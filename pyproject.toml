@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sculptor"
+# this is a lie. The version file will be injected.
+version = "0.0.0"
+readme = "README.md"
+dependencies = [
+    "fastapi",
+    "imbue-core",
+    "loguru",
+    "psycopg[binary]",
+    "pydantic",
+    "pydantic-settings",
+    "sentry-sdk",
+    "sqlalchemy",
+]
+requires-python = ">=3.11"
+
+[tool.uv.sources]
+imbue_core = { workspace = true }
