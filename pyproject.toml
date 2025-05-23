@@ -14,8 +14,10 @@ dependencies = [
     "psycopg[binary]",
     "pydantic",
     "pydantic-settings",
+    "pyjwt[crypto]",
     "sentry-sdk",
     "sqlalchemy",
+    "typer",
 ]
 requires-python = ">=3.11"
 
