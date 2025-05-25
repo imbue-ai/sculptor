@@ -18,6 +18,7 @@ The proposed setup allows both us and AI agents to interact with those artifacts
 - high level test descriptions
 - visual designs
 - architecture docs
+- module layout
 - style guides
 - service interfaces
 - data types
@@ -43,6 +44,8 @@ All current "specs" should be documented in their canonical location:
 - architecture docs:
     - `docs/architecture/**/*.md`  (for the highest level descriptions of system components. Files should include links to renderable Eraser diagrams, the code for which is included in the repo)
     - `sculptor/**/readme.md`  (for the module-level documentation)
+- module layout:
+    - `sculptor/*` (eg, the arrangement of folders in the `sculptor/` directory -- there should be no .py files, only modules)
 - style guides:
     - `sculptor/**/style.md`
 - service interfaces:

@@ -1,178 +1,76 @@
-user [icon: person, color: white]
-browser [icon: monitor, color: gray]
-sculptor [icon: server, color: blue]
-worktask [icon: tool, color: green]
-executor [icon: box, color: purple]
+# Overview
 
-# TODO: some onboarding and setup to describe
+The purpose of `sculptor` is to help users get things done with AI agents.
 
-user > browser: "load main page"
-    activate browser
-    browser > sculptor: GET /
-        activate sculptor
-        sculptor > browser: HTTP 200
-        deactivate sculptor
-    browser > sculptor: GET /project_stream/
-        activate sculptor
-        sculptor > browser: HTTP SSE 200
-    browser > user: render HTML for "/"
+Specifically, this means allowing users to create and manage tasks (`UserTask`s),
+which are then worked on by AI agents (`Agents`) in environments (`Environments`).
 
-user > browser: "start new task"
-    browser > sculptor: POST /api/v1/task/
-        activate sculptor
-        sculptor > worktask: start task
-            activate worktask
-        sculptor > browser: HTTP 200
-        sculptor > browser: HTTP SSE 200
-        deactivate sculptor
-    browser > user: react.render()
+For an end-to-end example of the request flow, see the [request flow diagram](diagrams/request_flow.md).
 
-# TODO: some repo fetching logic to set up in here
-worktask > worktask: create image
-worktask > worktask: create volume
-worktask > executor: start executor
-activate executor
-worktask > executor: start claude code
+# Components
 
-executor > executor: write some code
-executor > worktask: receive message(s)
-worktask > worktask: add to DB
-executor > worktask: fetch repo
-sculptor > browser: HTTP SSE 200
-browser > user: react.render()
+In order to accomplish `UserTask`s, `sculptor` is implemented as a simple web app.
 
-executor > executor: run some tools
-executor > worktask: receive message(s)
-worktask > worktask: add to DB
-sculptor > browser: HTTP SSE 200
-browser > user: react.render()
+`sculptor` is divided into three main components:
+1. the backend (written in `python` and using `FastAPI`,)
+1. the frontend (written in `TypeScript` and using `react`) and
+1. the command-line interface (CLI) (also written in `python`.)
 
-user > browser: "load individual task page"
-    activate browser
-    browser > sculptor: GET /(task_id/
-        activate sculptor
-        sculptor > browser: HTTP 200
-        deactivate sculptor
-    deactivate sculptor
-    browser > sculptor: GET /task_stream/
-        activate sculptor
-        sculptor > browser: HTTP SSE 200
-    browser > user: render HTML for "/(task_id/)"
+The backend handles the core logic of launching AI agents (`Agents`) in (generally sandboxed) environments,
+as well as managing those agents and environments.
+It also handles the associated data storage, event handling, and communication with the frontend.
 
-user > browser: "send message to agent"
-    activate browser
-    browser > sculptor: POST /api/v1/task/(task_id)/message/
-        activate sculptor
-        sculptor > sculptor: add to DB
-        worktask > executor: send message to agent
-        executor > worktask: new log event
-        worktask > worktask: add to DB
-    sculptor > browser: HTTP SSE 200
-    browser > user: react.render()
+The frontend provides a simple and extensible user interface
+for interacting with the backend in order to create and manage tasks, agents, and environments.
+It is designed to be easily accessible via browsers (even on mobile devices.)
 
-executor > executor: write some code
-executor > worktask: receive message(s)
-worktask > worktask: add to DB
-executor > worktask: fetch repo
-sculptor > browser: HTTP SSE 200
-browser > user: react.render()
+The CLI provides a simple way to interact with the backend from the command line.
 
-executor > worktask: done
-worktask > worktask: add to DB
-executor > worktask: fetch repo
-deactivate executor
-sculptor > browser: HTTP SSE 200
-browser > user: react.render()
-worktask > worktask: save done to DB
-deactivate worktask
+## Backend
 
-user > user: "git diff agent/branch_name"
+The backend is architected as a standard web application,
+with stateless handling of requests, a database for persistent storage, and a set of background workers for long-running tasks.
 
-user > browser: "merge agent changes"
-browser > sculptor: POST /api/v1/task/(task_id)/merge/
-activate sculptor
-sculptor > sculptor: merge changes
-sculptor > sculptor: push to repo
-deactivate sculptor
-sculptor > browser: HTTP SSE 200
-browser > user: react.render()
+It is designed to be run both locally (e.g., under the full control of an individual user),
+and remotely (e.g., in a cloud environment, where multiple users can use shared infrastructure.)
 
-deactivate sculptor
-deactivate browser
+Currently, only the "local" mode is implemented.
 
+The database currently supported is SQLite (though support is planned for PostgreSQL.)
+Database models are defined using `pydantic` and `SQLAlchemy`.
+Migrations are handled using `alembic`.
 
+Tasks are simply `python` classes that implement the `WorkTask` interface.
+They are run via the `task_service`, which is a simple in-process task runner.
 
+## Frontend
 
+Data types are defined using `pydantic`.
+From these definitions, `TypeScript` types are generated via OpenAPI schemas.
 
+## CLI
 
+The CLI is a simple `python` script that uses the `Typer` library to provide a command-line interface.
 
+Only a single command is currently implemented: `sculptor launch`,
+which creates a new task and launches an agent to work on it.
 
-browser > browser: make commit out of changes
-browser > sculptor: ensure sync (FUTURE)
-sculptor > sculptor: fetch repo if necessary (FUTURE)
-sculptor > browser: ack (FUTURE)
+# Plugins
 
-worktask > worktask: create image
-worktask > executor: start executor
-activate executor
-worktask > executor: update executor to user_task git hash with dependencies
+The `sculptor` codebase is designed to be extensible via plugins.
 
-worktask > executor: prompt claude code
-loop [label: claude, color: green] {
-  executor > executor: iterates
-}
-worktask --> sculptor: stream results
-executor > worktask: blocked on input (FUTURE)
-worktask --> user: notify via DB (FUTURE)
+The full interface is still in active development, but the intent is to support plugins of at least a few different types:
+- "Agents" are effectively plugins that implement the `Agent` interface.
+  They can be used to create new types of agents that can work on tasks.
+- "Tools" are plugins that implement the `AgentTool` interface.
+  They can be used to create new types of tools that agents can use to accomplish tasks.
+- "Middleware" are plugins that implement the `Middleware` interface.
+  They can be used to create new types of middlewares that can be used to modify requests and responses, or take actions based on events.
+- "Interfaces" are plugins that implement the `InterfaceSurface` interface.
+  They can be used to create new types of interfaces that can be used to interact with the backend.
+  Unlike the other types of plugins, these plugins are written in `TypeScript` and are intended to be used in the frontend.
 
-user > browser: "tasks"
-activate browser
-browser > sculptor: GET /user_tasks/
-activate sculptor
-sculptor > browser: all tasks
-deactivate sculptor
-browser > user: display all tasks
-deactivate browser
+# Module Structure
 
-user > browser: "pair"
-activate browser
-browser > sculptor: GET /user_task/id
-activate sculptor
-sculptor > browser: task with ssh details
-deactivate sculptor
-browser > executor: ssh in and tmux attach
-user > executor: send input
-executor > user: observe changes
-user > executor: detach
-deactivate browser
-
-loop [label: claude, color: green] {
-  executor > executor: iterates
-}
-executor > worktask: done
-deactivate executor
-
-worktask --> sculptor: stream results
-worktask > sculptor: done
-deactivate worktask
-
-sculptor --> user: notify that task is done (FUTURE)
-
-user > browser: "tasks"
-activate browser
-browser > sculptor: GET /user_tasks/
-activate sculptor
-sculptor > browser: all tasks
-deactivate sculptor
-browser > browser: git fetch all branches
-browser > user: display all tasks
-deactivate browser
-
-user > browser: "apply" (FUTURE)
-activate browser
-browser > sculptor: GET /user_tasks/
-activate sculptor
-sculptor > browser: all tasks
-deactivate sculptor
-browser > user: display all tasks
-deactivate browser
+The `sculptor` codebase is organized into several modules, each with a specific purpose.
+See the [README.md](sculptor/README.md) in the source root for details.

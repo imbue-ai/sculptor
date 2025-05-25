@@ -1,10 +1,16 @@
 # Sculptor
 
+Sculptor is a tool for getting things done with AI agents (with a special focus on software development-related tasks).
+
+It provides a web interface for creating and managing tasks, agents, and the environments in which they run.
+
 ## Quickstart
 
 ```
-uv run fastapi run sculptor/server.py
+# start the server (will open http://localhost:8000 in your browser)
+uv run fastapi run sculptor/main.py
 
+# or send a request for the current version
 curl http://localhost:8000/version
 ```
 
@@ -33,3 +39,7 @@ You can get a token by running
 ```
 uv run python sculptor/scripts/create_token.py <username>@imbue.com
 ```
+
+## Learning More
+
+[docs/architecture.md](docs/architecture.md) - high-level architecture of the system
