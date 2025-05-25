@@ -57,7 +57,7 @@ All current "specs" should be documented in their canonical location:
     - `pyproject.toml` (for python dependencies, alphabetically sorted + with minimal version specifications)
     - `sculptor/web/frontend/package.json` (for frontend dependencies)
 - routes (and their args)
-    - `sculptor/web/routes.py`
+    - `sculptor/web/routes.json` (for the backend routes, in JSON format -- is automatically generated from the OpenAPI schemas)
 - CLI commands (and their args)
     - `sculptor/cli/main.py`
 
