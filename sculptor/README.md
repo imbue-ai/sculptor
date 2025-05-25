@@ -15,10 +15,12 @@ From the top level down, the modules are:
 - `services`: the services that provide the core functionality of the application, such as task management and interacting with the database.  Each service has a canonical structure:
   - `*/api.py`: the API definitions for the service.
   - `*/data_types.py`: the data types defined by the service.
+- `core`: the core logic of the application, including additional data types, utilities, and common functionality.
 - `database`: the database-related code, including models and migrations.
-- `core`: the core logic of the application, including data types, utilities, and common functionality.
+- `interfaces`: the interfaces that define externally facing components of the application (ex: the `Agent` class and others used by plugins.)
 - `config`: the configuration for the application, including settings and environment variables.
 - `utils`: generic utility functions and classes that are used throughout the application.
+- `primitives`: the most basic types -- ids, enums, and other foundational data types.
 - `version.py`: the version information of the application.
 
 All front-end code is contained in `web/frontend` (see the `web/frontend/README.md` for more details.)
