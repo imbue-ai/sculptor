@@ -11,7 +11,7 @@ It provides a web interface for creating and managing tasks, agents, and the env
 uv run fastapi run sculptor/main.py
 
 # or send a request for the current version
-curl http://localhost:8000/version
+curl http://localhost:8000/api/v1/version
 ```
 
 ## Changing the database
@@ -22,6 +22,12 @@ If you'd like to change this, set the DATABASE_URL environment variable. For exa
 
 - `DATABASE_URL="sqlite:////var/lib/sculptor/sculptor.db" uv run fastapi run sculptor/server.py
 - `DATABASE_URL="postgresql+psycopg://..." uv run fastapi run sculptor/server.py
+
+## Tests
+
+```
+uv run pytest .
+```
 
 
 ## Authentication
