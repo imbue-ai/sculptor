@@ -15,6 +15,7 @@ dependencies = [
     "pydantic",
     "pydantic-settings",
     "pyjwt[crypto]",
+    "pyre-check",
     "sentry-sdk",
     "sqlalchemy",
     "typer",
@@ -23,3 +24,6 @@ requires-python = ">=3.11"
 
 [tool.uv.sources]
 imbue_core = { workspace = true }
+
+[tool.setuptools.packages.find]
+exclude = ["keys"]
