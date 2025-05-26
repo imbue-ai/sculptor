@@ -40,7 +40,7 @@ The database currently supported is SQLite (though support is planned for Postgr
 Database models are defined using `pydantic` and `SQLAlchemy`.
 Migrations are handled using `alembic`.
 
-Tasks are simply `python` classes that implement the `WorkTask` interface.
+Tasks are simply `python` classes that implement the `ServerTask` interface.
 They are run via the `task_service`, which is a simple in-process task runner.
 
 ## Frontend

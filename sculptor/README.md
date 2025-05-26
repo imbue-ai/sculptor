@@ -11,7 +11,7 @@ From the top level down, the modules are:
 - `plugins`: contains the default plugins for the application (since even some of the basic functionality is implemented as plugins.)
 - `cli`: the command-line interface (CLI) for interacting with the application, allowing users to launch tasks and agents.
 - `web`: the web interface for the application, including the frontend and backend components.
-- `tasks`: the tasks that can be run by the application, which implement the `WorkTask` interface.
+- `tasks`: the tasks that can be run by the application, which implement the `ServerTask` interface.
 - `services`: the services that provide the core functionality of the application, such as task management and interacting with the database.  Each service has a canonical structure:
   - `*/api.py`: the API definitions for the service.
   - `*/data_types.py`: the data types defined by the service.
