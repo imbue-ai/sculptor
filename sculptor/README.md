@@ -8,16 +8,17 @@ From the top level down, the modules are:
 
 - `testing`: test-related code, including fixtures, helpers and utilities for writing and running tests.
 - `scripts`: scripts for running various tasks, such as deployment, creating tokens or generating TypeScript types from OpenAPI schemas.
-- `plugins`: contains the default plugins for the application (since even some of the basic functionality is implemented as plugins.)
 - `cli`: the command-line interface (CLI) for interacting with the application, allowing users to launch tasks and agents.
 - `web`: the web interface for the application, including the frontend and backend components.
-- `tasks`: the tasks that can be run by the application, which implement the `Task` interface.
-- `services`: the services that provide the core functionality of the application, such as task management and interacting with the database.  Each service has a canonical structure:
+- `agents`: contains the default `Agent` implementations.
+- `tasks`: contains the code for handling `Task`s.  This is done by dispatching on the `TaskInputs` type.
+- `services`: the services that provide the core functionality of the application, such as task management and interacting with the database.
+  Each service has a canonical structure:
+  See the [`./services/README.md`](./services/README.md) for more details on each service.
   - `*/api.py`: the API definitions for the service.
   - `*/data_types.py`: the data types defined by the service.
-- `core`: the core logic of the application, including additional data types, utilities, and common functionality.
-- `database`: the database-related code, including models and migrations.
-- `interfaces`: the interfaces that define externally facing components of the application (ex: the `Agent` class and others used by plugins.)
+- `database`: the database-related code, including all models and migrations. Most data-related classes live here.
+- `interfaces`: the interfaces that define externally facing components of the application (ex: the `Agent` class.)
 - `config`: the configuration for the application, including settings and environment variables.
 - `utils`: generic utility functions and classes that are used throughout the application.
 - `primitives`: the most basic types -- ids, enums, and other foundational data types.
