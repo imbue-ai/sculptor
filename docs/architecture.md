@@ -24,6 +24,8 @@ which is contained in [this eraser link](https://app.eraser.io/workspace/QJkmIoq
 
 In order to accomplish `Task`s, `sculptor` is implemented as a simple web app.
 
+For the principles behind the architecture, see the [architectural_principles.md](./architectural_principles.md).
+
 `sculptor` is divided into three main components:
 1. the backend (written in `python` and using `FastAPI`,)
 1. the frontend (written in `TypeScript` and using `react`) and

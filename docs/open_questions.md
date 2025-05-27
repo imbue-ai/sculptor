@@ -1,5 +1,28 @@
 # Currently open design questions
 
+## How, precisely, should the default claude agents know when they are blocked?
+
+This is potentially a bit tricky, especially with the text-based one.
+
+It *seems* like it should be possible to understand when there are any outstanding LLM or tool calls?
+For example, [this project](https://github.com/1rgs/claude-code-proxy) wraps the claude LLM calls (in order to proxy them),
+so that should be sufficient for us.
+
+## How does streaming work from the inner coding agents?
+
+In particular, it is a little bit tricky because the SDK interface seems to only provide complete responses,
+so if we wanted to stream in the HTML version, we would probably need to intercept the LLM calls and stream them ourselves.
+
+See the above link for an example of how to do this.
+
+## What level does this tmux and ttyd hackery live on?
+
+We start claude in tmux, and that's sort of baked into some of the logic.
+We are also starting ttyd so that we can connect.
+But this is clearly a bit of a special case of something more general.
+
+At what level does this logic live? Should `Agent`s be tmux-aware, or should this be an implementation detail of some `Agent` implementations?
+
 ## Should there even be a database for the environment_service?
 
 The only thing that REALLY needs to be saved is the images, and that's really just a caching thing.
