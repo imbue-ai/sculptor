@@ -8,7 +8,7 @@ and as a materialized view of the current state (in `${table_name}_latest`.)
 For the implementation of that logic, see [automanaged.py](automanaged.py).
 
 For the exact schema definitions, see the [tables.py](tables.py) file.
-All table classes end with `Row`, and ultimately inherit from `DatabaseRow`.
+All table classes end with `Row`, and ultimately inherit from `DatabaseModel`.
 
 Each table has an ID class that is specific to that table, and which inherits from `ObjectID`.
 
