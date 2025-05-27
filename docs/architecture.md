@@ -3,7 +3,7 @@
 The purpose of `sculptor` is to help users get things done with AI agents.
 
 Specifically, this means allowing users to create and manage tasks (`UserTask`s),
-on which we run `Agent`s in sandboxed environments (created via `Executor`s).
+on which we run `Agent`s in sandboxed environments (created via `Environment`s).
 
 # High level flow
 
