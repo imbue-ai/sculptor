@@ -41,6 +41,9 @@ But this is clearly a bit of a special case of something more general.
 
 At what level does this logic live? Should `Agent`s be tmux-aware, or should this be an implementation detail of some `Agent` implementations?
 
+My current leading idea is that we should move this into *our* code that is called within the `Environment`, eg, the code that calls into the `Agent`.
+Before calling in, we can set up tmux, start whatever process needs to be started in that tmux session, etc.
+
 ## Should there even be a database for the environment_service?
 
 The only thing that REALLY needs to be saved is the images, and that's really just a caching thing.
