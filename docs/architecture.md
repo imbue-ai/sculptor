@@ -2,8 +2,8 @@
 
 The purpose of `sculptor` is to help users get things done with AI agents.
 
-Specifically, this means allowing users to create and manage tasks (`UserTask`s),
-on which we run `Agent`s in sandboxed environments (created via `Environment`s).
+Specifically, this means allowing users to create and manage tasks (`Task`s),
+which typically run `Agent`s in sandboxed `Environment`s.
 
 # High level flow
 
@@ -22,7 +22,7 @@ which is contained in [this eraser link](https://app.eraser.io/workspace/QJkmIoq
 
 # Components
 
-In order to accomplish `UserTask`s, `sculptor` is implemented as a simple web app.
+In order to accomplish `Task`s, `sculptor` is implemented as a simple web app.
 
 `sculptor` is divided into three main components:
 1. the backend (written in `python` and using `FastAPI`,)
