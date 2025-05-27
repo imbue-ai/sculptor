@@ -3,9 +3,22 @@
 The purpose of `sculptor` is to help users get things done with AI agents.
 
 Specifically, this means allowing users to create and manage tasks (`UserTask`s),
-which are then worked on by AI agents (`Agents`) in environments (`Environments`).
+on which we run `Agent`s in sandboxed environments (created via `Executor`s).
 
-For an end-to-end example of the request flow, see the [request flow diagram](diagrams/request_flow.md).
+# High level flow
+
+Below is an extremely high level overview of how `sculptor` works:
+
+![image](https://i.postimg.cc/1XGR8HWN/image.png)
+Generated from [diagrams/high_level_flow.md](diagrams/high_level_flow.md).
+
+Breaking that down slightly more, here's a simplified diagram of the different parts of the system and how they interact:
+
+![image](https://i.postimg.cc/5yYvTZ2W/image.png)
+Generated from [diagrams/high_level_components.md](diagrams/high_level_components.md).
+
+For a detailed end-to-end example of the request flow, see the [request flow diagram](diagrams/request_flow.md),
+which is contained in [this eraser link](https://app.eraser.io/workspace/QJkmIoqQ9K2qjLBZIXbo)
 
 # Components
 
@@ -54,21 +67,6 @@ The CLI is a simple `python` script that uses the `Typer` library to provide a c
 
 Only a single command is currently implemented: `sculptor launch`,
 which creates a new task and launches an agent to work on it.
-
-# Plugins
-
-The `sculptor` codebase is designed to be extensible via plugins.
-
-The full interface is still in active development, but the intent is to support plugins of at least a few different types:
-- "Agents" are effectively plugins that implement the `Agent` interface.
-  They can be used to create new types of agents that can work on tasks.
-- "Tools" are plugins that implement the `AgentTool` interface.
-  They can be used to create new types of tools that agents can use to accomplish tasks.
-- "Middleware" are plugins that implement the `Middleware` interface.
-  They can be used to create new types of middlewares that can be used to modify requests and responses, or take actions based on events.
-- "Interfaces" are plugins that implement the `InterfaceSurface` interface.
-  They can be used to create new types of interfaces that can be used to interact with the backend.
-  Unlike the other types of plugins, these plugins are written in `TypeScript` and are intended to be used in the frontend.
 
 # Module Structure
 

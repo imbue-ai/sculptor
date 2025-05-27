@@ -20,8 +20,8 @@ By default, Sculptor saves its data in a semi-ephemeral way in an SQLite databas
 
 If you'd like to change this, set the DATABASE_URL environment variable. For example:
 
-- `DATABASE_URL="sqlite:////var/lib/sculptor/sculptor.db" uv run fastapi run sculptor/server.py
-- `DATABASE_URL="postgresql+psycopg://..." uv run fastapi run sculptor/server.py
+- `DATABASE_URL="sqlite:////var/lib/sculptor/sculptor.db" uv run fastapi run sculptor/server.py`
+- `DATABASE_URL="postgresql+psycopg://..." uv run fastapi run sculptor/server.py`
 
 ## Tests
 
@@ -48,4 +48,4 @@ uv run python sculptor/scripts/create_token.py <username>@imbue.com
 
 ## Learning More
 
-[docs/architecture.md](docs/architecture.md) - high-level architecture of the system
+Take a look at the [docs/](docs/README.md) folder to learn more about the architecture, design, and implementation details of Sculptor.
