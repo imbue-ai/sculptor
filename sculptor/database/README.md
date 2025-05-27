@@ -22,7 +22,7 @@ Plus one other alternative:
 All of them have trade-offs, and the approach we use is case-specific:
 - For `ExecutorVolumeRow` and `ExecutorImageRow` we use the concrete table inheritance,
   since the data is entirely different for each provider.
-- For `Task` and `UserTaskEventRow`,
+- For `Task` and `SavedAgentMessage`,
   we use the dispatched json approach since it doesn't really make sense to migrate the data --
   it will eventualy be completely agent-dependent anyway,
   and we'll want to think about how to gracefully deal with outdated data.

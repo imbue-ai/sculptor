@@ -10,4 +10,4 @@ From the top level down, the services are:
 - `git_repo_service`: manages Git repositories, including cloning and pushing changes.
 - `user_notification_service`: manages user notifications, including error alerts.
 - `data_model_service`: manages data models, including loading and saving data to and from the database.
-- `agent_config_service`: manages agent configurations, including loading and saving configurations.
+- `secrets_service`: manages access to user secrets.
