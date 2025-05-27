@@ -1,5 +1,23 @@
 # Currently open design questions
 
+## Should we use threads or processes for the task_service?
+
+I wrote the first implementation using threads, but it's just kind of a bad idea --
+it makes it really hard to cleanly shut down (unless you want to carefully spread a bunch of shutdown flag checking through basically everything, which I do not.)
+
+I don't see a particularly compelling reason not to just use processes, so I think I'm going to re-write it to do that instead.
+
+This has the additional benefit of making it much faster to shut down.
+
+## Where, exactly, does the tmux scrollback buffer get syned to *on the server*?
+
+Right now, we can probably sync the *logs* into the database and the *git branch* into the local repo,
+but it's less clear where to put the tmux scrollback buffer (and raw stdout, stderr, etc.).
+
+We could sync them to a file? Or make a special table in the database that contains them?
+Logically it's very similar to the StreamingContainer's that we had before
+(in that we don't want to continually make new records for each update)
+
 ## How, precisely, should the default claude agents know when they are blocked?
 
 This is potentially a bit tricky, especially with the text-based one.
@@ -41,3 +59,10 @@ Currently, the `tasks` module is designed to make it possible to handle upgrades
 In this way, tasks could be resumed even if they were using an older set of inputs than the latest code.
 
 This is more complex than I would like, but it doesn't matter that much -- for now we'll just be restarting tasks when the code changes anyway.
+
+## What is the exact onboarding / startup sequence for the user?
+
+It seems like:
+- Run the command via uvx in your current repo, and that shows up as a project in the UI.
+- Complain at you if you don't have docker installed (but possibly allow you to start in an unsafe way anyway?)
+- Is there any way to add a project without running the command from that folder? Seems like we can start with "no"?
