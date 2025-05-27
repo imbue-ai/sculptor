@@ -1,7 +1,7 @@
 user [icon: person, color: white]
 browser [icon: monitor, color: gray]
 sculptor [icon: server, color: blue]
-ServerTask [icon: tool, color: green]
+task [icon: tool, color: green]
 executor [icon: box, color: purple]
 
 # TODO: some onboarding and setup to describe
@@ -20,30 +20,30 @@ user > browser: "load main page"
 user > browser: "start new task"
     browser > sculptor: POST /api/v1/task/
         activate sculptor
-        sculptor > ServerTask: start task
-            activate ServerTask
+        sculptor > task: start task
+            activate task
         sculptor > browser: HTTP 200
         sculptor > browser: HTTP SSE 200
         deactivate sculptor
     browser > user: react.render()
 
 # TODO: some repo fetching logic to set up in here
-ServerTask > ServerTask: create image
-ServerTask > ServerTask: create volume
-ServerTask > executor: start executor
+task > task: create image
+task > task: create volume
+task > executor: start executor
 activate executor
-ServerTask > executor: start claude code
+task > executor: start claude code
 
 executor > executor: write some code
-executor > ServerTask: receive message(s)
-ServerTask > ServerTask: add to DB
-executor > ServerTask: fetch repo
+executor > task: receive message(s)
+task > task: add to DB
+executor > task: fetch repo
 sculptor > browser: HTTP SSE 200
 browser > user: react.render()
 
 executor > executor: run some tools
-executor > ServerTask: receive message(s)
-ServerTask > ServerTask: add to DB
+executor > task: receive message(s)
+task > task: add to DB
 sculptor > browser: HTTP SSE 200
 browser > user: react.render()
 
@@ -64,27 +64,27 @@ user > browser: "send message to agent"
     browser > sculptor: POST /api/v1/task/(task_id)/message/
         activate sculptor
         sculptor > sculptor: add to DB
-        ServerTask > executor: send message to agent
-        executor > ServerTask: new log event
-        ServerTask > ServerTask: add to DB
+        task > executor: send message to agent
+        executor > task: new log event
+        task > task: add to DB
     sculptor > browser: HTTP SSE 200
     browser > user: react.render()
 
 executor > executor: write some code
-executor > ServerTask: receive message(s)
-ServerTask > ServerTask: add to DB
-executor > ServerTask: fetch repo
+executor > task: receive message(s)
+task > task: add to DB
+executor > task: fetch repo
 sculptor > browser: HTTP SSE 200
 browser > user: react.render()
 
-executor > ServerTask: done
-ServerTask > ServerTask: add to DB
-executor > ServerTask: fetch repo
+executor > task: done
+task > task: add to DB
+executor > task: fetch repo
 deactivate executor
 sculptor > browser: HTTP SSE 200
 browser > user: react.render()
-ServerTask > ServerTask: save done to DB
-deactivate ServerTask
+task > task: save done to DB
+deactivate task
 
 user > user: "git diff agent/branch_name"
 
