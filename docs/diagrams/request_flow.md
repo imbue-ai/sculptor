@@ -2,7 +2,7 @@ user [icon: person, color: white]
 browser [icon: monitor, color: gray]
 sculptor [icon: server, color: blue]
 task [icon: tool, color: green]
-executor [icon: box, color: purple]
+environment [icon: box, color: purple]
 
 # TODO: some onboarding and setup to describe
 
@@ -30,19 +30,19 @@ user > browser: "start new task"
 # TODO: some repo fetching logic to set up in here
 task > task: create image
 task > task: create volume
-task > executor: start executor
-activate executor
-task > executor: start claude code
+task > environment: start environment
+activate environment
+task > environment: start claude code
 
-executor > executor: write some code
-executor > task: receive message(s)
+environment > environment: write some code
+environment > task: receive message(s)
 task > task: add to DB
-executor > task: fetch repo
+environment > task: fetch repo
 sculptor > browser: HTTP SSE 200
 browser > user: react.render()
 
-executor > executor: run some tools
-executor > task: receive message(s)
+environment > environment: run some tools
+environment > task: receive message(s)
 task > task: add to DB
 sculptor > browser: HTTP SSE 200
 browser > user: react.render()
@@ -64,23 +64,23 @@ user > browser: "send message to agent"
     browser > sculptor: POST /api/v1/task/(task_id)/message/
         activate sculptor
         sculptor > sculptor: add to DB
-        task > executor: send message to agent
-        executor > task: new log event
+        task > environment: send message to agent
+        environment > task: new log event
         task > task: add to DB
     sculptor > browser: HTTP SSE 200
     browser > user: react.render()
 
-executor > executor: write some code
-executor > task: receive message(s)
+environment > environment: write some code
+environment > task: receive message(s)
 task > task: add to DB
-executor > task: fetch repo
+environment > task: fetch repo
 sculptor > browser: HTTP SSE 200
 browser > user: react.render()
 
-executor > task: done
+environment > task: done
 task > task: add to DB
-executor > task: fetch repo
-deactivate executor
+environment > task: fetch repo
+deactivate environment
 sculptor > browser: HTTP SSE 200
 browser > user: react.render()
 task > task: save done to DB

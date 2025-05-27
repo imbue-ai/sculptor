@@ -1,15 +1,12 @@
 # Currently open design questions
 
-there's a weird split between user task events and agent messages...
-    very similar, one is just stored in the DB...
-    and one doesn't have an ID...
-    should really probably fix
+## Should there even be a database for the environment_service?
 
+The only thing that REALLY needs to be saved is the images, and that's really just a caching thing.
 
-should there even be a database for the executor service...
-    the only thing that REALLY needs to be saved is the images
-    and that's really just a caching thing
+For now, I think we can just ignore it and leave it as an implementation detail of the `EnvironmentService`.
 
+Note that this is possible because the actual `Image` and `Volume` data is just serialized as JSON in the current_state of the `Task`.
 
 ## Should notifications be done in the same stream as the task events? Or in a separate stream?
 

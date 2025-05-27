@@ -18,7 +18,7 @@ sculptor server {
   }
 }
 
-executor {
+environment {
   tmux {
     claude [icon: aws-redshift]
   }
