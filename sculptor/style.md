@@ -41,24 +41,33 @@ Type definitions for other languages (e.g., `TypeScript`, `SQL`, etc.) should be
 
 # Testing
 
-better style of testing -- need to *know* that the action completed
-    and that's something that goes through the whole application, really
-    it ought to be designed to be "transactional" even at these different layers
-    is "functional" or something...  you're taking this action that has an effect and then returns once that effect is complete
-    and those are the ONLY things that you can do...
-could we get a less flaky pattern for tests? (to know when an action has been done)
-    yes, we can, finally!
-    is all about "actions" -- everything should be expressed that way the entire way down
-    in the UI, you take some action, it has some result
-    built into the whole architecture of the software that all actions are functions that are SYNC until they are done!!  (even if the implementation is different)
-    and there are sometimes different bits, sure -- like if you kick off a background task, it will *logically* take some time before being complete, but the *action* is "start the task"
-    and we can have a *separate* action for "start a task and wait for it to finish", which is different
-for better testing: everything you do is an action, all actions have timeouts, all actions can fail, all failures must be reported
-    time bounds on everything (so that if the heartbeat is going, nothing can be "stuck")
-for better testing: enable "deterministic" mode as we build this
-    specifically, reduce concurrent connections and processing down to basically 1 everywhere (ex: in task processor, in request handling, etc)
-    remove randomness, etc
-testing -- should flow from the top level specification of user stories and become test specs and then tests!
-    then that (plus the figma designs) is ALL that we need in order to specify the behavior of the product
-    well, and interfaces, routes, etc
-    but we can be a lot clearer about what the specification is -- it's basically *in the repo* and we WANT that (otherwise LLM cannot understand it and extend and implement)
+## Preventing flaky tests
+
+Flaky tests are very annoying, and waste a lot of developer time.
+
+Fundamentally, they are caused by non-determinism in the code being tested (e.g., random numbers, timeouts, concurrency, etc.)
+
+Most of these sources of non-determinism can (and should) be eliminated from most tests:
+- For randomness, tests should be given a fixed seed.
+- For time, tests should use generally use special timing primitives that control how the process perceives time.
+- For environment variables, tests should use a fixed set of environment variables.
+
+For concurrency, tests should be designed to run in a deterministic manner, e.g., by using a single-threaded event loop or by controlling the concurrency level of the code being tested.
+
+When concurrency is required for the behavior under test, the tests should be written to take "actions", eg, atomic operations that know when they are complete.
+This should be done at all levels of the application, from the UI down to the database.
+All "actions" should have timeouts, and all failures should be surfaced.
+
+Machine / system level differences can still cause differences or failures, but with the above handled,
+they are at least much less likely (especially when the computational infrastructure is the same, e.g., all tests run on the same CI system, and can be retried when there are transient failures.)
+
+## Integration tests
+
+### Specifying which behavior to test
+
+All of our integration testing should flow from the top level specification of user stories.
+
+Please write user stories in the `./docs/user_stories.md` file,
+then use those to create integration test plans in `./docs/test_plans/`
+
+The user stories, test plans, and figma designs should be sufficient to fully specify the desired behavior of the product.

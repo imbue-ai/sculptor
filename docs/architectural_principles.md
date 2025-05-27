@@ -7,14 +7,18 @@ These principles are not strict rules, but rather guidelines that help maintain 
 
 ## Structured Concurrency
 
-implicit in all of this -- the notion of "task groups" as a fundamental first class primitive so that you dont shoot your leg off
-    the Modal.App primitive is amazing for making proper task groups...
-    this MOSTLY gets tricky once things get remote OR if you were to shut down the server and want things to continue running (let's not do that)
-    ok, so dealing with this when remote...
-        we basically just need to ensure that our tasks themselves are modal.App style things
-        or, any executor context needs to ENSURE that the container goes away
-        sure, it could get hard killed
-        that means that the actual execution services should be *primarily* responsible for this (like modal)
-        can do similar things in the containers -- if no heartbeat, shut down, etc
-        but you DO want a DUAL handshake here -- when resuming a task, if you see something around from before, you can try to use it I guess
-        and periodically, we want to scan for places where this has gone horribly wrong (future)
+We try to use ["structured concurrency"](https://vorpus.org/blog/notes-on-structured-concurrency-or-go-statement-considered-harmful/) for all tasks and processes.
+By doing this, we can prevent "zombie" processes and tasks, and make it easier to reason about the state of the system (for both users and developers.)
+
+The `modal.App` primitive is a good example of this, as are `asyncio.TaskGroup`s.
+
+Whenever we start remote `Environment`s, they are responsible for ensuring that they are shut down if the `Task` fails.
+
+In practice, it's best to accomplish this with a sort of "dual" approach:
+1. Any remote running resource should receive heartbeats from the controlling process.
+  When the heartbeat stops, the remote resource should shut down.
+2. The controlling process should, upon being restarted, check for any remote resources that are still running.
+  If they are still running, it should attempt to resume them or shut them down.
+  This is necessary because the remote resource heartbeat can get stuck.
+
+Whenever possible, we should try to use the service-level primitives that are designed to handle this for us.
