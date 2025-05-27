@@ -1,4 +1,4 @@
-# sculptor user notification service
+# sculptor notification service
 
 This module provides a service for sending notifications to users about various events in the Sculptor application.
 
