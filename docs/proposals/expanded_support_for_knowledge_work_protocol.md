@@ -19,7 +19,11 @@ It seems potentially worth developing some of this into a more formal protocol t
 
 For example, making the notion of "is this actually successfully completed" into something first-class might make it easier to compose agents.
 
-Clearly we dont want to be tied specifically to github or linear issues (there are many issue trackers).
+Clearly we don't want to be tied specifically to github or linear issues (there are many issue trackers).
 Those are simply methods for *communicating* the status of a task -- the status and information is internal to our application / fundamental.
 And clearly agents can have whatever rich internal state they want.
 But the idea of the protocol would be to define a standard interface, and make it easier to compose a wide variety of agents.
+
+### Immediate implications
+
+1. `Project`s do *not* need to have a git_url.  `Agent`s can be used for any kind of knowledge work, and not all of it requires a sandbox in order to run.
