@@ -7,10 +7,10 @@ It provides a web interface for creating and managing tasks, agents, and the env
 ## Quickstart
 
 ```
-# start the server (will open http://localhost:8000 in your browser)
-uv run fastapi run sculptor/main.py
+# start the server
+uv run fastapi run sculptor/web/server.py
 
-# or send a request for the current version
+# send a request for the current version
 curl http://localhost:8000/api/v1/version
 ```
 
