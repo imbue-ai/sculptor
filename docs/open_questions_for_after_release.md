@@ -9,9 +9,11 @@ I think this might be a better fit in the `pytest` check in `imbue_mcp`.
 It would probably serve as a nice demo of "how you can launch a tool in a sandbox from our MCP server",
 which is something that we want anyway.
 
+Recursively invoking `Agent`s and tools *from our MCP server* is mostly about breaking out the module for the `Environment`s such that it can easily be invoked... via the CLI I guess?
+
 ## How exactly should snapshot/fork work?
 
-This can be done by handling some special `AgentMessage`s (e.g., snapshot, fork, join) from the user in the `CodingAgentTaskInputsV1` handler.
+This can be done by handling some special `AgentMessage`s (e.g., snapshot, fork, join) from the user in the `AgentTaskInputsV1` handler.
 
 This seems like it ought to work reasonably well with the idea of "settle" and "continue" messages in that current design anyway.
 

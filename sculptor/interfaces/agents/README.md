@@ -1,13 +1,39 @@
 # `Agent` interface versions
 
-The core `Agent` interface is very simple --
-`Agent`s are tasked with performing a specific goal within an `Environment`,
-and they output both the raw text output buffer (`output_text`) and a sequence of `AgentMessage`s.
-Users may send `AgentMessage`s to the agent while it is running as well.
+Conceptually, the purpose of an `Agent` is to perform a specific task or accomplish some goal.
 
-When the agent is done, the `is_complete` property will be `True`,
-and there will be at least one artifact in the `artifacts` property.
+Fundamentally, an `Agent` is extremly simple:
+any program that accepts JSON messages on stdin and produces messages on stdout (generally in JSON format) can be considered an `Agent`.
+
+That said, there are a number of additional conventions defined below that make it easier to work with `Agent`s in the `sculptor` ecosystem:
+
+- `Agent`s are guaranteed to have an initial message, which serves as the initial goal.
+- `Agent`s will be run in the `Environment` specified in the inputs (`AgentTaskInputsV1`.)
+- `Agent`s should emit a sequence of `AgentMessage`s to communicate their progress and results.
+- `Agent`s should react to `AgentMessage`s sent to them by the user or controlling process.
+- `Agent`s can be interrupted (like any normal task). Because of this, they should support resuming from a previous state.
+- `Agent`s should periodically yield "settled" messages (`SettledAgentMessage`) and wait until acknowledgement (`ContinueAgentMessage`) before continuing.
+  This enables the controlling process to snapshot the state.
+- `Agent`s can be restricted and limited in various ways, such as by time, resources, network access, information (eg, secret) availability, etc.
+- `Agent`s should have a notion of whether they are blocked or not (ie, if they are waiting for user input.)
+- `Agent`s should have a notion of whether they are complete or not (ie, if they have finished their task.)
+- `Agent`s may ask questions, make suggestions, or provide other information to the user.
+- `Agent`s must produce at least one output (eg, a branch, a file, a piece of text, etc.) when they are complete.
+- `Agent`s, when complete, should have emitted at least one `UpdatedArtifactAgentMessage` to indicate the final output.
+- `Agent`s, by convention, are run in a `tmux` session, and the user can connect to that session (over the web) to see the output.
+  This is not strictly required, but it makes it easier to interact with (and debug) `Agent`s.
+
+All of the above conventions are simply implemented by emitting and handling the correct `AgentMessage`s.
+You can think of an `Agent` as a program that is a bidirectional stream processor of `AgentMessage`s,
 
 The most recent version of the `Agent` interface is `v1`.
 
-See the [`./v1/agent.py`](./v1/agent.py) for the exact definition of the interface.
+See the [`./v1/agent.py`](./v1/agent.py) for the exact definition of the relevant message and config types.
+
+In V1, the dependencies between the `Agent` and the `Environment` are not explicitly modeled --
+the user is responsible for ensuring that the `Agent` can run in the specified `Environment`.
+
+Note that while `Agent`s themselves are fairly general,
+our existing `Agent` *runner* (i.e., the `Task` in `sculptor` that runs the `Agent` in an `Environment`)
+does have a few more specific implementation details that are worth understanding.
+See [`AgentTaskInputsV1`](/sculptor/sculptor/database/models.py) for those details.

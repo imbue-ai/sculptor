@@ -26,7 +26,7 @@ It *seems* like it should be possible to understand when there are any outstandi
 For example, [this project](https://github.com/1rgs/claude-code-proxy) wraps the claude LLM calls (in order to proxy them),
 so that should be sufficient for us.
 
-## How does streaming work from the inner coding agents?
+## How does streaming work from the inner agents?
 
 In particular, it is a little bit tricky because the SDK interface seems to only provide complete responses,
 so if we wanted to stream in the HTML version, we would probably need to intercept the LLM calls and stream them ourselves.
@@ -40,6 +40,9 @@ We are also starting ttyd so that we can connect.
 But this is clearly a bit of a special case of something more general.
 
 At what level does this logic live? Should `Agent`s be tmux-aware, or should this be an implementation detail of some `Agent` implementations?
+
+My current leading idea is that we should move this into *our* code that is called within the `Environment`, eg, the code that calls into the `Agent`.
+Before calling in, we can set up tmux, start whatever process needs to be started in that tmux session, etc.
 
 ## Should there even be a database for the environment_service?
 

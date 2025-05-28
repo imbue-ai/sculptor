@@ -17,3 +17,5 @@ secrets:
     do those always regenerate it?  I guess so!
 env vars:
     regenerates if you change them
+
+one optimization for modal: technically we could return the image that was created when we're making a modal image, would be a little bit faster (would need to change that interface though)
