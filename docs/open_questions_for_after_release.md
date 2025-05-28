@@ -13,7 +13,7 @@ Recursively invoking `Agent`s and tools *from our MCP server* is mostly about br
 
 ## How exactly should snapshot/fork work?
 
-This can be done by handling some special `AgentMessage`s (e.g., snapshot, fork, join) from the user in the `CodingAgentTaskInputsV1` handler.
+This can be done by handling some special `AgentMessage`s (e.g., snapshot, fork, join) from the user in the `AgentTaskInputsV1` handler.
 
 This seems like it ought to work reasonably well with the idea of "settle" and "continue" messages in that current design anyway.
 

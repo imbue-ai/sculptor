@@ -26,7 +26,7 @@ It *seems* like it should be possible to understand when there are any outstandi
 For example, [this project](https://github.com/1rgs/claude-code-proxy) wraps the claude LLM calls (in order to proxy them),
 so that should be sufficient for us.
 
-## How does streaming work from the inner coding agents?
+## How does streaming work from the inner agents?
 
 In particular, it is a little bit tricky because the SDK interface seems to only provide complete responses,
 so if we wanted to stream in the HTML version, we would probably need to intercept the LLM calls and stream them ourselves.
