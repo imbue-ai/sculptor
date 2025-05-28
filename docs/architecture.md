@@ -14,11 +14,10 @@ Generated from [diagrams/high_level_flow.md](diagrams/high_level_flow.md).
 
 Breaking that down slightly more, here's a simplified diagram of the different parts of the system and how they interact:
 
-![image](https://i.postimg.cc/5yYvTZ2W/image.png)
+![image](https://i.postimg.cc/qvYzZZBP/image.png)
 Generated from [diagrams/high_level_components.md](diagrams/high_level_components.md).
 
 For a detailed end-to-end example of the request flow, see the [request flow diagram](diagrams/request_flow.md),
-which is contained in [this eraser link](https://app.eraser.io/workspace/QJkmIoqQ9K2qjLBZIXbo)
 
 # Components
 
