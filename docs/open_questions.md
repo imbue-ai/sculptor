@@ -1,5 +1,12 @@
 # Currently open design questions
 
+## Should the AgentMessage's be saved to the database or not?
+
+**Tentative answer**: Yes. This will eventually be a performance problem, but for now it is probably fine,
+and it's just much easier to reason about behavior when it is transactional.
+Note that they will NOT require any migrations -- they're basically just saved as JSON rows, we're free to evolve the messages as needed.
+I think I'll just make the data go through the `task_service` and then save it to the database as an implementation detail.
+
 ## Should we use threads or processes for the task_service?
 
 I wrote the first implementation using threads, but it's just kind of a bad idea --
