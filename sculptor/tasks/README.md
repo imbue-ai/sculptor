@@ -7,4 +7,4 @@ the previous task can continue executing with the old type.
 
 Currently, the only real task input type is `AgentTaskInputsV1`,
 which is handled in [`./handlers/run_agent/v1.py`](./handlers/run_agent/v1.py).
-See the docstring for more information.
+See the docstring there for more information on how agents are run.
