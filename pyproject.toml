@@ -8,6 +8,7 @@ name = "sculptor"
 version = "0.0.0"
 readme = "README.md"
 dependencies = [
+    "email-validator",
     "fastapi",
     "imbue-core",
     "loguru",
@@ -15,11 +16,16 @@ dependencies = [
     "pydantic",
     "pydantic-settings",
     "pyjwt[crypto]",
+    "pyre-check",
     "sentry-sdk",
     "sqlalchemy",
+    "typeid-python",
     "typer",
 ]
 requires-python = ">=3.11"
 
 [tool.uv.sources]
 imbue_core = { workspace = true }
+
+[tool.setuptools.packages.find]
+exclude = ["keys"]
