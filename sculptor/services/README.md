@@ -5,7 +5,7 @@ that is, each service may only depend on services that are "lower" in the hierar
 
 From the top level down, the services are:
 
-- `task_service`: manages tasks, including task execution and scheduling.
+- `task_service`: manages tasks, including task execution, scheduling and outputs.
 - `environment_service`: manages environments in which tasks and agents run.
 - `git_repo_service`: manages Git repositories, including cloning and pushing changes.
 - `notification_service`: manages user notifications, including error alerts.
