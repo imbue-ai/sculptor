@@ -2,6 +2,24 @@
 
 We don't need to figure these out yet, just flagging them so we can start thinking about them.
 
+## How should secret management work?
+
+For now this is fine (load from local), but how do we want this to work when users launch from the web?
+
+I would *very much* like to *not* be storing their secrets, bc that is bad from a security perspective.
+
+The "right" way (from a security perspective) is to think about totally ephemeral everything --
+that doesn't seem short term feasible though.
+
+You could have users inject secrets only at task launch time,
+but that breaks mobile + web launching.
+
+We *could* store the secrets...  but ideally we would not.
+
+Ideally they would have them in vault or something?  and could provide a key to unlock them?
+
+Want to know a bit more how to do this...
+
 ## How exactly should we onboard people on to creating their own images?
 
 This is a fairly tricky thing to do.

@@ -34,9 +34,10 @@ so that should be sufficient for us.
 In particular, it is a little bit tricky because the SDK interface seems to only provide complete responses,
 so if we wanted to stream in the HTML version, we would probably need to intercept the LLM calls and stream them ourselves.
 
-See the above link for an example of how to do this.
+See the above link for an example of how to do this interception.
 
-**Tentative answer**: leaving this up to Guinness as he implements it.
+**Tentative answer**: we can make a separate type of "streamed chunk" message that is meant to be aggregated by clients.
+The full message WILL eventually be sent, but for streamed responses, we can just duplicate the data, that's fine -- it's at most a factor of 2x.
 
 ## What level does this tmux and ttyd hackery live on?
 
