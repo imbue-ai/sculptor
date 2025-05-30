@@ -34,6 +34,19 @@ More thought is definitely needed here.
 
 In particular, we'll want direct connections to the `Environment`s (if at all possible.)
 
+## How exactly should message passing work for tasks?
+
+Currently, we just save all of them in the database but that's very inefficient.
+
+It's complicated to move away from that though, because it stops being transactional.
+
+For example -- without messages being transactional, how would you ensure that the start message was sent to a task right after it wsa started?
+
+That's not impossible to handle in the specific case (ex: save just that start message and ensure that it makes it into the task)
+but the more general case is harder.
+
+Perhaps we could have special transactional messages? Or perhaps we only need to handle start and stop?
+
 ## How should task processing be done?
 
 The current transactional approach is great, but we'll probably have to be careful about the efficiency of the implementation.
