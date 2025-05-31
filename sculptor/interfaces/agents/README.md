@@ -26,6 +26,10 @@ That said, there are a number of additional conventions defined below that make 
 All of the above conventions are simply implemented by emitting and handling the correct `AgentMessage`s.
 You can think of an `Agent` as a program that is a bidirectional stream processor of `AgentMessage`s,
 
+When emitting an artifact message that refers to some output to sync,
+it is important that the artifact be written (and flushed) before the message is emitted.
+Otherwise, the controlling process may read an inconsistent state of the artifact.
+
 The most recent version of the `Agent` interface is `v1`.
 
 See the [`./v1/agent.py`](./v1/agent.py) for the exact definition of the relevant message and config types.
