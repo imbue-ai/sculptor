@@ -12,8 +12,8 @@ That said, there are a number of additional conventions defined below that make 
 - `Agent`s should emit a sequence of `AgentMessage`s to communicate their progress and results.
 - `Agent`s should react to `AgentMessage`s sent to them by the user or controlling process.
 - `Agent`s can be interrupted (like any normal task). Because of this, they should support resuming from a previous state.
-- `Agent`s should periodically yield "settled" messages (`SettledAgentMessage`) and wait until acknowledgement (`ContinueAgentMessage`) before continuing.
-  This enables the controlling process to snapshot the state.
+- `Agent`s should yield `RequestCompleteAgentMessage` messages when they have finished processing a message.
+  This enables the controlling process to snapshot the state (when there are no pending messages.)
 - `Agent`s can be restricted and limited in various ways, such as by time, resources, network access, information (eg, secret) availability, etc.
 - `Agent`s should have a notion of whether they are blocked or not (ie, if they are waiting for user input.)
 - `Agent`s should have a notion of whether they are complete or not (ie, if they have finished their task.)

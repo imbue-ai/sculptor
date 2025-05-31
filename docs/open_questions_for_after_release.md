@@ -15,7 +15,7 @@ Recursively invoking `Agent`s and tools *from our MCP server* is mostly about br
 
 This can be done by handling some special `AgentMessage`s (e.g., snapshot, fork, join) from the user in the `AgentTaskInputsV1` handler.
 
-This seems like it ought to work reasonably well with the idea of "settle" and "continue" messages in that current design anyway.
+This seems like it ought to work reasonably well with the idea of `RequestCompleteAgentMessage` enabling snapshotting in the current design anyway.
 
 One implication is that I'd like to keep the resume/snapshot tmux stuff in the execution logic for now, since it works and we're pretty sure we want to do this.
 
