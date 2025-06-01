@@ -1,5 +1,18 @@
 # Currently open design questions
 
+## SHould the AgentMessage's have a created_at field?
+
+You probably want to know *when* something happened.
+
+However, putting the created_at in the AgentMessage is not great -- there is fundamentally clock skew,
+and then people might think it was reasonable to sort by that field, which is not a good idea.
+
+Right now, the AgentMessage's are properly serialized by virtue of being saved to the database,
+
+Perhaps the field ought to be there, but be simply be given a name like `approximate_creation_time`.
+
+I'll do that for now.
+
 ## Should the AgentMessage's be saved to the database or not?
 
 **Tentative answer**: Yes. This will eventually be a performance problem, but for now it is probably fine,
