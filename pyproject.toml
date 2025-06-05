@@ -31,4 +31,4 @@ imbue_core = { workspace = true }
 exclude = ["keys"]
 
 [project.scripts]
-sculptor_npm_run = "sculptor.scripts.npm_run:main"
+sculptor_npm_run = "sculptor.scripts.npm_run:app"
