@@ -29,3 +29,6 @@ imbue_core = { workspace = true }
 
 [tool.setuptools.packages.find]
 exclude = ["keys"]
+
+[project.scripts]
+sculptor_npm_run = "sculptor.scripts.npm_run:app"

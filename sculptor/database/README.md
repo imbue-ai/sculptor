@@ -14,6 +14,8 @@ All classes in this file, and (recursively) imported by this file, will end up i
 All classes that do *not* inherit from `DatabaseModel` will end up being serialized as JSON.
 
 Each table has an ID class that is specific to that table, and which inherits from `ObjectID`.
+Each ID class specifies an (ideally unique) prefix / tag that allows us to quickly distinguish their string representations.
+See `sculptor/primitives/ids.py` for more details.
 
 Note that there are [3 different ways of mapping inheritance in SQLAlchemy](https://docs.sqlalchemy.org/en/20/orm/inheritance.html):
 
