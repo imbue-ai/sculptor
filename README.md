@@ -6,6 +6,12 @@ It provides a web interface for creating and managing tasks, agents, and the env
 
 ## Quickstart
 
+### Install prerequisites
+
+Install ttyd using instructions [here](https://github.com/tsl0922/ttyd).
+
+### Run
+
 ```
 # start the server
 uv run fastapi run sculptor/web/server.py
