@@ -30,5 +30,12 @@ imbue_core = { workspace = true }
 [tool.setuptools.packages.find]
 exclude = ["keys"]
 
+[dependency-groups]
+dev = [
+    "filelock>=3.18.0",
+    "pytest>=7.4.0",
+    "pytest-xdist>=3.7.0",
+]
+
 [project.scripts]
 sculptor_npm_run = "sculptor.scripts.npm_run:app"
