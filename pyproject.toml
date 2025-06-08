@@ -10,7 +10,6 @@ readme = "README.md"
 dependencies = [
     "email-validator",
     "fastapi",
-    "imbue",
     "imbue-core",
     "loguru",
     "modal>=1.0.3",
@@ -29,7 +28,6 @@ dependencies = [
 requires-python = ">=3.11"
 
 [tool.uv.sources]
-imbue = { workspace = true }
 imbue_core = { workspace = true }
 
 [tool.setuptools.packages.find]
