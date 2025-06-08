@@ -10,8 +10,10 @@ readme = "README.md"
 dependencies = [
     "email-validator",
     "fastapi",
+    "imbue",
     "imbue-core",
     "loguru",
+    "modal>=1.0.3",
     "psycopg[binary]",
     "pydantic",
     "pydantic-settings",
@@ -22,14 +24,23 @@ dependencies = [
     "sqlalchemy",
     "typeid-python",
     "typer",
+    "uvicorn>=0.34.3",
 ]
 requires-python = ">=3.11"
 
 [tool.uv.sources]
+imbue = { workspace = true }
 imbue_core = { workspace = true }
 
 [tool.setuptools.packages.find]
 exclude = ["keys"]
+
+[dependency-groups]
+dev = [
+    "filelock>=3.18.0",
+    "pytest>=7.4.0",
+    "pytest-xdist>=3.7.0",
+]
 
 [project.scripts]
 sculptor_npm_run = "sculptor.scripts.npm_run:app"
