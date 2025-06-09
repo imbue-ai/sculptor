@@ -2,8 +2,8 @@
 
 Conceptually, the purpose of an `Agent` is to perform a specific task or accomplish some goal.
 
-Fundamentally, an `Agent` is extremly simple:
-any program that accepts JSON messages on stdin and produces messages on stdout (generally in JSON format) can be considered an `Agent`.
+Fundamentally, an `Agent` is extremely simple:
+any program that can process a `AgentMessage`s (and emit `AgentMessage`s) can be considered an `Agent`.
 
 That said, there are a number of additional conventions defined below that make it easier to work with `Agent`s in the `sculptor` ecosystem:
 
@@ -24,7 +24,6 @@ That said, there are a number of additional conventions defined below that make 
   This is not strictly required, but it makes it easier to interact with (and debug) `Agent`s.
 
 All of the above conventions are simply implemented by emitting and handling the correct `AgentMessage`s.
-You can think of an `Agent` as a program that is a bidirectional stream processor of `AgentMessage`s,
 
 When emitting an artifact message that refers to some output to sync,
 it is important that the artifact be written (and flushed) before the message is emitted.
