@@ -14,7 +14,7 @@ Install ttyd using instructions [here](https://github.com/tsl0922/ttyd).
 
 ```
 # start the server
-uv run fastapi run sculptor/web/server.py
+uv run uvicorn sculptor.web.app:APP --reload
 
 # send a request for the current version
 curl http://localhost:8000/api/v1/version
