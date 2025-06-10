@@ -21,11 +21,13 @@ dependencies = [
     "sqlalchemy",
     "typeid-python",
     "typer",
+    "sculptor_v0"
 ]
 requires-python = ">=3.11"
 
 [tool.uv.sources]
 imbue_core = { workspace = true }
+sculptor_v0 = { workspace = true }
 
 [tool.setuptools.packages.find]
 exclude = ["keys"]
