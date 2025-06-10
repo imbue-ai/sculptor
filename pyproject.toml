@@ -17,6 +17,7 @@ dependencies = [
     "pydantic-settings",
     "pyjwt[crypto]",
     "pyre-check",
+    "pytest-xdist",
     "sentry-sdk",
     "sqlalchemy",
     "typeid-python",
