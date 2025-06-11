@@ -21,6 +21,7 @@ dependencies = [
     "pytest-xdist",
     "sentry-sdk",
     "sqlalchemy",
+    "syrupy",
     "typeid-python",
     "typer",
     "uvicorn>=0.34.3",
