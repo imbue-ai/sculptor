@@ -24,8 +24,15 @@ dependencies = [
     "syrupy",
     "typeid-python",
     "typer",
+    "sculptor_v0",
+    "filelock>=3.8.0",
+    "psutil>=5.9.0",
+    "pyfixfmt",
+    "pytest>=7.0.0",
+    "requests>=2.28.0",
+    "selenium>=4.0.0",
+    "splinter>=0.19.0",
     "uvicorn>=0.34.3",
-    "sculptor-v0",
 ]
 requires-python = ">=3.11"
 
