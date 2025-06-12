@@ -14,10 +14,10 @@ Install ttyd using instructions [here](https://github.com/tsl0922/ttyd).
 
 ```
 # start the server
-uv run uvicorn sculptor.web.app:APP --reload
+uv run uvicorn sculptor.web.app:APP --reload --port 5050
 
 # send a request for the current version
-curl http://localhost:8000/api/v1/version
+curl http://localhost:5050/api/v1/version
 ```
 
 ## Changing the database
@@ -43,7 +43,7 @@ By default, authentication is off. If you want to enable it, set the `ALLOW_ANON
 When you do that, you need to authenticate using the `Authorization: Bearer` header, e.g.:
 
 ```
-curl -H "Authorization: Bearer <token>" http://localhost:8000/modal-sandboxes
+curl -H "Authorization: Bearer <token>" http://localhost:5050/modal-sandboxes
 ```
 
 You can get a token by running
