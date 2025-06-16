@@ -10,15 +10,34 @@ It provides a web interface for creating and managing tasks, agents, and the env
 
 Install ttyd using instructions [here](https://github.com/tsl0922/ttyd).
 
+### Add secrets
+
+Add your anthropic api key to `~/.sculptor/secrets.json` in the form `{ "ANTHROPIC_API_KEY" : "your_key_here" }
+
 ### Run
 
-```
-# start the server
-uv run uvicorn sculptor.web.app:APP --reload
+From the root of the generally intelligent repo, run the following command to build the project:
 
-# send a request for the current version
-curl http://localhost:8000/api/v1/version
+```bash
+cd sculptor
+make install
 ```
+
+Then run the following command to start the frontend and backend (this will also install dependencies):
+
+```bash
+make start REPO_PATH=<path_to_your_repo>
+```
+
+`path_to_your_repo` should be a path to the **root** of the git repository that you want to use with Sculptor.
+
+Note, you may need to clear you state if we've made any updates via
+
+```bash
+make rm-state
+```
+
+See the Makefile for all supported commands.
 
 ## Changing the database
 
@@ -43,7 +62,7 @@ By default, authentication is off. If you want to enable it, set the `ALLOW_ANON
 When you do that, you need to authenticate using the `Authorization: Bearer` header, e.g.:
 
 ```
-curl -H "Authorization: Bearer <token>" http://localhost:8000/modal-sandboxes
+curl -H "Authorization: Bearer <token>" http://localhost:5050/modal-sandboxes
 ```
 
 You can get a token by running

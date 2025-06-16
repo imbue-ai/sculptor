@@ -3,14 +3,14 @@
 Conceptually, the purpose of an `Agent` is to perform a specific task or accomplish some goal.
 
 Fundamentally, an `Agent` is extremely simple:
-any program that can process a `AgentMessage`s (and emit `AgentMessage`s) can be considered an `Agent`.
+any program that can process a `Message`s (and emit `Message`s) can be considered an `Agent`.
 
 That said, there are a number of additional conventions defined below that make it easier to work with `Agent`s in the `sculptor` ecosystem:
 
 - `Agent`s are guaranteed to have an initial message, which serves as the initial goal.
 - `Agent`s will be run in the `Environment` specified in the inputs (`AgentTaskInputsV1`.)
-- `Agent`s should emit a sequence of `AgentMessage`s to communicate their progress and results.
-- `Agent`s should react to `AgentMessage`s sent to them by the user or controlling process.
+- `Agent`s should emit a sequence of `Message`s to communicate their progress and results.
+- `Agent`s should react to `Message`s sent to them by the user or controlling process.
 - `Agent`s can be interrupted (like any normal task). Because of this, they should support resuming from a previous state.
 - `Agent`s should yield `RequestCompleteAgentMessage` messages when they have finished processing a message.
   This enables the controlling process to snapshot the state (when there are no pending messages.)
@@ -23,7 +23,7 @@ That said, there are a number of additional conventions defined below that make 
 - `Agent`s, by convention, are run in a `tmux` session, and the user can connect to that session (over the web) to see the output.
   This is not strictly required, but it makes it easier to interact with (and debug) `Agent`s.
 
-All of the above conventions are simply implemented by emitting and handling the correct `AgentMessage`s.
+All of the above conventions are simply implemented by emitting and handling the correct `Message`s.
 
 When emitting an artifact message that refers to some output to sync,
 it is important that the artifact be written (and flushed) before the message is emitted.

@@ -1,19 +1,19 @@
 # Currently open design questions
 
-## SHould the AgentMessage's have a created_at field?
+## SHould the Message's have a created_at field?
 
 You probably want to know *when* something happened.
 
-However, putting the created_at in the AgentMessage is not great -- there is fundamentally clock skew,
+However, putting the created_at in the Message is not great -- there is fundamentally clock skew,
 and then people might think it was reasonable to sort by that field, which is not a good idea.
 
-Right now, the AgentMessage's are properly serialized by virtue of being saved to the database,
+Right now, the Message's are properly serialized by virtue of being saved to the database,
 
 Perhaps the field ought to be there, but be simply be given a name like `approximate_creation_time`.
 
 I'll do that for now.
 
-## Should the AgentMessage's be saved to the database or not?
+## Should the Message's be saved to the database or not?
 
 **Tentative answer**: Yes. This will eventually be a performance problem, but for now it is probably fine,
 and it's just much easier to reason about behavior when it is transactional.
@@ -64,7 +64,7 @@ My current leading idea is that we should move this into *our* code that is call
 Before calling in, we can set up tmux, start whatever process needs to be started in that tmux session, etc.
 
 **Tentative answer**: we decided to move this into the actual "Agent"s themselves, ie, the code that is run in the `Environment`.
-The outer process can be informed about these details by sending special `AgentMessage`s back.
+The outer process can be informed about these details by sending special `Message`s back.
 
 ## Where, exactly, does the tmux scrollback buffer get syned to *on the server*?
 
@@ -75,7 +75,7 @@ We could sync them to a file? Or make a special table in the database that conta
 Logically it's very similar to the StreamingContainer's that we had before
 (in that we don't want to continually make new records for each update)
 
-**Tentative answer**: like the above, we can have special `AgentMessage`s that tell the runner where to find the scrollback buffer.
+**Tentative answer**: like the above, we can have special `Message`s that tell the runner where to find the scrollback buffer.
 Then they can be considered an "artifact" from the agent (with a file:/// url), and the syncer can just keep that file updated.
 
 ## Should there even be a database for the environment_service?
