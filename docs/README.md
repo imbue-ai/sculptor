@@ -3,6 +3,7 @@
 The documentation for `sculptor` is organized into several files:
 
 - [README.md](README.md): this file, the index into the documentation.
+- [overview.md](overview.md): a high-level overview of the `sculptor` application.  Probably best to start here!
 - [specifications.md](specifications.md): a high-level overview of how the specification of the `sculptor` application is organized
   and where to find various types of specification-related files.
 - [glossary.md](glossary.md): a glossary of terms used in the `sculptor` application.
