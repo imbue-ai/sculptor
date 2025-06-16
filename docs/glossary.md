@@ -13,6 +13,9 @@
 - `Process`: a running process in an `Environment`.  It has the same semantics as a posix process, but with a restricted interface.
 - `Image`: a collection of container layers. A docker image, modal sandbox, or the like. Used to launch an `Environment`.
 - `Volume`: a remotely accessible filesystem that can be mounted into an `Environment`, and which persists across `Environment` restarts.
+- `*Config`: classes like `AgentConfig`, `EnvironmentConfig`, etc, are used to configure the various components of the system.
+  They can be thought of as capturing the data required to create an object of that given type.
+  Each concrete implementation of an `Agent`, `Environment`, etc, will have its own specific configuration class.
 - `Message`: messages are either sent by the user, the `Agent`, or the task runner itself.
   All communication between the user and the `Agent` is done via `Message`s.
 - `Request`: a request is any HTTP request made by the user to the `sculptor` backend.

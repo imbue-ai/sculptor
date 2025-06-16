@@ -27,3 +27,8 @@ Users interact with running `Agent`s / `Task`s by sending `Message`s to the appr
 
 Certain `Message`s also control the lifecycle of the `Task` itself,
 (e.g., the `User` can send `StopAgentUserMessage` to stop the agent)
+
+All of this work happens in the context of a `Project`,
+which is a logical collection of code and other resources that the user works on together.
+For now, we assume a single repo, and we assume there is a single `Project` per instance of `sculptor`
+(though this constraint will be relaxed in the future.)
