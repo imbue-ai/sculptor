@@ -10,10 +10,6 @@ It provides a web interface for creating and managing tasks, agents, and the env
 
 Install ttyd using instructions [here](https://github.com/tsl0922/ttyd).
 
-### Add secrets
-
-Add your anthropic api key to `~/.sculptor/secrets.json` in the form `{ "ANTHROPIC_API_KEY" : "your_key_here" }
-
 ### Run
 
 From the root of the generally intelligent repo, run the following command to build the project:
