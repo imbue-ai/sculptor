@@ -10,6 +10,8 @@ It provides a web interface for creating and managing tasks, agents, and the env
 
 Install ttyd using instructions [here](https://github.com/tsl0922/ttyd).
 
+On Docker Desktop, set the file sharing implementation to gRPC FUSE under Settings -> General
+
 ### Run
 
 From the root of the generally intelligent repo, run the following command to build the project:
