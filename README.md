@@ -10,15 +10,32 @@ It provides a web interface for creating and managing tasks, agents, and the env
 
 Install ttyd using instructions [here](https://github.com/tsl0922/ttyd).
 
+On Docker Desktop, set the file sharing implementation to gRPC FUSE under Settings -> General
+
 ### Run
 
-```
-# start the server
-uv run uvicorn sculptor.web.app:APP --reload --port 5050
+From the root of the generally intelligent repo, run the following command to build the project:
 
-# send a request for the current version
-curl http://localhost:5050/api/v1/version
+```bash
+cd sculptor
+make install
 ```
+
+Then run the following command to start the frontend and backend (this will also install dependencies):
+
+```bash
+make start REPO_PATH=<path_to_your_repo>
+```
+
+`path_to_your_repo` should be a path to the **root** of the git repository that you want to use with Sculptor.
+
+Note, you may need to clear you state if we've made any updates via
+
+```bash
+make rm-state
+```
+
+See the Makefile for all supported commands.
 
 ## Changing the database
 
