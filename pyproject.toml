@@ -10,7 +10,6 @@ readme = "README.md"
 dependencies = [
     "email-validator",
     "fastapi",
-    "imbue-core",
     "loguru",
     "modal>=1.0.3",
     "psycopg[binary]",
@@ -52,3 +51,4 @@ dev = [
 
 [project.scripts]
 sculptor_npm_run = "sculptor.scripts.npm_run:app"
+sculptor = "sculptor.cli.main:main"
