@@ -1,4 +1,4 @@
-.PHONY: dev start frontend backend rm-state clean help tmux-dev tmux-stop test-integration
+.PHONY: dev start frontend backend rm-state clean install help tmux-dev tmux-stop test-integration
 .SILENT:
 .ONESHELL:
 
@@ -43,6 +43,21 @@ backend: ## Run the backend server (requires REPO_PATH=/path/to/repo)
 	echo "Using repository path: $(REPO_PATH)"
 	uv run python -m sculptor.cli.main $(REPO_PATH)
 
+rm-state: ## Clear sculptor application state
+	echo "Clearing sculptor database..."
+	rm /tmp/sculptor.db
+
+# Build commands follow
+
+clean: ## Clean node_modules and Python cache
+	echo "Cleaning up..."
+	rm -rf ../sculptor_v0/frontend/node_modules
+	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	find . -name "*.pyc" -delete 2>/dev/null || true
+	rm ../dist/* .devcontainer/*.whl || true
+	rm -r ./frontend-dist/* || true
+	rm -r build/* || true
+
 install: ## Install dependencies for both frontend and backend
 	echo "Installing frontend dependencies..."
 	( cd ../sculptor_v0/frontend && npm install --force )
@@ -51,15 +66,11 @@ install: ## Install dependencies for both frontend and backend
 	echo "Building the docker image."
 	uv run sculptor/scripts/build.py images
 
-rm-state: ## Clear sculptor application state
-	echo "Clearing sculptor database..."
-	rm /tmp/sculptor.db
-
-clean: ## Clean node_modules and Python cache
-	echo "Cleaning up..."
-	rm -rf ../sculptor_v0/frontend/node_modules
-	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-	find . -name "*.pyc" -delete 2>/dev/null || true
+dist: clean install  ## Build a distribution for sculptor
+	cd ../sculptor_v0/frontend && npm run build
+	cp -R ../sculptor_v0/frontend/dist/ ./frontend-dist
+	uv build --wheel --sdist
+	# Build executable
 
 help: ## Show this help message
 	echo "Available targets:"
