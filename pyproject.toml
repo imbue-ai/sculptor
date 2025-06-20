@@ -34,6 +34,7 @@ dependencies = [
     "splinter>=0.19.0",
     "uvicorn>=0.34.3",
     "coolname>=2.2.0",
+    "watchdog>=6.0.0",
 ]
 requires-python = ">=3.11"
 
