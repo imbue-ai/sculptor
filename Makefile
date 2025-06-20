@@ -48,6 +48,8 @@ install: ## Install dependencies for both frontend and backend
 	( cd ../sculptor_v0/frontend && npm install --force )
 	echo "Installing backend dependencies..."
 	uv sync --dev
+	echo "Building the docker image."
+	uv run sculptor/scripts/build.py images
 
 rm-state: ## Clear sculptor application state
 	echo "Clearing sculptor database..."
