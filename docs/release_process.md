@@ -44,3 +44,17 @@ The latest version of sculptor is always at
 * s3://imbue-sculptor-latest/sculptor
 * s3://imbue-sculptor-latest/sculptor.tar.gz
 * s3://imbue-sculptor-latest/sculptor-py3-none-any.whl
+
+
+### A note on versioning
+
+First a spot-the-difference:
+
+* https://peps.python.org/pep-0440/
+* https://semver.org/spec/v2.0.0.html
+
+Of course you spotted that both standards disagree on how to spell rc versions.
+
+Python packaging mandates "1.2.3rc2" while Semver wants "1.2.3-rc.1". The
+additional punctuation characters are somewhat rudely stripped from Python,
+forcing us to go with PEP-0440.
