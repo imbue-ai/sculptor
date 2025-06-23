@@ -2,7 +2,7 @@
 
 ## Assumptions
 
-- We want to support locally running, isolated single-user servers as well as a centrally managed multi-user server.
+- We want to support locally running, isolated single-user servers as well as (eventually) a centrally managed multi-user server.
 - We want to support SQL schema migrations.
 - We want to support data migrations, especially migrations of JSON blobs (e.g. in SavedAgentMessage).
 
@@ -52,7 +52,17 @@
 ## Open questions
 
 - Do we actually need old messages?
+  - Answer by Josh:
+    > The issue is that the product probably needs "old" messages in at least some cases, and given that, we might as well (be able to do it) in all cases (since a computer doesn't care if we're migrating 10 or 10M messages)
+    >  We need them in some cases bc of the following scenario:
+    >
+    >  User kicks off task and chats with it a bit, gets some brilliant results
+    >  User sees "update" icon in the upper right and clicks it
+    >  App restarts with new version
+    >  If those recent (old) messages are not still there / the task cannot be resumed, they are generally going to be sad (and will learn to never update, which has its own problems)
 - Do we need to support migrations when the app is running / tasks are in progress?
+  > While the app is running -- no, for now, we can force them to restart, just like cursor or pycharm.  We don't need to try to do better than that.
+  > However, tasks can be "in progress" even when the app is not running.  We DO need to support upgrading when tasks are in progress, see above note
 - Where and how should we indicate progress and status of locally running migrations, including nuking of the DB in case migrations fail?
 
 
