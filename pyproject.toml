@@ -8,6 +8,8 @@ name = "sculptor"
 version = "0.0.0"
 readme = "README.md"
 dependencies = [
+    # Please add dev dependencies to dependency-groups.dev, not here.
+    "anthropic>=0.38.0",
     "email-validator",
     "fastapi",
     "loguru",
