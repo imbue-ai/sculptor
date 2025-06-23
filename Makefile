@@ -54,7 +54,7 @@ clean: ## Clean node_modules and Python cache
 	rm -rf ../sculptor_v0/frontend/node_modules
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	find . -name "*.pyc" -delete 2>/dev/null || true
-	rm ../dist/* .devcontainer/*.whl || true
+	rm ../dist/* claude-container/*.whl || true
 	rm -r ./frontend-dist/* || true
 	rm -r build/* || true
 
