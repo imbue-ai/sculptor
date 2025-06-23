@@ -4,8 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sculptor"
-# this is a lie. The version file will be injected.
+
+# This is going to be the true version.
 version = "0.0.0"
+
 readme = "README.md"
 dependencies = [
     # Please add dev dependencies to dependency-groups.dev, not here.
@@ -46,6 +48,7 @@ exclude = ["keys"]
 [dependency-groups]
 dev = [
     "filelock>=3.18.0",
+    "imbue_core==0.0.9",
     "pytest>=7.4.0",
     "pytest-xdist>=3.7.0",
     "pyfixfmt",
