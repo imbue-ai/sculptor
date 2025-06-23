@@ -58,6 +58,10 @@
 
 ## Alternatives
 
-- We could keep throwing away old data instead of trying to keep it relevant via migrations.
+- Keep throwing away old data instead of trying to keep it relevant via migrations.
     - However, even if we did that, we would probably reuse many of the above building blocks in order to detect breaking changes in the first place.
     - Which means that going with migrations for starters isn't that much of wasted effort even if we eventually end up throwing away old data instead.
+- Migrate JSON blobs lazily on the fly.
+    - We tried that in data gen a year ago and it wasn't that great in practice.
+- Instead of data migrations, make the application logic robust towards obsolete JSON data formats by implementing graceful failures everywhere.
+    - This would be probably fragile and would lead to having a database with data that would be hard to work with or even interpret.
