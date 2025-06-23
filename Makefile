@@ -57,12 +57,14 @@ clean: ## Clean node_modules and Python cache
 	rm ../dist/* claude-container/*.whl || true
 	rm -r ./frontend-dist/* || true
 	rm -r build/* || true
+	rm -r _vendor/* || true
 
 install: ## Install dependencies for both frontend and backend
 	echo "Installing frontend dependencies..."
 	( cd ../sculptor_v0/frontend && npm install --force )
 	echo "Installing backend dependencies..."
 	uv sync --dev
+	uv pip install ../imbue_core --target _vendor
 	echo "Building the docker image."
 	uv run sculptor/scripts/build.py images
 
