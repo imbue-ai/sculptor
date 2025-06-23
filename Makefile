@@ -64,7 +64,10 @@ install: ## Install dependencies for both frontend and backend
 	( cd ../sculptor_v0/frontend && npm install --force )
 	echo "Installing backend dependencies..."
 	uv sync --dev
-	uv pip install ../imbue_core --target _vendor
+	# We cannot install imbue_core's dependencies at this time, because that
+	# would bake in platform-specific .so files and other binaries into our
+	# build, which we want to be platform agnostic.
+	uv pip install ../imbue_core --no-deps --target _vendor
 	echo "Building the docker image."
 	uv run sculptor/scripts/build.py images
 
