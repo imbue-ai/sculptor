@@ -58,6 +58,8 @@ clean: ## Clean node_modules and Python cache
 	rm -r ./frontend-dist/* || true
 	rm -r build/* || true
 	rm -r _vendor/* || true
+	rm -r sculptor/_version.py || true
+
 
 install: ## Install dependencies for both frontend and backend
 	echo "Installing frontend dependencies..."
@@ -72,10 +74,14 @@ install: ## Install dependencies for both frontend and backend
 	uv run sculptor/scripts/build.py images
 
 dist: clean install  ## Build a distribution for sculptor
+
+    # We have a dependency on sculptor_v0 for the frontend artifacts
 	cd ../sculptor_v0/frontend && npm run build
 	cp -R ../sculptor_v0/frontend/dist/ ./frontend-dist
+
+	uv run sculptor/scripts/build.py create-version-file
+
 	uv build --wheel --sdist
-	# Build executable
 
 help: ## Show this help message
 	echo "Available targets:"

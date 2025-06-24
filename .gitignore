@@ -1,2 +1,5 @@
 frontend-dist/**
 _vendor
+
+# This version file is automatically generated and included with the build.
+sculptor/_version.py
