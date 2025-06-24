@@ -3,14 +3,14 @@
 ## Motivations
 
 We have the following rough user stories:
-    - As a product owner, I want to collect user e-mails so that I can notify users about important updates.
-    - As a user, I want to be able to sign up, log in, retrieve forgotten password, ...
-    - As a product owner, I want to track billing / usage associated with each user.
-    - As a user, I want to be able to let Sculptor use Modal and Anthropic without setting up my own account with each of them.
+- As a product owner, I want to collect user e-mails so that I can notify users about important updates.
+- As a user, I want to be able to sign up, log in, retrieve forgotten password, ...
+- As a product owner, I want to track billing / usage associated with each user.
+- As a user, I want to be able to let Sculptor use Modal and Anthropic without setting up my own account with each of them.
 
 And more into the future:
-    - As a user, I don't want to run sculptor locally.
-    - As a user, I want my sculptor's agents to colaborate with agents of other users in my organization.
+- As a user, I don't want to run sculptor locally.
+- As a user, I want my sculptor's agents to colaborate with agents of other users in my organization.
 
 
 ## Reasoning and research
@@ -62,12 +62,12 @@ In general, choosing a third party provider would be the least amount of work fo
 There's a middle ground between the two approaches above: we could use a self-hosted auth provider. That would incur some operational overhead for us but we would avoid the disadvantages of third party auth providers. In terms of implementation / integration on the Sculptor's side, it's the same as using a third party provider.
 
 From the self-hosted providers, one that stands out is [Authentik](https://goauthentik.io/):
-    - Under the hood, it's just Python / Django and Typescript.
-    - Stores data in postgres (we can point it at our database).
-    - People seem to be generally happy with it (for simplicity, customization options, ...).
-    - Scales well (is horizontally scalable - all the state is in Postgres).
-    - Allows us to add custom claims to JWTs.
-    - There are ways of modelling organizations if we so desire.
+- Under the hood, it's just Python / Django and Typescript.
+- Stores data in postgres (we can point it at our database).
+- People seem to be generally happy with it (for simplicity, customization options, ...).
+- Scales well (is horizontally scalable - all the state is in Postgres).
+- Allows us to add custom claims to JWTs.
+- There are ways of modelling organizations if we so desire.
 
 
 ## Proposed approach
