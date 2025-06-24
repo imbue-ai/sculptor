@@ -77,6 +77,6 @@ help: ## Show this help message
 	grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
 
 # Tests below
-
 test-integration: ## Run integration tests for Sculptor
-	uv run pytest tests/integration --no-headless -kv0 -sv -ra
+	uv run sculptor/scripts/build.py images
+	uv run --project ../sculptor pytest ../sculptor/tests/integration --no-headless -kv1 -sv -ra
