@@ -85,3 +85,6 @@ help: ## Show this help message
 
 test-integration: ## Run integration tests for Sculptor
 	uv run pytest tests/integration --no-headless -kv0 -sv -ra
+
+test-unit: ## Run unit tests for Sculptor
+	uv run pytest sculptor/ -n 8
