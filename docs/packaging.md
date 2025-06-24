@@ -15,13 +15,18 @@ Josh](https://www.dropbox.com/scl/fi/ch5g3upepd2ibytwiq5sh/Sculptor-packaging-sp
 
 `uvx --python=3.11 --from https://imbue-sculptor-latest.s3.us-west-2.amazonaws.com/sculptor.tar.gz --refresh sculptor`
 
-And an executable wrapper that the user can download and install on their machine:
+And an executable wrapper that the user can download and install on their machine.
 
 ```
 curl -O https://imbue-sculptor-latest.s3.us-west-2.amazonaws.com/sculptor
 chmod +x sculptor
 ./sculptor --help
 ```
+
+The executable wrapper will only do a minor install of uv, and then run the
+`uvx` command above. This means that using the wrapper will always guarantee
+that the user receives the latest build of Sculptor.
+
 
 ## In the long term, we may have other plans
 
