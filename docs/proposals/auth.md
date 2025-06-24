@@ -2,58 +2,58 @@
 
 ## Motivations
 
-We have the following rough user stories:
+We have the following approximate user stories:
 - As a product owner, I want to collect user e-mails so that I can notify users about important updates.
 - As a user, I want to be able to sign up, log in, retrieve forgotten password, ...
 - As a product owner, I want to track billing / usage associated with each user.
-- As a user, I want to be able to let Sculptor use Modal and Anthropic without setting up my own account with each of them.
+- As a user, I want to be able to let Sculptor use Modal and Anthropic without having to set up my own account with each of them.
 
-And more into the future:
-- As a user, I don't want to run sculptor locally.
+And later on:
+- As a user, I don't want to run sculptor locally to avoid the operational overhead.
 - As a user, I want my sculptor's agents to colaborate with agents of other users in my organization.
 
 
 ## Reasoning and research
 
-The above points mean that eventually, we will need to have Users as well as Organizations in our own central database.
-Provided that the first two user stories (related to sign up) are the first to tackle, we can probably postpone having a central Sculptor database.
+The user stories imply that eventually, we will need to have Users as well as Organizations in our own central database.
+Provided that the first two user stories (e-mail collection and signups / logins) are the first to tackle, we can probably postpone having a central Sculptor database for now.
 
-It's likely that we would like users to be able to sign up as easily as hitting a "sign up using your Google account" button. On the high level, this (as well as all the related auth functionality) can be achieved in three different ways:
+We would like users to be able to sign up as easily as hitting a "sign up using your Google account" button. On the high level, this and other similar things can be achieved in three different ways:
 
 
 ### Rolling our own auth
 
 We could implement all that we need (signups, login flows, oauth2, password reset, ...) using existing low-level libraries.
-That would give us the most control but it's a lot of work. Let's not go that route.
+That would give us the most control but it's a lot of work. We probably don't want to do that.
 
 
 ### Using a third-party auth provider
 
-There's a number of third-party auth providers: Auth0, WorkOS, Clerk, AWS Cognito, Supabase, Firebase auth and others.
-The first three in the list seem to be most relevant for us; they all provide relatively similar functionality (various auth flows including the frontend part, user and organization management).
+There's a number of third-party auth providers: Auth0, WorkOS, Clerk, AWS Cognito, Supabase, Firebase auth, ...
+The first three in the list seem to be the most relevant for us; they all provide relatively similar functionality (various auth flows, user and organization management).
 
-- Clerk
+- [Clerk](https://clerk.com/)
     - Has many negative experiences mentioned on Reddit, usually related to bugginess.
     - That's not a great sign, I haven't investigated further.
-- Auth0
+- [Auth0](https://auth0.com/)
     - Has been around for quite some time.
     - Has export functionality.
     - Seems to be quite pricey (low $hundreds per thousand active users monthly).
     - Multiple people reported that they feel it's a "stale" product (has been acquired a few years ago).
-    - Limits the number of "Organizations" (up to ten?).
-    - Generally supports B2C setups.
-- WorkOS
+    - Limits the number of "Organizations" (up to just ten?).
+    - Supports B2C as well as B2B setups.
+- [WorkOS](https://workos.com/)
     - Cheaper than Auth0 (the basic Authkit is free up to 1M active users).
     - Specializes in B2B software with enterprise features.
-    - Only exposes data (like users) via a rate-limited API.
+    - Only exposes data (such as users) via a rate-limited API.
 
 In general, choosing a third party provider would be the least amount of work for us but the price to pay for that is:
 - Loss of control
     - User data live with the provider, not with us.
     - Helplessness in face of bugs and outages (which seems to be a real concern with some providers).
     - Hard or limited customization.
-- Vendor lock-in (it can be rather hard to migrate away, especially from some of them).
-- Mismatch between our words ("decentralization") and actions ("let's store all of our user's sensitive data in Auth0").
+- Vendor lock-in (it can be rather hard to migrate away).
+- Mismatch between our words ("decentralization!") and actions ("let's store all of our user's sensitive data with Auth0").
 - From the perspective of users, we retain all the responsibility even if it's the third party provider who makes a mistake or somehow fails.
 
 
@@ -90,4 +90,4 @@ In case we decide to go with Authentic, for starters, we could do it like this:
 - Prepare a database in neon.tech.
 - If we don't have one yet, get an account with mailgun or mailchimp or something similar to get a trusted e-mail sender for things like password reset e-mails.
   (We'll need it for the newsletters and communication with users, anyway.)
-- Deploy Authentik to fly, using the neon.tech postgres database and possibly fly's managed redis which Authentik uses for caching.
+- Deploy Authentik to fly, using the above and possibly also fly's managed redis service that Authentik will use for caching.
