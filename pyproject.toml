@@ -36,6 +36,7 @@ dependencies = [
     "uvicorn>=0.34.3",
     "coolname>=2.2.0",
     "watchdog>=6.0.0",
+    "tomli-w>=1.2.0",
 ]
 requires-python = ">=3.11"
 
