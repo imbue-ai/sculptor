@@ -8,7 +8,7 @@ It provides a web interface for creating and managing tasks, agents, and the env
 
 ### Install prerequisites
 
-Install ttyd using instructions [here](https://github.com/tsl0922/ttyd).
+Install ttyd using instructions [here](https://github.com/tsl0922/ttyd), and install tmux using `brew install tmux`.
 
 On Docker Desktop, set the file sharing implementation to gRPC FUSE under Settings -> General
 
