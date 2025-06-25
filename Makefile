@@ -5,6 +5,7 @@
 # Variables
 SESSION_NAME := sculptor-session
 REPO_PATH ?= $(error REPO_PATH is required. Usage: make dev REPO_PATH=/path/to/repo)
+DEV_MODE ?= false
 # Force SHELL to /bin/bash for users of more esoteric shells
 ifeq ($(filter %bash %zsh,$(SHELL)),)
     SHELL := /bin/bash
@@ -22,8 +23,8 @@ tmux-dev: ## Start tmux session with frontend and backend windows (requires REPO
 	echo "Creating new tmux session..."
 	tmux new-session -d -s $(SESSION_NAME) -n frontend $(SHELL)
 	tmux new-window -t $(SESSION_NAME) -n backend $(SHELL)
-	tmux send-keys -t $(SESSION_NAME):frontend "cd $(PWD)/../sculptor_v0/frontend && npm run dev" Enter
-	tmux send-keys -t $(SESSION_NAME):backend "cd $(PWD) && uv run python -m sculptor.cli.main $(REPO_PATH)" Enter
+	tmux send-keys -t $(SESSION_NAME):frontend "cd $(PWD)/../sculptor_v0/frontend && DEV_MODE=$(DEV_MODE) npm run dev" Enter
+	tmux send-keys -t $(SESSION_NAME):backend "cd $(PWD) && DEV_MODE=$(DEV_MODE) uv run python -m sculptor.cli.main $(REPO_PATH)" Enter
 	echo "Development servers started in tmux session '$(SESSION_NAME)'"
 	echo "Backend serving repository: $(REPO_PATH)"
 	echo "Use 'tmux attach -t $(SESSION_NAME)' to attach to the session"
