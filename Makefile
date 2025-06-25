@@ -97,3 +97,6 @@ test-integration: # Run integration tests for Sculptor
 
 test-unit: ## Run unit tests for Sculptor
 	uv run pytest sculptor/ -n 8 $(TEST_ARGS)
+
+test-build-artifacts: ## Test the build script and verify that the artifacts can run
+	bash sculptor/scripts/test_build_artifacts.sh
