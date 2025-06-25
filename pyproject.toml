@@ -35,7 +35,6 @@ dependencies = [
     "uvicorn>=0.34.3",
     "coolname>=2.2.0",
     "watchdog>=6.0.0",
-
     # The following dependencies have been inlined from imbue_core.
     #
     # See ../imbue_core/pyproject.toml for the full files.
@@ -64,6 +63,7 @@ dependencies = [
     "tenacity>=8.2.2",
     "grpclib>=0.4.7",
     # End imbue_core inline
+    "alembic>=1.16.1",
 ]
 requires-python = ">=3.11"
 
