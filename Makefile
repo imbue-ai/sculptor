@@ -73,6 +73,7 @@ install: ## Install dependencies for both frontend and backend
 	echo "Building the docker image."
 	uv run sculptor/scripts/build.py images
 
+
 dist: clean install  ## Build a distribution for sculptor
 
     # We have a dependency on sculptor_v0 for the frontend artifacts
@@ -82,6 +83,7 @@ dist: clean install  ## Build a distribution for sculptor
 	uv run sculptor/scripts/build.py create-version-file
 
 	uv build --wheel --sdist
+
 
 help: ## Show this help message
 	echo "Available targets:"
