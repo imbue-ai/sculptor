@@ -71,7 +71,7 @@ install: ## Install dependencies for both frontend and backend
 	# build, which we want to be platform agnostic.
 	uv pip install ../imbue_core --no-deps --target _vendor
 	echo "Building the docker image."
-	uv run sculptor/scripts/build.py images
+	uv run sculptor/scripts/dev.py images
 
 
 dist: clean install  ## Build a distribution for sculptor
@@ -80,7 +80,7 @@ dist: clean install  ## Build a distribution for sculptor
 	cd ../sculptor_v0/frontend && npm run build
 	cp -R ../sculptor_v0/frontend/dist/ ./frontend-dist
 
-	uv run sculptor/scripts/build.py create-version-file
+	uv run sculptor/scripts/dev.py create-version-file
 
 	uv build --wheel --sdist
 
