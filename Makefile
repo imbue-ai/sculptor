@@ -57,12 +57,17 @@ clean: ## Clean node_modules and Python cache
 	rm ../dist/* claude-container/*.whl || true
 	rm -r ./frontend-dist/* || true
 	rm -r build/* || true
+	rm -r _vendor/* || true
 
 install: ## Install dependencies for both frontend and backend
 	echo "Installing frontend dependencies..."
 	( cd ../sculptor_v0/frontend && npm install --force )
 	echo "Installing backend dependencies..."
 	uv sync --dev
+	# We cannot install imbue_core's dependencies at this time, because that
+	# would bake in platform-specific .so files and other binaries into our
+	# build, which we want to be platform agnostic.
+	uv pip install ../imbue_core --no-deps --target _vendor
 	echo "Building the docker image."
 	uv run sculptor/scripts/build.py images
 
@@ -80,3 +85,6 @@ help: ## Show this help message
 
 test-integration: ## Run integration tests for Sculptor
 	uv run pytest tests/integration --no-headless -kv0 -sv -ra
+
+test-unit: ## Run unit tests for Sculptor
+	uv run pytest sculptor/ -n 8
