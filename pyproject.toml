@@ -17,7 +17,6 @@ dependencies = [
     "loguru",
     "modal>=1.0.3",
     "psycopg[binary]",
-    "pydantic",
     "pydantic-settings",
     "pyjwt[crypto]",
     "pyre-check",
