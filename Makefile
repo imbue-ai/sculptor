@@ -5,6 +5,7 @@
 # Variables
 SESSION_NAME := sculptor-session
 REPO_PATH ?= $(error REPO_PATH is required. Usage: make dev REPO_PATH=/path/to/repo)
+DEV_MODE ?= false
 # Force SHELL to /bin/bash for users of more esoteric shells
 ifeq ($(filter %bash %zsh,$(SHELL)),)
     SHELL := /bin/bash
@@ -22,8 +23,8 @@ tmux-dev: ## Start tmux session with frontend and backend windows (requires REPO
 	echo "Creating new tmux session..."
 	tmux new-session -d -s $(SESSION_NAME) -n frontend $(SHELL)
 	tmux new-window -t $(SESSION_NAME) -n backend $(SHELL)
-	tmux send-keys -t $(SESSION_NAME):frontend "cd $(PWD)/../sculptor_v0/frontend && npm run dev" Enter
-	tmux send-keys -t $(SESSION_NAME):backend "cd $(PWD) && uv run python -m sculptor.cli.main $(REPO_PATH)" Enter
+	tmux send-keys -t $(SESSION_NAME):frontend "cd $(PWD)/../sculptor_v0/frontend && DEV_MODE=$(DEV_MODE) npm run dev" Enter
+	tmux send-keys -t $(SESSION_NAME):backend "cd $(PWD) && DEV_MODE=$(DEV_MODE) uv run python -m sculptor.cli.main $(REPO_PATH)" Enter
 	echo "Development servers started in tmux session '$(SESSION_NAME)'"
 	echo "Backend serving repository: $(REPO_PATH)"
 	echo "Use 'tmux attach -t $(SESSION_NAME)' to attach to the session"
@@ -58,6 +59,8 @@ clean: ## Clean node_modules and Python cache
 	rm -r ./frontend-dist/* || true
 	rm -r build/* || true
 	rm -r _vendor/* || true
+	rm -r sculptor/_version.py || true
+
 
 install: ## Install dependencies for both frontend and backend
 	echo "Installing frontend dependencies..."
@@ -69,22 +72,28 @@ install: ## Install dependencies for both frontend and backend
 	# build, which we want to be platform agnostic.
 	uv pip install ../imbue_core --no-deps --target _vendor
 	echo "Building the docker image."
-	uv run sculptor/scripts/build.py images
+	uv run sculptor/scripts/dev.py images
+
 
 dist: clean install  ## Build a distribution for sculptor
+
+    # We have a dependency on sculptor_v0 for the frontend artifacts
 	cd ../sculptor_v0/frontend && npm run build
 	cp -R ../sculptor_v0/frontend/dist/ ./frontend-dist
+
+	uv run sculptor/scripts/dev.py create-version-file
+
 	uv build --wheel --sdist
-	# Build executable
+
 
 help: ## Show this help message
 	echo "Available targets:"
 	grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
 
 # Tests below
-
 test-integration: ## Run integration tests for Sculptor
-	uv run pytest tests/integration --no-headless -kv0 -sv -ra
+	uv run sculptor/scripts/build.py images
+	uv run --project ../sculptor pytest ../sculptor/tests/integration --no-headless -kv1 -sv -ra
 
 test-unit: ## Run unit tests for Sculptor
 	uv run pytest sculptor/ -n 8
