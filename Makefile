@@ -12,10 +12,11 @@ ifeq ($(filter %bash %zsh,$(SHELL)),)
 endif
 
 dev: tmux-dev ## Run both frontend and backend in tmux session (requires REPO_PATH=/path/to/repo)
+              ## Note that this supports hot-reloading for frontend assets.
 
-start: install tmux-dev
+start: tmux-dev
 
-tmux-dev: ## Start tmux session with frontend and backend windows (requires REPO_PATH=/path/to/repo)
+tmux-dev: install ## Start tmux session with frontend and backend windows (requires REPO_PATH=/path/to/repo)
 	echo "Starting tmux development session..."
 	echo "Using repository path: $(REPO_PATH)"
 	echo "Killing existing session if present..."
@@ -35,7 +36,7 @@ tmux-stop: ## Stop tmux development session
 	echo "Stopping tmux session..."
 	tmux kill-session -t $(SESSION_NAME) 2>/dev/null || echo "Session '$(SESSION_NAME)' not found"
 
-frontend: ## Run the frontend development server
+frontend: install ## Run the frontend development server
 	echo "Starting frontend server..."
 	cd ../sculptor_v0/frontend && npm run dev
 
@@ -65,6 +66,11 @@ clean: ## Clean node_modules and Python cache
 install: ## Install dependencies for both frontend and backend
 	echo "Installing frontend dependencies..."
 	( cd ../sculptor_v0/frontend && npm install --force )
+
+    # We have a dependency on sculptor_v0 for the frontend artifacts
+	(cd ../sculptor_v0/frontend && npm run build)
+	cp -R ../sculptor_v0/frontend/dist/ ./frontend-dist
+
 	echo "Installing backend dependencies..."
 	uv sync --dev
 	# We cannot install imbue_core's dependencies at this time, because that
@@ -76,13 +82,7 @@ install: ## Install dependencies for both frontend and backend
 
 
 dist: clean install  ## Build a distribution for sculptor
-
-    # We have a dependency on sculptor_v0 for the frontend artifacts
-	cd ../sculptor_v0/frontend && npm run build
-	cp -R ../sculptor_v0/frontend/dist/ ./frontend-dist
-
 	uv run sculptor/scripts/dev.py create-version-file
-
 	uv build --wheel --sdist
 
 
@@ -91,8 +91,8 @@ help: ## Show this help message
 	grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
 
 # Tests below
-test-integration: ## Run integration tests for Sculptor
-	uv run sculptor/scripts/dev.py images
+test-integration: # Run integration tests for Sculptor
+	# Sculptors integration tests will run the makefile targets it needs to run, so no dependencies here.
 	uv run --project ../sculptor pytest ../sculptor/tests/integration --no-headless -kv1 -sv -ra $(TEST_ARGS)
 
 test-unit: ## Run unit tests for Sculptor
