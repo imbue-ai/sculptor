@@ -1,6 +1,7 @@
 .PHONY: dev start frontend backend rm-state clean install help tmux-dev tmux-stop test-integration
-.SILENT:
 .ONESHELL:
+SHELL := /bin/bash
+SHELLFLAGS := -eu -o pipefail -c
 
 # Variables
 SESSION_NAME := sculptor-session
