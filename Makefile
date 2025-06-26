@@ -68,6 +68,7 @@ install: ## Install dependencies for both frontend and backend
 	( cd ../sculptor_v0/frontend && npm install --force )
 
     # We have a dependency on sculptor_v0 for the frontend artifacts
+	# TODO(danver): Amend this to depend on the correct v1 frontend artifacts once that is changed.
 	( cd ../sculptor_v0/frontend && npm run build )
 	cp -R ../sculptor_v0/frontend/dist/ ./frontend-dist
 
