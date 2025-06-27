@@ -48,7 +48,7 @@ backend: ## Run the backend server (requires REPO_PATH=/path/to/repo)
 
 rm-state: ## Clear sculptor application state
 	echo "Clearing sculptor database..."
-	rm /tmp/sculptor.db
+	rm ~/.sculptor/database.db
 
 # Build commands follow
 
