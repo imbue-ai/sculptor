@@ -36,7 +36,6 @@ dependencies = [
     "coolname>=2.2.0",
     "watchdog>=6.0.0",
     "tomli-w>=1.2.0",
-
     # The following dependencies have been inlined from imbue_core.
     #
     # See ../imbue_core/pyproject.toml for the full files.
@@ -65,6 +64,7 @@ dependencies = [
     "tenacity>=8.2.2",
     "grpclib>=0.4.7",
     # End imbue_core inline
+    "pytest-cov>=6.2.1",
 ]
 requires-python = ">=3.11"
 
