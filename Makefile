@@ -1,6 +1,7 @@
 .PHONY: dev start frontend backend rm-state clean install help tmux-dev tmux-stop test-integration
-.SILENT:
 .ONESHELL:
+SHELL := /bin/bash
+SHELLFLAGS := -eu -o pipefail -c
 
 # Variables
 SESSION_NAME := sculptor-session
@@ -68,6 +69,7 @@ install: ## Install dependencies for both frontend and backend
 	( cd ../sculptor_v0/frontend && npm install --force )
 
     # We have a dependency on sculptor_v0 for the frontend artifacts
+	# TODO(danver): Amend this to depend on the correct v1 frontend artifacts once that is changed.
 	( cd ../sculptor_v0/frontend && npm run build )
 	cp -R ../sculptor_v0/frontend/dist/ ./frontend-dist
 
@@ -97,3 +99,6 @@ test-integration: # Run integration tests for Sculptor
 
 test-unit: ## Run unit tests for Sculptor
 	uv run pytest sculptor/ -n 8 $(TEST_ARGS)
+
+test-build-artifacts: ## Test the build script and verify that the artifacts can run
+	bash sculptor/scripts/test_build_artifacts.sh
