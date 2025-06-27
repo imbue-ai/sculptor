@@ -85,6 +85,9 @@ dist: clean install  ## Build a distribution for sculptor
 	uv run sculptor/scripts/dev.py create-version-file
 	uv build --wheel --sdist
 
+release: ## Convenience shortcut for running release dev command
+	# No depedencies because it's a shortcut
+	uv run sculptor/scripts/dev.py release $(RELEASE_ARGS)
 
 help: ## Show this help message
 	echo "Available targets:"
