@@ -82,6 +82,7 @@ dev = [
     "pytest>=7.4.0",
     "pytest-xdist>=3.7.0",
     "pyfixfmt",
+    "pytest-cov",
     "sculptor_v0", # Tests still have a dependency on Sculptor v0
 ]
 
