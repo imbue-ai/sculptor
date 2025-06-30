@@ -88,3 +88,4 @@ dev = [
 [project.scripts]
 sculptor_npm_run = "sculptor.scripts.npm_run:app"
 sculptor = "sculptor.cli.main:entrypoint"
+sculptor_eslint_preprocess = "sculptor.scripts.eslint_preprocess:main"
