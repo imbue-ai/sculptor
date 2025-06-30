@@ -96,7 +96,7 @@ help: ## Show this help message
 # Tests below
 test-integration: # Run integration tests for Sculptor
 	# Sculptors integration tests will run the makefile targets it needs to run, so no dependencies here.
-	uv run --project ../sculptor pytest ../sculptor/tests/integration --no-headless -kv1 -sv -ra $(TEST_ARGS)
+	uv run pytest tests/integration --no-headless -kv1 -sv -ra $(TEST_ARGS)
 
 test-unit: ## Run unit tests for Sculptor
 	uv run pytest sculptor/ -n 8 $(TEST_ARGS)
