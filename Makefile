@@ -100,7 +100,7 @@ test-integration: # Run integration tests for Sculptor
 	uv run pytest -n 8 -kv1 --capture=no -v -ra $(or $(TEST_ARGS), "tests/integration/")
 
 test-unit: ## Run unit tests for Sculptor
-	 uv run pytest -n 8 --capture=no -v $(or $(TEST_ARGS), "sculptor/")
+	uv run pytest -n 8 --capture=no -v $(or $(TEST_ARGS), "sculptor/")
 
 test-build-artifacts: ## Test the build script and verify that the artifacts can run
 	bash sculptor/scripts/test_build_artifacts.sh
