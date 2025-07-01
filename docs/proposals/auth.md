@@ -10,7 +10,9 @@ We have the following approximate user stories:
 
 And later on:
 - As a user, I don't want to run sculptor locally to avoid the operational overhead.
-- As a user, I want my sculptor's agents to colaborate with agents of other users in my organization.
+- As a user, I want my sculptor's agents to collaborate with other users in my organization or their agents.
+
+- But also: as a user, I want to run sculptor without requiring any account so that everything is under the control of myself / my organization.
 
 
 ## Reasoning and research
@@ -85,7 +87,7 @@ Given the above, I propose to use a self-hosted Authentik instance. However, usi
 
 ### Authentik setup
 
-In case we decide to go with Authentic, for starters, we could do it like this:
+In case we decide to go with Authentik, for starters, we could do it like this:
 
 - Prepare a database in neon.tech.
 - If we don't have one yet, get an account with mailgun or mailchimp or something similar to get a trusted e-mail sender for things like password reset e-mails.
