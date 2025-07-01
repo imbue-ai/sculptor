@@ -32,3 +32,13 @@ All of them have trade-offs, and the approach we use is case-specific:
   we use the dispatched json approach since it doesn't really make sense to migrate the data --
   it will eventually be completely agent-dependent anyway,
   and we'll want to think about how to gracefully deal with outdated data.
+
+
+## Migrations
+
+We use Alembic for schema migrations. For the locally running sculptor instances, we run migrations automatically at server startup. See the [original proposal](../docs/proposals/database_migrations.md) for an overview of the intentions.
+
+### Tracking schema changes.
+
+When you make a change to a database model without creating a migration, the `test_there_are_no_missing_schema_migrations()` test should fail.
+When that happens, run `uv run python sculptor/scripts/bump_migrations <migration_message>`. Alembic should automatically generate the necessary migration. Please review it and if necessary, adjust manually. Try to keep dialect compatibility in mind (we're trying to support sqlite and postgres).
