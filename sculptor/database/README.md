@@ -61,5 +61,5 @@ Failing to do so should cause a failure of the `test_there_are_no_missing_json_s
 
 ### Testing migrations
 
-You can test new migrations by running `uv run alembic -x dburl=sqlite:////tmp/sculptor.db upgrade head` from the `sculptor/database` directory.
+You can test new migrations by running `uv run alembic -x dburl=sqlite:///~/.sculptor/database.db upgrade head` from the `sculptor/database` directory.
 (Ideally, back up your original database first.)
