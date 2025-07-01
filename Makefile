@@ -25,7 +25,7 @@ tmux-dev: install ## Start tmux session with frontend and backend windows (requi
 	echo "Creating new tmux session..."
 	tmux new-session -d -s $(SESSION_NAME) -n frontend $(SHELL)
 	tmux new-window -t $(SESSION_NAME) -n backend $(SHELL)
-	tmux send-keys -t $(SESSION_NAME):frontend "cd $(PWD)/../sculptor_v0/frontend && DEV_MODE=$(DEV_MODE) npm run dev" Enter
+	tmux send-keys -t $(SESSION_NAME):frontend "cd $(PWD)/frontend && DEV_MODE=$(DEV_MODE) npm run dev" Enter
 	tmux send-keys -t $(SESSION_NAME):backend "cd $(PWD) && DEV_MODE=$(DEV_MODE) uv run python -m sculptor.cli.main $(REPO_PATH)" Enter
 	echo "Development servers started in tmux session '$(SESSION_NAME)'"
 	echo "Backend serving repository: $(REPO_PATH)"
@@ -39,7 +39,7 @@ tmux-stop: ## Stop tmux development session
 
 frontend: install ## Run the frontend development server
 	echo "Starting frontend server..."
-	cd ../sculptor_v0/frontend && npm run dev
+	cd frontend && npm run dev
 
 backend: ## Run the backend server (requires REPO_PATH=/path/to/repo)
 	echo "Starting backend server..."
@@ -54,7 +54,7 @@ rm-state: ## Clear sculptor application state
 
 clean: ## Clean node_modules and Python cache
 	echo "Cleaning up..."
-	rm -rf ../sculptor_v0/frontend/node_modules
+	rm -rf frontend/node_modules
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	find . -name "*.pyc" -delete 2>/dev/null || true
 	rm ../dist/* claude-container/*.whl || true
@@ -66,12 +66,10 @@ clean: ## Clean node_modules and Python cache
 
 install: ## Install dependencies for both frontend and backend
 	echo "Installing frontend dependencies..."
-	( cd ../sculptor_v0/frontend && npm install --force )
+	( cd frontend && npm install --force )
 
-    # We have a dependency on sculptor_v0 for the frontend artifacts
-	# TODO(danver): Amend this to depend on the correct v1 frontend artifacts once that is changed.
-	( cd ../sculptor_v0/frontend && npm run build )
-	cp -R ../sculptor_v0/frontend/dist/ ./frontend-dist
+	( cd frontend && npm run build )
+	cp -R frontend/dist/ ./frontend-dist
 
 	echo "Installing backend dependencies..."
 	uv sync --dev
@@ -87,6 +85,9 @@ dist: clean install  ## Build a distribution for sculptor
 	uv run sculptor/scripts/dev.py create-version-file
 	uv build --wheel --sdist
 
+release: ## Convenience shortcut for running release dev command
+	# No depedencies because it's a shortcut
+	uv run sculptor/scripts/dev.py release $(RELEASE_ARGS)
 
 help: ## Show this help message
 	echo "Available targets:"
@@ -95,7 +96,7 @@ help: ## Show this help message
 # Tests below
 test-integration: # Run integration tests for Sculptor
 	# Sculptors integration tests will run the makefile targets it needs to run, so no dependencies here.
-	uv run --project ../sculptor pytest ../sculptor/tests/integration --no-headless -kv1 -sv -ra $(TEST_ARGS)
+	uv run pytest tests/integration -n 8 -kv1 -sv -ra $(TEST_ARGS)
 
 test-unit: ## Run unit tests for Sculptor
 	uv run pytest sculptor/ -n 8 $(TEST_ARGS)
