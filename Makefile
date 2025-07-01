@@ -96,10 +96,11 @@ help: ## Show this help message
 # Tests below
 test-integration: # Run integration tests for Sculptor
 	# Sculptors integration tests will run the makefile targets it needs to run, so no dependencies here.
-	uv run pytest -n 8 -kv1 -v -ra $(TEST_ARGS)
+
+	uv run pytest -n 8 -kv1 -v -ra $(or $(TEST_ARGS), "tests/integration/")
 
 test-unit: ## Run unit tests for Sculptor
-	uv run pytest sculptor/ -n 8 $(TEST_ARGS)
+	uv run pytest -n 8 -v $(or $(TEST_ARGS), "sculptor/")
 
 test-build-artifacts: ## Test the build script and verify that the artifacts can run
 	bash sculptor/scripts/test_build_artifacts.sh
