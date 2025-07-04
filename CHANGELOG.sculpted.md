@@ -3,6 +3,15 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
+## [0.0.1rc4](https://gitlab.com/generally-intelligent/generally_intelligent/-/merge_requests/5066) (4136094f)
+#### changes since `0.0.1rc3`
+
+### Added
+- Browser auto-launch functionality when server is ready to prevent 404 errors on first load (!5064)
+
+### Changed
+- Optimized initial JavaScript bundle loading performance from 6s to 0.3s (!5066)
+
 ## [0.0.1rc3](https://gitlab.com/generally-intelligent/generally_intelligent/-/merge_requests/5061) (2b099f40)
 #### changes since `0.0.1rc2`
 
