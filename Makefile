@@ -62,6 +62,7 @@ clean: ## Clean node_modules and Python cache
 	rm -r build/* || true
 	rm -r _vendor/* || true
 	rm -r sculptor/_version.py || true
+	rm -r sculptor/_sentry_settings.py || true
 
 
 install: ## Install dependencies for both frontend and backend
