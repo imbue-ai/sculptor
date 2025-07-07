@@ -83,6 +83,7 @@ install: ## Install dependencies for both frontend and backend
 
 dist: clean install  ## Build a distribution for sculptor
 	uv run sculptor/scripts/dev.py create-version-file
+	uv run sculptor/scripts/dev.py create-sentry-settings
 	uv build --wheel --sdist
 
 release: ## Convenience shortcut for running release dev command
