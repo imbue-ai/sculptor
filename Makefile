@@ -64,7 +64,6 @@ clean: ## Clean node_modules and Python cache
 	rm sculptor/_version.py || true
 	rm sculptor/_sentry_settings.py || true
 
-
 install: ## Install dependencies for both frontend and backend
 	echo "Installing frontend dependencies..."
 	( cd frontend && npm install --force )
@@ -81,6 +80,8 @@ install: ## Install dependencies for both frontend and backend
 	echo "Building the docker image."
 	uv run sculptor/scripts/dev.py images
 
+install-test: install
+	uv run -m playwright install --with-deps
 
 dist: clean install  ## Build a distribution for sculptor
 	uv run sculptor/scripts/dev.py create-version-file
