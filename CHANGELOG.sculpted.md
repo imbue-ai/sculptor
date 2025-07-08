@@ -25,6 +25,7 @@ All changes are based on merge commits since the last release commit, with gitla
 - Fixed version indicator layering to display below sync footer (!5027)
 - Fixed error block corner styling (!5082)
 - Fixed skeleton truncation issues (hotfix)
+- Fixed sentry integration (!5093)
 
 ## [0.0.1rc4](https://gitlab.com/generally-intelligent/generally_intelligent/-/merge_requests/5066) (4136094f)
 #### changes since `0.0.1rc3`
