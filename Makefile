@@ -106,6 +106,11 @@ test-integration: # Run integration tests for Sculptor
 
 	uv run pytest -n 8 -kv1 --capture=no -v -ra $(or $(TEST_ARGS), "tests/integration/")
 
+test-integration-dist: # Run integration tests for Sculptor on the dist
+	# Sculptors integration tests will run the makefile targets it needs to run, so no dependencies here.
+	uv run pytest -n 8 -kdist --capture=no -v -ra $(or $(TEST_ARGS), "tests/integration/")
+
+
 test-unit: ## Run unit tests for Sculptor
 	uv run pytest -n 8 --capture=no -v $(or $(TEST_ARGS), "sculptor/")
 
