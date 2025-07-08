@@ -78,6 +78,8 @@ exclude = ["keys"]
 dev = [
     "filelock>=3.18.0",
     "imbue_core==0.0.9",
+    "playwright==1.53.0",
+    "pytest-playwright==0.7.0",
     "pyfixfmt",
     "pytest-cov>=6.2.1",
     "pytest-xdist",
