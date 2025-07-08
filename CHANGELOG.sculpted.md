@@ -3,6 +3,29 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
+## [0.0.1rc5](https://gitlab.com/generally-intelligent/generally_intelligent/-/merge_requests/5089) (4ecb8f30)
+#### changes since `0.0.1rc4`
+
+### Added
+- Loading skeleton for long user prompts in the frontend (!5089)
+- Anthropic API key validation to startup checks (!5090)
+- 30-second timeout for Docker cleanup operations (!5080)
+- React Router fallback to fix route serving issues (!5086)
+- ObservableThread primitive for better exception handling in threaded operations (!5063)
+- Diff truncation to handle overly long diffs (!5049)
+
+### Changed
+- Enhanced system prompt to prevent Claude from hallucinating file names (!5088)
+- Expanded conditions for sending branch artifacts (!5078)
+- Enhanced error message UI with prominent system error blocks and improved styling (!5082)
+- Updated development script dependencies (!5068)
+
+### Fixed
+- Fixed navigation to reroute to home when deleting tasks (!5091)
+- Fixed version indicator layering to display below sync footer (!5027)
+- Fixed error block corner styling (!5082)
+- Fixed skeleton truncation issues (hotfix)
+
 ## [0.0.1rc4](https://gitlab.com/generally-intelligent/generally_intelligent/-/merge_requests/5066) (4136094f)
 #### changes since `0.0.1rc3`
 
