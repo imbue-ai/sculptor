@@ -26,7 +26,7 @@ tmux-dev: install ## Start tmux session with frontend and backend windows (requi
 	tmux new-session -d -s $(SESSION_NAME) -n frontend $(SHELL)
 	tmux new-window -t $(SESSION_NAME) -n backend $(SHELL)
 	tmux send-keys -t $(SESSION_NAME):frontend "cd $(PWD)/frontend && DEV_MODE=$(DEV_MODE) npm run dev" Enter
-	tmux send-keys -t $(SESSION_NAME):backend "cd $(PWD) && DEV_MODE=$(DEV_MODE) uv run python -m sculptor.cli.main $(REPO_PATH)" Enter
+	tmux send-keys -t $(SESSION_NAME):backend "cd $(PWD) && DEV_MODE=$(DEV_MODE) uv run python -m sculptor.cli.main --serve-static $(REPO_PATH)" Enter
 	echo "Development servers started in tmux session '$(SESSION_NAME)'"
 	echo "Backend serving repository: $(REPO_PATH)"
 	echo "Use 'tmux attach -t $(SESSION_NAME)' to attach to the session"
@@ -61,15 +61,16 @@ clean: ## Clean node_modules and Python cache
 	rm -r ./frontend-dist/* || true
 	rm -r build/* || true
 	rm -r _vendor/* || true
-	rm -r sculptor/_version.py || true
-
+	rm sculptor/_version.py || true
+	rm sculptor/_sentry_settings.py || true
 
 install: ## Install dependencies for both frontend and backend
 	echo "Installing frontend dependencies..."
 	( cd frontend && npm install --force )
 
 	( cd frontend && npm run build )
-	cp -R frontend/dist/ ./frontend-dist
+	mkdir -p ./frontend-dist
+	cp -R frontend/dist/. ./frontend-dist/.
 
 	echo "Installing backend dependencies..."
 	uv sync --dev
@@ -80,9 +81,12 @@ install: ## Install dependencies for both frontend and backend
 	echo "Building the docker image."
 	uv run sculptor/scripts/dev.py images
 
+install-test: install
+	uv run -m playwright install --with-deps
 
 dist: clean install  ## Build a distribution for sculptor
 	uv run sculptor/scripts/dev.py create-version-file
+	uv run sculptor/scripts/dev.py create-sentry-settings
 	uv build --wheel --sdist
 
 release: ## Convenience shortcut for running release dev command
@@ -96,10 +100,11 @@ help: ## Show this help message
 # Tests below
 test-integration: # Run integration tests for Sculptor
 	# Sculptors integration tests will run the makefile targets it needs to run, so no dependencies here.
-	uv run --project ../sculptor pytest ../sculptor/tests/integration --no-headless -kv1 -sv -ra $(TEST_ARGS)
+
+	uv run pytest -n 8 -kv1 --capture=no -v -ra $(or $(TEST_ARGS), "tests/integration/")
 
 test-unit: ## Run unit tests for Sculptor
-	uv run pytest sculptor/ -n 8 $(TEST_ARGS)
+	uv run pytest -n 8 --capture=no -v $(or $(TEST_ARGS), "sculptor/")
 
 test-build-artifacts: ## Test the build script and verify that the artifacts can run
 	bash sculptor/scripts/test_build_artifacts.sh
