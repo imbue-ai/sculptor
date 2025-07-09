@@ -69,6 +69,7 @@ install: ## Install dependencies for both frontend and backend
 	( cd frontend && npm install --force )
 
 	( cd frontend && npm run build )
+	mkdir -p ./frontend-dist
 	cp -R frontend/dist/. ./frontend-dist/.
 
 	echo "Installing backend dependencies..."
