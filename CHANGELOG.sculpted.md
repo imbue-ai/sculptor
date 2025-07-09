@@ -3,6 +3,39 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
+## [0.0.1rc6](https://gitlab.com/generally-intelligent/generally_intelligent/-/merge_requests/5133) (2469d344)
+#### changes since `0.0.1rc5`
+
+### Added
+- Coverage configuration file `.coveragerc` to Sculptor for better test coverage analysis (!4976)
+- User authentication UI with login indicator and logout button for better user experience (!5101)
+- Basic error display infrastructure in frontend (!5110)
+- Pre-push hook for ratchet testing to catch failures earlier (!4983)
+- Playwright for integration testing, replacing Splinter (!5111)
+- Timeout functionality to `run_local_command` with git diff migration (!5108)
+
+### Changed
+- Replaced all threads with observable threads to prevent silenced exceptions and improve error handling (!5112)
+- Enhanced MCP server configuration and added caching support for better Claude SDK performance (!5062)
+- Separated style and correctness issue identification with dataset improvements (!5104)
+
+### Fixed
+- Fixed quoting issues in Sculptor Makefile (!5132)
+- Updated default_tools.toml with correct imbue_verify configuration (!5131)
+- Added documentation for `enabled_identifiers` in imbue_verify tool configuration (!5133)
+- Added safety check to raise error when live debugging is enabled (!5129)
+- Fixed serialization issues in web derived module (!5128)
+- Fixed multiple typing errors in request_context.py, npm_run.py, and user_config.py (!5124, !5125, !5122)
+- Improved user config handling by removing fake field initialization (!5102)
+- Fixed frontend-dist directory creation in build process (!5120)
+- Fixed space handling in git stash operations and untracked file retrieval (!5117)
+- Ensured log exceptions properly reach Sentry for better error tracking (!5116)
+- Fixed bug where line numbers were incorrectly shifted in context display (!5109)
+- Fixed weird loading behavior on page reload and improved navigation (!5107)
+
+### Removed
+- Removed redundant integration testing code after migrating to fixture-based approach (!5098)
+
 ## [0.0.1rc5](https://gitlab.com/generally-intelligent/generally_intelligent/-/merge_requests/5089) (4ecb8f30)
 #### changes since `0.0.1rc4`
 
