@@ -69,7 +69,7 @@ install: ## Install dependencies for both frontend and backend
 	( cd frontend && npm install --force )
 
 	( cd frontend && npm run build )
-	cp -R frontend/dist/ ./frontend-dist
+	cp -R frontend/dist/. ./frontend-dist/.
 
 	echo "Installing backend dependencies..."
 	uv sync --dev
