@@ -25,8 +25,8 @@ tmux-dev: install ## Start tmux session with frontend and backend windows (requi
 	echo "Creating new tmux session..."
 	tmux new-session -d -s $(SESSION_NAME) -n frontend $(SHELL)
 	tmux new-window -t $(SESSION_NAME) -n backend $(SHELL)
-	tmux send-keys -t $(SESSION_NAME):frontend "cd $(PWD)/frontend && DEV_MODE=$(DEV_MODE) npm run dev" Enter
-	tmux send-keys -t $(SESSION_NAME):backend "cd $(PWD) && DEV_MODE=$(DEV_MODE) uv run python -m sculptor.cli.main --serve-static $(REPO_PATH)" Enter
+	tmux send-keys -t $(SESSION_NAME):frontend "cd \"$(PWD)/frontend\" && DEV_MODE=$(DEV_MODE) npm run dev" Enter
+	tmux send-keys -t $(SESSION_NAME):backend "cd \"$(PWD)\" && DEV_MODE=$(DEV_MODE) uv run python -m sculptor.cli.main --serve-static $(REPO_PATH)" Enter
 	echo "Development servers started in tmux session '$(SESSION_NAME)'"
 	echo "Backend serving repository: $(REPO_PATH)"
 	echo "Use 'tmux attach -t $(SESSION_NAME)' to attach to the session"
