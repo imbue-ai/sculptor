@@ -67,9 +67,12 @@ clean: ## Clean node_modules and Python cache
 install: ## Install dependencies for both frontend and backend
 	echo "Installing frontend dependencies..."
 	( cd frontend && npm install --force )
-
 	( cd frontend && npm run build )
+
+	# Necessary to pre-create the target so the following command behaves the
+	# same on Mac and Linux.
 	mkdir -p ./frontend-dist
+	# These /. s are necessary to ensure the correct data gets copied into place
 	cp -R frontend/dist/. ./frontend-dist/.
 
 	echo "Installing backend dependencies..."
