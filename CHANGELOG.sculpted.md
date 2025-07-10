@@ -3,6 +3,30 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
+## [0.0.1rc7](https://gitlab.com/generally-intelligent/generally_intelligent/-/merge_requests/5147) (e52d6065)
+#### changes since `0.0.1rc6`
+
+### Added
+- Multi-project support with project ID filtering to enable simultaneous sculptor instances (!5114)
+- Updated cleanup logic to work with multi-project mutagen sync (!5147)
+- Improved exception handling with expected error types (!5140)
+
+### Changed
+- Refactored agent artifact creation logic for better code organization and testing isolation (!5135, !5137)
+- Refactored agent output parsing and message sending (!5135)
+- Enhanced error type detection using last message in agent output (!5140)
+
+### Fixed
+- Fixed missing attribute error when instantiating ServerReadyAgentMessage (!5121)
+- Resolved error by adding missing attribute (!5121)
+
+### Unreleased
+- New `imbue-scout` CLI tool to generate scout reports (!5084)
+-
+### Internal updates
+- HOW-TO.md documentation for adding new tools to imbue_cli project (!5134)
+- Added bowei code to interview repository (!5142)
+
 ## [0.0.1rc6](https://gitlab.com/generally-intelligent/generally_intelligent/-/merge_requests/5133) (2469d344)
 #### changes since `0.0.1rc5`
 
