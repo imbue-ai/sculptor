@@ -8,6 +8,7 @@ All changes are based on merge commits since the last release commit, with gitla
 
 ### Added
 - Basic error display infrastructure in frontend (!5110)
+- Fixed serialization issues in web derived module (!5128)
 
 ### Changed
 - Enhanced MCP server configuration and added caching support for better Claude SDK performance (!5062)
@@ -17,7 +18,6 @@ All changes are based on merge commits since the last release commit, with gitla
 - Timeout functionality to `run_local_command` with git diff migration (!5108)
 - Updated default_tools.toml with correct imbue_verify configuration (!5131)
 - Added documentation for `enabled_identifiers` in imbue_verify tool configuration (!5133)
-- Fixed serialization issues in web derived module (!5128)
 - Fixed space handling in git stash operations and untracked file retrieval (!5117)
 - Ensured log exceptions properly reach Sentry for better error tracking (!5116)
 - Fixed bug where line numbers were incorrectly shifted in context display (!5109)
