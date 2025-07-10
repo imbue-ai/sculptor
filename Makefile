@@ -87,7 +87,7 @@ install: ## Install dependencies for both frontend and backend
 install-test: install
 	uv run -m playwright install --with-deps
 
-dist: clean install  ## Build a distribution for sculptor
+dist: install  ## Build a distribution for sculptor
 	uv run sculptor/scripts/dev.py create-version-file
 	uv run sculptor/scripts/dev.py create-sentry-settings
 	uv build --wheel --sdist
