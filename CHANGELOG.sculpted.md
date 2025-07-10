@@ -3,6 +3,31 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
+## [0.0.1rc7](https://gitlab.com/generally-intelligent/generally_intelligent/-/merge_requests/5147) (e52d6065)
+#### changes since `0.0.1rc6`
+
+### Added
+- Multi-project support with project ID filtering to prevent task leakage between simultaneous sculptor instances (!5114)
+- New `imbue_scout` project containing the `imbue-scout` CLI tool (!5084)
+- HOW-TO.md documentation for adding new tools to imbue_cli project (!5134)
+- Claude exception handling with expected error types and improved error detection (!5140)
+
+### Changed
+- Updated mutagen cleanup logic to work with multi-project sync names with "sculptor-{project_id}" prefix (!5147)
+- Refactored agent artifact creation logic for better code organization and testing isolation (!5135, !5137)
+- Enhanced frontend routes to include projectID for better multi-project support (!5114)
+- Updated SQL queries with project_id filters and TaskService/DataModel service methods (!5114)
+
+### Fixed
+- Fixed missing attribute error when instantiating ServerReadyAgentMessage (!5121)
+- Resolved type error by adding missing attribute (addresses PROD-186) (!5121)
+
+### Internal updates
+- Updated CHANGELOG.sculpted.md with RC6 changes from git history (!5146)
+- Added bowei code to interview repository (!5142)
+- Improved Claude Code output parsing and message sending for better testing (!5135)
+- Enhanced error type detection using last message in Claude Code output (!5140)
+
 ## [0.0.1rc6](https://gitlab.com/generally-intelligent/generally_intelligent/-/merge_requests/5133) (2469d344)
 #### changes since `0.0.1rc5`
 
