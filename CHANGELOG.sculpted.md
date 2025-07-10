@@ -22,7 +22,7 @@ All changes are based on merge commits since the last release commit, with gitla
 
 ### Unreleased
 - New `imbue-scout` CLI tool to generate scout reports (!5084)
-- 
+-
 ### Internal updates
 - HOW-TO.md documentation for adding new tools to imbue_cli project (!5134)
 - Added bowei code to interview repository (!5142)
