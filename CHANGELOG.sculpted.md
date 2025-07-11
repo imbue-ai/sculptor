@@ -3,6 +3,23 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
+## [0.0.1rc9](https://gitlab.com/generally-intelligent/generally_intelligent/-/merge_requests/5175) (de12417a)
+#### changes since `0.0.1rc8`
+
+### Added
+- Ability to remove queued messages from UI (!5171)
+- Docker startup check bypass option when `SCULPTOR_ALLOW_ALL_DOCKER_SETTINGS` is set (!5175)
+
+### Changed
+- Improved onboarding error messages for better user experience (!5175)
+
+### Fixed
+
+### Unreleased
+
+### Internal updates
+- Integration test stability improvements using stable file access (!5162)
+
 ## [0.0.1rc8](https://gitlab.com/generally-intelligent/generally_intelligent/-/merge_requests/5167) (c008a86a)
 #### changes since `0.0.1rc7`
 
