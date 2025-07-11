@@ -25,7 +25,7 @@ The custom classes exist to:
 - Prevent raw `get_by_test_id()` calls in test code
 - Provide a semantic interface for complex components
 
-**Design Note**: POM classes generally should return locators or element objects, rather than perform actions themselves.
+**Design Note**: POM classes should return locators or element objects, rather than perform actions themselves. Complex actions or wait logic should be implemented as helper functions or utilities, not as methods on Page or Element subclasses.
 
 ### Test ID Strategy
 
@@ -83,12 +83,12 @@ Avoid using Python's `assert` statements or manual wait loops unless there's an 
 
 ### Timeout Management
 
-- **Default timeout**: Configured in `sculptor/conftest.py` - sufficient for most operations
-- **BUILD_TIMEOUT_SECS**: Only use when waiting for code builds or compilation:
+- **Default timeout**: Configured in `sculptor/conftest.py` - use this for all operations except task container building
+- **BUILD_TIMEOUT_SECS**: Required when waiting for task container building:
   ```python
   expect(get_task_status_locator(task)).to_have_text("Ready", timeout=BUILD_TIMEOUT_SECS * 1000)
   ```
-- Avoid defining custom timeouts unless absolutely necessary
+- Avoid defining custom and hardcoded timeouts unless absolutely necessary
 
 ### Element Access Hierarchy
 
