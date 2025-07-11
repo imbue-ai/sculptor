@@ -36,7 +36,7 @@ class ElementTags(Serializable, StrEnum):
     TASK_LIST = "TASK_LIST"
     TASK_INPUT = "TASK_INPUT"
     START_TASK_BUTTON = "START_TASK_BUTTON"
-    
+
     # Chat Elements
     CHAT_PANEL = "CHAT_PANEL"
     CHAT_INPUT = "CHAT_INPUT"
@@ -47,7 +47,7 @@ class ElementTags(Serializable, StrEnum):
 Frontend components include these as `data-testid` attributes:
 ```tsx
 // Example from a React component
-<Button 
+<Button
     data-testid={ElementTags.START_TASK_BUTTON}
     onClick={handleStart}
 >
@@ -146,4 +146,4 @@ The POM should grow organically as new testing needs arise.
 - **One test, one feature**: Each test should verify a single piece of functionality
 - **Readability**: Tests should read like user stories
 
-When writing new tests, try to match the existing patterns as closely as possible. The consistency across the test suite makes it easier to understand, maintain, and extend the tests over time.
+When writing new tests, try to match the existing patterns as closely as possible. If you deviate from any patterns that are held across existing tests, there should be a strong reason why you are doing so.
