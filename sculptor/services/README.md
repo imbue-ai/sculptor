@@ -5,6 +5,7 @@ that is, each service may only depend on services that are "lower" in the hierar
 
 From the top level down, the services are:
 
+- `local_sync_service`: manages local syncing between the user's local repo and the task repo clones
 - `task_service`: manages tasks, including task execution, scheduling and outputs.
 - `git_repo_service`: manages Git repositories, including cloning and pushing changes.
 - `environment_service`: manages environments in which tasks and agents run.
