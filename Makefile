@@ -67,9 +67,12 @@ clean: ## Clean node_modules and Python cache
 install: ## Install dependencies for both frontend and backend
 	echo "Installing frontend dependencies..."
 	( cd frontend && npm install --force )
-
 	( cd frontend && npm run build )
+
+	# Necessary to pre-create the target so the following command behaves the
+	# same on Mac and Linux.
 	mkdir -p ./frontend-dist
+	# These /. s are necessary to ensure the correct data gets copied into place
 	cp -R frontend/dist/. ./frontend-dist/.
 
 	echo "Installing backend dependencies..."
@@ -84,7 +87,7 @@ install: ## Install dependencies for both frontend and backend
 install-test: install
 	uv run -m playwright install --with-deps
 
-dist: clean install  ## Build a distribution for sculptor
+dist: install  ## Build a distribution for sculptor
 	uv run sculptor/scripts/dev.py create-version-file
 	uv run sculptor/scripts/dev.py create-sentry-settings
 	uv build --wheel --sdist
@@ -102,6 +105,11 @@ test-integration: # Run integration tests for Sculptor
 	# Sculptors integration tests will run the makefile targets it needs to run, so no dependencies here.
 
 	uv run pytest -n 8 -kv1 --capture=no -v -ra $(or $(TEST_ARGS), "tests/integration/")
+
+test-integration-dist: # Run integration tests for Sculptor on the dist
+	# Sculptors integration tests will run the makefile targets it needs to run, so no dependencies here.
+	uv run pytest -n 8 -kdist --capture=no -v -ra $(or $(TEST_ARGS), "tests/integration/")
+
 
 test-unit: ## Run unit tests for Sculptor
 	uv run pytest -n 8 --capture=no -v $(or $(TEST_ARGS), "sculptor/")
