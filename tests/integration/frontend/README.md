@@ -25,6 +25,8 @@ The custom classes exist to:
 - Prevent raw `get_by_test_id()` calls in test code
 - Provide a semantic interface for complex components
 
+**Design Note**: POM classes generally should return locators or element objects, rather than perform actions themselves.
+
 ### Test ID Strategy
 
 All test IDs are centralized in `sculptor/sculptor/testing/constants.py` in the `ElementTags` enum:
@@ -60,6 +62,10 @@ Frontend components include these as `data-testid` attributes:
 Tests access these IDs through POM methods. Never use raw test ID strings in your tests.
 
 ## Critical Testing Patterns
+
+### Fixture Imports
+
+Import fixtures explicitly with `# noqa: F401` comments. This helps with IDE navigation since some setups don't automatically recognize fixtures from conftest files.
 
 ### Use `expect()` for Assertions and Waits
 
