@@ -2,7 +2,7 @@
 
 ## Core Architecture: Page Object Model (POM)
 
-The POM implementation has a crucial design: all page and element classes **subclass Playwright's native `Page` and `Locator` objects**. This inheritance gives you full access to Playwright's methods while providing our semantic abstraction layer.
+Our integration testing structure uses a POM: HTML pages and elements are represented using classes that **subclass Playwright's native `Page` and `Locator` objects**. This inheritance gives you full access to Playwright's methods while providing our semantic abstractions.
 
 ### Key Classes and Structure
 
