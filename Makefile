@@ -1,15 +1,17 @@
 .PHONY: dev start frontend backend rm-state clean install help tmux-dev tmux-stop test-integration
 .ONESHELL:
-SHELL := /bin/bash
 SHELLFLAGS := -eu -o pipefail -c
+_ENV_SHELL := $(shell echo $$SHELL)
 
 # Variables
 SESSION_NAME := sculptor-session
 REPO_PATH ?= $(error REPO_PATH is required. Usage: make dev REPO_PATH=/path/to/repo)
 DEV_MODE ?= false
 # Force SHELL to /bin/bash for users of more esoteric shells
-ifeq ($(filter %bash %zsh,$(SHELL)),)
+ifeq ($(filter %bash %zsh,$(notdir $(_ENV_SHELL))),)
     SHELL := /bin/bash
+else
+    SHELL := $(_ENV_SHELL)
 endif
 
 dev: tmux-dev ## Run both frontend and backend in tmux session (requires REPO_PATH=/path/to/repo)
