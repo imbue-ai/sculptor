@@ -25,7 +25,7 @@ The custom classes exist to:
 - Prevent raw `get_by_test_id()` calls in test code
 - Provide a semantic interface for complex components
 
-**Design Note**: POM classes generally should return locators or element objects, rather than perform actions themselves.
+**Design Note**: POM classes should return locators or element objects, rather than perform actions themselves. Complex actions or wait logic should be implemented as helper functions or utilities, not as methods on Page or Element subclasses.
 
 ### Test ID Strategy
 
@@ -80,6 +80,8 @@ expect(last_message).to_contain_text(signal_word)
 ```
 
 Avoid using Python's `assert` statements or manual wait loops unless there's an exceptional reason. Both `PlaywrightIntegrationTestElement` and `PlaywrightIntegrationTestPage` inherit from Playwright's classes, so all Playwright methods work seamlessly.
+
+**Important**: Never access the internal `locator` or `_locator` attributes directly. Always call methods on the POM objects themselves - they will automatically route to the underlying locator. This maintains proper encapsulation and ensures the POM abstraction works correctly.
 
 ### Timeout Management
 
