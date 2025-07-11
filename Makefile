@@ -17,6 +17,27 @@ dev: tmux-dev ## Run both frontend and backend in tmux session (requires REPO_PA
 
 start: tmux-dev
 
+sos: install
+	echo "Starting tmux development session..."
+	echo "Using repository path: $(REPO_PATH)"
+	echo "Killing existing session if present..."
+	tmux kill-session -t $(SESSION_NAME) 2>/dev/null || true
+	echo "Creating new tmux session..."
+	tmux new-session -d -s $(SESSION_NAME) -n dev-frontend $(SHELL)
+	tmux new-window -t $(SESSION_NAME) -n dev-backend $(SHELL)
+	tmux new-window -t $(SESSION_NAME) -n dist $(SHELL)
+	tmux new-window -t $(SESSION_NAME) -n test-project $(SHELL)
+	tmux send-keys -t $(SESSION_NAME):dev-frontend "cd \"$(PWD)/frontend\" && npm run dev" Enter
+	tmux send-keys -t $(SESSION_NAME):dev-backend "cd \"$(PWD)\" && DEV_MODE=true uv run python -m sculptor.cli.main $(REPO_PATH)" Enter
+	tmux send-keys -t $(SESSION_NAME):dist "uvx --with https://imbue-sculptor-latest.s3.us-west-2.amazonaws.com/nightly/sculptor.tar.gz --refresh sculptor $(REPO_PATH)" Enter
+	tmux send-keys -t $(SESSION_NAME):test-project "cd $(REPO_PATH)" Enter
+	echo "Development servers started in tmux session '$(SESSION_NAME)'"
+	echo "Backend serving repository: $(REPO_PATH)"
+	echo "Use 'tmux attach -t $(SESSION_NAME)' to attach to the session"
+	echo "Use 'make tmux-stop' to stop the session"
+	tmux attach -t $(SESSION_NAME) || echo "Failed to attach to tmux session. You can attach manually using 'tmux attach -t $(SESSION_NAME)'"
+
+
 tmux-dev: install ## Start tmux session with frontend and backend windows (requires REPO_PATH=/path/to/repo)
 	echo "Starting tmux development session..."
 	echo "Using repository path: $(REPO_PATH)"
