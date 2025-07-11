@@ -94,7 +94,7 @@ Avoid using Python's `assert` statements or manual wait loops unless there's an 
 
 ### Element Access Hierarchy
 
-Always access elements through the POM hierarchy:
+Always access elements through the POM hierarchy. Never use raw `get_by_test_id()` calls in test code - if you need access to an element that doesn't have a getter, add a method to the parent POM class (or create it):
 ```python
 # Correct approach
 home_page = PlaywrightHomePage(page=sculptor_page_)
@@ -104,6 +104,10 @@ task_starter.get_task_input().type("Hello")
 # Avoid direct access
 sculptor_page_.get_by_test_id("TASK_INPUT").type("Hello")  # Don't do this
 ```
+
+### Selecting Single Elements
+
+When you expect exactly one element and need to work with it, use `only()` from `imbue_core.itertools` rather than `.first` or indexing. This makes the test's expectations explicit and will fail clearly if the assumption is violated.
 
 ## How to Write a New Integration Test
 
