@@ -25,7 +25,7 @@ The custom classes exist to:
 - Prevent raw `get_by_test_id()` calls in test code
 - Provide a semantic interface for complex components
 
-**Design Note**: POM classes generally should return locators or element objects, rather than perform actions themselves.
+**Design Note**: POM classes should return locators or element objects, rather than perform actions themselves. Complex actions or wait logic should be implemented as helper functions or utilities, not as methods on Page or Element subclasses.
 
 ### Test ID Strategy
 
@@ -38,7 +38,7 @@ class ElementTags(Serializable, StrEnum):
     TASK_LIST = "TASK_LIST"
     TASK_INPUT = "TASK_INPUT"
     START_TASK_BUTTON = "START_TASK_BUTTON"
-    
+
     # Chat Elements
     CHAT_PANEL = "CHAT_PANEL"
     CHAT_INPUT = "CHAT_INPUT"
@@ -49,7 +49,7 @@ class ElementTags(Serializable, StrEnum):
 Frontend components include these as `data-testid` attributes:
 ```tsx
 // Example from a React component
-<Button 
+<Button
     data-testid={ElementTags.START_TASK_BUTTON}
     onClick={handleStart}
 >
