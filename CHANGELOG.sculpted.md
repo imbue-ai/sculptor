@@ -7,32 +7,33 @@ All changes are based on merge commits since the last release commit, with gitla
 #### changes since `0.0.1rc7`
 
 ### Added
-- Playwright MCP integration for scout with image support (!5159)
-- Precision-recall scoring for each issue type with CSV export (!5071)
-- Retry request button for transient errors in frontend (!5144)
-- Reload task button in frontend (!5144)
-- Image rendering support in generated HTML reports (!5159)
+- Retry request button and reload task button (!5144)
 
 ### Changed
-- Converted Splinter to Playwright for integration tests (!5167)
-- Database engines migrated to NullPool for better connection management (!5157)
 - Enhanced error isolation to prevent single request failures from crashing tasks (!5144)
-- Improved goal parameter passing in prompts (!5159)
 
 ### Fixed
-- Fixed image file handling in scout integration (!5166)
 - Fixed task existence API after projectID refactoring (!5158)
-- Re-enabled snapshot updates by correcting snapshot capture logic (!5156)
+- Fixed JSON encoding error handling (!5126)
+
+### Unreleased
+- Playwright MCP integration for scout with image support (!5159)
+- Image rendering support in generated HTML reports (!5159)
+- Fixed image file handling in scout integration (!5166)
+- Precision-recall scoring for each issue type with CSV export (!5071)
+- Removed login requirement for root path access (!5149)
+
+### Internal updates
 - Fixed type errors in sculptor/testing module (!5151)
 - Fixed type errors in sculptor/web module (!5152)
 - Fixed type errors in sculptor/services module (!5126)
-- Fixed environment builder error behavior to match docstring (!5126)
-- Fixed JSON encoding error handling (!5126)
-- Removed login requirement for root path access (!5149)
 - Fixed missing import in computing_environment.py (!5151)
 - Fixed type annotation issues with splinter.Browser (!5151)
-
-### Internal updates
+- Fixed environment builder error behavior to match docstring (!5126)
+- Re-enabled snapshot updates by correcting snapshot capture logic (!5156)
+- Improved goal parameter passing in prompts (!5159)
+- Database engines migrated to NullPool for better connection management (!5157)
+- Converted Splinter to Playwright for integration tests (!5167)
 - Added enabled identifiers enum for issue type awareness (!5071)
 - Updated scorer to be aware of relevant issue codes (!5071)
 - Enhanced FastAPI subclassing for better type safety (!5152)
