@@ -16,31 +16,48 @@
 
 ## Envisioned setup
 
-- For now, we will store all central user and organization related data inside Authentik.
-    - Organizations can be modelled as user groups.
-    - In Authentik, both users and groups can have arbitrary additional attributes for our own purposes.
-    - Everything is manageable via Authentik's API.
-    - That way we don't need to set up another central database and we don't need to deal with data synchronization.
-    - Disadvantages that we can live with:
-        - Cannot define DB schemas or constraints on the data.
-        - Makes the migration away from Authentik a little bit harder than otherwise.
+### User and organization database
+
+For now, we will store all central user and organization related data inside Authentik.
+
+- Organizations can be modelled as user groups.
+- In Authentik, both users and groups can have arbitrary additional attributes for our own purposes.
+- Everything is manageable via Authentik's API.
+- That way we don't need to set up another central database and we don't need to deal with data synchronization.
+- Disadvantages that we can live with:
+    - Cannot define DB schemas or constraints on the data.
+    - Makes the migration away from Authentik a little bit harder than otherwise.
+
+### Authentik proxy
+
 - There will be a proxy service to manage organizations inside Authentik.
-    - The service will have access to Authentik and the necessary permissions to perform user-initiated actions:
-        - list my groups, add a user to a group, remove a user from a group
-        - Users are authenticated using access tokens from Authentik.
-        - It's the responsibility of the proxy service to ensure that only authorized people perform the actions.
-        - (In other words: we prefer application-level authorization checks over Authentik-native permissions.
-            Because it's going to be easier to implement and more flexible. Still begs for a little more research, though.)
-- We will use Lago for billing and Stripe for payments.
-- There will be a proxy service to read the current usage from Lago.
-    - Allowing users to read their current billing usage.
-    - Similarly to the Authentik proxy, this service will ensure that users only read data they are authorized for.
-    - (It can - and maybe should - actually be the same service as the previous proxy.)
-- Organizations UI will be shown in the (local) Sculptor frontend.
-    - Lets users list and leave their organizations, create new ones and add or remove users to their organizations.
-        - (For simplicity, let's assume that only existing registered users can be added.)
-    - They can add payment details (via a Stripe integration).
-    - Under Organization detail, they can see the current billing usage.
+- The service will have access to Authentik and the necessary permissions to perform user-initiated actions:
+    - list my groups, add a user to a group, remove a user from a group
+    - Users are authenticated using access tokens from Authentik.
+    - It's the responsibility of the proxy service to ensure that only authorized people perform the actions.
+    - (In other words: we prefer application-level authorization checks over Authentik-native permissions.
+        Because it's going to be easier to implement and more flexible. Still begs for a little more research, though.)
+
+### Billing and payment
+
+We will use Lago for billing and Stripe for payments.
+
+### Lago proxy
+
+There will be a proxy service to read the current usage from Lago.
+
+- Allowing users to read their current billing usage.
+- Similarly to the Authentik proxy, this service will ensure that users only read data they are authorized for.
+- (It can - and maybe should - actually be the same service as the previous proxy.)
+
+### Organizations UI
+
+Organizations UI will be shown in the (local) Sculptor frontend.
+
+- Will let users list and leave their organizations, create new ones and add or remove users to their organizations.
+    - (For simplicity, let's assume that only existing registered users can be added.)
+- Adding of payment details (via a Stripe integration).
+- Under Organization detail, users can see the current billing usage.
 
 
 ## Suggested steps
