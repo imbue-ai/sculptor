@@ -28,7 +28,7 @@ sos: install
 	tmux new-session -d -s $(SESSION_NAME) -n dev-frontend -c "$(PWD)/frontend" $(SHELL)
 	tmux new-window -t $(SESSION_NAME) -n dev-backend $(SHELL)
 	tmux new-window -t $(SESSION_NAME) -n dist $(SHELL)
-	tmux new-window -t $(SESSION_NAME) -n test-project $(SHELL) -c "$(REPO_PATH)"
+	tmux new-window -t $(SESSION_NAME) -n test-project -c "$(REPO_PATH)" $(SHELL)
 	tmux send-keys -t $(SESSION_NAME):dev-frontend "npm run dev -- --open" Enter
 	tmux send-keys -t $(SESSION_NAME):dev-backend "DEV_MODE=true uv run python -m sculptor.cli.main  --no-open-browser .." Enter
 	tmux send-keys -t $(SESSION_NAME):dist "SCULPTOR_API_PORT=1224 uvx --with https://imbue-sculptor-latest.s3.us-west-2.amazonaws.com/nightly/sculptor.tar.gz --refresh sculptor .." Enter
