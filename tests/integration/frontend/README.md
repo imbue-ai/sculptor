@@ -83,12 +83,12 @@ Avoid using Python's `assert` statements or manual wait loops unless there's an 
 
 ### Timeout Management
 
-- **Default timeout**: Configured in `sculptor/conftest.py` - sufficient for most operations
-- **BUILD_TIMEOUT_SECS**: Only use when waiting for code builds or compilation:
+- **Default timeout**: Configured in `sculptor/conftest.py` - use this for all operations except task startup
+- **BUILD_TIMEOUT_SECS**: Required when waiting for tasks to reach "Ready" state after creation:
   ```python
   expect(get_task_status_locator(task)).to_have_text("Ready", timeout=BUILD_TIMEOUT_SECS * 1000)
   ```
-- Avoid defining custom timeouts unless absolutely necessary
+- Avoid hardcoded timeouts - use the default timeout for all other operations
 
 ### Element Access Hierarchy
 
