@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "sculptor"
 
 # This is going to be the true version.
-version = "0.0.1rc7"
+version = "0.0.1rc8"
 
 readme = "README.md"
 dependencies = [
