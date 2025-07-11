@@ -3,12 +3,35 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
+## [0.0.1rc9](https://gitlab.com/generally-intelligent/generally_intelligent/-/merge_requests/5175) (de12417a)
+#### changes since `0.0.1rc8`
+
+### Added
+- Precision-recall scoring for each issue type with CSV export (!5071)
+- Ability to remove queued messages from UI (!5171)
+- Docker startup check bypass option when `SCULPTOR_ALLOW_ALL_DOCKER_SETTINGS` is set (!5175)
+
+### Changed
+- Improved onboarding error messages for better user experience (!5175)
+
+### Fixed
+- Integration test stability improvements using stable file access (!5162)
+
+### Unreleased
+
+### Internal updates
+- Updated changelog organization and formatting (!5173)
+- Version bump to RC8 (!5174)
+
 ## [0.0.1rc8](https://gitlab.com/generally-intelligent/generally_intelligent/-/merge_requests/5167) (c008a86a)
 #### changes since `0.0.1rc7`
 
 ### Added
 - prevent single request failure (AgentCrashedError) from bringing down task  (!5144)
 - Also improve retry-request and reload-task buttons (!5144)
+- Playwright MCP integration for scout with image support (!5159)
+- Image rendering support in generated HTML reports (!5159)
+- Removed login requirement for root path access (!5149)
 
 ### Changed
 - Enhanced error isolation to prevent single request failures from crashing tasks (!5144)
@@ -16,13 +39,7 @@ All changes are based on merge commits since the last release commit, with gitla
 ### Fixed
 - Fixed task existence API after projectID refactoring (!5158)
 - Fixed JSON encoding error handling (!5126)
-
-### Unreleased
-- Playwright MCP integration for scout with image support (!5159)
-- Image rendering support in generated HTML reports (!5159)
 - Fixed image file handling in scout integration (!5166)
-- Precision-recall scoring for each issue type with CSV export (!5071)
-- Removed login requirement for root path access (!5149)
 
 ### Internal updates
 - Fixed type errors in sculptor/testing module (!5151)
