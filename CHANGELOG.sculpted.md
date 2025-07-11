@@ -7,7 +7,8 @@ All changes are based on merge commits since the last release commit, with gitla
 #### changes since `0.0.1rc7`
 
 ### Added
-- Retry request button and reload task button (!5144)
+- prevent single request failure (AgentCrashedError) from bringing down task  (!5144)
+- Also improve retry-request and reload-task buttons (!5144)
 
 ### Changed
 - Enhanced error isolation to prevent single request failures from crashing tasks (!5144)
