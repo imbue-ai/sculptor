@@ -81,6 +81,8 @@ expect(last_message).to_contain_text(signal_word)
 
 Avoid using Python's `assert` statements or manual wait loops unless there's an exceptional reason. Both `PlaywrightIntegrationTestElement` and `PlaywrightIntegrationTestPage` inherit from Playwright's classes, so all Playwright methods work seamlessly.
 
+**Important**: Never access the internal `locator` or `_locator` attributes directly. Always call methods on the POM objects themselves - they will automatically route to the underlying locator. This maintains proper encapsulation and ensures the POM abstraction works correctly.
+
 ### Timeout Management
 
 - **Default timeout**: Configured in `sculptor/conftest.py` - use this for all operations except task container building
