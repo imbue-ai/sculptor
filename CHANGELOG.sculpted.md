@@ -7,27 +7,27 @@ All changes are based on merge commits since the last release commit, with gitla
 #### changes since `0.0.1rc9`
 
 ### Added
-- Precommit hook for rate limit validation to ensure Prefect rate limits stay in sync (88dc863c)
-- Make command for 2-session Sculptor setup (sos) to start dist and dev Sculptor instances (9088aaf2)
-- Integration tests for distributions with snapshot updates (135f4cf1)
+- Precommit hook for rate limit validation to ensure Prefect rate limits stay in sync (!5180)
+- Make command for 2-session Sculptor setup (sos) to start dist and dev Sculptor instances (!5179)
+- Integration tests for distributions with snapshot updates (!5115)
 
 ### Changed
-- Log level adjustment from debug to trace to reduce confusing error messages (a3c47dbe)
-- Branch dropdown now refreshes available branches when opened (fb472639)
+- Log level adjustment from debug to trace to reduce confusing error messages (!5177)
+- Branch dropdown now refreshes available branches when opened (!5130)
 
 ### Fixed
-- Database migration script to work with null pools (75006de9)
-- Rancher Desktop compatibility and virtualization detection (a3aec527)
-- FastAPI logging integration with loguru in v1 (b338cf92)
-- Test logging duplicate issues (7f18736a)
-- Artifact path naming for better clarity (f5c2f408)
+- Database migration script to work with null pools (!5183)
+- Rancher Desktop compatibility and virtualization detection (!5198)
+- FastAPI logging integration with loguru in v1 (!5106)
+- Test logging duplicate issues (!5187)
+- Artifact path naming for better clarity (!5185)
 
 ### Unreleased
 
 ### Internal updates
-- Remote repository setup for sculptor's controlled bare repository (293cc10e)
-- Documentation improvements for build metadata function (bfa93b41)
-- Test stability improvements by skipping flaky tests (f53848ef, 7cf2ae97)
+- Remote repository setup for sculptor's controlled bare repository (!5079)
+- Documentation improvements for build metadata function (!5199)
+- Test stability improvements by skipping flaky tests (!5200, !5188)
 
 ## [0.0.1rc9](https://gitlab.com/generally-intelligent/generally_intelligent/-/merge_requests/5175) (de12417a)
 #### changes since `0.0.1rc8`
