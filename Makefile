@@ -1,21 +1,44 @@
 .PHONY: dev start frontend backend rm-state clean install help tmux-dev tmux-stop test-integration
 .ONESHELL:
-SHELL := /bin/bash
 SHELLFLAGS := -eu -o pipefail -c
+_ENV_SHELL := $(shell echo $$SHELL)
 
 # Variables
 SESSION_NAME := sculptor-session
 REPO_PATH ?= $(error REPO_PATH is required. Usage: make dev REPO_PATH=/path/to/repo)
 DEV_MODE ?= false
 # Force SHELL to /bin/bash for users of more esoteric shells
-ifeq ($(filter %bash %zsh,$(SHELL)),)
+ifeq ($(filter %bash %zsh,$(notdir $(_ENV_SHELL))),)
     SHELL := /bin/bash
+else
+    SHELL := $(_ENV_SHELL)
 endif
 
 dev: tmux-dev ## Run both frontend and backend in tmux session (requires REPO_PATH=/path/to/repo)
               ## Note that this supports hot-reloading for frontend assets.
 
 start: tmux-dev
+
+sos: install
+	echo "Starting tmux development session..."
+	echo "Using repository path: $(REPO_PATH)"
+	echo "Killing existing session if present..."
+	tmux kill-session -t $(SESSION_NAME) 2>/dev/null || true
+	echo "Creating new tmux session..."
+	tmux new-session -d -s $(SESSION_NAME) -n dev-frontend -c "$(PWD)/frontend" $(SHELL)
+	tmux new-window -t $(SESSION_NAME) -n dev-backend $(SHELL)
+	tmux new-window -t $(SESSION_NAME) -n dist $(SHELL)
+	tmux new-window -t $(SESSION_NAME) -n test-project $(SHELL)
+	tmux send-keys -t $(SESSION_NAME):dev-frontend "npm run dev -- --open" Enter
+	tmux send-keys -t $(SESSION_NAME):dev-backend "DEV_MODE=true uv run python -m sculptor.cli.main  --no-open-browser $(REPO_PATH)" Enter
+	tmux send-keys -t $(SESSION_NAME):dist "SCULPTOR_API_PORT=1224 uvx --with https://imbue-sculptor-latest.s3.us-west-2.amazonaws.com/nightly/sculptor.tar.gz --refresh sculptor .." Enter
+	tmux send-keys -t $(SESSION_NAME):test-project "cd $(REPO_PATH)" Enter
+	echo "Development servers started in tmux session '$(SESSION_NAME)'"
+	echo "Backend serving repository: $(REPO_PATH)"
+	echo "Use 'tmux attach -t $(SESSION_NAME)' to attach to the session"
+	echo "Use 'make tmux-stop' to stop the session"
+	tmux attach -t $(SESSION_NAME) || echo "Failed to attach to tmux session. You can attach manually using 'tmux attach -t $(SESSION_NAME)'"
+
 
 tmux-dev: install ## Start tmux session with frontend and backend windows (requires REPO_PATH=/path/to/repo)
 	echo "Starting tmux development session..."
