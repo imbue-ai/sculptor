@@ -57,9 +57,7 @@ Frontend components include these as `data-testid` attributes:
 </Button>
 ```
 
-**Warning**: Be careful where you place the `data-testid` attribute. If it's on a component that doesn't directly render HTML (like a higher-level React component), the test ID might not appear in the final HTML. Always verify the test ID appears in the rendered DOM.
-
-Tests access these IDs through POM methods. Never use raw test ID strings in your tests.
+**Warning**: Be careful where you place the `data-testid` attribute. If it's on a component that doesn't directly render HTML (like a higher-level React component), the test ID might not appear in the final HTML.
 
 ## Critical Testing Patterns
 
@@ -81,7 +79,7 @@ expect(last_message).to_contain_text(signal_word)
 
 Avoid using Python's `assert` statements or manual wait loops unless there's an exceptional reason. Both `PlaywrightIntegrationTestElement` and `PlaywrightIntegrationTestPage` inherit from Playwright's classes, so all Playwright methods work seamlessly.
 
-**Important**: Never access the internal `locator` or `_locator` attributes directly. Always call methods on the POM objects themselves - they will automatically route to the underlying locator. This maintains proper encapsulation and ensures the POM abstraction works correctly.
+**Important**: Never access the internal locator attributes directly. Always call methods on the POM objects themselves - they will automatically route to the underlying locator. This maintains proper encapsulation and ensures the POM abstraction works correctly.
 
 ### Timeout Management
 
@@ -94,7 +92,7 @@ Avoid using Python's `assert` statements or manual wait loops unless there's an 
 
 ### Element Access Hierarchy
 
-Always access elements through the POM hierarchy. Never use raw `get_by_test_id()` calls in test code - if you need access to an element that doesn't have a getter, add a method to the parent POM class (or create it):
+**Important**: Always access elements through the POM hierarchy. Never use raw `get_by_test_id()` calls in test code - if you need access to an element that doesn't have a getter, add a method to the parent POM class (or create it):
 ```python
 # Correct approach
 home_page = PlaywrightHomePage(page=sculptor_page_)
@@ -102,7 +100,7 @@ task_starter = home_page.get_task_starter()
 task_starter.get_task_input().type("Hello")
 
 # Avoid direct access
-sculptor_page_.get_by_test_id("TASK_INPUT").type("Hello")  # Don't do this
+home_page.get_by_test_id("TASK_INPUT").type("Hello")  # Don't do this
 ```
 
 ### Selecting Single Elements
@@ -147,8 +145,6 @@ This is handled in helper functions like `delete_task()` in `sculptor/testing/el
 Consider adding new element classes when you encounter major page components with multiple child elements (like the chat panel or task starter). For simple elements, returning raw Locators is fine.
 
 Add new methods to page or element classes when you need to access an element that doesn't have a getter method.
-
-The POM should grow organically as new testing needs arise.
 
 ## Key Principles
 
