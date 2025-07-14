@@ -3,6 +3,86 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
+## [0.0.2rc1] (current)
+#### changes since `0.0.1rc9`
+
+### Added
+- Precommit hook for rate limit validation to ensure Prefect rate limits stay in sync (!5180)
+- Make command for 2-session Sculptor setup (sos) to start dist and dev Sculptor instances (!5179)
+- Integration tests for distributions with snapshot updates (!5115)
+
+### Changed
+- Log level adjustment from debug to trace to reduce confusing error messages (!5177)
+- Branch dropdown now refreshes available branches when opened (!5130)
+
+### Fixed
+- Database migration script to work with null pools (!5183)
+- Rancher Desktop compatibility and virtualization detection (!5198)
+- FastAPI logging integration with loguru in v1 (!5106)
+- Test logging duplicate issues (!5187)
+- Artifact path naming for better clarity (!5185)
+
+### Unreleased
+
+### Internal updates
+- Remote repository setup for sculptor's controlled bare repository (!5079)
+- Documentation improvements for build metadata function (!5199)
+- Test stability improvements by skipping flaky tests (!5200, !5188)
+
+## [0.0.1rc9](https://gitlab.com/generally-intelligent/generally_intelligent/-/merge_requests/5175) (de12417a)
+#### changes since `0.0.1rc8`
+
+### Added
+- Ability to remove queued messages from UI (!5171)
+- Docker startup check bypass option when `SCULPTOR_ALLOW_ALL_DOCKER_SETTINGS` is set (!5175)
+
+### Changed
+- Improved onboarding error messages for better user experience (!5175)
+
+### Fixed
+
+### Unreleased
+
+### Internal updates
+- Integration test stability improvements using stable file access (!5162)
+
+## [0.0.1rc8](https://gitlab.com/generally-intelligent/generally_intelligent/-/merge_requests/5167) (c008a86a)
+#### changes since `0.0.1rc7`
+
+### Added
+- prevent single request failure (AgentCrashedError) from bringing down task  (!5144)
+- Also improve retry-request and reload-task buttons (!5144)
+
+### Changed
+- Enhanced error isolation to prevent single request failures from crashing tasks (!5144)
+
+### Fixed
+- Fixed task existence API after projectID refactoring (!5158)
+- Fixed JSON encoding error handling (!5126)
+
+### Unreleased
+- Playwright MCP integration for scout with image support (!5159)
+- Image rendering support in generated HTML reports (!5159)
+- Fixed image file handling in scout integration (!5166)
+- Precision-recall scoring for each issue type with CSV export (!5071)
+- Removed login requirement for root path access (!5149)
+
+### Internal updates
+- Fixed type errors in sculptor/testing module (!5151)
+- Fixed type errors in sculptor/web module (!5152)
+- Fixed type errors in sculptor/services module (!5126)
+- Fixed missing import in computing_environment.py (!5151)
+- Fixed type annotation issues with splinter.Browser (!5151)
+- Fixed environment builder error behavior to match docstring (!5126)
+- Re-enabled snapshot updates by correcting snapshot capture logic (!5156)
+- Improved goal parameter passing in prompts (!5159)
+- Database engines migrated to NullPool for better connection management (!5157)
+- Converted Splinter to Playwright for integration tests (!5167)
+- Added enabled identifiers enum for issue type awareness (!5071)
+- Updated scorer to be aware of relevant issue codes (!5071)
+- Enhanced FastAPI subclassing for better type safety (!5152)
+- Improved error handling in various modules (!5154)
+
 ## [0.0.1rc7](https://gitlab.com/generally-intelligent/generally_intelligent/-/merge_requests/5147) (e52d6065)
 #### changes since `0.0.1rc6`
 
