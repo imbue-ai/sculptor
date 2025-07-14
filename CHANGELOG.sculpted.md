@@ -3,23 +3,25 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
+
 ## [0.0.2rc1] (current)
 #### changes since `0.0.1rc9`
 
 ### Added
-- Precommit hook for rate limit validation to ensure Prefect rate limits stay in sync (!5180)
-- Make command for 2-session Sculptor setup (sos) to start dist and dev Sculptor instances (!5179)
-- Integration tests for distributions with snapshot updates (!5115)
+- Token refresh functionality for better authentication handling (!5127)
+- PostHog logging for task creation events (!5212)
+- Agentic issue identifier v0 functionality (!5153)
 
 ### Changed
 - Log level adjustment from debug to trace to reduce confusing error messages (!5177)
 - Branch dropdown now refreshes available branches when opened (!5130)
+- Event source implementation switched to fetch-event-source to bypass browser limitations (!5208)
+- Improved error handling for environment failures (!5207, !5172)
 
 ### Fixed
 - Database migration script to work with null pools (!5183)
 - Rancher Desktop compatibility and virtualization detection (!5198)
 - FastAPI logging integration with loguru in v1 (!5106)
-- Test logging duplicate issues (!5187)
 - Artifact path naming for better clarity (!5185)
 
 ### Unreleased
@@ -28,6 +30,13 @@ All changes are based on merge commits since the last release commit, with gitla
 - Remote repository setup for sculptor's controlled bare repository (!5079)
 - Documentation improvements for build metadata function (!5199)
 - Test stability improvements by skipping flaky tests (!5200, !5188)
+- Build process improvements excluding build/ and _vendor directories (!5210)
+- Minor V1 cleanups and improvements (!5181)
+- Precommit hook for rate limit validation to ensure Prefect rate limits stay in sync (!5180)
+- Make command for 2-session Sculptor setup (sos) to start dist and dev Sculptor instances (!5179)
+- Test logging duplicate issues (!5187)
+- Integration tests for distributions with snapshot updates (!5115)
+
 
 ## [0.0.1rc9](https://gitlab.com/generally-intelligent/generally_intelligent/-/merge_requests/5175) (de12417a)
 #### changes since `0.0.1rc8`
