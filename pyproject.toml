@@ -44,25 +44,27 @@ dependencies = [
     # be vendored.
     "anyio",
     "attrs",
+    "boto3>=1.38.27",
     "cachetools",
     "cattrs",
+    "grpclib>=0.4.7",
     "httpx",
     "inline-snapshot",
     "loguru",
     "pathspec",
-    "pydantic>=2.11.4",
+    "posthog==5.4.0",
+    "prometheus-client>=0.20.0",
     "pydantic-settings",
+    "pydantic>=2.11.4",
     "pyhumps",
     "pytest",
     "pytest-asyncio",
     "pytest-mock",
+    "sentry-sdk",
     "tblib==2.0.0", # pinning because Hammers code relies on "get_locals"
+    "tenacity>=8.2.2",
     "traceback-with-variables>=2.2.0",
     "yasoo",
-    "sentry-sdk",
-    "tenacity>=8.2.2",
-    "grpclib>=0.4.7",
-    "posthog==5.4.0",
     # End imbue_core inline
     # Do not add direct dependencies here.
 ]
