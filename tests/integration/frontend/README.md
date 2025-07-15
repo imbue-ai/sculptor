@@ -35,7 +35,7 @@ Frontend components include these as `data-testid` attributes:
 ```tsx
 // Example from a React component
 <Button
-    data-testid={ElementTags.START_TASK_BUTTON}
+    data-testid="START_TASK_BUTTON"
     onClick={handleStart}
 >
     Start Task
