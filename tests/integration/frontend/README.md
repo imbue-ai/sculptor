@@ -1,5 +1,7 @@
 # Frontend Integration Testing Guide
 
+This is a very important guide on rules to follow when writing tests. You should read over this carefully before writing any tests.
+
 ## Core Architecture: Page Object Model (POM)
 
 Our integration testing structure uses a POM: HTML pages and elements are represented using classes that **subclass Playwright's native `Page` and `Locator` objects**. This inheritance gives you full access to Playwright's methods while providing our semantic abstractions.
@@ -25,26 +27,9 @@ The custom classes exist to:
 - Prevent raw `get_by_test_id()` calls in test code
 - Provide a semantic interface for complex components
 
-**Design Note**: POM classes should return locators or element objects, rather than perform actions themselves. Complex actions or wait logic should be implemented as helper functions or utilities, not as methods on Page or Element subclasses.
-
-### Test ID Strategy
+### Test IDs
 
 All test IDs are centralized in `sculptor/sculptor/testing/constants.py` in the `ElementTags` enum:
-
-```python
-class ElementTags(Serializable, StrEnum):
-    # Home Page Elements
-    TASK_STARTER = "TASK_STARTER"
-    TASK_LIST = "TASK_LIST"
-    TASK_INPUT = "TASK_INPUT"
-    START_TASK_BUTTON = "START_TASK_BUTTON"
-
-    # Chat Elements
-    CHAT_PANEL = "CHAT_PANEL"
-    CHAT_INPUT = "CHAT_INPUT"
-    SEND_BUTTON = "SEND_BUTTON"
-    # ... many more
-```
 
 Frontend components include these as `data-testid` attributes:
 ```tsx
@@ -79,8 +64,6 @@ expect(last_message).to_contain_text(signal_word)
 
 Avoid using Python's `assert` statements or manual wait loops unless there's an exceptional reason. Both `PlaywrightIntegrationTestElement` and `PlaywrightIntegrationTestPage` inherit from Playwright's classes, so all Playwright methods work seamlessly.
 
-**Important**: Never access the internal locator attributes directly. Always call methods on the POM objects themselves - they will automatically route to the underlying locator. This maintains proper encapsulation and ensures the POM abstraction works correctly.
-
 ### Timeout Management
 
 - **Default timeout**: Configured in `sculptor/conftest.py` - use this for all operations except task container building
@@ -102,10 +85,6 @@ task_starter.get_task_input().type("Hello")
 # Avoid direct access
 home_page.get_by_test_id("TASK_INPUT").type("Hello")  # Don't do this
 ```
-
-### Selecting Single Elements
-
-When you expect exactly one element and need to work with it, use `only()` from `imbue_core.itertools` rather than `.first` or indexing. This makes the test's expectations explicit and will fail clearly if the assumption is violated.
 
 ## How to Write a New Integration Test
 
@@ -138,8 +117,6 @@ Some elements (dropdowns, dialogs, modals) render at the page level, not within 
 delete_menu_item = task.page.get_by_test_id(ElementTags.DELETE_MENU_ITEM)
 ```
 
-This is handled in helper functions like `delete_task()` in `sculptor/testing/elements/task.py`.
-
 ## When to Extend the POM
 
 Consider adding new element classes when you encounter major page components with multiple child elements (like the chat panel or task starter). For simple elements, returning raw Locators is fine.
@@ -150,8 +127,17 @@ Add new methods to page or element classes when you need to access an element th
 
 - **Semantic access**: Always go through page and element objects rather than raw selectors
 - **Proper waits**: Use `expect()` for all waiting and assertions
-- **Test isolation**: Each test should work independently
 - **One test, one feature**: Each test should verify a single piece of functionality
 - **Readability**: Tests should read like user stories
 
 When writing new tests, try to match the existing patterns as closely as possible. If you deviate from any patterns that are held across existing tests, there should be a strong reason why you are doing so.
+
+## Important Notes to Keep in Mind
+- Never access the internal locator attributes directly. Always call methods on the POM objects themselves - they will automatically route to the underlying locator. This maintains proper encapsulation and ensures the POM abstraction works correctly.
+- POM classes should return locators or element objects, rather than perform actions themselves. Complex actions or wait logic should be implemented as helper functions or utilities, not as methods on Page or Element subclasses.
+- Try to avoid modifying the frontend or backend code in ways that could affect actual functionality. Changes should be isolated to the testing setup as much as possible.
+- Always access elements through the POM hierarchy. Never use raw `get_by_test_id()` calls in test code - if you need access to an element that doesn't have a getter, add a method to the parent POM class (or create it)
+- When you expect exactly one element and need to work with it, use `only()` from `imbue_core.itertools` rather than `.first` or indexing. This makes the test's expectations explicit and will fail clearly if the assumption is violated.
+- Avoid using Python's `assert` statements or manual wait loops unless there's an exceptional reason. Both `PlaywrightIntegrationTestElement` and `PlaywrightIntegrationTestPage` inherit from Playwright's classes, so all Playwright methods work seamlessly.
+- When writing new tests, try to match the existing patterns as closely as possible. If you deviate from any patterns that are held across existing tests, there should be a strong reason why you are doing so.
+- Avoid defining custom and hardcoded timeouts unless absolutely necessary. Use the build timeout if a task build is involved.
