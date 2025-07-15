@@ -125,7 +125,6 @@ Add new methods to page or element classes when you need to access an element th
 
 ## Key Principles
 
-- **Semantic access**: Always go through page and element objects rather than raw selectors
 - **Proper waits**: Use `expect()` for all waiting and assertions
 - **One test, one feature**: Each test should verify a single piece of functionality
 - **Readability**: Tests should read like user stories
