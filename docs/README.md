@@ -1,6 +1,6 @@
-# sculptor documentation
+# Sculptor documentation
 
-The documentation for `sculptor` is organized into several files:
+The documentation for Sculptor is organized into several files:
 
 - [README.md](README.md): this file, the index into the documentation.
 - [overview.md](overview.md): a high-level overview of the `sculptor` application.  Probably best to start here!
@@ -11,7 +11,7 @@ The documentation for `sculptor` is organized into several files:
 - [architectural_principles.md](./architectural_principles.md) describes the principles behind the architecture.
 - [style.md](style.md): the style guide for documentation itself.
   For the code style, see the [sculptor/style.md](../sculptor/style.md) file in the source root (for `python` code)
-  and the [sculptor/web/frontend/style.md](../sculptor/web/frontend/style.md) file (for `TypeScript` code).
+  and the [frontend/docs/style.md](../frontend/docs/style.md) file (for `TypeScript` code).
 - [proposals/](proposals/README.md): a collection of design proposals for extending the `sculptor` application.
 - [diagrams/](diagrams/README.md): a collection of diagrams that illustrate the architecture and design of the `sculptor` application.
 - [open questions](open_questions.md): a collection of open questions that need to be answered in order to finalize the design.

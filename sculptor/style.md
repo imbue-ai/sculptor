@@ -2,7 +2,7 @@
 
 This document describes the style guide for all `python` code in the `sculptor` application.
 
-For the style guide for the frontend code, see the [web/frontend/style.md](./web/frontend/style.md) file.
+For the style guide for the frontend code, see the [../frontend/docs/style.md](../frontend/docs/style.md) file.
 
 # Data Types
 
