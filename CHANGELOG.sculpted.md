@@ -4,7 +4,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
 
-## [0.0.2rc2] (current)
+## [0.0.2rc3] (current)
+#### changes since `0.0.2rc2`
+
+### Added
+- Copy filename functionality to diff viewer for easier file reference (!5195)
+- Onboarding guidelines link to startup check failures for better user guidance (!5193)
+
+### Changed
+- Remote configuration checking on task setup to ensure proper git repository state (!5245)
+
+### Fixed
+- Review modal button tooltip display issue (!5247)
+- Error display for numerical serialized exception arguments on frontend (!5236)
+- Error handling to prevent timeout errors from masking Docker errors (!5262)
+
+### Internal updates
+- Integration test README updates (!5254)
+- Sentry test route fixes (!5267)
+- CI timeout adjustments for test_sculptor jobs (!5258)
+
+
+## [0.0.2rc2]
 #### changes since `0.0.2rc1`
 
 ### Added
