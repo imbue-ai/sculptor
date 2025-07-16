@@ -117,9 +117,9 @@ dist: install  ## Build a distribution for sculptor
 bump-version: ## Convenience shortcut for creating a branch bumping the version.
 	uv run sculptor/scripts/dev.py bump-version $(ARGS)
 
-release: ## Convenience shortcut for running release dev command
+cut-release: ## Convenience shortcut for running dev command to cut a release
 	# No depedencies because it's a shortcut
-	uv run sculptor/scripts/dev.py release $(RELEASE_ARGS)
+	uv run sculptor/scripts/dev.py cut-release $(RELEASE_ARGS)
 
 help: ## Show this help message
 	echo "Available targets:"
