@@ -114,6 +114,9 @@ dist: install  ## Build a distribution for sculptor
 	uv run sculptor/scripts/dev.py create-sentry-settings
 	uv build --wheel --sdist
 
+bump-version: ## Convenience shortcut for creating a branch bumping the version.
+	uv run sculptor/scripts/dev.py bump-version $(ARGS)
+
 release: ## Convenience shortcut for running release dev command
 	# No depedencies because it's a shortcut
 	uv run sculptor/scripts/dev.py release $(RELEASE_ARGS)
