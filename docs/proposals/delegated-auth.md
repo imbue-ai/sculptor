@@ -30,4 +30,4 @@ We're going to have a proxy service that will run in cloud and will facilitate a
 - All requests to the cloud proxy will be authenticated using the `task_token`.
 - During authentication, the proxy simply validates the signature.
 
-On the high level, a similar scheme is actually standardized as the "OAuth 2.0 Token Exchange" RFC.
+On the high level, a similar scheme is actually standardized as the [OAuth 2.0 Token Exchange RFC](https://datatracker.ietf.org/doc/html/rfc8693).
