@@ -28,3 +28,5 @@ We're going to have a proxy service that will run in cloud and will facilitate a
 - When a user launches an agent to perform a long-running task, the user first obtains a `task_token` and gives it to the agent.
 - All requests to the cloud proxy will be authenticated using the `task_token`.
 - During authentication, the proxy simply validates the signature.
+
+On the high level, a similar scheme is actually standardized as the "OAuth 2.0 Token Exchange" RFC.
