@@ -11,7 +11,7 @@ This proposal builds on top of the [basic Auth proposal](./auth.md) and the refi
 
 In short, we're currently using a standard OAuth2.0 flow to get access tokens and refresh tokens.
 Access tokens are too short-lived to be usable for long-running agents and we don't want to have to implement token refreshing for each potential long running task.
-Also, we want to avoid using user auth directly to distinguish requests coming directly from the user as oppossed to requests coming from an agent "on behalf" of a user.
+Also, we want to distinguish requests coming directly from the user from those made by an agent on the user's behalf.
 
 ## Assumptions
 
