@@ -2,8 +2,8 @@
 
 ## Motivations
 
-As a user, I want to be able to spawn long-running agents that would do work on my behalf.
-As a user, I want to be able to impose constraints on the agents (limit money spent, third party services allowed to be used, ...)
+- As a user, I want to be able to spawn long-running agents that would do work on my behalf.
+- As a user, I want to be able to impose constraints on the agents (limit money spent, third party services allowed to be used, ...)
 
 ## Previous work
 
