@@ -99,7 +99,7 @@ install: ## Install dependencies for both frontend and backend
 	cp -R frontend/dist/. ./frontend-dist/.
 
 	echo "Installing backend dependencies..."
-	uv sync --dev
+	uv sync --dev --inexact
 	# We cannot install imbue_core's dependencies at this time, because that
 	# would bake in platform-specific .so files and other binaries into our
 	# build, which we want to be platform agnostic.
