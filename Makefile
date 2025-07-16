@@ -99,7 +99,6 @@ install: ## Install dependencies for both frontend and backend
 	cp -R frontend/dist/. ./frontend-dist/.
 
 	echo "Installing backend dependencies..."
-	uv sync --dev
 	# We cannot install imbue_core's dependencies at this time, because that
 	# would bake in platform-specific .so files and other binaries into our
 	# build, which we want to be platform agnostic.
@@ -125,14 +124,18 @@ help: ## Show this help message
 
 # Tests below
 test-integration: # Run integration tests for Sculptor
-	# Sculptors integration tests will run the makefile targets it needs to run, so no dependencies here.
-
-	uv run pytest -n 8 -kv1 --capture=no -v -ra $(or $(TEST_ARGS), "tests/integration/")
+	# Sculptors integration tests will run the makefile targets it needs to run, so no dependencies
+	uv run pytest -n 8 -k"v1 and integration" --capture=no -v -ra $(or $(TEST_ARGS), "tests/integration/")
 
 test-integration-dist: # Run integration tests for Sculptor on the dist
 	# Sculptors integration tests will run the makefile targets it needs to run, so no dependencies here.
-	uv run pytest -n 8 -kdist --capture=no -v -ra $(or $(TEST_ARGS), "tests/integration/")
+	uv run pytest -n 8 -k"dist and integration" --capture=no -v -ra $(or $(TEST_ARGS), "tests/integration/")
 
+test-acceptance: # Run acceptance tests for Sculptor on the dist
+	# Sculptors acceptance tests will run the makefile targets it needs to run, so no dependencies here.
+	# We only ever run the acceptance tests on the dist.
+	# TODO: Add the Acceptance Testing Folder
+	uv run pytest -n 8 -k"dist and acceptance" --capture=no -v -ra $(or $(TEST_ARGS), "tests/integration/")
 
 test-unit: ## Run unit tests for Sculptor
 	uv run pytest -n 8 --capture=no -v $(or $(TEST_ARGS), "sculptor/")

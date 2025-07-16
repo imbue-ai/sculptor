@@ -4,7 +4,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
 
-## [0.0.2rc1] (current)
+## [0.0.2rc2] (current)
+#### changes since `0.0.2rc1`
+
+### Added
+- UI for environment crash detection and display to show Docker task errors (!5222)
+- Validation for Anthropic API key to ensure ASCII character compatibility (!5228)
+
+### Changed
+- Markdown links now open in new tabs for better user experience (!5201)
+- Frontend state consistency improved via request ID tracking to prevent race conditions (!5169)
+
+### Fixed
+- Duplicate messages bug that occurred when event source reconnects (!5231)
+
+### Internal updates
+- Version bump to 0.0.2rc2 (!5234)
+
+
+## [0.0.2rc1]
 #### changes since `0.0.1rc9`
 
 ### Added
