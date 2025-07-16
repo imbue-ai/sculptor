@@ -92,6 +92,7 @@ dev = [
     "sculptor_v0", # Tests still have a dependency on Sculptor v0
     "selenium>=4.0.0",
     "syrupy",
+    "tomlkit>=0.13.0",
 ]
 
 [project.scripts]
