@@ -75,7 +75,17 @@ requires-python = ">=3.11"
 imbue_core = { workspace = true }
 
 [tool.setuptools.packages.find]
-exclude = ["keys"]
+exclude = [
+    "keys",
+
+    # Exclude any testing packages from being included in our code.
+    "tests",
+    "tests.*",
+    "*.tests",
+    "*.tests.*",
+    # TODO: We will be able to exclude the */testing/* code once our production code
+    #  does not have a depedency on test code to mock the LLM
+]
 
 [dependency-groups]
 dev = [
