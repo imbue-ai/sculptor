@@ -29,8 +29,6 @@ For now, we will store all central user and organization related data inside Aut
     - Makes the migration away from Authentik a little bit harder than otherwise.
 - By default, a user is always a member of their own personal organization.
   This organization cannot be left, cannot accept more users and its name cannot be changed by the user.
-  To avoid having to implement these constraints and to avoid having too many groups in Authentik,
-  we can implement personal organizations as virtual, i.e. they don't have a corresponding record in the database and their ID is derived from user's ID (or is the same). This setup can become tricky later on in case we need foreign keys pointing to organizations but it's probably the lesser evil (and we can easily migrate away from it if needed).
 - Each group corresponding to an organization will contain two subgroups, "users" and "admins".
 
 ### Authentik proxy
