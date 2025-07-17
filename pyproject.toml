@@ -29,7 +29,7 @@ dependencies = [
     "sentry-sdk",
     "splinter>=0.19.0",
     "sqlalchemy",
-    "tomli-w>=1.2.0",
+    "tomlkit>=0.13.0",
     "typeid-python",
     "typer",
     "uvicorn>=0.34.3",
@@ -92,7 +92,6 @@ dev = [
     "sculptor_v0", # Tests still have a dependency on Sculptor v0
     "selenium>=4.0.0",
     "syrupy",
-    "tomlkit>=0.13.0",
 ]
 
 [project.scripts]
