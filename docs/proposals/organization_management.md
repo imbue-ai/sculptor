@@ -28,9 +28,10 @@ For now, we will store all central user and organization related data inside Aut
     - Cannot define DB schemas or constraints on the data.
     - Makes the migration away from Authentik a little bit harder than otherwise.
 - By default, a user is always a member of their own personal organization.
-  This organization cannot be left, cannot accept more users and its name cannot change.
+  This organization cannot be left, cannot accept more users and its name cannot be changed by the user.
   To avoid having to implement these constraints and to avoid having too many groups in Authentik,
   we can implement personal organizations as virtual, i.e. they don't have a corresponding record in the database and their ID is derived from user's ID (or is the same). This setup can become tricky later on in case we need foreign keys pointing to organizations but it's probably the lesser evil (and we can easily migrate away from it if needed).
+- Each group corresponding to an organization will contain two subgroups, "users" and "admins".
 
 ### Authentik proxy
 
@@ -54,7 +55,7 @@ Aside from that, we will also need a proxy to Lago that will:
 - Allow us to send billing events that do not originate in LiteLLM (e.g. Modal invocations).
 
 Similarly to the Authentik proxy, this service will ensure that users only read data they are authorized for.
-(It can - and maybe should - actually be the same service as the previous proxy.)
+(It should actually be the same service as the previous proxy.)
 
 Each billing event needs to be connected to a User as well as an Organization.
 
@@ -76,9 +77,10 @@ Organizations UI will be shown in the local Sculptor frontend.
 
 It will let users:
 - List and leave their organizations, create new ones and add or remove users to their organizations.
-    - For simplicity, let's assume that only existing registered users can be added.
-    - For starters, we can declare that only the original creators of an organization are their administrators.
-      (We can easily refine this later on.)
+    - For simplicity, let's assume that only existing registered users can be added at first.
+      (In subsequent steps, we can implement e-mail invites using the [existing functionality in Authentik](https://docs.goauthentik.io/docs/users-sources/user/invitations).)
+    - For starters, the original creator lands in the "admins" subgroup while all other users land in the "users" subgroup.
+      (Later on, we can implement flows for ownership transition and sharing.)
 - Add payment details (via a Stripe integration).
 - See the current billing usage for a given organization.
 
@@ -92,7 +94,9 @@ It will let users:
 4. Set up the Lago integration in our LiteLLM proxy and start collecting usage.
    (Make sure that user requests that result in billing events are always explicitly tied to a specific organization.)
 6. Prepare the Lago proxy endpoints to expose billing usage.
-7. Show billing usage in Organizations UI.
-8. Integrate with Stripe.
+7. Show billing / usage in Organizations UI.
+    - aggregate
+    - as well as broken down to tasks for better transparency
+9. Integrate with Stripe.
 10. Add endpoints for creating organizations, adding / removing users and leaving organizations.
 11. Let users use those endpoints via Organizations UI.
