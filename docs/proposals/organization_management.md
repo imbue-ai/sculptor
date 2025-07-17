@@ -46,27 +46,29 @@ For now, we will store all central user and organization related data inside Aut
 ### Billing
 
 We will use Lago for billing. To keep track of LLM usage, we expect to use the Lago integration that's part of LiteLLM.
+For usage-based billing, there are two basic approaches: [Progressive Billing and Prepaid Credits](https://github.com/getlago/lago/wiki/What-I-Wish-Someone-Told-Me-About-Prepaid-Credits).
+From these two, we prefer Prepaid Credits which translates to using Lago Wallets.
 
 Aside from that, we will also need a proxy to Lago that will:
 
-- Allow users to read their current billing usage.
-- Allow us to send billing events that do not originate in LiteLLM (e.g. Modal invocations).
+- Allow users to read their current billing usage / remaining credits in their wallet.
+- Allow us to log billing events that do not originate in LiteLLM (e.g. Modal invocations).
 
 Similarly to the Authentik proxy, this service will ensure that users only read data they are authorized for.
 (It should actually be the same service as the previous proxy.)
 
-Each billing event needs to be connected to a User as well as an Organization.
+Each billing event needs to be connected to a User as well as an Organization and ideally also a Task (see the [delegated Auth](./delegated-auth.md) proposal for details about tasks).
+
+We will set up webhook alerts from Lago to our cloud proxy service to let us know when users run out of credits / when they refill their wallets.
+In reaction to those webhooks, we can modify user attributes in Authentik and disallow / re-enable calls to third party proxies.
+
+We should also have a cronjob to periodically reconcile our DB with Stripe / Lago status in case we missed a webook notification.
 
 
 ### Payment
 
 We will use Stripe for payments. We expect to use the Stripe integration that Lago provides and possibly Stripe Elements
 to let users pay directly from within Sculptor.
-
-We will set webhooks pointing from Stripe to our main proxy service to let us know if users missed payments.
-In reaction to those webhooks, we can modify user attributes in Authentik and potentially disallow further calls to third party proxies until resolved by the user.
-
-We can also consider having a cronjob to periodically reconcile our DB with Stripe / Lago status.
 
 
 ### Organizations UI
@@ -89,12 +91,13 @@ It will let users:
    (This can be just a part of the "main" proxy service that we are likely to build.)
 2. Add the initial version of the Organizations UI on the frontend that shows a list of user's organizations and their details.
 3. Get a Lago account.
-4. Set up the Lago integration in our LiteLLM proxy and start collecting usage.
+4. Set up the Lago integration in our LiteLLM proxy and start tracking usage.
    (Make sure that user requests that result in billing events are always explicitly tied to a specific organization.)
 6. Prepare the Lago proxy endpoints to expose billing usage.
 7. Show billing / usage in Organizations UI.
     - aggregate
     - as well as broken down into tasks for better transparency
 9. Integrate with Stripe.
-10. Add endpoints for creating organizations, adding / removing users and leaving organizations.
-11. Let users use those endpoints via Organizations UI.
+10. Add markup to our bills.
+12. Add endpoints for creating organizations, adding / removing users and leaving organizations.
+13. Let users use those endpoints via Organizations UI.
