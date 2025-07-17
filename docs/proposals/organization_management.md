@@ -94,7 +94,7 @@ It will let users:
 6. Prepare the Lago proxy endpoints to expose billing usage.
 7. Show billing / usage in Organizations UI.
     - aggregate
-    - as well as broken down to tasks for better transparency
+    - as well as broken down into tasks for better transparency
 9. Integrate with Stripe.
 10. Add endpoints for creating organizations, adding / removing users and leaving organizations.
 11. Let users use those endpoints via Organizations UI.
