@@ -48,11 +48,11 @@ The proxy would then refuse to serve delegated requests outside of the allowed s
 The `task_token` should also contain a claim called `cap` that would limit the maximum spending allowed while working on the given task.
 We don't want to track spending in the proxy itself so we should delegate this to [Lago](https://www.getlago.com/) if possible.
 
-On Lago's side, it may be possible to use a combination of Filters, Progressive Billing and Webooks to get notifications for when a given task exceeds some total amount of money spent.
+On Lago's side, it may be possible to use a combination of Filters, Progressive Billing and Webhooks to get notifications for when a given task exceeds some total amount of money spent.
 
-This means that each billing event should be logged with a `task_id`. That should be part of the `task_token` claims and it needs to be different from the token's `id` claim. The reason is that we may want to count usage consumed "on users behalf" (e.g. by the agent calling the LLM) together with usage consumed directly by the user (e.g. by running the Modal container for the agent) so that the user can set a limit for a logically meaningful unit (a whole task).
+This means that each billing event should be logged with a `task_id`. That should be part of the `task_token` claims and it needs to be different from the token's `id` claim. The reason is that we may want to count usage consumed "on user's behalf" (e.g. by the agent calling the LLM) together with usage consumed directly by the user (e.g. by running the Modal container for the agent) so that the user can set a limit for a logically meaningful unit (a whole task).
 
-Then the proxy just needs to store two binary flags for each token (`is_threshold_set_in_lago` and `is_threshold_reached`).
+Then the proxy just needs to keep track of two binary flags for each `task_id` (`is_threshold_set_in_lago` and `is_threshold_reached`).
 
 There should be a default spending limit that users can change.
 
