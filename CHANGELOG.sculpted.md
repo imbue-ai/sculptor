@@ -3,8 +3,39 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
+[0.0.3] (current)
+#### changes since 0.0.2rc3
 
-## [0.0.2rc3] (current)
+### Added
+- MCP tools information display showing available tools from each server with colored badges (!5266)
+- Disable telemetry opt-out levels 0 and 1 (!5246)
+
+
+### Changed
+- Authentication tokens are now isolated per session to prevent conflicts when multiple tabs are open (!5250)
+
+### Fixed
+- Interrupt functionality now properly terminates internal Docker processes instead of just the docker exec process (!5299)
+- TipTap editor bullet point parsing issue where messages starting with "- " caused conflicts (!5220)
+- Branch selector overflow issue by truncating long branch names to prevent UI layout problems (!5293)
+
+### Internal updates
+- Process pool implementation to fix threading issues in parallel imbue_verify calls (!5259)
+- Automated version bumping script and release process improvements (!5304, !5288)
+- Integration tests for plan artifacts and committed changes (!5280, !5275, !5271)
+- Websockets implementation on frontend (!5269)
+- LiteLLM deployment on Fly for cross-API format usage (!5287)
+- Diff size limiting in imbue_verify tool to prevent timeouts (!5268)
+- PostHog task metrics logging for better analytics (!5270)
+- Improved error handling and priority adjustments for LLM API errors (!5279)
+- Development tool improvements including eslint pre-commit script (!5284, !5281)
+- Bug fixes for frontend types and frozen instance mutations (!5273, !5290)
+- TOML file inclusion fixes for proper wheel building (!5278)
+- Support for cwd parameter in pytest configuration (!5224)
+
+
+
+## [0.0.2rc3]
 #### changes since `0.0.2rc2`
 
 ### Added
