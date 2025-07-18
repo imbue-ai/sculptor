@@ -3,7 +3,39 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
-[0.0.3] (current)
+
+## [0.0.4] (current)
+#### changes since `0.0.3`
+
+### Added
+- Parallel processing for agentic issue identification to significantly reduce verification time (!5235)
+- MCP server integration for invoking imbue-verify tool (!5336)
+- Better error classification for Docker provider errors (!5334)
+- Comprehensive S3 upload reliability with proper resource cleanup (!5335)
+
+### Changed
+- Frontend performance dramatically improved with smarter WebSocket connection handling (!5368)
+- Chat interface loading states enhanced for better user experience (!5368)
+- Request tracking logic optimized to only wait for necessary WebSocket sources (!5368)
+- Task management system improved to handle deletions during build operations (!5344)
+- Error handling enhanced to provide clearer error messages and better debugging (!5334)
+
+### Fixed
+- Critical bug where deleting tasks while building would prevent new tasks from starting (!5344)
+- Interrupt handling bug that could leave the system in inconsistent state (!5333)
+- WebSocket connection issues causing frontend unresponsiveness (!5368)
+- Infinite re-rendering issues that caused UI freezing (!5368)
+- Resource cleanup to prevent memory leaks and system lockups (!5335)
+
+### Internal updates
+- Removed dangerous global locking state from git operations (!5345)
+- Major type safety improvements across the codebase (!5330)
+- Enhanced test coverage for MCP server functionality (!5336)
+- Better resource management and cleanup patterns (!5335)
+- Improved validation for empty verification requests (!5252)
+- Code generation evaluation framework improvements (!5346)
+
+[0.0.3]
 #### changes since 0.0.2rc3
 
 ### Added
