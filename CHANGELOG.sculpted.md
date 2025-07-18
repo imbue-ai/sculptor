@@ -33,8 +33,6 @@ All changes are based on merge commits since the last release commit, with gitla
 - TOML file inclusion fixes for proper wheel building (!5278)
 - Support for cwd parameter in pytest configuration (!5224)
 
-
-
 ## [0.0.2rc3]
 #### changes since `0.0.2rc2`
 
