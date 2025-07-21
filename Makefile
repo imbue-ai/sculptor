@@ -128,17 +128,17 @@ help: ## Show this help message
 # Tests below
 test-integration: # Run integration tests for Sculptor
 	# Sculptors integration tests will run the makefile targets it needs to run, so no dependencies
-	uv run pytest -n 8 -k"v1 and integration" --capture=no -v -ra $(or $(TEST_ARGS), "tests/integration/")
+	uv run pytest -n 8 -k "v1" -m "integration" --capture=no -v -ra $(or $(TEST_ARGS), "tests/integration/")
 
 test-integration-dist: # Run integration tests for Sculptor on the dist
 	# Sculptors integration tests will run the makefile targets it needs to run, so no dependencies here.
-	uv run pytest -n 8 -k"dist and integration" --capture=no -v -ra $(or $(TEST_ARGS), "tests/integration/")
+	uv run pytest -n 8 -k "dist" -m "integration" --capture=no -v -ra $(or $(TEST_ARGS), "tests/integration/")
 
 test-acceptance: # Run acceptance tests for Sculptor on the dist
 	# Sculptors acceptance tests will run the makefile targets it needs to run, so no dependencies here.
 	# We only ever run the acceptance tests on the dist.
 	# TODO: Add the Acceptance Testing Folder
-	uv run pytest -n 8 -k"dist and acceptance" --capture=no -v -ra $(or $(TEST_ARGS), "tests/integration/")
+	uv run pytest -n 8 -k "dist" -m "acceptance" --capture=no -v -ra $(or $(TEST_ARGS), "tests/integration/")
 
 test-unit: ## Run unit tests for Sculptor
 	uv run pytest -n 8 --capture=no -v $(or $(TEST_ARGS), "sculptor/")
