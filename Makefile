@@ -114,6 +114,9 @@ dist: install  ## Build a distribution for sculptor
 	uv run sculptor/scripts/dev.py create-sentry-settings
 	uv build --wheel --sdist
 
+
+# Release and operational commands follow
+
 bump-version: ## Convenience shortcut for creating a branch bumping the version.
 	uv run sculptor/scripts/dev.py bump-version $(ARGS)
 
@@ -121,9 +124,21 @@ cut-release: ## Convenience shortcut for running dev command to cut a release
 	# No depedencies because it's a shortcut
 	uv run sculptor/scripts/dev.py cut-release $(RELEASE_ARGS)
 
+fixup-release: ## Convenience shortcut for running dev command to update a release
+	# No depedencies because it's a shortcut
+	uv run sculptor/scripts/dev.py fixup-release $(RELEASE_ARGS)
+
+promote: ## Promote a release to the latest version
+	# No depedencies because it's a shortcut
+	uv run sculptor/scripts/dev.py promote $(RELEASE_ARGS)
+
+
+# Help command
+
 help: ## Show this help message
 	echo "Available targets:"
 	grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
+
 
 # Tests below
 test-integration: # Run integration tests for Sculptor
