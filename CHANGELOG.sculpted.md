@@ -3,8 +3,28 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
+## [0.0.5] (current)
 
-## [0.0.4] (current)
+### changes since `0.0.4`
+
+### Added
+
+- User setup script support allowing custom `user_setup.sh` scripts in `<sculpture>/.sculptor/` directory for container customization (!5340)
+
+### Changed
+
+- Reordered chat interface panes to: Plan → Changes → Suggestions → Log for better user workflow (!5342)
+- Earlier PostHog initialization for comprehensive startup event logging (!5357)
+- Database schema handling now gracefully manages downgrades when switching between Sculptor versions (!5318)
+- Claude Code requests now route through proxy when LITELLM_BASE_URL is configured (!5320)
+
+### Internal updates
+- Release promotion tooling for managing live/stable environment deployments (!5343)
+- Version bump automation and changelog management improvements (!5373, !5371)
+- Enhanced error handling for "task not found" scenarios with graceful stream closure (!5327)
+- Improved development workflow with better integration test stability (!5374)
+
+## [0.0.4]
 #### changes since `0.0.3`
 
 ### Added
