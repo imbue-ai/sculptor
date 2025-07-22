@@ -132,6 +132,10 @@ promote: ## Promote a release to the latest version
 	# No depedencies because it's a shortcut
 	uv run sculptor/scripts/dev.py promote $(RELEASE_ARGS)
 
+generate-release-notes: ## Convenience shortcut for running dev command to update a release
+	# No depedencies because it's a shortcut
+	uv run sculptor/scripts/dev.py generate-release-notes $(RELEASE_ARGS)
+
 
 # Help command
 
