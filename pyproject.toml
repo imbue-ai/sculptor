@@ -83,8 +83,12 @@ exclude = [
     "tests.*",
     "*.tests",
     "*.tests.*",
-    # TODO: We will be able to exclude the */testing/* code once our production code
-    #  does not have a depedency on test code to mock the LLM
+    "testing",
+    "testing.*",
+    "*.testing",
+    "*.testing.*",
+    "sculptor.testing",
+    "sculptor.testing.*",
 ]
 
 [dependency-groups]
