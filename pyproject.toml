@@ -75,7 +75,21 @@ requires-python = ">=3.11"
 imbue_core = { workspace = true }
 
 [tool.setuptools.packages.find]
-exclude = ["keys"]
+exclude = [
+    "keys",
+
+    # Exclude any testing packages from being included in our code.
+    "tests",
+    "tests.*",
+    "*.tests",
+    "*.tests.*",
+    "testing",
+    "testing.*",
+    "*.testing",
+    "*.testing.*",
+    "sculptor.testing",
+    "sculptor.testing.*",
+]
 
 [dependency-groups]
 dev = [
