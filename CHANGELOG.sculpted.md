@@ -3,7 +3,27 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
-## [0.0.5] (current)
+## [0.0.6] (current)
+
+### changes since `0.0.5`
+
+### Added
+
+### Changed
+- Enhanced system prompt to increase automated verification frequency (!5392)
+- Fixed Docker container conflicts by prefixing containers with project ID (!5244)
+
+### Fixed
+ - Allow tasks to run even if Docker snapshot lacks make_user.sh
+- Improved error handling by fixing debug mode detection and enhanced Sentry reporting with commit SHA tags (!5391)
+
+### Internal Updates
+- Fixed test execution limits in Makefile and CI pipeline (!5390)
+- Added support for Gemini thinking models with configurable thinking budgets (!5305)
+- Re-enabled integration tests to improve test coverage (!5387)
+- Added email and instance tracking to onboarding confirmation events (!5386)
+
+## [0.0.5]
 
 ### changes since `0.0.4`
 
