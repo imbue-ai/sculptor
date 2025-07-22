@@ -8,9 +8,9 @@ It provides a web interface for creating and managing tasks, agents, and the env
 
 ### Install prerequisites
 
-Install ttyd using instructions [here](https://github.com/tsl0922/ttyd) and install tmux using `brew install tmux`.
+Install tmux using `brew install tmux`.
 
-On Docker Desktop, set the file sharing implementation to gRPC FUSE under Settings -> General
+Follow the sculptor external setup guide: https://imbue-ai.notion.site/A-Guide-to-Sculptor-22aa550faf95801b8639dd3288e21974?source=copy_link
 
 ### Run
 
@@ -19,6 +19,7 @@ From the root of the generally intelligent repo, run the following command to bu
 ```bash
 cd sculptor
 make install
+make dist
 ```
 
 Then run the following command to start the frontend and backend (this will also install dependencies):
@@ -30,15 +31,22 @@ make start REPO_PATH=<path_to_your_repo>
 `path_to_your_repo` should be a path to the **root** of the git repository that you want to use with Sculptor.
 
 
-Note, you may need to clear you state if we've made any updates via
+Note, you may need to clear you state if we've made any updates. Try
 
 ```bash
 make rm-state
 ```
 
+or
+
+```bash
+mv ~/.sculptor ~/.sculptor.bkp
+```
+
 See the Makefile for all supported commands.
 
 Finally, you should get a "startup wizard" - make sure you specify your `@imbue.com` email address when prompted for it!!
+
 
 ```
 bowei@Boweis-MacBook-Pro sculptor % cd /Users/bowei/code/generally_intelligent/sculptor && DEV_MODE=True uv run python -m sculptor.cli.main
@@ -81,7 +89,7 @@ is_repo_backup_enabled = true
 
 ## Changing the database
 
-By default, Sculptor saves its data in a semi-ephemeral way in an SQLite database under `/tmp/sculptor.db`.
+By default, Sculptor saves its data in a semi-ephemeral way in an SQLite database.
 
 If you'd like to change this, set the DATABASE_URL environment variable. For example:
 
