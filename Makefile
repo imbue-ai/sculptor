@@ -86,7 +86,6 @@ clean: ## Clean node_modules and Python cache
 	rm -r build/* || true
 	rm -r _vendor/* || true
 	rm sculptor/_version.py || true
-	rm sculptor/_sentry_settings.py || true
 
 install: ## Install dependencies for both frontend and backend
 	echo "Installing frontend dependencies..."
@@ -112,7 +111,6 @@ install-test: install
 
 dist: install  ## Build a distribution for sculptor
 	uv run sculptor/scripts/dev.py create-version-file
-	uv run sculptor/scripts/dev.py create-sentry-settings
 	uv build --wheel --sdist
 
 
