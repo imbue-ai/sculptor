@@ -7,6 +7,7 @@ _ENV_SHELL := $(shell echo $$SHELL)
 SESSION_NAME := sculptor-session
 REPO_PATH ?= $(error REPO_PATH is required. Usage: make dev REPO_PATH=/path/to/repo)
 DEV_MODE ?= false
+ENABLED_FRONTEND_ARTIFACT_VIEWS ?= ""
 # Force SHELL to /bin/bash for users of more esoteric shells
 ifeq ($(filter %bash %zsh,$(notdir $(_ENV_SHELL))),)
     SHELL := /bin/bash
@@ -30,7 +31,7 @@ sos: install
 	tmux new-window -t $(SESSION_NAME) -n dist $(SHELL)
 	tmux new-window -t $(SESSION_NAME) -n test-project $(SHELL)
 	tmux send-keys -t $(SESSION_NAME):dev-frontend "npm run dev -- --open" Enter
-	tmux send-keys -t $(SESSION_NAME):dev-backend "DEV_MODE=true uv run python -m sculptor.cli.main  --no-open-browser $(REPO_PATH)" Enter
+	tmux send-keys -t $(SESSION_NAME):dev-backend "DEV_MODE=true ENABLED_FRONTEND_ARTIFACT_VIEWS=$(ENABLED_FRONTEND_ARTIFACT_VIEWS) uv run python -m sculptor.cli.main  --no-open-browser $(REPO_PATH)" Enter
 	tmux send-keys -t $(SESSION_NAME):dist "SCULPTOR_API_PORT=1224 uvx --with https://imbue-sculptor-latest.s3.us-west-2.amazonaws.com/internal/sculptor.tar.gz --refresh sculptor .." Enter
 	tmux send-keys -t $(SESSION_NAME):test-project "cd $(REPO_PATH)" Enter
 	echo "Development servers started in tmux session '$(SESSION_NAME)'"
@@ -49,7 +50,7 @@ tmux-dev: install ## Start tmux session with frontend and backend windows (requi
 	tmux new-session -d -s $(SESSION_NAME) -n frontend $(SHELL)
 	tmux new-window -t $(SESSION_NAME) -n backend $(SHELL)
 	tmux send-keys -t $(SESSION_NAME):frontend "cd \"$(PWD)/frontend\" && DEV_MODE=$(DEV_MODE) npm run dev" Enter
-	tmux send-keys -t $(SESSION_NAME):backend "cd \"$(PWD)\" && DEV_MODE=$(DEV_MODE) uv run python -m sculptor.cli.main --serve-static $(REPO_PATH)" Enter
+	tmux send-keys -t $(SESSION_NAME):backend "cd \"$(PWD)\" && DEV_MODE=$(DEV_MODE) ENABLED_FRONTEND_ARTIFACT_VIEWS=$(ENABLED_FRONTEND_ARTIFACT_VIEWS) uv run python -m sculptor.cli.main --serve-static $(REPO_PATH)" Enter
 	echo "Development servers started in tmux session '$(SESSION_NAME)'"
 	echo "Backend serving repository: $(REPO_PATH)"
 	echo "Use 'tmux attach -t $(SESSION_NAME)' to attach to the session"
