@@ -269,7 +269,7 @@ All changes are based on merge commits since the last release commit, with gitla
 
 ### Fixed
 - Timeout functionality to `run_local_command` with git diff migration (!5108)
-- Updated default_tools.toml with correct imbue_verify configuration (!5131)
+- Updated default_tools.toml with correct imbue_tools.imbue_verify_types.configuration (!5131)
 - Added documentation for `enabled_identifiers` in imbue_verify tool configuration (!5133)
 - Fixed space handling in git stash operations and untracked file retrieval (!5117)
 - Ensured log exceptions properly reach Sentry for better error tracking (!5116)
