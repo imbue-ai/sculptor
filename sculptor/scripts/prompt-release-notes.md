@@ -6,15 +6,25 @@ Each step’s “Output” is the only text you may emit for that step.
 
 ---
 
-1. Identify last release
+0. Identify the base for the release or the prior completed release
+   * Look at the last entry in `sculptor/CHANGELOG.sculpted.md`
+   * Look at the Git tags to find prior completed release tags (e.g., `release/sculptor-v0.0.5`).
+   * Look at release branches to find open release branches (e.g., `release/sculptor-v0.0.5`).
+
+   Output → the exact tag name of the prior _completed_ release and commit SHA.
+
+
+1. Identify the last commit in the current release
    * Look at `sculptor/pyproject.toml` to determine the current version.
-   * Use Git tags to find the prior release tag (e.g., `vX.Y.Z` or `rc‑…`).
-   * Record its commit SHA.
+   * Use Git tags to find the current release tag (e.g., `existingrelease/sculptor-v0.0.5`).
+   * If the git tag for the current release does not exist, this means the current release is still being completed.
+   * In this case, use the latest commit of the release branch (e.g., `existingrelease/sculptor-v0.0.5`).
 
    Output → the exact tag name and commit SHA.
 
 2. Collect candidate merges
-   * From the last release tag up to `HEAD`, list all commits that merged into `main` whose paths touch `sculptor/`.
+   * From the base release SHA to the current release, list all commits that merged into `main` whose paths touch `sculptor/`.
+   * Additionally list all commits that merged into the release branch.
    * Capture each merge request (MR) ID and its commit SHA and description
    * If the commit has no description, look at the diff to determine what the description ought to be
 
