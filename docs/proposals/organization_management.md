@@ -29,7 +29,7 @@ For now, we will store all central user and organization related data inside Aut
     - Makes the migration away from Authentik a little bit harder than otherwise.
 - By default, a user is always a member of their own personal organization.
   This organization cannot be left, cannot accept more users and its name cannot be changed by the user.
-- Each group corresponding to an organization will contain two subgroups, "users" and "admins".
+- Each group corresponding to an organization will contain an additional subgroup with the same name and the suffix "_admins".
 
 ### Authentik proxy
 
