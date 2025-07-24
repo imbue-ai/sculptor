@@ -156,7 +156,7 @@ test-acceptance: # Run acceptance tests for Sculptor on the dist
 	uv run pytest -n 8 -k "dist" -m "acceptance" -sv -ra $(or $(TEST_ARGS), "tests/integration/")
 
 test-unit: ## Run unit tests for Sculptor
-	uv run pytest -n 8 -v $(or $(TEST_ARGS), "sculptor/")
+	uv run pytest -n 8 -sv $(or $(TEST_ARGS), "sculptor/")
 
 test-build-artifacts: ## Test the build script and verify that the artifacts can run
 	bash sculptor/scripts/test_build_artifacts.sh
