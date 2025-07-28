@@ -113,7 +113,7 @@ When you do that, you need to authenticate using the `Authorization: Bearer` hea
 curl -H "Authorization: Bearer <token>" http://localhost:5050/api/v1/auth/me
 ```
 
-You can get a token by actually running sculptor in your web browser. The frontend will notice that it received 401 or 403 responses from the backend and will redirect you to our [Authentik server](https://imbue-authentik.fly.dev/). After completing the whole login flow, you will find your JWT in localStorage under the `sculptor-jwt` key.
+You can get a token by actually running sculptor in your web browser. The frontend will notice that it received 401 or 403 responses from the backend and will redirect you to our [Authentik server](https://auth.imbue.com/). After completing the whole login flow, you will find your JWT in localStorage under the `sculptor-jwt` key.
 
 For more details, see the docstring in the [auth.py](sculptor/web/auth.py) module.
 
