@@ -3,7 +3,46 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
-## [0.0.6] (current)
+## [0.0.8rc1] (current)
+
+### changes since `0.0.6`
+
+### Added
+- Onboarding improvements with Discord invite link and API key request form in startup messages (!5462)
+- State persistence for model selection and task filter preferences using localStorage (!5308)
+- LiteLLM integration running alongside Claude container for improved API compatibility (!5395)
+- Gemini model support with retrieval capabilities for enhanced context understanding (!5263)
+- Automated changelog generation tooling for release management (!5387)
+- System prompt requirement enforced when creating new tasks (!5453)
+- Improved error classification and handling for git operations (!5391, !5386)
+- Automatic sculptor remote repository setup if not exists (!5408)
+
+### Changed
+- Build process optimized for smaller size and faster builds (!5377)
+- Claude container configuration improvements and version pinning (!5380, !5372)
+- Markdown text rendering enhancements in chat interface (!5366)
+- PostHog event tracking migration and initialization fixes (!5399, !5433)
+- UV lock generation robustness improvements (!5437)
+- Release notes generation script updated to avoid automatic commits (!5433)
+
+### Fixed
+- Navigation flakiness and UI reliability improvements (!5388, !5370)
+- Agent task failure handling to prevent system-wide crashes (!5369)
+- Docker container `make_user.sh` script compatibility with older snapshots (!5422)
+- Git error handling for expected error cases (!5387, !5391)
+- Pipeline test flakiness resolved (!5370)
+- Telemetry test style issues corrected (!5396)
+- Version string display on chat page (!5385)
+- Branching support for non-main branches (!5393)
+
+### Internal Updates
+- Pyre type checking allowed to pass during builds (!5390)
+- Pre-push hook improvements for better developer experience (!5374)
+- Filesystem root configuration for improved flexibility (!5378)
+- Testing infrastructure enhancements and stability improvements (!5371)
+- Container environment setup improvements (!5420)
+
+## [0.0.6]
 
 ### changes since `0.0.5`
 
