@@ -151,6 +151,10 @@ test-integration: # Run integration tests for Sculptor
 	# Sculptors integration tests will run the makefile targets it needs to run, so no dependencies
 	uv run pytest -n 8 -k "v1" -m "integration" --show-capture=all --capture=tee-sys -v -ra $(or $(TEST_ARGS), "tests/integration/")
 
+test-integration-no-build: # Run integration tests for Sculptor
+	# Sculptors integration tests will run the makefile targets it needs to run, so no dependencies
+	uv run pytest -n 8 -k "v1" -m "integration" --show-capture=all --capture=tee-sys -v -ra --skip-build-artifacts $(or $(TEST_ARGS), "tests/integration/")
+
 test-integration-dist: # Run integration tests for Sculptor on the dist
 	# Sculptors integration tests will run the makefile targets it needs to run, so no dependencies here.
 	uv run pytest -n 8 -k "dist" -m "integration" --show-capture=all --capture=tee-sys -v -ra $(or $(TEST_ARGS), "tests/integration/")
