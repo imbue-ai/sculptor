@@ -3,7 +3,36 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
-## [0.0.8] (current)
+## [0.0.9] (current)
+
+### changes since `0.0.8`
+
+### Added
+- Gemini model support with retrieval capabilities for enhanced context understanding (!5263)
+- System prompt requirement enforced when creating new tasks (!5453)
+- State persistence for model selection and task filter preferences using localStorage (!5308)
+- Issue-finding agent functionality with performance improvements (!5476)
+
+### Changed
+- Onboarding experience enhanced with quality of life improvements (!5471)
+- Anthropic API key now cached in config.toml during onboarding if user consents (!5480)
+- UV lock generation process made more robust and reliable (!5437)
+- Claude session metadata now logged for better telemetry tracking (!5469)
+- Release notes generation script updated to avoid automatic commits (!5433)
+
+### Fixed
+- Command stalling bug resolved by properly consuming stdout/stderr streams (!5482)
+- PostHog initialization issues corrected for proper telemetry startup (!5433)
+- JUnit test execution problems resolved for better CI reliability (!5456)
+
+### Internal Updates
+- DEV Environment added to Sentry configuration with deprecated _sentry_settings file (!5478)
+- Sculptor remote repository setup functionality relocated and improved (!5408)
+- Mutagen session name slugification improved with enhanced parsing (!5356)
+- AWSCLI version pinned for consistent and reliable builds (!5468)
+- PostHog configuration switched to development environment (!5473)
+
+## [0.0.8]
 
 ### changes since `0.0.6`
 
