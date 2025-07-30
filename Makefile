@@ -87,6 +87,7 @@ clean: ## Clean node_modules and Python cache
 	rm -r _vendor/* || true
 	rm sculptor/_version.py || true
 
+
 install: ## Install dependencies for both frontend and backend
 	echo "Installing frontend dependencies..."
 	( cd frontend && npm install --force )
@@ -106,8 +107,10 @@ install: ## Install dependencies for both frontend and backend
 	echo "Building the docker image."
 	uv run sculptor/scripts/dev.py images
 
+
 install-test: install
 	uv run -m playwright install --with-deps
+
 
 dist: install  ## Build a distribution for sculptor
 	uv run sculptor/scripts/dev.py create-version-file
@@ -147,6 +150,10 @@ help: ## Show this help message
 test-integration: # Run integration tests for Sculptor
 	# Sculptors integration tests will run the makefile targets it needs to run, so no dependencies
 	uv run pytest -n 8 -k "v1" -m "integration" --show-capture=all --capture=tee-sys -v -ra $(or $(TEST_ARGS), "tests/integration/")
+
+test-integration-no-build: # Run integration tests for Sculptor
+	# Sculptors integration tests will run the makefile targets it needs to run, so no dependencies
+	uv run pytest -n 8 -k "v1" -m "integration" --show-capture=all --capture=tee-sys -v -ra --skip-build-artifacts $(or $(TEST_ARGS), "tests/integration/")
 
 test-integration-dist: # Run integration tests for Sculptor on the dist
 	# Sculptors integration tests will run the makefile targets it needs to run, so no dependencies here.

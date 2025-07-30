@@ -3,7 +3,21 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
-## [0.0.8rc1] (current)
+## [0.0.9] (current)
+
+### changes since `0.0.8`
+
+### Fixed
+- Fixes process blocking when git commands produce large outputs (!5482)
+
+### Changed
+- Improves onboarding by caching API key with user confirmation (!5480)
+- Enhances artifact view with better layout and loading states (!5476)
+
+### Internal Updates
+- Enables PostHog event routing to development instance for testing (!5473)
+
+## [0.0.8]
 
 ### changes since `0.0.6`
 
