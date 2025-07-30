@@ -13,8 +13,6 @@ The Proxy Viewer is a standalone tool that intercepts API calls between Claude C
 
 ## Quick Start
 
-### 1. Standalone Usage
-
 ```bash
 # Set your API key
 export ANTHROPIC_API_KEY=your-api-key
@@ -27,16 +25,6 @@ python proxy_server.py
 export ANTHROPIC_BASE_URL="http://localhost:8082"
 claude [your command]
 
-# View interactions at http://localhost:8082/viewer
-```
-
-### 2. With Sculptor
-
-```bash
-# Start Sculptor with proxy mode enabled
-sculptor --proxy [project-path]
-
-# The proxy viewer will automatically start
 # View interactions at http://localhost:8082/viewer
 ```
 

@@ -71,7 +71,7 @@ Call 3: [System] + [User 1] + [Assistant 1] + [User 2] + [Assistant 2] + [User 3
 ### System Messages
 - Always present at the start
 - Contains Claude's instructions
-- Includes any custom prompts from Sculptor
+- Includes any custom prompts from the application
 
 ### Tool Use Messages
 When Claude uses tools:
