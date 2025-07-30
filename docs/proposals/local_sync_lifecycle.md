@@ -43,7 +43,7 @@ Putting everything together, we get the following state diagram:
 
 The most important decisions above are:
 1. Pausing is not manually toggle-able. User should just stop sync instead.
-2. The only time an existing stash prevents an action is when attempting to start a new sync from a dirt tree.
+2. The only time an existing stash prevents an action is when attempting to start a new sync from a dirty tree.
    Otherwise we can just leave it lying around.
 
 This means the user can always choose to discard the paused local sync and leave the stash behind without worrying about it if they've already moved on to other work.
