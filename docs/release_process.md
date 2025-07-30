@@ -5,11 +5,32 @@ The Release Process for Sculptor v1 is intentionally designed to be lightweight
 and manual for maximum flexibility. As we grow in levels of sophistication, we
 will add to this process.
 
+* We employ a variation upon the [Release Branch](https://martinfowler.com/articles/branching-patterns.html#release-branch) strategy (as described at that link by Martin Fowler)
 
-### Initiate a release
-Initiate with `uv run sculptor/scripts/dev.py release`
+* We align on 3 release channels: stable, internal, latest
 
-You can only release from main with a clean state.
+* **Stable**: Has been tested, and is what our customers use
+* **Internal**: If there is a release candidate, internal is aliased to this. Otherwise, this is stable.
+* **Latest**: This is intended to be what was most recently merged to main.
+
+A Release Branch is regularly and explicitly cut by the Release Coordinator.
+There is a short period of time when that branch is used by all internal
+Imbumans to drive out any blocking bugs. At the end of this period, that branch
+becomes the new stable release.
+
+
+### Goals
+
+* Keep our velocity high. Developers should not have to worry (too much) about where we are in the release process
+* Ensure we have enough confidence in our builds before we release them to the public. Specifically, each build will have enough time with internal testing to find any errors
+* Enable us to directly fix any errors discovered during the release independently.
+* Isolate fixing the release from other work
+
+
+### Initiate a release cut
+The [Runbook is here](https://www.notion.so/imbue-ai/Cut-a-new-Release-of-Sculptor-234a550faf9580dc9502ea403a5ab425)
+
+You can only cut a release from main with a clean state.
 
 The version that will be built will be determined from the version of sculptor
 in `pyproject.toml`.
@@ -17,44 +38,66 @@ in `pyproject.toml`.
 This will create [a clean build of the distribution artifacts](packaging.md),
 and it will upload these artifacts to the correct locations.
 
-For version tagged releases, these will be uploaded to:
+A copy will be uploaded to:
 
-* s3://imbue-sculptor-releases/sculptor-{version}
 * s3://imbue-sculptor-releases/sculptor-{version}.tar.gz
-* s3://imbue-sculptor-releases/sculptor-{version}-py3-none-any.whl
 
-For now, we always make a fresh build on every release. This will keep us honest
-that our builds are repeatable.
+This release will also be uploaded to
 
-### Mark a release as latest
+* s3://imbue-sculptor-latest/internal/sculptor.tar.gz
 
-A version-tagged release is not automatically promoted to being the latest
-release. There are two ways to promote a tagged release as latest.
+which is what everyone internally should be using.
 
-You can pass the `--update-latest` flag to the `dev` script at release time:
-`uv run sculptor/scripts/dev.py release --update-latest`
 
-You can also call
+### Promoting a release
 
-`uv run sculptor/scripts/dev.py release set-latest-release <version>` which will
-update the latest tags to point to the latest release.
+The [Runbook on promoting the release](https://www.notion.so/imbue-ai/Promote-a-new-Release-of-Sculptor-v1-223a550faf9580b2adbbc0e11f1650e4) is here.
 
-The latest version of sculptor is always at
+You can only cut a release from the release branch, with a clean state.
 
-* s3://imbue-sculptor-latest/sculptor
+This will create a new build, and upload the build artifacts to the correct location.
+
+A copy will be uploaded to:
+
+* s3://imbue-sculptor-releases/sculptor-{version}.tar.gz
+
+Storing the release version for archival purposes
+
 * s3://imbue-sculptor-latest/sculptor.tar.gz
-* s3://imbue-sculptor-latest/sculptor-py3-none-any.whl
+
+This is what promotes the version to the public
+
+* s3://imbue-sculptor-latest/internal/sculptor.tar.gz
+
+This sets the internal channel to use the stable version, up until the next cut.
 
 
-### A note on versioning
+### Fixing up a release
 
-First a spot-the-difference:
+The only changes we should accept into a release branch after it is cut are bug fixes aimed at stabilizing it for the
+release.
 
-* https://peps.python.org/pep-0440/
-* https://semver.org/spec/v2.0.0.html
+These fixup changes may be cherry-picked into the release branch from main.
 
-Of course you spotted that both standards disagree on how to spell rc versions.
+They can also be made directly against the release branch if the cherry-pick would not cleanly apply.
 
-Python packaging mandates "1.2.3rc2" while Semver wants "1.2.3-rc.1". The
-additional punctuation characters are somewhat rudely stripped from Python,
-forcing us to go with PEP-0440.
+After a fixup change lands, the release coordinator should run
+
+`uv run sculptor/scripts/dev.py fixup-release`
+
+This will bump the release candidate version and publish the artifact to the right places.
+
+
+### Planned features and future milestones
+
+* Refuse to release a distribution if one already exists (unless --force is passed as an argument to the build)
+** “Rc” candidates are exempt from this requirement, and can be rebuilt
+
+#### Milestone 2
+
+* Also publish to PyPI as part of the release
+* (tentative, needs vetting) Also publish the releases to Sentry
+
+#### Milestone 3
+
+* Integration with CI: detect the creation of a release branch and start cutting releases based on them.
