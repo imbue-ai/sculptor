@@ -1,10 +1,8 @@
----
-gitlab_mrs:
-linear_issues: https://linear.app/imbue/issue/PROD-1377/spec-out-local-sync-lifecycle-robustness-state-graph
-last_updated: 2025-07-29
----
 
 # Local Sync Lifecycle Management
+
+* Discussion MR: [!5518]
+* Linear Ticket: [PROD-1377]
 
 ## Problem
 > When user does incompatible git stuff we want to stop syncing, but can't because the stash handling is coupled.
@@ -55,6 +53,8 @@ This means the user can always choose to discard the paused local sync and leave
 There will probably also be lots of thorny edge-case handling like [PROD-1403] (crash recovery cleanup).
 In particular, it is possible for a user to pop the git stash manually, leaving behind an untracked file backup.
 
+[!5518]: https://gitlab.com/generally-intelligent/generally_intelligent/-/merge_requests/5518
+[PROD-1377]: https://linear.app/imbue/issue/PROD-1377/spec-out-local-sync-lifecycle-robustness-state-graph
 [PROD-807]: https://linear.app/imbue/issue/PROD-807/no-watch-mode-adjust-mutagen-handling-to-sync-on-user-worktree-changes
 [PROD-846]: https://linear.app/imbue/issue/PROD-846/prevent-startingstopping-local-sync-in-mergerebase-states
 [PROD-1372]: https://linear.app/imbue/issue/PROD-1372/error-handling-stopgap-only-unsync-on-error-if-is-local-sync
