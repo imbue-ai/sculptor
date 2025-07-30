@@ -1,4 +1,4 @@
-.PHONY: dev start frontend backend rm-state clean install help tmux-dev tmux-stop test-integration
+.PHONY: dev start frontend backend rm-state clean install install-frontend install-backend install-test build build-frontend build-backend help tmux-dev tmux-stop test-integration
 .ONESHELL:
 SHELLFLAGS := -eu -o pipefail -c
 _ENV_SHELL := $(shell echo $$SHELL)
@@ -87,32 +87,38 @@ clean: ## Clean node_modules and Python cache
 	rm -r _vendor/* || true
 	rm sculptor/_version.py || true
 
-
-install: ## Install dependencies for both frontend and backend
+install-frontend:
 	echo "Installing frontend dependencies..."
 	( cd frontend && npm install --force )
-	( cd frontend && npm run build )
 
+build-frontend: install-frontend
+	( cd frontend && npm run build )
 	# Necessary to pre-create the target so the following command behaves the
 	# same on Mac and Linux.
 	mkdir -p ./frontend-dist
 	# These /. s are necessary to ensure the correct data gets copied into place
 	cp -R frontend/dist/. ./frontend-dist/.
 
+install-backend:
 	echo "Installing backend dependencies..."
 	# We cannot install imbue_core's dependencies at this time, because that
 	# would bake in platform-specific .so files and other binaries into our
 	# build, which we want to be platform agnostic.
 	uv pip install ../imbue_core --no-deps --target _vendor
+
+build-backend: install-backend
 	echo "Building the docker image."
 	uv run sculptor/scripts/dev.py images
 
+install: install-frontend install-backend ## Install dependencies for both frontend and backend
 
 install-test: install
 	uv run -m playwright install --with-deps
 
+build: build-frontend build-backend ## build the artifacts
 
-dist: install  ## Build a distribution for sculptor
+
+dist: install build  ## Create a "distributed" build for sculptor
 	uv run sculptor/scripts/dev.py create-version-file
 	uv build --wheel --sdist
 
