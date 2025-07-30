@@ -55,10 +55,10 @@ This means the user can always choose to discard the paused local sync and leave
 There will probably also be lots of thorny edge-case handling like [PROD-1403] (crash recovery cleanup).
 In particular, it is possible for a user to pop the git stash manually, leaving behind an untracked file backup.
 
-* [PROD-807]: https://linear.app/imbue/issue/PROD-807/no-watch-mode-adjust-mutagen-handling-to-sync-on-user-worktree-changes
-* [PROD-846]: https://linear.app/imbue/issue/PROD-846/prevent-startingstopping-local-sync-in-mergerebase-states
-* [PROD-1372]: https://linear.app/imbue/issue/PROD-1372/error-handling-stopgap-only-unsync-on-error-if-is-local-sync
-* [PROD-1364]: https://linear.app/imbue/issue/PROD-1364/decouple-local-sync-stash-track-the-sculptor-stashbackup
-* [PROD-848]: https://linear.app/imbue/issue/PROD-848/pause-or-bail-out-of-local-sync-on-incompatible-git-state-changes
-* [PROD-1402]: https://linear.app/imbue/issue/PROD-1402/local-sync-pause-state-surface-causes-to-user
-* [PROD-1403]: https://linear.app/imbue/issue/PROD-1403/local-sync-cleanup-and-stash-recovery-after-crash
+[PROD-807]: https://linear.app/imbue/issue/PROD-807/no-watch-mode-adjust-mutagen-handling-to-sync-on-user-worktree-changes
+[PROD-846]: https://linear.app/imbue/issue/PROD-846/prevent-startingstopping-local-sync-in-mergerebase-states
+[PROD-1372]: https://linear.app/imbue/issue/PROD-1372/error-handling-stopgap-only-unsync-on-error-if-is-local-sync
+[PROD-1364]: https://linear.app/imbue/issue/PROD-1364/decouple-local-sync-stash-track-the-sculptor-stashbackup
+[PROD-848]: https://linear.app/imbue/issue/PROD-848/pause-or-bail-out-of-local-sync-on-incompatible-git-state-changes
+[PROD-1402]: https://linear.app/imbue/issue/PROD-1402/local-sync-pause-state-surface-causes-to-user
+[PROD-1403]: https://linear.app/imbue/issue/PROD-1403/local-sync-cleanup-and-stash-recovery-after-crash
