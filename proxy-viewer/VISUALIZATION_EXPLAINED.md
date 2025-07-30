@@ -138,7 +138,16 @@ The proxy viewer now fully supports streaming API requests:
 - Streaming chunks follow the SSE format: `data: {json}\n\n`
 - The proxy parses each chunk while forwarding it
 - Token usage and timing are tracked across the entire stream
-- The viewer shows the final assembled response, not individual chunks
+- The viewer shows streaming text in real-time with a blinking cursor
+
+### Live Streaming Experience
+When Claude Code makes a streaming request:
+1. The viewer immediately shows a "Streaming..." indicator
+2. Text appears character-by-character as chunks arrive
+3. A blinking blue cursor shows where new text will appear
+4. Once complete, the cursor disappears and metrics are shown
+
+This gives you the same experience as watching Claude type in real-time!
 
 ## Future Improvements
 
@@ -148,4 +157,4 @@ We could enhance the visualization to:
 - Show context diffs between calls
 - Visualize token usage graphically
 - Filter by message type
-- Show streaming chunks in real-time as they arrive
+- Show individual streaming chunks for debugging

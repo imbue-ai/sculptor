@@ -99,6 +99,7 @@ proxy-viewer/
 ## Features
 
 - **Real-time Updates**: See API calls as they happen
+- **Live Streaming Visualization**: Watch Claude's responses appear character-by-character in real-time
 - **Streaming Support**: Properly handles and visualizes streaming API requests
 - **Token Tracking**: Monitor input/output token usage
 - **Timing Information**: Track API response times
