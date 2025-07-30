@@ -15,6 +15,12 @@ else
     SHELL := $(_ENV_SHELL)
 endif
 
+
+# Environment controls which environment that the test is running in.\
+# It is dev by default, but can be one of {dev|production|testing}
+ENVIRONMENT ?= dev
+
+
 dev: tmux-dev ## Run both frontend and backend in tmux session (requires REPO_PATH=/path/to/repo)
               ## Note that this supports hot-reloading for frontend assets.
 
@@ -88,11 +94,15 @@ clean: ## Clean node_modules and Python cache
 	rm sculptor/_version.py || true
 
 install-frontend:
+	# Only installs the frontend dependencies, for local iteration. Will not set
+	# up a FE dist to enable the sculptor backend to serve statically.
 	echo "Installing frontend dependencies..."
 	( cd frontend && npm install --force )
 
 build-frontend: install-frontend
-	( cd frontend && npm run build )
+	# Creates a FE distribution for the sculptor backend to serve statically.
+    # This next line will set up the correct sentry variables and then runs npm build
+	( eval $$(uv run sculptor/scripts/dev.py setup-build-vars $(ENVIRONMENT)) && cd frontend && npm run build )
 	# Necessary to pre-create the target so the following command behaves the
 	# same on Mac and Linux.
 	mkdir -p ./frontend-dist
@@ -107,20 +117,27 @@ install-backend:
 	uv pip install ../imbue_core --no-deps --target _vendor
 
 build-backend: install-backend
-	echo "Building the docker image."
+	echo "Building the Docker image and creating a sdist for sculptor"
 	uv run sculptor/scripts/dev.py images
+	uv run sculptor/scripts/dev.py create-version-file
+	uv build --wheel --sdist
 
-install: install-frontend install-backend ## Install dependencies for both frontend and backend
+install: build-frontend install-backend ## Install dependencies for both frontend and backend
 
-install-test: install
+install-test:
+	# Override the enivornment completed and ensure we are getting a testing build
+	$(MAKE) install ENVIRONMENT=testing
 	uv run -m playwright install --with-deps
 
 build: build-frontend build-backend ## build the artifacts
 
+dist: install
+	eval $$(uv run sculptor/scripts/dev.py setup-build-vars production)
+	$(MAKE) build ENVIRONMENT=production
 
-dist: install build  ## Create a "distributed" build for sculptor
-	uv run sculptor/scripts/dev.py create-version-file
-	uv build --wheel --sdist
+dist-test: install-test
+	eval $$(uv run sculptor/scripts/dev.py setup-build-vars testing)
+	$(MAKE) build ENVIRONMENT=testing
 
 
 # Release and operational commands follow
