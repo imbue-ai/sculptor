@@ -3,7 +3,28 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
-## [0.0.9] (current)
+## [0.0.10] (current)
+
+### changes since `0.0.9`
+
+### Added
+- Git panel UI with commit, push, and pull operations for task management (!5464)
+- Organization management with Authentik integration and access control (!5459)
+
+### Changed
+- User setup script enhanced with privilege management and container configuration (!5460)
+- Telemetry logging improved for UI button interactions and fixes selection descriptions (!5500)
+
+### Fixed
+- Repository setup errors when bare repositories are encountered (!5507)
+- Python warnings from ASCII art escape sequences in welcome message (!5491)
+- Local sync no longer breaks if Mutagen was hard-killed (!5530)
+
+### Internal Updates
+- Release process improved by fixing tag pushing and updating changelog generation (!5512)
+- Disabled LiteLLM integration. (!5527)
+
+## [0.0.9]
 
 ### changes since `0.0.8`
 
