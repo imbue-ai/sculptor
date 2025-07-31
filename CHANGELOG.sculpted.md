@@ -11,7 +11,7 @@ All changes are based on merge commits since the last release commit, with gitla
 - Git panel UI with commit, push, and pull operations for task management (!5464)
 - Organization management with Authentik integration and access control (!5459)
 
-### Changed 
+### Changed
 - User setup script enhanced with privilege management and container configuration (!5460)
 - Telemetry logging improved for UI button interactions and fixes selection descriptions (!5500)
 
