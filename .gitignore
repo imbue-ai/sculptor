@@ -7,3 +7,5 @@ test-results/
 # These files are automatically generated and included with the build.
 sculptor/_version.py
 sculptor/_sentry_settings.py
+
+.flock_build_dist
