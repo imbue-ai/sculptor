@@ -16,7 +16,7 @@ else
 endif
 
 
-# Environment controls which environment that the test is running in.\
+# Environment controls which environment that the test is running in.
 # It is dev by default, but can be one of {dev|production|testing}
 ENVIRONMENT ?= dev
 
@@ -102,6 +102,7 @@ install-frontend:
 build-frontend: install-frontend
 	# Creates a FE distribution for the sculptor backend to serve statically.
     # This next line will set up the correct sentry variables and then runs npm build
+	echo $(ENVIRONMENT)
 	( eval $$(uv run sculptor/scripts/dev.py setup-build-vars $(ENVIRONMENT)) && cd frontend && npm run build )
 	# Necessary to pre-create the target so the following command behaves the
 	# same on Mac and Linux.
@@ -126,18 +127,16 @@ install: build-frontend install-backend ## Install dependencies for both fronten
 
 install-test:
 	# Override the enivornment completed and ensure we are getting a testing build
-	$(MAKE) install ENVIRONMENT=testing
+	$(MAKE) ENVIRONMENT=testing install
 	uv run -m playwright install --with-deps
 
 build: build-frontend build-backend ## build the artifacts
 
 dist: install
-	eval $$(uv run sculptor/scripts/dev.py setup-build-vars production)
-	$(MAKE) build ENVIRONMENT=production
+	$(MAKE) build-frontend build-backend ENVIRONMENT=production
 
 dist-test: install-test
-	eval $$(uv run sculptor/scripts/dev.py setup-build-vars testing)
-	$(MAKE) build ENVIRONMENT=testing
+	$(MAKE) ENVIRONMENT=testing build
 
 
 # Release and operational commands follow
