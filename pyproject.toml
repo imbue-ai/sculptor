@@ -103,7 +103,6 @@ dev = [
     "pytest-cov>=6.2.1",
     "pytest-xdist>=3.8.0",
     "pytest>=8.4.1",
-    "sculptor_v0", # Tests still have a dependency on Sculptor v0
     "selenium>=4.0.0",
     "syrupy",
 ]
