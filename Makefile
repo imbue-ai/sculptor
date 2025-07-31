@@ -92,8 +92,8 @@ clean: ## Clean node_modules and Python cache
 
 install: ## Install dependencies for both frontend and backend
 	echo "Installing frontend dependencies..."
-	( cd frontend && npm run generate-api )
 	( cd frontend && npm install --force )
+	( cd frontend && npm run generate-api )
 	( cd frontend && npm run build )
 
 	# Necessary to pre-create the target so the following command behaves the
