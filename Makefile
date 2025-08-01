@@ -86,11 +86,14 @@ clean: ## Clean node_modules and Python cache
 	rm -r build/* || true
 	rm -r _vendor/* || true
 	rm sculptor/_version.py || true
+	rm -r frontend/src/api.generated.ts || true
+	rm -r frontend/src/api.generated.schemas.ts || true
 
 
 install: ## Install dependencies for both frontend and backend
 	echo "Installing frontend dependencies..."
 	( cd frontend && npm install --force )
+	( cd frontend && npm run generate-api )
 	( cd frontend && npm run build )
 
 	# Necessary to pre-create the target so the following command behaves the
