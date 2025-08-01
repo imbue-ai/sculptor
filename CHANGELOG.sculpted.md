@@ -3,7 +3,17 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
-## [0.0.10] (current)
+## [0.0.11] (current)
+
+### changes since `0.0.10`
+
+### Changed
+- Added SSH daemon support in Docker containers for remote access (!5481)
+
+### Internal Updates
+- Removed dangerously_launch_root_process function after merge conflict (!5525)
+
+## [0.0.10]
 
 ### changes since `0.0.9`
 
