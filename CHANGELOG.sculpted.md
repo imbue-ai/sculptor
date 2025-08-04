@@ -3,7 +3,42 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
-## [0.0.11] (current)
+## [0.0.13]
+
+### changes since `0.0.12`
+
+### Changed
+- Improved initial configuration wizard flow for better user experience (!5485)
+- Enhanced local sync lifecycle management for more reliable file synchronization (!5518)
+- Improved chat interface by removing excess vertical padding from user messages (!5577)
+- Improved UI by showing retry button only on last error message (!5560)
+
+### Fixed
+- Fixed multiple stop-related bugs including session validation and interrupt handling (!5545)
+
+### Internal Updates
+- Enhanced imbue_verify with git repository mirroring for improved verification reliability (!5370)
+- Added warning block component to display warning messages in UI (!5558)
+- Enhanced build process reliability with flock-based worker synchronization (!5543)
+- Added automated cleanup for Docker images and containers of inactive tasks (!5326)
+- Improved CI reliability with unique temporary directories for imbue_verify jobs (!5569)
+
+## [0.0.12]
+
+### changes since `0.0.11`
+
+### Added
+- Privacy consent prompt added to onboarding flow, exits if user declines (!5549)
+
+### Changed
+- Local sync now properly handles task state validation and prevents hanging (!5526)
+
+### Fixed
+- Git directory loading issues fixed with directory refresh workaround (!5540)
+- ASCII parsing warning during startup removed (!5511)
+
+
+## [0.0.11]
 
 ### changes since `0.0.10`
 
