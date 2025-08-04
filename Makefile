@@ -86,8 +86,8 @@ clean: ## Clean node_modules and Python cache
 	rm -r build/* || true
 	rm -r _vendor/* || true
 	rm sculptor/_version.py || true
-	rm -r frontend/src/api.generated.ts || true
-	rm -r frontend/src/api.generated.schemas.ts || true
+	rm -rf frontend/src/api || true
+	rm -r frontend/src/api || true
 
 
 install: ## Install dependencies for both frontend and backend
