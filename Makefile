@@ -92,12 +92,16 @@ clean: ## Clean node_modules and Python cache
 	rm -r build/* || true
 	rm -r _vendor/* || true
 	rm sculptor/_version.py || true
+	rm -r frontend/src/api.generated.ts || true
+	rm -r frontend/src/api.generated.schemas.ts || true
 
 install-frontend:
 	# Only installs the frontend dependencies, for local iteration. Will not set
 	# up a FE dist to enable the sculptor backend to serve statically.
 	echo "Installing frontend dependencies..."
 	( cd frontend && npm install --force )
+	( cd frontend && npm run generate-api )
+	( cd frontend && npm run build )
 
 build-frontend: install-frontend
 	# Creates a FE distribution for the sculptor backend to serve statically.

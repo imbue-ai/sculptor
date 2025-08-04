@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "sculptor"
 
 # This is going to be the true version.
-version = "0.0.10"
+version = "0.0.13"
 
 readme = "README.md"
 dependencies = [
@@ -61,6 +61,7 @@ dependencies = [
     "pytest",
     "pytest-asyncio",
     "pytest-mock",
+    "python-gitlab>=4.5.0",
     "sentry-sdk",
     "tblib==2.0.0", # pinning because Hammers code relies on "get_locals"
     "tenacity>=8.2.2",
@@ -103,7 +104,6 @@ dev = [
     "pytest-cov>=6.2.1",
     "pytest-xdist>=3.8.0",
     "pytest>=8.4.1",
-    "sculptor_v0", # Tests still have a dependency on Sculptor v0
     "selenium>=4.0.0",
     "syrupy",
 ]
