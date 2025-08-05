@@ -1,6 +1,6 @@
-.PHONY: dev start frontend backend rm-state clean install install-frontend install-backend install-test build build-frontend build-backend help tmux-dev tmux-stop test-integration
+.PHONY: dev start frontend backend rm-state clean install install-frontend install-backend install-test build build-frontend build-backend help tmux-dev tmux-stop test-integration test-integration-dist
 .ONESHELL:
-SHELLFLAGS := -eu -o pipefail -c
+.SHELLFLAGS := -eu -o pipefail -c
 _ENV_SHELL := $(shell echo $$SHELL)
 
 # Variables
