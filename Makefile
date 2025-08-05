@@ -1,6 +1,6 @@
-.PHONY: dev start frontend backend rm-state clean install help tmux-dev tmux-stop test-integration
+.PHONY: dev start frontend backend rm-state clean install install-frontend install-backend install-test build build-frontend build-backend help tmux-dev tmux-stop test-integration test-integration-dist
 .ONESHELL:
-SHELLFLAGS := -eu -o pipefail -c
+.SHELLFLAGS := -eu -o pipefail -c
 _ENV_SHELL := $(shell echo $$SHELL)
 
 # Variables
@@ -14,6 +14,12 @@ ifeq ($(filter %bash %zsh,$(notdir $(_ENV_SHELL))),)
 else
     SHELL := $(_ENV_SHELL)
 endif
+
+
+# Environment controls which environment that the test is running in.
+# It is dev by default, but can be one of {dev|production|testing}
+ENVIRONMENT ?= dev
+
 
 dev: tmux-dev ## Run both frontend and backend in tmux session (requires REPO_PATH=/path/to/repo)
               ## Note that this supports hot-reloading for frontend assets.
@@ -31,7 +37,7 @@ sos: install
 	tmux new-window -t $(SESSION_NAME) -n dist $(SHELL)
 	tmux new-window -t $(SESSION_NAME) -n test-project $(SHELL)
 	tmux send-keys -t $(SESSION_NAME):dev-frontend "npm run dev -- --open" Enter
-	tmux send-keys -t $(SESSION_NAME):dev-backend "DEV_MODE=true ENABLED_FRONTEND_ARTIFACT_VIEWS=$(ENABLED_FRONTEND_ARTIFACT_VIEWS) uv run python -m sculptor.cli.main  --no-open-browser $(REPO_PATH)" Enter
+	tmux send-keys -t $(SESSION_NAME):dev-backend "DEV_MODE=true USE_DEV_POSTHOG=true ENABLED_FRONTEND_ARTIFACT_VIEWS=$(ENABLED_FRONTEND_ARTIFACT_VIEWS) uv run python -m sculptor.cli.main  --no-open-browser $(REPO_PATH)" Enter
 	tmux send-keys -t $(SESSION_NAME):dist "SCULPTOR_API_PORT=1224 uvx --with https://imbue-sculptor-latest.s3.us-west-2.amazonaws.com/internal/sculptor.tar.gz --refresh sculptor .." Enter
 	tmux send-keys -t $(SESSION_NAME):test-project "cd $(REPO_PATH)" Enter
 	echo "Development servers started in tmux session '$(SESSION_NAME)'"
@@ -89,35 +95,52 @@ clean: ## Clean node_modules and Python cache
 	rm -r frontend/src/api.generated.ts || true
 	rm -r frontend/src/api.generated.schemas.ts || true
 
-
-install: ## Install dependencies for both frontend and backend
+install-frontend:
+	# Only installs the frontend dependencies, for local iteration. Will not set
+	# up a FE dist to enable the sculptor backend to serve statically.
 	echo "Installing frontend dependencies..."
 	( cd frontend && npm install --force )
 	( cd frontend && npm run generate-api )
 	( cd frontend && npm run build )
 
+build-frontend: install-frontend
+	# Creates a FE distribution for the sculptor backend to serve statically.
+    # This next line will set up the correct sentry variables and then runs npm build
+	echo $(ENVIRONMENT)
+	( eval $$(uv run sculptor/scripts/dev.py setup-build-vars $(ENVIRONMENT)) && cd frontend && npm run build )
 	# Necessary to pre-create the target so the following command behaves the
 	# same on Mac and Linux.
 	mkdir -p ./frontend-dist
 	# These /. s are necessary to ensure the correct data gets copied into place
 	cp -R frontend/dist/. ./frontend-dist/.
 
+install-backend:
 	echo "Installing backend dependencies..."
 	# We cannot install imbue_core's dependencies at this time, because that
 	# would bake in platform-specific .so files and other binaries into our
 	# build, which we want to be platform agnostic.
 	uv pip install ../imbue_core --no-deps --target _vendor
-	echo "Building the docker image."
+
+build-backend: install-backend
+	echo "Building the Docker image and creating a sdist for sculptor"
 	uv run sculptor/scripts/dev.py images
-
-
-install-test: install
-	uv run -m playwright install --with-deps
-
-
-dist: install  ## Build a distribution for sculptor
 	uv run sculptor/scripts/dev.py create-version-file
 	uv build --wheel --sdist
+
+install: build-frontend install-backend ## Install dependencies for both frontend and backend
+
+install-test:
+	# Override the enivornment completed and ensure we are getting a testing build
+	$(MAKE) ENVIRONMENT=testing install
+	uv run -m playwright install --with-deps
+
+build: build-frontend build-backend ## build the artifacts
+
+dist: install
+	$(MAKE) build-frontend build-backend ENVIRONMENT=production
+
+dist-test: install-test
+	$(MAKE) ENVIRONMENT=testing build
 
 
 # Release and operational commands follow
