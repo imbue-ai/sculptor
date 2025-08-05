@@ -98,6 +98,7 @@ dev = [
     "websocket-client>=1.5.1",
     "imbue_core==0.0.9",
     "playwright==1.53.0",
+    "pre-commit",
     "pytest-playwright==0.7.0",
     "pytest-metadata==3.1.1",
     "pyfixfmt",
