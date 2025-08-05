@@ -93,7 +93,6 @@ clean: ## Clean node_modules and Python cache
 	rm -r _vendor/* || true
 	rm sculptor/_version.py || true
 	rm -rf frontend/src/api || true
-	rm -r frontend/src/api || true
 
 install-frontend:
 	# Only installs the frontend dependencies, for local iteration. Will not set
