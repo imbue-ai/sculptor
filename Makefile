@@ -100,6 +100,7 @@ install-frontend:
 	# up a FE dist to enable the sculptor backend to serve statically.
 	echo "Installing frontend dependencies..."
 	( cd frontend && npm install --force )
+	( cd frontend && npm run generate-api )
 	( cd frontend && npm run build )
 
 build-frontend: install-frontend
