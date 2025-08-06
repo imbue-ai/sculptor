@@ -20,7 +20,6 @@ dependencies = [
     "filelock>=3.8.0",
     "loguru",
     "modal>=1.0.3",
-    "python-gitlab>=4.5.0",
     "psutil>=5.9.0",
     "psycopg[binary]",
     "pydantic-settings",
