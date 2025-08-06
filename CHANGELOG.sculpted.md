@@ -3,6 +3,22 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
+## [0.0.15]
+
+### changes since `0.0.14`
+
+### Internal Updates
+- Replaced Orval with HeyAPI for API code generation improving development workflow (!5563)
+- Added pre-commit dependency to development environment for consistent code formatting (!5615)
+
+## [0.0.15rc1]
+
+### changes since `0.0.14`
+
+### Internal Updates
+- Replaced Orval with HeyAPI for API code generation improving development workflow (!5563)
+- Added pre-commit dependency to development environment for consistent code formatting (!5615)
+
 ## [0.0.14]
 
 ### changes since `0.0.13`
