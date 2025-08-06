@@ -49,7 +49,6 @@ dependencies = [
     "cachetools",
     "cattrs",
     "grpclib>=0.4.7",
-    "python-gitlab",
     "httpx",
     "inline-snapshot",
     "loguru",
