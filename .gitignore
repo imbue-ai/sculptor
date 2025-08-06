@@ -8,4 +8,5 @@ test-results/
 sculptor/_version.py
 sculptor/_sentry_settings.py
 
+# Used to coordinate dists
 .flock_build_dist
