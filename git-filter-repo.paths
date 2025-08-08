@@ -1,0 +1,19 @@
+# This file controls our public repo export, and determines what is shared to
+#  https://github.com/imbue-ai/sculptor
+#
+# Please see the git-filter-repo manual for a reference on how to edit this file
+#   https://htmlpreview.github.io/?https://github.com/newren/git-filter-repo/blob/docs/html/git-filter-repo.html
+#
+#
+
+# List files you want to export here
+glob:sculptor/*.md
+sculptor/pyproject.toml
+sculptor/.gitignore
+sculptor/git-filter-repo.paths
+sculptor/Makefile
+sculptor/pytest.ini
+
+
+# Rename sculptor repo to root
+sculptor/==>

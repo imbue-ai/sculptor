@@ -95,18 +95,19 @@ exclude = [
 [dependency-groups]
 dev = [
     "filelock>=3.18.0",
-    "websocket-client>=1.5.1",
+    "git-filter-repo",
     "imbue_core==0.0.9",
     "playwright==1.53.0",
     "pre-commit",
-    "pytest-playwright==0.7.0",
-    "pytest-metadata==3.1.1",
     "pyfixfmt",
     "pytest-cov>=6.2.1",
+    "pytest-metadata==3.1.1",
+    "pytest-playwright==0.7.0",
     "pytest-xdist>=3.8.0",
     "pytest>=8.4.1",
     "selenium>=4.0.0",
     "syrupy",
+    "websocket-client>=1.5.1",
 ]
 
 [project.scripts]
