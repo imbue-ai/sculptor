@@ -11,6 +11,9 @@ With Sculptor, you can:
 - Interact with agents through an intuitive interface
 - Work with your IDE of choice
 
+### A Behind-the-Scenes video of a demo
+
+[![A demo of what is possible with Sculptor](https://img.youtube.com/vi/ESZH7hd1sMY/0.jpg)](https://www.youtube.com/watch?v=ESZH7hd1sMY)
 
 ## Installation & setup
 
