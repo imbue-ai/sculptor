@@ -3,6 +3,42 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
+## [0.0.16]
+
+### changes since `0.0.15`
+
+### Fixed
+- Fixed task spamming issue preventing system performance degradation (!5634)
+- Fixed imbue tool calls displaying properly instead of showing no action outputs (!5570)
+- Fixed shell configuration to always use bash preventing silent file deletion errors (!5625)
+
+### Added
+- Added retrieval MCP server with Haiku model integration for improved context understanding (!5384)
+
+### Changed
+- Enhanced onboarding error handling for empty directory initialization (!5604)
+
+### Internal Updates
+- Added comprehensive interrupt testing for better agent reliability (!5605)
+
+## [0.0.16rc1]
+
+### changes since `0.0.15`
+
+### Fixed
+- Fixed task spamming issue preventing system performance degradation (!5634)
+- Fixed imbue tool calls displaying properly instead of showing no action outputs (!5570)
+- Fixed shell configuration to always use bash preventing silent file deletion errors (!5625)
+
+### Added
+- Added retrieval MCP server with Haiku model integration for improved context understanding (!5384)
+
+### Changed
+- Enhanced onboarding error handling for empty directory initialization (!5604)
+
+### Internal Updates
+- Added comprehensive interrupt testing for better agent reliability (!5605)
+
 ## [0.0.15]
 
 ### changes since `0.0.14`
