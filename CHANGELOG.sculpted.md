@@ -3,6 +3,34 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
+## [0.0.17]
+
+### changes since `0.0.16`
+
+### Fixed
+- Fixed testing flake in permissions-related directory test preventing development workflow disruption (!5647)
+
+### Changed
+- Changed PostHog analytics to default to development instance unless environment overrides or external users (!5629)
+
+### Internal Updates
+- Added error spam prevention to Sentry logging with 500ms timeout for duplicate errors (!5501)
+- Added comprehensive test coverage for prompt persistence functionality (!5624)
+
+## [0.0.17rc1]
+
+### changes since `0.0.16`
+
+### Fixed
+- Fixed testing flake in permissions-related directory test preventing development workflow disruption (!5647)
+
+### Changed
+- Changed PostHog analytics to default to development instance unless environment overrides or external users (!5629)
+
+### Internal Updates
+- Added error spam prevention to Sentry logging with 500ms timeout for duplicate errors (!5501)
+- Added comprehensive test coverage for prompt persistence functionality (!5624)
+
 ## [0.0.16]
 
 ### changes since `0.0.15`
