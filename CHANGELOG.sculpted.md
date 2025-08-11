@@ -3,6 +3,22 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
+## [0.0.18]
+
+### changes since `0.0.17`
+
+### Internal Updates
+- Enhanced model selection testing and improved system prompt handling (!5657)
+- Added public repository presence and documentation updates for external users (!5660)
+
+## [0.0.18rc1]
+
+### changes since `0.0.17`
+
+### Internal Updates
+- Enhanced model selection testing and improved system prompt handling (!5657)
+- Added public repository presence and documentation updates for external users (!5660)
+
 ## [0.0.17]
 
 ### changes since `0.0.16`
