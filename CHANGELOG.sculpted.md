@@ -3,6 +3,27 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
+## [0.0.19]
+
+### changes since `0.0.19rc1`
+
+No functional changes - this release promotes v0.0.19rc1 to stable.
+
+## [0.0.19rc1]
+
+### changes since `0.0.18`
+
+### Fixed
+- Fixed welcome message display when no tasks exist in task list (!5695)
+- Reduced noise by silencing websocket connection error logging to Sentry (!5694)
+
+### Internal Updates
+- Enhanced test reports with embedded videos and screenshots for debugging (!5674)
+- Added comprehensive test coverage for git panel command functionality (!5672)
+- Added validation tests to ensure PostHog event naming consistency (!5700)
+- Improved test failure debugging with enhanced integration test logging (!5630)
+- Fixed acceptance test configuration by removing snapshot path dependency (!5691)
+
 ## [0.0.18]
 
 ### changes since `0.0.17`
