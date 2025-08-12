@@ -135,7 +135,7 @@ build-backend: install-backend
 install: build-frontend install-backend ## Install dependencies for both frontend and backend
 
 install-test:
-	# Override the enivornment completed and ensure we are getting a testing build
+	# Override the environment completed and ensure we are getting a testing build
 	$(MAKE) ENVIRONMENT=testing install
 	uv run -m playwright install --with-deps
 
@@ -154,19 +154,19 @@ bump-version: ## Convenience shortcut for creating a branch bumping the version.
 	uv run sculptor/scripts/dev.py bump-version $(ARGS)
 
 cut-release: ## Convenience shortcut for running dev command to cut a release
-	# No depedencies because it's a shortcut
+	# No dependencies because it's a shortcut
 	uv run sculptor/scripts/dev.py cut-release $(RELEASE_ARGS)
 
 fixup-release: ## Convenience shortcut for running dev command to update a release
-	# No depedencies because it's a shortcut
+	# No dependencies because it's a shortcut
 	uv run sculptor/scripts/dev.py fixup-release $(RELEASE_ARGS)
 
 promote: ## Promote a release to the latest version
-	# No depedencies because it's a shortcut
+	# No dependencies because it's a shortcut
 	uv run sculptor/scripts/dev.py promote $(RELEASE_ARGS)
 
 generate-release-notes: ## Convenience shortcut for running dev command to update a release
-	# No depedencies because it's a shortcut
+	# No dependencies because it's a shortcut
 	uv run sculptor/scripts/dev.py generate-release-notes $(RELEASE_ARGS)
 
 
