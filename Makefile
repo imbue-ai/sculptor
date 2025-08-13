@@ -156,9 +156,11 @@ sidecar: dist
 	# TODO(danver): I don't want to have to collect These things by hand. Figure
 	# out a better way.
 	uv run --project sculptor pyinstaller --onefile --name sculptor_main \
-  --collect-all coolname \
-  --copy-metadata coolname \
+	--collect-all coolname \
+    --copy-metadata coolname \
 	--hidden-import sculptor._version \
+    --hidden-import sculptor.database.alembic \
+	--add-data "frontend-dist:frontend-dist" \
 	sculptor/cli/main.py
 
 tauri-dev: # sidecar
