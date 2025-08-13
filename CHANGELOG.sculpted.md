@@ -3,7 +3,204 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
-## [0.0.8rc1] (current)
+## [0.0.18]
+
+### changes since `0.0.17`
+
+### Internal Updates
+- Enhanced model selection testing and improved system prompt handling (!5657)
+- Added public repository presence and documentation updates for external users (!5660)
+
+## [0.0.18rc1]
+
+### changes since `0.0.17`
+
+### Internal Updates
+- Enhanced model selection testing and improved system prompt handling (!5657)
+- Added public repository presence and documentation updates for external users (!5660)
+
+## [0.0.17]
+
+### changes since `0.0.16`
+
+### Fixed
+- Fixed testing flake in permissions-related directory test preventing development workflow disruption (!5647)
+
+### Changed
+- Changed PostHog analytics to default to development instance unless environment overrides or external users (!5629)
+
+### Internal Updates
+- Added error spam prevention to Sentry logging with 500ms timeout for duplicate errors (!5501)
+- Added comprehensive test coverage for prompt persistence functionality (!5624)
+
+## [0.0.17rc1]
+
+### changes since `0.0.16`
+
+### Fixed
+- Fixed testing flake in permissions-related directory test preventing development workflow disruption (!5647)
+
+### Changed
+- Changed PostHog analytics to default to development instance unless environment overrides or external users (!5629)
+
+### Internal Updates
+- Added error spam prevention to Sentry logging with 500ms timeout for duplicate errors (!5501)
+- Added comprehensive test coverage for prompt persistence functionality (!5624)
+
+## [0.0.16]
+
+### changes since `0.0.15`
+
+### Fixed
+- Fixed task spamming issue preventing system performance degradation (!5634)
+- Fixed imbue tool calls displaying properly instead of showing no action outputs (!5570)
+- Fixed shell configuration to always use bash preventing silent file deletion errors (!5625)
+
+### Added
+- Added retrieval MCP server with Haiku model integration for improved context understanding (!5384)
+
+### Changed
+- Enhanced onboarding error handling for empty directory initialization (!5604)
+
+### Internal Updates
+- Added comprehensive interrupt testing for better agent reliability (!5605)
+
+## [0.0.16rc1]
+
+### changes since `0.0.15`
+
+### Fixed
+- Fixed task spamming issue preventing system performance degradation (!5634)
+- Fixed imbue tool calls displaying properly instead of showing no action outputs (!5570)
+- Fixed shell configuration to always use bash preventing silent file deletion errors (!5625)
+
+### Added
+- Added retrieval MCP server with Haiku model integration for improved context understanding (!5384)
+
+### Changed
+- Enhanced onboarding error handling for empty directory initialization (!5604)
+
+### Internal Updates
+- Added comprehensive interrupt testing for better agent reliability (!5605)
+
+## [0.0.15]
+
+### changes since `0.0.14`
+
+### Internal Updates
+- Replaced Orval with HeyAPI for API code generation improving development workflow (!5563)
+- Added pre-commit dependency to development environment for consistent code formatting (!5615)
+
+## [0.0.15rc1]
+
+### changes since `0.0.14`
+
+### Internal Updates
+- Replaced Orval with HeyAPI for API code generation improving development workflow (!5563)
+- Added pre-commit dependency to development environment for consistent code formatting (!5615)
+
+## [0.0.14]
+
+### changes since `0.0.13`
+
+### Changed
+- Enhanced onboarding by automatically helping users create initial git commit in empty repositories (!5585)
+
+### Internal Updates
+- Improved logging privacy by removing Sentry when users opt out and enabling S3 uploads without AWS credentials (!5597)
+- Removed container deletion logic from cleanup images handler to prevent unintended container removal
+
+## [0.0.14rc1]
+
+### changes since `0.0.13`
+
+### Changed
+- Enhanced onboarding by automatically helping users create initial git commit in empty repositories (!5585)
+
+### Internal Updates
+- Improved logging privacy by removing Sentry when users opt out and enabling S3 uploads without AWS credentials (!5597)
+
+## [0.0.13]
+
+### changes since `0.0.12`
+
+### Changed
+- Improved initial configuration wizard flow for better user experience (!5485)
+- Enhanced local sync lifecycle management for more reliable file synchronization (!5518)
+- Improved chat interface by removing excess vertical padding from user messages (!5577)
+- Improved UI by showing retry button only on last error message (!5560)
+
+### Fixed
+- Fixed multiple stop-related bugs including session validation and interrupt handling (!5545)
+
+### Internal Updates
+- Enhanced imbue_verify with git repository mirroring for improved verification reliability (!5370)
+- Added warning block component to display warning messages in UI (!5558)
+- Enhanced build process reliability with flock-based worker synchronization (!5543)
+- Added automated cleanup for Docker images and containers of inactive tasks (!5326)
+- Improved CI reliability with unique temporary directories for imbue_verify jobs (!5569)
+
+## [0.0.12]
+
+### changes since `0.0.11`
+
+### Added
+- Privacy consent prompt added to onboarding flow, exits if user declines (!5549)
+
+### Changed
+- Local sync now properly handles task state validation and prevents hanging (!5526)
+
+### Fixed
+- Git directory loading issues fixed with directory refresh workaround (!5540)
+- ASCII parsing warning during startup removed (!5511)
+
+
+## [0.0.11]
+
+### changes since `0.0.10`
+
+### Changed
+- Added SSH daemon support in Docker containers for remote access (!5481)
+
+### Internal Updates
+- Removed dangerously_launch_root_process function after merge conflict (!5525)
+
+## [0.0.10]
+
+### changes since `0.0.9`
+
+### Added
+- Git panel UI with commit, push, and pull operations for task management (!5464)
+- Organization management with Authentik integration and access control (!5459)
+
+### Changed
+- User setup script enhanced with privilege management and container configuration (!5460)
+- Telemetry logging improved for UI button interactions and fixes selection descriptions (!5500)
+
+### Fixed
+- Repository setup errors when bare repositories are encountered (!5507)
+- Python warnings from ASCII art escape sequences in welcome message (!5491)
+- Local sync no longer breaks if Mutagen was hard-killed (!5530)
+
+### Internal Updates
+- Release process improved by fixing tag pushing and updating changelog generation (!5512)
+- Disabled LiteLLM integration. (!5527)
+
+## [0.0.9]
+
+### changes since `0.0.8`
+
+### Fixed
+- Fixes process blocking when git commands produce large outputs (!5482)
+
+### Changed
+- Improves onboarding by caching API key with user confirmation (!5480)
+- Enhances artifact view with better layout and loading states (!5476)
+
+### Internal Updates
+- Enables PostHog event routing to development instance for testing (!5473)
+
+## [0.0.8]
 
 ### changes since `0.0.6`
 
