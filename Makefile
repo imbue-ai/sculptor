@@ -158,6 +158,8 @@ sidecar: dist
 	uv run --project sculptor pyinstaller --onefile --name sculptor_main \
 	--collect-all coolname \
     --copy-metadata coolname \
+	--collect-all sculptor \
+	--copy-metadata sculptor \
 	--hidden-import sculptor._version \
     --hidden-import sculptor.database.alembic \
 	--add-data "frontend-dist:frontend-dist" \
