@@ -54,7 +54,7 @@ pip install fastapi uvicorn httpx loguru pydantic
 #### React App (Optional but Recommended)
 
 ```bash
-cd webapp
+cd frontend
 npm install
 npm run build
 ```
@@ -76,7 +76,7 @@ Proxy Server (port 8082)
 ### Running the React App in Development Mode
 
 ```bash
-cd webapp
+cd frontend
 npm install
 npm run dev
 # Open http://localhost:3000
