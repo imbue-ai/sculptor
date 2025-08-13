@@ -163,20 +163,8 @@ sidecar: dist
 	--hidden-import sculptor._version \
     --hidden-import sculptor.database.alembic \
 	--add-data "frontend-dist:frontend-dist" \
+	--add-data "claude-container:claude-container" \
 	sculptor/cli/main.py
-
-tauri-dev: # sidecar
-	# Creates a deployable project
-	(cd src-tauri && cargo tauri dev)
-
-tauri-build: clean sidecar ## Build the Tauri application
-	# TODO: This is a hack to ensure that the sculptor_main binary is
-	# available in the dist directory for the Tauri build.
-	cp dist/sculptor_main dist/sculptor_main-aarch64-apple-darwin
-	# Generate icons
-	(cd src-tauri && cargo tauri icon ../frontend-dist/favicon-32x32.png)
-	(cd src-tauri && cargo tauri build)
-
 
 # Release and operational commands follow
 
