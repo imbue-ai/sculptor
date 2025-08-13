@@ -152,9 +152,12 @@ dist-test: install-test
 sidecar: install
 	# Creates a bundled executable sidecar of the Sculptor application that we
 	# can use for the Desktop app.
+	#
+	# TODO(danver): I don't want to have to collect These things by hand. Figure
+	# out a better way.
 	uv run --project sculptor pyinstaller --onefile --name sculptor_main \
-  --collect-all coolname \     # TODO(danver): I don't want to have to collect
-  --copy-metadata coolname \   # These things by hand. Figure out a better way.
+  --collect-all coolname \
+  --copy-metadata coolname \
 	sculptor/cli/main.py
 
 # Release and operational commands follow
