@@ -119,35 +119,6 @@ When approaching limits, Claude Code may:
 3. **Watch for patterns** in how Claude Code manages conversation
 4. **Look for tool sequences** to understand Claude's problem-solving
 
-## Streaming Support
-
-The proxy viewer now fully supports streaming API requests:
-
-### How Streaming Works
-1. When Claude Code makes a streaming request (`stream: true`), the proxy:
-   - Forwards the Server-Sent Events (SSE) stream to Claude Code
-   - Captures all streaming chunks for visualization
-   - Reconstructs the complete response for display
-
-2. Visual Indicators:
-   - Request shows "(streaming enabled)" when `stream: true`
-   - Response shows "(streamed)" for streaming responses
-   - Complete response is assembled from chunks for easy viewing
-
-### Behind the Scenes
-- Streaming chunks follow the SSE format: `data: {json}\n\n`
-- The proxy parses each chunk while forwarding it
-- Token usage and timing are tracked across the entire stream
-- The viewer shows streaming text in real-time with a blinking cursor
-
-### Live Streaming Experience
-When Claude Code makes a streaming request:
-1. The viewer immediately shows a "Streaming..." indicator
-2. Text appears character-by-character as chunks arrive
-3. A blinking blue cursor shows where new text will appear
-4. Once complete, the cursor disappears and metrics are shown
-
-This gives you the same experience as watching Claude type in real-time!
 
 ## Future Improvements
 
