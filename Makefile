@@ -149,7 +149,7 @@ dist: install
 dist-test: install-test
 	$(MAKE) ENVIRONMENT=testing build
 
-sidecar: install
+sidecar: dist
 	# Creates a bundled executable sidecar of the Sculptor application that we
 	# can use for the Desktop app.
 	#
@@ -158,7 +158,21 @@ sidecar: install
 	uv run --project sculptor pyinstaller --onefile --name sculptor_main \
   --collect-all coolname \
   --copy-metadata coolname \
+	--hidden-import sculptor._version \
 	sculptor/cli/main.py
+
+tauri-dev: # sidecar
+	# Creates a deployable project
+	(cd src-tauri && cargo tauri dev)
+
+tauri-build: clean sidecar ## Build the Tauri application
+	# TODO: This is a hack to ensure that the sculptor_main binary is
+	# available in the dist directory for the Tauri build.
+	cp dist/sculptor_main dist/sculptor_main-aarch64-apple-darwin
+	# Generate icons
+	(cd src-tauri && cargo tauri icon ../frontend-dist/favicon-32x32.png)
+	(cd src-tauri && cargo tauri build)
+
 
 # Release and operational commands follow
 
