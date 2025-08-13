@@ -3,6 +3,39 @@
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 All changes are based on merge commits since the last release commit, with gitlab-style MR links.
 
+## [0.0.20]
+
+### changes since `0.0.19`
+
+### Added
+- Added user feedback interface with thumbs up/down buttons for collecting task feedback (!5736)
+
+### Changed
+- Enhanced onboarding email validation with automatic git configuration and retry logic (!5662)
+
+### Fixed
+- Fixed acceptance test configuration by removing snapshot path dependency (!5707)
+
+### Internal Updates
+- Replaced ESLint with TypeScript Compiler for improved type checking in development workflow (!5680)
+- Added validation tests to ensure PostHog event naming consistency (!5705)
+
+## [0.0.20rc1]
+
+### changes since `0.0.19`
+
+### Added
+- Added user feedback interface with thumbs up/down buttons for collecting task feedback (!5736)
+
+### Changed
+- Enhanced onboarding email validation with automatic git configuration and retry logic (!5662)
+
+### Fixed
+- Fixed acceptance test configuration by removing snapshot path dependency (!5707)
+
+### Internal Updates
+- Added validation tests to ensure PostHog event naming consistency (!5705)
+
 ## [0.0.19]
 
 ### changes since `0.0.19rc1`
