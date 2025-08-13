@@ -149,6 +149,22 @@ dist: install
 dist-test: install-test
 	$(MAKE) ENVIRONMENT=testing build
 
+sidecar: dist
+	# Creates a bundled executable sidecar of the Sculptor application that we
+	# can use for the Desktop app.
+	#
+	# TODO(danver): I don't want to have to collect These things by hand. Figure
+	# out a better way.
+	uv run --project sculptor pyinstaller --onefile --name sculptor_main \
+	--collect-all coolname \
+    --copy-metadata coolname \
+	--collect-all sculptor \
+	--copy-metadata sculptor \
+	--hidden-import sculptor._version \
+    --hidden-import sculptor.database.alembic \
+	--add-data "frontend-dist:frontend-dist" \
+	--add-data "claude-container:claude-container" \
+	sculptor/cli/main.py
 
 # Release and operational commands follow
 

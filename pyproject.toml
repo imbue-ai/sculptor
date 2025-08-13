@@ -100,6 +100,7 @@ dev = [
     "playwright==1.53.0",
     "pre-commit",
     "pyfixfmt",
+    "pyinstaller>=6.15.0",
     "pytest-cov>=6.2.1",
     "pytest-metadata==3.1.1",
     "pytest-playwright==0.7.0",
