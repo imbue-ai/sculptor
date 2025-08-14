@@ -95,15 +95,14 @@ We’re always here for you! If you run into any issues or just want to chat wit
     1. Simply pressing Enter will start a new line in your task description.
 3. Your new task will appear in the task list. Click into it to see the changes as the agent works.
 
-![Screenshot 2025-07-16 at 10.31.15 AM.png](attachment:ca1675ca-ab40-4689-be16-d29024b62322:Screenshot_2025-07-16_at_10.31.15_AM.png)
+<img width="2048" height="1326" alt="image" src="https://github.com/user-attachments/assets/d39dc6f7-91fe-4819-9954-0755f3d79778" />
+
 
 ## Reviewing the agent’s changes
 
 1. Local sync to the agent’s task branch. Its changes are now synced to your local repository so you can review them in your IDE of choice!
 2. While synced, make as many changes as you like by following up with the agent in the task chat or making changes by hand in your IDE.
 3. Once you’re happy, unsync from the agent’s task branch.
-
-![Local sync from the main task list](attachment:bcb40eaa-5e36-403e-b114-f56b6253e19f:Screenshot_2025-07-16_at_3.58.16_PM.png)
 
 Local sync from the main task list
 
