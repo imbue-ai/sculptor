@@ -104,12 +104,15 @@ We’re always here for you! If you run into any issues or just want to chat wit
 2. While synced, make as many changes as you like by following up with the agent in the task chat or making changes by hand in your IDE.
 3. Once you’re happy, unsync from the agent’s task branch.
 
-<img width="2048" height="1326" alt="image" src="https://github.com/user-attachments/assets/d9605813-6d3a-48a6-a438-fbff46e01464" />
-Local sync from the main task list
+<figure>
+  <img width="1024" height="663" alt="image" src="https://github.com/user-attachments/assets/d9605813-6d3a-48a6-a438-fbff46e01464" />
+  <figcaption>Local sync from the main task list</figcaption>
+</figure>
 
-<img width="2048" height="1326" alt="image" src="https://github.com/user-attachments/assets/b96d8900-7750-4b70-951d-a403d8e0354f" />
-Local sync from a task’s page
-
+<figure>
+  <img width="1024" height="663" alt="image" src="https://github.com/user-attachments/assets/b96d8900-7750-4b70-951d-a403d8e0354f" />
+  <figcaption>Local sync from a task’s page</figcaption>
+</figure>
 
 ## Merging the agent’s changes
 
