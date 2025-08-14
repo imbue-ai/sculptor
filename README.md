@@ -104,11 +104,12 @@ We’re always here for you! If you run into any issues or just want to chat wit
 2. While synced, make as many changes as you like by following up with the agent in the task chat or making changes by hand in your IDE.
 3. Once you’re happy, unsync from the agent’s task branch.
 
+<img width="2048" height="1326" alt="image" src="https://github.com/user-attachments/assets/d9605813-6d3a-48a6-a438-fbff46e01464" />
 Local sync from the main task list
 
-![Local sync from a task’s page](attachment:43bfc3e1-d265-4412-94b1-7cd71e556ba1:Screenshot_2025-07-16_at_3.58.22_PM.png)
-
+<img width="2048" height="1326" alt="image" src="https://github.com/user-attachments/assets/b96d8900-7750-4b70-951d-a403d8e0354f" />
 Local sync from a task’s page
+
 
 ## Merging the agent’s changes
 
@@ -161,12 +162,10 @@ Agents follow explicit directions extremely well, so the system prompt is the pe
     ```
     
 
-![Updating the system prompt from the main task list page](attachment:e1f40a93-a983-4e47-a7b0-b64c488b99aa:Screenshot_2025-07-16_at_10.33.42_AM.png)
-
+<img width="2048" height="1326" alt="image" src="https://github.com/user-attachments/assets/497b44a8-430e-4c45-b249-a66017b10f7e" />
 Updating the system prompt from the main task list page
 
-![Updating the system prompt from an individual task page](attachment:dee58b3b-60d5-4aee-b74a-c3d2f26a2b3f:Screenshot_2025-07-16_at_10.34.05_AM.png)
-
+<img width="2048" height="1326" alt="image" src="https://github.com/user-attachments/assets/63b6f810-4f39-47b5-8382-efc4c63226b8" />
 Updating the system prompt from an individual task page
 
 ## Steering with inline TODOs
