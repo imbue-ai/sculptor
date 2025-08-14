@@ -14,7 +14,7 @@ Sync to any agent’s sandbox to instantly see its file changes in your local ID
 
 Quickly merge the agent branches that you like. Sculptor agents can help you resolve any merge conflicts that arise.
 
-### A quick behind-the-scenes demo 🤓
+### See the power of Sculptor in this behind-the-scenes demo 🤓
 See it all come together in this behind-the-scenes demo from one of our product engineers, Guinness:
 
 [![A demo of what is possible with Sculptor](https://img.youtube.com/vi/ESZH7hd1sMY/0.jpg)](https://www.youtube.com/watch?v=ESZH7hd1sMY)
