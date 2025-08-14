@@ -1,73 +1,89 @@
-## What is Sculptor?
+# Sculptor: run parallel Claude Code agents in safe, local sandboxes
 
----
+Sculptor lets you run simultaneous Claude Code agents in safe, isolated sandboxes. Sculptor runs locally, letting you iterate quickly in your chosen IDE without going through PRs. We’re currently alpha testing Sculptor and are excited to hear what you think!
 
-Sculptor is [Imbue](https://imbue.com)’s coding agent environment that allows you to run multiple coding agents simultaneously in safe,
-isolated sandboxes. We’re currently beta testing Sculptor and are eager to hear what you think of it!
+### Kick off agents in parallel
 
-With Sculptor, you can:
+Sculptor is a web UI for creating and managing multiple agents. Each agent runs in its own isolated sandbox with a clone of your repo, so you can experiment and make changes safely. Desktop app coming soon!
 
-- Run parallel agent tasks
-- Interact with agents through an intuitive interface
-- Work with your IDE of choice
+### Test & edit agent changes locally
 
-### A Behind-the-Scenes video of a demo
+Sync to any agent’s sandbox to instantly see its file changes in your local IDE. This lets you review, run, test, and edit the agent’s changes in your local environment while it's working in a sandbox, giving you the best of both worlds.
+
+### Easily merge changes & resolve conflicts
+
+Quickly merge the agent branches that you like. Sculptor agents can help you resolve any merge conflicts that arise.
+
+### A quick behind-the-scenes demo 🤓
+See it all come together in this behind-the-scenes demo from one of our product engineers, Guinness:
 
 [![A demo of what is possible with Sculptor](https://img.youtube.com/vi/ESZH7hd1sMY/0.jpg)](https://www.youtube.com/watch?v=ESZH7hd1sMY)
 
-## Installation & setup
+Sculptor is built by [Imbue](https://imbue.com).
 
----
+# Installation & setup
+> [!IMPORTANT]
+> Join our [Discord](https://discord.gg/sBAVvHPUTE) for dedicated support and up-to-date info from the Imbue team! Our whole team's in Discord with you, building Sculptor with Sculptor 🙂
 
-<aside> 📣 **Recommended:** Join our [Discord](https://discord.gg/sBAVvHPUTE) community for dedicated support and up-to-date information from the Imbue team! </aside>
+### 1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and [mutagen](https://mutagen.io/documentation/introduction/installation/):
 
-*Note: You will need an Anthropic API key and git repository to set up Sculptor.*
+**Via Homebrew (Mac or Linux)**:
 
-1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and [mutagen](https://mutagen.io/documentation/introduction/installation/):
+```bash
+brew install uv
+brew install mutagen-io/mutagen/mutagen
+```
 
-	**Via Homebrew (Mac or Linux)**:
+**On Linux**:
 
-    ```bash
-    brew install uv
-    brew install mutagen-io/mutagen/mutagen
-    ```
+```bash
+pipx install uv # OR pip install uv
+```
 
-	**On Linux**:
-
-    ```bash
-	pipx install uv # OR pip install uv
-    ```
-
-	Install the [appropriate latest released binary for Mutagen](https://github.com/mutagen-io/mutagen/releases)
+Install the [appropriate latest released binary for Mutagen](https://github.com/mutagen-io/mutagen/releases)
 
 
+### 2. Install [Docker](https://www.docker.com/get-started/):
 
-2. Install [Docker](https://www.docker.com/get-started/):
+**On Mac**:
+[Docker Desktop](https://docs.docker.com/desktop/setup/install/mac-install/)
 
-	**On Mac**:
-	[Docker Desktop](https://docs.docker.com/desktop/setup/install/mac-install/)
+- Ensure your Docker version is 27 or higher according to `docker --version`
+- Go to Settings > General > Virtual Machine Options after download and set “Virtual Machine Manager” to `Docker VMM`
 
-	1. Ensure your Docker version is 27 or higher according to `docker --version`
-    2. Go to Settings > General > Virtual Machine Options after download and set “Virtual Machine Manager” to `Docker VMM`
+**On Linux**:
+Do *not* install Docker Desktop.
 
-
-	**On Linux**:
-	Do *not* install Docker Desktop.
-
-	Instead, install Docker Engine by [following the instructions here](https://docs.docker.com/engine/install/)
+- Instead, install Docker Engine by [following the instructions here](https://docs.docker.com/engine/install/)
 
 
-3. Run Sculptor
+### 3. Run Sculptor
+*Note: You'll need an Anthropic API key and git repository to use Sculptor.*
 
-    ```bash
-    uvx --with https://imbue-sculptor-latest.s3.us-west-2.amazonaws.com/sculptor.tar.gz --refresh sculptor <absolute_path_to_repo>
-    ```
+```bash
+# Change directory to your code repository
+cd /to/your/repo
 
-4. Configure your settings. As a beta tester, you will be opted in to send error logs and telemetry data. Let us know if this is an issue or if you need more information about this! 🙏
+# Run Sculptor
+uvx --with https://imbue-sculptor-latest.s3.us-west-2.amazonaws.com/sculptor.tar.gz --refresh sculptor .
+```
 
-If you’re having trouble, [book time](https://calendly.com/nicseo/sculptor-chat) with us!
+### 4. Configure your settings
+As a beta tester, you'll be opted in to send error logs and telemetry data. Let us know if this is an issue or if you need more information about this! 🙏
 
 
-## Contributing
+# Community
+### Discord
 
-At this time, the best way to contribute to Sculptor is by being an active user of the tool and joining the community on [Discord](https://discord.gg/sBAVvHPUTE). Share your workflows, projects you've completed and your feedback with us.
+As an early tester, we highly recommend that you join our [Discord](https://discord.gg/sBAVvHPUTE) community to get direct support from the Imbue team. Some interesting channels:
+
+- `#bugs-and-support`: Get quick support from the Imbue team
+- `#behind-the-scenes`: Watch how the sausage gets made as our team uses Sculptor to build Sculptor
+- `#show-and-tell`: See what other people have created with Sculptor, and share your own Sculptures
+
+### Talk with us
+
+We’re always here for you! If you run into any issues or just want to chat with the team, [book time](https://calendly.com/nicseo/sculptor-chat) with us!
+
+# License
+© Imbue, Inc. All rights reserved. Use is subject to Imbue's [Research Preview Terms of Service](https://imbue.com/terms/).
