@@ -104,15 +104,11 @@ We’re always here for you! If you run into any issues or just want to chat wit
 2. While synced, make as many changes as you like by following up with the agent in the task chat or making changes by hand in your IDE.
 3. Once you’re happy, unsync from the agent’s task branch.
 
-<figure>
-  <img width="1024" height="663" alt="image" src="https://github.com/user-attachments/assets/d9605813-6d3a-48a6-a438-fbff46e01464" />
-  <figcaption>Local sync from the main task list</figcaption>
-</figure>
+Local sync from the main task list:
+<img width="1024" height="663" alt="image" src="https://github.com/user-attachments/assets/d9605813-6d3a-48a6-a438-fbff46e01464" />
 
-<figure>
-  <img width="1024" height="663" alt="image" src="https://github.com/user-attachments/assets/b96d8900-7750-4b70-951d-a403d8e0354f" />
-  <figcaption>Local sync from a task’s page</figcaption>
-</figure>
+Local sync from a task’s page:
+<img width="1024" height="663" alt="image" src="https://github.com/user-attachments/assets/b96d8900-7750-4b70-951d-a403d8e0354f" />
 
 ## Merging the agent’s changes
 
@@ -164,12 +160,11 @@ Agents follow explicit directions extremely well, so the system prompt is the pe
     Thoroughly review all relevant code, deeply analyze potential causes, and formulate 2-3 hypotheses explaining the bug. For each hypothesis, identify specific locations for adding detailed logging to empirically validate them. Insert extensive logs accordingly. After adding logs, prompt me clearly about what tests or actions I should perform. I'll run these tests and share the logs with you. Use these results to draw conclusions and report back with your findings.
     ```
     
-
+Updating the system prompt from the main task list page:
 <img width="2048" height="1326" alt="image" src="https://github.com/user-attachments/assets/497b44a8-430e-4c45-b249-a66017b10f7e" />
-Updating the system prompt from the main task list page
 
+Updating the system prompt from an individual task page:
 <img width="2048" height="1326" alt="image" src="https://github.com/user-attachments/assets/63b6f810-4f39-47b5-8382-efc4c63226b8" />
-Updating the system prompt from an individual task page
 
 ## Steering with inline TODOs
 
