@@ -19,7 +19,7 @@ See it all come together in this behind-the-scenes demo from one of our product 
 
 [![A demo of what is possible with Sculptor](https://img.youtube.com/vi/ESZH7hd1sMY/0.jpg)](https://www.youtube.com/watch?v=ESZH7hd1sMY)
 
-Sculptor is built by [Imbue](https://imbue.com).
+Sculptor is built by all of us at [Imbue](https://imbue.com).
 
 # Installation & setup
 > [!IMPORTANT]
