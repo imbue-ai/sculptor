@@ -314,4 +314,24 @@ right
 <img width="951" height="1294" alt="Screenshot 2025-09-17 at 5 37 01 AM" src="https://github.com/user-attachments/assets/ea86c597-15d4-4965-b82c-73b89eee4869" />
 
 
+---
 
+live sync 1
+<img width="2000" height="632" alt="live sync" src="https://github.com/user-attachments/assets/2989e130-9995-48b6-9e50-7657c33bb0b4" />
+2
+<img width="2000" height="698" alt="Screenshot 2025-09-17 at 5 36 25 AM" src="https://github.com/user-attachments/assets/5bd92f8e-985e-4ac1-afb3-97d643926565" />
+3
+<img width="1601" height="506" alt="Screenshot 2025-09-17 at 5 33 27 AM" src="https://github.com/user-attachments/assets/3d8c3ac8-ebb6-412e-b5ef-134b733403b0" />
+
+
+commit & merge
+<img width="986" height="1294" alt="Screenshot 2025-09-17 at 5 37 45 AM" src="https://github.com/user-attachments/assets/c129b2cf-ea60-490f-8379-9fe24c281dd0" />
+
+<img width="1001" height="1294" alt="pull agent changes" src="https://github.com/user-attachments/assets/7c30fdb1-fc29-48dd-9b45-1498f90ed386" />
+
+merge conf 1
+<img width="1840" height="1191" alt="Screenshot 2025-09-17 at 5 47 04 AM" src="https://github.com/user-attachments/assets/aca9db5b-782b-437b-ae5c-75d9f4268789" />
+
+<img width="1001" height="1294" alt="push agent changes" src="https://github.com/user-attachments/assets/9b8cf01a-bfd0-48ff-b756-8e5cb457ea9d" />
+
+<img width="2000" height="461" alt="Screenshot 2025-09-17 at 5 48 24 AM" src="https://github.com/user-attachments/assets/e4b55480-76a0-41fd-bfcb-654d0feb2dc4" />
