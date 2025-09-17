@@ -208,3 +208,25 @@ If you’re trying to run Sculptor on languages that aren’t pre-baked into the
 
 # License
 © Imbue, Inc. All rights reserved. Use is subject to Imbue's [Research Preview Terms of Service](https://imbue.com/terms/).
+
+
+
+
+# WIP
+Once you have downloaded the .dmg from the download link, double-click it, then drag the app to /Applications, then run it.
+<img width="770" height="632" alt="Screenshot 2025-09-16 at 8 10 10 PM" src="https://github.com/user-attachments/assets/fcd800b5-37e1-46e2-be4a-1c0433107bb7" />
+
+Installation wizard
+<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 07 09 PM" src="https://github.com/user-attachments/assets/05d9a6fe-d91a-49e3-9b01-2ff31362c5e0" />
+
+Anthropic API key prompt
+<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 08 09 PM" src="https://github.com/user-attachments/assets/a3e5c4cd-b4be-411e-9a76-3b3aa0f35a72" />
+
+Repo selection
+<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 08 35 PM" src="https://github.com/user-attachments/assets/07e3cb62-b9ae-440a-a25a-f021453b879b" />
+
+Git initialization
+<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 09 31 PM" src="https://github.com/user-attachments/assets/f2b02171-4329-4aef-b69f-ab6ab7fd21a0" />
+
+
+
