@@ -294,8 +294,8 @@ create a new agent
 test images side by side
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/3e4799fc-a3dc-4783-bc9f-9874661b19de" alt="Image 1" width="856" height="1294" />
-  <img src="https://github.com/user-attachments/assets/ea86c597-15d4-4965-b82c-73b89eee4869" alt="Image 2" width="951" height="1294"/>
+  <img src="https://github.com/user-attachments/assets/3e4799fc-a3dc-4783-bc9f-9874661b19de" alt="Image 1" width="45%" />
+  <img src="https://github.com/user-attachments/assets/ea86c597-15d4-4965-b82c-73b89eee4869" alt="Image 2" width="45%"/>
 </p>
 
 
