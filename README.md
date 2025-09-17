@@ -150,13 +150,13 @@ Note: Live Sync will be disabled if you have uncommitted changes in your current
 2. Commit the agent’s changes in Sculptor.
 
 <p align="center">
-  <img width="986" height="1294" alt="Screenshot 2025-09-17 at 5 37 45 AM" src="https://github.com/user-attachments/assets/c129b2cf-ea60-490f-8379-9fe24c281dd0" />
+  <img width="45%" alt="Screenshot 2025-09-17 at 5 37 45 AM" src="https://github.com/user-attachments/assets/c129b2cf-ea60-490f-8379-9fe24c281dd0" />
 </p>
 
 3. Press the Merge button in the top right corner, select your target branch, and pull the agent’s changes.
 
 <p align="center">
-  <img width="1001" height="1294" alt="pull agent changes" src="https://github.com/user-attachments/assets/7c30fdb1-fc29-48dd-9b45-1498f90ed386" />
+  <img width="45%" alt="pull agent changes" src="https://github.com/user-attachments/assets/7c30fdb1-fc29-48dd-9b45-1498f90ed386" />
 </p>
 
 ## Resolving merge conflicts
@@ -170,7 +170,7 @@ If merge conflicts arise when you merge the agent branch into your target branch
 Alternatively, you can push your target branch to the agent’s branch first. You can then tell the agent to resolve any merge conflicts that arise. After it’s done, merge the agent branch into your target branch as described in the last section (Merging the agent’s changes).
 
 <p align="center">
-  <img width="1001" height="1294" alt="push agent changes" src="https://github.com/user-attachments/assets/9b8cf01a-bfd0-48ff-b756-8e5cb457ea9d" />
+  <img width="45%" alt="push agent changes" src="https://github.com/user-attachments/assets/9b8cf01a-bfd0-48ff-b756-8e5cb457ea9d" />
 </p>
 
 
