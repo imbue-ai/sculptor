@@ -241,3 +241,23 @@ Interact with the container via terminal
 <img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 29 57 PM" src="https://github.com/user-attachments/assets/cc089899-9e99-49a5-8f84-2172f972f44c" />
 
 [https://imbue-sculptor-releases.s3.us-west-2.amazonaws.com/sculptor/Sculptor.dmg]
+
+
+
+
+
+
+
+Plan tab
+<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 34 48 PM" src="https://github.com/user-attachments/assets/b526ce4d-4b35-4c37-85eb-938007de7177" />
+
+changes
+<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 35 18 PM" src="https://github.com/user-attachments/assets/39d780a7-40d5-4e20-8913-c2b4fee98023" />
+
+
+
+Make a commit
+<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 43 17 PM" src="https://github.com/user-attachments/assets/c3067a30-0f9e-461f-afe1-1248a94243ad" />
+
+
+
