@@ -284,3 +284,19 @@ compact
 
 Task restart
 <img width="993" height="802" alt="Screenshot 2025-09-16 at 9 12 16 PM" src="https://github.com/user-attachments/assets/68fe0e15-e364-4f87-9572-5ce9731eea76" />
+
+Agent start
+<img width="1840" height="1191" alt="Screenshot 2025-09-17 at 5 25 12 AM" src="https://github.com/user-attachments/assets/6c94daef-c100-4d4f-9e2b-27a0bff37352" />
+
+create a new agent
+<img width="2000" height="765" alt="sculptor_new-agent" src="https://github.com/user-attachments/assets/533f6399-a3ef-49d6-96af-5063d1219705" />
+
+test images side by side
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/6c94daef-c100-4d4f-9e2b-27a0bff37352" alt="Image 1" width="45%"/>
+  <img src="https://github.com/user-attachments/assets/533f6399-a3ef-49d6-96af-5063d1219705" alt="Image 2" width="45%"/>
+</p>
+
+
+
