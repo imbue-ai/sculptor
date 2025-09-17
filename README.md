@@ -259,5 +259,28 @@ changes
 Make a commit
 <img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 43 17 PM" src="https://github.com/user-attachments/assets/c3067a30-0f9e-461f-afe1-1248a94243ad" />
 
+Green sync to unsync
+<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 55 04 PM" src="https://github.com/user-attachments/assets/c1aa25ac-3fbb-416d-97b3-52d0b2cb0c99" />
+Black change sync
+<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 54 52 PM" src="https://github.com/user-attachments/assets/e23c9ab1-b526-44b6-bb3b-06f83a54c0d9" />
+
+pull modal
+<img width="1312" height="912" alt="Screenshot 2025-09-16 at 9 00 52 PM" src="https://github.com/user-attachments/assets/4cc2aa04-391c-4174-8c41-829ac93ea113" />
+
+pushing
+<img width="1312" height="912" alt="Screenshot 2025-09-16 at 9 01 51 PM" src="https://github.com/user-attachments/assets/752333e0-265f-4039-b872-8e5c375d0323" />
+
+Target
+<img width="1312" height="912" alt="Screenshot 2025-09-16 at 9 03 00 PM" src="https://github.com/user-attachments/assets/bfd7aa3a-1be3-4889-874a-4c18cdebf494" />
+
+compact
+<img width="1312" height="912" alt="Screenshot 2025-09-16 at 9 05 58 PM" src="https://github.com/user-attachments/assets/cef578cd-c6d0-4bf5-8e81-26713f889a05" />
+
+@ mention
+
+<img width="1312" height="912" alt="Screenshot 2025-09-16 at 9 07 40 PM" src="https://github.com/user-attachments/assets/778b8821-624a-4f1d-96aa-c056840bcb1b" />
 
 
+
+Task restart
+<img width="993" height="802" alt="Screenshot 2025-09-16 at 9 12 16 PM" src="https://github.com/user-attachments/assets/68fe0e15-e364-4f87-9572-5ce9731eea76" />
