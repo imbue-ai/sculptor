@@ -140,6 +140,12 @@ Follow these steps if you run into merge conflicts when merging the agent’s ch
 
 # Advanced workflows
 
+## Autoupdate
+
+<img width="1205" height="803" alt="Updating in progress" src="https://github.com/user-attachments/assets/a6405147-af55-43a1-94ee-f8d9fb103cab" />
+<img width="1202" height="802" alt="Update complete" src="https://github.com/user-attachments/assets/b2b1498c-6edd-4a88-abb9-c2fb1f605cb5" />
+
+
 ## Changing the system prompt
 
 Agents follow explicit directions extremely well, so the system prompt is the perfect place to include general context like project details, relevant subdirectories, or specific coding guidelines. You can customize your system prompts at any time, either for all messages or on a per-message basis.
