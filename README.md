@@ -2,6 +2,19 @@
 
 Sculptor lets you run simultaneous Claude Code agents in safe, isolated sandboxes. Sculptor runs locally, letting you iterate quickly in your chosen IDE without going through PRs. We’re currently alpha testing Sculptor and are excited to hear what you think!
 
+<div align="center">
+<table>
+<tbody>
+<td align="center">
+<a href="https://imbue-sculptor-releases.s3.us-west-2.amazonaws.com/sculptor/Sculptor.dmg" target="_blank"><strong>Download for Mac (Apple Silicon)</strong></a>
+</td>
+<td align="center">
+<a href="https://discord.gg/sBAVvHPUTE" target="_blank"><strong>Discord</strong></a>
+</td>
+</tbody>
+</table>
+</div>
+
 ### Kick off agents in parallel
 
 Sculptor is a web UI for creating and managing multiple agents. Each agent runs in its own isolated sandbox with a clone of your repo, so you can experiment and make changes safely. Desktop app coming soon!
@@ -25,7 +38,11 @@ Sculptor is built by all of us at [Imbue](https://imbue.com).
 > [!IMPORTANT]
 > Join our [Discord](https://discord.gg/sBAVvHPUTE) for dedicated support and up-to-date info from the Imbue team! Our whole team's in Discord with you, building Sculptor with Sculptor 🙂
 
-Instructions for Mac Silicon (OSX arm64) follow. Linux build and instructions will be updated shortly!
+Instructions for Apple Silicon (OSX arm64) follow. Linux build and instructions will be updated shortly!
+
+## Download here
+
+https://imbue-sculptor-releases.s3.us-west-2.amazonaws.com/sculptor/Sculptor.dmg
 
 ## 1. Dependencies
 
