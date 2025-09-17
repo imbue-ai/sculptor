@@ -146,6 +146,11 @@ Follow these steps if you run into merge conflicts when merging the agent’s ch
 <img width="1202" height="802" alt="Update complete" src="https://github.com/user-attachments/assets/b2b1498c-6edd-4a88-abb9-c2fb1f605cb5" />
 
 
+Signup
+<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 06 26 PM" src="https://github.com/user-attachments/assets/1b8a5e82-5586-4090-99e1-1d4766dade6e" />
+
+
+
 ## Changing the system prompt
 
 Agents follow explicit directions extremely well, so the system prompt is the perfect place to include general context like project details, relevant subdirectories, or specific coding guidelines. You can customize your system prompts at any time, either for all messages or on a per-message basis.
