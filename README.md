@@ -62,21 +62,31 @@ Do *not* install Docker Desktop.
 
 Download the .dmg from https://imbue-sculptor-releases.s3.us-west-2.amazonaws.com/sculptor/Sculptor.dmg and double-click to unpack it into your /Applications folder.
 
-<img width="770" height="632" alt="Screenshot 2025-09-16 at 8 10 10 PM" src="https://github.com/user-attachments/assets/fcd800b5-37e1-46e2-be4a-1c0433107bb7" />
+<p align="center">
+  <img width="770" height="632" alt="Screenshot 2025-09-16 at 8 10 10 PM" src="https://github.com/user-attachments/assets/fcd800b5-37e1-46e2-be4a-1c0433107bb7" />
+</p>
 
 Enter your email and you should get to the installation wizard. This will tell you if we've found your installed docker, git, and mutagen. As a beta tester, you'll be opted in to send error logs and telemetry data. Let us know if this is an issue or if you need more information about this! 🙏
 
-<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 07 09 PM" src="https://github.com/user-attachments/assets/05d9a6fe-d91a-49e3-9b01-2ff31362c5e0" />
+<p align="center">
+  <img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 07 09 PM" src="https://github.com/user-attachments/assets/05d9a6fe-d91a-49e3-9b01-2ff31362c5e0" />
+</p>
 
 Provide the Anthropic credentials you'll be using. We plan on pushing out an update soon that allows Claude auth sign-in!
 
-<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 08 09 PM" src="https://github.com/user-attachments/assets/a3e5c4cd-b4be-411e-9a76-3b3aa0f35a72" />
+<p align="center">
+  <img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 08 09 PM" src="https://github.com/user-attachments/assets/a3e5c4cd-b4be-411e-9a76-3b3aa0f35a72" />
+</p>
 
 Select the repo you wish to work on. Don't worry, you can select a second repo later and switch between them freely! If there's no git repo installed there, we'll install one.
 
-<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 08 35 PM" src="https://github.com/user-attachments/assets/07e3cb62-b9ae-440a-a25a-f021453b879b" />
+<p align="center">
+  <img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 08 35 PM" src="https://github.com/user-attachments/assets/07e3cb62-b9ae-440a-a25a-f021453b879b" />
+</p>
 
-<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 09 31 PM" src="https://github.com/user-attachments/assets/f2b02171-4329-4aef-b69f-ab6ab7fd21a0" />
+<p align="center">
+  <img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 09 31 PM" src="https://github.com/user-attachments/assets/f2b02171-4329-4aef-b69f-ab6ab7fd21a0" />
+</p>
 
 # Community
 ### Discord
@@ -93,82 +103,86 @@ We’re always here for you! If you run into any issues or just want to chat wit
 
 # Basic workflows
 
-## Starting your first task
+## Creating agents
 
-1. On the main task list page, describe your task to the agent.
-2. Press “Start task” or cmd+Enter to start the task.
-    1. Simply pressing Enter will start a new line in your task description.
-3. Your new task will appear in the task list. Click into it to see the changes as the agent works.
+1. On your projects homepage, describe your task to the agent.
+2. Press “Start task” or cmd+Enter to start the task. Press Enter to start a new line in your task description.
+3. Your new agent will appear in the sidebar. Click into it to see the changes as the agent works.
 
-```
-missing image
-```
+<p align="center">
+  <img width="1840" height="1191" alt="Screenshot 2025-09-17 at 5 25 12 AM" src="https://github.com/user-attachments/assets/6c94daef-c100-4d4f-9e2b-27a0bff37352" />
+</p>
 
-4. From within the task, hit "cmd-N" or click "new agent" to open the new task prompt. You can create multiple tasks in quick succession from here, or return to your ongoing task. You can also move between different tasks, or archive/delete them.
+When you’re viewing an agent’s task, you can press the + New Agent button or cmd+N to quickly create a new agent.
 
-<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 27 10 PM" src="https://github.com/user-attachments/assets/83e249e0-38ea-4231-baf9-9e4495edae6e" />
+<p align="center">
+  <img width="2000" height="765" alt="sculptor_new-agent" src="https://github.com/user-attachments/assets/533f6399-a3ef-49d6-96af-5063d1219705" />
+</p>
 
-## Working on a different repo
+## Live Sync: Reviewing the agent’s changes
 
-1. Open the repo selector in the bottom right. Here you can choose between your loaded repos, or point Sculptor at a new one.
-<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 24 51 PM" src="https://github.com/user-attachments/assets/610de94d-3d29-4f2e-885f-10d321cd3eee" />
+1. Click the Live Sync button in the sidebar or top right corner. The agent’s changes will sync to your local branch, where you can view it instantly in your IDE.
+2. Run the agent’s code, run terminal commands, make edits in your IDE, or keep working with the agent in chat while in Live Sync mode. Any local changes you make will sync back to the agent’s branch and persist after turning off Live Sync.
 
-## Check on your task status
+<p align="center">
+  <img width="2000" height="632" alt="live sync" src="https://github.com/user-attachments/assets/2989e130-9995-48b6-9e50-7657c33bb0b4" />
+</p>
 
-1. To see what's going on, check on the Log tab for the build logs.
+<p align="center">
+  <img width="2000" height="698" alt="Screenshot 2025-09-17 at 5 36 25 AM" src="https://github.com/user-attachments/assets/5bd92f8e-985e-4ac1-afb3-97d643926565" />
+</p>
 
-<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 29 22 PM" src="https://github.com/user-attachments/assets/a0dc530f-e918-41bd-9838-f777571e3414" />
+Note: Live Sync will be disabled if you have uncommitted changes in your current local branch. Stash or commit changes to enable Live Sync.
 
-2. To debug what's going on inside the container, use the terminal tab. This places you inside a tmux inside the agent container. Leave and come back anytime and your terminal state will stick around!
-
-<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 29 57 PM" src="https://github.com/user-attachments/assets/cc089899-9e99-49a5-8f84-2172f972f44c" />
-
-3. Check out the "Plan" tab to see the multistep thinking progress, or the "Suggestions" tab to see code quality and code verification results.
-
-<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 34 48 PM" src="https://github.com/user-attachments/assets/b526ce4d-4b35-4c37-85eb-938007de7177" />
-
-4. Open the "Changes" tab to see the diff of file changes made in the task, either uncommited or committed, relative to the base branch the task was created from.
-
-<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 35 18 PM" src="https://github.com/user-attachments/assets/39d780a7-40d5-4e20-8913-c2b4fee98023" />
-
-Commit the agent's changes with your custom commit message.
-
-<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 43 17 PM" src="https://github.com/user-attachments/assets/c3067a30-0f9e-461f-afe1-1248a94243ad" />
-
-## Live sync with agent changes
-
-1. Click the black "Live Sync" button in the top right of the repo to sync the agent repo state over to your copy of the repo.
-2. While synced, make as many changes as you like by following up with the agent in the task chat, or switching to your IDE or terminal of choice to edit code, run tests, etc.
-4. Click the green spinner to stop sync and return your local repo to its original state.
-
-<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 55 04 PM" src="https://github.com/user-attachments/assets/c1aa25ac-3fbb-416d-97b3-52d0b2cb0c99" />
-
-3. While one task is working, add instructions and follow-ups to other agents. When those agents get stuck, swap live sync over to those tasks instead from the task sidebar, or using the black "Live Sync" button in top right.
-
-<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 54 52 PM" src="https://github.com/user-attachments/assets/e23c9ab1-b526-44b6-bb3b-06f83a54c0d9" />
-
+<p align="center">
+  <img width="1601" height="506" alt="Screenshot 2025-09-17 at 5 33 27 AM" src="https://github.com/user-attachments/assets/3d8c3ac8-ebb6-412e-b5ef-134b733403b0" />
+</p>
 
 ## Merging the agent’s changes
 
-(Note that merging is disabled while Live Sync is active.)
+1. Turn off Live Sync to switch your local state back to where it was.
 
-1. When you're satisfied with your task progress (don't forget to commit the changes!), you can merge those changes back to your local base branch. Open the "Merge" dropdown and select "Pull" to merge the agent's changes into your own. From there, make any finishing touches yourself and ship it off to wherever it goes next - merge request for review, QA for more testing, or straight to production...?
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/3e4799fc-a3dc-4783-bc9f-9874661b19de" alt="Image 1" width="45%" style="vertical-align: top;" />
+  <img src="https://github.com/user-attachments/assets/ea86c597-15d4-4965-b82c-73b89eee4869" alt="Image 2" width="45%" style="vertical-align: top;"/>
+</p>
 
-<img width="1312" height="912" alt="Screenshot 2025-09-16 at 9 00 52 PM" src="https://github.com/user-attachments/assets/4cc2aa04-391c-4174-8c41-829ac93ea113" />
+2. Commit the agent’s changes in Sculptor.
 
-2. If you've made changes locally, e.g. from pulling in changes from another task, and want to push those to the agent, select "Push" to send those to the agent's copy of the repo.
+<p align="center">
+  <img width="986" height="1294" alt="Screenshot 2025-09-17 at 5 37 45 AM" src="https://github.com/user-attachments/assets/c129b2cf-ea60-490f-8379-9fe24c281dd0" />
+</p>
 
-<img width="1312" height="912" alt="Screenshot 2025-09-16 at 9 01 51 PM" src="https://github.com/user-attachments/assets/752333e0-265f-4039-b872-8e5c375d0323" />
+3. Press the Merge button in the top right corner, select your target branch, and pull the agent’s changes.
 
-3. If you prefer to operate directly on the sculptor/* git branch, select your local mirror as the Target and push/pull at will.
+<p align="center">
+  <img width="1001" height="1294" alt="pull agent changes" src="https://github.com/user-attachments/assets/7c30fdb1-fc29-48dd-9b45-1498f90ed386" />
+</p>
 
-<img width="1312" height="912" alt="Screenshot 2025-09-16 at 9 03 00 PM" src="https://github.com/user-attachments/assets/bfd7aa3a-1be3-4889-874a-4c18cdebf494" />
+## Resolving merge conflicts
 
-4. Need to pull in changes from colleague who recently pushed to main and caused merge conflicts? No worry, you can select any recent branch to push into the agent repo. Push those merge conflicts in and let the agent resolve them for you!
+If merge conflicts arise when you merge the agent branch into your target branch, you will see this dialogue. Choose whether to force merge or abort if there are conflicts that can’t be resolved.
 
-```
-i dont have a repo right now but i swear it works
-```
+<p align="center">
+  <img width="1840" height="1191" alt="Screenshot 2025-09-17 at 5 47 04 AM" src="https://github.com/user-attachments/assets/aca9db5b-782b-437b-ae5c-75d9f4268789" />
+</p>
+
+Alternatively, you can push your target branch to the agent’s branch first. You can then tell the agent to resolve any merge conflicts that arise. After it’s done, merge the agent branch into your target branch as described in the last section (Merging the agent’s changes).
+
+<p align="center">
+  <img width="1001" height="1294" alt="push agent changes" src="https://github.com/user-attachments/assets/9b8cf01a-bfd0-48ff-b756-8e5cb457ea9d" />
+</p>
+
+
+<p align="center">
+  <img width="2000" height="461" alt="Screenshot 2025-09-17 at 5 48 24 AM" src="https://github.com/user-attachments/assets/e4b55480-76a0-41fd-bfcb-654d0feb2dc4" />
+</p>
+
+
+
+
+
+
 
 # Advanced workflows
 
@@ -176,14 +190,18 @@ i dont have a repo right now but i swear it works
 
 If your task conversation gets too long, click into the context meter and choose "compact".
 
-<img width="1312" height="912" alt="Screenshot 2025-09-16 at 9 05 58 PM" src="https://github.com/user-attachments/assets/cef578cd-c6d0-4bf5-8e81-26713f889a05" />
+<p align="center">
+  <img width="1312" height="912" alt="Screenshot 2025-09-16 at 9 05 58 PM" src="https://github.com/user-attachments/assets/cef578cd-c6d0-4bf5-8e81-26713f889a05" />
+</p>
 
 
 ## @autocomplete file and folder names
 
 Anytime during a task, @mention a part of a filename to autocomplete it.
 
-<img width="1312" height="912" alt="Screenshot 2025-09-16 at 9 07 40 PM" src="https://github.com/user-attachments/assets/778b8821-624a-4f1d-96aa-c056840bcb1b" />
+<p align="center">
+  <img width="1312" height="912" alt="Screenshot 2025-09-16 at 9 07 40 PM" src="https://github.com/user-attachments/assets/778b8821-624a-4f1d-96aa-c056840bcb1b" />
+</p>
 
 ## Custom dockerfile
 
@@ -221,17 +239,23 @@ RUN node --version
 
 Hit an unexpected error with Sculptor? Contact us on discord to report the issue and see if others have hit it -- but in the meanwhile, try asking Sculptor to restart the task from the latest snapshot.
 
-<img width="993" height="802" alt="Screenshot 2025-09-16 at 9 12 16 PM" src="https://github.com/user-attachments/assets/68fe0e15-e364-4f87-9572-5ce9731eea76" />
+<p align="center">
+  <img width="993" height="802" alt="Screenshot 2025-09-16 at 9 12 16 PM" src="https://github.com/user-attachments/assets/68fe0e15-e364-4f87-9572-5ce9731eea76" />
+</p>
 
 ## Autoupdate
 
 Get notified when a new sculptor version is available:
 
-<img width="1205" height="803" alt="Updating in progress" src="https://github.com/user-attachments/assets/a6405147-af55-43a1-94ee-f8d9fb103cab" />
+<p align="center">
+  <img width="1205" height="803" alt="Updating in progress" src="https://github.com/user-attachments/assets/a6405147-af55-43a1-94ee-f8d9fb103cab" />
+</p>
 
 Note that you currently have to restart sculptor to get the new version. We recommend you wait until tasks are completed - Sculptor is still in active development!
 
-<img width="1202" height="802" alt="Update complete" src="https://github.com/user-attachments/assets/b2b1498c-6edd-4a88-abb9-c2fb1f605cb5" />
+<p align="center">
+  <img width="1202" height="802" alt="Update complete" src="https://github.com/user-attachments/assets/b2b1498c-6edd-4a88-abb9-c2fb1f605cb5" />
+</p>
 
 ## Factory reset your sculptor
 
@@ -239,6 +263,13 @@ Note that you currently have to restart sculptor to get the new version. We reco
 mv ~/.sculptor ~/.sculptor.bkp."$(date +%s)"
 ```
 
+## Clean up docker disk space
+
+Sculptor auto-cleans up its images and containers on a cadence while it's running, so this shouldn't be necessary most of the time. However if you need to, here's a command to remove ALL docker containers and images (sculptor or not).
+
+```bash
+docker system prune -af
+```
 
 ## Changing the system prompt
 
