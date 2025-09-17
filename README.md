@@ -60,33 +60,17 @@ Do *not* install Docker Desktop.
 ### 2. Run Sculptor
 *Note: You'll need an Anthropic account to use Sculptor.*
 
-Download the .dmg from https://imbue-sculptor-releases.s3.us-west-2.amazonaws.com/sculptor/Sculptor.dmg and double-click to unpack it into your /Applications folder.
+1. Download the .dmg from https://imbue-sculptor-releases.s3.us-west-2.amazonaws.com/sculptor/Sculptor.dmg and double-click to unpack it into your /Applications folder.
 
-<p align="center">
-  <img width="770" height="632" alt="Screenshot 2025-09-16 at 8 10 10 PM" src="https://github.com/user-attachments/assets/fcd800b5-37e1-46e2-be4a-1c0433107bb7" />
-</p>
-
-Enter your email and you should get to the installation wizard. This will tell you if we've found your installed docker, git, and mutagen. As a beta tester, you'll be opted in to send error logs and telemetry data. Let us know if this is an issue or if you need more information about this! 🙏
+2. Enter your email and you should get to the installation wizard. This will tell you if we've found your installed docker, git, and mutagen. As a beta tester, you'll be opted in to send error logs and telemetry data. Let us know if this is an issue or if you need more information about this! 🙏
 
 <p align="center">
   <img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 07 09 PM" src="https://github.com/user-attachments/assets/05d9a6fe-d91a-49e3-9b01-2ff31362c5e0" />
 </p>
 
-Provide the Anthropic credentials you'll be using. We plan on pushing out an update soon that allows Claude auth sign-in!
+3. Provide the Anthropic credentials you'll be using. We plan on pushing out an update soon that allows Claude auth sign-in!
 
-<p align="center">
-  <img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 08 09 PM" src="https://github.com/user-attachments/assets/a3e5c4cd-b4be-411e-9a76-3b3aa0f35a72" />
-</p>
-
-Select the repo you wish to work on. Don't worry, you can select a second repo later and switch between them freely! If there's no git repo installed there, we'll install one.
-
-<p align="center">
-  <img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 08 35 PM" src="https://github.com/user-attachments/assets/07e3cb62-b9ae-440a-a25a-f021453b879b" />
-</p>
-
-<p align="center">
-  <img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 09 31 PM" src="https://github.com/user-attachments/assets/f2b02171-4329-4aef-b69f-ab6ab7fd21a0" />
-</p>
+4. Select the repo you wish to work on. Don't worry, you can select a second repo later and switch between them freely! If there's no git repo installed there, we'll install one.
 
 # Community
 ### Discord
