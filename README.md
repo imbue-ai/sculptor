@@ -228,6 +228,16 @@ Repo selection
 Git initialization
 <img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 09 31 PM" src="https://github.com/user-attachments/assets/f2b02171-4329-4aef-b69f-ab6ab7fd21a0" />
 
+Repo reselection
+<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 24 51 PM" src="https://github.com/user-attachments/assets/610de94d-3d29-4f2e-885f-10d321cd3eee" />
 
+Task modal
+<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 27 10 PM" src="https://github.com/user-attachments/assets/83e249e0-38ea-4231-baf9-9e4495edae6e" />
+
+View task build log
+<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 29 22 PM" src="https://github.com/user-attachments/assets/a0dc530f-e918-41bd-9838-f777571e3414" />
+
+Interact with the container via terminal
+<img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 29 57 PM" src="https://github.com/user-attachments/assets/cc089899-9e99-49a5-8f84-2172f972f44c" />
 
 [https://imbue-sculptor-releases.s3.us-west-2.amazonaws.com/sculptor/Sculptor.dmg]
