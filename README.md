@@ -297,8 +297,14 @@ test images side by side
   <img src="https://github.com/user-attachments/assets/3e4799fc-a3dc-4783-bc9f-9874661b19de" alt="Image 1" width="45%" style="vertical-align: top;" />
   <img src="https://github.com/user-attachments/assets/ea86c597-15d4-4965-b82c-73b89eee4869" alt="Image 2" width="45%" style="vertical-align: top;"/>
 </p>
+
+test image table
+
 | <img src="https://github.com/user-attachments/assets/3e4799fc-a3dc-4783-bc9f-9874661b19de" alt="Image 1" width="45%"> | <img src="https://github.com/user-attachments/assets/ea86c597-15d4-4965-b82c-73b89eee4869" alt="Image 2" width="45%"> |
 |--------------------------------------------------|--------------------------------------------------|
+
+
+
 
 left
 <img width="856" height="1294" alt="Screenshot 2025-09-17 at 5 36 48 AM" src="https://github.com/user-attachments/assets/3e4799fc-a3dc-4783-bc9f-9874661b19de" />
