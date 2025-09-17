@@ -232,13 +232,13 @@ Hit an unexpected error with Sculptor? Contact us on discord to report the issue
 Get notified when a new sculptor version is available:
 
 <p align="center">
-  <img width="1205" height="803" alt="Updating in progress" src="https://github.com/user-attachments/assets/a6405147-af55-43a1-94ee-f8d9fb103cab" />
+  <img width="60%" alt="Updating in progress" src="https://github.com/user-attachments/assets/a6405147-af55-43a1-94ee-f8d9fb103cab" />
 </p>
 
 Note that you currently have to restart sculptor to get the new version. We recommend you wait until tasks are completed - Sculptor is still in active development!
 
 <p align="center">
-  <img width="1202" height="802" alt="Update complete" src="https://github.com/user-attachments/assets/b2b1498c-6edd-4a88-abb9-c2fb1f605cb5" />
+  <img width="60%" alt="Update complete" src="https://github.com/user-attachments/assets/b2b1498c-6edd-4a88-abb9-c2fb1f605cb5" />
 </p>
 
 ## Factory reset your sculptor
@@ -275,15 +275,7 @@ Agents follow explicit directions extremely well, so the system prompt is the pe
     Thoroughly review all relevant code, deeply analyze potential causes, and formulate 2-3 hypotheses explaining the bug. For each hypothesis, identify specific locations for adding detailed logging to empirically validate them. Insert extensive logs accordingly. After adding logs, prompt me clearly about what tests or actions I should perform. I'll run these tests and share the logs with you. Use these results to draw conclusions and report back with your findings.
     ```
 
-Updating the system prompt from the main task list page:
-```
-missing image
-```
-
-Updating the system prompt from an individual task page:
-```
-missing image
-```
+You can update the system prompt from the main task list page, or from an individual task page.
 
 ## Steering with inline TODOs
 
