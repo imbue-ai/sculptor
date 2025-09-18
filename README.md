@@ -36,12 +36,12 @@ Sculptor is built by the team at [Imbue](https://imbue.com).
 
 # Download Sculptor
 
-[Download Sculptor for OSX with Apple Silicon here ->](https://imbue-sculptor-releases.s3.us-west-2.amazonaws.com/sculptor/Sculptor.dmg)
-
-Instructions for Apple Silicon (OSX arm64) follow. Apple Intel and Linux instructions will be updated shortly!
-
 > [!IMPORTANT]
 > Join our [Discord](https://discord.gg/sBAVvHPUTE) for dedicated support and up-to-date info from the Imbue team! Our whole team's in Discord with you, building Sculptor with Sculptor 🙂
+
+<strong>[Download Sculptor for OSX with Apple Silicon here ->](https://imbue-sculptor-releases.s3.us-west-2.amazonaws.com/sculptor/Sculptor.dmg)</strong>
+
+Instructions for Apple Silicon (OSX arm64) follow. Apple Intel and Linux instructions will be updated shortly!
 
 ## 1. Running Sculptor
 *Note: You'll need an Anthropic account to use Sculptor.*
@@ -105,21 +105,21 @@ When you’re viewing an agent’s task, you can press the + New Agent button or
 Note: for now, your first agent will take about a minute to start. We're working on making it instant!
 
 ## Test the agent’s changes with Live Sync
-Each agent runs in a safe container with a copy of your repo. Their branch lives in the container. 
+Each agent runs in a safe container with a copy of your repo. Their branch lives in the container. Live Sync lets you bring an agent's branch into your IDE so you can instantly test its changes, while it sees your edits in real-time. When you turn it on, it checks out the agent's branch locally and keep your files + git state synced.
 
-Click the Live Sync button in the sidebar or the top right corner to bring an agent's branch into your IDE so you can instantly test its changes, while it sees your edits in real-time. Live Sync checks out the agent's branch locally and keep your files + git state synced.
+1. Click the Live Sync button in the sidebar or the top right corner to turn it on
 
 <p align="center">
   <img width="2000" height="632" alt="live sync" src="https://github.com/user-attachments/assets/2989e130-9995-48b6-9e50-7657c33bb0b4" />
 </p>
 
-Run the agent’s code, run terminal commands, make edits in your IDE, or keep working with the agent in chat while Live Sync is on. Any local changes you make will sync back to the agent’s branch and persist after turning off Live Sync.
+2. Run the agent’s code, run terminal commands, make edits in your IDE, or keep working with the agent in chat while Live Sync is on. Any local changes you make will sync back to the agent’s branch and persist after turning off Live Sync.
 
 <p align="center">
   <img width="2000" height="698" alt="Screenshot 2025-09-17 at 5 36 25 AM" src="https://github.com/user-attachments/assets/5bd92f8e-985e-4ac1-afb3-97d643926565" />
 </p>
 
-Note: Live Sync will be disabled if you have uncommitted or unstashed changes in your current local branch. Stash or commit changes to enable Live Sync.
+Note: Currently Live Sync will be disabled if you have uncommitted or unstashed changes in your current local branch. Stash or commit changes to enable Live Sync.
 
 <p align="center">
   <img width="1601" height="506" alt="Screenshot 2025-09-17 at 5 33 27 AM" src="https://github.com/user-attachments/assets/3d8c3ac8-ebb6-412e-b5ef-134b733403b0" />
@@ -146,28 +146,28 @@ Note: Live Sync will be disabled if you have uncommitted or unstashed changes in
   <img width="60%" alt="pull agent changes" src="https://github.com/user-attachments/assets/7c30fdb1-fc29-48dd-9b45-1498f90ed386" />
 </p>
 
-For power users: you can also commit and merge the agent's changes locally while Live Sync is on. 
+For power users: you can also commit and merge the agent's changes locally while Live Sync is on using `git commit` on the branch, checking out the target branch, and `git merge <source-branch>`.
 
 ## Resolving merge conflicts
 
-If merge conflicts arise when you merge the agent branch into your target branch, you will see this dialogue. Choose whether to force merge or abort if there are conflicts that can’t be resolved.
-
-<p align="center">
-  <img width="1840" height="1191" alt="Screenshot 2025-09-17 at 5 47 04 AM" src="https://github.com/user-attachments/assets/aca9db5b-782b-437b-ae5c-75d9f4268789" />
-</p>
-
-Alternatively, you can push your target branch to the agent’s branch first. You can then tell the agent to resolve any merge conflicts that arise. After it’s done, merge the agent branch into your target branch as described in the last section (Merging the agent’s changes).
+If you expect merge conflicts, the agent can help you resolve them! 
+1. Push your target branch to the agent’s branch using the Merge panel.
+2. Tell the agent to resolve any merge conflicts that arise.
+3. After it’s done, merge the agent branch into your target branch as described in the last section (Merging the agent’s changes).
 
 <p align="center">
   <img width="60%" alt="push agent changes" src="https://github.com/user-attachments/assets/9b8cf01a-bfd0-48ff-b756-8e5cb457ea9d" />
 </p>
 
-
 <p align="center">
   <img width="2000" height="461" alt="Screenshot 2025-09-17 at 5 48 24 AM" src="https://github.com/user-attachments/assets/e4b55480-76a0-41fd-bfcb-654d0feb2dc4" />
 </p>
 
+If you try merging the agent's branch into your target branch, and merge conflicts arise, you will see this dialog. Choose whether to force merge or abort if there are conflicts that can’t be resolved.
 
+<p align="center">
+  <img width="1840" height="1191" alt="Screenshot 2025-09-17 at 5 47 04 AM" src="https://github.com/user-attachments/assets/aca9db5b-782b-437b-ae5c-75d9f4268789" />
+</p>
 
 
 
@@ -175,21 +175,53 @@ Alternatively, you can push your target branch to the agent’s branch first. Yo
 
 # Advanced workflows
 
-## Compaction
-
-If your task conversation gets too long, click into the context meter and choose "compact".
-
-<p align="center">
-  <img width="1312" height="912" alt="Screenshot 2025-09-16 at 9 05 58 PM" src="https://github.com/user-attachments/assets/cef578cd-c6d0-4bf5-8e81-26713f889a05" />
-</p>
-
-
 ## @autocomplete file and folder names
 
 Anytime during a task, @mention a part of a filename to autocomplete it.
 
 <p align="center">
   <img width="1312" height="912" alt="Screenshot 2025-09-16 at 9 07 40 PM" src="https://github.com/user-attachments/assets/778b8821-624a-4f1d-96aa-c056840bcb1b" />
+</p>
+
+## Changing the system prompt
+
+Agents follow explicit directions extremely well, so the system prompt is the perfect place to include general context like project details, relevant subdirectories, or specific coding guidelines. You can customize your system prompts at any time, either for all messages or on a per-message basis.
+
+- **Example system prompts**
+
+    ```markdown
+    # Planning system prompt
+
+    Don't write any code until I've approved the implementation or design strategy. For each request, propose 2-3 alternative strategies, architectures, or designs, clearly outlining tradeoffs for each. Recommend the best approach and actively ask clarifying questions to resolve ambiguities. I'd prefer extra discussion over incorrect assumptions.
+
+    # Code implementation system prompt
+
+    Implement the task exactly as described. If you encounter any ambiguity (unknown unknowns), pause immediately to request clarification. I'd rather clarify upfront than proceed based on incorrect assumptions. Write self-documenting code, adding comments only when necessary to explain the "why" behind specific implementation choices.
+
+    # Debugging system prompt
+
+    Thoroughly review all relevant code, deeply analyze potential causes, and formulate 2-3 hypotheses explaining the bug. For each hypothesis, identify specific locations for adding detailed logging to empirically validate them. Insert extensive logs accordingly. After adding logs, prompt me clearly about what tests or actions I should perform. I'll run these tests and share the logs with you. Use these results to draw conclusions and report back with your findings.
+    ```
+
+You can update the system prompt from the main task list page, or from an individual task page.
+
+## Steering with inline TODOs
+
+Inline TODOs or FIXMEs are one of the most reliable ways to steer the agent when iterating on real code. Because LLMs attend better to instructions **near the relevant code**, inline notes are often more effective than chat prompts alone.
+
+To use inline TODOs:
+
+- Local sync to the task you want to update
+- Add TODOs or comments near the code you want the agent to modify
+- Tell the agent where to look (e.g. “Check foo.py for TODOs”)
+
+
+## Context compaction
+
+If your task conversation gets too long, click into the context meter and choose "compact".
+
+<p align="center">
+  <img width="1312" height="912" alt="Screenshot 2025-09-16 at 9 05 58 PM" src="https://github.com/user-attachments/assets/cef578cd-c6d0-4bf5-8e81-26713f889a05" />
 </p>
 
 ## Custom dockerfile
@@ -226,7 +258,7 @@ RUN node --version
 
 ## Task error recovery
 
-Hit an unexpected error with Sculptor? Contact us on discord to report the issue and see if others have hit it -- but in the meanwhile, try asking Sculptor to restart the task from the latest snapshot.
+Hit an unexpected error with Sculptor? Contact us on [Discord](https://discord.gg/sBAVvHPUTE) to report the issue and see if others have hit it — but in the meantime, try asking Sculptor to restart the task from the latest snapshot.
 
 <p align="center">
   <img width="993" height="802" alt="Screenshot 2025-09-16 at 9 12 16 PM" src="https://github.com/user-attachments/assets/68fe0e15-e364-4f87-9572-5ce9731eea76" />
@@ -234,63 +266,31 @@ Hit an unexpected error with Sculptor? Contact us on discord to report the issue
 
 ## Autoupdate
 
-Get notified when a new sculptor version is available:
+Get notified when a new Sculptor version is available:
 
 <p align="center">
   <img width="60%" alt="Updating in progress" src="https://github.com/user-attachments/assets/a6405147-af55-43a1-94ee-f8d9fb103cab" />
 </p>
 
-Note that you currently have to restart sculptor to get the new version. We recommend you wait until tasks are completed - Sculptor is still in active development!
+Note that you currently have to restart Sculptor to get the new version. We recommend you wait until tasks are completed — Sculptor is still in active development!
 
 <p align="center">
   <img width="60%" alt="Update complete" src="https://github.com/user-attachments/assets/b2b1498c-6edd-4a88-abb9-c2fb1f605cb5" />
 </p>
 
-## Factory reset your sculptor
+## Factory reset your Sculptor
 
 ```bash
 mv ~/.sculptor ~/.sculptor.bkp."$(date +%s)"
 ```
 
-## Clean up docker disk space
+## Clean up Docker disk space
 
-Sculptor auto-cleans up its images and containers on a cadence while it's running, so this shouldn't be necessary most of the time. However if you need to, here's a command to remove ALL docker containers and images (sculptor or not).
+Sculptor auto-cleans up its images and containers on a cadence while it's running, so this shouldn't be necessary most of the time. However if you need to, here's a command to remove ALL Docker containers and images (Sculptor or not). You can also use Docker Desktop to clean up specific images.
 
 ```bash
 docker system prune -af
 ```
-
-## Changing the system prompt
-
-Agents follow explicit directions extremely well, so the system prompt is the perfect place to include general context like project details, relevant subdirectories, or specific coding guidelines. You can customize your system prompts at any time, either for all messages or on a per-message basis.
-
-- **Example system prompts**
-
-    ```markdown
-    # Planning system prompt
-
-    Don't write any code until I've approved the implementation or design strategy. For each request, propose 2-3 alternative strategies, architectures, or designs, clearly outlining tradeoffs for each. Recommend the best approach and actively ask clarifying questions to resolve ambiguities. I'd prefer extra discussion over incorrect assumptions.
-
-    # Code implementation system prompt
-
-    Implement the task exactly as described. If you encounter any ambiguity (unknown unknowns), pause immediately to request clarification. I'd rather clarify upfront than proceed based on incorrect assumptions. Write self-documenting code, adding comments only when necessary to explain the "why" behind specific implementation choices.
-
-    # Debugging system prompt
-
-    Thoroughly review all relevant code, deeply analyze potential causes, and formulate 2-3 hypotheses explaining the bug. For each hypothesis, identify specific locations for adding detailed logging to empirically validate them. Insert extensive logs accordingly. After adding logs, prompt me clearly about what tests or actions I should perform. I'll run these tests and share the logs with you. Use these results to draw conclusions and report back with your findings.
-    ```
-
-You can update the system prompt from the main task list page, or from an individual task page.
-
-## Steering with inline TODOs
-
-Inline TODOs or FIXMEs are one of the most reliable ways to steer the agent when iterating on real code. Because LLMs attend better to instructions **near the relevant code**, inline notes are often more effective than chat prompts alone.
-
-To use inline TODOs:
-
-- Local sync to the task you want to update
-- Add TODOs or comments near the code you want the agent to modify
-- Tell the agent where to look (e.g. “Check foo.py for TODOs”)
 
 # License
 © Imbue, Inc. All rights reserved. Use is subject to Imbue's [Research Preview Terms of Service](https://imbue.com/terms/).
