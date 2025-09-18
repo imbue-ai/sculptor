@@ -36,12 +36,12 @@ Sculptor is built by the team at [Imbue](https://imbue.com).
 
 # Download Sculptor
 
-> [!IMPORTANT]
-> Join our [Discord](https://discord.gg/sBAVvHPUTE) for dedicated support and up-to-date info from the Imbue team! Our whole team's in Discord with you, building Sculptor with Sculptor 🙂
-
 [Download Sculptor for OSX with Apple Silicon here ->](https://imbue-sculptor-releases.s3.us-west-2.amazonaws.com/sculptor/Sculptor.dmg)
 
 Instructions for Apple Silicon (OSX arm64) follow. Apple Intel and Linux instructions will be updated shortly!
+
+> [!IMPORTANT]
+> Join our [Discord](https://discord.gg/sBAVvHPUTE) for dedicated support and up-to-date info from the Imbue team! Our whole team's in Discord with you, building Sculptor with Sculptor 🙂
 
 ## 1. Running Sculptor
 *Note: You'll need an Anthropic account to use Sculptor.*
