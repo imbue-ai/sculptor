@@ -1,6 +1,6 @@
 # Sculptor: run parallel Claude Code agents in safe, local sandboxes
 
-Sculptor lets you run simultaneous Claude Code agents in safe, isolated sandboxes. Sculptor runs locally, letting you iterate quickly in your chosen IDE without going through PRs. We’re currently alpha testing Sculptor and are excited to hear what you think!
+Sculptor lets you run simultaneous Claude Code agents in safe containers. Sculptor runs locally, letting you iterate quickly in your chosen IDE without going through PRs. We’re currently alpha testing Sculptor and are excited to hear what you think!
 
 <div align="center">
 <table>
@@ -9,7 +9,7 @@ Sculptor lets you run simultaneous Claude Code agents in safe, isolated sandboxe
 <a href="https://imbue-sculptor-releases.s3.us-west-2.amazonaws.com/sculptor/Sculptor.dmg" target="_blank"><strong>Download for Mac (Apple Silicon)</strong></a>
 </td>
 <td align="center">
-<a href="https://discord.gg/sBAVvHPUTE" target="_blank"><strong>Discord</strong></a>
+<a href="https://discord.gg/sBAVvHPUTE" target="_blank"><strong>Join us on Discord</strong></a>
 </td>
 </tbody>
 </table>
@@ -17,11 +17,11 @@ Sculptor lets you run simultaneous Claude Code agents in safe, isolated sandboxe
 
 ### Kick off agents in parallel
 
-Sculptor is a web UI for creating and managing multiple agents. Each agent runs in its own isolated sandbox with a clone of your repo, so you can experiment and make changes safely. Desktop app coming soon!
+Sculptor is a web UI for creating and managing multiple agents. Each agent runs in its own container with a clone of your repo, so you can experiment and make changes safely.
 
 ### Test & edit agent changes locally
 
-Sync to any agent’s sandbox to instantly see its file changes in your local IDE. This lets you review, run, test, and edit the agent’s changes in your local environment while it's working in a sandbox, giving you the best of both worlds.
+Use Pairing Mode to bring any agent's branch into your local IDE, so you can real-time review, run, test, and edit the agent’s changes in your local environment while it's working in its container, giving you the best of local development with safety.
 
 ### Easily merge changes & resolve conflicts
 
@@ -32,36 +32,33 @@ See it all come together in this behind-the-scenes demo from one of our product 
 
 [![A demo of what is possible with Sculptor](https://img.youtube.com/vi/ESZH7hd1sMY/0.jpg)](https://www.youtube.com/watch?v=ESZH7hd1sMY)
 
-Sculptor is built by all of us at [Imbue](https://imbue.com).
+Sculptor is built by the team at [Imbue](https://imbue.com).
 
-# Installation & setup
+# Download Sculptor
+
 > [!IMPORTANT]
 > Join our [Discord](https://discord.gg/sBAVvHPUTE) for dedicated support and up-to-date info from the Imbue team! Our whole team's in Discord with you, building Sculptor with Sculptor 🙂
 
-Instructions for Apple Silicon (OSX arm64) follow. Linux build and instructions will be updated shortly!
+[Download Sculptor for OSX with Apple Silicon here ->](https://imbue-sculptor-releases.s3.us-west-2.amazonaws.com/sculptor/Sculptor.dmg)
 
-## Download here
+Instructions for Apple Silicon (OSX arm64) follow. Apple Intel and Linux instructions will be updated shortly!
 
-https://imbue-sculptor-releases.s3.us-west-2.amazonaws.com/sculptor/Sculptor.dmg
+## 1. Running Sculptor
+*Note: You'll need an Anthropic account to use Sculptor.*
 
-## 1. Dependencies
+1. Download the .dmg from [here](https://imbue-sculptor-releases.s3.us-west-2.amazonaws.com/sculptor/Sculptor.dmg) and double-click to unpack it into your /Applications folder.
 
-### Install git
+2. Enter your email and you should get to the installation wizard. To run Sculptor, you'll need to install Docker Desktop. We'll also install git and mutagen for you, if you already don't have them. As a beta tester, you'll be opted in to send error logs and basic product usage data. Let us know if this is an issue or if you need more information about this! 🙏
 
-```bash
-brew install git
-```
+<p align="center">
+  <img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 07 09 PM" src="https://github.com/user-attachments/assets/05d9a6fe-d91a-49e3-9b01-2ff31362c5e0" />
+</p>
 
-### Install mutagen
+4. Provide the Anthropic credentials you'll be using. We plan on pushing out an update soon that allows Claude auth sign-in so you can use your Claude Pro and Max plans!
 
-```bash
-brew install mutagen-io/mutagen/mutagen
-```
+5. Select the repo you wish to work on. Don't worry, you can select a second repo later and switch between them freely! If there's no git repo installed there, we'll install one.
 
-OR - install the [appropriate latest released binary for Mutagen](https://github.com/mutagen-io/mutagen/releases)
-
-### Install docker
-
+## Installing Docker
 **On Mac**:
 [Docker Desktop](https://docs.docker.com/desktop/setup/install/mac-install/)
 
@@ -74,29 +71,14 @@ Do *not* install Docker Desktop.
 - Instead, install Docker Engine by [following the instructions here](https://docs.docker.com/engine/install/)
 
 
-### 2. Run Sculptor
-*Note: You'll need an Anthropic account to use Sculptor.*
-
-1. Download the .dmg from https://imbue-sculptor-releases.s3.us-west-2.amazonaws.com/sculptor/Sculptor.dmg and double-click to unpack it into your /Applications folder.
-
-2. Enter your email and you should get to the installation wizard. This will tell you if we've found your installed docker, git, and mutagen. As a beta tester, you'll be opted in to send error logs and telemetry data. Let us know if this is an issue or if you need more information about this! 🙏
-
-<p align="center">
-  <img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 07 09 PM" src="https://github.com/user-attachments/assets/05d9a6fe-d91a-49e3-9b01-2ff31362c5e0" />
-</p>
-
-3. Provide the Anthropic credentials you'll be using. We plan on pushing out an update soon that allows Claude auth sign-in!
-
-4. Select the repo you wish to work on. Don't worry, you can select a second repo later and switch between them freely! If there's no git repo installed there, we'll install one.
-
 # Community
 ### Discord
 
 As an early tester, we highly recommend that you join our [Discord](https://discord.gg/sBAVvHPUTE) community to get direct support from the Imbue team. Some interesting channels:
 
-- `#bugs-and-support`: Get quick support from the Imbue team
+- `#help-and-bugs`: Get quick support from the Imbue team
+- `#show-and-tell`: Share wow moments, workflows, tips, and Sculptures you're creating!
 - `#behind-the-scenes`: Watch how the sausage gets made as our team uses Sculptor to build Sculptor
-- `#show-and-tell`: See what other people have created with Sculptor, and share your own Sculptures
 
 ### Talk with us
 
@@ -107,7 +89,7 @@ We’re always here for you! If you run into any issues or just want to chat wit
 ## Creating agents
 
 1. On your projects homepage, describe your task to the agent.
-2. Press “Start task” or cmd+Enter to start the task. Press Enter to start a new line in your task description.
+2. Press “Start task” or CMD+Enter to start the task. Press Enter to start a new line in your task description.
 3. Your new agent will appear in the sidebar. Click into it to see the changes as the agent works.
 
 <p align="center">
@@ -120,20 +102,24 @@ When you’re viewing an agent’s task, you can press the + New Agent button or
   <img width="2000" height="765" alt="sculptor_new-agent" src="https://github.com/user-attachments/assets/533f6399-a3ef-49d6-96af-5063d1219705" />
 </p>
 
-## Live Sync: Reviewing the agent’s changes
+Note: for now, your first agent will take about a minute to start. We're working on making it instant!
 
-1. Click the Live Sync button in the sidebar or top right corner. The agent’s changes will sync to your local branch, where you can view it instantly in your IDE.
-2. Run the agent’s code, run terminal commands, make edits in your IDE, or keep working with the agent in chat while in Live Sync mode. Any local changes you make will sync back to the agent’s branch and persist after turning off Live Sync.
+## Test the agent’s changes with Live Sync
+Each agent runs in a safe container with a copy of your repo. Their branch lives in the container. 
+
+Click the Live Sync button in the sidebar or the top right corner to bring an agent's branch into your IDE so you can instantly test its changes, while it sees your edits in real-time. Live Sync checks out the agent's branch locally and keep your files + git state synced.
 
 <p align="center">
   <img width="2000" height="632" alt="live sync" src="https://github.com/user-attachments/assets/2989e130-9995-48b6-9e50-7657c33bb0b4" />
 </p>
 
+Run the agent’s code, run terminal commands, make edits in your IDE, or keep working with the agent in chat while Live Sync is on. Any local changes you make will sync back to the agent’s branch and persist after turning off Live Sync.
+
 <p align="center">
   <img width="2000" height="698" alt="Screenshot 2025-09-17 at 5 36 25 AM" src="https://github.com/user-attachments/assets/5bd92f8e-985e-4ac1-afb3-97d643926565" />
 </p>
 
-Note: Live Sync will be disabled if you have uncommitted changes in your current local branch. Stash or commit changes to enable Live Sync.
+Note: Live Sync will be disabled if you have uncommitted or unstashed changes in your current local branch. Stash or commit changes to enable Live Sync.
 
 <p align="center">
   <img width="1601" height="506" alt="Screenshot 2025-09-17 at 5 33 27 AM" src="https://github.com/user-attachments/assets/3d8c3ac8-ebb6-412e-b5ef-134b733403b0" />
@@ -159,6 +145,8 @@ Note: Live Sync will be disabled if you have uncommitted changes in your current
 <p align="center">
   <img width="60%" alt="pull agent changes" src="https://github.com/user-attachments/assets/7c30fdb1-fc29-48dd-9b45-1498f90ed386" />
 </p>
+
+For power users: you can also commit and merge the agent's changes locally while Live Sync is on. 
 
 ## Resolving merge conflicts
 
