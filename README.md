@@ -119,7 +119,7 @@ Each agent runs in a safe container with a copy of your repo. Their branch lives
   <img width="2000" height="698" alt="Screenshot 2025-09-17 at 5 36 25 AM" src="https://github.com/user-attachments/assets/5bd92f8e-985e-4ac1-afb3-97d643926565" />
 </p>
 
-Note: Currently Live Sync will be disabled if you have uncommitted or unstashed changes in your current local branch. Stash or commit changes to enable Live Sync.
+Note: Currently Live Sync will be disabled if you have uncommitted or unstashed changes in your current local branch. Stash or commit changes to enable Live Sync using `git stash --include-untracked`.
 
 <p align="center">
   <img width="1601" height="506" alt="Screenshot 2025-09-17 at 5 33 27 AM" src="https://github.com/user-attachments/assets/3d8c3ac8-ebb6-412e-b5ef-134b733403b0" />
