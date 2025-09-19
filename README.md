@@ -226,7 +226,24 @@ If your task conversation gets too long, click into the context meter and choose
 
 ## Custom dockerfile
 
-Have project-specific dependencies you want in your agent environment? We support specifying a Dockerfile or image as per the devcontainer spec.
+Sculptor agents use the same environment as your development, CI/CD, and Github Codespaces by supporting devcontainer specifications.
+
+**Quick start:**
+- **No dockerfile, using uv + npm + bash?** Things should just work with our default environment
+- **Need to preinstall other dependencies but don't have a dockerfile?** Ask Sculptor to generate a devcontainer and Dockerfile, commit it, then start another task
+- **Already have a dockerfile?** Check the build logs to see if Sculptor can use it successfully
+
+### How to use it
+
+Sculptor will automatically use your devcontainer configuration if you have a `devcontainer.json` file at either:
+- `/.devcontainer/devcontainer.json`
+- `/devcontainer.json`
+
+Without a devcontainer file, we use the default Sculptor environment (Ubuntu-based with Python and `uv`).
+
+**Supported devcontainer fields:**
+- `build.dockerfile` - Points to a Dockerfile in your repository
+- `image` - Single docker image reference (e.g., `ubuntu:24.04`, `python-slim`)
 
 ```json
 {
@@ -242,7 +259,7 @@ or
   "name": "dev",
   "build": {
     "dockerfile": "Dockerfile"
-  },
+  }
 }
 ```
 
@@ -253,8 +270,31 @@ FROM node:latest
 ENV NODE_OPTIONS='--max-old-space-size=4096'
 
 RUN node --version
-
 ```
+
+### Requirements for your image
+
+**Supported base images:** Ubuntu, Alpine, Debian, and other Linux distributions
+**Required tools:** Your image must include `cat`, `chmod`, and `ln` (included in standard distributions)
+**Network access:** Internet access required for LLM communication
+
+**For sudo support (optional):**
+```dockerfile
+RUN apt-get install -y --no-install-recommends sudo
+RUN echo "ALL ALL=(ALL:ALL) NOPASSWD:ALL" >> /etc/sudoers
+```
+
+### How it works
+
+- We `docker build` your devcontainer for every new Sculptor task
+- Build logs are visible in Sculptor's logs panel  
+- Uses current code state when the task starts
+- Same container persists for the entire task duration
+- Processes run with matching user/group IDs from your host (you may see `user501` on macOS)
+
+**Current limitations:**
+- No support for custom Linux user IDs
+- No post-container start scripts support
 
 ## Task error recovery
 
