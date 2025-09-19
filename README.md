@@ -275,7 +275,9 @@ RUN node --version
 ### Requirements for your image
 
 **Supported base images:** Ubuntu, Alpine, Debian, and other Linux distributions
+
 **Required tools:** Your image must include `cat`, `chmod`, and `ln` (included in standard distributions)
+
 **Network access:** Internet access required for LLM communication
 
 **For sudo support (optional):**
