@@ -104,22 +104,22 @@ When you’re viewing an agent’s task, you can press the + New Agent button or
 
 Note: for now, your first agent will take about a minute to start. We're working on making it instant!
 
-## Test the agent’s changes with Live Sync
-Each agent runs in a safe container with a copy of your repo. Their branch lives in the container. Live Sync lets you bring an agent's branch into your IDE so you can instantly test its changes, while it sees your edits in real-time. When you turn it on, it checks out the agent's branch locally and keep your files + git state synced.
+## Test the agent’s changes with Pairing Mode
+Each agent runs in a safe container with a copy of your repo. Their branch lives in the container. Pairing Mode lets you bring an agent's branch into your IDE so you can instantly test its changes, while it sees your edits in real-time. When you turn it on, it checks out the agent's branch locally and keep your files + git state synced.
 
-1. Click the Live Sync button in the sidebar or the top right corner to turn it on
+1. Click the Pairing Mode button in the sidebar or the top right corner to turn it on
 
 <p align="center">
-  <img width="2000" height="632" alt="live sync" src="https://github.com/user-attachments/assets/2989e130-9995-48b6-9e50-7657c33bb0b4" />
+  <img width="2000" height="632" alt="pairing mode" src="https://github.com/user-attachments/assets/2989e130-9995-48b6-9e50-7657c33bb0b4" />
 </p>
 
-2. Run the agent’s code, run terminal commands, make edits in your IDE, or keep working with the agent in chat while Live Sync is on. Any local changes you make will sync back to the agent’s branch and persist after turning off Live Sync.
+2. Run the agent’s code, run terminal commands, make edits in your IDE, or keep working with the agent in chat while in Pairing Mode. Any local changes you make will sync back to the agent’s branch and persist after turning off Pairing Mode.
 
 <p align="center">
   <img width="2000" height="698" alt="Screenshot 2025-09-17 at 5 36 25 AM" src="https://github.com/user-attachments/assets/5bd92f8e-985e-4ac1-afb3-97d643926565" />
 </p>
 
-Note: Currently Live Sync will be disabled if you have uncommitted or unstashed changes in your current local branch. Stash or commit changes to enable Live Sync using `git stash --include-untracked`.
+Note: Currently Pairing Mode will be disabled if you have uncommitted or unstashed changes in your current local branch. Stash or commit changes to enable Pairing Mode using `git stash --include-untracked`.
 
 <p align="center">
   <img width="1601" height="506" alt="Screenshot 2025-09-17 at 5 33 27 AM" src="https://github.com/user-attachments/assets/3d8c3ac8-ebb6-412e-b5ef-134b733403b0" />
@@ -127,7 +127,7 @@ Note: Currently Live Sync will be disabled if you have uncommitted or unstashed 
 
 ## Merging the agent’s changes
 
-1. Turn off Live Sync to switch your local state back to where it was.
+1. Turn off Pairing Mode to switch your local state back to where it was.
 
 <p align="center">
   <img src="https://github.com/user-attachments/assets/3e4799fc-a3dc-4783-bc9f-9874661b19de" alt="Image 1" width="45%" style="vertical-align: top;" />
@@ -146,7 +146,7 @@ Note: Currently Live Sync will be disabled if you have uncommitted or unstashed 
   <img width="60%" alt="pull agent changes" src="https://github.com/user-attachments/assets/7c30fdb1-fc29-48dd-9b45-1498f90ed386" />
 </p>
 
-For power users: you can also commit and merge the agent's changes locally while Live Sync is on using `git commit` on the branch, checking out the target branch, and `git merge <source-branch>`.
+For power users: you can also commit and merge the agent's changes locally while Pairing Mode is on using `git commit` on the branch, checking out the target branch, and `git merge <source-branch>`.
 
 ## Resolving merge conflicts
 
