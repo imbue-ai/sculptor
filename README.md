@@ -15,19 +15,19 @@ Run parallel Claudes safely in containers. Jump between their environments to in
 </table>
 </div>
 
-### Kick off agents in parallel
+### Spin up parallel agents
 
-Sculptor is a web UI for creating and managing multiple agents. Each agent runs in its own container with a clone of your repo, so you can experiment and make changes safely.
+Each Claude works in its own container. You get safe execution and parallel agents without the hassle of git worktrees. You can even tell them, “Don't come back until my tests pass.”
 
-### Test & edit agent changes locally
+### Instantly pair with any agent
 
-Use Pairing Mode to bring any agent's branch into your local IDE, so you can real-time review, run, test, and edit the agent’s changes in your local environment while it's working in its container, giving you the best of local development with safety.
+Toggle Pairing Mode to move between any agents' containers. Run, test, and edit each agent's changes from your normal dev environment — no need to switch workspaces.
 
-### Easily merge changes & resolve conflicts
+### Merge without conflicts
 
-Quickly merge the agent branches that you like. Sculptor agents can help you resolve any merge conflicts that arise.
+Merge the changes you like and throw out the ones you don't. Sculptor helps you resolve merge conflicts.
 
-### See the power of Sculptor in this behind-the-scenes demo 🤓
+### See the power of Sculptor's Pairing Mode in this behind-the-scenes demo 🤓
 See it all come together in this behind-the-scenes demo from one of our product engineers, Guinness:
 
 [![A demo of what is possible with Sculptor](https://img.youtube.com/vi/ESZH7hd1sMY/0.jpg)](https://www.youtube.com/watch?v=ESZH7hd1sMY)
