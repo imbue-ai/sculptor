@@ -15,6 +15,11 @@ Run parallel Claudes safely in containers. Jump between their environments to in
 </table>
 </div>
 
+
+<p align="center">
+  <img width="1312" height="912" alt="Sculptor Demo" src="assets/demo.gif" />
+</p>
+
 ### Spin up parallel agents
 
 Each Claude works in its own container. You get safe execution and parallel agents without the hassle of git worktrees. You can even tell them, “Don't come back until my tests pass.”
@@ -29,6 +34,12 @@ Merge the changes you like and throw out the ones you don't. Sculptor helps you 
 
 ### See the power of Sculptor's Pairing Mode 🤓
 See it all come together in this behind-the-scenes demo from one of our product engineers, Guinness:
+
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=ESZH7hd1sMY">
+    <img width="1312" height="738" alt="A demo of what is possible with Sculptor" src="https://img.youtube.com/vi/ESZH7hd1sMY/0.jpg" />
+  </a>
+</p>
 
 [![A demo of what is possible with Sculptor](https://img.youtube.com/vi/ESZH7hd1sMY/0.jpg)](https://www.youtube.com/watch?v=ESZH7hd1sMY)
 
