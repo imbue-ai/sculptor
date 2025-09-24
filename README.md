@@ -27,7 +27,7 @@ Toggle Pairing Mode to move between any agents' containers. Run, test, and edit 
 
 Merge the changes you like and throw out the ones you don't. Sculptor helps you resolve merge conflicts.
 
-### See the power of Sculptor's Pairing Mode in this behind-the-scenes demo 🤓
+### See the power of Sculptor's Pairing Mode 🤓
 See it all come together in this behind-the-scenes demo from one of our product engineers, Guinness:
 
 [![A demo of what is possible with Sculptor](https://img.youtube.com/vi/ESZH7hd1sMY/0.jpg)](https://www.youtube.com/watch?v=ESZH7hd1sMY)
