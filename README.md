@@ -1,6 +1,6 @@
-# Sculptor: run parallel Claude Code agents in safe, local sandboxes
+# Sculptor: the missing UI for Claude Code
 
-Sculptor lets you run simultaneous Claude Code agents in safe containers. Sculptor runs locally, letting you iterate quickly in your chosen IDE without going through PRs. We’re currently alpha testing Sculptor and are excited to hear what you think!
+Run parallel Claudes safely in containers. Jump between their environments to instantly test changes. Get suggestions that catch critical issues as you go.
 
 <div align="center">
 <table>
