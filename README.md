@@ -33,8 +33,8 @@ Toggle Pairing Mode to move between any agents' containers. Run, test, and edit 
 
 Merge the changes you like and throw out the ones you don't. Sculptor helps you resolve merge conflicts.
 
-### See the power of Sculptor's Pairing Mode 🤓
-See it all come together in this behind-the-scenes demo from one of our product engineers, Guinness:
+### See the power of Sculptor's Pairing Mode in this behind-the-scenes demo 🤓
+Here’s our teammate Guinness walking through an earlier build of Sculptor — what he calls "Local Sync" is now "Pairing Mode". Since then, we’ve shipped new improvements every day, so you might see some old features here!
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=ESZH7hd1sMY">
