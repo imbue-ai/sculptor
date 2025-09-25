@@ -15,6 +15,7 @@ Run parallel Claudes safely in containers. Jump between their environments to in
 </table>
 </div>
 
+<br>
 
 <p align="center">
   <img width="1312" alt="Sculptor Demo" src="assets/demo.gif" />
