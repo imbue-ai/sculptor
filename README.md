@@ -17,7 +17,7 @@ Run parallel Claudes safely in containers. Jump between their environments to in
 
 
 <p align="center">
-  <img width="1312" height="912" alt="Sculptor Demo" src="assets/demo.gif" />
+  <img width="1312" alt="Sculptor Demo" src="assets/demo.gif" />
 </p>
 
 ### Spin up parallel agents
@@ -40,8 +40,6 @@ See it all come together in this behind-the-scenes demo from one of our product 
     <img width="1312" height="738" alt="A demo of what is possible with Sculptor" src="https://img.youtube.com/vi/ESZH7hd1sMY/0.jpg" />
   </a>
 </p>
-
-[![A demo of what is possible with Sculptor](https://img.youtube.com/vi/ESZH7hd1sMY/0.jpg)](https://www.youtube.com/watch?v=ESZH7hd1sMY)
 
 Sculptor is built by the team at [Imbue](https://imbue.com).
 
