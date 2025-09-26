@@ -195,7 +195,7 @@ Anytime during a task, @mention a part of a filename to autocomplete it.
 
 ## Changing the system prompt
 
-Agents follow explicit directions extremely well, so the system prompt is the perfect place to include general context like project details, relevant subdirectories, or specific coding guidelines. You can customize your system prompts at any time, either for all messages or on a per-message basis.
+Agents follow explicit directions extremely well, so the system prompt is the perfect place to include general context like project details, relevant subdirectories, or specific coding guidelines. You can customize system prompts for each project and update them at any time.
 
 - **Example system prompts**
 
@@ -213,7 +213,7 @@ Agents follow explicit directions extremely well, so the system prompt is the pe
     Thoroughly review all relevant code, deeply analyze potential causes, and formulate 2-3 hypotheses explaining the bug. For each hypothesis, identify specific locations for adding detailed logging to empirically validate them. Insert extensive logs accordingly. After adding logs, prompt me clearly about what tests or actions I should perform. I'll run these tests and share the logs with you. Use these results to draw conclusions and report back with your findings.
     ```
 
-You can update the system prompt from the main task list page, or from an individual task page.
+You can update the system prompt from the main task list page, or from the create task modal.
 
 ## Steering with inline TODOs
 
