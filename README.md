@@ -6,7 +6,7 @@ Run parallel Claudes safely in containers. Jump between their environments to in
 <table>
 <tbody>
 <td align="center">
-<a href="https://imbue-sculptor-releases.s3.us-west-2.amazonaws.com/sculptor/Sculptor.dmg" target="_blank"><strong>Download for Mac (Apple Silicon)</strong></a>
+<a href="https://tryimbue.link/g88kYqM" target="_blank"><strong>Download for Mac (Apple Silicon)</strong></a>
 </td>
 <td align="center">
 <a href="https://discord.gg/sBAVvHPUTE" target="_blank"><strong>Join us on Discord</strong></a>
@@ -49,14 +49,14 @@ Sculptor is built by the team at [Imbue](https://imbue.com).
 > [!IMPORTANT]
 > Join our [Discord](https://discord.gg/sBAVvHPUTE) for dedicated support and up-to-date info from the Imbue team! Our whole team's in Discord with you, building Sculptor with Sculptor 🙂
 
-<strong>[Download Sculptor for OSX with Apple Silicon here ->](https://imbue-sculptor-releases.s3.us-west-2.amazonaws.com/sculptor/Sculptor.dmg)</strong>
+<strong>[Download Sculptor for OSX with Apple Silicon here ->](https://tryimbue.link/g88kYqM)</strong>
 
 Instructions for Apple Silicon (OSX arm64) follow. Apple Intel and Linux instructions will be updated shortly!
 
 ## 1. Running Sculptor
 *Note: You'll need an Anthropic account to use Sculptor.*
 
-1. Download the .dmg from [here](https://imbue-sculptor-releases.s3.us-west-2.amazonaws.com/sculptor/Sculptor.dmg) and double-click to unpack it into your /Applications folder.
+1. Download the .dmg from [here](https://tryimbue.link/g88kYqM) and double-click to unpack it into your /Applications folder.
 
 2. Enter your email and you should get to the installation wizard. To run Sculptor, you'll need to install Docker Desktop. We'll also install git and mutagen for you, if you already don't have them. As a beta tester, you'll be opted in to send error logs and basic product usage data. Let us know if this is an issue or if you need more information about this! 🙏
 
