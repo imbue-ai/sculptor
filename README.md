@@ -9,6 +9,9 @@ Run parallel Claudes safely in containers. Jump between their environments to in
 <a href="https://tryimbue.link/g88kYqM" target="_blank"><strong>Download for Mac (Apple Silicon)</strong></a>
 </td>
 <td align="center">
+<a href="https://tryimbue.link/XNL0Ken" target="_blank"><strong>Download for Linux</strong></a>
+</td>
+<td align="center">
 <a href="https://discord.gg/sBAVvHPUTE" target="_blank"><strong>Join us on Discord</strong></a>
 </td>
 </tbody>
@@ -51,12 +54,14 @@ Sculptor is built by the team at [Imbue](https://imbue.com).
 
 <strong>[Download Sculptor for OSX with Apple Silicon here ->](https://tryimbue.link/g88kYqM)</strong>
 
-Instructions for Apple Silicon (OSX arm64) follow. Apple Intel and Linux instructions will be updated shortly!
+<strong>[Download Sculptor for Linux here ->](https://tryimbue.link/XNL0Ken)</strong>
+
+Instructions for Apple Silicon (OSX arm64) and Linux follow. Apple Intel instructions will be updated shortly!
 
 ## 1. Running Sculptor
 *Note: You'll need an Anthropic account to use Sculptor.*
 
-1. Download the .dmg from [here](https://tryimbue.link/g88kYqM) and double-click to unpack it into your /Applications folder.
+1. **Mac (Apple Silicon):** Download the .dmg from [here](https://tryimbue.link/g88kYqM) and double-click to unpack it into your /Applications folder. **Linux:** Download the .AppImage from [here](https://tryimbue.link/XNL0Ken), mark it executable (`chmod +x`), and run it.
 
 2. Enter your email and you should get to the installation wizard. To run Sculptor, you'll need to install Docker Desktop. We'll also install git and mutagen for you, if you already don't have them. As a beta tester, you'll be opted in to send error logs and basic product usage data. Let us know if this is an issue or if you need more information about this! 🙏
 
@@ -64,9 +69,9 @@ Instructions for Apple Silicon (OSX arm64) follow. Apple Intel and Linux instruc
   <img width="1312" height="912" alt="Screenshot 2025-09-16 at 8 07 09 PM" src="https://github.com/user-attachments/assets/05d9a6fe-d91a-49e3-9b01-2ff31362c5e0" />
 </p>
 
-4. Provide the Anthropic credentials you'll be using. We plan on pushing out an update soon that allows Claude auth sign-in so you can use your Claude Pro and Max plans!
+3. Provide the Anthropic credentials you'll be using. We plan on pushing out an update soon that allows Claude auth sign-in so you can use your Claude Pro and Max plans!
 
-5. Select the repo you wish to work on. Don't worry, you can select a second repo later and switch between them freely! If there's no git repo installed there, we'll install one.
+4. Select the repo you wish to work on. Don't worry, you can select a second repo later and switch between them freely! If there's no git repo installed there, we'll install one.
 
 ## Installing Docker
 **On Mac**:
