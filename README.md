@@ -349,5 +349,29 @@ Sculptor auto-cleans up its images and containers on a cadence while it's runnin
 docker system prune -af
 ```
 
+# Security
+
+One of the main benefit of using Sculptor is better security (because the agents run in containers), 
+but there are still some important considerations.
+Please read this section carefully if you are operating in a secure environment.
+
+1. **Put your IDE in untrusted mode (if possible).**
+  Most IDEs (VSCode, PyCharm, etc) have an "untrusted mode" that prevents them from running code automatically. 
+  Without this, the IDE may execute code that you have not vetted.
+  For example, VSCode automatically runs `pytest` in order to figure what tests are available, which loads fixtures, which can cause agent-generated code to run while you are in Pairing Mode.
+2. **Only expose secrets that you are comfortable agents using.**
+  You can define secrets to inject into the container by creating a `.env` file in `~/.sculptor/.env`
+  You should only expose secrets that are "safe" for the agent to use.
+  For example, you should *not* put a token to access your actual email account here -- instead, treat it like CI, and only expose a token for a testing mailbox that you don't care about.
+  Otherwise, the agent may be able to take destructive actions (like deleting all your email).
+3. **Do not put secrets anywhere else**
+  Try to avoid baking secrets into your `Dockerfile`, putting them in prompts that you send to the agent, sticking them in your code, etc.
+  We do our best to avoid putting secrets into logs, error reports, etc., but if you shove them in random places, it's possible that they will end up somewhere you don't want them to be.
+4. **Network isolation is up to you (right now.)**
+  We plan to make it easier to restrict network access to particular agents, but right now the containers have full access.
+  If you need to restrict network access, you should do that yourself (for example, by running Sculptor on a machine without internet access or by configuring your own firewall).
+
+If you discover any security issues, please *do not* post them as public issues on GitHub, but email us at [security@imbue.com](mailto:security@imbue.com)
+
 # License
 © Imbue, Inc. All rights reserved. Use is subject to Imbue's [Research Preview Terms of Service](https://imbue.com/terms/).
