@@ -1,0 +1,4 @@
+ Host *
+     IdentityAgent none
+     StrictHostKeyChecking no
+     UserKnownHostsFile /dev/null

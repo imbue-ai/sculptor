@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+/* Style media indicators */
+.media-indicators {
+  background-color: silver;
+  color: black;
+}
+
+/* Media preview section styles */
+.media-preview-section {
+    margin: 20px 0;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+}
+
+.media-preview-section h5 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: #495057;
+}
+
+.media-preview-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    align-items: flex-start;
+}
+
+.media-preview-item {
+    flex: 0 1 calc(50% - 50px);
+    min-width: 250px;
+    text-align: center;
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 10px;
+}
+
+.media-preview-image,
+.media-preview-video {
+    max-width: 100%;
+    height: auto;
+    max-height: 100%;
+    display: block;
+    margin: 0 auto 8px;
+    border-radius: 2px;
+}
+
+.media-preview-video {
+    width: 100%;
+}
+
+.media-preview-caption {
+    font-size: 0.85em;
+    color: #6c757d;
+    word-break: break-all;
+    margin-top: 8px;
+}
+
+.proplist td, .proplist th {
+    border: 1px solid gray;
+}
+</style>
+<h1>
+    Test Report : {{ report.title }}
+</h1>
+
+{% if show_toc %}
+<a id="toc"></a>
+<table class="index-table">
+    <tr>
+        <td>
+            <ul class="toc">
+            {% for suite in report %}
+                {% for classname in suite.classes %}
+                <li>{{classname}}
+                <ul>
+                    {% for test in suite.classes[classname].cases %}
+                    <li class="outcome outcome-{{test.outcome()}}">
+                        <a href="#{{test.anchor()}}">{{test.name}}</a>{{test.display_suffix}}
+                        {% if test.properties %}
+                            {% set media_count = namespace(value=0) %}
+                            {% for prop in test.properties %}
+                              {% if prop.name.startswith("image_path-") or prop.name.startswith("video_path-") or prop.name.startswith("playwright_trace_path-") %}
+                                    {% set media_count.value = media_count.value + 1 %}
+                                {% endif %}
+                            {% endfor %}
+                            {% if media_count.value > 0 %}
+                              <a href="#{{test.anchor()}}-media">
+                                <span class="media-indicators">⬇️ media available ⬇️</span>
+                              </a>
+                            {% endif %}
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                </li>
+                {% endfor %}
+            {% endfor %}
+            </ul>
+        </td>
+        <td class="failure-index">
+            <ul class="toc">
+            {% for suite in report %}
+                {% for classname in suite.classes %}
+                    {% for test in suite.classes[classname].cases %}
+                    {% if test.failed() %}
+                    <li>
+                        <a href="#{{test.anchor()}}">{{test.prefix()}} {{test.fullname()}}</a>
+                        {% if test.properties %}
+                            {% set media_count = namespace(value=0) %}
+                            {% for prop in test.properties %}
+                              {% if prop.name.startswith("image_path-") or prop.name.startswith("video_path-") or prop.name.startswith("playwright_trace_path-") %}
+                                    {% set media_count.value = media_count.value + 1 %}
+                                {% endif %}
+                            {% endfor %}
+                            {% if media_count.value > 0 %}
+                              <a href="#{{test.anchor()}}-media">
+                                <span class="media-indicators">⬇️ media available ⬇️</span>
+                              </a>
+                            {% endif %}
+                        {% endif %}
+                    </li>
+                    {% endif %}
+                    {% endfor %}
+                {% endfor %}
+            {% endfor %}
+            </ul>
+        </td>
+    </tr>
+</table>
+{% endif %}
+
+{% for suite in report %}
+    <div class="testsuite">
+        <h2>Test Suite: {{ suite.name }}</h2>
+        <a id="{{ suite.anchor() }}"></a>
+        {% if suite.package %}
+        <span>Package: {{suite.package}}</span>
+        {% endif %}
+        {% if suite.properties %}
+        <h3>Suite Properties</h3>
+        <table class="proplist">
+            {% for prop in suite.properties %}
+            <tr>
+                <th>{{prop.name}}</th><td>{{prop.value}}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% endif %}
+        <h3>Results</h3>
+        <table class="proplist">
+            <tr>
+                <th>Duration</th><td>{{suite.duration |round(3)}} sec</td>
+            </tr>
+            <tr>
+                <th>Tests</th><td>{{suite.all() |length}}</td>
+            </tr>
+            <tr>
+                <th>Failures</th><td>{{suite.failed()| length}}</td>
+            </tr>
+        </table>
+
+        <div class="testclasses">
+            <h3>Tests</h3>
+            {% for classname in suite.classes %}
+            <div class="testclass">
+                <h4>{{classname}}</h4>
+                <div class="testcases">
+                {% for test in suite.classes[classname].cases %}
+                    <div class="test outcome outcome-{{test.outcome()}}">
+                        <a id="{{test.anchor()}}"></a>
+                        <table class="proplist">
+                            <tr><th>Test case:</th><td><b>{{test.name}}</b></td></tr>
+                            <tr><th>Outcome:</th><td>{{test.outcome().title()}}</td></tr>
+                            <tr><th>Duration:</th><td>{{test.duration|round(3)}} sec</td></tr>
+                        {% if test.failed() %}
+                            <tr><th>Failed</th><td>{{test.failure_msg}}</td></tr>
+                        {% endif %}
+                        {% if test.skipped %}
+                            <tr><th>Skipped</th><td>{{test.skipped_msg}}</td></tr>
+                        {% endif %}
+                        </table>
+
+                        {% if test.failed() %}
+                        <pre>{{test.failure}}</pre>
+                        {% endif %}
+                        {% if test.skipped %}
+                        <pre>{{test.skipped}}</pre>
+                        {% endif %}
+
+                        {% if test.properties %}
+                        {# Collect media properties for preview #}
+                        {% set media_items = [] %}
+                        {% for prop in test.properties %}
+                            {% if prop.name.startswith("image_path-") or prop.name.startswith("video_path-") %}
+                                {% set _ = media_items.append(prop) %}
+                            {% endif %}
+                        {% endfor %}
+
+                        {# Display media preview if we have any media #}
+                        {% if media_items %}
+                        <div class="media-preview-section" id="{{test.anchor()}}-media">
+                            <h5>Media Artifacts</h5>
+                            <div class="media-preview-grid">
+                                {% for media_prop in media_items %}
+                                <div class="media-preview-item">
+                                    {% if media_prop.name.startswith("image_path-") %}
+                                        <img src="{{file_access_url}}{{media_prop.value}}"
+                                             alt="{{media_prop.value}}"
+                                             class="media-preview-image">
+                                    {% elif media_prop.name.startswith("video_path-") %}
+                                        <video src="{{file_access_url}}{{media_prop.value}}"
+                                               controls
+                                               preload="none"
+                                               class="media-preview-video">
+                                            Your browser does not support the video tag.
+                                        </video>
+                                    {% endif %}
+                                    <div class="media-preview-caption">{{media_prop.value.split('/')[-1]}}</div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <table class="proplist">
+                            {% for prop in test.properties %}
+                            <tr>
+                              <th>{{prop.name}}</th><td>{{prop.value}}</td>
+                              {#
+                                the naming convention here is matching that of `record_generated_files` fixture in
+                                sculptor/tests/integration/frontend/conftest.py
+
+                                the special properties are recorded relative to the test root directory that is available
+                                through the `file_access_url` injected here from `scripts/gitlab_ci/run_test.py`:
+                              #}
+                              {% if prop.name.startswith("test_results_path") %}
+                                <td><a href="{{file_access_url}}{{prop.value}}">Browse All Artifacts</a></td>
+                              {% elif prop.name.startswith("image_path-") %}
+                                <td><a href="{{file_access_url}}{{prop.value}}">View Image</a></td>
+                              {% elif prop.name.startswith("video_path-") %}
+                                <td><a href="{{file_access_url}}{{prop.value}}">View Video</a></td>
+                              {% elif prop.name.startswith("playwright_trace_path-") %}
+                                <td><a href="{{file_access_url}}{{prop.value}}">Download Playwright Trace</a></td>
+                              {% elif prop.name.startswith("directory_path-") %}
+                                <td><a href="{{file_access_url}}{{prop.value}}">Browse Subdirectory</a></td>
+                              {% else %}
+                                <td></td>
+                              {% endif %}
+                            </tr>
+                            {% endfor %}
+                        </table>
+                        {% endif %}
+                        {% if test.repro_command %}
+                        <h4>Reproduction Command</h4>
+                        <pre>{{test.repro_command}}</pre>
+                        {% endif %}
+                        {% if test.stdout or test.stdout_link %}
+                        <div class="stdout"><i><a target="_blank" href="{{test.stdout_link}}">Stdout</a></i><br>
+                            <pre>{{test.stdout}}</pre>
+                        </div>
+                        {% endif %}
+                        {% if test.stderr or test.stderr_link %}
+                        <div class="stderr"><i><a target="_blank" href="{{test.stderr_link}}">Stderr</a></i><br>
+                            <pre>{{test.stderr}}</pre>
+                        </div>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% if suite.stdout or suite.stderr %}
+        <h3>Suite stdout:</h3>
+        <pre class="stdio">{{suite.stdout}}</pre>
+        <h3>Suite stderr:</h3>
+        <pre class="stdio">{{suite.stderr}}</pre>
+    {% endif %}
+{% endfor %}
+
+{% endblock %}

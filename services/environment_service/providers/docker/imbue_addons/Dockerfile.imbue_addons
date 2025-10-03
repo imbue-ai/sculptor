@@ -1,0 +1,131 @@
+# Imbue's "wrapper" Dockerfile, which builds atop the user's Dockerfile.
+# The Imbue control plane is expected to exist at "/imbue" and "/nix/store", but is not
+# provided as a layer, but rather as a volume mounted at "/imbue".
+# This means that it can't be used during image build, but only after the container is created.
+# A symlink from /nix pointing to /imbue/nix gets /nix into the right location.
+
+# A note about $PATH:
+# This image is trying to support two logically distinct environments:
+# 1. The user's environment, configured in the image this will inherit from.
+# 2. The Imbue control plane, mostly mounted inside /imbue, with a bit of extra stuff in /imbue_addons.
+# To support this, we set two different $PATH variables:
+# 1. _IMBUE_USER_ORIGINAL_PATH: The user's original $PATH, plus a few little Imbue bits.
+# 2. _IMBUE_CONTROL_PLANE_PATH: The Imbue control plane $PATH.
+# Mixing these two environments is bad and leads to weird cross-talk, so we try to avoid it -- just pick one or the other.
+# The default $PATH for using this image is PATH=_IMBUE_CONTROL_PLANE_PATH.
+# Otherwise, commands run from python would be super annoying.
+# But when we run both `claude` and terminal, we restore the user's original PATH, so that they can use their tools.
+
+# This alpine image is never used, but Docker gave a warning if there was no default here.
+# Instead, we pass the user's image as the base image to derive from.
+ARG BASE_IMAGE=debian:stable-slim
+FROM $BASE_IMAGE
+
+ARG BUILT_FROM_SCULPTOR_VERSION=unknown
+ARG BUILT_FROM_SCULPTOR_GIT_HASH=unknown
+
+ARG USER_UID
+ARG GROUP_GID
+
+# We save their original PATH so that we can restore it when we run claude and terminal.
+ENV _IMBUE_USER_ORIGINAL_PATH=$PATH
+
+# Set this path, but it doesn't work yet because we don't have the control plane mounted.
+ENV _IMBUE_CONTROL_PLANE_PATH=/imbue_addons/agent_path_extension_bin:/imbue/bin:/imbue/nix_bin
+
+# Even if the user ended their Dockerfile not as root, we need to be root for these steps.
+USER root
+
+# Creat /nix via symlink.  The target isn't available yet because the volume isn't mounted, but that's okay.
+RUN ln -s /imbue/nix /nix || { echo "Imbue's control plane won't currently work if the image already contains /nix"; false; }
+
+WORKDIR /imbue_addons
+
+# We can't run this yet because it requires the control plane to be mounted.
+COPY imbue_post_container_build.sh bash_with_user_env.sh ./
+# Assumption about user image: chmod.
+RUN chmod +x ./imbue_post_container_build.sh ./bash_with_user_env.sh
+
+# This is the directory that we'll put on end of the PATH when running claude and terminal.
+# Reason for bash: Claude is unhappy if there's no bash on the PATH and Alpine doesn't have it.
+WORKDIR /imbue_addons/agent_path_extension_bin/
+RUN ln -s /imbue/bin/imbue-cli.sh ./imbue-cli.sh && \
+    ln -s /imbue/nix_bin/bash ./bash
+# Our unit tests want to to be able to overwrite the claude binary to force it to fail, so we put a writable version here.
+COPY imbue-cli.sh claude ./
+# Assumption about user image: chmod.
+RUN chmod a+rx ./claude ./imbue-cli.sh
+
+# Works on both Ubuntu and Alpine (which doesn't have useradd).
+RUN (useradd -m -d /home/sculptoruser -s /imbue/nix_bin/bash sculptoruser || adduser -D sculptoruser) && passwd -d sculptoruser
+
+USER root
+WORKDIR /home/sculptoruser/
+
+# When we ssh into the container, we want to use the Imbue control plane PATH.
+# Without this, git can't find git-receive-pack when it ssh's into the container.
+RUN mkdir -p /home/sculptoruser/.ssh && \
+    chown sculptoruser:sculptoruser /home/sculptoruser/.ssh && \
+    chmod 700 /home/sculptoruser/.ssh
+RUN cat > /home/sculptoruser/.ssh/environment <<EOF
+PATH=${_IMBUE_CONTROL_PLANE_PATH}
+EOF
+
+# Create directories and tmux config
+RUN mkdir -p /home/sculptoruser/artifacts /home/sculptoruser/state && \
+    echo "set -g status-style bg=#ADDDC0,fg=#3B352B" > /home/sculptoruser/.tmux.conf
+
+# Create the .ssh directory
+
+COPY --from=ssh_keypair_dir --chown=sculptoruser:sculptoruser . /home/sculptoruser/.ssh
+RUN cat /home/sculptoruser/.ssh/id_rsa.pub >> /home/sculptoruser/.ssh/authorized_keys
+RUN mkdir -p /run/sshd && \
+    chmod 755 /run/sshd
+
+RUN chown -R sculptoruser:sculptoruser /home/sculptoruser/
+RUN mkdir /code && chown sculptoruser:sculptoruser /code
+
+# Copy in the user's repo tarball and extract it. This preserves mtimes, allowing mutagen
+# to run 5x faster as it brings the in-container repo up to date for new tasks.
+COPY --from=imbue_user_repo --chown=sculptoruser:sculptoruser /repo.tar /tmp/repo.tar
+
+# By setting the user before extraction, there's no need to go in and recursively chown
+USER sculptoruser
+
+# Ignore spammed logs from tar related to apple headers
+RUN cd /code && \
+    tar -xf /tmp/repo.tar && \
+    rm /tmp/repo.tar
+
+USER root
+# Assumption about user image: cat, date.
+# We don't pass date through an ARG, since that would invalidate the Docker build cache every time.
+RUN cat > /imbue_addons/version.json <<EOF
+{
+  "built_at_timestamp": "$(date +%Y-%m-%dT%H:%M:%S%z)",
+  "built_from_sculptor_version": "${BUILT_FROM_SCULPTOR_VERSION}",
+  "built_from_sculptor_git_hash": "${BUILT_FROM_SCULPTOR_GIT_HASH}"
+}
+EOF
+
+# We also want the control plane PATH active when we ssh into the container.
+RUN cat >> /home/sculptoruser/.profile <<EOF
+export PATH=${_IMBUE_CONTROL_PLANE_PATH}
+EOF
+
+# Last step, since once we set PATH, we can't run much else anymore.
+# There's no point in setting this earlier, since /imbue/nix doesn't exist yet,
+# and /imbue/nix_bin just points into that.
+# This is the Imbue control plane PATH.  For running user tools, we should use _IMBUE_USER_ORIGINAL_PATH.
+# This PATH provides bash, git, claude, mutagen, sshd, tmux, ttyd, python, etc.
+# To the extent possible, we don't want the user's toolchain mixing with ours.  Don't cross the streams!
+ENV PATH=${_IMBUE_CONTROL_PLANE_PATH}
+
+# We are leaving the default user as root, rather than restoring to what the user had in the image we're wrapping,
+# because Thad doesn't know how to do that.
+
+# The ENTRYPOINT will be inherited from the user's image if not overridden here!
+ENTRYPOINT []
+
+# TODO: Consider running this from Python rather asumming it will be defaulted here.
+CMD ["tail", "-f", "/dev/null"]

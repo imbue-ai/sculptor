@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>
+    Reports Matrix
+</h1>
+
+<table class="matrix-table">
+    {% set report_names = matrix.report_order() %}
+    {% set n_reports = report_names.__len__() %}
+    {% if n_reports > 0 %}
+    <tr><!-- top row, stats and each matrix axis -->
+        <td colspan="1" rowspan="{{n_reports + 2}}"> <!-- stats -->
+            <table class="stats-table">
+                {% for outcome in matrix.result_stats %}
+                <tr>
+                    <th class="{{outcome}}">{{outcome.title()}}</th>
+                    <td>{{matrix.result_stats[outcome]}}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </td>
+        <td colspan="{{n_reports + 1}}"></td>
+
+    </tr>
+    {% endif %}
+    <!-- matrix column index - {{report_names}} -->
+    {% for i in range(n_reports) %}
+    <tr>
+        <td colspan="{{n_reports + 1 - i}}" class="matrix-axis-name {% if (n_reports - i) % 2 == 0 %}matrix-even{% endif %}">
+            <a href="{{report_names[n_reports - 1 - i]}}.html">{{matrix.short_axis(report_names[n_reports - 1 - i])}}</a>
+        </td>
+        {% for n in range(i) %}
+        <td class="matrix-axis-line {% if (n_reports - n) % 2 != i % 2 %}matrix-even{% endif %}"></td>
+        {% endfor %}
+    </tr>
+    {% endfor %}
+    <tr>
+        {% for n in range(n_reports + 1) %}
+        <td class="matrix-axis-line {% if n % 2 == 0 %}matrix-even{% endif %}"></td>
+        {% endfor %}
+    </tr>
+
+    <!-- test results by class/test -->
+    {% for classname in matrix.classes %}
+    <tr>
+        <th class="matrix-classname" colspan="2">{{classname}}</th>
+        {% for n in range(n_reports) %}
+        <td class="matrix-axis-line {% if n % 2 == 1 %}matrix-even{% endif %}"></td>
+        {% endfor %}
+    </tr>
+    {% for casename in matrix.casenames[classname] %}
+    {% set xcase = matrix.cases[classname][casename] %}
+    <tr>
+        <th class="matrix-casename">{{casename}}</th>
+        <td class="matrix-casename matrix-result-combined">
+            {{ matrix.combined_result_list(classname, casename)[1] }}
+        </td>
+        {% for n in range(n_reports) %}
+        {% set axis = report_names[n] %}
+
+        <td class="matrix-axis-line {% if n % 2 == 1 %}matrix-even{% endif %}">
+            {% if axis in xcase %}
+            <a href="{{axis}}.html#{{xcase[axis].anchor()}}">
+                        <span class="matrix-result matrix-result-{{xcase[axis].outcome()}}">
+                            {{ matrix.short_outcome(xcase[axis].outcome()) }}
+                        </span>
+            </a>
+            {% else %}
+            <span class="matrix-result">&nbsp;</span>
+            {% endif %}
+
+        </td>
+        {% endfor %}
+        {% endfor %}
+    </tr>
+    {% endfor %}
+
+</table>
+{% endblock %}

@@ -1,0 +1,4 @@
+{
+  "name": "Sculptor Default Devcontainer",
+  "image": "ghcr.io/imbue-ai/sculptor_default_devcontainer:20250918@sha256:d5a6cdf5cfb6cc212ef9c5fef2fa64149450e6776adda340a9a2ed24319050c5"
+}

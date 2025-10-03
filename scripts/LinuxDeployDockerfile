@@ -1,0 +1,17 @@
+FROM node:20
+
+# Install basic development tools and iptables/ipset
+RUN apt update && apt install -y less \
+  sudo \
+  git
+
+
+# Install uv per their instructions
+COPY --from=ghcr.io/astral-sh/uv:0.6.8 /uv /uvx /bin/
+
+COPY dist/sculptor-*.tar.gz /home/node/
+
+#Make directory /root/.sculptor
+RUN mkdir -p /root/.sculptor
+
+# Thats it.

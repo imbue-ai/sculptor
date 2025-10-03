@@ -1,0 +1,37 @@
+# serializer version: 1
+# name: test_parse_imbue_cli_content[tool_result0]
+  "Check 'verify' found 6 issues"
+# ---
+# name: test_parse_imbue_cli_content[tool_result0].1
+  ImbueCLIToolContent(content_type='imbue_cli', action_outputs=[ImbueCLIActionToolContent(content_type='imbue_cli_action', check='verify', user_display=None, summary=None, issues=[ImbueCLIActionIssue(description='', severity='CRITICAL', location=None, object_type=None, debug_full_details='{"key": {"command": "imbue_verify", "identifier": "correctness_syntax_issues:sculptor/sculptor/agents/claude_code_sdk/utils.py: 167-170"}, "severity": "CRITICAL"}'), ImbueCLIActionIssue(description='', severity='CRITICAL', location=None, object_type=None, debug_full_details='{"key": {"command": "imbue_verify", "identifier": "incomplete_integration_with_existing_code:sculptor/sculptor/agents/claude_code_sdk/utils.py: 161"}, "severity": "CRITICAL"}'), ImbueCLIActionIssue(description='', severity='NIT', location=None, object_type=None, debug_full_details='{"key": {"command": "imbue_verify", "identifier": "documentation_implementation_mismatch:sculptor/sculptor/agents/claude_code_sdk/utils.py: 162"}, "severity": "NIT"}'), ImbueCLIActionIssue(description='', severity='CRITICAL', location=None, object_type=None, debug_full_details='{"key": {"command": "imbue_verify", "identifier": "logic_error:sculptor/sculptor/agents/claude_code_sdk/utils.py: 165-170"}, "severity": "CRITICAL"}'), ImbueCLIActionIssue(description='', severity='CRITICAL', location=None, object_type=None, debug_full_details='{"key": {"command": "imbue_verify", "identifier": "runtime_error_risk:sculptor/sculptor/agents/claude_code_sdk/utils.py: 170"}, "severity": "CRITICAL"}'), ImbueCLIActionIssue(description='', severity='ERROR', location=None, object_type=None, debug_full_details='{"key": {"command": "imbue_verify", "identifier": "logic_error:sculptor/sculptor/agents/claude_code_sdk/utils.py: 161-172"}, "severity": "ERROR"}')])])
+# ---
+# name: test_parse_imbue_cli_content[tool_result1]
+  'Executed 0 checks and found no issues'
+# ---
+# name: test_parse_imbue_cli_content[tool_result1].1
+  ImbueCLIToolContent(content_type='imbue_cli', action_outputs=[])
+# ---
+# name: test_parse_imbue_cli_content[tool_result2]
+  "Check 'verify' found no issues"
+# ---
+# name: test_parse_imbue_cli_content[tool_result2].1
+  ImbueCLIToolContent(content_type='imbue_cli', action_outputs=[ImbueCLIActionToolContent(content_type='imbue_cli_action', check='verify', user_display=None, summary=None, issues=[])])
+# ---
+# name: test_parse_imbue_cli_content_retrieve
+  'test.py...'
+# ---
+# name: test_parse_imbue_cli_content_retrieve.1
+  ImbueCLIToolContent(content_type='imbue_cli', action_outputs=[ImbueCLIActionToolContent(content_type='imbue_cli_action', check='retrieve', user_display=None, summary='test.py\ntest.js', issues=[])])
+# ---
+# name: test_parse_imbue_cli_content_retrieve.2
+  'test.py'
+# ---
+# name: test_parse_imbue_cli_content_retrieve.3
+  ImbueCLIToolContent(content_type='imbue_cli', action_outputs=[ImbueCLIActionToolContent(content_type='imbue_cli_action', check='retrieve', user_display=None, summary='test.py', issues=[])])
+# ---
+# name: test_parse_imbue_cli_content_retrieve.4
+  'No files found matching the query'
+# ---
+# name: test_parse_imbue_cli_content_retrieve.5
+  ImbueCLIToolContent(content_type='imbue_cli', action_outputs=[ImbueCLIActionToolContent(content_type='imbue_cli_action', check='retrieve', user_display=None, summary='', issues=[])])
+# ---
