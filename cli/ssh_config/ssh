@@ -1,0 +1,3 @@
+#!/bin/bash
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+exec ssh -F "$SCRIPT_DIR/config" -i "$SCRIPT_DIR/../task_container_keypair/id_rsa" "$@"
