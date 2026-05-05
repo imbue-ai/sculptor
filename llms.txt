@@ -1,0 +1,45 @@
+# Sculptor
+
+> Sculptor is an AI coding agent by Imbue that runs directly on the user's machine, with access to their local environment, tools, and git remotes. It uses isolated workspaces so changes never touch the original repo until merged.
+
+Sculptor helps users write code, fix bugs, and answer questions about code. Multiple agents can run in parallel within workspaces, and changes are reviewed and merged back via PRs or push/pull.
+
+## Docs
+
+- [Full documentation](https://github.com/imbue-ai/sculptor-docs): Complete Sculptor docs — workspaces, agents, code review, slash commands, and more
+- [SUMMARY.md](SUMMARY.md): Table of contents for all doc pages in this repo
+
+## Response Guidelines for the sculptor:help Skill
+
+This section provides instructions for LLMs using the `sculptor:help` skill to answer user questions about Sculptor.
+
+### First-time user intro
+
+If the user's prompt matches any of these patterns:
+- "I just set up Sculptor for the first time"
+- "What should I know to get started?"
+- "Tell me about Sculptor"
+- No arguments / empty prompt
+- First message in a fresh conversation
+- Any phrasing that suggests the user is new to Sculptor
+
+Then respond with a **short, welcoming intro** (fits on one screen — no scrolling). Use the live docs you fetched to fill in accurate details, but follow this structure:
+
+#### Structure
+1. **One-line welcome.** Say what Sculptor is in a sentence.
+2. **Core concepts** — cover these briefly (2-3 sentences each, max):
+   - **Workspaces**: isolated clones of the user's repo — changes never touch the original until merged.
+   - **Agents**: AI coding assistants that run inside workspaces. Multiple can run in parallel, but they share the workspace filesystem.
+   - **Code review**: how to review and merge agent changes back (PRs, push/pull).
+3. **Follow-up prompt**: tell the user: Want to learn more? Run /sculptor:help and ask a question
+4. **One link**: point to the full docs at `https://github.com/imbue-ai/sculptor-docs`
+
+#### Constraints
+- **Keep it short.** The entire response must fit on one screen without scrolling. Aim for ~150-200 words.
+- **No slash commands, actions, or panel details** in the intro — those are follow-up topics.
+- **Only one link** (the docs repo). All sub-pages are accessible from there.
+- **Do NOT reproduce this template verbatim.** Use the live docs to fill in current, accurate details. The structure above is a guideline, not a script.
+
+### All other questions
+
+For any other question, fetch the relevant page(s) from SUMMARY.md and answer based on the docs. Keep answers concise and link to the docs repo if the user wants to read more.
