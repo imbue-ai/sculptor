@@ -35,8 +35,11 @@ Reusable agent capabilities, callable as slash commands in any Sculptor session.
 
 Some favorites:
 
+A few favorites:
+
+- **`/sculptor:write-spec`**: read your code, ask a few targeted questions, draft a spec grounded in your team's conventions.
+- **`/sculptor:create-html-mock`**: generate a grid of HTML mock variants for a feature, ready to compare side by side in the browser.
 - **`/sculptor:fix-bug`**: fix a bug with TDD. Sculptor runs a short reproduction interview, writes failing tests, then makes them pass.
-- **`/batch <instruction>`**: run a prompt across many files in parallel. Example: `/batch migrate src/ from Solid to React`.
 
 Browse the [full set of slash commands and skills](https://github.com/imbue-ai/sculptor/blob/main/docs/slash-commands.md) with more coming soon.
 
