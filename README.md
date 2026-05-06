@@ -2,24 +2,57 @@
 
 [//]: # (<img src="images/sculptor-hero.png" width="70%">)
 
-Sculptor is a desktop app for running coding agents in parallel. Each workspace is an isolated copy of your repo, so multiple tasks can progress at the same time without conflicts.
+Build product with grounded, parallel coding agents.
 
-**Download:**
+Sculptor is a desktop app for running coding agents in parallel. Each task gets an isolated copy of your repo so agents can work side by side without merge chaos. The interface is clean, snappy, and modular. 
+
+Open source, in active beta, and designed for teams willing to deploy early and share their feedback.
+
+## Download
 - [Mac (Apple Silicon)](https://tryimbue.link/sculptor-for-apple-silicon)
 - [Linux](https://tryimbue.link/sculptor-for-linux)
 
-**Getting started:** Connect a repo, create a workspace (an isolated clone), and prompt an agent to complete a task. When it's done, review the changes and merge them back into main. Create multiple agents in a workspace when you want fresh context or want agents to collaborate on the same problem.
+**Getting started:** Connect a repo, create a workspace (an isolated copy of your code), and prompt an agent. Review the changes when it's done and merge back to main. To explore a different project, open another workspace. To collaborate with another agent on the same project, add one to the existing workspace.
 
-> Report any bugs or leave any feedback as a [GitHub issue](https://github.com/imbue-ai/sculptor/issues/new).
 
----
+## Feedback
 
-## What's in these docs
+[Open a GitHub issue](https://github.com/imbue-ai/sculptor/issues/new) for any bug, idea, or feedback.
 
-- [Workspaces](docs/workspaces.md) — how workspaces map to repos and how to create one
-- [Agents](docs/agents.md) — running multiple agents and tracking complex tasks
-- [Interface](docs/interface.md) — the chat panel, model picker, file references, context window, and terminal
-- [Actions](docs/actions.md) — saving prompts you use repeatedly
-- [Changes](docs/changes.md) — reviewing and committing agent changes
-- [Slash Commands](docs/slash-commands.md) — built-in commands and skills available in every session
-- [Container Backend](docs/container-backend.md) — running the Sculptor backend in a Docker container or remote environment
+Deploying Sculptor as a team? We open a private Slack channel for teams willing to share feedback in beta. Raise a GitHub issue to request access.
+
+
+## See it in action
+
+**Skills to ship faster:** The full library in one session: spec, mocks, and fix-bug across parallel workspaces. [Watch demo video.](https://www.loom.com/share/c9a9546122024844aeabff5b5a68514c)
+
+**Fixing UI bugs fast:** `/sculptor:fix-bug` runs a short reproduction interview, writes failing tests, then makes them pass. Agents that ask before they answer. [Watch demo video.](https://www.loom.com/share/45ae363eb4fa40cfb04f5ade93754477)
+
+
+## Skills
+
+Reusable agent capabilities, callable as slash commands in any Sculptor session. They handle work you'd otherwise re-prompt for every time.
+
+Some favorites:
+
+- **`/sculptor:fix-bug`**: fix a bug with TDD. Sculptor runs a short reproduction interview, writes failing tests, then makes them pass.
+- **`/batch <instruction>`**: run a prompt across many files in parallel. Example: `/batch migrate src/ from Solid to React`.
+
+Browse the [full set of slash commands and skills](https://github.com/imbue-ai/sculptor/blob/main/docs/slash-commands.md) with more coming soon.
+
+
+## Docs
+
+- [Workspaces](docs/workspaces.md): how they map to repos and how to create one
+- [Agents](docs/agents.md): running multiple agents and complex tasks
+- [Interface](docs/interface.md): chat, models, file refs, and terminal
+- [Actions](docs/actions.md): saving prompts you use repeatedly
+- [Changes](docs/changes.md): reviewing and committing agent changes
+- [Slash Commands](docs/slash-commands.md): built-in commands and skills
+- [Container Backend](docs/container-backend.md): running in a Docker or remote
+
+
+
+## About Imbue
+
+Sculptor is open source and built by [Imbue](https://imbue.com). We make tools that help people think, create, and build with code. We share our work openly because progress in AI should be collaborative and developer-driven, with agents that stay accountable to the people they serve.
