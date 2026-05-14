@@ -6,7 +6,7 @@ Actions are saved prompts. If you have a task you run repeatedly, like a code re
 
 ## Creating an action
 
-In the Actions panel on the right side of the Sculptor window, click **Add Your First Action** (or the **+** button if you already have some). Give it a name and write the prompt you want to save.
+In the Actions panel on the right side of the Sculptor window, click the **+** button in the panel header. Give the action a name and write the prompt you want to save.
 
 ![Creating a new action](../images/create-action.png)
 
@@ -24,6 +24,6 @@ Actions are a good fit for things like:
 
 ---
 
-## Importing actions
+## Organizing actions
 
-If you have a set of actions you want to reuse across workspaces, click **Import** at the bottom of the Actions panel to bring them in from another workspace or a saved file.
+Right-click inside the Actions panel to add a new action or a group. Groups let you keep related actions together — for example, a "Review" group and a "Tests" group — and you can collapse a group's header to hide its actions.

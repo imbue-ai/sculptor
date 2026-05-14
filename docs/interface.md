@@ -36,19 +36,21 @@ The model picker sits in the chat input toolbar, to the left of the send button.
 
 ## Attaching context
 
-**Images** — Click the file-upload button on the left side of the chat input toolbar to attach images to your next message. This is useful for pasting screenshots of UI bugs, error dialogs, or design references. You can also drag and drop images onto the input.
+The **+** button on the left side of the chat input toolbar opens a menu for adding context to your next message. The same menu opens when you type `@` in the input. From it you can:
 
-**@ file mentions** — Click the **@** button (or type `@` directly) and then the filename to reference a specific file in your repo. The agent will load that file into its context. This is useful when you want to point the agent at a specific module without relying on it to find the right file on its own.
+- **Files & folders** — point the agent at a specific file or directory in your repo. The agent will load it into context.
+- **Skills** — start a slash command. (You can also type `/` directly to do this.)
+- **Images** — attach a screenshot, design reference, or other image. You can also drag and drop images onto the input, or paste them directly.
 
-![File-upload and @ mention buttons in the chat input toolbar](../images/attach-context.png)
+![Plus-button menu in the chat input toolbar](../images/attach-context.png)
 
 ---
 
-## Context window indicator
+## Tracking context usage
 
-The context window indicator is a circular arc button on the left side of the chat input toolbar that fills up as the conversation uses more of the model's context. Hover for a tooltip showing remaining context; click to open a popover with **Compact Context** (summarizes the history) and **Clear Context** (starts a new thread) buttons.
+After each agent turn, the turn footer shows how much of the model's context window the conversation has used — for example, **45% context**. Click the percentage to see a token breakdown.
 
-![Context window indicator](../images/context-window-indicator.png)
+To free up context, use `/compact` (summarize the conversation so far) or `/clear` (start a fresh conversation). See [Slash Commands](slash-commands.md) for details.
 
 ---
 
@@ -66,7 +68,7 @@ The right side of the chat input toolbar — between the message input and the s
 
 ## Slash commands
 
-Type `/` in the input box to open a list of available commands and skills. These include built-in session commands like `/clear` and `/compact`, skills like `/batch` and `/simplify`, and the `sculptor:*` skills bundled with the app. See [Slash Commands](slash-commands.md) for the full reference.
+Type `/` in the input box to open a list of available commands and skills. These include conversation commands like `/clear` and `/compact`, workflow skills like `/batch` and `/simplify`, and the `sculptor:*` skills bundled with the app. See [Slash Commands](slash-commands.md) for the full reference.
 
 ![Slash command picker](../images/slash-commands.png)
 
