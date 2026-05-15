@@ -6,7 +6,7 @@ Build product with grounded, parallel coding agents.
 
 Sculptor is a desktop app for running coding agents in parallel. Each task gets an isolated copy of your repo so agents can work side by side without merge chaos. The interface is clean, snappy, and modular. 
 
-Open source, in active beta, and designed for teams willing to deploy early and share their feedback.
+Sculptor is currently in active beta and designed for teams willing to deploy early and share their feedback.
 
 ## Download
 - [Mac (Apple Silicon)](https://tryimbue.link/sculptor-for-apple-silicon)
