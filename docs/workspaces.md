@@ -18,7 +18,7 @@ The repo and branch are shown in the top bar of the Sculptor window:
 
 ![Repo and branch shown in the top bar](../images/workspace-path.png)
 
-For a workspace cloned from a repo called `api-server` off the `main` branch, the top bar reads `api-server › main`. Click the repo name to open a dropdown with "Open folder", "Copy path", and "Open with…" shortcuts for the clone directory; click the branch name to copy it to your clipboard.
+For a workspace cloned from a repo called `api-server` off the `main` branch, the top bar reads `api-server › main`. Click the repo name to open a dropdown with **Open folder**, **Copy relative path**, **Copy path**, and one entry per app you have installed for opening the directory (your editor, your terminal, and so on). Click the branch name to copy it to your clipboard.
 
 ---
 

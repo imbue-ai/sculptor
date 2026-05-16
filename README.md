@@ -33,12 +33,10 @@ Deploying Sculptor as a team? We open a private Slack channel for teams willing 
 
 Reusable agent capabilities, callable as slash commands in any Sculptor session. They handle work you'd otherwise re-prompt for every time.
 
-Some favorites:
-
 A few favorites:
 
-- **`/sculptor:write-spec`**: read your code, ask a few targeted questions, draft a spec grounded in your team's conventions.
-- **`/sculptor:create-html-mock`**: generate a grid of HTML mock variants for a feature, ready to compare side by side in the browser.
+- **`/sculptor:write-spec`**: write an implementation spec through a guided Q&A before writing any code.
+- **`/sculptor:create-html-mock`**: generate HTML mocks for a feature — explore several variants side by side, or refine a single coherent mock.
 - **`/sculptor:fix-bug`**: fix a bug with TDD. Sculptor runs a short reproduction interview, writes failing tests, then makes them pass.
 
 Browse the [full set of slash commands and skills](https://github.com/imbue-ai/sculptor/blob/main/docs/slash-commands.md) with more coming soon.
