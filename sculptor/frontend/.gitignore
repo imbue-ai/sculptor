@@ -35,6 +35,11 @@ generated-*.ts
 # Lint caches
 .stylelintcache
 
+# Plugin build output — source lives in `plugins/<id>/`, output is generated
+# by `cd plugins/<id> && npm run build` and served from public/plugins/<id>/
+# at runtime.
+public/plugins/
+
 # Test coverage output
 coverage/
 
