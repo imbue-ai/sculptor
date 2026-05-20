@@ -42,6 +42,13 @@ export default tseslint.config(
       "vite.config.ts",
       "out/**",
       "storybook-static/**",
+      // Plugin output and runtime stubs sit in public/ and are not part of
+      // the host's TS program.
+      "public/plugins/**",
+      "public/plugin-runtime/**",
+      // Source for runtime-loaded plugins is its own Vite project, not in
+      // the host's tsconfig.
+      "plugins/**",
     ],
   },
   // NOTE: turns off all rules that may conflict with prettier
