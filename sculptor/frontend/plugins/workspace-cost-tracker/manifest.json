@@ -1,0 +1,12 @@
+{
+  "id": "workspace-cost-tracker",
+  "name": "Workspace cost tracker",
+  "version": "0.1.0",
+  "entry": "main.js",
+  "sdkVersion": "^1.0.0",
+  "peerDependencies": {
+    "@radix-ui/themes": "^3",
+    "react": "^18",
+    "jotai": "^2"
+  }
+}
