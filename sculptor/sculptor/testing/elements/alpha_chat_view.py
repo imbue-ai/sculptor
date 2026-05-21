@@ -94,6 +94,17 @@ class PlaywrightAlphaChatViewElement(PlaywrightIntegrationTestElement):
     def get_file_previews(self) -> Locator:
         return self.get_by_test_id(ElementIDs.FILE_PREVIEW)
 
+    def get_tables(self) -> Locator:
+        return self.get_by_test_id(ElementIDs.ALPHA_CHAT_TABLE)
+
+    def get_table_wrap_toggles(self) -> Locator:
+        return self.get_by_test_id(ElementIDs.ALPHA_CHAT_TABLE_WRAP_TOGGLE)
+
+    def get_table_wrap_toggles_with_label(self, aria_label: str) -> Locator:
+        """Return wrap-toggle(s) whose ``aria-label`` matches (it encodes the
+        per-table wrap state, e.g. ``"Switch to scroll"`` / ``"Switch to wrap"``)."""
+        return self.get_table_wrap_toggles().and_(self._page.locator(f'[aria-label="{aria_label}"]'))
+
 
 def get_jump_to_bottom_button(page: Page) -> Locator:
     """Locator for the jump-to-bottom button."""
