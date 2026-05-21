@@ -8,9 +8,8 @@ dropped.
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
+from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
 from sculptor.testing.elements.chat_panel import send_chat_message
-from sculptor.testing.elements.terminal import get_active_element_focus_info
 from sculptor.testing.elements.terminal import get_terminal_textarea
 from sculptor.testing.elements.terminal import open_terminal_and_wait
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -62,23 +61,12 @@ def test_ask_user_question_does_not_steal_focus_from_terminal(
     terminal_textarea.focus()
 
     # Sanity check: terminal currently has focus right before the AUQ mounts.
-    is_focused, _, _ = get_active_element_focus_info(page)
-    assert is_focused, "Pre-condition failed: terminal textarea should be focused before the AUQ appears."
+    expect(terminal_textarea).to_be_focused()
 
     # Wait for the AUQ panel to appear.
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
-    expect(ask_panel).to_be_visible(timeout=30_000)
+    auq_panel = get_ask_user_question_panel(page)
+    expect(auq_panel).to_be_visible()
 
-    # Give any post-mount focus effects a chance to run before asserting.
-    page.wait_for_timeout(500)
-
-    # The terminal textarea should still be the active element. With the bug,
-    # AskUserQuestion's mount-time ``containerRef.current?.focus()`` makes the
-    # AUQ panel container the active element, dropping subsequent terminal keys.
-    is_focused, active_classes, active_testid = get_active_element_focus_info(page)
-
-    assert is_focused, (
-        "AskUserQuestion panel stole focus from the terminal on mount."
-        + f" activeElement classes: {active_classes!r}, data-testid: {active_testid!r}."
-        + " Keypresses typed into the terminal would be routed to the AUQ panel."
-    )
+    # The terminal textarea should still be the active element after the
+    # AUQ panel mounts — the panel must not steal focus.
+    expect(terminal_textarea).to_be_focused()
