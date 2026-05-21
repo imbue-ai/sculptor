@@ -100,6 +100,11 @@ def get_jump_to_bottom_button(page: Page) -> Locator:
     return page.get_by_test_id(ElementIDs.ALPHA_JUMP_TO_BOTTOM_BUTTON)
 
 
+def get_jump_to_bottom_wrapper(page: Page) -> Locator:
+    """Locator for the jump-to-bottom wrapper (always in DOM; visibility controlled via aria-hidden)."""
+    return page.get_by_test_id(ElementIDs.ALPHA_JUMP_TO_BOTTOM_WRAPPER)
+
+
 def get_alpha_scroll_position(page: Page) -> float:
     """Read the scrollTop of the alpha chat scroll container."""
     return page.evaluate(
