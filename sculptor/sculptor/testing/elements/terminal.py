@@ -214,6 +214,10 @@ def get_terminal_starting_text(page: Page) -> Locator:
     return page.get_by_test_id(ElementIDs.TERMINAL_STARTING_TEXT)
 
 
+def get_tab_close_button(tab: Locator) -> Locator:
+    return tab.get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON)
+
+
 def get_tab_context_menu_close_others(page: Page) -> Locator:
     return page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_CLOSE_OTHERS)
 
