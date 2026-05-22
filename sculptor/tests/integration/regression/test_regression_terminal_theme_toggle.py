@@ -10,10 +10,12 @@ Radix theme transition was still in progress.
 from sculptor.testing.elements.terminal import get_xterm_theme_background
 from sculptor.testing.elements.terminal import get_xterm_theme_foreground
 from sculptor.testing.elements.terminal import open_terminal_and_wait
+from sculptor.testing.elements.terminal import wait_for_xterm_theme_change
+from sculptor.testing.elements.terminal import wait_for_xterm_theme_ready
+from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
-from sculptor.testing.utils import get_playwright_modifier_key
 
 
 @user_story("to have the terminal colors update when I toggle the UI theme")
@@ -29,31 +31,18 @@ def test_terminal_theme_updates_on_toggle(sculptor_instance_: SculptorInstance) 
     6. Assert both colors changed — the terminal adopted the new theme
     """
     page = sculptor_instance_.page
+    task_page = PlaywrightTaskPage(page=page)
 
     start_task_and_wait_for_ready(sculptor_page=page, prompt="Hello")
     open_terminal_and_wait(page)
 
-    # Record the initial terminal theme colors (default is dark).
+    # Wait for xterm theme to be fully initialized, then record initial colors.
+    wait_for_xterm_theme_ready(page)
     initial_bg = get_xterm_theme_background(page)
     initial_fg = get_xterm_theme_foreground(page)
 
-    assert initial_bg, "xterm theme background should be set after terminal opens"
-    assert initial_fg, "xterm theme foreground should be set after terminal opens"
-
     # Toggle the theme (Cmd+Shift+D on macOS, Ctrl+Shift+D on Linux).
-    mod_key = get_playwright_modifier_key()
-    page.keyboard.press(f"{mod_key}+Shift+d")
+    task_page.toggle_theme()
 
-    # Wait for the theme transition and React effects to complete.
-    page.wait_for_timeout(2000)
-
-    # Read the terminal theme colors after the toggle.
-    new_bg = get_xterm_theme_background(page)
-    new_fg = get_xterm_theme_foreground(page)
-
-    assert new_bg != initial_bg, (
-        f"Terminal background color did not change after toggling the app theme. Before: {initial_bg!r}, After: {new_bg!r}."
-    )
-    assert new_fg != initial_fg, (
-        f"Terminal foreground color did not change after toggling the app theme. Before: {initial_fg!r}, After: {new_fg!r}."
-    )
+    # Wait for the terminal theme colors to actually change (polls via JS).
+    wait_for_xterm_theme_change(page, initial_bg, initial_fg)

@@ -243,3 +243,41 @@ def get_xterm_theme_foreground(page: Page) -> str:
         return xterm.options.theme.foreground || '';
     }"""
     )
+
+
+def wait_for_xterm_theme_ready(page: Page) -> None:
+    """Wait until the xterm theme has non-empty background and foreground colors."""
+    try:
+        page.wait_for_function(
+            """() => {
+                const xterm = window.__xterm;
+                return !!(xterm && xterm.options.theme
+                    && xterm.options.theme.background
+                    && xterm.options.theme.foreground);
+            }"""
+        )
+    except PlaywrightTimeoutError as e:
+        bg = get_xterm_theme_background(page)
+        fg = get_xterm_theme_foreground(page)
+        raise AssertionError(f"xterm theme not ready. bg: {bg!r}, fg: {fg!r}") from e
+
+
+def wait_for_xterm_theme_change(page: Page, old_bg: str, old_fg: str) -> None:
+    """Wait until the xterm theme colors differ from the given values."""
+    try:
+        page.wait_for_function(
+            """([oldBg, oldFg]) => {
+                const xterm = window.__xterm;
+                if (!xterm || !xterm.options.theme) return false;
+                const bg = xterm.options.theme.background || '';
+                const fg = xterm.options.theme.foreground || '';
+                return bg !== oldBg && fg !== oldFg;
+            }""",
+            arg=[old_bg, old_fg],
+        )
+    except PlaywrightTimeoutError as e:
+        new_bg = get_xterm_theme_background(page)
+        new_fg = get_xterm_theme_foreground(page)
+        raise AssertionError(
+            f"Terminal theme did not change. bg: {old_bg!r} → {new_bg!r}, fg: {old_fg!r} → {new_fg!r}"
+        ) from e
