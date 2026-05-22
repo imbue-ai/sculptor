@@ -299,6 +299,17 @@ def tiptap_has_placeholder(locator: Locator, placeholder_text: str) -> bool:
     )
 
 
+def get_tiptap_placeholder_paragraphs(locator: Locator, placeholder_text: str) -> Locator:
+    """Return the ``<p>`` nodes showing the given TipTap placeholder text.
+
+    The Placeholder extension sets ``data-placeholder`` on empty nodes; an empty
+    result means the placeholder is hidden. Returning a Locator (rather than the
+    snapshot bool of ``tiptap_has_placeholder``) lets callers use
+    ``expect(...).to_have_count(0)`` so Playwright auto-retries.
+    """
+    return locator.locator(f'p[data-placeholder="{placeholder_text}"]')
+
+
 # NOTE: This is an exception to our rule to not use page.evaluate().
 # There is no Playwright API to wait for a single animation frame.
 # page.wait_for_timeout(N) is the alternative, but requires guessing a
