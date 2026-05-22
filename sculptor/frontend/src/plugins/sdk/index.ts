@@ -5,5 +5,5 @@
  */
 export { PanelHeader } from "./components.ts";
 export { useTaskArtifact, useWorkspaceId, useWorkspaceTasks } from "./hooks.ts";
-export type { CodingAgentTaskView, TodoItem, TodoListArtifact, UsageArtifact } from "~/api";
+export type { CodingAgentTaskView, Task, TaskListArtifact, UsageArtifact } from "~/api";
 export { ArtifactType } from "~/api";

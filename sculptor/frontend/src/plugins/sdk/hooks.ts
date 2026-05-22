@@ -2,7 +2,7 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { useEffect } from "react";
 
 import { ArtifactType, type CodingAgentTaskView, getWorkspaceAgentArtifact } from "~/api";
-import { isTodoListArtifact, isUsageArtifact } from "~/common/Guards.ts";
+import { isTaskListArtifact, isUsageArtifact } from "~/common/Guards.ts";
 import {
   getEmptyTaskDetailState,
   taskDetailAtomFamily,
@@ -95,7 +95,7 @@ const processArtifactResponse = <T extends keyof ArtifactsMap>(
   artifactType: T,
 ): ArtifactsMap[T] | null => {
   if (!response) return null;
-  if (artifactType === ArtifactType.PLAN && isTodoListArtifact(response)) {
+  if (artifactType === ArtifactType.PLAN && isTaskListArtifact(response)) {
     return response as ArtifactsMap[T];
   }
 
