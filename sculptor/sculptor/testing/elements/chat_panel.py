@@ -161,6 +161,12 @@ class PlaywrightChatPanelElement(PlaywrightFilePreviewAndUploadMixin, Playwright
         )
         return self._locator.locator(selector)
 
+    def get_status_pill_elapsed(self) -> Locator:
+        return self.get_by_test_id(ElementIDs.STATUS_PILL_ELAPSED)
+
+    def get_status_pill_animation(self) -> Locator:
+        return self.get_by_test_id(ElementIDs.STATUS_PILL_ANIMATION)
+
     def get_compacting_pill(self) -> Locator:
         """Locator that matches only when the alpha status pill is in the
         ``compacting`` lifecycle state. Pair with ``to_be_attached`` /
