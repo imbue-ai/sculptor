@@ -206,6 +206,14 @@ def get_add_terminal_button(page: Page) -> Locator:
     return page.get_by_test_id(ElementIDs.ADD_TERMINAL_BUTTON)
 
 
+def get_terminal_panel_icon(page: Page) -> Locator:
+    return page.get_by_test_id(ElementIDs.PANEL_ICON_TERMINAL)
+
+
+def get_terminal_starting_text(page: Page) -> Locator:
+    return page.get_by_test_id(ElementIDs.TERMINAL_STARTING_TEXT)
+
+
 def get_tab_context_menu_close_others(page: Page) -> Locator:
     return page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_CLOSE_OTHERS)
 
