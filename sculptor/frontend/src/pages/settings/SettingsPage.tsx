@@ -45,6 +45,7 @@ import { GitSettingsSection } from "./components/GitSettingsSection.tsx";
 import { KeybindingsSection } from "./components/KeybindingsSection.tsx";
 import { PanelsSettingsSection } from "./components/PanelsSettingsSection.tsx";
 import { PiSettingsSection } from "./components/PiSettingsSection.tsx";
+import { PluginsSettingsSection } from "./components/PluginsSettingsSection.tsx";
 import { ReposSection } from "./components/ReposSection.tsx";
 import { SettingRow } from "./components/SettingRow.tsx";
 import { SettingsSectionLayout } from "./components/SettingsSection.tsx";
@@ -363,6 +364,7 @@ export const SettingsPage = (): ReactElement => {
               {activeSection === SettingsSection.PANELS && (
                 <PanelsSettingsSection onSettingChange={handleSettingChange} />
               )}
+              {activeSection === SettingsSection.PLUGINS && <PluginsSettingsSection />}
               {activeSection === SettingsSection.PRIVACY && (
                 <SettingsSectionLayout description="Your email and telemetry preferences.">
                   <AccountFieldRow
