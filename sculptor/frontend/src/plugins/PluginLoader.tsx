@@ -42,10 +42,10 @@ const validateManifest = (manifest: PluginManifest): Error | null => {
   return null;
 };
 
-const loadOne = async (
-  manifestUrl: string,
-  registerPanel: (panel: PanelDefinition) => () => void,
-): Promise<LoadedPlugin | PluginLoadError> => {
+/** Builds the per-plugin `api` object handed to `activate()`. */
+type ApiFactory = (manifest: PluginManifest) => PluginHostApi;
+
+const loadOne = async (manifestUrl: string, makeApi: ApiFactory): Promise<LoadedPlugin | PluginLoadError> => {
   let manifest: PluginManifest;
   try {
     const res = await fetch(manifestUrl, { cache: "no-store" });
@@ -82,7 +82,7 @@ const loadOne = async (
     };
   }
 
-  const api: PluginHostApi = { registerPanel };
+  const api = makeApi(manifest);
   try {
     const result = await mod.default(api);
     const dispose = typeof result === "function" ? result : undefined;
@@ -109,37 +109,39 @@ export const PluginLoader = (): ReactElement | null => {
     let isDisposed = false;
     const disposers: Array<() => void> = [];
 
-    const registerPanel = (panel: PanelDefinition): (() => void) => {
-      // Wrap the plugin's component in the error boundary plus a context
-      // provider that exposes the current workspace id to SDK hooks. Both
-      // run at render time, so the workspace id is read fresh per render
-      // from the route params.
-      const PluginComponent = panel.component;
-      const Wrapped = (): ReactElement | null => {
-        const { workspaceID } = useWorkspacePageParams();
-        if (!workspaceID) return null;
-        return (
-          <PluginErrorBoundary pluginId={panel.id} pluginName={panel.displayName}>
-            <WorkspacePluginContext.Provider value={{ workspaceId: workspaceID }}>
-              <PluginComponent />
-            </WorkspacePluginContext.Provider>
-          </PluginErrorBoundary>
-        );
-      };
-      Wrapped.displayName = `PluginPanel(${panel.id})`;
-      const wrappedPanel: PanelDefinition = { ...panel, component: Wrapped };
+    const makeApi = (manifest: PluginManifest): PluginHostApi => ({
+      registerPanel: (panel: PanelDefinition): (() => void) => {
+        // Wrap the plugin's component in the error boundary plus a context
+        // provider that exposes the current workspace id to SDK hooks. Both
+        // run at render time, so the workspace id is read fresh per render
+        // from the route params.
+        const PluginComponent = panel.component;
+        const Wrapped = (): ReactElement | null => {
+          const { workspaceID } = useWorkspacePageParams();
+          if (!workspaceID) return null;
+          return (
+            <PluginErrorBoundary pluginId={panel.id} pluginName={panel.displayName}>
+              <WorkspacePluginContext.Provider value={{ workspaceId: workspaceID }}>
+                <PluginComponent />
+              </WorkspacePluginContext.Provider>
+            </PluginErrorBoundary>
+          );
+        };
+        Wrapped.displayName = `PluginPanel(${panel.id})`;
+        const wrappedPanel: PanelDefinition = { ...panel, component: Wrapped, pluginId: manifest.id };
 
-      setPanels((prev) => [...prev, wrappedPanel]);
-      const undo = (): void => {
-        setPanels((prev) => prev.filter((p) => p.id !== panel.id));
-      };
-      disposers.push(undo);
-      return undo;
-    };
+        setPanels((prev) => [...prev, wrappedPanel]);
+        const undo = (): void => {
+          setPanels((prev) => prev.filter((p) => p.id !== panel.id));
+        };
+        disposers.push(undo);
+        return undo;
+      },
+    });
 
     void (async (): Promise<void> => {
       for (const url of BUILTIN_PLUGIN_MANIFEST_URLS) {
-        const outcome = await loadOne(url, registerPanel);
+        const outcome = await loadOne(url, makeApi);
         if (isDisposed) {
           if ("dispose" in outcome && outcome.dispose) outcome.dispose();
           return;
