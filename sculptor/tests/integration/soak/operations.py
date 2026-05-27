@@ -15,6 +15,7 @@ from __future__ import annotations
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
+from sculptor.testing.elements.base import type_into_tiptap
 from sculptor.testing.playwright_utils import navigate_to_home_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.utils import get_playwright_modifier_key
@@ -134,6 +135,131 @@ class WorkspaceDeletionOp(Operation):
 
         confirm_dialog = ctx.page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_DIALOG)
         expect(confirm_dialog).to_be_hidden(timeout=10_000)
+
+
+# ---------------------------------------------------------------------------
+# Agent-view ops
+# ---------------------------------------------------------------------------
+
+
+_LONG_AGENT_PROMPT_SECONDS = (15, 30, 60)
+
+
+class SendLongAgentPromptOp(Operation):
+    """Fire a long-running FakeClaude sleep prompt into the current agent and don't wait.
+
+    The point is to pile concurrent agent work onto the backend while the
+    soak keeps moving — closes, deletions, and adds during a busy turn are
+    where the gnarliest races live.
+    """
+
+    name = "send_long_agent_prompt"
+    weight = 0.8
+
+    def is_available(self, ctx: OperationContext) -> bool:
+        return ctx.page.get_by_test_id(ElementIDs.CHAT_INPUT).is_visible()
+
+    def execute(self, ctx: OperationContext) -> None:
+        seconds = ctx.rng.choice(_LONG_AGENT_PROMPT_SECONDS)
+        prompt = f'fake_claude:sleep `{{"seconds": {seconds}}}`'
+        ctx.record_event("send_long_agent_prompt", seconds=seconds)
+        chat_input = ctx.page.get_by_test_id(ElementIDs.CHAT_INPUT)
+        type_into_tiptap(ctx.page, chat_input, prompt)
+        ctx.page.get_by_test_id(ElementIDs.SEND_BUTTON).click()
+
+
+class CloseCurrentAgentTabOp(Operation):
+    """Close a randomly-chosen agent tab via its X button + confirm dialog.
+
+    Tests the regression-test path that auto-creates a new agent when the
+    last one is closed, AND the "close one of N" path with multiple agents.
+    """
+
+    name = "close_current_agent_tab"
+    weight = 0.3
+
+    def is_available(self, ctx: OperationContext) -> bool:
+        return ctx.page.get_by_test_id(ElementIDs.AGENT_TAB).count() >= 1
+
+    def execute(self, ctx: OperationContext) -> None:
+        agent_tabs = ctx.page.get_by_test_id(ElementIDs.AGENT_TAB)
+        count = agent_tabs.count()
+        if count == 0:
+            ctx.record_event("close_agent_tab_vanished")
+            return
+        index = ctx.rng.randrange(count)
+        ctx.record_event("close_agent_tab_pick", index=index, total=count)
+        close_button = agent_tabs.nth(index).get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON)
+        close_button.click()
+        # Closing the last agent in a workspace surfaces a confirmation dialog;
+        # closing one of N might or might not — handle both.
+        confirm_dialog = ctx.page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_DIALOG)
+        if confirm_dialog.is_visible():
+            ctx.page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_CONFIRM).click()
+            expect(confirm_dialog).to_be_hidden(timeout=10_000)
+
+
+class AddAgentToWorkspaceOp(Operation):
+    """Click the + button in the agent tabs to add another agent to this workspace."""
+
+    name = "add_agent_to_workspace"
+    weight = 0.5
+
+    def is_available(self, ctx: OperationContext) -> bool:
+        return ctx.page.get_by_test_id(ElementIDs.ADD_AGENT_BUTTON).is_visible()
+
+    def execute(self, ctx: OperationContext) -> None:
+        before = ctx.page.get_by_test_id(ElementIDs.AGENT_TAB).count()
+        ctx.page.get_by_test_id(ElementIDs.ADD_AGENT_BUTTON).click()
+        # Don't wait for the new agent to be fully ready — fire and forget.
+        ctx.record_event("add_agent_to_workspace", before_count=before)
+
+
+_PANEL_ICONS = (
+    ElementIDs.PANEL_ICON_FILES,
+    ElementIDs.PANEL_ICON_ACTIONS,
+    ElementIDs.PANEL_ICON_TERMINAL,
+    ElementIDs.PANEL_ICON_BROWSER,
+    ElementIDs.PANEL_ICON_SKILLS,
+    ElementIDs.PANEL_ICON_NOTES,
+)
+
+
+class TogglePanelIconOp(Operation):
+    """Click a random sidebar panel icon to toggle its zone open/closed."""
+
+    name = "toggle_panel_icon"
+    weight = 0.6
+
+    def is_available(self, ctx: OperationContext) -> bool:
+        # Any single icon visible is enough — the sidebar shows up together.
+        return ctx.page.get_by_test_id(ElementIDs.PANEL_ICON_FILES).is_visible()
+
+    def execute(self, ctx: OperationContext) -> None:
+        icon_id = ctx.rng.choice(_PANEL_ICONS)
+        icon = ctx.page.get_by_test_id(icon_id)
+        if not icon.is_visible():
+            ctx.record_event("toggle_panel_icon_missing", icon=str(icon_id))
+            return
+        ctx.record_event("toggle_panel_icon", icon=str(icon_id))
+        icon.click()
+
+
+class StopRunningAgentOp(Operation):
+    """Click the in-pill Stop button while an agent is mid-turn."""
+
+    name = "stop_running_agent"
+    weight = 0.5
+
+    def is_available(self, ctx: OperationContext) -> bool:
+        # STATUS_PILL_STOP only renders while the agent is cancellable, so
+        # its visibility is the right gate.
+        stop = ctx.page.get_by_test_id(ElementIDs.STATUS_PILL_STOP)
+        return stop.count() > 0 and stop.first.is_visible()
+
+    def execute(self, ctx: OperationContext) -> None:
+        ctx.record_event("stop_running_agent")
+        ctx.page.get_by_test_id(ElementIDs.STATUS_PILL_STOP).first.click()
 
 
 # ---------------------------------------------------------------------------
@@ -300,6 +426,11 @@ DEFAULT_OPERATIONS: list[Operation] = [
     CreateWorkspaceWriteFileOp(),
     NavigateWorkspaceTabOp(),
     WorkspaceDeletionOp(),
+    SendLongAgentPromptOp(),
+    CloseCurrentAgentTabOp(),
+    AddAgentToWorkspaceOp(),
+    TogglePanelIconOp(),
+    StopRunningAgentOp(),
     NavigateHomeOp(),
     OpenCloseCommandPaletteOp(),
     OpenCloseSettingsOp(),
