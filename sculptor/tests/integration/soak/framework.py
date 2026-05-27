@@ -61,6 +61,7 @@ class SoakStats:
     iterations: int = 0
     operations_run: dict[str, int] = field(default_factory=dict)
     operations_skipped_unavailable: dict[str, int] = field(default_factory=dict)
+    operations_available_not_picked: dict[str, int] = field(default_factory=dict)
     soft_failures: list[SoftFailure] = field(default_factory=list)
     recoveries: int = 0
 
@@ -308,6 +309,7 @@ class SoakRunner:
                     "kind": "soak_end",
                     "iterations": stats.iterations,
                     "operations_run": stats.operations_run,
+                    "operations_available_not_picked": stats.operations_available_not_picked,
                     "operations_skipped_unavailable": stats.operations_skipped_unavailable,
                     "soft_failure_count": len(stats.soft_failures),
                     "recoveries": stats.recoveries,
@@ -338,7 +340,14 @@ class SoakRunner:
                 logger.debug("is_available raised for %s: %s", op.name, exc)
         if not available:
             return None
-        return ctx.rng.choices(available, weights=weights, k=1)[0]
+        chosen = ctx.rng.choices(available, weights=weights, k=1)[0]
+        for op in available:
+            if op is chosen:
+                continue
+            ctx.stats.operations_available_not_picked[op.name] = (
+                ctx.stats.operations_available_not_picked.get(op.name, 0) + 1
+            )
+        return chosen
 
     def _run_one(self, ctx: OperationContext, op: Operation) -> None:
         ctx.current_operation = op.name

@@ -271,7 +271,7 @@ class NavigateHomeOp(Operation):
     """Navigate to the home page and assert the workspace list shows up."""
 
     name = "navigate_home"
-    weight = 1.0
+    weight = 0.3
 
     def execute(self, ctx: OperationContext) -> None:
         navigate_to_home_page(ctx.page)
@@ -281,7 +281,7 @@ class OpenCloseCommandPaletteOp(Operation):
     """Open the command palette with Cmd+K, then close with Escape."""
 
     name = "open_close_command_palette"
-    weight = 1.5
+    weight = 0.3
 
     def is_available(self, ctx: OperationContext) -> bool:
         return ctx.page.get_by_test_id(ElementIDs.TOP_BAR).is_visible()
