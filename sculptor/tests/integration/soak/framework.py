@@ -285,7 +285,8 @@ class SoakRunner:
         try:
             while time.monotonic() - start < self._duration:
                 ctx.iteration = stats.iterations
-                op = self._pick(ctx)
+                with ctx.annotated("SOAK-PICK"):
+                    op = self._pick(ctx)
                 if op is None:
                     # The registry is expected to contain at least one always-
                     # available operation (e.g. IdleWaitOp). If we hit this,
@@ -295,7 +296,8 @@ class SoakRunner:
                         "No operation is currently available — the registry should include at least one always-available op (e.g. IdleWaitOp)."  # noqa: E501
                     )
                 self._run_one(ctx, op)
-                self._check_global_invariants(ctx)
+                with ctx.annotated("SOAK-INVARIANTS"):
+                    self._check_global_invariants(ctx)
                 stats.iterations += 1
         except AbortSoak as exc:
             jsonl.write({"kind": "abort", "reason": str(exc)})
