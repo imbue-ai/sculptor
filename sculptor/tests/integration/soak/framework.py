@@ -62,6 +62,7 @@ class SoakStats:
     operations_run: dict[str, int] = field(default_factory=dict)
     operations_skipped_unavailable: dict[str, int] = field(default_factory=dict)
     operations_available_not_picked: dict[str, int] = field(default_factory=dict)
+    operations_on_cooldown: dict[str, int] = field(default_factory=dict)
     soft_failures: list[SoftFailure] = field(default_factory=list)
     recoveries: int = 0
 
@@ -210,12 +211,24 @@ class Operation(ABC):
     Designed so a future *compound* operation is simply an :class:`Operation`
     whose :meth:`execute` calls a sequence of other operations.  No extra
     framework needed today.
+
+    Tuning knobs:
+
+    * ``weight`` — relative weight for the random picker. Higher = more
+      often. Use this to favour ops you want to fire often when available.
+    * ``cooldown_iterations`` — after this op is picked, skip it for this
+      many subsequent picker ticks even when ``is_available`` is True.
+      Use this as a limiter on ops you want to fire *sometimes* but not
+      *every* time they become available — typically destructive ops and
+      ops that grab a rare opportunity (e.g. stopping a running agent).
     """
 
     #: Name shown in logs and trace annotations.
     name: str = ""
     #: Relative weight for the random picker. Higher = more often.
     weight: float = 1.0
+    #: Picker ticks to suppress this op for after it's been picked.
+    cooldown_iterations: int = 0
 
     def is_available(self, ctx: OperationContext) -> bool:  # noqa: ARG002
         """Cheap DOM probe — return True iff this op can run *right now*.
@@ -267,6 +280,9 @@ class SoakRunner:
         self._seed = seed
         self._log_path = log_path
         self._screenshot_dir = screenshot_dir
+        # Per-op cooldown counter. Decremented each tick the op is suppressed;
+        # set to ``op.cooldown_iterations`` when the op is picked.
+        self._cooldown_remaining: dict[str, int] = {op.name: 0 for op in self._operations}
 
     def run(self) -> SoakStats:
         rng = random.Random(self._seed)
@@ -311,6 +327,7 @@ class SoakRunner:
                     "operations_run": stats.operations_run,
                     "operations_available_not_picked": stats.operations_available_not_picked,
                     "operations_skipped_unavailable": stats.operations_skipped_unavailable,
+                    "operations_on_cooldown": stats.operations_on_cooldown,
                     "soft_failure_count": len(stats.soft_failures),
                     "recoveries": stats.recoveries,
                     "elapsed_seconds": time.monotonic() - start,
@@ -327,6 +344,12 @@ class SoakRunner:
         available: list[Operation] = []
         weights: list[float] = []
         for op in self._operations:
+            # Cooldown gate. Decrement and skip even if ``is_available``
+            # would have returned True — the op had its turn recently.
+            if self._cooldown_remaining[op.name] > 0:
+                self._cooldown_remaining[op.name] -= 1
+                ctx.stats.operations_on_cooldown[op.name] = ctx.stats.operations_on_cooldown.get(op.name, 0) + 1
+                continue
             try:
                 if op.is_available(ctx):
                     available.append(op)
@@ -347,6 +370,8 @@ class SoakRunner:
             ctx.stats.operations_available_not_picked[op.name] = (
                 ctx.stats.operations_available_not_picked.get(op.name, 0) + 1
             )
+        if chosen.cooldown_iterations > 0:
+            self._cooldown_remaining[chosen.name] = chosen.cooldown_iterations
         return chosen
 
     def _run_one(self, ctx: OperationContext, op: Operation) -> None:
