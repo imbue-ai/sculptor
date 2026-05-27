@@ -106,6 +106,7 @@ class WorkspaceDeletionOp(Operation):
 
     name = "workspace_deletion"
     weight = 0.4
+    cooldown_iterations = 2  # destructive — space out
 
     def is_available(self, ctx: OperationContext) -> bool:
         # Only delete when there are at least two — keeps the cap from
@@ -177,6 +178,7 @@ class CloseCurrentAgentTabOp(Operation):
 
     name = "close_current_agent_tab"
     weight = 0.3
+    cooldown_iterations = 3  # destructive — leave room for the workspace to settle
 
     def is_available(self, ctx: OperationContext) -> bool:
         return ctx.page.get_by_test_id(ElementIDs.AGENT_TAB).count() >= 1
@@ -246,10 +248,16 @@ class TogglePanelIconOp(Operation):
 
 
 class StopRunningAgentOp(Operation):
-    """Click the in-pill Stop button while an agent is mid-turn."""
+    """Click the in-pill Stop button while an agent is mid-turn.
+
+    Heavy weight + cooldown: the pill is only visible while an agent is
+    cancellable, so opportunities are scarce. When they come up we want to
+    grab one, but not every consecutive tick of the same busy turn.
+    """
 
     name = "stop_running_agent"
-    weight = 0.5
+    weight = 2.5  # bumped so we actually pick it when the rare opportunity appears
+    cooldown_iterations = 5  # but don't spam-stop the same turn
 
     def is_available(self, ctx: OperationContext) -> bool:
         # STATUS_PILL_STOP only renders while the agent is cancellable, so
@@ -349,6 +357,7 @@ class ChaosClickOp(Operation):
 
     name = "chaos_click"
     weight = 0.3
+    cooldown_iterations = 2  # chaos is disruptive — leave gaps for invariants to settle
 
     def execute(self, ctx: OperationContext) -> None:
         testids: list[str] = ctx.page.evaluate(_VISIBLE_TESTIDS_JS)
