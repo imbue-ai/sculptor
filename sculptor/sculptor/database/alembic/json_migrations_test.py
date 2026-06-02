@@ -3,11 +3,11 @@ from typing import Annotated
 from pydantic import Tag
 from pydantic import create_model
 
-from sculptor.foundation.pydantic_serialization import SerializableModel
-from sculptor.foundation.pydantic_serialization import build_discriminator
 from sculptor.database.alembic.json_migrations import get_json_schemas_of_all_nested_models
 from sculptor.database.alembic.json_migrations import get_potentially_breaking_changes
 from sculptor.database.automanaged import DatabaseModel
+from sculptor.foundation.pydantic_serialization import SerializableModel
+from sculptor.foundation.pydantic_serialization import build_discriminator
 from sculptor.primitives.ids import ObjectID
 
 

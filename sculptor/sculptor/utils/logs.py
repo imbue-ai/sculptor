@@ -11,8 +11,8 @@ from cachetools import LRUCache
 from loguru import logger
 from loguru._file_sink import FileSink
 
-from sculptor.foundation.common import is_running_within_a_pytest_tree
 from sculptor.config.settings import TEST_LOG_PATH
+from sculptor.foundation.common import is_running_within_a_pytest_tree
 from sculptor.utils.build import is_dev_build
 
 if TYPE_CHECKING:

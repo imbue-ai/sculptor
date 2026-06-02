@@ -1,8 +1,8 @@
-from sculptor.foundation.user_config import CIBabysitterConfig
-from sculptor.foundation.user_config import DependencyPaths
-from sculptor.foundation.user_config import PiConfig
-from sculptor.foundation.user_config import UserConfig
-from sculptor.foundation.user_config import UserConfigField
+from sculptor.config.user_config import CIBabysitterConfig
+from sculptor.config.user_config import DependencyPaths
+from sculptor.config.user_config import PiConfig
+from sculptor.config.user_config import UserConfig
+from sculptor.config.user_config import UserConfigField
 
 
 def test_ci_babysitter_defaults() -> None:

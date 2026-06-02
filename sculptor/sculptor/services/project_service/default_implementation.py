@@ -5,13 +5,13 @@ from loguru import logger
 from pydantic import PrivateAttr
 from typeid.errors import InvalidTypeIDStringException
 
-from sculptor.foundation.agents.data_types.ids import ProjectID
-from sculptor.foundation.agents.data_types.ids import TypeIDPrefixMismatchError
+from sculptor.database.models import Project
 from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.foundation.thread_utils import ObservableThread
-from sculptor.database.models import Project
 from sculptor.primitives.ids import OrganizationReference
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
+from sculptor.primitives.ids import TypeIDPrefixMismatchError
 from sculptor.primitives.ids import get_deterministic_typeid_suffix
 from sculptor.services.data_model_service.api import DataModelService
 from sculptor.services.data_model_service.data_types import DataModelTransaction

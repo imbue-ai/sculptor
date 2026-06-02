@@ -7,14 +7,13 @@ from typing import cast
 import pytest
 from loguru import logger
 
-from sculptor.foundation.git import get_repo_base_path
-from sculptor.foundation.itertools import only
-from sculptor.foundation.state.messages import Message
 from sculptor.database.models import MustBeShutDownTaskInputsV1
 from sculptor.database.models import NoOpTaskInputsV1
 from sculptor.database.models import Project
 from sculptor.database.models import Task
 from sculptor.database.models import TaskID
+from sculptor.foundation.git import get_repo_base_path
+from sculptor.foundation.itertools import only
 from sculptor.interfaces.agents.agent import MessageTypes
 from sculptor.interfaces.agents.tasks import TaskState
 from sculptor.primitives.ids import RequestID
@@ -23,6 +22,7 @@ from sculptor.services.task_service.api import TaskMessageContainer
 from sculptor.services.task_service.conftest import get_user_input_message
 from sculptor.services.task_service.threaded_implementation import LocalThreadTaskService
 from sculptor.services.task_service.threaded_implementation import _get_name_for_runner_from_task
+from sculptor.state.messages import Message
 from sculptor.web.auth import UserSession
 from sculptor.web.auth import authenticate_anonymous
 

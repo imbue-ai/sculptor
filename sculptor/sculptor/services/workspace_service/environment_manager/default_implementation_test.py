@@ -5,11 +5,11 @@ from typing import cast
 
 import pytest
 
-from sculptor.foundation.concurrency_group import ConcurrencyGroup
-from sculptor.foundation.git import get_repo_base_path
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import Project
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.git import get_repo_base_path
 from sculptor.primitives.constants import ANONYMOUS_ORGANIZATION_REFERENCE
 from sculptor.primitives.ids import RequestID
 from sculptor.service_collections.service_collection import CompleteServiceCollection

@@ -18,10 +18,10 @@ import attr
 from loguru import logger
 
 from sculptor.foundation.async_monkey_patches import log_exception
-from sculptor.foundation.computing_environment.data_types import AnyPath
-from sculptor.foundation.computing_environment.data_types import RunCommandError
 from sculptor.foundation.constants import ExceptionPriority
 from sculptor.testing.computing_environment import run_command_with_retry_on_git_lock_error
+from sculptor.testing.computing_environment_types import AnyPath
+from sculptor.testing.computing_environment_types import RunCommandError
 
 if TYPE_CHECKING:
     # for proper file mode typing

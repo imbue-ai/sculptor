@@ -10,17 +10,6 @@ import pytest
 from pydantic import AnyUrl
 from pydantic import PrivateAttr
 
-from sculptor.foundation.agents.data_types.ids import AgentMessageID
-from sculptor.foundation.agents.data_types.ids import TaskID
-from sculptor.foundation.common import generate_id
-from sculptor.foundation.ids import AssistantMessageID
-from sculptor.foundation.state.chat_state import AskUserQuestionData
-from sculptor.foundation.state.chat_state import TextBlock
-from sculptor.foundation.state.messages import ChatInputUserMessage
-from sculptor.foundation.state.messages import LLMModel
-from sculptor.foundation.state.messages import Message
-from sculptor.foundation.state.messages import ResponseBlockAgentMessage
-from sculptor.foundation.serialization import SerializedException
 from sculptor.agents.default.agent_wrapper import DefaultAgentWrapper
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.config.settings import SculptorSettings
@@ -28,6 +17,8 @@ from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Project
 from sculptor.database.models import Task
+from sculptor.foundation.common import generate_id
+from sculptor.foundation.serialization import SerializedException
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import MessageTypes
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
@@ -41,6 +32,9 @@ from sculptor.interfaces.agents.artifacts import ArtifactType
 from sculptor.interfaces.agents.artifacts import FileAgentArtifact
 from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_FROM_SIGTERM
 from sculptor.interfaces.agents.errors import AgentClientError
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import AssistantMessageID
+from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.server.llm_content_generation import TaskTitle
 from sculptor.services.task_service.data_types import ServiceCollectionForTask
@@ -48,6 +42,12 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
     LocalAgentExecutionEnvironment,
 )
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
+from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.chat_state import TextBlock
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import LLMModel
+from sculptor.state.messages import Message
+from sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.tasks.handlers.run_agent.setup import _drop_already_processed_messages
 from sculptor.tasks.handlers.run_agent.setup import _resolve_title_prediction_thread
 from sculptor.tasks.handlers.run_agent.setup import load_initial_task_state

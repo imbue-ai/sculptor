@@ -26,14 +26,14 @@ from uuid import uuid4
 
 import pytest
 
-from sculptor.foundation.agents.data_types.ids import ProjectID
-from sculptor.foundation.agents.data_types.ids import TaskID
-from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.agents.default.claude_code_sdk.btw_process_manager import BtwProcessManager
 from sculptor.agents.default.claude_code_sdk.btw_process_manager import NoBtwSessionAvailable
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.primitives.ids import LocalEnvironmentID
+from sculptor.primitives.ids import ProjectID
+from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.btw_service.api import BtwService
 from sculptor.services.dependency_management_service import DependencyManagementService

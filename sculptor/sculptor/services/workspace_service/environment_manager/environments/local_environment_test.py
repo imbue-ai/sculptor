@@ -11,11 +11,11 @@ from uuid import uuid4
 
 import pytest
 
-from sculptor.foundation.agents.data_types.ids import ProjectID
+from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
-from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.primitives.ids import LocalEnvironmentID
+from sculptor.primitives.ids import ProjectID
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LOCAL_WORKSPACE_DIR
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
 from sculptor.services.workspace_service.environment_manager.environments.worktree_strategy import WorktreeError

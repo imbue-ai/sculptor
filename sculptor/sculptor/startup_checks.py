@@ -11,7 +11,7 @@ import tempfile
 
 from loguru import logger
 
-from sculptor.foundation.user_config import UserConfig
+from sculptor.config.user_config import UserConfig
 from sculptor.utils import build as build_utils
 
 

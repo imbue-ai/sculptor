@@ -11,7 +11,6 @@ from typing import final
 from pydantic import BaseModel
 from pydantic import PrivateAttr
 
-from sculptor.foundation.agents.data_types.ids import ProjectID
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.event_utils import MutableEvent
 from sculptor.foundation.event_utils import ReadOnlyEvent
@@ -19,6 +18,7 @@ from sculptor.foundation.processes.local_process import RunningProcess
 from sculptor.foundation.secrets_utils import Secret
 from sculptor.foundation.subprocess_utils import FinishedProcess
 from sculptor.interfaces.terminal_manager import TerminalManager
+from sculptor.primitives.ids import ProjectID
 
 # https://github.com/python/typeshed/tree/main/stdlib/_typeshed
 if TYPE_CHECKING:

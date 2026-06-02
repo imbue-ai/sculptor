@@ -17,11 +17,11 @@ import sqlalchemy
 from playwright.sync_api import expect
 
 import sculptor.primitives.ids
-from sculptor.foundation.async_monkey_patches_test import expect_at_least_logged_errors
-from sculptor.foundation.user_config import DependencyPaths
-from sculptor.foundation.user_config import UserConfig
+from sculptor.config.user_config import DependencyPaths
+from sculptor.config.user_config import UserConfig
 from sculptor.database.core import create_new_engine
 from sculptor.database.core import initialize_db
+from sculptor.foundation.async_monkey_patches_test import expect_at_least_logged_errors
 from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.pages.error_page import PlaywrightErrorPage
 from sculptor.testing.resources import custom_sculptor_folder_populator

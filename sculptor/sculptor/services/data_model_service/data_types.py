@@ -9,8 +9,6 @@ from typing import TypedDict
 from pydantic import PrivateAttr
 from typing_extensions import Unpack
 
-from sculptor.foundation.agents.data_types.ids import ProjectID
-from sculptor.foundation.pydantic_serialization import MutableModel
 from sculptor.database.models import Notification
 from sculptor.database.models import Project
 from sculptor.database.models import SavedAgentMessage
@@ -19,8 +17,10 @@ from sculptor.database.models import TaskID
 from sculptor.database.models import UserSettings
 from sculptor.database.models import Workspace
 from sculptor.database.workspace_enums import DiffStatus
+from sculptor.foundation.pydantic_serialization import MutableModel
 from sculptor.interfaces.agents.tasks import TaskState
 from sculptor.primitives.ids import OrganizationReference
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import TransactionID
 from sculptor.primitives.ids import UserReference

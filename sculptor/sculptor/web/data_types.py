@@ -11,24 +11,24 @@ from pydantic import EmailStr
 from pydantic import Field
 from pydantic import Tag
 
-from sculptor.foundation.agents.data_types.ids import ProjectID
-from sculptor.foundation.agents.data_types.ids import TaskID
-from sculptor.foundation.pydantic_serialization import SerializableModel
-from sculptor.foundation.pydantic_serialization import build_discriminator
-from sculptor.foundation.state.chat_state import AskUserQuestionData
-from sculptor.foundation.state.messages import EffortLevel
-from sculptor.foundation.state.messages import LLMModel
-from sculptor.foundation.state.messages import Message
-from sculptor.foundation.upper_case_str_enum import UpperCaseStrEnum
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.pydantic_serialization import SerializableModel
+from sculptor.foundation.pydantic_serialization import build_discriminator
+from sculptor.foundation.upper_case_str_enum import UpperCaseStrEnum
 from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.interfaces.agents.artifacts import DiffArtifact
 from sculptor.interfaces.agents.artifacts import TaskListArtifact
+from sculptor.primitives.ids import ProjectID
+from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.data_model_service.api import CompletedTransaction
 from sculptor.services.task_service.api import TaskMessageContainer
 from sculptor.services.workspace_service.api import GitOperationResult
+from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.messages import EffortLevel
+from sculptor.state.messages import LLMModel
+from sculptor.state.messages import Message
 
 
 class TaskInterface(StrEnum):

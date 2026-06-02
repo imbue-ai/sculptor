@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
-from sculptor.foundation.agents.data_types.ids import ProjectID
 from sculptor.database.models import TaskID
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.web.derived import PrStatusInfo
 

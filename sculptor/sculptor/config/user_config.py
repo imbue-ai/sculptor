@@ -8,8 +8,8 @@ from pydantic import Field
 from pydantic import model_validator
 from pydantic.alias_generators import to_camel
 
+from sculptor.config.custom_actions import CustomActionsConfig
 from sculptor.foundation.pydantic_serialization import SerializableModel
-from sculptor.foundation.custom_actions import CustomActionsConfig
 
 
 class UpdateChannel(StrEnum):

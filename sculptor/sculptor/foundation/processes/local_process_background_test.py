@@ -14,7 +14,6 @@ from sculptor.foundation.event_utils import CompoundEvent
 from sculptor.foundation.processes import local_process as local_process_module
 from sculptor.foundation.processes.local_process import RunningProcess
 from sculptor.foundation.processes.local_process import run_background
-from sculptor.foundation.subprocess_utils import FinishedProcess
 from sculptor.foundation.subprocess_utils import ProcessError
 from sculptor.foundation.subprocess_utils import ProcessSetupError
 
@@ -268,7 +267,9 @@ def test_run_background_inner_thread_does_not_leak_unexpected_exception(monkeypa
             on_init(sentinel)
         raise sentinel
 
-    monkeypatch.setattr(local_process_module, "run_local_command_modern_version", fake_run_local_command_modern_version)
+    monkeypatch.setattr(
+        local_process_module, "run_local_command_modern_version", fake_run_local_command_modern_version
+    )
 
     captured: list[threading.ExceptHookArgs] = []
 
@@ -291,7 +292,9 @@ def test_run_background_inner_thread_does_not_leak_unexpected_exception(monkeypa
         f"{args.exc_type.__name__}: {args.exc_value} in thread {args.thread.name if args.thread else '?'}"
         for args in captured
     ]
-    assert not captured, f"Inner subprocess-wrapper thread leaked an exception to threading.excepthook (SCU-1265): {leaked_summaries}"
+    assert not captured, (
+        f"Inner subprocess-wrapper thread leaked an exception to threading.excepthook (SCU-1265): {leaked_summaries}"
+    )
 
 
 def test_run_background_inner_thread_runtime_failure_surfaced_by_wait(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -318,7 +321,9 @@ def test_run_background_inner_thread_runtime_failure_surfaced_by_wait(monkeypatc
         # Then raise as if the streaming loop hit an unexpected error.
         raise runtime_failure
 
-    monkeypatch.setattr(local_process_module, "run_local_command_modern_version", fake_run_local_command_modern_version)
+    monkeypatch.setattr(
+        local_process_module, "run_local_command_modern_version", fake_run_local_command_modern_version
+    )
 
     # ``start()`` should return normally because Popen "succeeded".
     proc = run_background(["echo", "runtime"])

@@ -6,13 +6,13 @@ from typing import Generator
 
 from loguru import logger
 
-from sculptor.foundation.agents.data_types.ids import ProjectID
+from sculptor.database.models import Workspace
 from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.constants import ExceptionPriority
 from sculptor.foundation.errors import ExpectedError
 from sculptor.foundation.itertools import generate_flattened
-from sculptor.database.models import Workspace
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.primitives.threads import StopGapBackgroundPollingStreamSource

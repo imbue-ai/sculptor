@@ -9,21 +9,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from sculptor.foundation.agents.data_types.ids import AgentMessageID
-from sculptor.foundation.agents.data_types.ids import TaskID
-from sculptor.foundation.ids import ToolUseID
-from sculptor.foundation.state.chat_state import FileBlock
-from sculptor.foundation.state.chat_state import TextBlock
-from sculptor.foundation.state.chat_state import ToolResultBlock
-from sculptor.foundation.state.chat_state import ToolUseBlock
-from sculptor.foundation.state.claude_state import ParsedAssistantResponse
-from sculptor.foundation.state.claude_state import ParsedEndResponse
-from sculptor.foundation.state.claude_state import ParsedInitResponse
-from sculptor.foundation.state.claude_state import ParsedStreamEvent
-from sculptor.foundation.state.claude_state import ParsedTaskNotificationResponse
-from sculptor.foundation.state.claude_state import ParsedTaskStartedResponse
-from sculptor.foundation.state.claude_state import ParsedTaskUpdatedResponse
-from sculptor.foundation.state.messages import ChatInputUserMessage
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.default.claude_code_sdk.mcp_server import SculptorMcpServer
 from sculptor.agents.default.claude_code_sdk.output_processor import ClaudeOutputProcessor
@@ -45,6 +30,21 @@ from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
 from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
 from sculptor.interfaces.agents.errors import AgentClientError
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import TaskID
+from sculptor.primitives.ids import ToolUseID
+from sculptor.state.chat_state import FileBlock
+from sculptor.state.chat_state import TextBlock
+from sculptor.state.chat_state import ToolResultBlock
+from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.claude_state import ParsedAssistantResponse
+from sculptor.state.claude_state import ParsedEndResponse
+from sculptor.state.claude_state import ParsedInitResponse
+from sculptor.state.claude_state import ParsedStreamEvent
+from sculptor.state.claude_state import ParsedTaskNotificationResponse
+from sculptor.state.claude_state import ParsedTaskStartedResponse
+from sculptor.state.claude_state import ParsedTaskUpdatedResponse
+from sculptor.state.messages import ChatInputUserMessage
 from sculptor.web.message_conversion import convert_agent_messages_to_task_update
 
 

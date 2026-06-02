@@ -307,7 +307,7 @@ class RunningProcess:
         # The caller should not have to worry about contextvars (e.g the loguru logging context).
         context = contextvars.copy_context()
         queue: Queue[BaseException | None] = Queue(maxsize=1)
-        on_initialized = lambda maybe_exception: queue.put_nowait(maybe_exception)
+        on_initialized = lambda maybe_exception: queue.put_nowait(maybe_exception)  # noqa: E731
         extra_kwargs: dict[str, Any] = {
             "on_initialization_complete": on_initialized,
             "isolate_process_group": self._isolate_process_group,

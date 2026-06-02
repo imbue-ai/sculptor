@@ -9,15 +9,10 @@ from loguru import logger
 from pydantic import AnyUrl
 from pydantic import PrivateAttr
 
-from sculptor.foundation.agents.data_types.ids import AgentMessageID
+from sculptor.agents.default.agent_wrapper import DefaultAgentWrapper
 from sculptor.foundation.common import generate_id
-from sculptor.foundation.ids import AssistantMessageID
-from sculptor.foundation.state.chat_state import TextBlock
-from sculptor.foundation.state.messages import ChatInputUserMessage
-from sculptor.foundation.state.messages import ResponseBlockAgentMessage
 from sculptor.foundation.secrets_utils import Secret
 from sculptor.foundation.thread_utils import ObservableThread
-from sculptor.agents.default.agent_wrapper import DefaultAgentWrapper
 from sculptor.interfaces.agents.agent import FileAgentArtifact
 from sculptor.interfaces.agents.agent import HelloAgentConfig
 from sculptor.interfaces.agents.agent import StopAgentUserMessage
@@ -25,6 +20,11 @@ from sculptor.interfaces.agents.agent import UpdatedArtifactAgentMessage
 from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_CLEAN_SHUTDOWN_ON_INTERRUPT
 from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_SHUTDOWN_DUE_TO_EXCEPTION
 from sculptor.interfaces.agents.errors import AgentCrashed
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import AssistantMessageID
+from sculptor.state.chat_state import TextBlock
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import ResponseBlockAgentMessage
 
 
 class HelloAgent(DefaultAgentWrapper):

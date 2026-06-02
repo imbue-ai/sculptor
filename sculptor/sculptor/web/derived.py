@@ -14,22 +14,6 @@ from pydantic import Tag
 from pydantic import ValidationError
 from pydantic import computed_field
 
-from sculptor.foundation.agents.data_types.ids import AgentMessageID
-from sculptor.foundation.agents.data_types.ids import ProjectID
-from sculptor.foundation.ids import AssistantMessageID
-from sculptor.foundation.itertools import only
-from sculptor.foundation.pydantic_serialization import SerializableModel
-from sculptor.foundation.pydantic_serialization import build_discriminator
-from sculptor.foundation.state.chat_state import AskUserQuestionData
-from sculptor.foundation.state.chat_state import ChatMessage
-from sculptor.foundation.state.chat_state import TextBlock
-from sculptor.foundation.state.chat_state import ToolUseBlock
-from sculptor.foundation.state.chat_state import TurnMetrics
-from sculptor.foundation.state.messages import AgentMessageSource
-from sculptor.foundation.state.messages import ChatInputUserMessage
-from sculptor.foundation.state.messages import LLMModel
-from sculptor.foundation.state.messages import Message
-from sculptor.foundation.state.messages import ResponseBlockAgentMessage
 from sculptor.agents.harness_registry import get_harness_for_config
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskInputsV2
@@ -45,6 +29,9 @@ from sculptor.database.models import TaskID
 from sculptor.database.models import TaskInputs
 from sculptor.database.models import UserSettings
 from sculptor.database.models import Workspace
+from sculptor.foundation.itertools import only
+from sculptor.foundation.pydantic_serialization import SerializableModel
+from sculptor.foundation.pydantic_serialization import build_discriminator
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingDoneAgentMessage
@@ -61,7 +48,20 @@ from sculptor.interfaces.agents.artifacts import TaskListArtifact
 from sculptor.interfaces.agents.harness import Harness
 from sculptor.interfaces.agents.harness import HarnessCapabilities
 from sculptor.interfaces.agents.tasks import TaskState
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import AssistantMessageID
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.chat_state import ChatMessage
+from sculptor.state.chat_state import TextBlock
+from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.chat_state import TurnMetrics
+from sculptor.state.messages import AgentMessageSource
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import LLMModel
+from sculptor.state.messages import Message
+from sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.utils.functional import first
 from sculptor.web.data_types import PrApproval  # noqa: F401 — re-exported for existing import sites
 from sculptor.web.data_types import PrComment  # noqa: F401 — re-exported for existing import sites

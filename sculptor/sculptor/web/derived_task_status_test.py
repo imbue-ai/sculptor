@@ -13,22 +13,12 @@ from ``request_finished_messages`` in ``derived.py`` has been removed accordingl
 and the test below has been updated to assert the new behavior.
 """
 
-from sculptor.foundation.agents.data_types.ids import AgentMessageID
-from sculptor.foundation.agents.data_types.ids import ProjectID
-from sculptor.foundation.ids import AssistantMessageID
-from sculptor.foundation.ids import ToolUseID
-from sculptor.foundation.state.chat_state import AskUserQuestionData
-from sculptor.foundation.state.chat_state import QuestionOption
-from sculptor.foundation.state.chat_state import ToolUseBlock
-from sculptor.foundation.state.chat_state import UserQuestion
-from sculptor.foundation.state.messages import ChatInputUserMessage
-from sculptor.foundation.state.messages import ResponseBlockAgentMessage
-from sculptor.foundation.serialization import SerializedException
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Task
 from sculptor.database.models import TaskID
+from sculptor.foundation.serialization import SerializedException
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
 from sculptor.interfaces.agents.agent import EnvironmentAcquiredRunnerMessage
@@ -38,9 +28,19 @@ from sculptor.interfaces.agents.agent import RequestStoppedAgentMessage
 from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
 from sculptor.interfaces.agents.harness import HarnessCapabilities
 from sculptor.interfaces.agents.tasks import TaskState
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import AssistantMessageID
 from sculptor.primitives.ids import OrganizationReference
+from sculptor.primitives.ids import ProjectID
+from sculptor.primitives.ids import ToolUseID
 from sculptor.primitives.ids import UserReference
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.chat_state import QuestionOption
+from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.chat_state import UserQuestion
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.web.derived import CodingAgentTaskView
 from sculptor.web.derived import TaskStatus
 from sculptor.web.derived import create_initial_task_view

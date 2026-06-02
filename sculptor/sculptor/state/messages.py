@@ -4,11 +4,11 @@ from typing import Literal
 
 from pydantic import Field
 
-from sculptor.foundation.agents.data_types.ids import AgentMessageID
-from sculptor.foundation.ids import AssistantMessageID
 from sculptor.foundation.pydantic_serialization import SerializableModel
-from sculptor.foundation.state.chat_state import ContentBlockTypes
 from sculptor.foundation.time_utils import get_current_time
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import AssistantMessageID
+from sculptor.state.chat_state import ContentBlockTypes
 
 
 class LLMModel(StrEnum):

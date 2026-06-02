@@ -17,19 +17,18 @@ from typing import cast
 import pytest
 from pydantic import PrivateAttr
 
-from sculptor.foundation.agents.data_types.ids import ProjectID
-from sculptor.foundation.concurrency_group import ConcurrencyGroup
-from sculptor.foundation.state.messages import ChatInputUserMessage
-from sculptor.foundation.user_config import CIBabysitterConfig
-from sculptor.foundation.user_config import UserConfig
+from sculptor.config.user_config import CIBabysitterConfig
+from sculptor.config.user_config import UserConfig
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Project
 from sculptor.database.models import Task
 from sculptor.database.models import TaskID
 from sculptor.database.models import Workspace
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.interfaces.agents.agent import MessageTypes
 from sculptor.primitives.ids import OrganizationReference
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import TransactionID
 from sculptor.primitives.ids import WorkspaceID
@@ -42,6 +41,7 @@ from sculptor.services.git_repo_service.api import GitRepoService
 from sculptor.services.git_repo_service.git_repos import ReadOnlyGitRepo
 from sculptor.services.task_service.api import TaskService
 from sculptor.services.workspace_service.api import WorkspaceService
+from sculptor.state.messages import ChatInputUserMessage
 from sculptor.web.derived import PrStatusInfo
 from sculptor.web.pr_polling_service import PrPollingService
 

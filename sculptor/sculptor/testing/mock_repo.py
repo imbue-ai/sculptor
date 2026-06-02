@@ -6,11 +6,11 @@ import attr
 from loguru import logger
 
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
-from sculptor.foundation.git_data_types import CommitTimestamp
 from sculptor.testing.computing_environment import create_reset_and_checkout_branch
 from sculptor.testing.computing_environment import get_branch_name
 from sculptor.testing.computing_environment import make_commit
 from sculptor.testing.computing_environment import switch_branch
+from sculptor.testing.git_data_types import CommitTimestamp
 from sculptor.testing.git_snapshot import FullLocalGitRepo
 from sculptor.testing.git_snapshot import create_repo_from_snapshot
 from sculptor.testing.local_git_repo import LocalGitRepo

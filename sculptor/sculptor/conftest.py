@@ -3,9 +3,9 @@ from typing import cast
 
 import pytest
 
-from sculptor.foundation.concurrency_group import ConcurrencyGroup
-from sculptor.foundation.user_config import UserConfig
 from sculptor.config.settings import SculptorSettings
+from sculptor.config.user_config import UserConfig
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.btw_service.api import BtwService
 from sculptor.services.ci_babysitter_service.coordinator import CIBabysitterCoordinator

@@ -1,5 +1,5 @@
-from sculptor.foundation.state.chat_state import AskUserQuestionData
-from sculptor.foundation.state.chat_state import make_plan_approval_question
+from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.chat_state import make_plan_approval_question
 
 
 def test_make_plan_approval_question_default_path_is_none() -> None:

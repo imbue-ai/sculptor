@@ -1,9 +1,9 @@
-from sculptor.foundation.telemetry import TelemetryInfo
-from sculptor.foundation.user_config import UserConfig
 from sculptor import version
+from sculptor.config.user_config import UserConfig
 from sculptor.services.user_config.user_config import get_default_user_config_instance
 from sculptor.services.user_config.user_config import get_execution_instance_id
 from sculptor.services.user_config.user_config import get_user_config_instance
+from sculptor.telemetry.telemetry import TelemetryInfo
 
 
 def _get_telemetry_info_with_user_config(user_config: UserConfig) -> TelemetryInfo:

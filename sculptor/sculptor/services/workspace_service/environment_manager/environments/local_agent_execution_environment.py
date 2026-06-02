@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from sculptor.foundation.agents.data_types.ids import TaskID
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.event_utils import MutableEvent
 from sculptor.foundation.processes.local_process import RunningProcess
@@ -26,6 +25,7 @@ from sculptor.interfaces.environments.base import ARTIFACTS_DIRECTORY
 from sculptor.interfaces.environments.base import Environment
 from sculptor.interfaces.environments.base import STATE_DIRECTORY
 from sculptor.interfaces.environments.base import TASKS_SUBDIRECTORY
+from sculptor.primitives.ids import TaskID
 from sculptor.services.dependency_management_service import DependencyManagementService
 
 if TYPE_CHECKING:

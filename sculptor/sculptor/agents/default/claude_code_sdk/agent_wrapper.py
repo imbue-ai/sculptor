@@ -8,8 +8,6 @@ from __future__ import annotations
 from loguru import logger
 from pydantic import PrivateAttr
 
-from sculptor.foundation.state.messages import ChatInputUserMessage
-from sculptor.foundation.state.messages import Message
 from sculptor.agents.default.agent_wrapper import DefaultAgentWrapper
 from sculptor.agents.default.claude_code_sdk.harness import ClaudeCodeHarness
 from sculptor.agents.default.claude_code_sdk.process_manager import ClaudeProcessManager
@@ -23,6 +21,8 @@ from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
 from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_SHUTDOWN_DUE_TO_EXCEPTION
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import Message
 
 
 class ClaudeCodeSDKAgent(DefaultAgentWrapper):

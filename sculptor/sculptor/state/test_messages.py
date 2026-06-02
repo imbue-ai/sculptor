@@ -1,10 +1,10 @@
 from syrupy import SnapshotAssertion
 
-from sculptor.foundation.ids import AssistantMessageID
-from sculptor.foundation.state.chat_state import TextBlock
-from sculptor.foundation.state.messages import ChatInputUserMessage
-from sculptor.foundation.state.messages import LLMModel
-from sculptor.foundation.state.messages import ResponseBlockAgentMessage
+from sculptor.primitives.ids import AssistantMessageID
+from sculptor.state.chat_state import TextBlock
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import LLMModel
+from sculptor.state.messages import ResponseBlockAgentMessage
 
 
 def test_create_messages(snapshot: SnapshotAssertion) -> None:

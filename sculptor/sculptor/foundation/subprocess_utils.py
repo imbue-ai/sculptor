@@ -696,8 +696,8 @@ def run_local_command_modern_version(
             _register_isolated_process_group(process.pid)
 
     if trace_on_line_callback is not None:
-        on_complete_line_from_stdout = lambda line: trace_on_line_callback(line, True)
-        on_complete_line_from_stderr = lambda line: trace_on_line_callback(line, False)
+        on_complete_line_from_stdout = lambda line: trace_on_line_callback(line, True)  # noqa: E731
+        on_complete_line_from_stderr = lambda line: trace_on_line_callback(line, False)  # noqa: E731
     else:
         on_complete_line_from_stdout = None
         on_complete_line_from_stderr = None

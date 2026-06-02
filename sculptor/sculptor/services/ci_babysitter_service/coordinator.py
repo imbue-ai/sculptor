@@ -18,22 +18,19 @@ from queue import Queue
 from loguru import logger
 from pydantic import PrivateAttr
 
-from sculptor.foundation.agents.data_types.ids import AgentMessageID
-from sculptor.foundation.agents.data_types.ids import ProjectID
-from sculptor.foundation.concurrency_group import ConcurrencyGroup
-from sculptor.foundation.pydantic_serialization import SerializableModel
-from sculptor.foundation.state.messages import ChatInputUserMessage
-from sculptor.foundation.state.messages import EffortLevel
-from sculptor.foundation.state.messages import LLMModel
-from sculptor.foundation.user_config import UserConfig
+from sculptor.config.user_config import UserConfig
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Task
 from sculptor.database.models import TaskID
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
 from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.interfaces.agents.agent import PiAgentConfig
 from sculptor.primitives.constants import ANONYMOUS_USER_REFERENCE
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.primitives.service import Service
@@ -45,6 +42,9 @@ from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.git_repo_service.api import GitRepoService
 from sculptor.services.task_service.api import TaskService
 from sculptor.services.user_config.user_config import get_user_config_instance
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import EffortLevel
+from sculptor.state.messages import LLMModel
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import PrStatusInfo
 from sculptor.web.pr_polling_service import PrPollingService

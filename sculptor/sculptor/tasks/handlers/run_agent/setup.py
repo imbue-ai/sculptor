@@ -8,8 +8,10 @@ from typing import cast
 
 from loguru import logger
 
-from sculptor.foundation.agents.data_types.ids import AgentMessageID
-from sculptor.foundation.agents.data_types.ids import TaskID
+from sculptor.config.settings import SculptorSettings
+from sculptor.database.models import AgentTaskStateV2
+from sculptor.database.models import Project
+from sculptor.database.models import Task
 from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.constants import ExceptionPriority
@@ -19,13 +21,6 @@ from sculptor.foundation.nested_evolver import chill
 from sculptor.foundation.nested_evolver import evolver
 from sculptor.foundation.progress_tracking.progress_tracking import RootProgressHandle
 from sculptor.foundation.progress_tracking.progress_tracking import start_finish_context
-from sculptor.foundation.state.messages import ChatInputUserMessage
-from sculptor.foundation.state.messages import Message
-from sculptor.foundation.state.messages import PersistentUserMessage
-from sculptor.config.settings import SculptorSettings
-from sculptor.database.models import AgentTaskStateV2
-from sculptor.database.models import Project
-from sculptor.database.models import Task
 from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessage
 from sculptor.interfaces.agents.agent import PersistentUserMessageUnion
 from sculptor.interfaces.agents.agent import RequestStoppedAgentMessage
@@ -33,10 +28,15 @@ from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
 from sculptor.interfaces.agents.agent import StopAgentUserMessage
 from sculptor.interfaces.agents.agent import UserMessageUnion
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import TaskID
 from sculptor.server.llm_content_generation import TaskTitle
 from sculptor.server.llm_content_generation import generate_title_from_prompt
 from sculptor.services.task_service.data_types import ServiceCollectionForTask
 from sculptor.services.task_service.errors import UserPausedTaskError
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import Message
+from sculptor.state.messages import PersistentUserMessage
 from sculptor.utils.type_utils import extract_leaf_types
 
 # it will take at most this much time to notice when the process has finished

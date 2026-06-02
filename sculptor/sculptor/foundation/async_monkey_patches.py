@@ -74,7 +74,9 @@ def log_exception(
         return None
 
     traceback_str = "".join(traceback.format_stack())
-    message = f"{message}\n\nlog_exception CALL SITE TRACEBACK:\n\n{traceback_str}\nORIGINAL EXCEPTION TRACEBACK FOLLOWS:\n"
+    message = (
+        f"{message}\n\nlog_exception CALL SITE TRACEBACK:\n\n{traceback_str}\nORIGINAL EXCEPTION TRACEBACK FOLLOWS:\n"
+    )
 
     # inject received exception stack trace into logger error message
     inject_exception_and_log(exc, message, priority, *args, **kwargs)

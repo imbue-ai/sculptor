@@ -24,12 +24,12 @@ from queue import Queue
 from loguru import logger
 from pydantic import PrivateAttr
 
+from sculptor.config.user_config import UserConfig
+from sculptor.database.models import Workspace
 from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.constants import ExceptionPriority
 from sculptor.foundation.processes.local_process import run_blocking
-from sculptor.foundation.user_config import UserConfig
-from sculptor.database.models import Workspace
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.primitives.service import Service

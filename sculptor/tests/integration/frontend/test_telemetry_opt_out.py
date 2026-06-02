@@ -29,8 +29,8 @@ from pathlib import Path
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
-from imbue_core.sculptor.user_config import DependencyPaths
-from imbue_core.sculptor.user_config import UserConfig
+from sculptor.config.user_config import DependencyPaths
+from sculptor.config.user_config import UserConfig
 from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.pages.onboarding_page import PlaywrightOnboardingPage

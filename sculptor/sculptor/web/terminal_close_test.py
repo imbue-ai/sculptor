@@ -23,9 +23,9 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.database.models import Project
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.primitives.ids import RequestID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (

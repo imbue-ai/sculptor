@@ -5,8 +5,8 @@ only remaining type here describes the telemetry info served to the frontend,
 which owns telemetry reporting.
 """
 
+from sculptor.config.user_config import UserConfig
 from sculptor.foundation.pydantic_serialization import SerializableModel
-from sculptor.foundation.user_config import UserConfig
 
 
 class TelemetryInfo(SerializableModel):

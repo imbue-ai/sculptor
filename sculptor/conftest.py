@@ -9,13 +9,13 @@ import pytest
 from _pytest.junitxml import xml_key
 from syrupy.assertion import SnapshotAssertion
 
+from sculptor.config.settings import SculptorSettings
+from sculptor.config.settings import TEST_LOG_PATH
+from sculptor.config.settings import TestingConfig
 from sculptor.foundation.async_monkey_patches_test import explode_on_error  # noqa: F401
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.fixtures import empty_temp_git_repo
 from sculptor.foundation.fixtures import initial_commit_repo
-from sculptor.config.settings import SculptorSettings
-from sculptor.config.settings import TEST_LOG_PATH
-from sculptor.config.settings import TestingConfig
 from sculptor.testing.browser_panel_fixture_server import browser_panel_fixture_server_  # noqa: F401
 from sculptor.testing.port_manager import PortManager
 from sculptor.utils.logs import setup_default_test_logging

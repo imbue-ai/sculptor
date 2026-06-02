@@ -22,22 +22,12 @@ import pytest
 from sculptor.agents.pi_agent.agent_wrapper import PI_SESSION_DIR_NAME
 from sculptor.agents.pi_agent.agent_wrapper import PI_SESSION_ID_STATE_FILE
 from sculptor.agents.pi_agent.agent_wrapper import PiAgent
-from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
-from sculptor.primitives.ids import AgentMessageID
-from sculptor.primitives.ids import TaskID
-from sculptor.state.chat_state import AskUserQuestionData
-from sculptor.state.chat_state import GenericToolContent
-from sculptor.state.chat_state import TextBlock
-from sculptor.state.chat_state import ToolResultBlock
-from sculptor.state.chat_state import ToolUseBlock
-from sculptor.state.messages import ChatInputUserMessage
-from sculptor.state.messages import Message
-from sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.agents.pi_agent.harness import PI_HARNESS
 from sculptor.agents.pi_agent.output_processor import AgentMessage
 from sculptor.agents.pi_agent.output_processor import ParsedUnknownEvent
 from sculptor.agents.pi_agent.output_processor import extract_tool_call_blocks
 from sculptor.agents.pi_agent.output_processor import parse_rpc_message
+from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
 from sculptor.interfaces.agents.agent import ClearContextUserMessage
 from sculptor.interfaces.agents.agent import InterruptProcessUserMessage
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
@@ -50,6 +40,16 @@ from sculptor.interfaces.agents.errors import PiBinaryNotFoundError
 from sculptor.interfaces.agents.errors import PiCrashError
 from sculptor.interfaces.agents.errors import PiVersionMismatchError
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import TaskID
+from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.chat_state import GenericToolContent
+from sculptor.state.chat_state import TextBlock
+from sculptor.state.chat_state import ToolResultBlock
+from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import Message
+from sculptor.state.messages import ResponseBlockAgentMessage
 
 _PROMPT_ID = "prompt-1"
 

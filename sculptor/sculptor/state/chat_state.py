@@ -7,10 +7,10 @@ from typing import Literal
 from pydantic import Field
 from pydantic import Tag
 
-from sculptor.foundation.agents.data_types.ids import AgentMessageID
-from sculptor.foundation.ids import ToolUseID
 from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.foundation.pydantic_serialization import build_discriminator
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import ToolUseID
 
 # ========================
 # Chat Type Definitions
@@ -97,7 +97,9 @@ class ToolResultBlockSimple(ContentBlock):
     invocation_string: str = Field(..., description="String representation of how the tool was invoked")
     content: SimpleToolContent = Field(..., description="Result content from the tool execution")
     is_error: bool = Field(default=False, description="Whether the tool execution resulted in an error")
-    duration_seconds: float | None = Field(default=None, description="Wall-clock duration of the tool execution in seconds")
+    duration_seconds: float | None = Field(
+        default=None, description="Wall-clock duration of the tool execution in seconds"
+    )
     description: str | None = Field(default=None, description="Human-readable description of what the tool call does")
 
 
@@ -109,7 +111,9 @@ class ToolResultBlock(ContentBlock):
     invocation_string: str = Field(..., description="String representation of how the tool was invoked")
     content: ToolResultContentType = Field(..., description="Result content from the tool execution")
     is_error: bool = Field(default=False, description="Whether the tool execution resulted in an error")
-    duration_seconds: float | None = Field(default=None, description="Wall-clock duration of the tool execution in seconds")
+    duration_seconds: float | None = Field(
+        default=None, description="Wall-clock duration of the tool execution in seconds"
+    )
     description: str | None = Field(default=None, description="Human-readable description of what the tool call does")
 
 
@@ -139,10 +143,19 @@ class TurnMetrics(SerializableModel):
     """Per-turn metrics attached to completed assistant messages."""
 
     duration_seconds: float = Field(..., description="Wall-clock turn duration in seconds")
-    input_tokens: int | None = Field(default=None, description="Input tokens for this turn (None when interrupted before completion)")
-    output_tokens: int | None = Field(default=None, description="Output tokens for this turn (None when interrupted before completion)")
-    reasoning_tokens: int | None = Field(default=None, description="Reasoning/thinking tokens (None if not applicable)")
-    changed_files: list[str] = Field(default_factory=list, description="File paths changed during this turn (git-relative, all tools including Bash)")
+    input_tokens: int | None = Field(
+        default=None, description="Input tokens for this turn (None when interrupted before completion)"
+    )
+    output_tokens: int | None = Field(
+        default=None, description="Output tokens for this turn (None when interrupted before completion)"
+    )
+    reasoning_tokens: int | None = Field(
+        default=None, description="Reasoning/thinking tokens (None if not applicable)"
+    )
+    changed_files: list[str] = Field(
+        default_factory=list,
+        description="File paths changed during this turn (git-relative, all tools including Bash)",
+    )
     # Context usage snapshot at the end of this turn. Sourced from the
     # get_context_usage control response, attached here so each turn footer
     # shows its own historical point-in-time values.

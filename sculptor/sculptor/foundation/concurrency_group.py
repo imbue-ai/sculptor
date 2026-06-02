@@ -470,7 +470,7 @@ class ConcurrencyGroup(MutableModel, AbstractContextManager):
         (And also when waited on directly, default is False)
 
         """
-        process_factory = lambda: run_background(
+        process_factory = lambda: run_background(  # noqa: E731
             command,
             cwd=Path(cwd) if cwd is not None else None,
             env=env,
@@ -525,7 +525,7 @@ class ConcurrencyGroup(MutableModel, AbstractContextManager):
                 is_checked_by_group=False,
                 log_command=log_command,
             )
-            result = process.wait()
+            process.wait()
             if is_checked_after:
                 process.check()
 
@@ -684,7 +684,6 @@ class ChildConcurrencyGroupDidNotExitError(Exception):
 
 class ConcurrentShutdownError(Exception):
     pass
-
 
 
 class AncestorConcurrentFailure(Exception):

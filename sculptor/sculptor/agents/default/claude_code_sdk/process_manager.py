@@ -13,16 +13,6 @@ from typing import Mapping
 
 from loguru import logger
 
-from sculptor.foundation.agents.data_types.ids import AgentMessageID
-from sculptor.foundation.agents.data_types.ids import TaskID
-from sculptor.foundation.async_monkey_patches import log_exception
-from sculptor.foundation.constants import ExceptionPriority
-from sculptor.foundation.processes.local_process import RunningProcess
-from sculptor.foundation.state.messages import ChatInputUserMessage
-from sculptor.foundation.state.messages import LLMModel
-from sculptor.foundation.state.messages import Message
-from sculptor.foundation.secrets_utils import Secret
-from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.claude_code_sdk.harness import ClaudeCodeHarness
 from sculptor.agents.default.claude_code_sdk.mcp_server import SculptorMcpServer
@@ -40,6 +30,11 @@ from sculptor.agents.default.utils import get_state_file_contents
 from sculptor.agents.default.utils import get_turn_request_id
 from sculptor.agents.default.utils import get_warning_message
 from sculptor.common.plugin import get_plugin_dirs
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.constants import ExceptionPriority
+from sculptor.foundation.processes.local_process import RunningProcess
+from sculptor.foundation.secrets_utils import Secret
+from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.interfaces.agents.agent import ClearContextUserMessage
 from sculptor.interfaces.agents.agent import ContextClearedMessage
 from sculptor.interfaces.agents.agent import InterruptProcessUserMessage
@@ -57,11 +52,16 @@ from sculptor.interfaces.agents.errors import IllegalOperationError
 from sculptor.interfaces.agents.errors import UncleanTerminationAgentError
 from sculptor.interfaces.agents.errors import WaitTimeoutAgentError
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.services.workspace_service.environment_manager.env_file_parser import load_project_env_vars
 from sculptor.services.workspace_service.setup_command_runner import SetupReminderState
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import LLMModel
+from sculptor.state.messages import Message
 from sculptor.utils.build import get_internal_folder
 
 

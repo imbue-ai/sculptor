@@ -15,9 +15,9 @@ from unittest.mock import patch
 import httpx
 import pytest
 
+from sculptor.config.user_config import DependencyPaths
+from sculptor.config.user_config import UserConfig
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
-from sculptor.foundation.user_config import DependencyPaths
-from sculptor.foundation.user_config import UserConfig
 from sculptor.foundation.subprocess_utils import FinishedProcess
 from sculptor.foundation.subprocess_utils import ProcessError
 from sculptor.foundation.subprocess_utils import ProcessTimeoutError

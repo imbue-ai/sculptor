@@ -8,17 +8,17 @@ from typing import cast
 from loguru import logger
 from pydantic import Field
 
-from sculptor.foundation.agents.agent_api.data_types import AgentToolName
-from sculptor.foundation.ids import AssistantMessageID
 from sculptor.foundation.pydantic_serialization import SerializableModel
-from sculptor.foundation.state.chat_state import ContentBlockTypes
-from sculptor.foundation.state.chat_state import FileBlock
-from sculptor.foundation.state.chat_state import SimpleToolContent
-from sculptor.foundation.state.chat_state import TextBlock
-from sculptor.foundation.state.chat_state import ToolInput
-from sculptor.foundation.state.chat_state import ToolResultBlock
-from sculptor.foundation.state.chat_state import ToolResultBlockSimple
-from sculptor.foundation.state.chat_state import ToolUseBlock
+from sculptor.interfaces.agents.tool_names import AgentToolName
+from sculptor.primitives.ids import AssistantMessageID
+from sculptor.state.chat_state import ContentBlockTypes
+from sculptor.state.chat_state import FileBlock
+from sculptor.state.chat_state import SimpleToolContent
+from sculptor.state.chat_state import TextBlock
+from sculptor.state.chat_state import ToolInput
+from sculptor.state.chat_state import ToolResultBlock
+from sculptor.state.chat_state import ToolResultBlockSimple
+from sculptor.state.chat_state import ToolUseBlock
 
 RE_STRIP_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[mGKHfABCDhls]|\x1b\[[?][0-9;]*[hlHLdcE]|\x1b[=>]")
 

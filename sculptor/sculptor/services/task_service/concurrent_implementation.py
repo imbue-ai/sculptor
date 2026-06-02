@@ -13,8 +13,11 @@ from typing import TypeVar
 from loguru import logger
 from pydantic import PrivateAttr
 
-from sculptor.foundation.agents.data_types.ids import AgentMessageID
-from sculptor.foundation.agents.data_types.ids import ProjectID
+from sculptor.config.settings import SculptorSettings
+from sculptor.constants import SCULPTOR_EXIT_CODE_IRRECOVERABLE_ERROR
+from sculptor.database.models import Project
+from sculptor.database.models import Task
+from sculptor.database.models import TaskID
 from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.foundation.concurrency_group import ConcurrencyExceptionGroup
 from sculptor.foundation.concurrency_group import ConcurrentShutdownError
@@ -22,13 +25,10 @@ from sculptor.foundation.constants import ExceptionPriority
 from sculptor.foundation.log_utils import log_and_exit_program
 from sculptor.foundation.pydantic_serialization import MutableModel
 from sculptor.foundation.time_utils import get_current_time
-from sculptor.config.settings import SculptorSettings
-from sculptor.constants import SCULPTOR_EXIT_CODE_IRRECOVERABLE_ERROR
-from sculptor.database.models import Project
-from sculptor.database.models import Task
-from sculptor.database.models import TaskID
 from sculptor.interfaces.agents.agent import TaskStatusRunnerMessage
 from sculptor.interfaces.agents.tasks import TaskState
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import ProjectID
 from sculptor.services.task_service.base_implementation import BaseTaskService
 from sculptor.utils.errors import is_irrecoverable_exception
 

@@ -1,7 +1,6 @@
 import pytest
 from fastapi import HTTPException
 
-from sculptor.foundation.agents.data_types.ids import ProjectID
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
@@ -12,6 +11,7 @@ from sculptor.database.models import Workspace
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
 from sculptor.primitives.ids import OrganizationReference
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import UserReference
 from sculptor.primitives.ids import WorkspaceID

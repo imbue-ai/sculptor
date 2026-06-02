@@ -2,17 +2,6 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from sculptor.foundation.agents.data_types.ids import AgentMessageID
-from sculptor.foundation.agents.data_types.ids import ProjectID
-from sculptor.foundation.agents.data_types.ids import TaskID
-from sculptor.foundation.concurrency_group import ConcurrencyGroup
-from sculptor.foundation.state.chat_state import AskUserQuestionData
-from sculptor.foundation.state.chat_state import GenericToolContent
-from sculptor.foundation.state.chat_state import QuestionOption
-from sculptor.foundation.state.chat_state import UserQuestion
-from sculptor.foundation.state.chat_state import make_plan_approval_question
-from sculptor.foundation.state.claude_state import ParsedToolResultResponse
-from sculptor.foundation.state.messages import ChatInputUserMessage
 from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import get_claude_command
@@ -21,9 +10,13 @@ from sculptor.agents.default.claude_code_sdk.process_manager_utils import parse_
 from sculptor.agents.testing.fake_claude_jsonl import make_assistant_message
 from sculptor.agents.testing.fake_claude_jsonl import make_tool_result_message
 from sculptor.agents.testing.fake_claude_jsonl import make_tool_use_block
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
+from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import LocalEnvironmentID
+from sculptor.primitives.ids import ProjectID
+from sculptor.primitives.ids import TaskID
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
     LocalAgentExecutionEnvironment,
@@ -31,6 +24,13 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
 from sculptor.services.workspace_service.setup_command_runner import FailedSetup
 from sculptor.services.workspace_service.setup_command_runner import RunningSetup
+from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.chat_state import GenericToolContent
+from sculptor.state.chat_state import QuestionOption
+from sculptor.state.chat_state import UserQuestion
+from sculptor.state.chat_state import make_plan_approval_question
+from sculptor.state.claude_state import ParsedToolResultResponse
+from sculptor.state.messages import ChatInputUserMessage
 from sculptor.tasks.handlers.run_agent.git import run_git_command_in_environment
 
 

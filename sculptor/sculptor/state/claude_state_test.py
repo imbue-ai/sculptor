@@ -1,13 +1,12 @@
 import json
 
-from sculptor.foundation.state.chat_state import FileBlock
-from sculptor.foundation.state.chat_state import TextBlock
-from sculptor.foundation.state.claude_state import ParsedAssistantResponse
-from sculptor.foundation.state.claude_state import extract_media_tags_from_text
-from sculptor.foundation.state.claude_state import split_text_and_media
-from sculptor.foundation.state.claude_state import get_tool_invocation_string
-from sculptor.foundation.state.claude_state import parse_claude_code_json_lines_simple
-
+from sculptor.state.chat_state import FileBlock
+from sculptor.state.chat_state import TextBlock
+from sculptor.state.claude_state import ParsedAssistantResponse
+from sculptor.state.claude_state import extract_media_tags_from_text
+from sculptor.state.claude_state import get_tool_invocation_string
+from sculptor.state.claude_state import parse_claude_code_json_lines_simple
+from sculptor.state.claude_state import split_text_and_media
 
 # =============================================
 # Tests for extract_media_tags_from_text
@@ -268,12 +267,7 @@ def test_split_text_and_media_http_url_stays_in_text() -> None:
 
 
 def test_split_text_and_media_mixed_img_and_video() -> None:
-    text = (
-        "Screenshot:\n"
-        '<img src="/tmp/ss.png" alt="ss">\n'
-        "Recording:\n"
-        '<video src="/tmp/rec.webm" controls></video>'
-    )
+    text = 'Screenshot:\n<img src="/tmp/ss.png" alt="ss">\nRecording:\n<video src="/tmp/rec.webm" controls></video>'
     result = split_text_and_media(text)
     assert result == [
         TextBlock(text="Screenshot:"),

@@ -6,12 +6,12 @@ import pytest
 from loguru import logger
 from pytest import Session
 
-from sculptor.foundation.concurrency_group import ConcurrencyGroup
-from sculptor.foundation.fixtures import initial_commit_repo
-from sculptor.foundation.git import get_repo_base_path
 from sculptor.config.settings import SculptorSettings
 from sculptor.config.settings import TEST_LOG_PATH
 from sculptor.config.settings import TestingConfig
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.fixtures import initial_commit_repo
+from sculptor.foundation.git import get_repo_base_path
 from sculptor.testing.timing_report import close_timeline
 from sculptor.testing.timing_report import print_phase_timing_table
 from sculptor.testing.timing_report import record_phase_duration

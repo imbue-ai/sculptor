@@ -14,7 +14,10 @@ from typing import Union
 from loguru import logger
 from pydantic import PrivateAttr
 
-from sculptor.foundation.agents.data_types.ids import ProjectID
+from sculptor.agents.default.constants import CLONE_MODE_PROMPT
+from sculptor.agents.default.constants import IN_PLACE_MODE_PROMPT
+from sculptor.agents.default.constants import WORKTREE_MODE_PROMPT
+from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.event_utils import CompoundEvent
 from sculptor.foundation.event_utils import MutableEvent
@@ -22,13 +25,10 @@ from sculptor.foundation.event_utils import ReadOnlyEvent
 from sculptor.foundation.processes.local_process import RunningProcess
 from sculptor.foundation.processes.local_process import run_background
 from sculptor.foundation.secrets_utils import Secret
-from sculptor.agents.default.constants import CLONE_MODE_PROMPT
-from sculptor.agents.default.constants import IN_PLACE_MODE_PROMPT
-from sculptor.agents.default.constants import WORKTREE_MODE_PROMPT
-from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.interfaces.environments.base import Environment
 from sculptor.interfaces.environments.errors import FileOrDirectoryCouldNotBeDeletedError
 from sculptor.primitives.ids import LocalEnvironmentID
+from sculptor.primitives.ids import ProjectID
 from sculptor.services.workspace_service.environment_manager.env_file_parser import atomic_copy_env_file
 from sculptor.services.workspace_service.environment_manager.env_file_parser import load_project_env_vars
 from sculptor.services.workspace_service.environment_manager.environments.clone_strategy import clone_repository

@@ -2,8 +2,6 @@
 
 from unittest.mock import MagicMock
 
-from sculptor.foundation.agents.data_types.ids import ProjectID
-from sculptor.foundation.agents.data_types.ids import TaskID
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.harness_registry import create_agent_for_run
 from sculptor.agents.harness_registry import get_harness_for_config
@@ -19,6 +17,8 @@ from sculptor.interfaces.agents.agent import PiAgentConfig
 from sculptor.interfaces.agents.harness import AgentRunContext
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.primitives.ids import OrganizationReference
+from sculptor.primitives.ids import ProjectID
+from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.workspace_service.api import WorkspaceService
 

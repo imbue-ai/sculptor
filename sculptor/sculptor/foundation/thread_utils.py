@@ -11,7 +11,7 @@ from sculptor.foundation.log_utils import log_and_exit_program
 EXIT_CODE_IRRECOVERABLE_ERROR = 3
 
 
-_default_is_irrecoverable_exception = lambda e: False
+_default_is_irrecoverable_exception = lambda e: False  # noqa: E731
 
 _IS_IRRECOVERABLE_EXCEPTION_HANDLER = _default_is_irrecoverable_exception
 
