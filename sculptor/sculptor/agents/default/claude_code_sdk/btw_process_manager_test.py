@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from imbue_core.agents.data_types.ids import TaskID
+from sculptor.foundation.agents.data_types.ids import TaskID
 from sculptor.agents.default.claude_code_sdk.btw_process_manager import BtwProcessManager
 from sculptor.agents.default.claude_code_sdk.btw_process_manager import NoBtwSessionAvailable
 from sculptor.agents.default.claude_code_sdk.btw_process_manager import get_btw_claude_command

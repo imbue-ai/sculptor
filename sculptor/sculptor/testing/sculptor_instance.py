@@ -25,7 +25,7 @@ from playwright.sync_api import BrowserContext
 from playwright.sync_api import Page
 from playwright.sync_api import Playwright
 
-from imbue_core.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.constants import ElementIDs
 from sculptor.testing.dependency_stubs import install_default_claude_stub
 from sculptor.testing.frontend_utils import DEFAULT_TEST_VIEWPORT

@@ -20,13 +20,13 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.exc import OperationalError
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.async_monkey_patches_test import expect_exact_logged_errors
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.pydantic_serialization import SerializableModel
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import LLMModel
+from sculptor.foundation.agents.data_types.ids import AgentMessageID
+from sculptor.foundation.agents.data_types.ids import ProjectID
+from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.pydantic_serialization import SerializableModel
+from sculptor.foundation.state.messages import ChatInputUserMessage
+from sculptor.foundation.state.messages import LLMModel
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.alembic.json_migrations import get_json_schemas_of_all_nested_models
 from sculptor.database.alembic.json_migrations import get_potentially_breaking_changes

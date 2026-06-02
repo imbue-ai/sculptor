@@ -5,15 +5,15 @@ from typing import Annotated
 
 from pydantic import Tag
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import ObjectID
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.agents.data_types.ids import TaskID as AgentTaskID
-from imbue_core.pydantic_serialization import SerializableModel
-from imbue_core.pydantic_serialization import build_discriminator
-from imbue_core.sculptor.state.messages import AgentMessageSource
-from imbue_core.sculptor.state.messages import LLMModel
-from imbue_core.serialization import SerializedException
+from sculptor.foundation.agents.data_types.ids import AgentMessageID
+from sculptor.foundation.agents.data_types.ids import ObjectID
+from sculptor.foundation.agents.data_types.ids import ProjectID
+from sculptor.foundation.agents.data_types.ids import TaskID as AgentTaskID
+from sculptor.foundation.pydantic_serialization import SerializableModel
+from sculptor.foundation.pydantic_serialization import build_discriminator
+from sculptor.foundation.state.messages import AgentMessageSource
+from sculptor.foundation.state.messages import LLMModel
+from sculptor.foundation.serialization import SerializedException
 from sculptor.database.automanaged import DatabaseModel
 from sculptor.database.workspace_enums import DiffStatus
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy

@@ -3,7 +3,7 @@ from typing import Generator
 
 import pytest
 
-from imbue_core.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import Project
 from sculptor.database.models import ProjectID

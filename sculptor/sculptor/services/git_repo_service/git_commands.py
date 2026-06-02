@@ -7,11 +7,11 @@ from tenacity import retry_if_exception
 from tenacity import stop_after_attempt
 from tenacity import wait_exponential
 
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.retry_utils import log_before_sleep
-from imbue_core.subprocess_utils import ProcessError
-from imbue_core.subprocess_utils import ProcessSetupError
-from imbue_core.subprocess_utils import ProcessTimeoutError
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.retry_utils import log_before_sleep
+from sculptor.foundation.subprocess_utils import ProcessError
+from sculptor.foundation.subprocess_utils import ProcessSetupError
+from sculptor.foundation.subprocess_utils import ProcessTimeoutError
 from sculptor.services.git_repo_service.git_errors import GitCommandFailure
 from sculptor.services.git_repo_service.git_errors import RetriableGitCommandFailure
 from sculptor.utils.build import get_internal_folder

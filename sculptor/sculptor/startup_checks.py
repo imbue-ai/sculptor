@@ -11,7 +11,7 @@ import tempfile
 
 from loguru import logger
 
-from imbue_core.sculptor.user_config import UserConfig
+from sculptor.foundation.user_config import UserConfig
 from sculptor.utils import build as build_utils
 
 

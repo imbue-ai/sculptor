@@ -12,10 +12,10 @@ from uuid import uuid4
 import pytest
 from pydantic import PrivateAttr
 
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.git import get_repo_base_path
-from imbue_core.progress_tracking.progress_tracking import RootProgressHandle
+from sculptor.foundation.agents.data_types.ids import TaskID
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.git import get_repo_base_path
+from sculptor.foundation.progress_tracking.progress_tracking import RootProgressHandle
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import Project
 from sculptor.database.workspace_enums import DiffStatus

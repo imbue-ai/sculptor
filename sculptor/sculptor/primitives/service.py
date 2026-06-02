@@ -2,8 +2,8 @@ from contextlib import contextmanager
 from contextlib import nullcontext
 from typing import Generator
 
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.pydantic_serialization import MutableModel
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.pydantic_serialization import MutableModel
 from sculptor.utils.timeout import log_runtime
 
 

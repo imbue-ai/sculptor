@@ -6,9 +6,9 @@ import pytest
 from loguru import logger
 from pytest import Session
 
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.fixtures import initial_commit_repo
-from imbue_core.git import get_repo_base_path
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.fixtures import initial_commit_repo
+from sculptor.foundation.git import get_repo_base_path
 from sculptor.config.settings import SculptorSettings
 from sculptor.config.settings import TEST_LOG_PATH
 from sculptor.config.settings import TestingConfig

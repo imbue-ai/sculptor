@@ -2,8 +2,8 @@
 
 from unittest.mock import MagicMock
 
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.agents.data_types.ids import TaskID
+from sculptor.foundation.agents.data_types.ids import ProjectID
+from sculptor.foundation.agents.data_types.ids import TaskID
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.harness_registry import create_agent_for_run
 from sculptor.agents.harness_registry import get_harness_for_config

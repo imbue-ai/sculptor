@@ -3,8 +3,8 @@ from typing import Generator
 
 import pytest
 
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.concurrency_group import ConcurrencyGroup  # noqa: F401
+from sculptor.foundation.agents.data_types.ids import ProjectID
+from sculptor.foundation.concurrency_group import ConcurrencyGroup  # noqa: F401
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import Project
 from sculptor.primitives.ids import OrganizationReference

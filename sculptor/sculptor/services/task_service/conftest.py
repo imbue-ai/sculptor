@@ -1,8 +1,8 @@
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import LLMModel
-from imbue_core.sculptor.state.messages import Message
+from sculptor.foundation.agents.data_types.ids import AgentMessageID
+from sculptor.foundation.agents.data_types.ids import TaskID
+from sculptor.foundation.state.messages import ChatInputUserMessage
+from sculptor.foundation.state.messages import LLMModel
+from sculptor.foundation.state.messages import Message
 
 
 def get_user_input_message(task_id: TaskID, message: str) -> Message:

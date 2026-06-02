@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Any
 
-from imbue_core.errors import ExpectedError
+from sculptor.foundation.errors import ExpectedError
 
 
 class AgentCrashed(ExpectedError):

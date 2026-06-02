@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from imbue_core.agents.agent_api.data_types import AgentToolName
+from sculptor.foundation.agents.agent_api.data_types import AgentToolName
 from sculptor.agents.default.artifact_creation import _make_file_artifact
 from sculptor.agents.default.artifact_creation import _read_task_list_artifact
 from sculptor.agents.default.artifact_creation import should_refresh_task_list

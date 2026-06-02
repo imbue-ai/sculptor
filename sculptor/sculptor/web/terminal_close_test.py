@@ -23,7 +23,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from imbue_core.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.database.models import Project
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.primitives.ids import RequestID

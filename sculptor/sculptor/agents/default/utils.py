@@ -5,10 +5,10 @@ from typing import get_origin
 
 from loguru import logger
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.sculptor.state.messages import Message
-from imbue_core.serialization import SerializedException
+from sculptor.foundation.agents.data_types.ids import AgentMessageID
+from sculptor.foundation.agents.data_types.ids import TaskID
+from sculptor.foundation.state.messages import Message
+from sculptor.foundation.serialization import SerializedException
 from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
 from sculptor.interfaces.agents.agent import RequestStoppedAgentMessage
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage

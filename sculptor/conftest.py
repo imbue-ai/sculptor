@@ -9,10 +9,10 @@ import pytest
 from _pytest.junitxml import xml_key
 from syrupy.assertion import SnapshotAssertion
 
-from imbue_core.async_monkey_patches_test import explode_on_error  # noqa: F401
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.fixtures import empty_temp_git_repo
-from imbue_core.fixtures import initial_commit_repo
+from sculptor.foundation.async_monkey_patches_test import explode_on_error  # noqa: F401
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.fixtures import empty_temp_git_repo
+from sculptor.foundation.fixtures import initial_commit_repo
 from sculptor.config.settings import SculptorSettings
 from sculptor.config.settings import TEST_LOG_PATH
 from sculptor.config.settings import TestingConfig

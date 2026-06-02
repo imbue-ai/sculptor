@@ -2,8 +2,8 @@ import hashlib
 
 from typeid.constants import SUFFIX_LEN as TYPEID_SUFFIX_LEN
 
-from imbue_core.agents.data_types.ids import ObjectID
-from imbue_core.ids import ExternalID
+from sculptor.foundation.agents.data_types.ids import ObjectID
+from sculptor.foundation.ids import ExternalID
 
 
 class RequestID(ObjectID):

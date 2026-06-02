@@ -1,8 +1,8 @@
 from typing import Any
 
-from imbue_core.sculptor.state.chat_state import AskUserQuestionData
-from imbue_core.sculptor.state.chat_state import QuestionOption
-from imbue_core.sculptor.state.chat_state import UserQuestion
+from sculptor.foundation.state.chat_state import AskUserQuestionData
+from sculptor.foundation.state.chat_state import QuestionOption
+from sculptor.foundation.state.chat_state import UserQuestion
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.default.claude_code_sdk.mcp_result_formatters import format_ask_user_question_result
 from sculptor.agents.default.claude_code_sdk.mcp_schemas import build_mcp_tools

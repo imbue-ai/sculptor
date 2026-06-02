@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from imbue_core.agents.data_types.ids import ProjectID
+from sculptor.foundation.agents.data_types.ids import ProjectID
 from sculptor.database.models import TaskID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.web.derived import PrStatusInfo

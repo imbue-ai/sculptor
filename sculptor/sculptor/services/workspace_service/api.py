@@ -5,12 +5,12 @@ from pathlib import Path
 from typing import Iterator
 from typing import Literal
 
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.errors import ExpectedError
-from imbue_core.event_utils import ReadOnlyEvent
-from imbue_core.progress_tracking.progress_tracking import RootProgressHandle
-from imbue_core.pydantic_serialization import FrozenModel
+from sculptor.foundation.agents.data_types.ids import TaskID
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.errors import ExpectedError
+from sculptor.foundation.event_utils import ReadOnlyEvent
+from sculptor.foundation.progress_tracking.progress_tracking import RootProgressHandle
+from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.database.models import Project
 from sculptor.database.models import Workspace
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy

@@ -28,7 +28,7 @@ from pathlib import Path
 
 from playwright.sync_api import expect
 
-from imbue_core.sculptor.user_config import DependencyPaths
+from sculptor.foundation.user_config import DependencyPaths
 from sculptor.services.user_config.user_config import load_config
 from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.dependency_stubs import create_claude_stub_dir

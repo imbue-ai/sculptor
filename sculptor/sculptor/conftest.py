@@ -3,8 +3,8 @@ from typing import cast
 
 import pytest
 
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.sculptor.user_config import UserConfig
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.user_config import UserConfig
 from sculptor.config.settings import SculptorSettings
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.btw_service.api import BtwService

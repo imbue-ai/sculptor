@@ -12,15 +12,15 @@ from uuid import uuid4
 
 import pytest
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.sculptor.state.chat_state import AskUserQuestionData
-from imbue_core.sculptor.state.chat_state import QuestionOption
-from imbue_core.sculptor.state.chat_state import UserQuestion
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import LLMModel
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import ProjectID
+from sculptor.primitives.ids import TaskID
+from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.chat_state import QuestionOption
+from sculptor.state.chat_state import UserQuestion
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import LLMModel
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.default.claude_code_sdk.process_manager import ClaudeProcessManager
 from sculptor.interfaces.agents.agent import InterruptProcessUserMessage

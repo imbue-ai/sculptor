@@ -4,12 +4,12 @@ from uuid import uuid4
 
 from loguru import logger
 
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.constants import ExceptionPriority
-from imbue_core.pydantic_serialization import MutableModel
-from imbue_core.subprocess_utils import ProcessError
+from sculptor.foundation.agents.data_types.ids import ProjectID
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.constants import ExceptionPriority
+from sculptor.foundation.pydantic_serialization import MutableModel
+from sculptor.foundation.subprocess_utils import ProcessError
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.interfaces.environments.base import Environment
 from sculptor.primitives.ids import LocalEnvironmentID

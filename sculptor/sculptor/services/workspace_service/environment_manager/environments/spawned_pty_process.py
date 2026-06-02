@@ -55,7 +55,7 @@ from typing import Final
 
 from loguru import logger
 
-from imbue_core.processes.local_process import RunningProcess
+from sculptor.foundation.processes.local_process import RunningProcess
 from sculptor.services.workspace_service.environment_manager.environments.pty_helper import HELPER_FD_ENV
 from sculptor.utils.build import is_packaged
 

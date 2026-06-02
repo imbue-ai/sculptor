@@ -5,10 +5,10 @@ from uuid import uuid4
 
 import pytest
 
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.sculptor.state.messages import Message
+from sculptor.foundation.agents.data_types.ids import ProjectID
+from sculptor.foundation.agents.data_types.ids import TaskID
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.state.messages import Message
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import Project
 from sculptor.database.models import Task

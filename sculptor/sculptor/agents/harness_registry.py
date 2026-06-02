@@ -8,7 +8,7 @@ here and adding one `case` branch to each function below.
 
 from __future__ import annotations
 
-from imbue_core.errors import ExpectedError
+from sculptor.foundation.errors import ExpectedError
 from sculptor.agents.default.claude_code_sdk.agent_wrapper import ClaudeCodeSDKAgent
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.hello_agent.agent_wrapper import HelloAgent

@@ -384,7 +384,7 @@ check:
       "just _run-check lint" \
       2>&1 | grep -v 'exited with code 0'
 
-# Run all unit tests (backend, frontend, imbue_core, and sculpt CLI)
+# Run all unit tests (backend, frontend, foundation, and sculpt CLI)
 # Pass junitxml="true" to output JUnit XML files for CI
 # Set JUST_VERBOSE=1 in the environment for full output (used in CI).
 [group("ci")]
@@ -398,19 +398,21 @@ test-unit junitxml="":
     fi
     just test-unit-backend {{ if junitxml != "" { "sculptor/pytest_junit.xml" } else { "" } }}
     just test-unit-frontend
-    just test-unit-imbue-core
+    just test-unit-foundation
     just test-unit-sculpt {{ if junitxml != "" { "sculpt_junit.xml" } else { "" } }}
 
-# Run imbue_core unit tests
+# Run foundation unit tests (the former imbue_core library, now sculptor.foundation).
+# Runs with sculptor/sculptor/foundation/ as the pytest rootdir (via its own pytest.ini) so it
+# keeps the isolated test environment it had as a standalone package, independent of sculptor/conftest.py.
 [group("ci")]
-test-unit-imbue-core:
+test-unit-foundation:
     #!/usr/bin/env bash
     set -euo pipefail
     {{ _quiet_by_default_fn }}
-    _do_test_unit_imbue_core() {
-      env -u SESSION_TOKEN PROJECT_PATH=/tmp/repo GOOGLE_API_KEY=fake ANTHROPIC_API_KEY=fake uv run --project imbue_core pytest -n "${SCULPTOR_TEST_WORKERS:-8}" imbue_core/ -m "not integration and not acceptance"
+    _do_test_unit_foundation() {
+      env -u SESSION_TOKEN PROJECT_PATH=/tmp/repo GOOGLE_API_KEY=fake ANTHROPIC_API_KEY=fake uv run --project sculptor pytest -n "${SCULPTOR_TEST_WORKERS:-8}" sculptor/sculptor/foundation/ -m "not integration and not acceptance"
     }
-    quiet_by_default test-unit-imbue-core _do_test_unit_imbue_core
+    quiet_by_default test-unit-foundation _do_test_unit_foundation
 
 # Run sculpt CLI unit tests
 # Pass a path to junitxml to output JUnit XML for CI

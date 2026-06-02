@@ -21,7 +21,7 @@ from typing import Literal
 
 import httpx
 
-from imbue_core.pydantic_serialization import FrozenModel
+from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
 
 

@@ -1,5 +1,5 @@
-from imbue_core.sculptor.telemetry import TelemetryInfo
-from imbue_core.sculptor.user_config import UserConfig
+from sculptor.foundation.telemetry import TelemetryInfo
+from sculptor.foundation.user_config import UserConfig
 from sculptor import version
 from sculptor.services.user_config.user_config import get_default_user_config_instance
 from sculptor.services.user_config.user_config import get_execution_instance_id

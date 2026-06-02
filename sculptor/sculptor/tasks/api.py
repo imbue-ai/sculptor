@@ -3,9 +3,9 @@ from typing import Any
 from typing import Callable
 from typing import assert_never
 
-from imbue_core.common import is_running_within_a_pytest_tree
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.event_utils import ReadOnlyEvent
+from sculptor.foundation.common import is_running_within_a_pytest_tree
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.event_utils import ReadOnlyEvent
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import MustBeShutDownTaskInputsV1

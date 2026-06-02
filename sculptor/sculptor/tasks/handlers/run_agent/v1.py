@@ -14,27 +14,27 @@ from typing import cast
 
 from loguru import logger
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.common import is_live_debugging
-from imbue_core.concurrency_group import ConcurrencyExceptionGroup
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.concurrency_group import ConcurrentShutdownError
-from imbue_core.constants import ExceptionPriority
-from imbue_core.errors import ExpectedError
-from imbue_core.event_utils import CancelledByEventError
-from imbue_core.event_utils import ReadOnlyEvent
-from imbue_core.nested_evolver import assign
-from imbue_core.nested_evolver import chill
-from imbue_core.nested_evolver import evolver
-from imbue_core.progress_tracking.progress_tracking import RootProgressHandle
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import Message
-from imbue_core.sculptor.state.messages import PersistentAgentMessage
-from imbue_core.sculptor.state.messages import PersistentUserMessage
-from imbue_core.sculptor.state.messages import ResponseBlockAgentMessage
-from imbue_core.serialization import SerializedException
+from sculptor.foundation.agents.data_types.ids import AgentMessageID
+from sculptor.foundation.agents.data_types.ids import TaskID
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.common import is_live_debugging
+from sculptor.foundation.concurrency_group import ConcurrencyExceptionGroup
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.concurrency_group import ConcurrentShutdownError
+from sculptor.foundation.constants import ExceptionPriority
+from sculptor.foundation.errors import ExpectedError
+from sculptor.foundation.event_utils import CancelledByEventError
+from sculptor.foundation.event_utils import ReadOnlyEvent
+from sculptor.foundation.nested_evolver import assign
+from sculptor.foundation.nested_evolver import chill
+from sculptor.foundation.nested_evolver import evolver
+from sculptor.foundation.progress_tracking.progress_tracking import RootProgressHandle
+from sculptor.foundation.state.messages import ChatInputUserMessage
+from sculptor.foundation.state.messages import Message
+from sculptor.foundation.state.messages import PersistentAgentMessage
+from sculptor.foundation.state.messages import PersistentUserMessage
+from sculptor.foundation.state.messages import ResponseBlockAgentMessage
+from sculptor.foundation.serialization import SerializedException
 from sculptor.agents.harness_registry import create_agent_for_run
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskInputsV2
@@ -272,7 +272,7 @@ def _build_agent_path(*, is_packaged: bool, executable_parent: Path, current_pat
 
     When running from source (not packaged), the server runs inside a uv-managed
     venv (via ``uv run``) that has editable installs of workspace members
-    (sculptor, imbue_core, etc.) pointing at the server's source tree. If agents
+    (sculptor, sculptor.foundation, etc.) pointing at the server's source tree. If agents
     inherit the venv's bin dir at the front of PATH, they use the venv Python —
     which imports from the server's source tree instead of the workspace clone's,
     causing cross-workspace pollution. So in dev mode we additionally strip the

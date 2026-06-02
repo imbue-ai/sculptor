@@ -8,8 +8,8 @@ from __future__ import annotations
 from loguru import logger
 from pydantic import PrivateAttr
 
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import Message
+from sculptor.foundation.state.messages import ChatInputUserMessage
+from sculptor.foundation.state.messages import Message
 from sculptor.agents.default.agent_wrapper import DefaultAgentWrapper
 from sculptor.agents.default.claude_code_sdk.harness import ClaudeCodeHarness
 from sculptor.agents.default.claude_code_sdk.process_manager import ClaudeProcessManager

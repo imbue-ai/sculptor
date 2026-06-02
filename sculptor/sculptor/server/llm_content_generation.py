@@ -3,8 +3,8 @@ from subprocess import TimeoutExpired
 from loguru import logger
 from pydantic import Field
 
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.pydantic_serialization import SerializableModel
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.pydantic_serialization import SerializableModel
 
 
 class TaskTitle(SerializableModel):

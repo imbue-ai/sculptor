@@ -7,9 +7,9 @@ from typing import assert_never
 
 from loguru import logger
 
-from imbue_core.processes.local_process import run_blocking
-from imbue_core.subprocess_utils import ProcessSetupError
-from imbue_core.subprocess_utils import ProcessTimeoutError
+from sculptor.foundation.processes.local_process import run_blocking
+from sculptor.foundation.subprocess_utils import ProcessSetupError
+from sculptor.foundation.subprocess_utils import ProcessTimeoutError
 from sculptor.web.data_types import ExternalApp
 from sculptor.web.data_types import OpenPathInAppResult
 

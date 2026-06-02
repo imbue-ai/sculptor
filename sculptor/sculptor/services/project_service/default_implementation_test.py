@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from imbue_core.agents.data_types.ids import ProjectID
+from sculptor.foundation.agents.data_types.ids import ProjectID
 from sculptor.database.models import Project
 from sculptor.primitives.ids import OrganizationReference
 from sculptor.services.project_service.default_implementation import DefaultProjectService

@@ -1,6 +1,6 @@
 from sqlite3 import OperationalError
 
-from imbue_core.thread_utils import ObservableThread
+from sculptor.foundation.thread_utils import ObservableThread
 
 
 def is_irrecoverable_exception(exception: BaseException) -> bool:

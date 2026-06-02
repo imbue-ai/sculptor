@@ -17,9 +17,9 @@ import sqlalchemy
 from playwright.sync_api import expect
 
 import sculptor.primitives.ids
-from imbue_core.async_monkey_patches_test import expect_at_least_logged_errors
-from imbue_core.sculptor.user_config import DependencyPaths
-from imbue_core.sculptor.user_config import UserConfig
+from sculptor.foundation.async_monkey_patches_test import expect_at_least_logged_errors
+from sculptor.foundation.user_config import DependencyPaths
+from sculptor.foundation.user_config import UserConfig
 from sculptor.database.core import create_new_engine
 from sculptor.database.core import initialize_db
 from sculptor.services.user_config.user_config import save_config

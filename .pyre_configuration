@@ -1,8 +1,7 @@
 {
   "site_package_search_strategy": "all",
   "source_directories": [
-    "sculptor",
-    "imbue_core"
+    "sculptor"
   ],
   "exclude": [
     ".*/_vendor/.*",
@@ -10,8 +9,7 @@
     ".*/sculptor/tests/.*",
     ".*/build/lib/.*",
     ".*/sculptor/frontend/out/.*",
-    ".*/sculptor/dist/.*",
-    ".*/imbue_core/imbue_core/test_data/.*"
+    ".*/sculptor/dist/.*"
   ],
   "ignore_all_errors": [
     "sculptor/sculptor/testing",

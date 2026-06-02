@@ -13,15 +13,15 @@ from typing import TypeVar
 from loguru import logger
 from pydantic import PrivateAttr
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.concurrency_group import ConcurrencyExceptionGroup
-from imbue_core.concurrency_group import ConcurrentShutdownError
-from imbue_core.constants import ExceptionPriority
-from imbue_core.log_utils import log_and_exit_program
-from imbue_core.pydantic_serialization import MutableModel
-from imbue_core.time_utils import get_current_time
+from sculptor.foundation.agents.data_types.ids import AgentMessageID
+from sculptor.foundation.agents.data_types.ids import ProjectID
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.concurrency_group import ConcurrencyExceptionGroup
+from sculptor.foundation.concurrency_group import ConcurrentShutdownError
+from sculptor.foundation.constants import ExceptionPriority
+from sculptor.foundation.log_utils import log_and_exit_program
+from sculptor.foundation.pydantic_serialization import MutableModel
+from sculptor.foundation.time_utils import get_current_time
 from sculptor.config.settings import SculptorSettings
 from sculptor.constants import SCULPTOR_EXIT_CODE_IRRECOVERABLE_ERROR
 from sculptor.database.models import Project

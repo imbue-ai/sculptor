@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from imbue_core.agents.data_types.ids import ProjectID
+from sculptor.foundation.agents.data_types.ids import ProjectID
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import Notification
 from sculptor.database.models import NotificationID

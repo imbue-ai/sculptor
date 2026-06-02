@@ -5,10 +5,10 @@ from loguru import logger
 from pydantic import PrivateAttr
 from typeid.errors import InvalidTypeIDStringException
 
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.agents.data_types.ids import TypeIDPrefixMismatchError
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.thread_utils import ObservableThread
+from sculptor.foundation.agents.data_types.ids import ProjectID
+from sculptor.foundation.agents.data_types.ids import TypeIDPrefixMismatchError
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.database.models import Project
 from sculptor.primitives.ids import OrganizationReference
 from sculptor.primitives.ids import RequestID

@@ -11,15 +11,15 @@ from pydantic import EmailStr
 from pydantic import Field
 from pydantic import Tag
 
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.pydantic_serialization import SerializableModel
-from imbue_core.pydantic_serialization import build_discriminator
-from imbue_core.sculptor.state.chat_state import AskUserQuestionData
-from imbue_core.sculptor.state.messages import EffortLevel
-from imbue_core.sculptor.state.messages import LLMModel
-from imbue_core.sculptor.state.messages import Message
-from imbue_core.upper_case_str_enum import UpperCaseStrEnum
+from sculptor.foundation.agents.data_types.ids import ProjectID
+from sculptor.foundation.agents.data_types.ids import TaskID
+from sculptor.foundation.pydantic_serialization import SerializableModel
+from sculptor.foundation.pydantic_serialization import build_discriminator
+from sculptor.foundation.state.chat_state import AskUserQuestionData
+from sculptor.foundation.state.messages import EffortLevel
+from sculptor.foundation.state.messages import LLMModel
+from sculptor.foundation.state.messages import Message
+from sculptor.foundation.upper_case_str_enum import UpperCaseStrEnum
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.interfaces.agents.agent import HarnessName

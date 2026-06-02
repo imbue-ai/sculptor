@@ -4,8 +4,8 @@ This module exists to break circular imports between agent.py and environment mo
 Messages defined here can be safely imported by environment implementations.
 """
 
-from imbue_core.sculptor.state.messages import AgentMessageSource
-from imbue_core.sculptor.state.messages import Message
+from sculptor.foundation.state.messages import AgentMessageSource
+from sculptor.foundation.state.messages import Message
 
 
 class EphemeralMessage(Message):

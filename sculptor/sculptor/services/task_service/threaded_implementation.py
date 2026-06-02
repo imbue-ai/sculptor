@@ -2,8 +2,8 @@ from typing import Callable
 
 from pydantic import PrivateAttr
 
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.thread_utils import ObservableThread
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import Task
 from sculptor.database.models import TaskID

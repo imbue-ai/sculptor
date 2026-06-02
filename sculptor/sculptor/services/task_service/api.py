@@ -7,9 +7,9 @@ from typing import Generator
 
 from pydantic import AnyUrl
 
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.pydantic_serialization import FrozenModel
-from imbue_core.sculptor.state.messages import Message
+from sculptor.foundation.agents.data_types.ids import ProjectID
+from sculptor.foundation.pydantic_serialization import FrozenModel
+from sculptor.foundation.state.messages import Message
 from sculptor.database.models import Task
 from sculptor.database.models import TaskID
 from sculptor.interfaces.agents.agent import MessageTypes

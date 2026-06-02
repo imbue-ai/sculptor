@@ -5,8 +5,8 @@ from typing import Self
 import attr
 from loguru import logger
 
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.git_data_types import CommitTimestamp
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.git_data_types import CommitTimestamp
 from sculptor.testing.computing_environment import create_reset_and_checkout_branch
 from sculptor.testing.computing_environment import get_branch_name
 from sculptor.testing.computing_environment import make_commit

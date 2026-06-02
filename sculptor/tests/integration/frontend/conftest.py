@@ -1,6 +1,6 @@
 import pytest
 
-from imbue_core.pydantic_serialization import FrozenModel
+from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.testing.auto_update_mock import mock_electron_api as mock_electron_api  # noqa: F401
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from imbue_core.errors import ExpectedError
+from sculptor.foundation.errors import ExpectedError
 
 
 class InterruptFailure(ExpectedError):

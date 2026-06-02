@@ -16,7 +16,7 @@ from typing import Any
 from loguru import logger
 from pydantic import ValidationError
 
-from imbue_core.sculptor.state.chat_state import UserQuestion
+from sculptor.foundation.state.chat_state import UserQuestion
 from sculptor.agents.default.claude_code_sdk.harness import ClaudeCodeHarness
 from sculptor.agents.default.claude_code_sdk.mcp_result_formatters import format_ask_user_question_result
 from sculptor.agents.default.claude_code_sdk.mcp_result_formatters import format_exit_plan_mode_result

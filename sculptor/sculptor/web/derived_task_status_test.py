@@ -13,17 +13,17 @@ from ``request_finished_messages`` in ``derived.py`` has been removed accordingl
 and the test below has been updated to assert the new behavior.
 """
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.ids import AssistantMessageID
-from imbue_core.ids import ToolUseID
-from imbue_core.sculptor.state.chat_state import AskUserQuestionData
-from imbue_core.sculptor.state.chat_state import QuestionOption
-from imbue_core.sculptor.state.chat_state import ToolUseBlock
-from imbue_core.sculptor.state.chat_state import UserQuestion
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import ResponseBlockAgentMessage
-from imbue_core.serialization import SerializedException
+from sculptor.foundation.agents.data_types.ids import AgentMessageID
+from sculptor.foundation.agents.data_types.ids import ProjectID
+from sculptor.foundation.ids import AssistantMessageID
+from sculptor.foundation.ids import ToolUseID
+from sculptor.foundation.state.chat_state import AskUserQuestionData
+from sculptor.foundation.state.chat_state import QuestionOption
+from sculptor.foundation.state.chat_state import ToolUseBlock
+from sculptor.foundation.state.chat_state import UserQuestion
+from sculptor.foundation.state.messages import ChatInputUserMessage
+from sculptor.foundation.state.messages import ResponseBlockAgentMessage
+from sculptor.foundation.serialization import SerializedException
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2

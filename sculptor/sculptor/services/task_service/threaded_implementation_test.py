@@ -7,9 +7,9 @@ from typing import cast
 import pytest
 from loguru import logger
 
-from imbue_core.git import get_repo_base_path
-from imbue_core.itertools import only
-from imbue_core.sculptor.state.messages import Message
+from sculptor.foundation.git import get_repo_base_path
+from sculptor.foundation.itertools import only
+from sculptor.foundation.state.messages import Message
 from sculptor.database.models import MustBeShutDownTaskInputsV1
 from sculptor.database.models import NoOpTaskInputsV1
 from sculptor.database.models import Project

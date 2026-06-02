@@ -16,15 +16,15 @@ from loguru import logger
 from pydantic import Field
 from typeid.errors import TypeIDException
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.agents.data_types.ids import TypeIDPrefixMismatchError
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.event_utils import CompoundEvent
-from imbue_core.event_utils import ReadOnlyEvent
-from imbue_core.pydantic_serialization import SerializableModel
-from imbue_core.sculptor.state.chat_state import ChatMessage
-from imbue_core.sculptor.state.messages import Message
+from sculptor.foundation.agents.data_types.ids import AgentMessageID
+from sculptor.foundation.agents.data_types.ids import ProjectID
+from sculptor.foundation.agents.data_types.ids import TypeIDPrefixMismatchError
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.event_utils import CompoundEvent
+from sculptor.foundation.event_utils import ReadOnlyEvent
+from sculptor.foundation.pydantic_serialization import SerializableModel
+from sculptor.foundation.state.chat_state import ChatMessage
+from sculptor.foundation.state.messages import Message
 from sculptor.agents.harness_registry import get_harness_for_config
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskInputsV2

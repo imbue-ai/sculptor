@@ -11,9 +11,9 @@ from uuid import uuid4
 
 import pytest
 
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.async_monkey_patches_test import expect_exact_logged_errors
-from imbue_core.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.agents.data_types.ids import ProjectID
+from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LOCAL_WORKSPACE_DIR

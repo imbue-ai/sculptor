@@ -39,8 +39,8 @@ from sqlalchemy import String
 from sqlalchemy import Table
 from sqlalchemy.schema import DDL
 
-from imbue_core.pydantic_serialization import SerializableModel
-from imbue_core.time_utils import get_current_time
+from sculptor.foundation.pydantic_serialization import SerializableModel
+from sculptor.foundation.time_utils import get_current_time
 from sculptor.database.core import METADATA
 from sculptor.primitives.ids import ObjectID
 from sculptor.primitives.ids import ObjectSnapshotID

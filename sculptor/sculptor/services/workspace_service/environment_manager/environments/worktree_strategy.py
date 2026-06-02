@@ -9,8 +9,8 @@ from typing import Literal
 
 from loguru import logger
 
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.subprocess_utils import ProcessError
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.subprocess_utils import ProcessError
 
 DeletionPolicy = Literal["never", "delete_if_safe", "always"]
 """Mirrors `UserConfig.workspace_branch_deletion_policy` — what to do with

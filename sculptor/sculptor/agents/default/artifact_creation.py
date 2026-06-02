@@ -7,11 +7,11 @@ from loguru import logger
 from pydantic import AnyUrl
 from pydantic import ValidationError
 
-from imbue_core.agents.agent_api.data_types import AgentToolName
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.common import generate_id
-from imbue_core.constants import ExceptionPriority
-from imbue_core.sculptor.state.chat_state import ToolInput
+from sculptor.foundation.agents.agent_api.data_types import AgentToolName
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.common import generate_id
+from sculptor.foundation.constants import ExceptionPriority
+from sculptor.foundation.state.chat_state import ToolInput
 from sculptor.agents.default.constants import FILE_CHANGE_TOOL_NAMES
 from sculptor.agents.default.utils import get_warning_message
 from sculptor.database.models import AgentMessageID

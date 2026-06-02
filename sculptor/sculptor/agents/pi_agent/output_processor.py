@@ -29,7 +29,7 @@ from pydantic import Field
 from pydantic import TypeAdapter
 from pydantic import ValidationError
 
-from imbue_core.pydantic_serialization import SerializableModel
+from sculptor.foundation.pydantic_serialization import SerializableModel
 
 
 # `content` is untyped dicts: pi interleaves text and toolCall blocks, and only

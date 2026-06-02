@@ -6,12 +6,12 @@ from typing import Generator
 
 from loguru import logger
 
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.constants import ExceptionPriority
-from imbue_core.errors import ExpectedError
-from imbue_core.itertools import generate_flattened
+from sculptor.foundation.agents.data_types.ids import ProjectID
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.constants import ExceptionPriority
+from sculptor.foundation.errors import ExpectedError
+from sculptor.foundation.itertools import generate_flattened
 from sculptor.database.models import Workspace
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import WorkspaceID

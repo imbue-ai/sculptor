@@ -24,9 +24,9 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from imbue_core.sculptor.state.chat_state import ContentBlock
-from imbue_core.sculptor.state.chat_state import ToolUseBlock
-from imbue_core.sculptor.state.chat_state import UserQuestion
+from sculptor.foundation.state.chat_state import ContentBlock
+from sculptor.foundation.state.chat_state import ToolUseBlock
+from sculptor.foundation.state.chat_state import UserQuestion
 from sculptor.interfaces.agents.harness import Harness
 from sculptor.interfaces.agents.harness import HarnessCapabilities
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment

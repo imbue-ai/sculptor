@@ -9,8 +9,8 @@ from typing import TypedDict
 from pydantic import PrivateAttr
 from typing_extensions import Unpack
 
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.pydantic_serialization import MutableModel
+from sculptor.foundation.agents.data_types.ids import ProjectID
+from sculptor.foundation.pydantic_serialization import MutableModel
 from sculptor.database.models import Notification
 from sculptor.database.models import Project
 from sculptor.database.models import SavedAgentMessage

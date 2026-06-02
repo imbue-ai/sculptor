@@ -5,9 +5,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.agents.data_types.ids import ProjectID
+from sculptor.foundation.agents.data_types.ids import TaskID
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.claude_code_sdk.diff_tracker import _get_file_contents_at_commit_hash
 from sculptor.agents.default.claude_code_sdk.diff_tracker import _is_file_present_at_commit_hash

@@ -1,11 +1,11 @@
 """Tests for CodingAgentTaskView.current_activity and last_activity."""
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.ids import AssistantMessageID
-from imbue_core.sculptor.state.chat_state import TextBlock
-from imbue_core.sculptor.state.chat_state import ToolUseBlock
-from imbue_core.sculptor.state.messages import ResponseBlockAgentMessage
+from sculptor.foundation.agents.data_types.ids import AgentMessageID
+from sculptor.foundation.agents.data_types.ids import ProjectID
+from sculptor.foundation.ids import AssistantMessageID
+from sculptor.foundation.state.chat_state import TextBlock
+from sculptor.foundation.state.chat_state import ToolUseBlock
+from sculptor.foundation.state.messages import ResponseBlockAgentMessage
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2

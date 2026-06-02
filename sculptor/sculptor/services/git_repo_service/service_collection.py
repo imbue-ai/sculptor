@@ -1,4 +1,4 @@
-from imbue_core.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.config.settings import SculptorSettings
 from sculptor.services.data_model_service.sql_implementation import SQLDataModelService
 from sculptor.services.dependency_management_service import DependencyManagementService

@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 from typing import Generator
 
-from imbue_core.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.config.settings import SculptorSettings
 from sculptor.services.btw_service.api import BtwService
 from sculptor.services.ci_babysitter_service.coordinator import CIBabysitterCoordinator

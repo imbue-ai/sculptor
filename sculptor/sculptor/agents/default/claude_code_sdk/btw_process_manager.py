@@ -17,8 +17,8 @@ from typing import Literal
 
 from loguru import logger
 
-from imbue_core.processes.local_process import RunningProcess
-from imbue_core.sculptor.state.messages import LLMModel
+from sculptor.foundation.processes.local_process import RunningProcess
+from sculptor.foundation.state.messages import LLMModel
 from sculptor.agents.default.claude_code_sdk.harness import ClaudeCodeHarness
 from sculptor.agents.default.constants import MODEL_SHORTNAME_MAP
 from sculptor.agents.default.utils import get_state_file_contents

@@ -13,16 +13,16 @@ from typing import Mapping
 
 from loguru import logger
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.constants import ExceptionPriority
-from imbue_core.processes.local_process import RunningProcess
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import LLMModel
-from imbue_core.sculptor.state.messages import Message
-from imbue_core.secrets_utils import Secret
-from imbue_core.thread_utils import ObservableThread
+from sculptor.foundation.agents.data_types.ids import AgentMessageID
+from sculptor.foundation.agents.data_types.ids import TaskID
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.constants import ExceptionPriority
+from sculptor.foundation.processes.local_process import RunningProcess
+from sculptor.foundation.state.messages import ChatInputUserMessage
+from sculptor.foundation.state.messages import LLMModel
+from sculptor.foundation.state.messages import Message
+from sculptor.foundation.secrets_utils import Secret
+from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.claude_code_sdk.harness import ClaudeCodeHarness
 from sculptor.agents.default.claude_code_sdk.mcp_server import SculptorMcpServer

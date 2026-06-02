@@ -40,12 +40,12 @@ from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.schema import Table
 from typing_extensions import Unpack
 
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.log_utils import log_and_exit_program
-from imbue_core.pydantic_serialization import SerializableModel
+from sculptor.foundation.agents.data_types.ids import ProjectID
+from sculptor.foundation.agents.data_types.ids import TaskID
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.log_utils import log_and_exit_program
+from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.config.settings import SculptorSettings
 from sculptor.constants import SCULPTOR_EXIT_CODE_COULD_NOT_ACQUIRE_LOCK
 from sculptor.constants import SCULPTOR_EXIT_CODE_IRRECOVERABLE_ERROR

@@ -1,4 +1,4 @@
-"""Synchronous version of LocalGitRepo in imbue_core"""
+"""Synchronous version of LocalGitRepo in sculptor.foundation"""
 
 from __future__ import annotations
 
@@ -17,10 +17,10 @@ from typing import TYPE_CHECKING
 import attr
 from loguru import logger
 
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.computing_environment.data_types import AnyPath
-from imbue_core.computing_environment.data_types import RunCommandError
-from imbue_core.constants import ExceptionPriority
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.computing_environment.data_types import AnyPath
+from sculptor.foundation.computing_environment.data_types import RunCommandError
+from sculptor.foundation.constants import ExceptionPriority
 from sculptor.testing.computing_environment import run_command_with_retry_on_git_lock_error
 
 if TYPE_CHECKING:

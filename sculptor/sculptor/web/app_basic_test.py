@@ -12,16 +12,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 import sculptor.services.user_config.user_config as user_config_module
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.ids import AssistantMessageID
-from imbue_core.ids import ToolUseID
-from imbue_core.pydantic_serialization import model_dump
-from imbue_core.pydantic_utils import model_update
-from imbue_core.sculptor.state.chat_state import ToolUseBlock
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import LLMModel
-from imbue_core.sculptor.state.messages import ResponseBlockAgentMessage
-from imbue_core.sculptor.user_config import UserConfig
+from sculptor.config.user_config import UserConfig
+from sculptor.foundation.pydantic_serialization import model_dump
+from sculptor.foundation.pydantic_utils import model_update
+from sculptor.primitives.ids import AssistantMessageID
+from sculptor.primitives.ids import ProjectID
+from sculptor.primitives.ids import ToolUseID
+from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import LLMModel
+from sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Project

@@ -17,11 +17,11 @@ from typing import cast
 import pytest
 from pydantic import PrivateAttr
 
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.user_config import CIBabysitterConfig
-from imbue_core.sculptor.user_config import UserConfig
+from sculptor.foundation.agents.data_types.ids import ProjectID
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.state.messages import ChatInputUserMessage
+from sculptor.foundation.user_config import CIBabysitterConfig
+from sculptor.foundation.user_config import UserConfig
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Project
 from sculptor.database.models import Task

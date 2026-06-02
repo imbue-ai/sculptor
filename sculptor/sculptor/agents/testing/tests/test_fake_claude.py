@@ -9,15 +9,15 @@ from uuid import uuid4
 
 import pytest
 
-from imbue_core.sculptor.state.chat_state import TextBlock
-from imbue_core.sculptor.state.chat_state import ToolUseBlock
-from imbue_core.sculptor.state.claude_state import ParsedAssistantResponse
-from imbue_core.sculptor.state.claude_state import ParsedEndResponse
-from imbue_core.sculptor.state.claude_state import ParsedInitResponse
-from imbue_core.sculptor.state.claude_state import ParsedTaskNotificationResponse
-from imbue_core.sculptor.state.claude_state import ParsedTaskStartedResponse
-from imbue_core.sculptor.state.claude_state import ParsedToolResultResponseSimple
-from imbue_core.sculptor.state.claude_state import parse_claude_code_json_lines_simple
+from sculptor.foundation.state.chat_state import TextBlock
+from sculptor.foundation.state.chat_state import ToolUseBlock
+from sculptor.foundation.state.claude_state import ParsedAssistantResponse
+from sculptor.foundation.state.claude_state import ParsedEndResponse
+from sculptor.foundation.state.claude_state import ParsedInitResponse
+from sculptor.foundation.state.claude_state import ParsedTaskNotificationResponse
+from sculptor.foundation.state.claude_state import ParsedTaskStartedResponse
+from sculptor.foundation.state.claude_state import ParsedToolResultResponseSimple
+from sculptor.foundation.state.claude_state import parse_claude_code_json_lines_simple
 from sculptor.agents.testing.fake_claude import _parse_prompt
 from sculptor.agents.testing.fake_claude_commands import _read_mcp_control_response_text
 from sculptor.agents.testing.fake_claude_commands import handle_ask_user_question

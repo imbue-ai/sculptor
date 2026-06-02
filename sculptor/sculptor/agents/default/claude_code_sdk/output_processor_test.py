@@ -9,21 +9,21 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.ids import ToolUseID
-from imbue_core.sculptor.state.chat_state import FileBlock
-from imbue_core.sculptor.state.chat_state import TextBlock
-from imbue_core.sculptor.state.chat_state import ToolResultBlock
-from imbue_core.sculptor.state.chat_state import ToolUseBlock
-from imbue_core.sculptor.state.claude_state import ParsedAssistantResponse
-from imbue_core.sculptor.state.claude_state import ParsedEndResponse
-from imbue_core.sculptor.state.claude_state import ParsedInitResponse
-from imbue_core.sculptor.state.claude_state import ParsedStreamEvent
-from imbue_core.sculptor.state.claude_state import ParsedTaskNotificationResponse
-from imbue_core.sculptor.state.claude_state import ParsedTaskStartedResponse
-from imbue_core.sculptor.state.claude_state import ParsedTaskUpdatedResponse
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
+from sculptor.foundation.agents.data_types.ids import AgentMessageID
+from sculptor.foundation.agents.data_types.ids import TaskID
+from sculptor.foundation.ids import ToolUseID
+from sculptor.foundation.state.chat_state import FileBlock
+from sculptor.foundation.state.chat_state import TextBlock
+from sculptor.foundation.state.chat_state import ToolResultBlock
+from sculptor.foundation.state.chat_state import ToolUseBlock
+from sculptor.foundation.state.claude_state import ParsedAssistantResponse
+from sculptor.foundation.state.claude_state import ParsedEndResponse
+from sculptor.foundation.state.claude_state import ParsedInitResponse
+from sculptor.foundation.state.claude_state import ParsedStreamEvent
+from sculptor.foundation.state.claude_state import ParsedTaskNotificationResponse
+from sculptor.foundation.state.claude_state import ParsedTaskStartedResponse
+from sculptor.foundation.state.claude_state import ParsedTaskUpdatedResponse
+from sculptor.foundation.state.messages import ChatInputUserMessage
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.default.claude_code_sdk.mcp_server import SculptorMcpServer
 from sculptor.agents.default.claude_code_sdk.output_processor import ClaudeOutputProcessor

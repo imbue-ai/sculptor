@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import AnyUrl
 from pydantic import Field
 
-from imbue_core.pydantic_serialization import SerializableModel
+from sculptor.foundation.pydantic_serialization import SerializableModel
 
 
 class AgentTaskStatus(StrEnum):

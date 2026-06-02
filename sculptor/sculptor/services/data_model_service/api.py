@@ -5,7 +5,7 @@ from typing import Generator
 from typing import Protocol
 from typing import TypeVar
 
-from imbue_core.pydantic_serialization import FrozenModel
+from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.database.models import Notification
 from sculptor.database.models import Project
 from sculptor.database.models import UserSettings

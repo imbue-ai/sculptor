@@ -1,7 +1,7 @@
 from typing import Any
 from typing import Callable
 
-from imbue_core.errors import ExpectedError
+from sculptor.foundation.errors import ExpectedError
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 
 

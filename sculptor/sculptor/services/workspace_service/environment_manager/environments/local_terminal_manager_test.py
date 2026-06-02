@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from imbue_core.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     LocalTerminalManager,
 )
