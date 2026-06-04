@@ -33,6 +33,10 @@ type TaskRowProps = {
  * parent having to call N hooks in a loop.
  */
 const TaskRow = ({ task, onUsage }: TaskRowProps): ReactElement => {
+  // TODO(plugins): the USAGE artifact was removed from the host (ArtifactType
+  // no longer has USAGE, and UsageArtifact / isUsageArtifact are gone), so this
+  // returns nothing and the panel shows empty cost/token figures. Re-source the
+  // cost + token data from whatever replaced it before shipping this plugin.
   const usage = useTaskArtifact(task.id, ArtifactType.USAGE);
 
   useEffect(() => {

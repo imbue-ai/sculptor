@@ -2,7 +2,7 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { useEffect } from "react";
 
 import { ArtifactType, type CodingAgentTaskView, getWorkspaceAgentArtifact } from "~/api";
-import { isTaskListArtifact, isUsageArtifact } from "~/common/Guards.ts";
+import { isTaskListArtifact } from "~/common/Guards.ts";
 import {
   getEmptyTaskDetailState,
   taskDetailAtomFamily,
@@ -98,9 +98,8 @@ const processArtifactResponse = <T extends keyof ArtifactsMap>(
   if (artifactType === ArtifactType.PLAN && isTaskListArtifact(response)) {
     return response as ArtifactsMap[T];
   }
-
-  if (artifactType === ArtifactType.USAGE && isUsageArtifact(response)) {
-    return response as ArtifactsMap[T];
-  }
+  // TODO(plugins): the USAGE branch was dropped when the host removed the
+  // USAGE artifact. Re-add a case here once the cost/token data has a new
+  // artifact (see workspace-cost-tracker plugin).
   return null;
 };
