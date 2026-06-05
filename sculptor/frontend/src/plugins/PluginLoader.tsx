@@ -92,11 +92,22 @@ const loadOne = async (manifestUrl: string, makeApi: ApiFactory): Promise<Loaded
   }
 };
 
+// Plugins load exactly once per page load. This guard lives at module scope
+// (not in a ref) so it survives React StrictMode's dev-only setup→cleanup→setup
+// double-invoke: without it, two concurrent async load runs race, both register
+// the same panel id, and the disposed run's late teardown filters out the live
+// run's panel — leaving the plugin listed in settings but with no panel mounted.
+let hasStartedLoading = false;
+
 /**
  * Mounts once at app root. Installs the host runtime singletons, fetches
  * each builtin plugin's manifest, validates it, dynamic-imports the bundle,
  * and invokes the plugin's `activate()` function. Contributions land in
  * the plugin registry atoms which downstream consumers read from.
+ *
+ * Loading happens once for the app session and is intentionally not torn
+ * down on unmount: the registries are module-level atoms and plugins behave
+ * as long-lived singletons in the prototype.
  */
 export const PluginLoader = (): ReactElement | null => {
   const setPanels = useSetAtom(pluginPanelsAtom);
@@ -105,9 +116,8 @@ export const PluginLoader = (): ReactElement | null => {
 
   useEffect(() => {
     installHostRuntime();
-
-    let isDisposed = false;
-    const disposers: Array<() => void> = [];
+    if (hasStartedLoading) return;
+    hasStartedLoading = true;
 
     const makeApi = (manifest: PluginManifest): PluginHostApi => ({
       registerPanel: (panel: PanelDefinition): (() => void) => {
@@ -130,43 +140,25 @@ export const PluginLoader = (): ReactElement | null => {
         Wrapped.displayName = `PluginPanel(${panel.id})`;
         const wrappedPanel: PanelDefinition = { ...panel, component: Wrapped, pluginId: manifest.id };
 
-        setPanels((prev) => [...prev, wrappedPanel]);
-        const undo = (): void => {
+        // Replace-by-id so a panel can only ever be registered once.
+        setPanels((prev) => [...prev.filter((p) => p.id !== panel.id), wrappedPanel]);
+        return (): void => {
           setPanels((prev) => prev.filter((p) => p.id !== panel.id));
         };
-        disposers.push(undo);
-        return undo;
       },
     });
 
     void (async (): Promise<void> => {
       for (const url of BUILTIN_PLUGIN_MANIFEST_URLS) {
         const outcome = await loadOne(url, makeApi);
-        if (isDisposed) {
-          if ("dispose" in outcome && outcome.dispose) outcome.dispose();
-          return;
-        }
-
         if ("phase" in outcome) {
           console.error(`Plugin load failed (${outcome.phase})`, outcome);
           setErrors((prev) => [...prev, outcome]);
         } else {
-          if (outcome.dispose) disposers.push(outcome.dispose);
-          setManifests((prev) => [...prev, outcome.manifest]);
+          setManifests((prev) => [...prev.filter((m) => m.id !== outcome.manifest.id), outcome.manifest]);
         }
       }
     })();
-
-    return (): void => {
-      isDisposed = true;
-      for (const d of disposers) {
-        try {
-          d();
-        } catch (e) {
-          console.error("Plugin disposer threw", e);
-        }
-      }
-    };
   }, [setPanels, setManifests, setErrors]);
 
   return null;
