@@ -1,5 +1,4 @@
 import { Flex, IconButton, Popover, Spinner, Text, Tooltip } from "@radix-ui/themes";
-import { DropdownMenu } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import { Check, ChevronDown, ChevronUp, CopyIcon, GitMergeIcon, Info, PlusIcon, TriangleAlert } from "lucide-react";
 import { posthog } from "posthog-js";
@@ -12,8 +11,6 @@ import { chatActionsAtom } from "../../../common/state/atoms/chatActions.ts";
 import { prStatusAtomFamily } from "../../../common/state/atoms/prStatus.ts";
 import { prCreationPromptAtom } from "../../../common/state/atoms/userConfig.ts";
 import styles from "./PrButton.module.scss";
-import { PrDetailDropdown } from "./PrDetailDropdown.tsx";
-import { PrPromptDialog } from "./PrPromptDialog.tsx";
 
 export type GitProvider = "gitlab" | "github" | null;
 
@@ -125,10 +122,11 @@ type CreatePrButtonProps = {
   gitProvider: GitProvider;
 };
 
+// No dropdown in any state (REQ-TOPBAR-7): the create button is a single
+// action with no "edit prompt" chevron.
 const CreatePrButton = ({ targetBranch, gitProvider }: CreatePrButtonProps): ReactElement => {
   const prCreationPrompt = useAtomValue(prCreationPromptAtom);
   const chatActions = useAtomValue(chatActionsAtom);
-  const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
 
   const isGitLab = gitProvider === "gitlab";
   const buttonLabel = isGitLab ? "Create MR" : "Create PR";
@@ -145,94 +143,27 @@ const CreatePrButton = ({ targetBranch, gitProvider }: CreatePrButtonProps): Rea
   };
 
   return (
-    <>
-      <div className={styles.createSplitButton}>
-        <button
-          type="button"
-          className={styles.createMainArea}
-          onClick={handleClick}
-          data-testid={ElementIds.PR_BUTTON_CREATE}
-        >
-          <PlusIcon size={12} className={styles.plusIcon} />
-          <Text size="1">{buttonLabel}</Text>
-        </button>
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger>
-            <span className={styles.createChevronArea} role="button" tabIndex={0}>
-              <ChevronDown size={12} />
-            </span>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content size="1">
-            <DropdownMenu.Item onSelect={() => setIsPromptDialogOpen(true)}>Edit prompt...</DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
-      </div>
-      <PrPromptDialog open={isPromptDialogOpen} onOpenChange={setIsPromptDialogOpen} gitProvider={gitProvider} />
-    </>
+    <div className={styles.createSplitButton}>
+      <button
+        type="button"
+        className={styles.createMainArea}
+        onClick={handleClick}
+        data-testid={ElementIds.PR_BUTTON_CREATE}
+      >
+        <PlusIcon size={12} className={styles.plusIcon} />
+        <Text size="1">{buttonLabel}</Text>
+      </button>
+    </div>
   );
 };
 
-const getPipelineDotClass = (status: string | null | undefined): string => {
-  switch (status) {
-    case "running":
-      return styles.dotRunning;
-    case "passed":
-      return styles.dotPassed;
-    case "failed":
-      return styles.dotFailed;
-    case null:
-    case undefined:
-    default:
-      return styles.dotMuted;
-  }
-};
-
-const getPipelineTooltip = (status: string | null | undefined): string => {
-  switch (status) {
-    case "running":
-      return "Pipeline running";
-    case "passed":
-      return "Pipeline passed";
-    case "failed":
-      return "Pipeline failed";
-    case null:
-    case undefined:
-    default:
-      return "No pipeline";
-  }
-};
-
-const getReviewDotClass = (prStatus: PrStatusInfo): string => {
-  if (!prStatus.approvals || prStatus.approvals.length === 0) {
-    return styles.dotMuted;
-  }
-
-  if (prStatus.approvals.every((a) => a.approved)) {
-    return styles.dotApproved;
-  }
-
-  return styles.dotPending;
-};
-
-const getReviewTooltip = (prStatus: PrStatusInfo): string => {
-  if (!prStatus.approvals || prStatus.approvals.length === 0) {
-    return "No reviewers";
-  }
-
-  if (prStatus.approvals.every((a) => a.approved)) {
-    return "Approved";
-  }
-
-  return "Review pending";
-};
-
-type OpenPrButtonProps = {
+// Open PR/MR → a plain link to the PR, no detail dropdown (REQ-TOPBAR-7).
+type OpenPrLinkProps = {
   prStatus: PrStatusInfo;
-  isDropdownOpen: boolean;
   gitProvider: GitProvider;
 };
 
-const OpenPrButton = ({ prStatus, isDropdownOpen, gitProvider }: OpenPrButtonProps): ReactElement => {
+const OpenPrLink = ({ prStatus, gitProvider }: OpenPrLinkProps): ReactElement => {
   const isGitHub = gitProvider === "github";
   const prefix = isGitHub ? "#" : "!";
   const label = isGitHub ? "PR" : "MR";
@@ -249,32 +180,20 @@ const OpenPrButton = ({ prStatus, isDropdownOpen, gitProvider }: OpenPrButtonPro
   };
 
   return (
-    <div className={styles.openButton}>
-      <Tooltip content={`Open ${prefix}${prStatus.prIid} in ${providerName}`}>
-        <button
-          type="button"
-          className={styles.prNumberArea}
-          onClick={handleOpenUrl}
-          data-testid={ElementIds.PR_BUTTON_OPEN}
-        >
-          <Text size="1">
-            {label} {prefix}
-            {prStatus.prIid}
-          </Text>
-          <Tooltip content={getPipelineTooltip(prStatus.pipelineStatus)}>
-            <span className={`${styles.statusDot} ${getPipelineDotClass(prStatus.pipelineStatus)}`} />
-          </Tooltip>
-          <Tooltip content={getReviewTooltip(prStatus)}>
-            <span className={`${styles.statusDot} ${getReviewDotClass(prStatus)}`} />
-          </Tooltip>
-        </button>
-      </Tooltip>
-      <Popover.Trigger>
-        <button type="button" className={styles.chevronArea} data-testid={ElementIds.PR_BUTTON_CHEVRON}>
-          {isDropdownOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-        </button>
-      </Popover.Trigger>
-    </div>
+    <Tooltip content={`Open ${prefix}${prStatus.prIid} in ${providerName}`}>
+      <button
+        type="button"
+        className={styles.mergedButton}
+        data-pr-state="open"
+        onClick={handleOpenUrl}
+        data-testid={ElementIds.PR_BUTTON_OPEN}
+      >
+        <Text size="1">
+          {label} {prefix}
+          {prStatus.prIid}
+        </Text>
+      </button>
+    </Tooltip>
   );
 };
 
@@ -434,76 +353,13 @@ const ErrorPrButton = ({ error, gitProvider }: ErrorPrButtonProps): ReactElement
   );
 };
 
-type AssignPrButtonProps = {
-  prStatus: PrStatusInfo;
-  targetBranch: string;
-  gitProvider: GitProvider;
-  onSwitchTarget?: (newTarget: string) => void;
-};
-
-const AssignPrButton = ({ prStatus, targetBranch, gitProvider, onSwitchTarget }: AssignPrButtonProps): ReactElement => {
-  const prCreationPrompt = useAtomValue(prCreationPromptAtom);
-  const chatActions = useAtomValue(chatActionsAtom);
-
-  const isGitLab = gitProvider === "gitlab";
-  const prefix = isGitLab ? "!" : "#";
-  const label = isGitLab ? "MR" : "PR";
-  const assignLabel = isGitLab ? "Assign MR" : "Assign PR";
-  const createLabel = isGitLab ? "Create MR" : "Create PR";
-
-  const handleCreate = (): void => {
-    const prTerm = isGitLab ? "merge request" : "pull request";
-    const message = `${prCreationPrompt}\n\nTarget the ${prTerm} against \`${targetBranch}\`.`;
-    posthog.capture("pr.create_initiated", {
-      git_provider: gitProvider,
-      // The branch name is user-entered text (it can encode feature/ticket/
-      // customer names), so it is deliberately not recorded.
-    });
-    chatActions.sendMessage?.(message);
-  };
-
-  const handleSwitchTarget = (): void => {
-    if (prStatus.mismatchedPrTargetBranch && onSwitchTarget) {
-      onSwitchTarget(prStatus.mismatchedPrTargetBranch);
-    }
-  };
-
-  return (
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger>
-        <div className={styles.assignButton} data-testid={ElementIds.PR_BUTTON_ASSIGN}>
-          <span className={styles.assignMainArea}>
-            <GitMergeIcon size={12} className={styles.assignMergeIcon} />
-            <Text size="1">{assignLabel}</Text>
-          </span>
-        </div>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Content size="1" align="end">
-        <DropdownMenu.Item onSelect={handleCreate}>
-          <PlusIcon size={12} />
-          {createLabel} → <span className={styles.monoBranch}>{targetBranch}</span>
-        </DropdownMenu.Item>
-        <DropdownMenu.Separator />
-        <DropdownMenu.Item onSelect={handleSwitchTarget}>
-          <GitMergeIcon size={12} />
-          {label} {prefix}
-          {prStatus.mismatchedPrIid} exists → switch target to{" "}
-          <span className={styles.monoBranch}>{prStatus.mismatchedPrTargetBranch}</span>
-        </DropdownMenu.Item>
-      </DropdownMenu.Content>
-    </DropdownMenu.Root>
-  );
-};
-
 export const PrButton = ({
   workspaceId,
   targetBranch,
   hideCreateAction,
   gitProvider,
-  onSwitchTarget,
 }: PrButtonProps): ReactElement | null => {
   const prStatus = useAtomValue(prStatusAtomFamily(workspaceId));
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const effectiveError: EffectiveError | null = prStatus?.errorCategory
     ? {
@@ -532,34 +388,13 @@ export const PrButton = ({
     if (hideCreateAction) {
       return null;
     }
-
-    const targetBare = (targetBranch ?? "").replace(/^[^/]+\//, "");
-    const isMismatchRelevant =
-      prStatus.mismatchedPrIid != null &&
-      prStatus.mismatchedPrTargetBranch != null &&
-      prStatus.mismatchedPrTargetBranch !== targetBare;
-    if (isMismatchRelevant) {
-      return (
-        <AssignPrButton
-          prStatus={prStatus}
-          targetBranch={targetBranch ?? "origin/main"}
-          gitProvider={gitProvider}
-          onSwitchTarget={onSwitchTarget}
-        />
-      );
-    }
+    // No dropdown in any state (REQ-TOPBAR-7): even the target-mismatch case
+    // just offers a plain create action.
     return <CreatePrButton targetBranch={targetBranch ?? "origin/main"} gitProvider={gitProvider} />;
   }
 
   if (prStatus.prState === "open") {
-    return (
-      <Popover.Root open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
-        <OpenPrButton prStatus={prStatus} isDropdownOpen={isDropdownOpen} gitProvider={gitProvider} />
-        <Popover.Content align="end" sideOffset={5} onOpenAutoFocus={(e) => e.preventDefault()}>
-          <PrDetailDropdown prStatus={prStatus} gitProvider={gitProvider} />
-        </Popover.Content>
-      </Popover.Root>
-    );
+    return <OpenPrLink prStatus={prStatus} gitProvider={gitProvider} />;
   }
 
   if (prStatus.prState === "merged" || prStatus.prState === "closed") {

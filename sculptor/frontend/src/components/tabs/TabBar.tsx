@@ -32,6 +32,7 @@ export const TabBar = ({
   variant = "default",
   contextMenuContent,
   scrollTrigger,
+  closeReplacesIcon = false,
 }: TabBarProps): ReactElement => {
   const isCompact = variant === "compact";
 
@@ -208,6 +209,7 @@ export const TabBar = ({
                     onDoubleClick={onDoubleClick}
                     variant={variant}
                     contextMenuContent={contextMenuContent}
+                    closeReplacesIcon={closeReplacesIcon}
                   />
                 ))}
               </SortableContext>
@@ -239,6 +241,7 @@ export const TabBar = ({
                       onClose={onClose}
                       onDoubleClick={onDoubleClick}
                       contextMenuContent={contextMenuContent}
+                      closeReplacesIcon={closeReplacesIcon}
                     />
                   ))}
                 </SortableContext>

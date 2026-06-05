@@ -5,8 +5,6 @@ import { activeWorkspaceIdAtom, zoneSizesAtom, zoneVisibilityAtom } from "~/comp
 import type { ZoneId } from "~/components/panels/types.ts";
 import { diffPanelOpenAtom, diffPanelSplitRatioAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
 
-import { isPanelLayoutPerWorkspaceAtom } from "../atoms/userConfig.ts";
-
 const VISIBILITY_KEY_PREFIX = "sculptor-zone-visibility-ws-";
 const SIZES_KEY_PREFIX = "sculptor-zone-sizes-ws-";
 const DIFF_PANEL_OPEN_KEY_PREFIX = "sculptor-diffPanel-open-ws-";
@@ -39,7 +37,10 @@ const loadFromLocalStorage = <T>(key: string): T | undefined => {
  * Must be called inside WorkspacePageContent where `workspaceId` is known.
  */
 export const usePerWorkspacePanelLayout = (workspaceId: string): void => {
-  const isPerWorkspace = useAtomValue(isPanelLayoutPerWorkspaceAtom);
+  // The compact layout makes section VISIBILITY per-workspace by default
+  // (REQ-PERSIST-1). Section SIZES remain global (REQ-PERSIST-2) — they live in
+  // sectionSizePercentAtom, not here, so they are unaffected.
+  const isPerWorkspace = true;
   const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
 
   const zoneVisibility = useAtomValue(zoneVisibilityAtom);

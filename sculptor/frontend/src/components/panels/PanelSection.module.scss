@@ -1,0 +1,49 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  width: 100%;
+}
+
+.tabBar {
+  background: var(--gray-2);
+  border-bottom: 1px solid var(--gray-a4);
+  flex-shrink: 0;
+}
+
+.headerControls {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-2);
+  // Keep the "+" hover background clear of the section's right border.
+  padding-right: var(--space-3);
+}
+
+.headerButton {
+  color: var(--gray-11);
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  min-height: 0;
+  outline: none;
+  overflow: hidden;
+}
+
+.emptyState {
+  align-items: center;
+  color: var(--gray-10);
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  gap: var(--space-2);
+  justify-content: center;
+}
+
+.emptyHint {
+  font-size: var(--font-size-1);
+}

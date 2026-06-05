@@ -1,0 +1,43 @@
+.outer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.topRow {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: row;
+  min-height: 0;
+  width: 100%;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.center {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  height: 100%;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- matches CENTER_PANEL_MIN_WIDTH_PX in constants.ts
+  min-width: 400px;
+  overflow: hidden;
+}
+
+.bottom {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-height: 0;
+  overflow: hidden;
+  width: 100%;
+}

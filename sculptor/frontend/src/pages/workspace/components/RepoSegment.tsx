@@ -16,6 +16,8 @@ type RepoSegmentProps = {
   strategy: WorkspaceInitializationStrategy;
   shouldShowModeBadge: boolean;
   projectName: string;
+  /** Collapse to just the folder icon (the dropdown still opens). (REQ-TOPBAR-4) */
+  iconOnly?: boolean;
   "data-testid"?: string;
 };
 
@@ -31,6 +33,7 @@ export const RepoSegment = ({
   strategy,
   shouldShowModeBadge,
   projectName,
+  iconOnly = false,
 }: RepoSegmentProps): ReactElement => {
   const isInPlace = strategy === WorkspaceInitializationStrategy.IN_PLACE;
   const badgeLabel = MODE_BADGE_LABEL[strategy];
@@ -95,7 +98,7 @@ export const RepoSegment = ({
     <>
       <Flex align="center" gap="2">
         <DropdownMenu.Root>
-          <Tooltip content="Repo name and environment" side="bottom">
+          <Tooltip content={iconOnly ? projectName : "Repo name and environment"} side="bottom">
             <DropdownMenu.Trigger>
               <Button
                 variant="ghost"
@@ -105,8 +108,12 @@ export const RepoSegment = ({
                 data-testid={ElementIds.REPO_PATH_DROPDOWN_TRIGGER}
               >
                 <FolderIcon size={12} className={styles.icon} />
-                <span className={styles.repoName}>{projectName}</span>
-                <DropdownMenu.TriggerIcon />
+                {!iconOnly && (
+                  <>
+                    <span className={styles.repoName}>{projectName}</span>
+                    <DropdownMenu.TriggerIcon />
+                  </>
+                )}
               </Button>
             </DropdownMenu.Trigger>
           </Tooltip>

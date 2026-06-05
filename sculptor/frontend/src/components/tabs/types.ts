@@ -47,6 +47,9 @@ export type TabBarProps = {
   contextMenuContent?: (tabId: string) => ReactNode;
   /** Changing this value forces the active tab to be scrolled into view. */
   scrollTrigger?: number;
+  /** On hover, replace the tab's leading icon with the close (X) button instead
+   *  of showing a separate trailing close button. */
+  closeReplacesIcon?: boolean;
 };
 
 export type DropIndicator = "left" | "right";
@@ -64,4 +67,6 @@ export type SortableTabProps = {
   /** Visual variant. "compact" uses rounded corners, compact padding. */
   variant?: TabVariant;
   contextMenuContent?: (tabId: string) => ReactNode;
+  /** On hover, replace the leading icon with the close button. */
+  closeReplacesIcon?: boolean;
 };

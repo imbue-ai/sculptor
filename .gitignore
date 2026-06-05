@@ -327,3 +327,6 @@ browser-panel-traces/
 
 # Dead-code scan artifacts (batch-claude-runner)
 scan-reports/
+
+# Manual-testing screenshot/log artifacts
+sculptor/attachments/

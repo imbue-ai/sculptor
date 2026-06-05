@@ -17,6 +17,13 @@ type PanelRegistryProviderProps = {
   panels: ReadonlyArray<PanelDefinition>;
   defaultLayout?: DefaultPanelLayout;
   children: ReactNode;
+  /**
+   * When false, panels not present in the persisted layout are left *unplaced*
+   * rather than auto-assigned to their `defaultZone`. The compact layout relies
+   * on this: panels live in a section only once the user adds them via the "+"
+   * dropdown, and closing a tab returns the panel to the unplaced pool.
+   */
+  autoPlaceMissing?: boolean;
 };
 
 /**
@@ -27,6 +34,7 @@ export const PanelRegistryProvider = ({
   panels,
   defaultLayout,
   children,
+  autoPlaceMissing = true,
 }: PanelRegistryProviderProps): ReactElement => {
   useHydrateAtoms([[panelRegistryAtom, panels]]);
 
@@ -67,7 +75,7 @@ export const PanelRegistryProvider = ({
     if (Object.keys(zoneAssignments).length === 0) return;
 
     const registeredIds = new Set(panels.map((p) => p.id));
-    const missingPanels = panels.filter((p) => !(p.id in zoneAssignments));
+    const missingPanels = autoPlaceMissing ? panels.filter((p) => !(p.id in zoneAssignments)) : [];
     const stalePanelIds = Object.keys(zoneAssignments).filter((id) => !registeredIds.has(id as PanelId));
 
     // Reset panels whose stored zone is structurally invalid (not in ZONE_IDS).
@@ -127,7 +135,16 @@ export const PanelRegistryProvider = ({
 
     setZoneAssignments(newAssignments);
     setZoneOrder(newOrder);
-  }, [defaultLayout, panels, zoneAssignments, zoneOrder, setZoneAssignments, setActivePanelPerZone, setZoneOrder]);
+  }, [
+    autoPlaceMissing,
+    defaultLayout,
+    panels,
+    zoneAssignments,
+    zoneOrder,
+    setZoneAssignments,
+    setActivePanelPerZone,
+    setZoneOrder,
+  ]);
 
   return <>{children}</>;
 };

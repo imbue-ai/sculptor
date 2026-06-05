@@ -17,10 +17,23 @@ type ChatPanelContentProps = {
   appendTextRef?: React.MutableRefObject<((text: string) => void) | null>;
   insertSkillRef?: React.MutableRefObject<((skill: InsertSkillArg) => void) | null>;
   editorRef?: React.MutableRefObject<TipTapEditor | null>;
+  /** Render a specific agent instead of the URL's active agent — used by the
+   *  Center's second chat pane when the chat is split (REQ-CHAT-1). */
+  taskIDOverride?: string;
 };
 
-export const ChatPanelContent = ({ appendTextRef, insertSkillRef, editorRef }: ChatPanelContentProps): ReactElement => {
-  const { workspaceID, agentID: taskID } = useWorkspacePageParams();
+export const ChatPanelContent = ({
+  appendTextRef,
+  insertSkillRef,
+  editorRef,
+  taskIDOverride,
+}: ChatPanelContentProps): ReactElement => {
+  const { workspaceID, agentID: agentIDFromUrl } = useWorkspacePageParams();
+  const taskID = taskIDOverride ?? agentIDFromUrl;
+  // A secondary pane (chat split) shows a non-active agent; it must not own the
+  // workspace-scoped /btw popup or the global "chat mounted" signal — those
+  // belong to the primary chat pane.
+  const isSecondaryPane = taskIDOverride !== undefined;
   const isDebugView = useAtomValue(debugViewAtomFamily(taskID ?? ""));
   const closeBtwPopupIfNotForAgent = useSetAtom(closeBtwPopupIfNotForAgentAtom);
   const isBtwPopupOpen = useAtomValue(isBtwPopupOpenAtom);
@@ -33,13 +46,14 @@ export const ChatPanelContent = ({ appendTextRef, insertSkillRef, editorRef }: C
   // popup atom may still hold the previous agent's question/answer; close
   // it so it doesn't float above an unrelated chat pane.
   useEffect(() => {
+    if (isSecondaryPane) return;
     closeBtwPopupIfNotForAgent(taskID ?? null);
-  }, [taskID, closeBtwPopupIfNotForAgent]);
+  }, [isSecondaryPane, taskID, closeBtwPopupIfNotForAgent]);
 
   // Reactive signal for "is the chat panel currently rendered?" — read by the
   // command palette (via `chatPanelMountedAtom`) instead of poking the DOM.
   // The debug view replaces the chat panel and so doesn't count.
-  const isChatPanelRendered = !isDebugView;
+  const isChatPanelRendered = !isDebugView && !isSecondaryPane;
   useEffect(() => {
     if (!isChatPanelRendered) return;
     setChatPanelMounted(true);
@@ -66,7 +80,7 @@ export const ChatPanelContent = ({ appendTextRef, insertSkillRef, editorRef }: C
         insertSkillRef={insertSkillRef}
         editorRef={editorRef}
       />
-      {isBtwPopupOpen && <BtwPopup />}
+      {!isSecondaryPane && isBtwPopupOpen && <BtwPopup />}
     </>
   );
 };

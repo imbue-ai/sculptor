@@ -70,5 +70,12 @@
 }
 
 .spacer {
+  align-self: stretch;
+  app-region: drag;
   flex-grow: 1;
+}
+
+.toggleActive {
+  background: var(--accent-a3);
+  color: var(--accent-11);
 }

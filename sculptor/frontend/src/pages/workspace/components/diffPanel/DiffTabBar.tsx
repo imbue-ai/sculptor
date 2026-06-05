@@ -153,6 +153,9 @@ const diffTabToDefinition = (tab: DiffTab, workspaceId: string): TabDefinition =
 
 type DiffTabBarProps = {
   workspaceId: string;
+  /** Compact single-file mode: hide the multi-file tab strip and the expand
+   *  toggle, keeping only the per-file controls and the close button (REQ-CENTER-4). */
+  singleFileMode?: boolean;
   viewType: DiffViewType;
   onToggleViewType: () => void;
   lineWrapping: "wrap" | "scroll";
@@ -170,6 +173,7 @@ type DiffTabBarProps = {
 
 export const DiffTabBar = ({
   workspaceId,
+  singleFileMode = false,
   viewType,
   onToggleViewType,
   lineWrapping,
@@ -261,8 +265,8 @@ export const DiffTabBar = ({
 
   return (
     <TabBar
-      tabs={tabDefinitions}
-      openTabIds={openTabIds}
+      tabs={singleFileMode ? [] : tabDefinitions}
+      openTabIds={singleFileMode ? [] : openTabIds}
       activeTabId={activeTabPath ?? ""}
       onActivate={handleActivateTab}
       onClose={handleCloseTab}
@@ -272,14 +276,16 @@ export const DiffTabBar = ({
       scrollTrigger={scrollTrigger}
       rightContent={
         <Flex align="center" gap="2" flexShrink="0" className={styles.windowControls}>
-          <TooltipIconButton
-            tooltipText={isExpanded ? "Exit review mode" : "Expand"}
-            size="1"
-            onClick={handleToggleExpand}
-            data-testid={ElementIds.DIFF_EXPAND_TOGGLE}
-          >
-            {isExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-          </TooltipIconButton>
+          {!singleFileMode && (
+            <TooltipIconButton
+              tooltipText={isExpanded ? "Exit review mode" : "Expand"}
+              size="1"
+              onClick={handleToggleExpand}
+              data-testid={ElementIds.DIFF_EXPAND_TOGGLE}
+            >
+              {isExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            </TooltipIconButton>
+          )}
 
           <TooltipIconButton
             tooltipText="Close diff panel"

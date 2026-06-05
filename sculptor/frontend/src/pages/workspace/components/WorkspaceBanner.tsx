@@ -1,43 +1,59 @@
-import { Skeleton, Text, Tooltip } from "@radix-ui/themes";
-import { useAtomValue } from "jotai";
-import { GitBranchIcon } from "lucide-react";
+import { Flex, Skeleton, Text, Tooltip } from "@radix-ui/themes";
+import { useAtomValue, useSetAtom } from "jotai";
+import { GitBranchIcon, PanelBottom, PanelLeft, PanelLeftOpen, PanelRight } from "lucide-react";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { ElementIds, updateWorkspace, WorkspaceInitializationStrategy } from "~/api";
+import { ElementIds, updateWorkspace } from "~/api";
 import { useActiveProjectID, useWorkspacePageParams } from "~/common/NavigateUtils";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus";
 import { prDefaultTargetBranchAtom } from "~/common/state/atoms/userConfig";
-import { useProject } from "~/common/state/hooks/useProjects";
 import { useRepoInfo } from "~/common/state/hooks/useRepoInfo";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace";
 import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch";
+import { navSidebarCollapsedAtom } from "~/components/nav/navAtoms.ts";
 import { zenModeActiveAtom } from "~/components/panels/atoms.ts";
+import {
+  BOTTOM_ZONE,
+  LEFT_SECTION_ZONE,
+  RIGHT_SECTION_ZONE,
+  useSectionToggle,
+} from "~/components/panels/sectionHooks.ts";
+import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
+import { getTitleBarLeftPadding } from "~/electron/utils.ts";
 import { getBranchName } from "~/pages/home/Utils";
 
-import { useProgressiveCollapse } from "../hooks/useProgressiveCollapse";
 import { useWorkspaceRemoteBranches } from "../hooks/useWorkspaceRemoteBranches";
 import { DiffSummary } from "./DiffSummary";
 import { PrButton } from "./PrButton";
-import { RepoSegment } from "./RepoSegment";
 import { TargetBranchSelector } from "./TargetBranchSelector";
 import styles from "./WorkspaceBanner.module.scss";
 
+/**
+ * Full-width top bar (REQ-TOPBAR-1..8). Spans the width minus the nav sidebar.
+ * Left: sidebar-expand toggle (only when the sidebar is collapsed) + Left-section
+ * toggle. Center: branch name, target-branch selector, repo folder icon, diff
+ * summary. Right: PR button, terminal toggle, Right-section toggle. No
+ * progressive collapse — going full-width relieves the space pressure (REQ-TOPBAR-8).
+ */
 export const WorkspaceBanner = (): ReactElement | null => {
   const isZenModeActive = useAtomValue(zenModeActiveAtom);
   const { workspaceID } = useWorkspacePageParams();
   const projectID = useActiveProjectID();
 
   const workspace = useWorkspace(workspaceID);
-  const project = useProject(projectID ?? "");
   const workspaceBranchInfo = useWorkspaceBranch(workspaceID);
   const { repoInfo } = useRepoInfo(projectID ?? "");
   const prDefaultTargetBranch = useAtomValue(prDefaultTargetBranchAtom);
 
   const prStatus = useAtomValue(prStatusAtomFamily(workspaceID));
   const remoteBranches = useWorkspaceRemoteBranches(workspaceID);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const { hiddenPriorities } = useProgressiveCollapse(containerRef);
+
+  const isNavCollapsed = useAtomValue(navSidebarCollapsedAtom);
+  const setNavCollapsed = useSetAtom(navSidebarCollapsedAtom);
+  const leftSection = useSectionToggle(LEFT_SECTION_ZONE);
+  const rightSection = useSectionToggle(RIGHT_SECTION_ZONE);
+  const terminalSection = useSectionToggle(BOTTOM_ZONE);
 
   const branchName = getBranchName(workspaceBranchInfo?.currentBranch);
 
@@ -45,7 +61,6 @@ export const WorkspaceBanner = (): ReactElement | null => {
   const [isTargetBranchOpen, setIsTargetBranchOpen] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Prevent setState-on-unmount from the "Copied!" timer
   useEffect(() => {
     return (): void => {
       if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
@@ -53,10 +68,7 @@ export const WorkspaceBanner = (): ReactElement | null => {
   }, []);
 
   const handleCopyBranch = useCallback((): void => {
-    if (!branchName) {
-      return;
-    }
-
+    if (!branchName) return;
     navigator.clipboard.writeText(branchName);
     setIsCopied(true);
     if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
@@ -66,34 +78,12 @@ export const WorkspaceBanner = (): ReactElement | null => {
   const handleTargetBranchChange = useCallback(
     async (branch: string) => {
       try {
-        await updateWorkspace({
-          path: { workspace_id: workspaceID },
-          body: { targetBranch: branch },
-        });
+        await updateWorkspace({ path: { workspace_id: workspaceID }, body: { targetBranch: branch } });
       } catch (e) {
         console.error("Failed to change target branch:", e);
       }
     },
     [workspaceID],
-  );
-
-  const handleSwitchTarget = useCallback(
-    async (newTarget: string) => {
-      // MRs live on the origin remote, so prefer "origin/{bare}".
-      const fullBranch =
-        remoteBranches.find((b) => b === `origin/${newTarget}`) ??
-        remoteBranches.find((b) => b.endsWith(`/${newTarget}`)) ??
-        `origin/${newTarget}`;
-      try {
-        await updateWorkspace({
-          path: { workspace_id: workspaceID },
-          body: { targetBranch: fullBranch },
-        });
-      } catch (e) {
-        console.error("Failed to switch target branch:", e);
-      }
-    },
-    [workspaceID, remoteBranches],
   );
 
   const gitProvider: "gitlab" | "github" | null = repoInfo?.isGitlabOrigin
@@ -104,17 +94,12 @@ export const WorkspaceBanner = (): ReactElement | null => {
   const isGitLab = gitProvider === "gitlab";
   const currentTargetBranch = workspace?.targetBranch ?? prDefaultTargetBranch;
 
-  // Only show mismatch when the MR's target branch differs from the current
-  // workspace target. Compare bare names (strip remote prefix like "origin/")
-  // to handle repos that use non-origin remotes.
   const currentTargetBare = currentTargetBranch.replace(/^[^/]+\//, "");
   const hasMismatch =
     prStatus?.prState === "none" &&
     prStatus.mismatchedPrIid != null &&
     prStatus.mismatchedPrTargetBranch != null &&
     prStatus.mismatchedPrTargetBranch !== currentTargetBare;
-  // Stable reference so the useMemo inside TargetBranchSelector doesn't
-  // thrash on every parent render (it depends on this `mismatch` prop).
   const mismatchForSelector = useMemo(
     () =>
       hasMismatch
@@ -133,48 +118,49 @@ export const WorkspaceBanner = (): ReactElement | null => {
     return null;
   }
 
-  const repoPath = repoInfo?.repoPath || null;
-  const strategy = workspace.initializationStrategy;
-  // Worktree is the default mode, so it gets no badge — only clone and
-  // in-place workspaces are visually marked so users can spot the non-default
-  // ones in a mixed list.
-  const shouldShowModeBadge = strategy !== WorkspaceInitializationStrategy.WORKTREE;
   const shouldShowTargetBranch = repoInfo?.isGitlabOrigin || repoInfo?.isGithubOrigin;
 
-  // Resolve the full remote branch name for the mismatch target (e.g. "upstream/main")
   const mismatchedFullBranch = hasMismatch
     ? (remoteBranches.find((b) => b === `origin/${prStatus.mismatchedPrTargetBranch}`) ??
       remoteBranches.find((b) => b.endsWith(`/${prStatus.mismatchedPrTargetBranch}`)) ??
       `origin/${prStatus.mismatchedPrTargetBranch}`)
     : null;
-  const mismatchInfo = hasMismatch
-    ? {
-        mismatchedPrIid: prStatus.mismatchedPrIid!,
-        fullBranch: mismatchedFullBranch!,
-      }
-    : null;
-  const isMismatched = mismatchInfo != null;
+  const isMismatched = mismatchedFullBranch != null;
 
   return (
-    <div ref={containerRef} className={styles.banner} data-testid={ElementIds.WORKSPACE_BANNER}>
-      {/* Repo segment */}
-      {!hiddenPriorities.has(2) &&
-        (repoPath ? (
-          <div data-collapse-priority="2">
-            <RepoSegment
-              sourcePath={repoPath}
-              environmentPath={workspace.environmentId ?? null}
-              strategy={strategy}
-              shouldShowModeBadge={shouldShowModeBadge}
-              projectName={project?.name ?? repoPath.split("/").pop() ?? repoPath}
-            />
-          </div>
-        ) : (
-          <Skeleton width="120px" height="16px" />
-        ))}
-
-      {/* Chevron separator */}
-      <span className={styles.chevronSeparator}>&rsaquo;</span>
+    <div
+      className={styles.banner}
+      style={isNavCollapsed ? { paddingLeft: getTitleBarLeftPadding(false) } : undefined}
+      data-testid={ElementIds.WORKSPACE_BANNER}
+    >
+      {/* Left controls (REQ-TOPBAR-2/5) */}
+      <Flex align="center" gap="3" flexShrink="0">
+        {isNavCollapsed && (
+          <TooltipIconButton
+            tooltipText="Show sidebar"
+            variant="ghost"
+            size="1"
+            color="gray"
+            onClick={() => setNavCollapsed(false)}
+            aria-label="Show sidebar"
+            data-testid="topbar-sidebar-toggle"
+          >
+            <PanelLeftOpen size={16} />
+          </TooltipIconButton>
+        )}
+        <TooltipIconButton
+          tooltipText={leftSection.isVisible ? "Hide left section" : "Show left section"}
+          variant="ghost"
+          size="1"
+          color="gray"
+          className={leftSection.isVisible ? styles.toggleActive : undefined}
+          onClick={() => leftSection.toggle()}
+          aria-label="Toggle left section"
+          data-testid="topbar-left-section-toggle"
+        >
+          <PanelLeft size={16} />
+        </TooltipIconButton>
+      </Flex>
 
       {/* Branch name */}
       {branchName ? (
@@ -196,15 +182,7 @@ export const WorkspaceBanner = (): ReactElement | null => {
       {shouldShowTargetBranch && (
         <>
           <span className={styles.arrowSeparator}>&rarr;</span>
-          <Tooltip
-            content={
-              isMismatched
-                ? `${isGitLab ? "MR" : "PR"} ${isGitLab ? "!" : "#"}${mismatchInfo.mismatchedPrIid} targets ${mismatchInfo.fullBranch} — retarget?`
-                : "Target branch"
-            }
-            side="bottom"
-            open={isTargetBranchOpen ? false : undefined}
-          >
+          <Tooltip content="Target branch" side="bottom" open={isTargetBranchOpen ? false : undefined}>
             <span>
               <TargetBranchSelector
                 currentTargetBranch={currentTargetBranch}
@@ -219,7 +197,7 @@ export const WorkspaceBanner = (): ReactElement | null => {
         </>
       )}
 
-      {/* "from" + source branch (non-GitLab repos) */}
+      {/* "from" + source branch (non-GitLab/GitHub repos) */}
       {!shouldShowTargetBranch && workspace.sourceBranch && (
         <>
           <Text size="1" className={styles.fromLabel}>
@@ -231,27 +209,41 @@ export const WorkspaceBanner = (): ReactElement | null => {
         </>
       )}
 
-      {/* Spacer */}
+      {/* Draggable spacer so the frameless window can be moved by the top bar. */}
       <div className={styles.spacer} data-spacer />
 
-      {/* Diff summary */}
-      {!hiddenPriorities.has(1) && (
-        <div data-collapse-priority="1">
-          <DiffSummary workspaceId={workspaceID} />
-        </div>
-      )}
-
-      {/* PR button */}
-      {!hiddenPriorities.has(4) && shouldShowTargetBranch && (
-        <div data-collapse-priority="4">
-          <PrButton
-            workspaceId={workspaceID}
-            targetBranch={currentTargetBranch}
-            gitProvider={gitProvider}
-            onSwitchTarget={handleSwitchTarget}
-          />
-        </div>
-      )}
+      {/* Right cluster: diff summary right-aligned next to the PR button, then
+          the section/terminal toggles, spaced apart (REQ-TOPBAR-2/3). */}
+      <Flex align="center" gap="3" flexShrink="0">
+        <DiffSummary workspaceId={workspaceID} />
+        {shouldShowTargetBranch && (
+          <PrButton workspaceId={workspaceID} targetBranch={currentTargetBranch} gitProvider={gitProvider} />
+        )}
+        <TooltipIconButton
+          tooltipText={terminalSection.isVisible ? "Hide terminal" : "Show terminal"}
+          variant="ghost"
+          size="1"
+          color="gray"
+          className={terminalSection.isVisible ? styles.toggleActive : undefined}
+          onClick={() => terminalSection.toggle()}
+          aria-label="Toggle terminal"
+          data-testid="topbar-terminal-toggle"
+        >
+          <PanelBottom size={16} />
+        </TooltipIconButton>
+        <TooltipIconButton
+          tooltipText={rightSection.isVisible ? "Hide right section" : "Show right section"}
+          variant="ghost"
+          size="1"
+          color="gray"
+          className={rightSection.isVisible ? styles.toggleActive : undefined}
+          onClick={() => rightSection.toggle()}
+          aria-label="Toggle right section"
+          data-testid="topbar-right-section-toggle"
+        >
+          <PanelRight size={16} />
+        </TooltipIconButton>
+      </Flex>
     </div>
   );
 };

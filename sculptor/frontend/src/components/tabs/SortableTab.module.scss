@@ -54,6 +54,22 @@
   margin-left: var(--space-1);
 }
 
+// Close button that sits in the leading-icon slot (closeReplacesIcon). Combined
+// with `.icon` it matches the icon's footprint so the label doesn't shift.
+.iconSlotClose {
+  background: none;
+  border: none;
+  border-radius: var(--radius-1);
+  color: var(--gray-9);
+  cursor: pointer;
+  justify-content: center;
+  padding: 0;
+
+  &:hover {
+    color: var(--gray-12);
+  }
+}
+
 .label {
   flex: 1;
   min-width: 0;

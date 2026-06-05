@@ -21,15 +21,16 @@ import { CommandRegistrations } from "../components/CommandPalette/CommandRegist
 import { DevModeIndicator } from "../components/DevModeIndicator.tsx";
 import { ExitZenModeButton } from "../components/ExitZenModeButton.tsx";
 import { KeyboardShortcutsDialog } from "../components/KeyboardShortcutsDialog.tsx";
+import { WorkspaceNavSidebar } from "../components/nav/WorkspaceNavSidebar.tsx";
 import { NotificationToasts } from "../components/NotificationToasts.tsx";
 import { zenModeActiveAtom } from "../components/panels/atoms.ts";
 import { PanelRegistryProvider } from "../components/panels/PanelRegistryProvider.tsx";
 import { RepoPathDialog } from "../components/RepoPathDialog.tsx";
 import { TitleBar } from "../components/TitleBar.tsx";
 import { Toast } from "../components/Toast.tsx";
-import { TopBar } from "../components/TopBar.tsx";
 import { VersionDisplay } from "../components/VersionDisplay.tsx";
 import { WarningStatusBanner } from "../components/WarningStatusBanner.tsx";
+import { WorkspaceTabs } from "../components/WorkspaceTabs.tsx";
 import { useAutoUpdateListener } from "../hooks/useAutoUpdateListener.ts";
 import { workspaceDefaultLayout, workspacePanels } from "../pages/workspace/panels/workspacePanels.ts";
 import { usePageLayoutKeyboardShortcuts } from "./hooks/usePageLayoutKeyboardShortcuts.ts";
@@ -94,45 +95,58 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
   return (
     <>
       <Flex
-        direction="column"
+        direction="row"
         height="var(--app-height)"
         width="100vw"
         position="relative"
         overflow="hidden"
         style={{ background: "var(--gray-2)" }}
       >
-        {/* TopBar stays mounted (display:none) in zen mode so that workspace
-            tab-cycling keyboard shortcuts (Cmd+[, Cmd+]) remain active. */}
+        {/* Vertical nav sidebar replaces the horizontal tab bar (REQ-NAV-1).
+            Hidden in zen mode. */}
         <div style={isZenModeActive ? { display: "none" } : undefined}>
-          <TopBar />
+          <WorkspaceNavSidebar />
         </div>
-        {/* In zen mode, render a draggable region so the top window edge
-            remains draggable. */}
-        {isZenModeActive && <TitleBar className={styles.zenTitleBar} />}
-        <PanelRegistryProvider panels={workspacePanels} defaultLayout={workspaceDefaultLayout}>
-          <Outlet />
-        </PanelRegistryProvider>
-        {showVersionIndicator && !isZenModeActive && (
-          <Flex align="center" mx="3" mb="2" flexShrink="0" style={{ background: "var(--gray-2)" }}>
-            <Flex flexBasis="0" flexGrow="1" />
-            <Flex flexBasis="0" flexGrow="1" justify="center">
-              <DevModeIndicator />
+        {/* WorkspaceTabs is kept mounted but hidden: it owns the tab-cycle
+            keybindings (Cmd+[, Cmd+]), close-workspace shortcut, command-palette
+            tab actions, and the workspace delete dialog. The nav sidebar
+            replaces only its visual tab strip. */}
+        <div style={{ display: "none" }} aria-hidden>
+          <WorkspaceTabs />
+        </div>
+        <Flex direction="column" flexGrow="1" minWidth="0" overflow="hidden">
+          {/* In zen mode, render a draggable region so the top window edge
+              remains draggable. */}
+          {isZenModeActive && <TitleBar className={styles.zenTitleBar} />}
+          <PanelRegistryProvider
+            panels={workspacePanels}
+            defaultLayout={workspaceDefaultLayout}
+            autoPlaceMissing={false}
+          >
+            <Outlet />
+          </PanelRegistryProvider>
+          {showVersionIndicator && !isZenModeActive && (
+            <Flex align="center" mx="3" mb="2" flexShrink="0" style={{ background: "var(--gray-2)" }}>
+              <Flex flexBasis="0" flexGrow="1" />
+              <Flex flexBasis="0" flexGrow="1" justify="center">
+                <DevModeIndicator />
+              </Flex>
+              <Flex flexBasis="0" flexGrow="1" justify="end">
+                <VersionDisplay />
+              </Flex>
             </Flex>
-            <Flex flexBasis="0" flexGrow="1" justify="end">
-              <VersionDisplay />
-            </Flex>
-          </Flex>
-        )}
-        {isProjectPathInaccessible && (
-          <WarningStatusBanner
-            message={`Project folder not found: ${currentProject.name}.`}
-            linkText="Learn more"
-            onLinkClick={() => setIsRepoPathDialogOpen(true)}
-          />
-        )}
-        {(hasBackendStopped || hasHealthWarningOnBackend) && (
-          <WarningStatusBanner message={backendStatus.payload.message} />
-        )}
+          )}
+          {isProjectPathInaccessible && (
+            <WarningStatusBanner
+              message={`Project folder not found: ${currentProject.name}.`}
+              linkText="Learn more"
+              onLinkClick={() => setIsRepoPathDialogOpen(true)}
+            />
+          )}
+          {(hasBackendStopped || hasHealthWarningOnBackend) && (
+            <WarningStatusBanner message={backendStatus.payload.message} />
+          )}
+        </Flex>
       </Flex>
       <ExitZenModeButton />
       <CommandRegistrations />

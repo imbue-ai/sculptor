@@ -26,6 +26,7 @@ export const SortableTab = ({
   onDoubleClick,
   variant = "default",
   contextMenuContent,
+  closeReplacesIcon = false,
 }: SortableTabProps): ReactElement => {
   const [isHovered, setIsHovered] = useState<boolean>(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState<boolean>(false);
@@ -84,6 +85,36 @@ export const SortableTab = ({
   // Default: conditionally render to avoid reserving space in fixed-width tabs.
   const shouldRenderCloseButton = isCompact ? isCloseable : shouldShowCloseButton;
 
+  // When closeReplacesIcon is set, the leading icon turns into the close button
+  // on hover rather than showing a separate trailing close button.
+  const shouldShowCloseInIconSlot = closeReplacesIcon && isCloseable && isEffectivelyHovered;
+  const closeButton = (
+    <IconButton
+      variant="ghost"
+      size="1"
+      color="gray"
+      data-testid={ElementIds.TAB_CLOSE_BUTTON}
+      className={closeButtonClass}
+      onClick={handleClose}
+      aria-label={`Close ${tab.label}`}
+    >
+      {tab.closeIcon ?? <X width={closeIconSize} height={closeIconSize} />}
+    </IconButton>
+  );
+  // A close button sized to occupy the exact same footprint as the leading icon,
+  // so swapping icon ↔ close on hover doesn't shift the label (closeReplacesIcon).
+  const iconSlotCloseButton = (
+    <button
+      type="button"
+      data-testid={ElementIds.TAB_CLOSE_BUTTON}
+      className={`${styles.icon} ${styles.iconSlotClose}`}
+      onClick={handleClose}
+      aria-label={`Close ${tab.label}`}
+    >
+      {tab.closeIcon ?? <X width={closeIconSize} height={closeIconSize} />}
+    </button>
+  );
+
   const tabElement = (
     <div
       ref={setNodeRef}
@@ -102,21 +133,11 @@ export const SortableTab = ({
       onMouseEnter={(): void => setIsHovered(true)}
       onMouseLeave={(): void => setIsHovered(false)}
     >
-      {tab.icon && <span className={styles.icon}>{tab.icon}</span>}
+      {closeReplacesIcon && shouldShowCloseInIconSlot
+        ? iconSlotCloseButton
+        : tab.icon && <span className={styles.icon}>{tab.icon}</span>}
       <span className={isCompact ? styles.compactLabel : styles.label}>{tab.labelContent ?? tab.label}</span>
-      {shouldRenderCloseButton && (
-        <IconButton
-          variant="ghost"
-          size="1"
-          color="gray"
-          data-testid={ElementIds.TAB_CLOSE_BUTTON}
-          className={closeButtonClass}
-          onClick={handleClose}
-          aria-label={`Close ${tab.label}`}
-        >
-          {tab.closeIcon ?? <X width={closeIconSize} height={closeIconSize} />}
-        </IconButton>
-      )}
+      {!closeReplacesIcon && shouldRenderCloseButton && closeButton}
     </div>
   );
 

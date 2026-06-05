@@ -1,8 +1,16 @@
 import { useAtomValue, useSetAtom } from "jotai";
-import { useCallback } from "react";
+import { createContext, useCallback, useContext } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { setActiveTabByIdAtom, setAgentForWorkspaceAtom, workspaceAtomFamily } from "./state/atoms/workspaces";
+
+/**
+ * Overrides the agent (task) id that `useWorkspacePageParams` reports, without
+ * changing the URL. The Center's second chat pane wraps its subtree in this
+ * provider so every descendant that reads `agentID` resolves to the split
+ * agent rather than the URL's active agent (REQ-CHAT-1). Null = use the URL.
+ */
+export const AgentOverrideContext = createContext<string | null>(null);
 
 type ImbueNavigationFunctions = {
   navigateToWorkspace: (workspaceID: string) => void;
@@ -145,6 +153,7 @@ export type WorkspacePageParams = {
 export const useWorkspacePageParams = (): WorkspacePageParams => {
   const location = useLocation();
   const params = useParams<WorkspaceURLParams>();
+  const agentOverride = useContext(AgentOverrideContext);
   if (params.workspaceID === undefined || params.workspaceID === null) {
     throw new ExpectedParamsNotFoundError(
       `Expected URL ${location.pathname} to contain workspaceID but only extracted the following: ${JSON.stringify(params)}`,
@@ -152,7 +161,7 @@ export const useWorkspacePageParams = (): WorkspacePageParams => {
   }
   return {
     workspaceID: params.workspaceID,
-    agentID: params.id,
+    agentID: agentOverride ?? params.id,
   };
 };
 

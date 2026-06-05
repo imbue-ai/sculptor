@@ -39,6 +39,12 @@ import { useScrollPreservation } from "./useScrollPreservation.ts";
 
 type DiffPanelProps = {
   workspaceId: string;
+  /**
+   * Compact single-file mode (REQ-CENTER-4): hide the multi-file tab/scope row
+   * and the always-mounted combined view (Review All is its own panel now). Only
+   * one file is shown at a time, with a minimal control row.
+   */
+  singleFile?: boolean;
 };
 
 // Wait this long before showing the top progress bar; fetches that finish
@@ -79,7 +85,7 @@ const renderDiffContent = ({
   );
 };
 
-export const DiffPanel = ({ workspaceId }: DiffPanelProps): ReactElement => {
+export const DiffPanel = ({ workspaceId, singleFile = false }: DiffPanelProps): ReactElement => {
   const activeFileDiff = useActiveFileDiff(workspaceId);
   // Only surface the loading bar when a file is open: the bar means "the diff
   // you're looking at is loading," which is meaningless over the empty "Open a
@@ -301,6 +307,7 @@ export const DiffPanel = ({ workspaceId }: DiffPanelProps): ReactElement => {
       )}
       <DiffTabBar
         workspaceId={workspaceId}
+        singleFileMode={singleFile}
         viewType={viewType}
         onToggleViewType={handleToggleViewType}
         lineWrapping={overflow}
@@ -327,14 +334,17 @@ export const DiffPanel = ({ workspaceId }: DiffPanelProps): ReactElement => {
         />
       )}
 
-      {/* Always mounted so the toolbar DOM is ready before the tab activates */}
-      <CombinedDiffView
-        workspaceId={workspaceId}
-        viewType={viewType}
-        isActive={activeFileDiff.isCombined}
-        contentRef={combinedContentRef}
-        searchQuery={isSearchOpen ? searchQuery : ""}
-      />
+      {/* Always mounted so the toolbar DOM is ready before the tab activates.
+          Skipped in single-file mode — Review All is its own panel now. */}
+      {!singleFile && (
+        <CombinedDiffView
+          workspaceId={workspaceId}
+          viewType={viewType}
+          isActive={activeFileDiff.isCombined}
+          contentRef={combinedContentRef}
+          searchQuery={isSearchOpen ? searchQuery : ""}
+        />
+      )}
 
       {!activeFileDiff.isCombined &&
         (activeFileDiff.isFileView ? (

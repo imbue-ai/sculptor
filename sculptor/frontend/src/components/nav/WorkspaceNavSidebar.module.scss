@@ -1,0 +1,188 @@
+@use "scrollbar" as *;
+
+.sidebar {
+  background: var(--gray-2);
+  border-right: 1px solid var(--gray-a4);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  height: 100%;
+  overflow: hidden;
+  width: 240px;
+}
+
+.windowControls {
+  align-items: center;
+  app-region: drag;
+  display: flex;
+  flex-shrink: 0;
+  height: 40px;
+  justify-content: flex-end;
+  padding-right: var(--space-2);
+}
+
+.noDrag {
+  app-region: no-drag;
+}
+
+.topActions,
+.bottomActions {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 2px;
+  padding: var(--space-2);
+}
+
+.navItem {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-2);
+  color: var(--gray-12);
+  cursor: pointer;
+  display: flex;
+  font-size: var(--font-size-2);
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  text-align: left;
+  width: 100%;
+
+  &:hover {
+    background: var(--gray-a3);
+  }
+}
+
+.navItemActive {
+  background: var(--accent-a3);
+  color: var(--accent-11);
+}
+
+.navIcon {
+  color: var(--gray-11);
+  flex-shrink: 0;
+}
+
+.navLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sectionTitle {
+  color: var(--gray-10);
+  flex-shrink: 0;
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.04em;
+  padding: var(--space-2) var(--space-3) var(--space-1);
+  text-transform: uppercase;
+}
+
+.repoList {
+  // Horizontal padding so the row hover pills are inset (and never touch the
+  // sidebar edges), matching the top-action nav items.
+  flex-grow: 1;
+  flex-shrink: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-1) var(--space-2);
+
+  @include thin-scrollbar(vertical);
+}
+
+.repoGroup {
+  // A small gap between the repo header and its workspace rows so the focused
+  // workspace pill never overlaps the row above it.
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: var(--space-3);
+}
+
+// Repo header and workspace rows share the same pill height and full width.
+// min-height (rather than vertical padding) keeps the row height stable even
+// though the header contains a taller "+" icon button.
+.repoHeader {
+  align-items: center;
+  border-radius: var(--radius-2);
+  display: flex;
+  gap: var(--space-1);
+  min-height: 28px;
+  padding: 0 var(--space-2);
+
+  &:hover {
+    background: var(--gray-a3);
+  }
+}
+
+.repoHeaderButton {
+  align-items: center;
+  background: transparent;
+  border: none;
+  color: var(--gray-12);
+  cursor: pointer;
+  display: flex;
+  flex-grow: 1;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: 0;
+}
+
+.repoChevron {
+  color: var(--gray-10);
+  flex-shrink: 0;
+}
+
+.repoName {
+  color: var(--gray-12);
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-medium);
+  overflow: hidden;
+}
+
+.workspaceRow {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-2);
+  color: var(--gray-12);
+  cursor: pointer;
+  display: flex;
+  font-size: var(--font-size-2);
+  gap: var(--space-2);
+  min-height: 28px;
+  // Full width like the repo header; the content is indented via padding-left.
+  padding: 0 var(--space-2) 0 var(--space-4);
+  width: 100%;
+
+  &:hover {
+    background: var(--gray-a3);
+  }
+}
+
+.workspaceRowActive {
+  background: var(--accent-a3);
+  color: var(--accent-11);
+
+  &:hover {
+    background: var(--accent-a3);
+  }
+}
+
+.workspaceDot {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+}
+
+.workspaceName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spacer {
+  flex-grow: 1;
+  flex-shrink: 0;
+}

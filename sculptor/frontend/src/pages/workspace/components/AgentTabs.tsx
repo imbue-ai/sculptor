@@ -1,6 +1,6 @@
 import { ContextMenu, IconButton } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { PlusIcon } from "lucide-react";
+import { Columns2, PlusIcon } from "lucide-react";
 import { posthog } from "posthog-js";
 import type { ReactElement, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -35,6 +35,8 @@ import { TabBar } from "~/components/tabs/TabBar";
 import type { TabDefinition } from "~/components/tabs/types";
 
 import styles from "./AgentTabs.module.scss";
+import { secondChatAgentIdAtomFamily } from "./centerAtoms.ts";
+import { closeDiffPanelAtom } from "./diffPanel/atoms.ts";
 
 const NO_SESSION_TOOLTIP = "No active session — send a prompt first";
 
@@ -126,6 +128,8 @@ export const AgentTabs = (): ReactElement | null => {
   // outside this component.
   const [renamingAgentId, setRenamingAgentId] = useAtom(renamingAgentIdAtom);
   const [deleteTarget, setDeleteTarget] = useAtom(agentDeleteTargetAtom);
+  const setSecondChatAgentId = useSetAtom(secondChatAgentIdAtomFamily(workspaceID));
+  const closeDiffPanel = useSetAtom(closeDiffPanelAtom);
   const pendingTitles = useAtomValue(pendingAgentTitlesAtom);
   const setPendingTitles = useSetAtom(pendingAgentTitlesAtom);
   const pendingTitleTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -397,6 +401,16 @@ export const AgentTabs = (): ReactElement | null => {
   );
   const agentActions = useMemo(() => buildAgentActions(agentActionRuntime), [agentActionRuntime]);
 
+  // Open this agent in the Center's second chat pane (REQ-CHAT-2). Closing the
+  // diff first keeps the Center to its 2-pane maximum (REQ-CENTER-3).
+  const handleSplit = useCallback(
+    (tabId: string): void => {
+      closeDiffPanel();
+      setSecondChatAgentId(tabId);
+    },
+    [closeDiffPanel, setSecondChatAgentId],
+  );
+
   const contextMenuContent = useCallback(
     (tabId: string): ReactNode => {
       const agent = workspaceAgents.find((a) => a.id === tabId);
@@ -406,17 +420,23 @@ export const AgentTabs = (): ReactElement | null => {
           actions={agentActions}
           agent={agent}
           trailing={
-            <ContextMenu.Sub>
-              <ContextMenu.SubTrigger data-testid={ElementIds.TAB_CONTEXT_MENU_DIAGNOSTICS}>
-                Diagnostics
-              </ContextMenu.SubTrigger>
-              <DiagnosticsSubMenu workspaceID={workspaceID} agentId={tabId} />
-            </ContextMenu.Sub>
+            <>
+              <ContextMenu.Item data-testid="agent-tab-split" onSelect={() => handleSplit(tabId)}>
+                <Columns2 size={14} /> Split
+              </ContextMenu.Item>
+              <ContextMenu.Separator />
+              <ContextMenu.Sub>
+                <ContextMenu.SubTrigger data-testid={ElementIds.TAB_CONTEXT_MENU_DIAGNOSTICS}>
+                  Diagnostics
+                </ContextMenu.SubTrigger>
+                <DiagnosticsSubMenu workspaceID={workspaceID} agentId={tabId} />
+              </ContextMenu.Sub>
+            </>
           }
         />
       );
     },
-    [workspaceAgents, workspaceID, agentActions],
+    [workspaceAgents, workspaceID, agentActions, handleSplit],
   );
 
   if (isZenModeActive) return null;
@@ -432,6 +452,7 @@ export const AgentTabs = (): ReactElement | null => {
         onReorder={handleReorder}
         onDoubleClick={handleDoubleClick}
         tabBarClassName={styles.tabBar}
+        variant="compact"
         alwaysCloseable
         contextMenuContent={contextMenuContent}
       >

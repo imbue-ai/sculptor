@@ -18,11 +18,10 @@ import { usePanelLayoutSync } from "../../common/state/hooks/usePanelLayoutSync.
 import { usePerWorkspacePanelLayout } from "../../common/state/hooks/usePerWorkspacePanelLayout.ts";
 import { useWorkspaceFiles } from "../../common/state/hooks/useWorkspaceFiles.ts";
 import { zenModeActiveAtom } from "../../components/panels/atoms.ts";
-import { DockingLayout } from "../../components/panels/DockingLayout";
+import { CompactLayout } from "../../components/panels/CompactLayout.tsx";
 import { AgentTabs } from "./components/AgentTabs.tsx";
-import { BottomBar } from "./components/BottomBar";
+import { CenterPanes } from "./components/CenterPanes.tsx";
 import { ChatPanelContent } from "./components/ChatPanelContent.tsx";
-import { DiffSplitContainer } from "./components/DiffSplitContainer.tsx";
 import { WorkspaceBanner } from "./components/WorkspaceBanner.tsx";
 import { useArtifactSync } from "./hooks/useArtifactSync";
 import styles from "./WorkspacePage.module.scss";
@@ -55,27 +54,24 @@ const WorkspacePageContent = ({ taskID }: { taskID: string }): ReactElement => {
   // so this subtree is stable across most re-renders of WorkspacePageContent.
   const centerContent = useMemo(
     () => (
-      <Flex direction="column" className={styles.centerPanel}>
-        <ZenTopGradient />
-        <WorkspaceBanner />
-        <DiffSplitContainer
-          workspaceId={workspaceID}
-          chatContent={
-            <Flex direction="column" className={styles.centerPanel}>
-              <ChatPanelContent appendTextRef={appendTextRef} insertSkillRef={insertSkillRef} editorRef={editorRef} />
-              <AgentTabs />
-            </Flex>
-          }
-        />
-      </Flex>
+      <CenterPanes
+        workspaceId={workspaceID}
+        chatContent={
+          <Flex direction="column" className={styles.centerPanel}>
+            <ZenTopGradient />
+            <ChatPanelContent appendTextRef={appendTextRef} insertSkillRef={insertSkillRef} editorRef={editorRef} />
+            <AgentTabs />
+          </Flex>
+        }
+      />
     ),
     [workspaceID],
   );
 
   return (
     <Flex direction="column" className={styles.container} overflowY="hidden">
-      <DockingLayout centerContent={centerContent} />
-      <BottomBar />
+      <WorkspaceBanner />
+      <CompactLayout centerContent={centerContent} />
     </Flex>
   );
 };
