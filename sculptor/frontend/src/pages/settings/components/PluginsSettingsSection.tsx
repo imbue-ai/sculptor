@@ -1,24 +1,68 @@
-import { Badge, Flex, Text } from "@radix-ui/themes";
-import { useAtomValue } from "jotai";
-import type { ReactElement } from "react";
+import { Badge, Button, Flex, IconButton, Spinner, Text, TextField, Tooltip } from "@radix-ui/themes";
+import { useAtomValue, useStore } from "jotai";
+import { Plus, RotateCw, Trash2 } from "lucide-react";
+import { type ReactElement, useState } from "react";
 
 import { ElementIds } from "~/api";
-import { loadedPluginManifestsAtom, pluginLoadErrorsAtom } from "~/plugins/pluginRegistry.ts";
+import { addPluginSource, reloadPluginSource, removePluginSource } from "~/plugins/pluginManager.tsx";
+import { pluginSourcesAtom, type PluginSourceState, pluginSourceStatesAtom } from "~/plugins/pluginRegistry.ts";
 
 import { SettingsSectionLayout } from "./SettingsSection.tsx";
 
 /**
- * Lists installed plugins. The prototype only displays what's loaded —
- * later this section will also be where the user installs new plugins
- * and configures per-plugin settings.
+ * Lists installed plugins and lets the user point Sculptor at additional
+ * plugin sources (a URL or directory containing a `manifest.json`). Sources
+ * are persisted to localStorage and re-loaded on every boot.
  */
 export const PluginsSettingsSection = (): ReactElement => {
-  const manifests = useAtomValue(loadedPluginManifestsAtom);
-  const errors = useAtomValue(pluginLoadErrorsAtom);
+  const store = useStore();
+  const userSources = useAtomValue(pluginSourcesAtom);
+  const states = useAtomValue(pluginSourceStatesAtom);
+  const [draft, setDraft] = useState("");
+  const [isBusy, setIsBusy] = useState(false);
+
+  // Built-in sources come from the status map; user sources keep their saved
+  // order. A freshly-added user source may not have a status entry yet, so the
+  // row falls back to a loading state.
+  const builtinSources = Object.keys(states).filter((s) => states[s].isBuiltin);
+  const orderedSources = [...builtinSources, ...userSources];
+
+  const handleAdd = async (): Promise<void> => {
+    const source = draft.trim();
+    if (!source || isBusy) return;
+    setIsBusy(true);
+    try {
+      await addPluginSource(store, source);
+      setDraft("");
+    } finally {
+      setIsBusy(false);
+    }
+  };
 
   return (
-    <SettingsSectionLayout description="Plugins extend Sculptor with new panels and behavior. Each plugin runs in the same renderer as the host and is wrapped in a per-plugin error boundary.">
-      {manifests.length === 0 && errors.length === 0 ? (
+    <SettingsSectionLayout description="Plugins extend Sculptor with new panels and behavior. Point at a URL or directory that contains a manifest.json; sources are saved locally and re-loaded each launch.">
+      <Flex gap="2" align="center" mb="4">
+        <TextField.Root
+          style={{ flexGrow: 1 }}
+          placeholder="https://localhost:5174/my-plugin or /plugins/my-plugin"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void handleAdd();
+          }}
+          data-testid={ElementIds.SETTINGS_PLUGINS_SOURCE_INPUT}
+        />
+        <Button
+          onClick={() => void handleAdd()}
+          disabled={!draft.trim() || isBusy}
+          data-testid={ElementIds.SETTINGS_PLUGINS_ADD_BUTTON}
+        >
+          <Plus size={14} />
+          Add
+        </Button>
+      </Flex>
+
+      {orderedSources.length === 0 ? (
         <Flex direction="column" align="center" py="6" data-testid={ElementIds.SETTINGS_PLUGINS_EMPTY}>
           <Text size="2" color="gray">
             No plugins installed.
@@ -26,54 +70,105 @@ export const PluginsSettingsSection = (): ReactElement => {
         </Flex>
       ) : (
         <Flex direction="column" data-testid={ElementIds.SETTINGS_PLUGINS_LIST}>
-          {manifests.map((manifest) => (
-            <Flex
-              key={manifest.id}
-              justify="between"
-              align="center"
-              gap="3"
-              py="3"
-              style={{ borderBottom: "1px solid var(--gray-4)" }}
-              data-testid={`${ElementIds.SETTINGS_PLUGINS_ROW}-${manifest.id}`}
-            >
-              <Flex direction="column" style={{ minWidth: 0, flexGrow: 1 }}>
-                <Flex align="center" gap="2">
-                  <Text weight="medium">{manifest.name}</Text>
-                  <Text size="1" color="gray">
-                    v{manifest.version}
-                  </Text>
-                </Flex>
-                <Text size="1" color="gray" style={{ fontFamily: "var(--code-font-family)" }}>
-                  {manifest.id}
-                </Text>
-              </Flex>
-              <Badge size="1" color="gray" variant="soft">
-                SDK {manifest.sdkVersion}
-              </Badge>
-            </Flex>
-          ))}
-          {errors.map((err, idx) => (
-            <Flex
-              key={`${err.manifest.id}-${idx}`}
-              direction="column"
-              gap="1"
-              py="3"
-              style={{ borderBottom: "1px solid var(--gray-4)" }}
-              data-testid={`${ElementIds.SETTINGS_PLUGINS_ROW}-error-${err.manifest.id}`}
-            >
-              <Flex align="center" gap="2">
-                <Text weight="medium">{err.manifest.name}</Text>
-                <Badge size="1" color="red" variant="soft">
-                  failed: {err.phase}
-                </Badge>
-              </Flex>
-              <Text size="1" color="gray">
-                {err.error.message}
-              </Text>
-            </Flex>
+          {orderedSources.map((source) => (
+            <SourceRow key={source} source={source} state={states[source]} store={store} setIsBusy={setIsBusy} />
           ))}
         </Flex>
       )}
     </SettingsSectionLayout>
+  );
+};
+
+type SourceRowProps = {
+  source: string;
+  state: PluginSourceState | undefined;
+  store: ReturnType<typeof useStore>;
+  setIsBusy: (busy: boolean) => void;
+};
+
+const SourceRow = ({ source, state, store, setIsBusy }: SourceRowProps): ReactElement => {
+  const isBuiltin = state?.isBuiltin ?? false;
+
+  const handleReload = async (): Promise<void> => {
+    setIsBusy(true);
+    try {
+      await reloadPluginSource(store, source);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  return (
+    <Flex
+      justify="between"
+      align="center"
+      gap="3"
+      py="3"
+      style={{ borderBottom: "1px solid var(--gray-4)" }}
+      data-testid={ElementIds.SETTINGS_PLUGINS_SOURCE_ROW}
+      data-source={source}
+    >
+      <Flex direction="column" gap="1" style={{ minWidth: 0, flexGrow: 1 }}>
+        <Flex align="center" gap="2">
+          {state?.status === "loaded" ? (
+            <Text weight="medium">{state.manifest.name}</Text>
+          ) : (
+            <Text weight="medium" color="gray">
+              {source.split("/").filter(Boolean).pop() ?? source}
+            </Text>
+          )}
+          {state?.status === "loaded" && (
+            <Text size="1" color="gray">
+              v{state.manifest.version}
+            </Text>
+          )}
+          {isBuiltin && (
+            <Badge size="1" color="gray" variant="soft">
+              bundled
+            </Badge>
+          )}
+          {(!state || state.status === "loading") && <Spinner size="1" />}
+          {state?.status === "error" && (
+            <Badge size="1" color="red" variant="soft">
+              failed: {state.phase}
+            </Badge>
+          )}
+        </Flex>
+        <Text size="1" color="gray" style={{ fontFamily: "var(--code-font-family)" }}>
+          {source}
+        </Text>
+        {state?.status === "error" && (
+          <Text size="1" color="gray">
+            {state.message}
+          </Text>
+        )}
+      </Flex>
+      <Flex align="center" gap="2">
+        <Tooltip content="Reload">
+          <IconButton
+            variant="ghost"
+            size="1"
+            color="gray"
+            onClick={() => void handleReload()}
+            data-testid={ElementIds.SETTINGS_PLUGINS_SOURCE_RELOAD}
+          >
+            <RotateCw size={14} />
+          </IconButton>
+        </Tooltip>
+        {!isBuiltin && (
+          <Tooltip content="Remove">
+            <IconButton
+              variant="ghost"
+              size="1"
+              color="gray"
+              onClick={() => removePluginSource(store, source)}
+              data-testid={ElementIds.SETTINGS_PLUGINS_SOURCE_REMOVE}
+            >
+              <Trash2 size={14} />
+            </IconButton>
+          </Tooltip>
+        )}
+      </Flex>
+    </Flex>
   );
 };
