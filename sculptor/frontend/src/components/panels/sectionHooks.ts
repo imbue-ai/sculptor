@@ -26,14 +26,21 @@ import {
 import { usePanelActions } from "~/components/panels/hooks.ts";
 import type { PanelDefinition, PanelId, ZoneId } from "~/components/panels/types.ts";
 
-// The single zone backing each peripheral section.
+// The single zone backing each section. In the uniform-panels layout the
+// Center is a normal section too (REQ-PANEL-1).
 export const LEFT_SECTION_ZONE: ZoneId = "top-left";
+export const CENTER_SECTION_ZONE: ZoneId = "center";
 export const RIGHT_SECTION_ZONE: ZoneId = "top-right";
 export const BOTTOM_ZONE: ZoneId = "bottom";
 
-// Panels that are never addable to a Left/Right section: the terminal lives
-// only in the Bottom zone (REQ-ZONE-3).
-const BOTTOM_ONLY_PANEL_IDS: ReadonlySet<PanelId> = new Set(["terminal"]);
+// Every section can host any panel now — the terminal is no longer Bottom-only
+// (REQ-TERM-1) and agents/terminals are added via the "+" like any other panel.
+export const SECTION_ZONES: ReadonlyArray<ZoneId> = [
+  LEFT_SECTION_ZONE,
+  CENTER_SECTION_ZONE,
+  RIGHT_SECTION_ZONE,
+  BOTTOM_ZONE,
+];
 
 /** Raw (not empty-guarded) visibility for a section's zone. */
 export const useSectionVisible = (zone: ZoneId): boolean => {
@@ -129,14 +136,31 @@ export const useRemovePanelFromSection = (): ((panelId: PanelId) => void) => {
 };
 
 /**
- * Panels addable to a section via its "+" dropdown: every registered panel that
- * isn't bottom-only and isn't already in this section (REQ-SECTION-2 / REQ-PANEL-2).
+ * Static panels addable to a section via its "+" dropdown: every registered
+ * "static" panel not already in this section (adding moves it from wherever it
+ * is). Dynamic panels (agents, terminals) are offered separately — see
+ * `useAddableDynamicPanels` — because they are only listed when not open in ANY
+ * section (REQ-AGENT-2 / REQ-INST-1).
  */
 export const useAddablePanels = (zone: ZoneId): ReadonlyArray<PanelDefinition> => {
   const registry = useAtomValue(panelRegistryAtom);
   const zoneAssignments = useAtomValue(zoneAssignmentsAtom);
   return useMemo(
-    () => registry.filter((panel) => !BOTTOM_ONLY_PANEL_IDS.has(panel.id) && zoneAssignments[panel.id] !== zone),
+    () => registry.filter((panel) => (panel.kind ?? "static") === "static" && zoneAssignments[panel.id] !== zone),
     [registry, zoneAssignments, zone],
+  );
+};
+
+/**
+ * Dynamic panels (agents, terminals) offered in a section's "+" — only those
+ * not currently placed in ANY section, so moving an open one is a close-and-
+ * reopen (REQ-AGENT-2 / REQ-TERM-2 / REQ-INST-1).
+ */
+export const useAddableDynamicPanels = (kind: "agent" | "terminal"): ReadonlyArray<PanelDefinition> => {
+  const registry = useAtomValue(panelRegistryAtom);
+  const zoneAssignments = useAtomValue(zoneAssignmentsAtom);
+  return useMemo(
+    () => registry.filter((panel) => panel.kind === kind && zoneAssignments[panel.id] === undefined),
+    [registry, zoneAssignments, kind],
   );
 };

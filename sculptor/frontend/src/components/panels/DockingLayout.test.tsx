@@ -11,6 +11,7 @@ import {
   activePanelPerZoneAtom,
   createPanelStore,
   modalPanelIdAtom,
+  panelRegistryAtom,
   panelsInZoneAtom,
   zoneAssignmentsAtom,
   zoneOrderAtom,
@@ -73,7 +74,14 @@ const TEST_PANELS: ReadonlyArray<PanelDefinition> = [
 
 // ── Test Store Helpers ───────────────────────────────────────────────
 
-const createTestStore = (): ReturnType<typeof createStore> => createStore();
+// Panels must be registered to appear in a zone (panelsInZoneAtom filters by the
+// registry). Tests that read panelsInZoneAtom directly (without rendering through
+// PanelRegistryProvider) need the registry set here.
+const createTestStore = (): ReturnType<typeof createStore> => {
+  const store = createStore();
+  store.set(panelRegistryAtom, TEST_PANELS);
+  return store;
+};
 
 const createDefaultTestStore = (): ReturnType<typeof createStore> =>
   createPanelStore(TEST_PANELS, { useDefaultLayout: true });

@@ -1,11 +1,11 @@
 import { Flex } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Outlet } from "react-router-dom";
 
 import { useSyncActiveTabFromRoute } from "../common/hooks/useSyncActiveTabFromRoute.ts";
-import { useActiveProjectID } from "../common/NavigateUtils.ts";
+import { useActiveProjectID, useImbueLocation } from "../common/NavigateUtils.ts";
 import { backendStatusAtom } from "../common/state/atoms/backend.ts";
 import {
   deleteErrorToastAtom,
@@ -32,6 +32,7 @@ import { VersionDisplay } from "../components/VersionDisplay.tsx";
 import { WarningStatusBanner } from "../components/WarningStatusBanner.tsx";
 import { WorkspaceTabs } from "../components/WorkspaceTabs.tsx";
 import { useAutoUpdateListener } from "../hooks/useAutoUpdateListener.ts";
+import { useWorkspaceDynamicPanels } from "../pages/workspace/panels/dynamicPanels.tsx";
 import { workspaceDefaultLayout, workspacePanels } from "../pages/workspace/panels/workspacePanels.ts";
 import { usePageLayoutKeyboardShortcuts } from "./hooks/usePageLayoutKeyboardShortcuts.ts";
 import styles from "./PageLayout.module.scss";
@@ -82,6 +83,13 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
     [setMentionChipUnreachableToast],
   );
 
+  // Agents and terminals are panels too (REQ-AGENT-1 / REQ-TERM-2): merge the
+  // active workspace's dynamic panels into the static registry so they live in
+  // sections like any other panel.
+  const { workspaceId: activeWorkspaceId } = useImbueLocation();
+  const dynamicPanels = useWorkspaceDynamicPanels(activeWorkspaceId);
+  const allPanels = useMemo(() => [...workspacePanels, ...dynamicPanels], [dynamicPanels]);
+
   useUnifiedStream();
   usePageLayoutKeyboardShortcuts();
   useAutoUpdateListener();
@@ -119,9 +127,10 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
               remains draggable. */}
           {isZenModeActive && <TitleBar className={styles.zenTitleBar} />}
           <PanelRegistryProvider
-            panels={workspacePanels}
+            panels={allPanels}
             defaultLayout={workspaceDefaultLayout}
             autoPlaceMissing={false}
+            preserveUnregisteredAssignments
           >
             <Outlet />
           </PanelRegistryProvider>

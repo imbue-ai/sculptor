@@ -153,8 +153,10 @@ const diffTabToDefinition = (tab: DiffTab, workspaceId: string): TabDefinition =
 
 type DiffTabBarProps = {
   workspaceId: string;
+  /** Per-panel diff-state scope key (defaults to the workspaceId). */
+  stateKey?: string;
   /** Compact single-file mode: hide the multi-file tab strip and the expand
-   *  toggle, keeping only the per-file controls and the close button (REQ-CENTER-4). */
+   *  toggle, keeping only the per-file controls and the close button (REQ-DIFF-3). */
   singleFileMode?: boolean;
   viewType: DiffViewType;
   onToggleViewType: () => void;
@@ -173,6 +175,7 @@ type DiffTabBarProps = {
 
 export const DiffTabBar = ({
   workspaceId,
+  stateKey,
   singleFileMode = false,
   viewType,
   onToggleViewType,
@@ -186,7 +189,7 @@ export const DiffTabBar = ({
   isRenderToggleEnabled,
   onToggleRender,
 }: DiffTabBarProps): ReactElement => {
-  const diffPanelState = useAtomValue(diffPanelStateAtomFamily(workspaceId));
+  const diffPanelState = useAtomValue(diffPanelStateAtomFamily(stateKey ?? workspaceId));
   const openDiffTab = useSetAtom(openDiffTabAtom);
   const openCombinedTab = useSetAtom(openCombinedDiffTabAtom);
   const openCommitDiffTab = useSetAtom(openCommitDiffTabAtom);
@@ -194,6 +197,7 @@ export const DiffTabBar = ({
   const closeDiffTab = useSetAtom(closeDiffTabAtom);
   const reorderTabs = useSetAtom(reorderTabsAtom);
   const closeDiffPanel = useSetAtom(closeDiffPanelAtom);
+  const closeAllDiffTabs = useSetAtom(closeAllDiffTabsAtom);
   const [expandedPanelId, setExpandedPanelId] = useAtom(expandedPanelIdAtom);
   const isExpanded = expandedPanelId != null;
   const tabCloseBehavior = useAtomValue(fileBrowserTabCloseBehaviorAtom);
@@ -215,33 +219,33 @@ export const DiffTabBar = ({
       const tab = openTabs.find((t) => t.filePath === filePath);
       if (!tab) return;
       if (isCombinedTab(tab)) {
-        openCombinedTab({ workspaceId });
+        openCombinedTab({ workspaceId, stateKey });
       } else if (isFileViewTab(tab)) {
-        openFileViewTab({ workspaceId, filePath: tab.realPath });
+        openFileViewTab({ workspaceId, stateKey, filePath: tab.realPath });
       } else if (isCommitDiffTab(tab)) {
-        openCommitDiffTab({ workspaceId, commitHash: tab.commitHash, filePath: tab.realPath });
+        openCommitDiffTab({ workspaceId, stateKey, commitHash: tab.commitHash, filePath: tab.realPath });
       } else {
         const realPath = filePath.startsWith(TARGET_BRANCH_DIFF_PREFIX)
           ? filePath.slice(TARGET_BRANCH_DIFF_PREFIX.length)
           : filePath;
-        openDiffTab({ workspaceId, filePath: realPath, status: tab.status, scope: tab.scope });
+        openDiffTab({ workspaceId, stateKey, filePath: realPath, status: tab.status, scope: tab.scope });
       }
     },
-    [openDiffTab, openCombinedTab, openCommitDiffTab, openFileViewTab, workspaceId, openTabs],
+    [openDiffTab, openCombinedTab, openCommitDiffTab, openFileViewTab, workspaceId, stateKey, openTabs],
   );
 
   const handleCloseTab = useCallback(
     (filePath: string): void => {
-      closeDiffTab({ workspaceId, filePath, tabCloseBehavior });
+      closeDiffTab({ workspaceId, stateKey, filePath, tabCloseBehavior });
     },
-    [closeDiffTab, workspaceId, tabCloseBehavior],
+    [closeDiffTab, workspaceId, stateKey, tabCloseBehavior],
   );
 
   const handleReorder = useCallback(
     (newOrder: Array<string>): void => {
-      reorderTabs({ workspaceId, newOrder });
+      reorderTabs({ workspaceId, stateKey, newOrder });
     },
-    [reorderTabs, workspaceId],
+    [reorderTabs, workspaceId, stateKey],
   );
 
   const handleToggleExpand = useCallback((): void => {
@@ -260,8 +264,15 @@ export const DiffTabBar = ({
     if (isExpanded) {
       setExpandedPanelId(null);
     }
-    closeDiffPanel();
-  }, [closeDiffPanel, isExpanded, setExpandedPanelId]);
+
+    // In the in-panel master-detail viewer, "close" collapses the detail back to
+    // the list by clearing this panel's own diff scope (REQ-DIFF-1).
+    if (singleFileMode) {
+      closeAllDiffTabs({ workspaceId, stateKey });
+    } else {
+      closeDiffPanel();
+    }
+  }, [closeDiffPanel, closeAllDiffTabs, workspaceId, stateKey, singleFileMode, isExpanded, setExpandedPanelId]);
 
   return (
     <TabBar

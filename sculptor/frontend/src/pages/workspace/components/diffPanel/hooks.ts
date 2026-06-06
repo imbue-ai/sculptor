@@ -56,8 +56,8 @@ const EMPTY_RESULT: Omit<ActiveFileDiffResult, "isFetching" | "targetBranchMerge
   errorMessage: null,
 };
 
-export const useActiveFileDiff = (workspaceId: string): ActiveFileDiffResult => {
-  const diffPanelState = useAtomValue(diffPanelStateAtomFamily(workspaceId));
+export const useActiveFileDiff = (workspaceId: string, stateKey?: string): ActiveFileDiffResult => {
+  const diffPanelState = useAtomValue(diffPanelStateAtomFamily(stateKey ?? workspaceId));
   const { data: diff, isFetching } = useWorkspaceDiff(workspaceId);
 
   const parsedUncommittedDiff = useMemo((): DiffData | null => {

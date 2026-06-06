@@ -1,14 +1,4 @@
-import {
-  FileDiff,
-  FolderTree,
-  GitCommitHorizontal,
-  Globe,
-  Layers,
-  NotebookPen,
-  SquareSlash,
-  Terminal,
-  Zap,
-} from "lucide-react";
+import { FileDiff, FolderTree, GitCommitHorizontal, Globe, Layers, NotebookPen, SquareSlash, Zap } from "lucide-react";
 
 import type { DefaultPanelLayout, PanelDefinition } from "~/components/panels/types.ts";
 
@@ -20,12 +10,11 @@ import { FilesPanel } from "./FilesPanel.tsx";
 import { NotesPanel } from "./NotesPanel.tsx";
 import { ReviewAllPanel } from "./ReviewAllPanel.tsx";
 import { SkillsPanel } from "./SkillsPanel.tsx";
-import { TerminalPanelWrapper } from "./TerminalPanel.tsx";
 
-// Compact layout: the file browser is split into three separate panels — Files,
-// Changes, Commits — plus Review All as its own panel (REQ-PANEL-1, REQ-CENTER-5).
-// Every section panel is addable via a section's "+" dropdown; the terminal is
-// special-cased to the Bottom zone only (REQ-ZONE-3).
+// Static panels. The file browser is split into Files / Changes / Commits plus
+// Review All (REQ-PANEL-1, REQ-CENTER-5). Agents and terminals are NOT here —
+// they are dynamic, per-workspace panels (see dynamicPanels.tsx) added to the
+// registry at runtime (REQ-AGENT-1 / REQ-TERM-2).
 export const workspacePanels: ReadonlyArray<PanelDefinition> = [
   {
     id: "files",
@@ -62,15 +51,6 @@ export const workspacePanels: ReadonlyArray<PanelDefinition> = [
     defaultZone: "top-right",
     defaultShortcut: "",
     component: ReviewAllPanel,
-  },
-  {
-    id: "terminal",
-    displayName: "Terminal",
-    description: "Open a terminal in the workspace container",
-    icon: Terminal,
-    defaultZone: "bottom",
-    defaultShortcut: "",
-    component: TerminalPanelWrapper,
   },
   {
     id: "actions",
@@ -113,28 +93,28 @@ export const workspacePanels: ReadonlyArray<PanelDefinition> = [
 /**
  * Default first-load layout (REQ-DEFAULT-1):
  *   - Left section (top-left) visible: Files, Changes, Commits (Files active).
- *   - Right section (top-right) empty and collapsed — Review All / Browser /
- *     Actions / Skills / Notes start unplaced and are added via the "+" dropdown.
- *   - Bottom terminal collapsed.
+ *   - Center section visible: the default agent (placed at runtime — its panel
+ *     id is a task id, unknown at static-config time).
+ *   - Right section (top-right) empty and collapsed.
+ *   - Bottom section collapsed, starting with the Terminal (also placed at
+ *     runtime). Agent/terminal bootstrap lives in `useWorkspaceLayoutBootstrap`.
  */
 export const workspaceDefaultLayout: DefaultPanelLayout = {
   zoneAssignments: {
     files: "top-left",
     changes: "top-left",
     commits: "top-left",
-    terminal: "bottom",
   },
   activePanelPerZone: {
     "top-left": "files",
-    bottom: "terminal",
   },
   zoneVisibility: {
     "top-left": true,
+    center: true,
     "top-right": false,
     bottom: false,
   },
   zoneOrder: {
     "top-left": ["files", "changes", "commits"],
-    bottom: ["terminal"],
   },
 };

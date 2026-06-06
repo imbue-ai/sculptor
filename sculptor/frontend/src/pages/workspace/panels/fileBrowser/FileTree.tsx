@@ -38,6 +38,8 @@ type FileTreeProps = {
   workspaceId: string;
   viewMode: ViewMode;
   searchMatchingPaths?: Set<string> | null;
+  /** Per-panel diff scope key — selecting a file opens it in this scope's detail. */
+  diffStateKey?: string;
 };
 
 type FlatListRowProps = {
@@ -72,7 +74,7 @@ const FlatListRow = memo(function FlatListRow({ entry, isFocused, onFileClick }:
   );
 });
 
-export const FileTree = ({ workspaceId, viewMode, searchMatchingPaths }: FileTreeProps): ReactElement => {
+export const FileTree = ({ workspaceId, viewMode, searchMatchingPaths, diffStateKey }: FileTreeProps): ReactElement => {
   const [fileBrowserState, setFileBrowserState] = useAtom(fileBrowserStateAtomFamily(workspaceId));
   const toggleFolder = useSetAtom(toggleFolderAtom);
   const expandFolders = useSetAtom(expandFoldersAtom);
@@ -190,9 +192,9 @@ export const FileTree = ({ workspaceId, viewMode, searchMatchingPaths }: FileTre
 
   const handleFileClick = useCallback(
     (path: string): void => {
-      openFileViewTab({ workspaceId, filePath: path });
+      openFileViewTab({ workspaceId, stateKey: diffStateKey, filePath: path });
     },
-    [openFileViewTab, workspaceId],
+    [openFileViewTab, workspaceId, diffStateKey],
   );
 
   const handleCollapseChildren = useCollapseChildren({

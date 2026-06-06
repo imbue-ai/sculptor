@@ -6,9 +6,10 @@ import { setActiveTabByIdAtom, setAgentForWorkspaceAtom, workspaceAtomFamily } f
 
 /**
  * Overrides the agent (task) id that `useWorkspacePageParams` reports, without
- * changing the URL. The Center's second chat pane wraps its subtree in this
- * provider so every descendant that reads `agentID` resolves to the split
- * agent rather than the URL's active agent (REQ-CHAT-1). Null = use the URL.
+ * changing the URL. Each agent panel wraps its subtree in this provider so every
+ * descendant that reads `agentID` resolves to that panel's agent rather than the
+ * URL's active agent — this is what lets several agents render side by side as
+ * panels (REQ-AGENT-1/4). Null = use the URL.
  */
 export const AgentOverrideContext = createContext<string | null>(null);
 

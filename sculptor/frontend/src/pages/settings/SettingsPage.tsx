@@ -10,6 +10,7 @@ import { autoUpdateStatusAtom, updateChannelAtom } from "~/common/state/atoms/au
 import { healthCheckDataAtom } from "~/common/state/atoms/backend.ts";
 import { themeBuilderSettingsAtom } from "~/common/state/atoms/themeBuilder.ts";
 import { ModelSelectOptions } from "~/components/ModelSelectOptions.tsx";
+import { tabStripPositionAtom } from "~/components/panels/sectionLayoutAtoms.ts";
 import { useInstallUpdate } from "~/hooks/useInstallUpdate.ts";
 import type { UpdateChannel } from "~/shared/types.ts";
 
@@ -93,6 +94,7 @@ export const SettingsPage = (): ReactElement => {
   const isRichMarkdownRenderingEnabled = useAtomValue(isRichMarkdownRenderingEnabledAtom);
   const isSmoothStreamingEnabled = useAtomValue(isSmoothStreamingUserPreferenceAtom);
   const isPanelLayoutPerWorkspace = useAtomValue(isPanelLayoutPerWorkspaceAtom);
+  const [tabStripPosition, setTabStripPosition] = useAtom(tabStripPositionAtom);
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
   const autoUpdateStatus = useAtomValue(autoUpdateStatusAtom);
@@ -431,6 +433,21 @@ export const SettingsPage = (): ReactElement => {
                         handleSettingChange(UserConfigField.IS_PANEL_LAYOUT_PER_WORKSPACE, checked)
                       }
                     />
+                  </SettingRow>
+                  <SettingRow
+                    title="Tab strip position"
+                    description="Render each panel section's tab strip at the top or bottom of the section."
+                  >
+                    <Select.Root
+                      value={tabStripPosition}
+                      onValueChange={(value) => setTabStripPosition(value === "bottom" ? "bottom" : "top")}
+                    >
+                      <Select.Trigger variant="soft" data-testid="settings-tab-strip-position-select" />
+                      <Select.Content>
+                        <Select.Item value="top">Top</Select.Item>
+                        <Select.Item value="bottom">Bottom</Select.Item>
+                      </Select.Content>
+                    </Select.Root>
                   </SettingRow>
                   <SettingRow
                     title="In-place workspaces"

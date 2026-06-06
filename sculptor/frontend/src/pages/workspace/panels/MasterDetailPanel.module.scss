@@ -1,26 +1,25 @@
 .row {
   display: flex;
   flex-direction: row;
+  flex-grow: 1;
   height: 100%;
   min-height: 0;
   overflow: hidden;
   width: 100%;
 }
 
-.chatPane {
+.list {
   display: flex;
+  flex: 1 1 0;
   flex-direction: column;
-  flex-grow: 1;
-  flex-shrink: 1;
-  // stylelint-disable-next-line sculptor/no-hardcoded-values -- matches CHAT_MIN_PX in CenterPanes.tsx
-  min-width: 385px;
+  min-width: 0;
   overflow: hidden;
 }
 
-.paneB {
+.detail {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  min-height: 0;
+  min-width: 0;
   overflow: hidden;
 }

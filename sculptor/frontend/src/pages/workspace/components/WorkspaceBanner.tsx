@@ -220,14 +220,14 @@ export const WorkspaceBanner = (): ReactElement | null => {
           <PrButton workspaceId={workspaceID} targetBranch={currentTargetBranch} gitProvider={gitProvider} />
         )}
         <TooltipIconButton
-          tooltipText={terminalSection.isVisible ? "Hide terminal" : "Show terminal"}
+          tooltipText={terminalSection.isVisible ? "Hide bottom section" : "Show bottom section"}
           variant="ghost"
           size="1"
           color="gray"
           className={terminalSection.isVisible ? styles.toggleActive : undefined}
           onClick={() => terminalSection.toggle()}
-          aria-label="Toggle terminal"
-          data-testid="topbar-terminal-toggle"
+          aria-label="Toggle bottom section"
+          data-testid="topbar-bottom-section-toggle"
         >
           <PanelBottom size={16} />
         </TooltipIconButton>

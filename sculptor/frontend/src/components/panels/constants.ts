@@ -25,4 +25,5 @@ export const ZONE_DISPLAY_NAMES: Readonly<Record<ZoneId, string>> = {
   bottom: "Bottom",
   "top-right": "Top Right",
   "bottom-right": "Bottom Right",
+  center: "Center",
 };

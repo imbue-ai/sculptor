@@ -1,5 +1,5 @@
-import { Flex, IconButton } from "@radix-ui/themes";
-import { MoreHorizontal } from "lucide-react";
+import { DropdownMenu, Flex, IconButton } from "@radix-ui/themes";
+import { MoreHorizontal, Search, SplitSquareHorizontal, X } from "lucide-react";
 import type { ReactElement } from "react";
 import { useMemo } from "react";
 
@@ -9,6 +9,24 @@ import type { FileContextMenuContext, FileStatus } from "~/pages/workspace/panel
 import { isBinaryFile } from "~/pages/workspace/panels/fileBrowser/utils.ts";
 
 import styles from "./DiffFileHeader.module.scss";
+import type { DiffViewType } from "./types.ts";
+
+/**
+ * The diff view controls that previously lived in a toolbar above the viewer.
+ * They now hang off the file header's "…" menu (REQ-DIFF polish).
+ */
+export type DiffViewOptions = {
+  viewType: DiffViewType;
+  onToggleViewType: () => void;
+  lineWrapping: "wrap" | "scroll";
+  onToggleLineWrapping: () => void;
+  onToggleSearch: () => void;
+  showRenderToggle: boolean;
+  isRendered: boolean;
+  isRenderToggleEnabled: boolean;
+  onToggleRender: () => void;
+  onClose: () => void;
+};
 
 type DiffFileHeaderProps = {
   workspaceId: string;
@@ -18,6 +36,7 @@ type DiffFileHeaderProps = {
   removedLines: number;
   fileStatus: FileStatus | null;
   isBinary: boolean;
+  viewOptions?: DiffViewOptions;
 };
 
 export const DiffFileHeader = ({
@@ -28,6 +47,7 @@ export const DiffFileHeader = ({
   removedLines,
   fileStatus,
   isBinary: isBinaryProp,
+  viewOptions,
 }: DiffFileHeaderProps): ReactElement => {
   const { dirParts, fileName } = useMemo(() => {
     const parts = filePath.split("/");
@@ -81,7 +101,13 @@ export const DiffFileHeader = ({
         </span>
       )}
 
-      <FileDropdownMenu context={menuContext} workspaceId={workspaceId}>
+      <FileDropdownMenu
+        context={menuContext}
+        workspaceId={workspaceId}
+        leadingItems={
+          viewOptions ? <DiffViewMenuItems isBinary={menuContext.isBinary} options={viewOptions} /> : undefined
+        }
+      >
         <IconButton variant="ghost" size="1" color="gray" data-testid={ElementIds.DIFF_FILE_HEADER_MENU_TRIGGER}>
           <MoreHorizontal size={14} />
         </IconButton>
@@ -89,3 +115,38 @@ export const DiffFileHeader = ({
     </Flex>
   );
 };
+
+/** View controls (find, split/unified, wrap, render, close) for the "…" menu. */
+const DiffViewMenuItems = ({ isBinary, options }: { isBinary: boolean; options: DiffViewOptions }): ReactElement => (
+  <>
+    {!isBinary && (
+      <>
+        <DropdownMenu.Item onSelect={() => options.onToggleSearch()}>
+          <Search size={14} /> Find in file
+        </DropdownMenu.Item>
+        <DropdownMenu.Item onSelect={() => options.onToggleViewType()}>
+          <SplitSquareHorizontal size={14} /> {options.viewType === "split" ? "Unified view" : "Split view"}
+        </DropdownMenu.Item>
+      </>
+    )}
+    <DropdownMenu.CheckboxItem
+      checked={options.lineWrapping === "wrap"}
+      onCheckedChange={() => options.onToggleLineWrapping()}
+    >
+      Wrap lines
+    </DropdownMenu.CheckboxItem>
+    {options.showRenderToggle && (
+      <DropdownMenu.CheckboxItem
+        checked={options.isRendered}
+        disabled={!options.isRenderToggleEnabled}
+        onCheckedChange={() => options.onToggleRender()}
+      >
+        Render markdown
+      </DropdownMenu.CheckboxItem>
+    )}
+    <DropdownMenu.Separator />
+    <DropdownMenu.Item onSelect={() => options.onClose()}>
+      <X size={14} /> Close
+    </DropdownMenu.Item>
+  </>
+);

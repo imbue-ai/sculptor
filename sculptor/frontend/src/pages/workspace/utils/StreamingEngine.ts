@@ -282,17 +282,17 @@ export class StreamingEngine {
   }
 }
 
+// Multiple chat panels can stream at once now that agents are panels — each
+// agent panel owns its own StreamingEngine (REQ-AGENT-4). We track the live
+// engines as a set rather than asserting a single global one. Registration is
+// idempotent; nothing reads the set externally — it exists only so a future
+// global flush/inspection could enumerate active engines.
+const activeEngines = new Set<StreamingEngine>();
+
 export const registerEngine = (engine: StreamingEngine): void => {
-  if (activeEngine && activeEngine !== engine) {
-    throw new Error("StreamingEngine already registered. Only one stream may be active at a time.");
-  }
-  activeEngine = engine;
+  activeEngines.add(engine);
 };
 
 export const unregisterEngine = (engine: StreamingEngine): void => {
-  if (activeEngine === engine) {
-    activeEngine = null;
-  }
+  activeEngines.delete(engine);
 };
-
-let activeEngine: StreamingEngine | null = null;

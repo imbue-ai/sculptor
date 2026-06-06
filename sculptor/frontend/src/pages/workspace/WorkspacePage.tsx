@@ -1,11 +1,9 @@
 import { Flex } from "@radix-ui/themes";
-import type { Editor as TipTapEditor } from "@tiptap/react";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo } from "react";
 
 import { useImbueNavigate, useWorkspacePageParams } from "../../common/NavigateUtils.ts";
-import type { InsertSkillArg } from "../../common/state/atoms/chatActions.ts";
 import { tasksArrayAtom } from "../../common/state/atoms/tasks.ts";
 import {
   agentIdForWorkspaceAtomFamily,
@@ -17,26 +15,15 @@ import { useMarkRead } from "../../common/state/hooks/useMarkRead";
 import { usePanelLayoutSync } from "../../common/state/hooks/usePanelLayoutSync.ts";
 import { usePerWorkspacePanelLayout } from "../../common/state/hooks/usePerWorkspacePanelLayout.ts";
 import { useWorkspaceFiles } from "../../common/state/hooks/useWorkspaceFiles.ts";
-import { zenModeActiveAtom } from "../../components/panels/atoms.ts";
 import { CompactLayout } from "../../components/panels/CompactLayout.tsx";
-import { AgentTabs } from "./components/AgentTabs.tsx";
-import { CenterPanes } from "./components/CenterPanes.tsx";
-import { ChatPanelContent } from "./components/ChatPanelContent.tsx";
+import { useWorkspaceLayoutBootstrap } from "../workspace/panels/useWorkspaceLayoutBootstrap.ts";
+import { AgentWorkspaceCommands } from "./components/AgentWorkspaceCommands.tsx";
 import { WorkspaceBanner } from "./components/WorkspaceBanner.tsx";
 import { useArtifactSync } from "./hooks/useArtifactSync";
 import styles from "./WorkspacePage.module.scss";
 
-const ZenTopGradient = (): ReactElement | null => {
-  const isZenMode = useAtomValue(zenModeActiveAtom);
-  if (!isZenMode) return null;
-  return <div className={styles.zenGradient} />;
-};
-
 const WorkspacePageContent = ({ taskID }: { taskID: string }): ReactElement => {
   const { workspaceID } = useWorkspacePageParams();
-  const appendTextRef = useRef<((text: string) => void) | null>(null);
-  const insertSkillRef = useRef<((skill: InsertSkillArg) => void) | null>(null);
-  const editorRef = useRef<TipTapEditor | null>(null);
 
   // Sync artifacts for the currently viewed task only
   useArtifactSync(workspaceID, taskID);
@@ -50,28 +37,15 @@ const WorkspacePageContent = ({ taskID }: { taskID: string }): ReactElement => {
   // Mark agent as read when user views the chat
   useMarkRead(workspaceID, taskID);
 
-  // Memoize center content — AlphaChatInterface owns its own data subscriptions,
-  // so this subtree is stable across most re-renders of WorkspacePageContent.
-  const centerContent = useMemo(
-    () => (
-      <CenterPanes
-        workspaceId={workspaceID}
-        chatContent={
-          <Flex direction="column" className={styles.centerPanel}>
-            <ZenTopGradient />
-            <ChatPanelContent appendTextRef={appendTextRef} insertSkillRef={insertSkillRef} editorRef={editorRef} />
-            <AgentTabs />
-          </Flex>
-        }
-      />
-    ),
-    [workspaceID],
-  );
+  // Place the active agent into the Center section and seed the Bottom terminal
+  // on first visit (REQ-DEFAULT-1 / REQ-AGENT-1).
+  useWorkspaceLayoutBootstrap({ workspaceId: workspaceID, agentId: taskID });
 
   return (
     <Flex direction="column" className={styles.container} overflowY="hidden">
       <WorkspaceBanner />
-      <CompactLayout centerContent={centerContent} />
+      <CompactLayout />
+      <AgentWorkspaceCommands />
     </Flex>
   );
 };

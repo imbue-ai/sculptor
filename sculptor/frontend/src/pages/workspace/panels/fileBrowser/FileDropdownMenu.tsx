@@ -8,18 +8,26 @@ type FileDropdownMenuProps = {
   children: ReactNode;
   context: FileContextMenuContext;
   workspaceId: string;
+  /** Extra items rendered at the top of the menu, above the file actions. */
+  leadingItems?: ReactNode;
 };
 
-export const FileDropdownMenu = ({ children, context, workspaceId }: FileDropdownMenuProps): ReactElement => {
+export const FileDropdownMenu = ({
+  children,
+  context,
+  workspaceId,
+  leadingItems,
+}: FileDropdownMenuProps): ReactElement => {
   const menuGroups = useFileMenuGroups({ context, workspaceId });
 
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>{children}</DropdownMenu.Trigger>
       <DropdownMenu.Content size="1">
+        {leadingItems}
         {menuGroups.map((group, groupIndex) => (
           <span key={groupIndex}>
-            {groupIndex > 0 && <DropdownMenu.Separator />}
+            {(groupIndex > 0 || leadingItems) && <DropdownMenu.Separator />}
             {group.map((item) => (
               <DropdownMenu.Item
                 key={item.key}

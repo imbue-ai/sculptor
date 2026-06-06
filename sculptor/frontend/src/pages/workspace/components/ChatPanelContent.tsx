@@ -2,7 +2,7 @@ import type { Editor as TipTapEditor } from "@tiptap/react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { type ReactElement, useEffect } from "react";
 
-import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
+import { useImbueLocation, useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { debugViewAtomFamily } from "~/common/state/atoms/alphaScroll.ts";
 import { closeBtwPopupIfNotForAgentAtom, isBtwPopupOpenAtom } from "~/common/state/atoms/btwPopup.ts";
 import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
@@ -17,23 +17,18 @@ type ChatPanelContentProps = {
   appendTextRef?: React.MutableRefObject<((text: string) => void) | null>;
   insertSkillRef?: React.MutableRefObject<((skill: InsertSkillArg) => void) | null>;
   editorRef?: React.MutableRefObject<TipTapEditor | null>;
-  /** Render a specific agent instead of the URL's active agent — used by the
-   *  Center's second chat pane when the chat is split (REQ-CHAT-1). */
-  taskIDOverride?: string;
 };
 
-export const ChatPanelContent = ({
-  appendTextRef,
-  insertSkillRef,
-  editorRef,
-  taskIDOverride,
-}: ChatPanelContentProps): ReactElement => {
-  const { workspaceID, agentID: agentIDFromUrl } = useWorkspacePageParams();
-  const taskID = taskIDOverride ?? agentIDFromUrl;
-  // A secondary pane (chat split) shows a non-active agent; it must not own the
-  // workspace-scoped /btw popup or the global "chat mounted" signal — those
-  // belong to the primary chat pane.
-  const isSecondaryPane = taskIDOverride !== undefined;
+export const ChatPanelContent = ({ appendTextRef, insertSkillRef, editorRef }: ChatPanelContentProps): ReactElement => {
+  // `agentID` is the agent this panel renders — resolved via AgentOverrideContext
+  // (each AgentPanel scopes the subtree to its own agent). The raw URL agent is
+  // read context-free so exactly one panel — the URL/active agent's — counts as
+  // the primary pane and owns the workspace-scoped /btw popup and the global
+  // chat-mounted signal; secondary side-by-side panels must not.
+  const { workspaceID, agentID } = useWorkspacePageParams();
+  const { agentId: urlAgentId } = useImbueLocation();
+  const taskID = agentID;
+  const isSecondaryPane = taskID !== urlAgentId;
   const isDebugView = useAtomValue(debugViewAtomFamily(taskID ?? ""));
   const closeBtwPopupIfNotForAgent = useSetAtom(closeBtwPopupIfNotForAgentAtom);
   const isBtwPopupOpen = useAtomValue(isBtwPopupOpenAtom);

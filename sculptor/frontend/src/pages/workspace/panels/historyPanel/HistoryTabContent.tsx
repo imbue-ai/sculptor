@@ -17,9 +17,15 @@ import { TerminusIndicator } from "./TerminusIndicator.tsx";
 type HistoryTabContentProps = {
   workspaceId: string;
   viewMode?: ViewMode;
+  /** Per-panel diff scope key — selecting a commit file opens it in this scope. */
+  diffStateKey?: string;
 };
 
-export const HistoryTabContent = ({ workspaceId, viewMode = "flat" }: HistoryTabContentProps): ReactElement => {
+export const HistoryTabContent = ({
+  workspaceId,
+  viewMode = "flat",
+  diffStateKey,
+}: HistoryTabContentProps): ReactElement => {
   const { data, isPending } = useWorkspaceCommits(workspaceId);
   const expandedCommits = useAtomValue(expandedCommitsAtomFamily(workspaceId));
   const toggleExpanded = useSetAtom(toggleCommitExpandedAtom);
@@ -28,9 +34,9 @@ export const HistoryTabContent = ({ workspaceId, viewMode = "flat" }: HistoryTab
 
   const handleFileClick = useCallback(
     (commitHash: string, filePath: string, _status: FileStatus): void => {
-      openCommitDiffTab({ workspaceId, commitHash, filePath });
+      openCommitDiffTab({ workspaceId, stateKey: diffStateKey, commitHash, filePath });
     },
-    [workspaceId, openCommitDiffTab],
+    [workspaceId, openCommitDiffTab, diffStateKey],
   );
 
   return (

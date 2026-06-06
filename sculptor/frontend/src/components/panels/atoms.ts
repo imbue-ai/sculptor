@@ -132,13 +132,18 @@ const panelsInZoneAtomMap = new Map<ZoneId, Atom<ReadonlyArray<PanelId>>>(
       const order = get(zoneOrderAtom);
       const registry = get(panelRegistryAtom);
       const enabled = get(panelEnabledAtom);
+      const registeredIds = new Set(registry.map((p) => p.id));
       const isEnabled = (panelId: PanelId): boolean => {
         const def = registry.find((p) => p.id === panelId);
         if (def?.isBuiltin ?? false) return true;
         return enabled[panelId] ?? def?.defaultEnabled ?? true;
       };
+      // Only surface panels that are actually registered. Dynamic panels
+      // (agents, terminals) are per-workspace, so the global zone assignments
+      // may still reference panels belonging to another workspace; filtering by
+      // the current registry drops those without touching their stored placement.
       const panelsInZone = (Object.entries(assignments) as ReadonlyArray<[PanelId, ZoneId]>)
-        .filter(([panelId, zone]) => zone === zoneId && isEnabled(panelId))
+        .filter(([panelId, zone]) => zone === zoneId && registeredIds.has(panelId) && isEnabled(panelId))
         .map(([panelId]) => panelId);
 
       const zoneOrder = order[zoneId];

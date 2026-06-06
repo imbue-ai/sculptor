@@ -1,5 +1,5 @@
 import { Box, Flex, Text } from "@radix-ui/themes";
-import { useAtom, useAtomValue } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useMemo, useRef, useState } from "react";
 
@@ -18,14 +18,13 @@ import { getLineCounts, parseDiff } from "~/components/DiffUtils.ts";
 import { IndeterminateProgress } from "~/components/IndeterminateProgress.tsx";
 import { determineFileStatus } from "~/pages/workspace/panels/fileBrowser/utils.ts";
 
-import { isMarkdownPath, markdownRenderModeAtom } from "./atoms.ts";
+import { closeAllDiffTabsAtom, isMarkdownPath, markdownRenderModeAtom } from "./atoms.ts";
 import { BinaryPreview } from "./BinaryPreview.tsx";
 import { CombinedDiffView } from "./CombinedDiffView.tsx";
 import { DeletedFileBanner } from "./DeletedFileBanner.tsx";
 import { DiffErrorBanner } from "./DiffErrorBanner.tsx";
-import { DiffFileHeader } from "./DiffFileHeader.tsx";
+import { DiffFileHeader, type DiffViewOptions } from "./DiffFileHeader.tsx";
 import styles from "./DiffPanel.module.scss";
-import { DiffTabBar } from "./DiffTabBar.tsx";
 import { useActiveFileDiff } from "./hooks.ts";
 import { InFileSearchBar } from "./InFileSearchBar.tsx";
 import { LargeDiffGate } from "./LargeDiffGate.tsx";
@@ -40,9 +39,15 @@ import { useScrollPreservation } from "./useScrollPreservation.ts";
 type DiffPanelProps = {
   workspaceId: string;
   /**
-   * Compact single-file mode (REQ-CENTER-4): hide the multi-file tab/scope row
-   * and the always-mounted combined view (Review All is its own panel now). Only
-   * one file is shown at a time, with a minimal control row.
+   * The per-panel diff-state scope key (REQ-DIFF-1..3). Defaults to the
+   * workspaceId (the Changes/default scope). Files and Commits pass distinct
+   * keys so each panel tracks its own selected file.
+   */
+  stateKey?: string;
+  /**
+   * Compact single-file mode (REQ-DIFF-3): hide the multi-file tab/scope row and
+   * the always-mounted combined view. Only one file is shown at a time, with a
+   * minimal control row. Always true in the in-panel master-detail viewer.
    */
   singleFile?: boolean;
 };
@@ -85,8 +90,8 @@ const renderDiffContent = ({
   );
 };
 
-export const DiffPanel = ({ workspaceId, singleFile = false }: DiffPanelProps): ReactElement => {
-  const activeFileDiff = useActiveFileDiff(workspaceId);
+export const DiffPanel = ({ workspaceId, stateKey, singleFile = false }: DiffPanelProps): ReactElement => {
+  const activeFileDiff = useActiveFileDiff(workspaceId, stateKey);
   // Only surface the loading bar when a file is open: the bar means "the diff
   // you're looking at is loading," which is meaningless over the empty "Open a
   // file to view it" placeholder. `isFetching` alone is a workspace-level
@@ -102,6 +107,7 @@ export const DiffPanel = ({ workspaceId, singleFile = false }: DiffPanelProps): 
   const appTheme = useAtomValue(appThemeAtom);
   // Expand mode is handled at the DockingLayout level; DiffPanel just renders normally.
   const { updateField } = useUserConfig();
+  const closeAllDiffTabs = useSetAtom(closeAllDiffTabsAtom);
   // Skip file line fetching for combined, file-view, and commit-diff tabs —
   // they don't need hunk expansion data.
   const shouldSkipFileLines = activeFileDiff.isCombined || activeFileDiff.isFileView || activeFileDiff.isCommitDiff;
@@ -235,6 +241,21 @@ export const DiffPanel = ({ workspaceId, singleFile = false }: DiffPanelProps): 
     setSearchFocusRequest((n) => n + 1);
   });
 
+  // The file's view controls — moved out of the old toolbar into the header "…"
+  // menu (REQ-DIFF polish).
+  const viewOptions: DiffViewOptions = {
+    viewType,
+    onToggleViewType: handleToggleViewType,
+    lineWrapping: overflow,
+    onToggleLineWrapping: handleToggleLineWrapping,
+    onToggleSearch: handleToggleSearch,
+    showRenderToggle: isMarkdownToggleVisible,
+    isRendered: markdownMode === "rendered" && isRichMarkdownRenderingEnabled,
+    isRenderToggleEnabled: isRichMarkdownRenderingEnabled,
+    onToggleRender: handleToggleMarkdownRender,
+    onClose: () => closeAllDiffTabs({ workspaceId, stateKey }),
+  };
+
   const renderContent = (): ReactElement => {
     const { filePath, errorMessage, isBinary, status, diffString, previousFilePath } = activeFileDiff;
 
@@ -305,22 +326,6 @@ export const DiffPanel = ({ workspaceId, singleFile = false }: DiffPanelProps): 
           <IndeterminateProgress size="1" />
         </Box>
       )}
-      <DiffTabBar
-        workspaceId={workspaceId}
-        singleFileMode={singleFile}
-        viewType={viewType}
-        onToggleViewType={handleToggleViewType}
-        lineWrapping={overflow}
-        onToggleLineWrapping={handleToggleLineWrapping}
-        isSearchOpen={isSearchOpen}
-        onToggleSearch={handleToggleSearch}
-        isBinaryFile={activeFileDiff.isBinary}
-        showRenderToggle={isMarkdownToggleVisible}
-        isRendered={markdownMode === "rendered" && isRichMarkdownRenderingEnabled}
-        isRenderToggleEnabled={isRichMarkdownRenderingEnabled}
-        onToggleRender={handleToggleMarkdownRender}
-      />
-
       {isSearchOpen && (
         <InFileSearchBar
           query={searchQuery}
@@ -357,6 +362,7 @@ export const DiffPanel = ({ workspaceId, singleFile = false }: DiffPanelProps): 
               removedLines={0}
               fileStatus={null}
               isBinary={false}
+              viewOptions={viewOptions}
             />
             <Flex ref={diffContentRef} direction="column" flexGrow="1" overflow="hidden" className={styles.content}>
               <ReadOnlyPreview workspaceId={workspaceId} filePath={activeFileDiff.filePath!} />
@@ -372,6 +378,7 @@ export const DiffPanel = ({ workspaceId, singleFile = false }: DiffPanelProps): 
               removedLines={commitFileLineCounts.removed}
               fileStatus={null}
               isBinary={false}
+              viewOptions={viewOptions}
             />
             <Flex ref={diffContentRef} direction="column" flexGrow="1" overflow="hidden" className={styles.content}>
               {isCommitDiffPending ? (
@@ -412,6 +419,7 @@ export const DiffPanel = ({ workspaceId, singleFile = false }: DiffPanelProps): 
               removedLines={activeFileDiff.removedLines}
               fileStatus={activeFileDiff.status}
               isBinary={activeFileDiff.isBinary}
+              viewOptions={viewOptions}
             />
             <Flex ref={diffContentRef} direction="column" flexGrow="1" overflow="hidden" className={styles.content}>
               {renderContent()}

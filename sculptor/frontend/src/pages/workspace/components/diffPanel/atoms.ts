@@ -13,6 +13,17 @@ import { COMBINED_REVIEW_PATH, COMMIT_DIFF_PREFIX, FILE_VIEW_PREFIX, TARGET_BRAN
 /** Transient per-workspace scope for the combined diff view. Resets on page refresh. */
 export const diffScopeAtomFamily = atomFamily((_workspaceId: string) => atom<DiffScope>("uncommitted"));
 
+// In-panel master-detail diff (REQ-DIFF-1..3). Each file panel keeps its own
+// selected file, so the diff-state atom family is keyed per (workspace, panel
+// scope). The Changes panel — and every existing caller that opens a file (chat
+// chips, @-mentions, the command palette) — uses the *default* scope, which is
+// just the workspaceId, so those land in the Changes panel's detail. Files and
+// Commits get distinct scopes.
+export const FILES_DIFF_SCOPE = "files";
+export const COMMITS_DIFF_SCOPE = "commits";
+
+export const diffStateKey = (workspaceId: string, scope: string): string => `${scope}::${workspaceId}`;
+
 /** Ratio (0–100) controlling the left/right column split in side-by-side diffs. */
 export const splitDiffColumnRatioAtom = atom(50);
 
@@ -65,9 +76,12 @@ export const isMarkdownPath = (filePath: string): boolean => /\.(md|markdown)$/i
 // Discriminated union payload for the unified setActiveDiffTabAtom
 // ---------------------------------------------------------------------------
 
+// `stateKey` selects which per-panel diff state to write (defaults to the
+// workspaceId — the Changes/default scope).
 type SetActiveSingleDiff = {
   kind: "single";
   workspaceId: string;
+  stateKey?: string;
   filePath: string;
   status: FileStatus;
   scope?: DiffScope;
@@ -77,18 +91,21 @@ type SetActiveSingleDiff = {
 type SetActiveCombinedDiff = {
   kind: "combined";
   workspaceId: string;
+  stateKey?: string;
   defaultScope?: DiffScope;
 };
 
 type SetActiveFileView = {
   kind: "file-view";
   workspaceId: string;
+  stateKey?: string;
   filePath: string;
 };
 
 type SetActiveCommitDiff = {
   kind: "commit-diff";
   workspaceId: string;
+  stateKey?: string;
   commitHash: string;
   filePath: string;
 };
@@ -156,7 +173,7 @@ const buildTabFromPayload = (payload: SetActiveDiffPayload, now: number): { tab:
  * `openFileViewTabAtom` — which were ~90% identical.
  */
 export const setActiveDiffTabAtom = atom(null, (get, set, payload: SetActiveDiffPayload) => {
-  const stateAtom = diffPanelStateAtomFamily(payload.workspaceId);
+  const stateAtom = diffPanelStateAtomFamily(payload.stateKey ?? payload.workspaceId);
   const state = get(stateAtom);
   const now = Date.now();
 
@@ -238,7 +255,14 @@ export const openDiffTabAtom = atom(
   (
     _get,
     set,
-    params: { workspaceId: string; filePath: string; status: FileStatus; scope?: DiffScope; diffString?: string },
+    params: {
+      workspaceId: string;
+      stateKey?: string;
+      filePath: string;
+      status: FileStatus;
+      scope?: DiffScope;
+      diffString?: string;
+    },
   ) => {
     set(setActiveDiffTabAtom, { kind: "single", ...params });
   },
@@ -247,20 +271,23 @@ export const openDiffTabAtom = atom(
 /** Open (or activate) the combined "Review All" tab. */
 export const openCombinedDiffTabAtom = atom(
   null,
-  (_get, set, params: { workspaceId: string; defaultScope?: DiffScope }) => {
+  (_get, set, params: { workspaceId: string; stateKey?: string; defaultScope?: DiffScope }) => {
     set(setActiveDiffTabAtom, { kind: "combined", ...params });
   },
 );
 
 /** Open (or activate) a read-only file view tab. */
-export const openFileViewTabAtom = atom(null, (_get, set, params: { workspaceId: string; filePath: string }) => {
-  set(setActiveDiffTabAtom, { kind: "file-view", ...params });
-});
+export const openFileViewTabAtom = atom(
+  null,
+  (_get, set, params: { workspaceId: string; stateKey?: string; filePath: string }) => {
+    set(setActiveDiffTabAtom, { kind: "file-view", ...params });
+  },
+);
 
 /** Open (or activate) a commit-scoped file diff tab. */
 export const openCommitDiffTabAtom = atom(
   null,
-  (_get, set, params: { workspaceId: string; commitHash: string; filePath: string }) => {
+  (_get, set, params: { workspaceId: string; stateKey?: string; commitHash: string; filePath: string }) => {
     set(setActiveDiffTabAtom, { kind: "commit-diff", ...params });
   },
 );
@@ -272,11 +299,12 @@ export const closeDiffTabAtom = atom(
     set,
     {
       workspaceId,
+      stateKey,
       filePath,
       tabCloseBehavior,
-    }: { workspaceId: string; filePath: string; tabCloseBehavior: "mru" | "adjacent" },
+    }: { workspaceId: string; stateKey?: string; filePath: string; tabCloseBehavior: "mru" | "adjacent" },
   ) => {
-    const stateAtom = diffPanelStateAtomFamily(workspaceId);
+    const stateAtom = diffPanelStateAtomFamily(stateKey ?? workspaceId);
     const state = get(stateAtom);
 
     const closingIndex = state.openTabs.findIndex((tab) => tab.filePath === filePath);
@@ -317,8 +345,8 @@ export const closeDiffPanelAtom = atom(null, (_get, set) => {
 
 export const closeOtherDiffTabsAtom = atom(
   null,
-  (get, set, { workspaceId, filePath }: { workspaceId: string; filePath: string }) => {
-    const stateAtom = diffPanelStateAtomFamily(workspaceId);
+  (get, set, { workspaceId, stateKey, filePath }: { workspaceId: string; stateKey?: string; filePath: string }) => {
+    const stateAtom = diffPanelStateAtomFamily(stateKey ?? workspaceId);
     const state = get(stateAtom);
     const keptTab = state.openTabs.find((tab) => tab.filePath === filePath);
     if (!keptTab) return;
@@ -326,19 +354,26 @@ export const closeOtherDiffTabsAtom = atom(
   },
 );
 
-export const closeAllDiffTabsAtom = atom(null, (get, set, { workspaceId }: { workspaceId: string }) => {
-  const stateAtom = diffPanelStateAtomFamily(workspaceId);
-  const state = get(stateAtom);
-  // Leave the panel open and show the empty placeholder, but drop expand mode.
-  set(stateAtom, { ...state, openTabs: [], activeTabPath: null });
-  set(expandedPanelIdAtom, null);
-});
+export const closeAllDiffTabsAtom = atom(
+  null,
+  (get, set, { workspaceId, stateKey }: { workspaceId: string; stateKey?: string }) => {
+    const stateAtom = diffPanelStateAtomFamily(stateKey ?? workspaceId);
+    const state = get(stateAtom);
+    // Collapse the detail back to the list and drop expand mode.
+    set(stateAtom, { ...state, openTabs: [], activeTabPath: null });
+    set(expandedPanelIdAtom, null);
+  },
+);
 
 /** Reorder tabs to match the given path order (e.g. after a drag-and-drop). */
 export const reorderTabsAtom = atom(
   null,
-  (get, set, { workspaceId, newOrder }: { workspaceId: string; newOrder: Array<string> }) => {
-    const stateAtom = diffPanelStateAtomFamily(workspaceId);
+  (
+    get,
+    set,
+    { workspaceId, stateKey, newOrder }: { workspaceId: string; stateKey?: string; newOrder: Array<string> },
+  ) => {
+    const stateAtom = diffPanelStateAtomFamily(stateKey ?? workspaceId);
     const state = get(stateAtom);
     const tabsByPath = new Map(state.openTabs.map((tab) => [tab.filePath, tab]));
     const reordered = newOrder.flatMap((path) => {

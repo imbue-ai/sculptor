@@ -51,7 +51,13 @@
   align-items: center;
   display: flex;
   flex-shrink: 0;
+  // Fixed square footprint so swapping the leading icon for the close button on
+  // hover (closeReplacesIcon) — e.g. an 8px status dot becoming a 12px X — does
+  // not change the slot width and jitter the label.
+  height: var(--space-4);
+  justify-content: center;
   margin-left: var(--space-1);
+  width: var(--space-4);
 }
 
 // Close button that sits in the leading-icon slot (closeReplacesIcon). Combined

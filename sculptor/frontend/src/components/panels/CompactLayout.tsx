@@ -1,5 +1,5 @@
 import { useAtomValue, useSetAtom } from "jotai";
-import type { ReactElement, ReactNode } from "react";
+import type { ReactElement } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { CENTER_PANEL_MIN_WIDTH_PX, PANEL_MIN_PX } from "~/components/panels/constants.ts";
@@ -7,6 +7,7 @@ import { PanelSection } from "~/components/panels/PanelSection.tsx";
 import { ResizeHandle } from "~/components/panels/ResizeHandle.tsx";
 import {
   BOTTOM_ZONE,
+  CENTER_SECTION_ZONE,
   LEFT_SECTION_ZONE,
   RIGHT_SECTION_ZONE,
   useSectionVisible,
@@ -16,25 +17,20 @@ import {
   type SectionSizeKey,
   sectionSizePercentAtom,
 } from "~/components/panels/sectionLayoutAtoms.ts";
-import { ZoneContent } from "~/components/panels/ZoneContent.tsx";
 
 import styles from "./CompactLayout.module.scss";
 
-// Sides may shrink to this floor so the chat keeps its minimum (REQ-PERSIST-3).
+// Sides may shrink to this floor so the center keeps its minimum (REQ-PERSIST-3).
 const SECTION_FLOOR_PX = 150;
 
-type CompactLayoutProps = {
-  centerContent: ReactNode;
-};
-
 /**
- * The compact workspace layout: three peripheral zones — Left, Right, Bottom —
- * around an always-present Center (REQ-ZONE-1). Left and Right each hold one
- * panel section; Bottom hosts only the terminal. Sizes are a global percentage
- * of the screen, clamped so the chat can't shrink below its minimum (other
- * sections give way) (REQ-PERSIST-2/3).
+ * The uniform-panels workspace layout: four sections — Left, Center, Right,
+ * Bottom — all rendered by the same PanelSection (REQ-PANEL-1). The Center is
+ * always present (no top-bar toggle); Left / Right / Bottom collapse via their
+ * toggles. Sizes are a global percentage of the screen, clamped so the center
+ * can't shrink below its minimum (other sections give way) (REQ-PERSIST-2/3).
  */
-export const CompactLayout = ({ centerContent }: CompactLayoutProps): ReactElement => {
+export const CompactLayout = (): ReactElement => {
   const isLeftVisible = useSectionVisible(LEFT_SECTION_ZONE);
   const isRightVisible = useSectionVisible(RIGHT_SECTION_ZONE);
   const isBottomVisible = useSectionVisible(BOTTOM_ZONE);
@@ -107,7 +103,9 @@ export const CompactLayout = ({ centerContent }: CompactLayoutProps): ReactEleme
           </>
         )}
 
-        <div className={styles.center}>{centerContent}</div>
+        <div className={styles.center}>
+          <PanelSection zone={CENTER_SECTION_ZONE} side="center" />
+        </div>
 
         {isRightVisible && (
           <>
@@ -132,10 +130,10 @@ export const CompactLayout = ({ centerContent }: CompactLayoutProps): ReactEleme
             getSize={() => bottomPx}
             onResize={(px) => setPct("bottom", px, height)}
             direction={-1}
-            ariaLabel="Resize terminal"
+            ariaLabel="Resize bottom section"
           />
           <div className={styles.bottom} style={{ height: bottomPx }}>
-            <ZoneContent zoneId={BOTTOM_ZONE} />
+            <PanelSection zone={BOTTOM_ZONE} side="bottom" />
           </div>
         </>
       )}

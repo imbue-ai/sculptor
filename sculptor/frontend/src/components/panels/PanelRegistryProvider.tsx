@@ -24,6 +24,15 @@ type PanelRegistryProviderProps = {
    * dropdown, and closing a tab returns the panel to the unplaced pool.
    */
   autoPlaceMissing?: boolean;
+  /**
+   * When true, zone assignments referencing panels not in the current registry
+   * are left untouched instead of being scrubbed as "stale". The uniform-panels
+   * layout needs this: agent/terminal panels are per-workspace, so the global
+   * zone assignments legitimately reference panels that aren't registered while
+   * a different workspace is active — their placement must survive a switch.
+   * (`panelsInZoneAtom` already hides unregistered ids from rendering.)
+   */
+  preserveUnregisteredAssignments?: boolean;
 };
 
 /**
@@ -35,6 +44,7 @@ export const PanelRegistryProvider = ({
   defaultLayout,
   children,
   autoPlaceMissing = true,
+  preserveUnregisteredAssignments = false,
 }: PanelRegistryProviderProps): ReactElement => {
   useHydrateAtoms([[panelRegistryAtom, panels]]);
 
@@ -76,7 +86,9 @@ export const PanelRegistryProvider = ({
 
     const registeredIds = new Set(panels.map((p) => p.id));
     const missingPanels = autoPlaceMissing ? panels.filter((p) => !(p.id in zoneAssignments)) : [];
-    const stalePanelIds = Object.keys(zoneAssignments).filter((id) => !registeredIds.has(id as PanelId));
+    const stalePanelIds = preserveUnregisteredAssignments
+      ? []
+      : Object.keys(zoneAssignments).filter((id) => !registeredIds.has(id as PanelId));
 
     // Reset panels whose stored zone is structurally invalid (not in ZONE_IDS).
     const validZones = new Set<string>(ZONE_IDS);
@@ -137,6 +149,7 @@ export const PanelRegistryProvider = ({
     setZoneOrder(newOrder);
   }, [
     autoPlaceMissing,
+    preserveUnregisteredAssignments,
     defaultLayout,
     panels,
     zoneAssignments,
