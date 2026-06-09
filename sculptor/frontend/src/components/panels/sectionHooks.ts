@@ -24,7 +24,10 @@ import {
   zoneVisibilityAtom,
 } from "~/components/panels/atoms.ts";
 import { usePanelActions } from "~/components/panels/hooks.ts";
+import type { SplitAxis } from "~/components/panels/sectionLayoutAtoms.ts";
+import { DEFAULT_SPLIT_RATIO, sectionSplitAtom } from "~/components/panels/sectionLayoutAtoms.ts";
 import type { PanelDefinition, PanelId, ZoneId } from "~/components/panels/types.ts";
+import { isSplitZone, toPrimaryZone, toSplitZone } from "~/components/panels/types.ts";
 
 // The single zone backing each section. In the uniform-panels layout the
 // Center is a normal section too (REQ-PANEL-1).
@@ -96,30 +99,95 @@ export const useAddPanelToSection = (): ((panelId: PanelId, zone: ZoneId) => voi
 };
 
 /**
- * Remove a panel from its section (the tab's close button). The panel becomes
- * "unplaced" — available again in every section's "+" dropdown. The section
- * stays open even if it becomes empty (REQ-SECTION-3).
+ * Split a section into two sub-sections, moving the given panel into the new
+ * (secondary) sub-section so the two appear side-by-side / stacked. A section
+ * can be split at most once; callers gate on `useCanSplitSection`. The primary
+ * sub-section keeps the section's remaining panels.
  */
-export const useRemovePanelFromSection = (): ((panelId: PanelId) => void) => {
-  const zoneAssignments = useAtomValue(zoneAssignmentsAtom);
+export const useSplitSection = (zone: ZoneId): ((panelId: PanelId, axis: SplitAxis) => void) => {
+  const panelIds = useAtomValue(panelsInZoneAtom(zone));
+  const setSectionSplit = useSetAtom(sectionSplitAtom);
   const setZoneAssignments = useSetAtom(zoneAssignmentsAtom);
   const setZoneOrder = useSetAtom(zoneOrderAtom);
   const setActivePanelPerZone = useSetAtom(activePanelPerZoneAtom);
+  const setZoneVisibility = useSetAtom(zoneVisibilityAtom);
+
+  return useCallback(
+    (panelId, axis) => {
+      const splitZone = toSplitZone(zone);
+
+      setSectionSplit((prev) => ({ ...prev, [zone]: { axis, ratio: DEFAULT_SPLIT_RATIO } }));
+
+      // Move the panel into the split sub-section.
+      setZoneAssignments((prev) => ({ ...prev, [panelId]: splitZone }));
+      setZoneOrder((prev) => ({
+        ...prev,
+        [zone]: (prev[zone] ?? []).filter((id) => id !== panelId),
+        [splitZone]: [...(prev[splitZone] ?? []).filter((id) => id !== panelId), panelId],
+      }));
+      setActivePanelPerZone((prev) => {
+        const next = { ...prev, [splitZone]: panelId };
+        if (prev[zone] === panelId) {
+          const remaining = panelIds.filter((id) => id !== panelId);
+          if (remaining.length > 0) {
+            next[zone] = remaining[0];
+          } else {
+            delete next[zone];
+          }
+        }
+        return next;
+      });
+      // Both halves stay visible — the primary must not collapse even if the
+      // moved panel was its only tab (it then shows just its "+").
+      setZoneVisibility((prev) => ({ ...prev, [zone]: true, [splitZone]: true }));
+    },
+    [zone, panelIds, setSectionSplit, setZoneAssignments, setZoneOrder, setActivePanelPerZone, setZoneVisibility],
+  );
+};
+
+/** Whether a section can be split right now: a primary section zone (not itself
+ *  a split half) that is not already split. */
+export const useCanSplitSection = (zone: ZoneId): boolean => {
+  const sectionSplit = useAtomValue(sectionSplitAtom);
+  return SECTION_ZONES.includes(zone) && sectionSplit[zone] === undefined;
+};
+
+/**
+ * Remove a panel from its section (the tab's close button). The panel becomes
+ * "unplaced" — available again in every section's "+" dropdown.
+ *
+ * Closing the LAST tab in a section now collapses/unsplits that section:
+ *  - a split sub-section emptied → un-split (the space goes back to its primary);
+ *  - a split primary emptied → promote the split half's panels up and un-split
+ *    (the surviving half becomes the whole section);
+ *  - an un-split section emptied → collapse it (hide the zone), EXCEPT the
+ *    Center, which always keeps an agent (its only-agent close is already
+ *    blocked upstream).
+ */
+export const useRemovePanelFromSection = (): ((panelId: PanelId) => void) => {
+  const zoneAssignments = useAtomValue(zoneAssignmentsAtom);
+  const zoneOrder = useAtomValue(zoneOrderAtom);
+  const activePanelPerZone = useAtomValue(activePanelPerZoneAtom);
+  const sectionSplit = useAtomValue(sectionSplitAtom);
+  const setZoneAssignments = useSetAtom(zoneAssignmentsAtom);
+  const setZoneOrder = useSetAtom(zoneOrderAtom);
+  const setActivePanelPerZone = useSetAtom(activePanelPerZoneAtom);
+  const setZoneVisibility = useSetAtom(zoneVisibilityAtom);
+  const setSectionSplit = useSetAtom(sectionSplitAtom);
 
   return useCallback(
     (panelId) => {
       const zone = zoneAssignments[panelId];
       if (!zone) return;
+
+      const remaining = (zoneOrder[zone] ?? []).filter((id) => id !== panelId);
+
       setZoneAssignments((prev) => {
         const next = { ...prev };
         delete next[panelId];
         return next;
       });
-      let remaining: Array<PanelId> = [];
-      setZoneOrder((prev) => {
-        remaining = (prev[zone] ?? []).filter((id) => id !== panelId);
-        return { ...prev, [zone]: remaining };
-      });
+      setZoneOrder((prev) => ({ ...prev, [zone]: (prev[zone] ?? []).filter((id) => id !== panelId) }));
       setActivePanelPerZone((prev) => {
         if (prev[zone] !== panelId) return prev;
         const next = { ...prev };
@@ -130,8 +198,72 @@ export const useRemovePanelFromSection = (): ((panelId: PanelId) => void) => {
         }
         return next;
       });
+
+      // Not the last tab — nothing to collapse.
+      if (remaining.length > 0) return;
+
+      // The split (secondary) half emptied → un-split; the primary reclaims the space.
+      if (isSplitZone(zone)) {
+        setSectionSplit((prev) => {
+          const next = { ...prev };
+          delete next[toPrimaryZone(zone)];
+          return next;
+        });
+        return;
+      }
+
+      // A split primary emptied → promote the split half's panels up so the
+      // surviving content becomes the whole section, then un-split.
+      const splitZone = toSplitZone(zone);
+      const splitPanels = (Object.entries(zoneAssignments) as ReadonlyArray<[PanelId, ZoneId]>)
+        .filter(([id, z]) => z === splitZone && id !== panelId)
+        .map(([id]) => id);
+      if (sectionSplit[zone] !== undefined && splitPanels.length > 0) {
+        setZoneAssignments((prev) => {
+          const next = { ...prev };
+          for (const id of splitPanels) next[id] = zone;
+          return next;
+        });
+        setZoneOrder((prev) => ({ ...prev, [zone]: prev[splitZone] ?? splitPanels, [splitZone]: [] }));
+        setActivePanelPerZone((prev) => {
+          const next = { ...prev };
+          next[zone] = activePanelPerZone[splitZone] ?? splitPanels[0];
+          delete next[splitZone];
+          return next;
+        });
+        setSectionSplit((prev) => {
+          const next = { ...prev };
+          delete next[zone];
+          return next;
+        });
+        setZoneVisibility((prev) => ({ ...prev, [zone]: true }));
+        return;
+      }
+
+      // An un-split section emptied → collapse it (the Center never collapses).
+      if (sectionSplit[zone] !== undefined) {
+        setSectionSplit((prev) => {
+          const next = { ...prev };
+          delete next[zone];
+          return next;
+        });
+      }
+
+      if (zone !== CENTER_SECTION_ZONE) {
+        setZoneVisibility((prev) => ({ ...prev, [zone]: false }));
+      }
     },
-    [zoneAssignments, setZoneAssignments, setZoneOrder, setActivePanelPerZone],
+    [
+      zoneAssignments,
+      zoneOrder,
+      activePanelPerZone,
+      sectionSplit,
+      setZoneAssignments,
+      setZoneOrder,
+      setActivePanelPerZone,
+      setZoneVisibility,
+      setSectionSplit,
+    ],
   );
 };
 

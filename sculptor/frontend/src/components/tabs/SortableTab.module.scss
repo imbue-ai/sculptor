@@ -11,7 +11,9 @@
   gap: var(--space-1);
   padding: 6px var(--space-2);
   position: relative;
-  transition: background-color var(--duration-fast), color var(--duration-fast);
+  transition:
+    background-color var(--duration-fast),
+    color var(--duration-fast);
   user-select: none;
 }
 
@@ -116,7 +118,9 @@
   font-size: var(--font-size-1);
   gap: var(--space-1);
   padding: var(--space-1) var(--space-2);
-  transition: background-color var(--duration-fast), color var(--duration-fast);
+  transition:
+    background-color var(--duration-fast),
+    color var(--duration-fast);
   user-select: none;
 
   &:hover {
@@ -141,6 +145,18 @@
 
 .compactDragging {
   opacity: 50%;
+}
+
+// Ghosted full-size placeholder shown in the gap while a tab is dragged across
+// sections (the floating copy is rendered in the ancestor DragOverlay). outline
+// (not border) keeps the footprint stable so neighbouring tabs don't shift when
+// the ghost appears.
+.compactGhost {
+  background-color: var(--gray-a2);
+  color: var(--gray-a8);
+  opacity: 70%;
+  outline: 1px dashed var(--gray-a7);
+  outline-offset: -1px;
 }
 
 .compactDropLeft {

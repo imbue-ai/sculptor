@@ -2,6 +2,13 @@ import type { ReactElement, ReactNode } from "react";
 
 export type TabVariant = "default" | "compact";
 
+// Where the drag-and-drop context lives. "owned" (default): the TabBar renders
+// its own DndContext and handles within-strip reorder itself. "shared": the
+// TabBar renders only the SortableContext and assumes an ancestor DndContext
+// (e.g. the compact layout's PanelDndProvider) drives reorder and cross-section
+// moves — so a tab can be dragged out of this strip into another section.
+export type TabDndMode = "owned" | "shared";
+
 export type TabDefinition = {
   id: string;
   label: string;
@@ -28,7 +35,9 @@ export type TabBarProps = {
   activeTabId: string;
   onActivate: (tabId: string) => void;
   onClose: (tabId: string) => void;
-  onReorder: (newOrder: Array<string>) => void;
+  /** Called on within-strip reorder. Optional: in "shared" dndMode an ancestor
+   *  DndContext drives reordering instead, so this is never called. */
+  onReorder?: (newOrder: Array<string>) => void;
   maxTabWidth?: number;
   children?: ReactNode;
   /** Content rendered at the far right of the tab bar, outside the scroll area. */
@@ -50,6 +59,12 @@ export type TabBarProps = {
   /** On hover, replace the tab's leading icon with the close (X) button instead
    *  of showing a separate trailing close button. */
   closeReplacesIcon?: boolean;
+  /** Drag-and-drop ownership. Defaults to "owned" (self-contained DndContext). */
+  dndMode?: TabDndMode;
+  /** In "shared" dndMode, signals that a drag is in flight in the ancestor
+   *  context so hover affordances are suppressed (the local drag state, which
+   *  drives this in "owned" mode, is never set in "shared" mode). */
+  externalDragActive?: boolean;
 };
 
 export type DropIndicator = "left" | "right";
@@ -69,4 +84,8 @@ export type SortableTabProps = {
   contextMenuContent?: (tabId: string) => ReactNode;
   /** On hover, replace the leading icon with the close button. */
   closeReplacesIcon?: boolean;
+  /** When dragging this tab, render it as a ghosted full-size placeholder in the
+   *  gap (the floating copy is shown via the ancestor's DragOverlay). Used in
+   *  "shared" dndMode so the tab previews where it will land across sections. */
+  ghostWhenDragging?: boolean;
 };

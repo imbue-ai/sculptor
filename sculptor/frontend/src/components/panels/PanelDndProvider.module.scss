@@ -1,0 +1,10 @@
+// The floating copy of the dragged tab, rendered in the DragOverlay so it
+// follows the pointer above every section (and above Electron <webview>s, which
+// are pointer-disabled via the shared `sculptor-resizing` body class).
+.overlayTab {
+  background-color: var(--gray-3);
+  box-shadow: var(--shadow-lg);
+  cursor: grabbing;
+  // Cap the floating copy so a long agent title doesn't produce a huge ghost.
+  max-width: 240px;
+}

@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { CENTER_PANEL_MIN_WIDTH_PX, PANEL_MIN_PX } from "~/components/panels/constants.ts";
-import { PanelSection } from "~/components/panels/PanelSection.tsx";
+import { PanelDndProvider } from "~/components/panels/PanelDndProvider.tsx";
 import { ResizeHandle } from "~/components/panels/ResizeHandle.tsx";
 import {
   BOTTOM_ZONE,
@@ -17,6 +17,7 @@ import {
   type SectionSizeKey,
   sectionSizePercentAtom,
 } from "~/components/panels/sectionLayoutAtoms.ts";
+import { SplittableSection } from "~/components/panels/SplittableSection.tsx";
 
 import styles from "./CompactLayout.module.scss";
 
@@ -87,56 +88,58 @@ export const CompactLayout = (): ReactElement => {
   );
 
   return (
-    <div ref={containerRef} className={styles.outer}>
-      <div className={styles.topRow}>
-        {isLeftVisible && (
-          <>
-            <div className={styles.side} style={{ width: leftPx }}>
-              <PanelSection zone={LEFT_SECTION_ZONE} side="left" />
-            </div>
-            <ResizeHandle
-              axis="x"
-              getSize={() => leftPx}
-              onResize={(px) => setPct("left", px, width)}
-              ariaLabel="Resize left section"
-            />
-          </>
-        )}
+    <PanelDndProvider>
+      <div ref={containerRef} className={styles.outer}>
+        <div className={styles.topRow}>
+          {isLeftVisible && (
+            <>
+              <div className={styles.side} style={{ width: leftPx }}>
+                <SplittableSection primaryZone={LEFT_SECTION_ZONE} side="left" />
+              </div>
+              <ResizeHandle
+                axis="x"
+                getSize={() => leftPx}
+                onResize={(px) => setPct("left", px, width)}
+                ariaLabel="Resize left section"
+              />
+            </>
+          )}
 
-        <div className={styles.center}>
-          <PanelSection zone={CENTER_SECTION_ZONE} side="center" />
+          <div className={styles.center}>
+            <SplittableSection primaryZone={CENTER_SECTION_ZONE} side="center" />
+          </div>
+
+          {isRightVisible && (
+            <>
+              <ResizeHandle
+                axis="x"
+                getSize={() => rightPx}
+                onResize={(px) => setPct("right", px, width)}
+                direction={-1}
+                ariaLabel="Resize right section"
+              />
+              <div className={styles.side} style={{ width: rightPx }}>
+                <SplittableSection primaryZone={RIGHT_SECTION_ZONE} side="right" />
+              </div>
+            </>
+          )}
         </div>
 
-        {isRightVisible && (
+        {isBottomVisible && (
           <>
             <ResizeHandle
-              axis="x"
-              getSize={() => rightPx}
-              onResize={(px) => setPct("right", px, width)}
+              axis="y"
+              getSize={() => bottomPx}
+              onResize={(px) => setPct("bottom", px, height)}
               direction={-1}
-              ariaLabel="Resize right section"
+              ariaLabel="Resize bottom section"
             />
-            <div className={styles.side} style={{ width: rightPx }}>
-              <PanelSection zone={RIGHT_SECTION_ZONE} side="right" />
+            <div className={styles.bottom} style={{ height: bottomPx }}>
+              <SplittableSection primaryZone={BOTTOM_ZONE} side="bottom" />
             </div>
           </>
         )}
       </div>
-
-      {isBottomVisible && (
-        <>
-          <ResizeHandle
-            axis="y"
-            getSize={() => bottomPx}
-            onResize={(px) => setPct("bottom", px, height)}
-            direction={-1}
-            ariaLabel="Resize bottom section"
-          />
-          <div className={styles.bottom} style={{ height: bottomPx }}>
-            <PanelSection zone={BOTTOM_ZONE} side="bottom" />
-          </div>
-        </>
-      )}
-    </div>
+    </PanelDndProvider>
   );
 };

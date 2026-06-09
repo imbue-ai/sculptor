@@ -3,7 +3,14 @@
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  position: relative;
   width: 100%;
+}
+
+// Highlight a section while a tab dragged from another section is hovering it,
+// signalling it as the drop target. An inset ring avoids shifting layout.
+.dropTarget {
+  box-shadow: inset 0 0 0 2px var(--accent-8);
 }
 
 .tabBar {

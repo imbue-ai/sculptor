@@ -18,7 +18,10 @@ export const SIBLING_TOP_ZONE: Partial<Record<ZoneId, ZoneId>> = {
   "bottom-right": "top-right",
 };
 
-// Zone display names for UI
+// Zone display names for UI. The "<zone>:split" entries name the secondary
+// sub-section a section gains when split; they are filtered out of the
+// layout/settings UIs (a split is created from a tab's right-click menu, not
+// picked as a move target).
 export const ZONE_DISPLAY_NAMES: Readonly<Record<ZoneId, string>> = {
   "top-left": "Top Left",
   "bottom-left": "Bottom Left",
@@ -26,4 +29,8 @@ export const ZONE_DISPLAY_NAMES: Readonly<Record<ZoneId, string>> = {
   "top-right": "Top Right",
   "bottom-right": "Bottom Right",
   center: "Center",
+  "top-left:split": "Left (split)",
+  "center:split": "Center (split)",
+  "top-right:split": "Right (split)",
+  "bottom:split": "Bottom (split)",
 };

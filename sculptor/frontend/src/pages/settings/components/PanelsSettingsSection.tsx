@@ -21,7 +21,11 @@ import {
 import { ZONE_DISPLAY_NAMES } from "~/components/panels/constants.ts";
 import { usePanelActions, usePanelEnabled, usePanelsByZone } from "~/components/panels/hooks.ts";
 import type { PanelId, ZoneId } from "~/components/panels/types.ts";
-import { ZONE_IDS } from "~/components/panels/types.ts";
+import { isSplitZone, ZONE_IDS } from "~/components/panels/types.ts";
+
+// Split sub-section zones are created from a tab's right-click menu, never
+// picked as a move target, so they are hidden from the settings zone list.
+const SELECTABLE_ZONE_IDS = ZONE_IDS.filter((zoneId) => !isSplitZone(zoneId));
 import { isZoneMoveDisabled } from "~/components/panels/utils.ts";
 import { workspaceDefaultLayout } from "~/pages/workspace/panels/workspacePanels.ts";
 
@@ -183,7 +187,7 @@ export const PanelsSettingsSection = ({ onSettingChange }: PanelsSettingsSection
                 >
                   <Select.Trigger data-testid={`${ElementIds.SETTINGS_PANELS_ZONE_SELECT}-${panel.id}`} />
                   <Select.Content>
-                    {ZONE_IDS.map((zoneId) => {
+                    {SELECTABLE_ZONE_IDS.map((zoneId) => {
                       const isDisabled =
                         zoneId !== currentZone &&
                         isZoneMoveDisabled({

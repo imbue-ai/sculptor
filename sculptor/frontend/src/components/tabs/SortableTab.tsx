@@ -27,6 +27,7 @@ export const SortableTab = ({
   variant = "default",
   contextMenuContent,
   closeReplacesIcon = false,
+  ghostWhenDragging = false,
 }: SortableTabProps): ReactElement => {
   const [isHovered, setIsHovered] = useState<boolean>(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState<boolean>(false);
@@ -75,9 +76,16 @@ export const SortableTab = ({
   const compactDropClass =
     dropIndicator === "left" ? styles.compactDropLeft : dropIndicator === "right" ? styles.compactDropRight : "";
 
+  // When this tab is the one being dragged across sections, it renders as a
+  // ghosted full-size placeholder in the gap (its floating copy lives in the
+  // ancestor DragOverlay). Active/hover affordances are suppressed for the ghost.
+  const isGhost = ghostWhenDragging && isDragging;
+  const shouldShowActive = isActive && !isGhost;
+  const shouldShowHovered = isEffectivelyHovered && !isGhost;
+
   const tabClassName = isCompact
-    ? `${styles.tabCompact} ${isActive ? styles.compactActive : ""} ${isEffectivelyHovered ? styles.compactHovered : ""} ${isDragging ? styles.compactDragging : ""} ${compactDropClass}`
-    : `${styles.tab} ${isActive ? styles.active : ""} ${isEffectivelyHovered ? styles.hovered : ""} ${isDragging ? styles.dragging : ""} ${dropClass}`;
+    ? `${styles.tabCompact} ${shouldShowActive ? styles.compactActive : ""} ${shouldShowHovered ? styles.compactHovered : ""} ${isGhost ? styles.compactGhost : isDragging ? styles.compactDragging : ""} ${compactDropClass}`
+    : `${styles.tab} ${shouldShowActive ? styles.active : ""} ${shouldShowHovered ? styles.hovered : ""} ${isGhost ? styles.compactGhost : isDragging ? styles.dragging : ""} ${dropClass}`;
 
   const closeIconSize = isCompact ? COMPACT_CLOSE_ICON_SIZE : DEFAULT_CLOSE_ICON_SIZE;
   const closeButtonClass = isCompact ? styles.compactCloseButton : styles.closeButton;

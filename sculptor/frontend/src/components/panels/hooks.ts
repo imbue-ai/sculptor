@@ -19,8 +19,9 @@ import {
   zoneOrderAtom,
   zoneVisibilityAtom,
 } from "~/components/panels/atoms.ts";
+import { sectionSplitAtom } from "~/components/panels/sectionLayoutAtoms.ts";
 import type { LayoutSide, PanelDefinition, PanelId, ZoneId } from "~/components/panels/types.ts";
-import { SIDE_ZONE_MAP, ZONE_IDS } from "~/components/panels/types.ts";
+import { SIDE_ZONE_MAP, toPrimaryZone, ZONE_IDS } from "~/components/panels/types.ts";
 import { computeToggleAction } from "~/components/panels/utils.ts";
 
 // ── usePanelById ────────────────────────────────────────────────────
@@ -112,6 +113,7 @@ export const usePanelActions = (): UsePanelActionsResult => {
   const [zoneVisibility, setZoneVisibility] = useAtom(zoneVisibilityAtom);
   const setZoneAssignments = useSetAtom(zoneAssignmentsAtom);
   const setZoneOrder = useSetAtom(zoneOrderAtom);
+  const sectionSplit = useAtomValue(sectionSplitAtom);
   const isZenModeActive = useAtomValue(zenModeActiveAtom);
   const isFocusModeActive = useAtomValue(focusModeActiveAtom);
   const setFocusModeActive = useSetAtom(focusModeActiveAtom);
@@ -144,7 +146,9 @@ export const usePanelActions = (): UsePanelActionsResult => {
 
         setZoneVisibility((prev) => {
           const next = { ...prev, [targetZone]: true };
-          if (remainingInSource.length === 0) {
+          // Don't hide an emptied source that belongs to a split section — the
+          // section's other half is still populated and must stay on screen.
+          if (remainingInSource.length === 0 && sectionSplit[toPrimaryZone(sourceZone)] === undefined) {
             next[sourceZone] = false;
           }
           return next;
@@ -220,7 +224,15 @@ export const usePanelActions = (): UsePanelActionsResult => {
         }
       }
     },
-    [zoneAssignments, panelsByZone, setZoneAssignments, setActivePanelPerZone, setZoneVisibility, setZoneOrder],
+    [
+      zoneAssignments,
+      panelsByZone,
+      sectionSplit,
+      setZoneAssignments,
+      setActivePanelPerZone,
+      setZoneVisibility,
+      setZoneOrder,
+    ],
   );
 
   const togglePanel = useCallback(

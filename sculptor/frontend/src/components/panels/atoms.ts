@@ -253,6 +253,42 @@ export const activePanelInZoneAtom = (zoneId: ZoneId): Atom<PanelDefinition | un
 // this panel and the center diff area are visible; everything else is hidden.
 export const expandedPanelIdAtom = atom<PanelId | null>(null);
 
+// ── Cross-section tab drag (non-persisted) ───────────────────────────
+// Tracks an in-flight tab drag so every PanelSection can preview the move
+// without committing it: the target section renders a drop highlight and a
+// ghosted full-size copy of the dragged tab at the insertion index, while the
+// source keeps the tab until drop. The atoms are only mutated on drop (via
+// movePanel), so this preview state is intentionally separate from the
+// persisted zone atoms. Reset to null on drop / cancel.
+export type PanelDragState = {
+  activePanelId: PanelId;
+  sourceZone: ZoneId;
+  targetZone: ZoneId;
+  /** Insertion index within the target zone's panels, excluding the dragged one. */
+  insertIndex: number;
+};
+
+export const panelDragStateAtom = atom<PanelDragState | null>(null);
+
+/**
+ * The panel ids a section should *render* during a drag: the dragged panel is
+ * removed from every section and re-inserted into the target section at the
+ * insertion index, so its ghost appears to slide between sections. With no drag
+ * in flight this is the zone's panels unchanged.
+ */
+export const computeDisplayedPanelIds = (inputs: {
+  zone: ZoneId;
+  panelIds: ReadonlyArray<PanelId>;
+  drag: PanelDragState | null;
+}): ReadonlyArray<PanelId> => {
+  const { zone, panelIds, drag } = inputs;
+  if (!drag) return panelIds;
+  const withoutActive = panelIds.filter((id) => id !== drag.activePanelId);
+  if (drag.targetZone !== zone) return withoutActive;
+  const index = Math.min(Math.max(drag.insertIndex, 0), withoutActive.length);
+  return [...withoutActive.slice(0, index), drag.activePanelId, ...withoutActive.slice(index)];
+};
+
 // ── Derived zone atom for "files" panel ────────────────────────────
 // Narrows the subscription so consumers that only need the zone for the
 // "files" panel don't re-render when other panels' zone assignments change.

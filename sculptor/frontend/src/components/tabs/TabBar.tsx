@@ -33,8 +33,14 @@ export const TabBar = ({
   contextMenuContent,
   scrollTrigger,
   closeReplacesIcon = false,
+  dndMode = "owned",
+  externalDragActive = false,
 }: TabBarProps): ReactElement => {
   const isCompact = variant === "compact";
+  // In "shared" mode an ancestor DndContext (PanelDndProvider) owns the drag, so
+  // this TabBar renders only the SortableContext — no local DndContext, no local
+  // drag state, no local drop indicators.
+  const isShared = dndMode === "shared";
 
   const [dragState, setDragState] = useState<{ activeId: string | null; overId: string | null }>({
     activeId: null,
@@ -133,7 +139,7 @@ export const TabBar = ({
   }, [containerWidth, openTabIds.length, maxTabWidth, isCompact]);
 
   const isCloseable = alwaysCloseable || openTabIds.length > 1;
-  const isDragActive = dragState.activeId !== null;
+  const isDragActive = dragState.activeId !== null || externalDragActive;
 
   const getDropIndicator = useCallback(
     (tabId: string): DropIndicator | undefined => {
@@ -164,7 +170,7 @@ export const TabBar = ({
     if (over && active.id !== over.id) {
       const oldIndex = openTabIds.indexOf(active.id as string);
       const newIndex = openTabIds.indexOf(over.id as string);
-      onReorder(arrayMove(openTabIds, oldIndex, newIndex));
+      onReorder?.(arrayMove(openTabIds, oldIndex, newIndex));
     }
   };
 
@@ -178,7 +184,84 @@ export const TabBar = ({
     ? `${styles.tabBarCompact} ${tabBarClassName ?? ""}`
     : `${styles.tabBar} ${tabBarClassName ?? ""}`;
 
-  const tabBarRow = (
+  const rowContent = (
+    <div ref={containerRef} className={tabBarClass} role="tablist">
+      {isCompact ? (
+        <>
+          <div
+            ref={scrollContainerRef}
+            className={`${styles.compactScroll} ${rightContent ? styles.compactScrollFill : ""}`}
+          >
+            <SortableContext items={openTabIds} strategy={horizontalListSortingStrategy}>
+              {openTabs.map((tab) => (
+                <SortableTab
+                  key={tab.id}
+                  tab={tab}
+                  isActive={tab.id === activeTabId}
+                  isCloseable={isCloseable}
+                  isDragActive={isDragActive}
+                  dropIndicator={getDropIndicator(tab.id)}
+                  onActivate={onActivate}
+                  onClose={onClose}
+                  onDoubleClick={onDoubleClick}
+                  variant={variant}
+                  contextMenuContent={contextMenuContent}
+                  closeReplacesIcon={closeReplacesIcon}
+                  ghostWhenDragging={isShared}
+                />
+              ))}
+            </SortableContext>
+          </div>
+          {rightContent ? (
+            <div className={styles.compactRightContent}>
+              {children}
+              {rightContent}
+            </div>
+          ) : (
+            children
+          )}
+        </>
+      ) : (
+        <>
+          <div className={styles.defaultScrollWrapper}>
+            <div ref={scrollContainerRef} className={styles.defaultScroll}>
+              <SortableContext items={openTabIds} strategy={horizontalListSortingStrategy}>
+                {openTabs.map((tab) => (
+                  <SortableTab
+                    key={tab.id}
+                    tab={tab}
+                    isActive={tab.id === activeTabId}
+                    isCloseable={isCloseable}
+                    isDragActive={isDragActive}
+                    width={tabWidth}
+                    dropIndicator={getDropIndicator(tab.id)}
+                    onActivate={onActivate}
+                    onClose={onClose}
+                    onDoubleClick={onDoubleClick}
+                    contextMenuContent={contextMenuContent}
+                    closeReplacesIcon={closeReplacesIcon}
+                    ghostWhenDragging={isShared}
+                  />
+                ))}
+              </SortableContext>
+            </div>
+            <OverlayScrollbar scrollRef={scrollContainerRef} className={styles.overlayScrollTrack} />
+          </div>
+          {children && (
+            <Box ref={childrenRef} className={styles.controls} pl="2">
+              {children}
+            </Box>
+          )}
+        </>
+      )}
+    </div>
+  );
+
+  // "owned" mode wraps the row in its own DndContext for within-strip reorder;
+  // "shared" mode relies on the ancestor PanelDndProvider's context instead.
+  const tabBarRow = isShared ? (
+    rowContent
+  ) : (
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
@@ -188,74 +271,7 @@ export const TabBar = ({
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div ref={containerRef} className={tabBarClass} role="tablist">
-        {isCompact ? (
-          <>
-            <div
-              ref={scrollContainerRef}
-              className={`${styles.compactScroll} ${rightContent ? styles.compactScrollFill : ""}`}
-            >
-              <SortableContext items={openTabIds} strategy={horizontalListSortingStrategy}>
-                {openTabs.map((tab) => (
-                  <SortableTab
-                    key={tab.id}
-                    tab={tab}
-                    isActive={tab.id === activeTabId}
-                    isCloseable={isCloseable}
-                    isDragActive={isDragActive}
-                    dropIndicator={getDropIndicator(tab.id)}
-                    onActivate={onActivate}
-                    onClose={onClose}
-                    onDoubleClick={onDoubleClick}
-                    variant={variant}
-                    contextMenuContent={contextMenuContent}
-                    closeReplacesIcon={closeReplacesIcon}
-                  />
-                ))}
-              </SortableContext>
-            </div>
-            {rightContent ? (
-              <div className={styles.compactRightContent}>
-                {children}
-                {rightContent}
-              </div>
-            ) : (
-              children
-            )}
-          </>
-        ) : (
-          <>
-            <div className={styles.defaultScrollWrapper}>
-              <div ref={scrollContainerRef} className={styles.defaultScroll}>
-                <SortableContext items={openTabIds} strategy={horizontalListSortingStrategy}>
-                  {openTabs.map((tab) => (
-                    <SortableTab
-                      key={tab.id}
-                      tab={tab}
-                      isActive={tab.id === activeTabId}
-                      isCloseable={isCloseable}
-                      isDragActive={isDragActive}
-                      width={tabWidth}
-                      dropIndicator={getDropIndicator(tab.id)}
-                      onActivate={onActivate}
-                      onClose={onClose}
-                      onDoubleClick={onDoubleClick}
-                      contextMenuContent={contextMenuContent}
-                      closeReplacesIcon={closeReplacesIcon}
-                    />
-                  ))}
-                </SortableContext>
-              </div>
-              <OverlayScrollbar scrollRef={scrollContainerRef} className={styles.overlayScrollTrack} />
-            </div>
-            {children && (
-              <Box ref={childrenRef} className={styles.controls} pl="2">
-                {children}
-              </Box>
-            )}
-          </>
-        )}
-      </div>
+      {rowContent}
     </DndContext>
   );
 

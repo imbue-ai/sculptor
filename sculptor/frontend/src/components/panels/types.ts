@@ -3,8 +3,40 @@ import type { ComponentType, ReactNode } from "react";
 
 // Zone IDs. "center" is the uniform-panels Center section (iteration 2) — a
 // normal panel section rendered by the same component as the peripheral zones.
-export const ZONE_IDS = ["top-left", "bottom-left", "bottom", "top-right", "bottom-right", "center"] as const;
+//
+// The "<zone>:split" ids back the secondary sub-section a section gains when it
+// is split once (panel-section splitting). They are real zones so that the
+// existing per-zone machinery (panelsInZoneAtom, zoneAssignments persistence,
+// the add-panel "+", PanelRegistryProvider's valid-zone check) works on a split
+// sub-section unchanged. A section is split at most once, so each primary
+// section zone has exactly one paired split zone.
+export const ZONE_IDS = [
+  "top-left",
+  "bottom-left",
+  "bottom",
+  "top-right",
+  "bottom-right",
+  "center",
+  "top-left:split",
+  "center:split",
+  "top-right:split",
+  "bottom:split",
+] as const;
 export type ZoneId = (typeof ZONE_IDS)[number];
+
+// ── Split-zone helpers ──────────────────────────────────────────────
+// A split adds a second sub-section bound to "<primaryZone>:split".
+export const SPLIT_ZONE_SUFFIX = ":split";
+
+/** The split (secondary) zone paired with a primary section zone. */
+export const toSplitZone = (zone: ZoneId): ZoneId => `${zone}${SPLIT_ZONE_SUFFIX}` as ZoneId;
+
+/** Whether a zone is the split (secondary) half of a section. */
+export const isSplitZone = (zone: ZoneId): boolean => zone.endsWith(SPLIT_ZONE_SUFFIX);
+
+/** The primary zone a split zone belongs to (identity for non-split zones). */
+export const toPrimaryZone = (zone: ZoneId): ZoneId =>
+  isSplitZone(zone) ? (zone.slice(0, -SPLIT_ZONE_SUFFIX.length) as ZoneId) : zone;
 
 // Panel IDs — dynamic string type since panels are registered at runtime
 export type PanelId = string;

@@ -1,6 +1,7 @@
 import { atomWithStorage } from "jotai/utils";
 
 import { atomWithDebouncedStorage } from "~/common/state/atoms/atomWithDebouncedStorage.ts";
+import type { ZoneId } from "~/components/panels/types.ts";
 
 // Global experimental setting: render every section's tab strip at the top or
 // bottom (REQ-SET-1). Default top. Stored in localStorage so it is global and
@@ -34,5 +35,30 @@ export const sectionSizePercentAtom = atomWithDebouncedStorage<Partial<Record<Se
 export const masterDetailDetailPercentAtom = atomWithDebouncedStorage<number>(
   "sculptor-master-detail-percent",
   60,
+  200,
+);
+
+// ── Section splitting ────────────────────────────────────────────────
+// A section can be split once into two stacked or side-by-side sub-sections.
+// "horizontal" = a horizontal divider → sub-sections stacked TOP/BOTTOM;
+// "vertical"   = a vertical divider   → sub-sections SIDE-BY-SIDE.
+export type SplitAxis = "horizontal" | "vertical";
+
+// One section's split state. `ratio` is the PRIMARY (first) sub-section's
+// fraction of the section along the split axis (0..1); the split sub-section
+// fills the rest.
+export type SectionSplit = {
+  axis: SplitAxis;
+  ratio: number;
+};
+
+export const DEFAULT_SPLIT_RATIO = 0.5;
+
+// Split state keyed by the PRIMARY section zone. An entry means that section is
+// split; absence means it is whole. Global (shared across workspaces) and
+// persisted, like the section sizes above.
+export const sectionSplitAtom = atomWithDebouncedStorage<Partial<Record<ZoneId, SectionSplit>>>(
+  "sculptor-section-split",
+  {},
   200,
 );

@@ -1,6 +1,7 @@
+import { useDroppable } from "@dnd-kit/core";
 import { ContextMenu, DropdownMenu, IconButton } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
-import { MessageSquarePlus, Plus, SquareTerminal, Trash2, X } from "lucide-react";
+import { Columns2, MessageSquarePlus, Plus, Rows2, SquareTerminal, Trash2, X } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { useCallback, useMemo } from "react";
 
@@ -11,11 +12,18 @@ import { agentDeleteTargetAtom, renamingAgentIdAtom } from "~/components/Command
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import {
   activePanelPerZoneAtom,
+  computeDisplayedPanelIds,
+  panelDragStateAtom,
   panelRegistryAtom,
   panelsInZoneAtom,
-  zoneOrderAtom,
+  zoneAssignmentsAtom,
 } from "~/components/panels/atoms.ts";
-import { useActivatePanel, useRemovePanelFromSection } from "~/components/panels/sectionHooks.ts";
+import {
+  useActivatePanel,
+  useCanSplitSection,
+  useRemovePanelFromSection,
+  useSplitSection,
+} from "~/components/panels/sectionHooks.ts";
 import { tabStripPositionAtom } from "~/components/panels/sectionLayoutAtoms.ts";
 import type { PanelId, ZoneId } from "~/components/panels/types.ts";
 import { TabBar } from "~/components/tabs/TabBar.tsx";
@@ -43,11 +51,14 @@ type PanelSectionProps = {
 export const PanelSection = ({ zone, side }: PanelSectionProps): ReactElement => {
   const registry = useAtomValue(panelRegistryAtom);
   const panelIds = useAtomValue(panelsInZoneAtom(zone));
+  const zoneAssignments = useAtomValue(zoneAssignmentsAtom);
   const activePanelPerZone = useAtomValue(activePanelPerZoneAtom);
-  const setZoneOrder = useSetAtom(zoneOrderAtom);
+  const dragState = useAtomValue(panelDragStateAtom);
   const tabStripPosition = useAtomValue(tabStripPositionAtom);
   const activatePanel = useActivatePanel();
   const removePanel = useRemovePanelFromSection();
+  const canSplit = useCanSplitSection(zone);
+  const splitSection = useSplitSection(zone);
   const removeTerminal = useSetAtom(removeTerminalAtom);
   const updateTasks = useSetAtom(updateTasksAtom);
   const setRenamingAgentId = useSetAtom(renamingAgentIdAtom);
@@ -58,6 +69,19 @@ export const PanelSection = ({ zone, side }: PanelSectionProps): ReactElement =>
   const { agentId: urlAgentId } = useImbueLocation();
   const { navigateToAgent } = useImbueNavigate();
   const menu = useAddPanelMenu(zone);
+
+  // The whole section is a drop target for tab drags (its zone is the droppable
+  // id). The PanelDndProvider's shared DndContext drives the move on drop.
+  const { setNodeRef: setDroppableRef } = useDroppable({ id: zone });
+
+  // While a tab is being dragged, render the dragged panel relocated into the
+  // target section at the insertion index — so a ghost copy previews where it
+  // will land — without mutating the persisted zone state until drop.
+  const displayedPanelIds = useMemo(
+    () => computeDisplayedPanelIds({ zone, panelIds, drag: dragState }),
+    [zone, panelIds, dragState],
+  );
+  const isDropTarget = dragState !== null && dragState.targetZone === zone && dragState.sourceZone !== zone;
 
   const activePanelId: PanelId | undefined =
     activePanelPerZone[zone] && panelIds.includes(activePanelPerZone[zone]!) ? activePanelPerZone[zone] : panelIds[0];
@@ -76,7 +100,7 @@ export const PanelSection = ({ zone, side }: PanelSectionProps): ReactElement =>
 
   const tabs = useMemo<Array<TabDefinition>>(
     () =>
-      panelIds.flatMap((panelId) => {
+      displayedPanelIds.flatMap((panelId) => {
         const def = registry.find((p) => p.id === panelId);
         if (!def) return [];
         const Icon = def.icon;
@@ -98,30 +122,25 @@ export const PanelSection = ({ zone, side }: PanelSectionProps): ReactElement =>
           },
         ];
       }),
-    [panelIds, registry, renamingAgentId, handleRenameCommit, setRenamingAgentId],
-  );
-
-  const handleReorder = useCallback(
-    (newOrder: Array<string>): void => {
-      setZoneOrder((prev) => ({ ...prev, [zone]: newOrder as Array<PanelId> }));
-    },
-    [setZoneOrder, zone],
+    [displayedPanelIds, registry, renamingAgentId, handleRenameCommit, setRenamingAgentId],
   );
 
   // Closing a tab removes the panel from this section (returns it to the "+"
   // pool) — it does not delete agents or kill terminals (REQ-INST-1). The active
-  // agent is kept on screen by the bootstrap invariant, so closing it focuses a
-  // sibling agent first when one exists.
+  // agent is kept on screen by the bootstrap invariant, so closing it focuses
+  // another open agent first when one exists. The sibling search spans all
+  // sections (zoneAssignments), not just this one, so closing the active agent
+  // still works when the other agent lives in this section's other split half.
   const handleClose = useCallback(
     (panelId: PanelId): void => {
       if (isAgentPanelId(panelId) && agentIdFromPanelId(panelId) === urlAgentId) {
-        const otherAgent = panelIds.find((id) => isAgentPanelId(id) && id !== panelId);
+        const otherAgent = Object.keys(zoneAssignments).find((id) => isAgentPanelId(id) && id !== panelId);
         if (!otherAgent) return; // can't close the only/active agent
         navigateToAgent(workspaceID, agentIdFromPanelId(otherAgent));
       }
       removePanel(panelId);
     },
-    [panelIds, urlAgentId, navigateToAgent, workspaceID, removePanel],
+    [zoneAssignments, urlAgentId, navigateToAgent, workspaceID, removePanel],
   );
 
   const handleDoubleClick = useCallback(
@@ -133,11 +152,27 @@ export const PanelSection = ({ zone, side }: PanelSectionProps): ReactElement =>
 
   const contextMenuContent = useCallback(
     (panelId: PanelId): ReactNode => {
+      // "Split horizontally" = stacked top/bottom; "Split vertically" =
+      // side-by-side. Offered on every tab while the section can still be split
+      // (a primary section that isn't already split — see useCanSplitSection).
+      const splitItems = canSplit ? (
+        <>
+          <ContextMenu.Item onSelect={() => splitSection(panelId, "horizontal")}>
+            <Rows2 size={14} /> Split horizontally
+          </ContextMenu.Item>
+          <ContextMenu.Item onSelect={() => splitSection(panelId, "vertical")}>
+            <Columns2 size={14} /> Split vertically
+          </ContextMenu.Item>
+        </>
+      ) : null;
+
       if (isAgentPanelId(panelId)) {
         const agentId = agentIdFromPanelId(panelId);
         const def = registry.find((p) => p.id === panelId);
         return (
           <ContextMenu.Content size="1">
+            {splitItems}
+            {splitItems && <ContextMenu.Separator />}
             <ContextMenu.Item onSelect={() => setRenamingAgentId(agentId)}>Rename</ContextMenu.Item>
             <ContextMenu.Separator />
             <ContextMenu.Item
@@ -153,6 +188,8 @@ export const PanelSection = ({ zone, side }: PanelSectionProps): ReactElement =>
       if (isTerminalPanelId(panelId)) {
         return (
           <ContextMenu.Content size="1">
+            {splitItems}
+            {splitItems && <ContextMenu.Separator />}
             <ContextMenu.Item
               color="red"
               onSelect={() => {
@@ -165,9 +202,12 @@ export const PanelSection = ({ zone, side }: PanelSectionProps): ReactElement =>
           </ContextMenu.Content>
         );
       }
-      return undefined;
+
+      // Static panels: only the split actions, and only when available.
+      if (!splitItems) return undefined;
+      return <ContextMenu.Content size="1">{splitItems}</ContextMenu.Content>;
     },
-    [registry, setRenamingAgentId, setAgentDeleteTarget, removeTerminal, removePanel],
+    [canSplit, splitSection, registry, setRenamingAgentId, setAgentDeleteTarget, removeTerminal, removePanel],
   );
 
   const ActivePanelComponent = activePanelId ? registry.find((p) => p.id === activePanelId)?.component : undefined;
@@ -194,14 +234,15 @@ export const PanelSection = ({ zone, side }: PanelSectionProps): ReactElement =>
   const tabBar = (
     <TabBar
       tabs={tabs}
-      openTabIds={panelIds as Array<string>}
+      openTabIds={displayedPanelIds as Array<string>}
       activeTabId={activePanelId ?? ""}
       onActivate={(id) => activatePanel(id, zone)}
       onClose={handleClose}
-      onReorder={handleReorder}
       onDoubleClick={handleDoubleClick}
       contextMenuContent={contextMenuContent}
       variant="compact"
+      dndMode="shared"
+      externalDragActive={dragState !== null}
       alwaysCloseable
       closeReplacesIcon
       tabBarClassName={styles.tabBar}
@@ -211,7 +252,11 @@ export const PanelSection = ({ zone, side }: PanelSectionProps): ReactElement =>
   );
 
   return (
-    <div className={styles.section} data-testid={`panel-section-${side}`}>
+    <div
+      ref={setDroppableRef}
+      className={`${styles.section} ${isDropTarget ? styles.dropTarget : ""}`}
+      data-testid={`panel-section-${side}`}
+    >
       {tabStripPosition === "top" && tabBar}
       <div className={styles.content} data-zone-id={zone} tabIndex={-1}>
         {ActivePanelComponent ? (

@@ -6,7 +6,10 @@ import { ElementIds } from "~/api";
 import { ZONE_DISPLAY_NAMES } from "~/components/panels/constants.ts";
 import { usePanelActions, usePanelById, usePanelsByZone } from "~/components/panels/hooks.ts";
 import type { PanelId, ZoneId } from "~/components/panels/types.ts";
-import { ZONE_IDS } from "~/components/panels/types.ts";
+import { isSplitZone, ZONE_IDS } from "~/components/panels/types.ts";
+
+// Split sub-section zones are not standalone move targets.
+const MOVE_TARGET_ZONE_IDS = ZONE_IDS.filter((zoneId) => !isSplitZone(zoneId));
 import { isZoneMoveDisabled } from "~/components/panels/utils.ts";
 
 type PanelContextMenuProps = {
@@ -50,7 +53,7 @@ export const PanelContextMenu = ({
         <ContextMenu.Sub>
           <ContextMenu.SubTrigger data-testid={ElementIds.PANEL_CONTEXT_MENU_MOVE_TO}>Move to</ContextMenu.SubTrigger>
           <ContextMenu.SubContent>
-            {ZONE_IDS.map((targetZone) => (
+            {MOVE_TARGET_ZONE_IDS.map((targetZone) => (
               <ContextMenu.Item
                 key={targetZone}
                 disabled={isDisabled(targetZone)}
