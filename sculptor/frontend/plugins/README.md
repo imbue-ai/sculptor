@@ -2,8 +2,12 @@
 
 This directory holds the source for runtime-loaded frontend plugins. Each
 subdirectory is an independent Vite project that builds an ESM bundle into
-the host's `public/plugins/<id>/` tree. The host loads it at boot via a
-hardcoded URL list in `src/plugins/PluginLoader.tsx`.
+the host's `public/plugins/<id>/` tree. The host loads built-in plugins plus
+any user-added sources (see Settings → Plugins) — see `src/plugins/pluginManager.tsx`.
+
+The example plugin is `linear-issue`: it reads the workspace branch via the
+SDK, parses a Linear ticket id out of it, fetches that issue from Linear's
+GraphQL API, and stores its API key through the plugin-settings SDK.
 
 ## How a plugin is built and loaded
 
@@ -20,15 +24,25 @@ hardcoded URL list in `src/plugins/PluginLoader.tsx`.
    `/plugin-runtime/`, which re-export from `window.__SCULPTOR_HOST__` —
    the host's actual singleton instances.
 5. The plugin's default export is an `activate(api)` function that calls
-   `api.registerPanel({ ... })`. The host wraps the contributed component
-   in a `PluginErrorBoundary` plus a `WorkspacePluginContext` provider
-   before merging it into the panel registry.
+   `api.registerPanel({ ... })` and optionally `api.registerSettings(...)`.
+   The host wraps contributed components in a `PluginErrorBoundary`, a
+   `PluginContext` (plugin id, for `usePluginSetting`), and — for panels —
+   a `WorkspacePluginContext` provider.
+
+## SDK surface plugins target (`@sculptor/plugin-sdk`)
+
+- `useWorkspaceTasks()`, `useTaskArtifact(taskId, type)` — read host task data.
+- `useWorkspaceId()`, `useWorkspaceBranch()` — workspace id / current branch.
+- `usePluginSetting(key)` — a persisted string setting scoped to the plugin
+  (localStorage under `sculptor-plugin:<id>:<key>`), shared between the
+  plugin's panel and its settings component.
+- `PanelHeader`, `ArtifactType`, and domain types.
 
 ## Adding a new plugin to the loader
 
-1. Create `plugins/<id>/` with the same shape as `workspace-cost-tracker/`.
-2. Add the plugin's manifest URL to `BUILTIN_PLUGIN_MANIFEST_URLS` in
-   `src/plugins/PluginLoader.tsx`.
+1. Create `plugins/<id>/` with the same shape as `linear-issue/`.
+2. Add `/plugins/<id>` to `BUILTIN_SOURCES` in `src/plugins/pluginManager.tsx`
+   (or just add it as a source at runtime via Settings → Plugins).
 3. Build it once; the host picks it up on next reload.
 
 ## What's mocked vs. real
@@ -36,6 +50,9 @@ hardcoded URL list in `src/plugins/PluginLoader.tsx`.
 - `useTaskArtifact` is a hand-rolled fetch-on-mount that writes back to
   the existing `taskDetailAtomFamily`. It will move to TanStack Query and
   the public hook signature won't change.
-- The plugin list is hardcoded; there is no enable/disable UI yet.
+- The built-in plugin list is hardcoded; user sources are persisted to
+  localStorage and managed from Settings → Plugins.
 - The SDK package is published as a runtime stub via the import map; it
   is not yet a separate npm package.
+- `usePluginSetting` persists to localStorage in the renderer; it is not a
+  secure secret store. The Linear API key lives there in plaintext.

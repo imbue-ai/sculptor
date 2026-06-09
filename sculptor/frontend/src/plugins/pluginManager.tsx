@@ -1,13 +1,15 @@
 import type { createStore } from "jotai";
-import type { ReactElement } from "react";
+import type { ComponentType, ReactElement } from "react";
 
 import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import type { PanelDefinition } from "~/components/panels/types.ts";
 
 import { installHostRuntime } from "./hostRuntime.ts";
+import { PluginContext } from "./PluginContext.tsx";
 import { PluginErrorBoundary } from "./PluginErrorBoundary.tsx";
 import {
   pluginPanelsAtom,
+  pluginSettingsComponentsAtom,
   pluginSourcesAtom,
   type PluginSourceState,
   pluginSourceStatesAtom,
@@ -21,7 +23,7 @@ type JotaiStore = ReturnType<typeof createStore>;
  * Built-in plugin sources, always loaded regardless of the user's saved list
  * and not removable from the settings UI.
  */
-const BUILTIN_SOURCES: ReadonlyArray<string> = ["/plugins/workspace-cost-tracker"];
+const BUILTIN_SOURCES: ReadonlyArray<string> = ["/plugins/linear-issue"];
 
 /** SDK major version the host currently provides. */
 const HOST_SDK_VERSION = 1;
@@ -29,9 +31,15 @@ const HOST_SDK_VERSION = 1;
 // Module-level bookkeeping. Plugins are app-session singletons, so these maps
 // and the bootstrap guard live at module scope and survive React remounts /
 // StrictMode's dev double-invoke.
-const disposerByPluginId = new Map<string, () => void>();
+const disposersByPluginId = new Map<string, Array<() => void>>();
 const pluginIdBySource = new Map<string, string>();
 let hasBootstrapped = false;
+
+const addDisposer = (pluginId: string, fn: () => void): void => {
+  const list = disposersByPluginId.get(pluginId) ?? [];
+  list.push(fn);
+  disposersByPluginId.set(pluginId, list);
+};
 
 const parseMajor = (range: string): number | null => {
   const match = range.match(/(\d+)/);
@@ -62,18 +70,20 @@ const normalizeManifestUrl = (source: string): string => {
 /** Builds the per-plugin `api` handed to `activate()`, backed by the given store. */
 const makeApi = (store: JotaiStore, manifest: PluginManifest): PluginHostApi => ({
   registerPanel: (panel: PanelDefinition): (() => void) => {
-    // Wrap the plugin's component in the error boundary plus a context provider
-    // that exposes the current workspace id to SDK hooks. Both run at render
-    // time, so the workspace id is read fresh per render from the route params.
+    // Wrap the plugin's component in the error boundary plus context providers
+    // exposing the plugin id (for settings hooks) and the current workspace id
+    // (read fresh per render from the route params).
     const PluginComponent = panel.component;
     const Wrapped = (): ReactElement | null => {
       const { workspaceID } = useWorkspacePageParams();
       if (!workspaceID) return null;
       return (
         <PluginErrorBoundary pluginId={panel.id} pluginName={panel.displayName}>
-          <WorkspacePluginContext.Provider value={{ workspaceId: workspaceID }}>
-            <PluginComponent />
-          </WorkspacePluginContext.Provider>
+          <PluginContext.Provider value={{ pluginId: manifest.id }}>
+            <WorkspacePluginContext.Provider value={{ workspaceId: workspaceID }}>
+              <PluginComponent />
+            </WorkspacePluginContext.Provider>
+          </PluginContext.Provider>
         </PluginErrorBoundary>
       );
     };
@@ -82,9 +92,23 @@ const makeApi = (store: JotaiStore, manifest: PluginManifest): PluginHostApi => 
 
     // Replace-by-id so a panel can only ever be registered once.
     store.set(pluginPanelsAtom, (prev) => [...prev.filter((p) => p.id !== panel.id), wrappedPanel]);
-    return (): void => {
+    const undo = (): void => {
       store.set(pluginPanelsAtom, (prev) => prev.filter((p) => p.id !== panel.id));
     };
+    addDisposer(manifest.id, undo);
+    return undo;
+  },
+  registerSettings: (component: ComponentType): (() => void) => {
+    store.set(pluginSettingsComponentsAtom, (prev) => ({ ...prev, [manifest.id]: component }));
+    const undo = (): void => {
+      store.set(pluginSettingsComponentsAtom, (prev) => {
+        const next = { ...prev };
+        delete next[manifest.id];
+        return next;
+      });
+    };
+    addDisposer(manifest.id, undo);
+    return undo;
   },
 });
 
@@ -169,15 +193,23 @@ const loadSource = async (store: JotaiStore, source: string, isBuiltin: boolean,
   }
 
   pluginIdBySource.set(source, outcome.manifest.id);
-  if (outcome.dispose) disposerByPluginId.set(outcome.manifest.id, outcome.dispose);
+  // The panel/settings registrations already self-tracked their disposers via
+  // addDisposer during activate; also run any cleanup the plugin returned.
+  if (outcome.dispose) addDisposer(outcome.manifest.id, outcome.dispose);
   setSourceState(store, source, { status: "loaded", isBuiltin, manifest: outcome.manifest });
 };
 
 const unloadSource = (source: string): void => {
   const pluginId = pluginIdBySource.get(source);
   if (!pluginId) return;
-  disposerByPluginId.get(pluginId)?.();
-  disposerByPluginId.delete(pluginId);
+  for (const dispose of disposersByPluginId.get(pluginId) ?? []) {
+    try {
+      dispose();
+    } catch (e) {
+      console.error(`Plugin disposer threw for "${pluginId}"`, e);
+    }
+  }
+  disposersByPluginId.delete(pluginId);
   pluginIdBySource.delete(source);
 };
 

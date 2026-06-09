@@ -1,4 +1,5 @@
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { atomFamily, atomWithStorage } from "jotai/utils";
 import { useEffect } from "react";
 
 import { ArtifactType, type CodingAgentTaskView, getWorkspaceAgentArtifact } from "~/api";
@@ -10,12 +11,41 @@ import {
 } from "~/common/state/atoms/taskDetails.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { useTask } from "~/common/state/hooks/useTaskHelpers.ts";
+import { useWorkspaceBranch as useHostWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch.ts";
 import type { ArtifactsMap } from "~/pages/workspace/Types.ts";
 
+import { usePluginContext } from "../PluginContext.tsx";
 import { useWorkspacePluginContext } from "../WorkspaceContext.tsx";
 
 /** Current workspace id, read from the host-provided plugin context. */
 export const useWorkspaceId = (): string => useWorkspacePluginContext().workspaceId;
+
+/**
+ * The current git branch of the workspace the plugin is mounted in, or `null`
+ * until the backend has reported it. Useful for linking the workspace to
+ * external systems (e.g. parsing a ticket id out of the branch name).
+ */
+export const useWorkspaceBranch = (): string | null => {
+  const { workspaceId } = useWorkspacePluginContext();
+  return useHostWorkspaceBranch(workspaceId)?.currentBranch ?? null;
+};
+
+// One persisted atom per (plugin, key). atomFamily caches by the full storage
+// key; getOnInit reads localStorage synchronously so the value is present on
+// first render instead of flashing the default.
+const pluginSettingAtomFamily = atomFamily((storageKey: string) =>
+  atomWithStorage<string>(storageKey, "", undefined, { getOnInit: true }),
+);
+
+/**
+ * A persisted string setting scoped to the calling plugin. Backed by
+ * localStorage under a `sculptor-plugin:<id>:<key>` namespace and shared
+ * reactively across the plugin's panel and its settings component.
+ */
+export const usePluginSetting = (key: string): [string, (value: string) => void] => {
+  const { pluginId } = usePluginContext();
+  return useAtom(pluginSettingAtomFamily(`sculptor-plugin:${pluginId}:${key}`));
+};
 
 /**
  * All non-deleted tasks for the workspace the plugin is mounted in. Returns
@@ -99,7 +129,7 @@ const processArtifactResponse = <T extends keyof ArtifactsMap>(
     return response as ArtifactsMap[T];
   }
   // TODO(plugins): the USAGE branch was dropped when the host removed the
-  // USAGE artifact. Re-add a case here once the cost/token data has a new
-  // artifact (see workspace-cost-tracker plugin).
+  // USAGE artifact. Re-add a case here if cost/token data returns as a new
+  // artifact a plugin wants to consume.
   return null;
 };

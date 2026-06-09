@@ -8,6 +8,8 @@ const sdk = host.sdk;
 export const useWorkspaceTasks = sdk.useWorkspaceTasks;
 export const useTaskArtifact = sdk.useTaskArtifact;
 export const useWorkspaceId = sdk.useWorkspaceId;
+export const useWorkspaceBranch = sdk.useWorkspaceBranch;
+export const usePluginSetting = sdk.usePluginSetting;
 
 // Components (re-exports from host)
 export const PanelHeader = sdk.PanelHeader;
