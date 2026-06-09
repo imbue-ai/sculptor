@@ -1,11 +1,18 @@
 import { Badge, Button, Flex, IconButton, Spinner, Text, TextField, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useStore } from "jotai";
-import { Plus, RotateCw, Trash2 } from "lucide-react";
-import { type ReactElement, useState } from "react";
+import { Plus, RotateCw, Settings2, Trash2 } from "lucide-react";
+import { type ComponentType, type ReactElement, useState } from "react";
 
 import { ElementIds } from "~/api";
+import { PluginContext } from "~/plugins/PluginContext.tsx";
+import { PluginErrorBoundary } from "~/plugins/PluginErrorBoundary.tsx";
 import { addPluginSource, reloadPluginSource, removePluginSource } from "~/plugins/pluginManager.tsx";
-import { pluginSourcesAtom, type PluginSourceState, pluginSourceStatesAtom } from "~/plugins/pluginRegistry.ts";
+import {
+  pluginSettingsComponentsAtom,
+  pluginSourcesAtom,
+  type PluginSourceState,
+  pluginSourceStatesAtom,
+} from "~/plugins/pluginRegistry.ts";
 
 import { SettingsSectionLayout } from "./SettingsSection.tsx";
 
@@ -88,6 +95,11 @@ type SourceRowProps = {
 
 const SourceRow = ({ source, state, store, setIsBusy }: SourceRowProps): ReactElement => {
   const isBuiltin = state?.isBuiltin ?? false;
+  const settingsComponents = useAtomValue(pluginSettingsComponentsAtom);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  const pluginId = state?.status === "loaded" ? state.manifest.id : undefined;
+  const SettingsComponent: ComponentType | undefined = pluginId ? settingsComponents[pluginId] : undefined;
 
   const handleReload = async (): Promise<void> => {
     setIsBusy(true);
@@ -100,75 +112,96 @@ const SourceRow = ({ source, state, store, setIsBusy }: SourceRowProps): ReactEl
 
   return (
     <Flex
-      justify="between"
-      align="center"
-      gap="3"
-      py="3"
+      direction="column"
       style={{ borderBottom: "1px solid var(--gray-4)" }}
       data-testid={ElementIds.SETTINGS_PLUGINS_SOURCE_ROW}
       data-source={source}
     >
-      <Flex direction="column" gap="1" style={{ minWidth: 0, flexGrow: 1 }}>
-        <Flex align="center" gap="2">
-          {state?.status === "loaded" ? (
-            <Text weight="medium">{state.manifest.name}</Text>
-          ) : (
-            <Text weight="medium" color="gray">
-              {source.split("/").filter(Boolean).pop() ?? source}
-            </Text>
-          )}
-          {state?.status === "loaded" && (
-            <Text size="1" color="gray">
-              v{state.manifest.version}
-            </Text>
-          )}
-          {isBuiltin && (
-            <Badge size="1" color="gray" variant="soft">
-              bundled
-            </Badge>
-          )}
-          {(!state || state.status === "loading") && <Spinner size="1" />}
+      <Flex justify="between" align="center" gap="3" py="3">
+        <Flex direction="column" gap="1" style={{ minWidth: 0, flexGrow: 1 }}>
+          <Flex align="center" gap="2">
+            {state?.status === "loaded" ? (
+              <Text weight="medium">{state.manifest.name}</Text>
+            ) : (
+              <Text weight="medium" color="gray">
+                {source.split("/").filter(Boolean).pop() ?? source}
+              </Text>
+            )}
+            {state?.status === "loaded" && (
+              <Text size="1" color="gray">
+                v{state.manifest.version}
+              </Text>
+            )}
+            {isBuiltin && (
+              <Badge size="1" color="gray" variant="soft">
+                bundled
+              </Badge>
+            )}
+            {(!state || state.status === "loading") && <Spinner size="1" />}
+            {state?.status === "error" && (
+              <Badge size="1" color="red" variant="soft">
+                failed: {state.phase}
+              </Badge>
+            )}
+          </Flex>
+          <Text size="1" color="gray" style={{ fontFamily: "var(--code-font-family)" }}>
+            {source}
+          </Text>
           {state?.status === "error" && (
-            <Badge size="1" color="red" variant="soft">
-              failed: {state.phase}
-            </Badge>
+            <Text size="1" color="gray">
+              {state.message}
+            </Text>
           )}
         </Flex>
-        <Text size="1" color="gray" style={{ fontFamily: "var(--code-font-family)" }}>
-          {source}
-        </Text>
-        {state?.status === "error" && (
-          <Text size="1" color="gray">
-            {state.message}
-          </Text>
-        )}
-      </Flex>
-      <Flex align="center" gap="2">
-        <Tooltip content="Reload">
-          <IconButton
-            variant="ghost"
-            size="1"
-            color="gray"
-            onClick={() => void handleReload()}
-            data-testid={ElementIds.SETTINGS_PLUGINS_SOURCE_RELOAD}
-          >
-            <RotateCw size={14} />
-          </IconButton>
-        </Tooltip>
-        {!isBuiltin && (
-          <Tooltip content="Remove">
+        <Flex align="center" gap="2">
+          {SettingsComponent && (
+            <Tooltip content="Settings">
+              <IconButton
+                variant={isSettingsOpen ? "soft" : "ghost"}
+                size="1"
+                color="gray"
+                onClick={() => setIsSettingsOpen((open) => !open)}
+                data-testid={ElementIds.SETTINGS_PLUGINS_SOURCE_SETTINGS}
+              >
+                <Settings2 size={14} />
+              </IconButton>
+            </Tooltip>
+          )}
+          <Tooltip content="Reload">
             <IconButton
               variant="ghost"
               size="1"
               color="gray"
-              onClick={() => removePluginSource(store, source)}
-              data-testid={ElementIds.SETTINGS_PLUGINS_SOURCE_REMOVE}
+              onClick={() => void handleReload()}
+              data-testid={ElementIds.SETTINGS_PLUGINS_SOURCE_RELOAD}
             >
-              <Trash2 size={14} />
+              <RotateCw size={14} />
             </IconButton>
           </Tooltip>
-        )}
+          {!isBuiltin && (
+            <Tooltip content="Remove">
+              <IconButton
+                variant="ghost"
+                size="1"
+                color="gray"
+                onClick={() => removePluginSource(store, source)}
+                data-testid={ElementIds.SETTINGS_PLUGINS_SOURCE_REMOVE}
+              >
+                <Trash2 size={14} />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Flex>
       </Flex>
+      {SettingsComponent && isSettingsOpen && pluginId && (
+        <Flex direction="column" pb="3" pl="2">
+          <PluginErrorBoundary pluginId={pluginId} pluginName={pluginId}>
+            <PluginContext.Provider value={{ pluginId }}>
+              <SettingsComponent />
+            </PluginContext.Provider>
+          </PluginErrorBoundary>
+        </Flex>
+      )}
     </Flex>
   );
 };

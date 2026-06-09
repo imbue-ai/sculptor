@@ -1,6 +1,6 @@
 {
-  "id": "workspace-cost-tracker",
-  "name": "Workspace cost tracker",
+  "id": "linear-issue",
+  "name": "Linear",
   "version": "0.1.0",
   "entry": "main.js",
   "sdkVersion": "^1.0.0",

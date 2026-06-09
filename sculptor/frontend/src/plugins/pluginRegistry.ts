@@ -1,5 +1,6 @@
 import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
+import type { ComponentType } from "react";
 
 import type { PanelDefinition } from "~/components/panels/types.ts";
 
@@ -10,6 +11,12 @@ import type { PluginManifest } from "./types.ts";
  * static `workspacePanels` list and handed to `PanelRegistryProvider`.
  */
 export const pluginPanelsAtom = atom<ReadonlyArray<PanelDefinition>>([]);
+
+/**
+ * Settings components contributed by plugins via `registerSettings`, keyed by
+ * plugin id. The Plugins settings section renders these under each plugin.
+ */
+export const pluginSettingsComponentsAtom = atom<Readonly<Record<string, ComponentType>>>({});
 
 /**
  * User-added plugin sources, persisted to localStorage. A source is a URL or
