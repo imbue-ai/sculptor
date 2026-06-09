@@ -1,3 +1,5 @@
+import type { ComponentType } from "react";
+
 import type { PanelDefinition } from "~/components/panels/types.ts";
 
 /**
@@ -24,6 +26,13 @@ export type PluginManifest = {
  */
 export type PluginHostApi = {
   registerPanel: (panel: PanelDefinition) => () => void;
+  /**
+   * Registers a settings component shown under the plugin in the Plugins
+   * settings section. Rendered inside the host's PluginContext (so SDK hooks
+   * like `usePluginSetting` work) and a per-plugin error boundary. Returns a
+   * disposer.
+   */
+  registerSettings: (component: ComponentType) => () => void;
 };
 
 export type PluginActivate = (api: PluginHostApi) => void | (() => void) | Promise<void | (() => void)>;

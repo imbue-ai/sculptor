@@ -10,7 +10,7 @@ import { defineConfig } from "vite";
  * `public/plugins/<id>/` directory so the host serves it under
  * `/plugins/<id>/main.js`.
  */
-const HOST_PUBLIC_PLUGINS = path.resolve(__dirname, "../../public/plugins/workspace-cost-tracker");
+const HOST_PUBLIC_PLUGINS = path.resolve(__dirname, "../../public/plugins/linear-issue");
 
 const copyManifest = (): import("vite").Plugin => ({
   name: "copy-plugin-manifest",
