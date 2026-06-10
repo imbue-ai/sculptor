@@ -322,6 +322,80 @@ class OpenCloseSettingsOp(Operation):
 
 
 # ---------------------------------------------------------------------------
+# File browser / file viewer ops
+# ---------------------------------------------------------------------------
+
+
+class OpenFileFromBrowserOp(Operation):
+    """Click a random *file* row in the file browser to open it in the diff panel.
+
+    Folder rows carry ``aria-expanded``; file rows don't — that's how we pick
+    only files. Requires the file browser panel to be open (toggle_panel_icon
+    and the default panel layout both get us there).
+    """
+
+    name = "open_file_from_browser"
+    weight = 1.0
+
+    def is_available(self, ctx: OperationContext) -> bool:
+        panel = ctx.page.get_by_test_id(ElementIDs.FILE_BROWSER_PANEL)
+        if not panel.is_visible():
+            return False
+        return panel.get_by_test_id(ElementIDs.FILE_BROWSER_TREE_ROW).count() > 0
+
+    def execute(self, ctx: OperationContext) -> None:
+        panel = ctx.page.get_by_test_id(ElementIDs.FILE_BROWSER_PANEL)
+        rows = panel.get_by_test_id(ElementIDs.FILE_BROWSER_TREE_ROW)
+        count = rows.count()
+        file_indices = [i for i in range(count) if rows.nth(i).get_attribute("aria-expanded") is None]
+        if not file_indices:
+            # Only folders visible — expand a random one so files appear next time.
+            index = ctx.rng.randrange(count)
+            ctx.record_event("open_file_expanded_folder", index=index, total=count)
+            rows.nth(index).click()
+            return
+        index = ctx.rng.choice(file_indices)
+        row = rows.nth(index)
+        path = row.get_attribute("data-tree-path")
+        ctx.record_event("open_file_pick", path=path, index=index, total=count)
+        row.click()
+        expect(ctx.page.get_by_test_id(ElementIDs.DIFF_PANEL)).to_be_visible(timeout=10_000)
+
+
+class ScrollOpenFileOp(Operation):
+    """Scroll up/down inside the currently-open file view via mouse wheel."""
+
+    name = "scroll_open_file"
+    weight = 1.0
+
+    def is_available(self, ctx: OperationContext) -> bool:
+        # Requires a file to actually be rendering in the diff panel — any of
+        # the three content surfaces (read-only preview, unified, split).
+        if not ctx.page.get_by_test_id(ElementIDs.DIFF_PANEL).is_visible():
+            return False
+        return any(
+            ctx.page.get_by_test_id(testid).count() > 0 and ctx.page.get_by_test_id(testid).first.is_visible()
+            for testid in (ElementIDs.READ_ONLY_PREVIEW, ElementIDs.DIFF_VIEW_UNIFIED, ElementIDs.DIFF_VIEW_SPLIT)
+        )
+
+    def execute(self, ctx: OperationContext) -> None:
+        for testid in (ElementIDs.READ_ONLY_PREVIEW, ElementIDs.DIFF_VIEW_UNIFIED, ElementIDs.DIFF_VIEW_SPLIT):
+            content = ctx.page.get_by_test_id(testid)
+            if content.count() > 0 and content.first.is_visible():
+                break
+        else:
+            ctx.record_event("scroll_open_file_vanished")
+            return
+        content.first.hover()
+        delta = ctx.rng.randint(200, 1_500)
+        ctx.record_event("scroll_open_file", testid=str(testid), delta=delta)
+        ctx.page.mouse.wheel(0, delta)
+        # Occasionally scroll back up so we exercise both directions.
+        if ctx.rng.random() < 0.5:
+            ctx.page.mouse.wheel(0, -delta)
+
+
+# ---------------------------------------------------------------------------
 # Chaos
 # ---------------------------------------------------------------------------
 
@@ -411,13 +485,25 @@ def invariant_top_bar_or_onboarding(ctx: OperationContext) -> None:
     )
 
 
+# Toast variants that indicate something went wrong. Values match the
+# ToastType const in frontend/src/components/Toast.tsx, exposed on the DOM as
+# data-toast-type. "default" and "success" (e.g. "Agent stopped successfully")
+# are benign.
+_ERROR_TOAST_TYPES = ("error", "warning", "errorProminent")
+
+
 def invariant_no_unexpected_error_toast(ctx: OperationContext) -> None:
-    """Soft-flag if an error toast is currently visible (does not abort)."""
-    toast = ctx.page.get_by_test_id(ElementIDs.TOAST)
-    if toast.count() == 0 or not toast.first.is_visible():
-        return
-    text = toast.first.inner_text()
-    ctx.soft_check("no_error_toast", lambda: _assert(False, f"toast visible: {text!r}"))
+    """Soft-flag if an error/warning toast is currently visible (does not abort)."""
+    toasts = ctx.page.get_by_test_id(ElementIDs.TOAST)
+    for i in range(toasts.count()):
+        toast = toasts.nth(i)
+        if not toast.is_visible():
+            continue
+        toast_type = toast.get_attribute("data-toast-type")
+        if toast_type not in _ERROR_TOAST_TYPES:
+            continue
+        message = f"{toast_type} toast visible: {toast.inner_text()!r}"
+        ctx.soft_check("no_error_toast", lambda message=message: _assert(False, message))
 
 
 def _assert(condition: bool, message: str) -> None:
@@ -440,6 +526,8 @@ DEFAULT_OPERATIONS: list[Operation] = [
     AddAgentToWorkspaceOp(),
     TogglePanelIconOp(),
     StopRunningAgentOp(),
+    OpenFileFromBrowserOp(),
+    ScrollOpenFileOp(),
     NavigateHomeOp(),
     OpenCloseCommandPaletteOp(),
     OpenCloseSettingsOp(),
