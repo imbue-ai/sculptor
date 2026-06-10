@@ -289,12 +289,18 @@ def resolve_output_path() -> Path | None:
     """Return the JSONL output path, or None if perf collection is disabled.
 
     Reads ``SCULPTOR_PERF_OUTPUT_PATH``; if unset, defaults to
-    ``test-results/perf-measurements.jsonl`` under the current working dir.
+    ``perf-results/perf-measurements.jsonl`` under the current working dir.
     Set the env var to an empty string to disable output entirely.
+
+    Deliberately NOT under ``test-results/``: pytest-playwright wipes that
+    directory at session start, so measurements accumulated there survive
+    only the most recent pytest invocation — repeat-run workflows (e.g.
+    re-running one scenario 3x for variance) silently lose all but the
+    last run's data.
     """
     raw = os.environ.get("SCULPTOR_PERF_OUTPUT_PATH")
     if raw is None:
-        return Path.cwd() / "test-results" / "perf-measurements.jsonl"
+        return Path.cwd() / "perf-results" / "perf-measurements.jsonl"
     if raw == "":
         return None
     return Path(raw)
