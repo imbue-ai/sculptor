@@ -16,6 +16,7 @@ from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.primitives.threads import StopGapBackgroundPollingStreamSource
+from sculptor.primitives.threads import StopPolling
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.data_model_service.api import CompletedTransaction
 from sculptor.services.git_repo_service.api import ReadOnlyGitRepo
@@ -27,13 +28,39 @@ from sculptor.web.derived import WorkspaceBranchInfo
 from sculptor.web.derived import WorkspaceRemoteBranchesInfo
 
 
+def _is_missing_repo_error(exc: BaseException) -> bool:
+    """Whether a git failure means the workspace repo is gone for good.
+
+    A torn-down workspace presents one of two ways (see SCU-1429):
+    - its working directory was removed entirely, which the git service surfaces
+      as a ``GitRepoNotFoundError`` (the repo path no longer exists);
+    - the directory survives but is no longer a git repo — e.g. a worktree whose
+      gitdir was pruned — which makes git print ``fatal: not a git repository``.
+
+    Both are permanent from this backend's perspective: a workspace's working
+    directory is stable for its lifetime, so once its repo vanishes the poller
+    will never succeed again and should stop rather than retry forever.
+    """
+    # NOTE: GitRepoNotFoundError is a GitRepoError subclass, so it must be
+    # checked first (it carries no stderr, so the stderr branch below misses it).
+    if isinstance(exc, GitRepoNotFoundError):
+        return True
+    if isinstance(exc, GitRepoError):
+        stderr = exc.stderr
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode("utf-8", errors="replace")
+        return stderr is not None and "not a git repository" in stderr
+    return False
+
+
 def _get_branch_unless_repo_missing(repo: ReadOnlyGitRepo) -> str | None:
     try:
         return repo.get_current_git_branch()
     except GitRepoNotFoundError as e:
-        logger.debug("Failed to get current git branch because the repo doesn't exist: {}", e)
-        return None
+        raise StopPolling(f"workspace repo is gone (working dir missing): {e}") from e
     except GitRepoError as e:
+        if _is_missing_repo_error(e):
+            raise StopPolling(f"workspace repo is gone (not a git repository): {e}") from e
         if e.branch_name is not None:
             raise
         logger.debug("There is no current branch: {}", e)
@@ -233,6 +260,10 @@ class _WorkspaceBranchPollingCallback:
                 current_branch=current_branch,
                 workspace_id=self._workspace_id,
             )
+        except StopPolling:
+            # The repo is gone for good; let the polling source stop us rather
+            # than swallowing this into the generic failure path below.
+            raise
         except Exception as e:
             if self._first_failure_since_last_success is None:
                 self._first_failure_since_last_success = (datetime.datetime.now(), e)
@@ -272,6 +303,10 @@ class _WorkspaceRemoteBranchesPollingCallback:
                 remote_branches=tuple(branches),
             )
         except Exception as e:
+            if _is_missing_repo_error(e):
+                # The repo is gone for good; stop polling rather than retrying
+                # (and logging) every cycle until process shutdown (SCU-1429).
+                raise StopPolling(f"workspace repo is gone: {e}") from e
             if self._first_failure_since_last_success is None:
                 self._first_failure_since_last_success = (datetime.datetime.now(), e)
                 log_exception(

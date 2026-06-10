@@ -24,7 +24,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from imbue_core.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.primitives.threads import StopPolling
 from sculptor.service_collections.service_collection import CompleteServiceCollection
@@ -62,9 +62,7 @@ def healthy_worktree(
     yield base, worktree
 
 
-def _branch_callback(
-    worktree: Path, cg: ConcurrencyGroup
-) -> _WorkspaceBranchPollingCallback:
+def _branch_callback(worktree: Path, cg: ConcurrencyGroup) -> _WorkspaceBranchPollingCallback:
     return _WorkspaceBranchPollingCallback(
         workspace_id=WorkspaceID(),
         workspace_working_dir=worktree,
@@ -73,9 +71,7 @@ def _branch_callback(
     )
 
 
-def _remote_branches_callback(
-    worktree: Path, cg: ConcurrencyGroup
-) -> _WorkspaceRemoteBranchesPollingCallback:
+def _remote_branches_callback(worktree: Path, cg: ConcurrencyGroup) -> _WorkspaceRemoteBranchesPollingCallback:
     return _WorkspaceRemoteBranchesPollingCallback(
         workspace_id=WorkspaceID(),
         workspace_working_dir=worktree,

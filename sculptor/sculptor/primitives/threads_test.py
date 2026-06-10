@@ -3,7 +3,7 @@
 import time
 from queue import Queue
 
-from imbue_core.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.primitives.threads import StopGapBackgroundPollingStreamSource
 from sculptor.primitives.threads import StopPolling
 

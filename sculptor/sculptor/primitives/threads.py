@@ -55,7 +55,14 @@ class StopGapBackgroundPollingStreamSource(Generic[T]):
     def _poll_into_queue(self) -> None:
         # Wait at the beginning rather than end so that we don't race with stream tests
         while not self.stop_event.wait(self.check_interval_in_seconds):
-            next_value = self.polling_callback()
+            try:
+                next_value = self.polling_callback()
+            except StopPolling as e:
+                # The callback has determined the polled resource is gone for
+                # good; stop instead of retrying forever (SCU-1429).
+                logger.debug("Polling callback requested stop: {}", e)
+                self.stop_event.set()
+                return
             if next_value is not None and next_value != self.last_seen:
                 self.output_queue.put(next_value)
                 self.last_seen = next_value
