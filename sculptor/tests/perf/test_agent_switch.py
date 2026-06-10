@@ -17,8 +17,6 @@ from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
-from sculptor.testing.elements.alpha_chat_view import disable_legacy_chat_view
-from sculptor.testing.elements.alpha_chat_view import enable_legacy_chat_view
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
@@ -63,46 +61,31 @@ def blend_long_history(page: Page) -> None:
     of completed chat; agent B is empty.  Stresses message virtualization,
     chat-cache hydration, and the prompt-navigator dot rail on agent switch.
 
-    Build-up runs in the *legacy* chat view as a workaround for SCU-1324
-    (alpha chat stalls after ~4 rapid sends — the assistant message arrives
-    at the backend but never renders). Legacy is on its way out; once
-    SCU-1324 is fixed, drop the toggle and use alpha throughout.  We flip
-    back to alpha before the measurement so the measured switch reflects
-    the production-default UI.
+    Builds the history directly in the (default) alpha chat view.  The
+    legacy-view workaround this blend used to carry — for the SCU-1324
+    rapid-send stall — was removed when legacy chat support was deleted
+    from the app; alpha is now the only view.
     """
-    enable_legacy_chat_view(page)
     task_page: PlaywrightTaskPage = start_task_and_wait_for_ready(
         page, prompt=_fake_claude_text_prompt("response 1"), workspace_name="Perf Long History"
     )
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
     # Strong "agent is idle" signal between sends: empty queue + no thinking
-    # indicator.  Asserting cumulative DOM counts here was brittle (the count
-    # occasionally lagged the DB for one turn and never caught up before the
-    # expect timeout) — the messages are durably persisted either way, so we
-    # re-verify the full count once after the post-blend reload below.
+    # indicator.  We don't assert cumulative DOM counts in the loop — alpha
+    # virtualizes the list so the DOM never holds all 2*N messages, and the
+    # count can briefly lag the DB; the idle signal is what the next send
+    # actually needs.
     queue_bar = chat_panel.get_queued_message_bar()
     thinking = chat_panel.get_thinking_indicator()
-    # Per-turn idle wait grows with the agent's message history. Empirically
-    # FakeClaude's reply latency drifts from ~0.4s near turn 1 up to a few
-    # seconds past turn 60 as the message log grows, so default 30s is too
-    # tight a margin for the late loop. 90s leaves room and still bounds the
-    # blend's wall time.
+    # Per-turn idle wait grows with the agent's message history (FakeClaude's
+    # reply latency drifts up as the log grows), so give the late loop more
+    # than the default 30s while still bounding the blend's wall time.
     per_turn_timeout_ms = 90_000
     for i in range(2, _LONG_HISTORY_TURNS + 1):
         send_chat_message(chat_panel=chat_panel, message=_fake_claude_text_prompt(f"response {i}"))
         expect(queue_bar).to_have_count(0, timeout=per_turn_timeout_ms)
         expect(thinking).not_to_be_visible(timeout=per_turn_timeout_ms)
-    disable_legacy_chat_view(page)
-    # After the reload, the SPA re-hydrates on alpha view.  Don't assert the
-    # full message count here: alpha virtualizes the chat list, so the DOM
-    # only contains the visible window (~7 items at viewport top), not all
-    # 2 * N messages.  Confirm the chat panel and *some* messages rendered
-    # — that's enough to know history is live without coupling the test to
-    # the virtualizer's viewport math.
-    task_page = PlaywrightTaskPage(page=page)
-    chat_panel = task_page.get_chat_panel()
-    expect(chat_panel.get_messages().first).to_be_visible()
     page.get_by_test_id(ElementIDs.ADD_AGENT_BUTTON).click()
     expect(page.get_by_test_id(ElementIDs.AGENT_TAB)).to_have_count(2)
 
