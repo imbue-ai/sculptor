@@ -63,6 +63,7 @@ export const Toast = memo(function Toast({
       duration={duration}
       onClick={(e) => e.stopPropagation()}
       data-testid={ElementIds.TOAST}
+      data-toast-type={type}
     >
       <Flex className={styles.content} align="center" gap="2" justify="start">
         {type === ToastType.ERROR_PROMINENT && <AlertTriangle size={18} className={styles.prominentIcon} />}
