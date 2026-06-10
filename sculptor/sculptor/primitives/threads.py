@@ -19,6 +19,17 @@ T = TypeVar("T")
 _POLL_THREAD_SHUTDOWN_TIMEOUT_IN_SECONDS = 10.0
 
 
+class StopPolling(Exception):
+    """Raised by a polling callback to permanently stop its polling source.
+
+    A ``StopGapBackgroundPollingStreamSource`` otherwise invokes its callback
+    forever on a fixed interval. When the resource being polled is gone for
+    good (e.g. a workspace whose git repo was torn down — see SCU-1429), the
+    callback raises this so the source stops its thread instead of retrying the
+    (now-pointless) work — and spamming git errors — until process shutdown.
+    """
+
+
 class StopGapBackgroundPollingStreamSource(Generic[T]):
     """
     DONT USE THIS PATTERN.
