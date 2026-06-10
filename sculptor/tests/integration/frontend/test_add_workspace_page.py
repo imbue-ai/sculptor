@@ -16,7 +16,6 @@ import pytest
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
-from sculptor.testing.elements.add_repo_dialog import PlaywrightAddRepoDialogElement
 from sculptor.testing.elements.chat_panel import select_model_by_name
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
@@ -445,27 +444,23 @@ def test_cmd_enter_in_repo_autocomplete_does_not_create_workspace(
     expect(submit_button).to_be_enabled()
 
     # Open the "Open New Repo" dialog from the repo selector.
-    add_ws_page.get_project_selector().click()
-    add_ws_page.get_open_new_repo_button().click()
-
-    add_repo_dialog = PlaywrightAddRepoDialogElement(
-        locator=page.get_by_test_id(ElementIDs.ADD_REPO_DIALOG), page=page
-    )
+    add_repo_dialog = add_ws_page.open_add_repo_dialog()
     path_input = add_repo_dialog.get_path_input()
-    expect(path_input).to_be_visible()
 
-    # Type a path so the autocomplete dropdown opens — the real scenario where
-    # the dropdown hides the Add button and Cmd+Enter is needed to submit.
+    # Type a path and confirm the input holds it. Cmd+Enter submits the path
+    # regardless of dropdown state, so this does not depend on the host home
+    # directory listing any subdirectories (which would flake on empty-home CI).
     path_input.fill("~/")
-    expect(add_repo_dialog.get_path_autocomplete_items().first).to_be_visible()
+    expect(path_input).to_have_value("~/")
 
     # Submit the path with Cmd+Enter.
     path_input.press(f"{mod_key}+Enter")
 
-    # Desired behaviour: the workspace is NOT created. Give the (buggy)
-    # workspace-creation path ample time to navigate to the chat panel; if it
-    # ever appears, the keystroke leaked to the outer form and created the
-    # workspace.
+    # Desired behaviour: the workspace is NOT created. Wait long enough for the
+    # (buggy) workspace-creation path to navigate to the chat panel — when the
+    # bug is present it does so within a few seconds — then conclude it did not.
+    # The 10s is a deliberate bounded wait for a negative assertion (the panel
+    # is expected to never appear), not a tightened positive timeout.
     chat_panel = add_ws_page.get_chat_panel()
     try:
         expect(chat_panel).to_be_visible(timeout=10_000)
@@ -474,7 +469,7 @@ def test_cmd_enter_in_repo_autocomplete_does_not_create_workspace(
     else:
         pytest.fail(
             "Cmd+Enter in the repo autocomplete created the workspace and "
-            "navigated to the chat panel (SCU-1450 regression)"
+            + "navigated to the chat panel (SCU-1450 regression)"
         )
 
     # Confirm we are still on the New Workspace page (no navigation happened).
