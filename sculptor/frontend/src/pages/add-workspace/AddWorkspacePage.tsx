@@ -36,7 +36,12 @@ import {
   convertNewWorkspaceToTabAtom,
   markDraftCreatingAtom,
 } from "../../common/state/atoms/workspaces.ts";
-import { useDraftTabName } from "../../common/state/hooks/usePromptDraft.ts";
+import {
+  useDraftBranchNameOverride,
+  useDraftProjectId,
+  useDraftSourceBranch,
+  useDraftTabName,
+} from "../../common/state/hooks/usePromptDraft.ts";
 import { useRepoInfo } from "../../common/state/hooks/useRepoInfo.ts";
 import { useTerminalAgentRegistrations } from "../../common/state/hooks/useTerminalAgentRegistrations.ts";
 import { BranchSelector } from "../../components/BranchSelector.tsx";
@@ -69,7 +74,14 @@ export const AddWorkspacePage = (): ReactElement => {
   // Project state — read from global atom so AddRepoDialog updates are reflected immediately
   const projects = useAtomValue(projectsArrayAtom);
   const updateProjects = useSetAtom(updateProjectsAtom);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  // Repo/branch selections are persisted per draftId (like the workspace name)
+  // so they survive the unmount/remount that happens when the user switches to
+  // another tab and back. See SCU-1427.
+  const [selectedProjectId, setSelectedProjectId] = useDraftProjectId(draftId);
+  // Latest selection, read inside the one-shot project-load effect without
+  // making it a dependency (which would re-fetch projects on every change).
+  const selectedProjectIdRef = useRef(selectedProjectId);
+  selectedProjectIdRef.current = selectedProjectId;
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
 
   // Form state. Worktree is the default mode; clone and in-place are opt-in.
@@ -93,24 +105,32 @@ export const AddWorkspacePage = (): ReactElement => {
     (value: string) => setWorkspaceNameDraft(value || null),
     [setWorkspaceNameDraft],
   );
-  const [userSelectedBranch, setUserSelectedBranch] = useState<string | null>(null);
+  const [userSelectedBranch, setUserSelectedBranch] = useDraftSourceBranch(draftId);
   const [isPending, setIsPending] = useState(false);
   const [toast, setToast] = useState<ToastContent | null>(null);
   // `null` means "use the auto-filled preview"; any string means the user has
   // taken over and we render their override. Both the value and the manual flag
   // collapse into one piece of state so they can never disagree.
-  const [branchNameOverride, setBranchNameOverride] = useState<string | null>(null);
+  const [branchNameOverride, setBranchNameOverride] = useDraftBranchNameOverride(draftId);
   const isBranchNameManuallyEdited = branchNameOverride !== null;
 
-  const handleModeChange = useCallback((nextMode: WorkspaceInitializationStrategy): void => {
-    setMode(nextMode);
-    setBranchNameOverride(null);
-  }, []);
+  const handleModeChange = useCallback(
+    (nextMode: WorkspaceInitializationStrategy): void => {
+      setMode(nextMode);
+      setBranchNameOverride(null);
+    },
+    [setBranchNameOverride],
+  );
 
-  const handleProjectChange = useCallback((nextProjectId: string | null): void => {
-    setSelectedProjectId(nextProjectId);
-    setBranchNameOverride(null);
-  }, []);
+  const handleProjectChange = useCallback(
+    (nextProjectId: string | null): void => {
+      setSelectedProjectId(nextProjectId);
+      // Switching repos invalidates branch choices made against the old repo.
+      setBranchNameOverride(null);
+      setUserSelectedBranch(null);
+    },
+    [setSelectedProjectId, setBranchNameOverride, setUserSelectedBranch],
+  );
 
   // Single source of truth for the branch-name field. The hook owns preview
   // fetching and the debounced collision check; the parent owns the override.
@@ -152,12 +172,20 @@ export const AddWorkspacePage = (): ReactElement => {
         const activeProjects = projectsResponse.data ?? [];
         updateProjects(activeProjects);
 
-        // Default to MRU project (response is a project ID string), fallback to first project
-        const mruProjectId = mruResponse.data;
-        if (mruProjectId && activeProjects.some((p) => p.objectId === mruProjectId)) {
-          setSelectedProjectId(mruProjectId);
-        } else if (activeProjects.length > 0) {
-          setSelectedProjectId(activeProjects[0].objectId);
+        // Keep a persisted selection (restored from a previous visit to this
+        // draft tab) when it still points at an existing project. Only fall back
+        // to the MRU project — then the first project — when there is no valid
+        // selection yet, so navigating away and back doesn't reset the repo.
+        const restoredProjectId = selectedProjectIdRef.current;
+        const hasValidSelection =
+          restoredProjectId !== null && activeProjects.some((p) => p.objectId === restoredProjectId);
+        if (!hasValidSelection) {
+          const mruProjectId = mruResponse.data;
+          if (mruProjectId && activeProjects.some((p) => p.objectId === mruProjectId)) {
+            setSelectedProjectId(mruProjectId);
+          } else if (activeProjects.length > 0) {
+            setSelectedProjectId(activeProjects[0].objectId);
+          }
         }
       } catch (error) {
         console.error("Failed to load projects:", error);
@@ -175,7 +203,7 @@ export const AddWorkspacePage = (): ReactElement => {
     return (): void => {
       isCancelled = true;
     };
-  }, [updateProjects]);
+  }, [updateProjects, setSelectedProjectId]);
 
   // Auto-select newly added projects
   const prevProjectIdsRef = useRef(new Set(projects.map((p) => p.objectId)));
@@ -186,15 +214,20 @@ export const AddWorkspacePage = (): ReactElement => {
 
     if (newIds.length > 0) {
       setSelectedProjectId(newIds[newIds.length - 1].objectId);
+      // A freshly added repo replaces the selection, so a branch picked against
+      // the previous repo no longer applies.
+      setUserSelectedBranch(null);
     }
-  }, [projects]);
+  }, [projects, setSelectedProjectId, setUserSelectedBranch]);
 
-  // Refresh branch info when project changes
+  // Refresh branch info when the project changes. The source-branch reset lives
+  // in handleProjectChange / the new-project effect (i.e. on a real user-driven
+  // change) rather than here, so restoring a persisted project on remount does
+  // not wipe the persisted source branch.
   useEffect(() => {
     if (!selectedProjectId) return;
     fetchCurrentBranch();
     fetchRepoInfo();
-    setUserSelectedBranch(null);
   }, [selectedProjectId, fetchCurrentBranch, fetchRepoInfo]);
 
   const handleSubmit = useCallback(async (): Promise<void> => {
@@ -244,7 +277,13 @@ export const AddWorkspacePage = (): ReactElement => {
       // so the workspace is already in workspaceIdsAtom.  Replace the
       // pseudo-tab with the real workspace tab in its same position.
       convertNewWorkspaceToTab({ draftId, workspaceId });
+      // The draft has become a real workspace — drop all of its persisted
+      // form state so the (now-defunct) draftId doesn't leave stale entries
+      // behind in localStorage.
       setWorkspaceNameDraft(null);
+      setSelectedProjectId(null);
+      setUserSelectedBranch(null);
+      setBranchNameOverride(null);
 
       // If the remembered registered agent's registration is no longer present
       // (deleted since it was picked), fall back to Claude rather than leaving
@@ -332,6 +371,9 @@ export const AddWorkspacePage = (): ReactElement => {
     defaultModelPreference,
     navigateToAgent,
     setWorkspaceNameDraft,
+    setSelectedProjectId,
+    setUserSelectedBranch,
+    setBranchNameOverride,
     convertNewWorkspaceToTab,
     markDraftCreating,
     clearDraftCreating,
