@@ -313,6 +313,18 @@ export function defineFrontendConfig(opts: FrontendConfigOptions): UserConfigExp
         sentryRelease: opts.sentryRelease(env),
       }),
       build: { sourcemap: true, ...opts.build },
+      // ``keepNames`` preserves ``function.name`` (and ``class.name``) through
+      // esbuild's minification. This keeps component names readable in three
+      // places that otherwise see mangled identifiers: the perf harness's
+      // React-commit attribution (sculptor/tests/perf/), production Sentry /
+      // PostHog error stacks, and React DevTools against a shipped build.
+      //
+      // Cost: ~+80 KB gzipped across all built JS (~+2.5%), ~+69 KB of it on
+      // the main entry chunk. No runtime cost — it only preserves name
+      // strings, nothing that executes. Deemed an acceptable standing cost
+      // for always-on name attribution; revisit if a first-load size budget
+      // makes the entry-chunk delta matter. (SCU-1294)
+      esbuild: { keepNames: true },
       clearScreen: false,
       envPrefix: "SCULPTOR_",
       resolve: sharedResolve(opts.root),
