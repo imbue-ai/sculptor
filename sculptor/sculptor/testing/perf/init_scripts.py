@@ -106,12 +106,14 @@ PERF_INIT_SCRIPT = (
         commitsByComponent: {},
         domMutations: 0,
         domMutationsByType: { childList: 0, characterData: 0, attributes: 0 },
+        domMutationsByTestid: {},
         observer: null,
         reset: function() {
             this.commits = 0;
             this.commitsByComponent = {};
             this.domMutations = 0;
             this.domMutationsByType = { childList: 0, characterData: 0, attributes: 0 };
+            this.domMutationsByTestid = {};
             this.active = true;
         },
         stop: function() {
@@ -123,6 +125,7 @@ PERF_INIT_SCRIPT = (
                 commitsByComponent: Object.assign({}, this.commitsByComponent),
                 domMutations: this.domMutations,
                 domMutationsByType: Object.assign({}, this.domMutationsByType),
+                domMutationsByTestid: Object.assign({}, this.domMutationsByTestid),
             };
         },
     };
@@ -133,6 +136,15 @@ PERF_INIT_SCRIPT = (
         return null;
     }
 
+    // React fiber.flags bits we care about: Placement (2) = added/moved,
+    // Update (4) = props/state changed. Skipping fibers without these
+    // flags filters out "fiber happened to be in the committed subtree"
+    // (which biases counts toward static infrastructure like Radix Slot)
+    // and leaves only fibers React actually did work on this commit.
+    // The bit values are React-internal but have been stable across the
+    // React 18/19 lines we ship.
+    var REACT_WORK_FLAGS = 6;
+
     window.__REACT_DEVTOOLS_GLOBAL_HOOK__.onCommitFiberRoot = function(_id, root) {
         var perf = window.__SCULPTOR_PERF__;
         if (!perf.active) return;
@@ -140,15 +152,28 @@ PERF_INIT_SCRIPT = (
         if (!root || !root.current) return;
         function walk(fiber) {
             if (!fiber) return;
-            var name = fiberName(fiber.type);
-            if (name && name.length < 100) {
-                perf.commitsByComponent[name] = (perf.commitsByComponent[name] || 0) + 1;
+            if (fiber.flags & REACT_WORK_FLAGS) {
+                var name = fiberName(fiber.type);
+                if (name && name.length < 100) {
+                    perf.commitsByComponent[name] = (perf.commitsByComponent[name] || 0) + 1;
+                }
             }
             walk(fiber.child);
             walk(fiber.sibling);
         }
         walk(root.current);
     };
+
+    function bucketForRecord(target) {
+        // MutationRecord.target may be a Text/Comment node (characterData)
+        // or an Element. Step up to the nearest element, then to the
+        // nearest tagged ancestor. Falls back to '__untagged__' when no
+        // testid is reachable (deep-internal Radix/styled subtrees, etc.).
+        var el = target && target.nodeType === 1 ? target : target && target.parentElement;
+        if (!el) return '__untagged__';
+        var tagged = el.closest('[data-testid]');
+        return tagged ? tagged.getAttribute('data-testid') : '__untagged__';
+    }
 
     function attachMutationObserver() {
         if (!document.body || window.__SCULPTOR_PERF__.observer) return;
@@ -157,17 +182,22 @@ PERF_INIT_SCRIPT = (
             if (!perf.active) return;
             for (var i = 0; i < records.length; i++) {
                 var r = records[i];
+                var n = 0;
                 if (r.type === 'childList') {
-                    var n = r.addedNodes.length + r.removedNodes.length;
-                    perf.domMutations += n;
+                    n = r.addedNodes.length + r.removedNodes.length;
                     perf.domMutationsByType.childList += n;
                 } else if (r.type === 'characterData') {
-                    perf.domMutations++;
-                    perf.domMutationsByType.characterData++;
+                    n = 1;
+                    perf.domMutationsByType.characterData += n;
                 } else if (r.type === 'attributes') {
-                    perf.domMutations++;
-                    perf.domMutationsByType.attributes++;
+                    n = 1;
+                    perf.domMutationsByType.attributes += n;
+                } else {
+                    continue;
                 }
+                perf.domMutations += n;
+                var bucket = bucketForRecord(r.target);
+                perf.domMutationsByTestid[bucket] = (perf.domMutationsByTestid[bucket] || 0) + n;
             }
         });
         obs.observe(document.body, {

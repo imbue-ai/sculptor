@@ -104,9 +104,17 @@ class Measurement:
     fg_by_route: dict[str, int]
     bg_by_route: dict[str, int]
     commits: int
+    # Commits-by-component counts fibers React actually did work on this
+    # commit (Placement | Update flags). Static infrastructure like Radix
+    # Slot drops out; the entries that remain are real re-renders.
     commits_by_component: dict[str, int]
     dom_mutations: int
     dom_mutations_by_type: dict[str, int]
+    # Mutations bucketed by the nearest enclosing ``data-testid`` ancestor.
+    # ``__untagged__`` collects mutations that have no tagged ancestor —
+    # mostly deep inside Radix/styled-components subtrees. Coverage is
+    # whatever fraction of the DOM we've tagged for test ids.
+    dom_mutations_by_testid: dict[str, int]
     checkpoints: list[Checkpoint] = field(default_factory=list)
     test_nodeid: str = ""
 
@@ -195,6 +203,7 @@ class _Window:
             commits_by_component=dict(snap["commitsByComponent"]),
             dom_mutations=int(snap["domMutations"]),
             dom_mutations_by_type=dict(snap["domMutationsByType"]),
+            dom_mutations_by_testid=dict(snap["domMutationsByTestid"]),
             checkpoints=list(self._checkpoints),
         )
 
