@@ -1,11 +1,8 @@
 """Scenario: Panel resize render cascade.
 
 Measures re-renders triggered by resizing the panel divider between the
-center content area and the right/left sidebar via keyboard arrow keys.
-
-We open a side panel first via the sidebar keyboard shortcut (Cmd+shift+e for
-file browser, or directly clicking a sidebar icon) to ensure a resize handle
-is present, then resize 5 left and 5 right.
+center content area and the left section via keyboard arrow keys on the
+resize handle, 5 steps left then 5 steps right.
 """
 
 import time
@@ -29,7 +26,50 @@ TARGET_COMPONENTS = [
     "WorkspaceBanner",
     "DiffSummary",
     "FileBrowserPanel",
+    # Compact layout (uniform panels)
+    "CompactLayout",
+    "SplittableSection",
+    "SplittableSectionInner",
+    "PanelSection",
+    "PanelSectionInner",
+    "SectionTabBarInner",
+    "SectionBodyInner",
+    "SortableTab",
+    "SortableTabContentInner",
+    "TabBar",
+    "FilesPanel",
+    "MasterDetailPanel",
+    "ChatPanelContent",
+    "AgentPanel",
 ]
+
+_ONBOARDING_FLAGS = (
+    "hasDependenciesPassing",
+    "has_dependencies_passing",
+    "hasEmail",
+    "has_email",
+    "hasPrivacyConsent",
+    "has_privacy_consent",
+    "hasProject",
+    "has_project",
+)
+
+
+def _patch_config_status(route):
+    response = route.fetch()
+    body = response.json()
+    for key in _ONBOARDING_FLAGS:
+        if key in body:
+            body[key] = True
+    route.fulfill(response=response, json=body)
+
+
+def _bypass_onboarding_gate(page):
+    """RequireOnboarding blocks the workspace behind a wizard whose
+    installation step waits on a real dependency download — not viable on the
+    throwaway perf backends. Force the config-status flags it checks instead;
+    applied identically to baseline and current, so the comparison is fair."""
+    page.route("**/api/v1/config/status*", _patch_config_status)
 
 
 def _open_side_panel(page):
@@ -53,8 +93,11 @@ def _open_side_panel(page):
 
 
 def setup(page, base_url, workspace_id, task_id):
+    _bypass_onboarding_gate(page)
+    # NOTE: no networkidle waits — the workspace page keeps long-lived
+    # connections open, so networkidle never fires once it loads.
     page.goto(f"{base_url}/#/ws/{workspace_id}/agent/{task_id}")
-    page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("load")
     time.sleep(5)
     _open_side_panel(page)
     # Wait for panel to mount

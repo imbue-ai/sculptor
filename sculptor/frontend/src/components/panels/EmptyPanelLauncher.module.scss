@@ -1,0 +1,59 @@
+.launcher {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--space-4);
+  width: 100%;
+}
+
+// A centered column: the button, heading, and rows are all center-aligned, and
+// the column itself is centered in the section via `margin: auto` (which also
+// keeps it scrollable when the section is too short for the full Quick add list).
+.quick {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  margin: auto;
+  width: 210px;
+}
+
+.splitHint {
+  padding: 0 var(--space-2) var(--space-3);
+  text-align: center;
+}
+
+.heading {
+  padding: 0 var(--space-2) var(--space-3);
+}
+
+// The Quick add shortcuts: soft Buttons stacked and centered, each sized to
+// its own label, with even spacing between them.
+.quickList {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+// The primary action, above Quick add, sized to its text and centered over the
+// list, with space below so the shortcuts read as a separate, secondary block.
+.browse {
+  align-items: center;
+  background: var(--gray-a3);
+  border: 1px solid var(--gray-a5);
+  border-radius: var(--radius-3);
+  color: var(--gray-12);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-medium);
+  justify-content: center;
+  margin-bottom: var(--space-5);
+  padding: var(--space-1) var(--space-3);
+}
+
+.browse:hover {
+  background: var(--gray-a4);
+}

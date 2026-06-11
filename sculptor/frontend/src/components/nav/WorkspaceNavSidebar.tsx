@@ -161,7 +161,6 @@ export const WorkspaceNavSidebar = (): ReactElement | null => {
         />
       </nav>
 
-      <div className={styles.sectionTitle}>Repos</div>
       <div className={styles.repoList}>
         {repoGroups.map((group) => {
           const isRepoCollapsed = collapsedRepos[group.projectId] ?? false;

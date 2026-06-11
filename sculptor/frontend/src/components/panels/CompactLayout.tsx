@@ -2,6 +2,7 @@ import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { AddPanelPalette } from "~/components/panels/AddPanelPalette.tsx";
 import { CENTER_PANEL_MIN_WIDTH_PX, PANEL_MIN_PX } from "~/components/panels/constants.ts";
 import { PanelDndProvider } from "~/components/panels/PanelDndProvider.tsx";
 import { ResizeHandle } from "~/components/panels/ResizeHandle.tsx";
@@ -140,6 +141,7 @@ export const CompactLayout = (): ReactElement => {
           </>
         )}
       </div>
+      <AddPanelPalette />
     </PanelDndProvider>
   );
 };

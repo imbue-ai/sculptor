@@ -12,6 +12,7 @@ import { useRegisterCommandAction } from "~/components/CommandPalette/commandAct
 import { agentDeleteTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
 import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
 import { CENTER_SECTION_ZONE } from "~/components/panels/sectionHooks.ts";
+import { usePaneNavigationShortcuts } from "~/components/panels/usePaneNavigationShortcuts.ts";
 import { useAddPanelMenu } from "~/pages/workspace/panels/useAddPanelMenu.ts";
 
 /**
@@ -29,6 +30,9 @@ export const AgentWorkspaceCommands = (): ReactElement => {
   const [deleteTarget, setDeleteTarget] = useAtom(agentDeleteTargetAtom);
   // New agents are created in the Center section, the default agent home.
   const { createAgent } = useAddPanelMenu(CENTER_SECTION_ZONE);
+
+  // Pane focus navigation (Ctrl+Alt+Arrow) and in-pane tab cycling (Ctrl+Tab).
+  usePaneNavigationShortcuts();
 
   const workspaceAgents = useMemo(() => {
     const agents = (tasks ?? []).filter((task) => task.workspaceId === workspaceID);

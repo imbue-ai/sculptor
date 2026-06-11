@@ -35,6 +35,8 @@ export type CommandRuntime = {
     toggleDevPanel: () => void;
     toggleZenMode: () => void;
     toggleFocusMode: () => void;
+    /** Maximize the focused panel to fill the workspace, or restore it. */
+    toggleMaximizePanel: () => void;
     toggleLeftPanel: () => void;
     toggleBottomPanel: () => void;
     toggleRightPanel: () => void;

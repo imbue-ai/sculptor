@@ -65,6 +65,7 @@ const makeRuntime = (overrides: Partial<CommandRuntime> = {}): CommandRuntime =>
       toggleDevPanel: vi.fn(),
       toggleZenMode: vi.fn(),
       toggleFocusMode: vi.fn(),
+      toggleMaximizePanel: vi.fn(),
       toggleLeftPanel: vi.fn(),
       toggleBottomPanel: vi.fn(),
       toggleRightPanel: vi.fn(),
@@ -325,6 +326,7 @@ describe("buildPanelCommands", () => {
         "view.toggle_bottom_panel",
         "view.focus_mode",
         "view.zen_mode",
+        "view.maximize_panel",
       ].sort(),
     );
   });
@@ -371,6 +373,7 @@ describe("buildPanelCommands", () => {
       "view.toggle_bottom_panel",
       "view.focus_mode",
       "view.zen_mode",
+      "view.maximize_panel",
     ]) {
       const cmd = cmds.find((c) => c.id === id)!;
       expect(cmd.onPage).toBe("view.layout");

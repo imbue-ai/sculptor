@@ -14,6 +14,7 @@ import type { ReactElement, ReactNode } from "react";
 import { useCallback } from "react";
 
 import {
+  draggedPanelIdAtom,
   panelDragStateAtom,
   panelRegistryAtom,
   panelsInZoneAtom,
@@ -61,7 +62,11 @@ type PanelDndProviderProps = {
  */
 export const PanelDndProvider = ({ children }: PanelDndProviderProps): ReactElement => {
   const store = useStore();
-  const drag = useAtomValue(panelDragStateAtom);
+  // Only the dragged panel id (stable for the whole drag), NOT the full drag
+  // state: the provider must not re-render on every insertion-index change —
+  // that would also keep the DragTabPreview element identity churning, defeating
+  // DragOverlay's children bail-out on its per-pointer-move re-renders.
+  const draggedPanelId = useAtomValue(draggedPanelIdAtom);
   const setDrag = useSetAtom(panelDragStateAtom);
   const { movePanel } = usePanelActions();
 
@@ -170,7 +175,9 @@ export const PanelDndProvider = ({ children }: PanelDndProviderProps): ReactElem
       onDragCancel={resetDrag}
     >
       {children}
-      <DragOverlay dropAnimation={null}>{drag ? <DragTabPreview panelId={drag.activePanelId} /> : null}</DragOverlay>
+      <DragOverlay dropAnimation={null}>
+        {draggedPanelId !== null ? <DragTabPreview panelId={draggedPanelId} /> : null}
+      </DragOverlay>
     </DndContext>
   );
 };
@@ -184,10 +191,9 @@ const DragTabPreview = ({ panelId }: DragTabPreviewProps): ReactElement | null =
   const registry = useAtomValue(panelRegistryAtom);
   const def = registry.find((p) => p.id === panelId);
   if (def === undefined) return null;
-  const Icon = def.icon;
   return (
     <div className={`${styles.overlayTab} ${tabStyles.tabCompact} ${tabStyles.compactActive}`}>
-      <span className={tabStyles.icon}>{def.tabIcon ?? <Icon size={13} />}</span>
+      {def.tabIcon && <span className={tabStyles.icon}>{def.tabIcon}</span>}
       <span className={tabStyles.compactLabel}>{def.displayName}</span>
     </div>
   );

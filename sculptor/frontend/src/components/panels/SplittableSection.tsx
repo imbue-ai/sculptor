@@ -1,14 +1,15 @@
 import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
-import { useCallback, useEffect, useRef } from "react";
+import { memo, useCallback, useEffect, useRef } from "react";
 
 import { panelsInZoneAtom } from "~/components/panels/atoms.ts";
 import type { SectionSide } from "~/components/panels/PanelSection.tsx";
 import { PanelSection } from "~/components/panels/PanelSection.tsx";
 import { ResizeHandle } from "~/components/panels/ResizeHandle.tsx";
-import { sectionSplitAtom } from "~/components/panels/sectionLayoutAtoms.ts";
+import { sectionSplitAtom, sectionSplitForZoneAtom } from "~/components/panels/sectionLayoutAtoms.ts";
 import type { ZoneId } from "~/components/panels/types.ts";
 import { toSplitZone } from "~/components/panels/types.ts";
+import { hasPendingSplitPanelAtom } from "~/pages/workspace/panels/panelDerivedAtoms.ts";
 
 import styles from "./SplittableSection.module.scss";
 
@@ -29,30 +30,37 @@ type SplittableSectionProps = {
  * handle, and a second PanelSection bound to the "<zone>:split" zone. Each
  * sub-section is a full PanelSection, so each gets its own tab strip and "+".
  */
-export const SplittableSection = ({ primaryZone, side }: SplittableSectionProps): ReactElement => {
-  const split = useAtomValue(sectionSplitAtom)[primaryZone];
+const SplittableSectionInner = ({ primaryZone, side }: SplittableSectionProps): ReactElement => {
+  // Per-zone slice: a split-ratio drag elsewhere must not re-render this section.
+  const split = useAtomValue(sectionSplitForZoneAtom(primaryZone));
   const setSectionSplit = useSetAtom(sectionSplitAtom);
   const splitZone = toSplitZone(primaryZone);
   const splitPanelCount = useAtomValue(panelsInZoneAtom(splitZone)).length;
+  // Boolean atom over assignments + the streaming task/terminal lists, so this
+  // section doesn't re-render on every task update — only when the answer flips.
+  // See panelDerivedAtoms.ts for why the pending window must not collapse the split.
+  const hasPendingSplitPanel = useAtomValue(hasPendingSplitPanelAtom(primaryZone));
 
   const containerRef = useRef<HTMLDivElement>(null);
   const primaryRef = useRef<HTMLDivElement>(null);
 
   const isStacked = split?.axis === "horizontal";
 
-  // Self-heal: if the split half loses its last panel through some path other
-  // than closing its tab — e.g. the agent in it is deleted, or it is moved out
-  // via another section's "+" — collapse the split so the primary reclaims the
-  // space (a split half is never left sitting empty).
+  // Self-heal: collapse the split when its SECONDARY half loses its last panel
+  // through some path other than closing its tab (e.g. the agent in it is
+  // deleted, or it is dragged/moved out). The primary then reclaims the space.
+  // We only watch the secondary half: an empty PRIMARY half is a valid state (a
+  // section split while it had a single tab leaves the primary empty by design),
+  // and primary emptying via removal is collapsed at the mutation site instead.
+  // The pending-panel guard makes this race-safe on reload (see above).
   useEffect(() => {
-    if (split !== undefined && splitPanelCount === 0) {
-      setSectionSplit((prev) => {
-        const next = { ...prev };
-        delete next[primaryZone];
-        return next;
-      });
-    }
-  }, [split, splitPanelCount, primaryZone, setSectionSplit]);
+    if (split === undefined || splitPanelCount > 0 || hasPendingSplitPanel) return;
+    setSectionSplit((prev) => {
+      const next = { ...prev };
+      delete next[primaryZone];
+      return next;
+    });
+  }, [split, splitPanelCount, hasPendingSplitPanel, primaryZone, setSectionSplit]);
 
   const handleResize = useCallback(
     (nextPrimaryPx: number): void => {
@@ -100,3 +108,7 @@ export const SplittableSection = ({ primaryZone, side }: SplittableSectionProps)
     </div>
   );
 };
+
+// Memoized with primitive props so CompactLayout's per-pointer-move re-renders
+// during section resizes stop at this boundary.
+export const SplittableSection = memo(SplittableSectionInner);

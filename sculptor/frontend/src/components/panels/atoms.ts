@@ -1,12 +1,13 @@
 import type { Atom } from "jotai";
 import { atom, createStore } from "jotai";
-import { atomFamily, atomWithStorage } from "jotai/utils";
+import { atomFamily, atomWithStorage, selectAtom } from "jotai/utils";
 
 import { keybindingsMapAtom } from "~/common/keybindings/atoms.ts";
 import type { KeybindingId } from "~/common/keybindings/types.ts";
 import { atomWithDebouncedStorage } from "~/common/state/atoms/atomWithDebouncedStorage.ts";
 import type { LayoutSide, PanelDefinition, PanelId, ZoneId } from "~/components/panels/types.ts";
 import { LAYOUT_SIDES, SIDE_ZONE_MAP, ZONE_IDS } from "~/components/panels/types.ts";
+import { areArraysShallowEqual } from "~/components/panels/utils.ts";
 
 // ── Panel registry atom ─────────────────────────────────────────────
 // Writable atom holding the current set of registered panels.
@@ -83,6 +84,14 @@ export const activeWorkspaceIdAtom = atom<string | null>(null);
 
 // Modal state atom — NOT persisted (resets on reload)
 export const modalPanelIdAtom = atom<PanelId | null>(null);
+
+// The section (zone) that currently holds user focus, or null until the user
+// first focuses a pane. Starts null so a fresh load shows no focus ring — the
+// indicator only appears once the user clicks into or keyboard-navigates to a
+// pane (it is intentionally NOT set by programmatic mount auto-focus). Drives
+// the subtle active-pane ring and is the origin for Ctrl+Alt+Arrow pane nav.
+// Non-persisted: focus is transient and should reset on reload.
+export const focusedZoneAtom = atom<ZoneId | null>(null);
 
 // Tracks whether a chat panel (real or skeleton) is currently mounted.
 // Chat-panel components flip this to `true` on mount and `false` on unmount,
@@ -253,6 +262,16 @@ export const activePanelInZoneAtom = (zoneId: ZoneId): Atom<PanelDefinition | un
 // this panel and the center diff area are visible; everything else is hidden.
 export const expandedPanelIdAtom = atom<PanelId | null>(null);
 
+// ── Maximize mode (compact layout) ───────────────────────────────────
+// When non-null, the section backing this zone is MAXIMIZED: it fills the
+// workspace area (covering the top banner) while the far-left nav rail stays
+// visible. The maximized section keeps its own tab strip, so a multi-panel
+// section can still switch panels while maximized. Distinct from
+// `expandedPanelIdAtom` (a diff-panel "review mode" used by the legacy
+// DockingLayout). Non-persisted: maximize is a transient, modal-ish view that
+// resets on reload, so a stale flag can never leave the app stuck maximized.
+export const maximizedZoneAtom = atom<ZoneId | null>(null);
+
 // ── Cross-section tab drag (non-persisted) ───────────────────────────
 // Tracks an in-flight tab drag so every PanelSection can preview the move
 // without committing it: the target section renders a drop highlight and a
@@ -275,6 +294,10 @@ export const panelDragStateAtom = atom<PanelDragState | null>(null);
  * removed from every section and re-inserted into the target section at the
  * insertion index, so its ghost appears to slide between sections. With no drag
  * in flight this is the zone's panels unchanged.
+ *
+ * Returns the input `panelIds` array (same reference) whenever the drag does
+ * not touch this zone, so derived atoms and memos over the result don't churn
+ * for uninvolved zones on every drag-state change.
  */
 export const computeDisplayedPanelIds = (inputs: {
   zone: ZoneId;
@@ -283,10 +306,105 @@ export const computeDisplayedPanelIds = (inputs: {
 }): ReadonlyArray<PanelId> => {
   const { zone, panelIds, drag } = inputs;
   if (!drag) return panelIds;
+  if (drag.targetZone !== zone && !panelIds.includes(drag.activePanelId)) return panelIds;
   const withoutActive = panelIds.filter((id) => id !== drag.activePanelId);
   if (drag.targetZone !== zone) return withoutActive;
   const index = Math.min(Math.max(drag.insertIndex, 0), withoutActive.length);
   return [...withoutActive.slice(0, index), drag.activePanelId, ...withoutActive.slice(index)];
+};
+
+// ── Per-zone drag-state slices ───────────────────────────────────────
+// During a drag, `panelDragStateAtom` changes on every insertion-index or
+// target-zone update. Components must NOT subscribe to it directly (that
+// re-renders every section, including heavy panel content, per change); they
+// subscribe to these narrow slices instead, which only notify when the value
+// for their own zone actually changes.
+
+export const isPanelDragActiveAtom = atom<boolean>((get) => get(panelDragStateAtom) !== null);
+
+// The dragged panel id, stable for the whole drag — lets the DragOverlay owner
+// render without re-rendering on every insertion-index change.
+export const draggedPanelIdAtom = atom<PanelId | null>((get) => get(panelDragStateAtom)?.activePanelId ?? null);
+
+const isDropTargetAtomMap = new Map<ZoneId, Atom<boolean>>(
+  ZONE_IDS.map((zoneId) => [
+    zoneId,
+    atom<boolean>((get) => {
+      const drag = get(panelDragStateAtom);
+      return drag !== null && drag.targetZone === zoneId && drag.sourceZone !== zoneId;
+    }),
+  ]),
+);
+
+export const isDropTargetAtom = (zoneId: ZoneId): Atom<boolean> => {
+  return isDropTargetAtomMap.get(zoneId)!;
+};
+
+// The dragged panel id while this zone is the drag target, else null. Tab
+// strips use it to extend their tab-definition pool with the incoming ghost —
+// pool membership then only changes when the ghost enters/leaves the zone,
+// not on every insertion-index change.
+const ghostPanelIdAtomMap = new Map<ZoneId, Atom<PanelId | null>>(
+  ZONE_IDS.map((zoneId) => [
+    zoneId,
+    atom<PanelId | null>((get) => {
+      const drag = get(panelDragStateAtom);
+      return drag !== null && drag.targetZone === zoneId ? drag.activePanelId : null;
+    }),
+  ]),
+);
+
+export const ghostPanelIdAtom = (zoneId: ZoneId): Atom<PanelId | null> => {
+  return ghostPanelIdAtomMap.get(zoneId)!;
+};
+
+// `selectAtom` with shallow-array equality keeps the previous reference when a
+// recompute yields the same ids — e.g. the source zone's list is re-filtered
+// (new array, same contents) on every drag-state change.
+const displayedPanelIdsAtomMap = new Map<ZoneId, Atom<ReadonlyArray<PanelId>>>(
+  ZONE_IDS.map((zoneId) => {
+    const base = atom<ReadonlyArray<PanelId>>((get) =>
+      computeDisplayedPanelIds({
+        zone: zoneId,
+        panelIds: get(panelsInZoneAtomMap.get(zoneId)!),
+        drag: get(panelDragStateAtom),
+      }),
+    );
+    return [zoneId, selectAtom(base, (ids) => ids, areArraysShallowEqual)];
+  }),
+);
+
+export const displayedPanelIdsAtom = (zoneId: ZoneId): Atom<ReadonlyArray<PanelId>> => {
+  return displayedPanelIdsAtomMap.get(zoneId)!;
+};
+
+// The id of the panel a zone should show as active: the stored active panel
+// when it is still in the zone, else the zone's first panel. (Distinct from
+// `activePanelInZoneAtom`, which resolves a PanelDefinition and has no
+// first-panel fallback.)
+const activePanelIdInZoneAtomMap = new Map<ZoneId, Atom<PanelId | undefined>>(
+  ZONE_IDS.map((zoneId) => [
+    zoneId,
+    atom<PanelId | undefined>((get) => {
+      const panelIds = get(panelsInZoneAtomMap.get(zoneId)!);
+      const candidate = get(activePanelPerZoneAtom)[zoneId];
+      return candidate && panelIds.includes(candidate) ? candidate : panelIds[0];
+    }),
+  ]),
+);
+
+export const activePanelIdInZoneAtom = (zoneId: ZoneId): Atom<PanelId | undefined> => {
+  return activePanelIdInZoneAtomMap.get(zoneId)!;
+};
+
+// Narrow per-zone focus flag: a focus change (adding/dropping a panel, or a
+// pane-navigation hotkey) must not re-render every section.
+const isZoneFocusedAtomMap = new Map<ZoneId, Atom<boolean>>(
+  ZONE_IDS.map((zoneId) => [zoneId, atom<boolean>((get) => get(focusedZoneAtom) === zoneId)]),
+);
+
+export const isZoneFocusedAtom = (zoneId: ZoneId): Atom<boolean> => {
+  return isZoneFocusedAtomMap.get(zoneId)!;
 };
 
 // ── Derived zone atom for "files" panel ────────────────────────────

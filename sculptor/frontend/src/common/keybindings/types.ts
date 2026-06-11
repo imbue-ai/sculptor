@@ -15,6 +15,7 @@ export type StaticKeybindingId =
   | "toggle_theme"
   | "focus_mode"
   | "zen_mode"
+  | "maximize_panel"
   | "toggle_left_panel"
   | "toggle_bottom_panel"
   | "toggle_right_panel"
@@ -24,7 +25,13 @@ export type StaticKeybindingId =
   | "open_in_app"
   | "find_in_file"
   | "toggle_tool_density"
-  | "clear_terminal";
+  | "clear_terminal"
+  | "focus_pane_left"
+  | "focus_pane_right"
+  | "focus_pane_up"
+  | "focus_pane_down"
+  | "next_pane_tab"
+  | "previous_pane_tab";
 
 export type PanelKeybindingId = `panel_${string}`;
 

@@ -10,7 +10,7 @@ import { autoUpdateStatusAtom, updateChannelAtom } from "~/common/state/atoms/au
 import { healthCheckDataAtom } from "~/common/state/atoms/backend.ts";
 import { themeBuilderSettingsAtom } from "~/common/state/atoms/themeBuilder.ts";
 import { ModelSelectOptions } from "~/components/ModelSelectOptions.tsx";
-import { tabStripPositionAtom } from "~/components/panels/sectionLayoutAtoms.ts";
+import { sectionSizesSharedAtom, tabStripPositionAtom } from "~/components/panels/sectionLayoutAtoms.ts";
 import { useInstallUpdate } from "~/hooks/useInstallUpdate.ts";
 import type { UpdateChannel } from "~/shared/types.ts";
 
@@ -24,7 +24,6 @@ import {
   isEntityMentionsEnabledAtom,
   isInPlaceWorkspacesEnabledAtom,
   isMultiHarnessEnabledAtom,
-  isPanelLayoutPerWorkspaceAtom,
   isReviewAllEnabledAtom,
   isRichMarkdownRenderingEnabledAtom,
   isSmoothStreamingUserPreferenceAtom,
@@ -93,7 +92,7 @@ export const SettingsPage = (): ReactElement => {
   const isEntityMentionsEnabled = useAtomValue(isEntityMentionsEnabledAtom);
   const isRichMarkdownRenderingEnabled = useAtomValue(isRichMarkdownRenderingEnabledAtom);
   const isSmoothStreamingEnabled = useAtomValue(isSmoothStreamingUserPreferenceAtom);
-  const isPanelLayoutPerWorkspace = useAtomValue(isPanelLayoutPerWorkspaceAtom);
+  const [areSectionSizesShared, setSectionSizesShared] = useAtom(sectionSizesSharedAtom);
   const [tabStripPosition, setTabStripPosition] = useAtom(tabStripPositionAtom);
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
@@ -424,14 +423,13 @@ export const SettingsPage = (): ReactElement => {
                     />
                   </SettingRow>
                   <SettingRow
-                    title="Per-workspace panel layout"
-                    description="Panel visibility and sizes are local to each workspace. Panel positions are still shared."
+                    title="Share panel section sizes across workspaces"
+                    description="Panel positions, visibility, and split state are always per-workspace. When enabled, the section sizes (the widths/heights of the Left/Right/Bottom sections) are shared across all workspaces; when disabled, each workspace keeps its own sizes."
                   >
                     <Switch
-                      checked={isPanelLayoutPerWorkspace}
-                      onCheckedChange={(checked) =>
-                        handleSettingChange(UserConfigField.IS_PANEL_LAYOUT_PER_WORKSPACE, checked)
-                      }
+                      checked={areSectionSizesShared}
+                      onCheckedChange={(checked) => setSectionSizesShared(checked)}
+                      data-testid="settings-section-sizes-shared-toggle"
                     />
                   </SettingRow>
                   <SettingRow

@@ -1,0 +1,1059 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Add Panel Launcher — Mock Explorations</title>
+<style>
+  /* ───────────────────────────────────────────────────────────────
+     Tokens — Radix dark, gray accent (the Sculptor default theme).
+     Values lifted from @radix-ui/themes dark gray + our tokens.css.
+     ─────────────────────────────────────────────────────────────── */
+  :root {
+    --gray-1:#111111; --gray-2:#191919; --gray-3:#222222; --gray-4:#2a2a2a;
+    --gray-5:#313131; --gray-6:#3a3a3a; --gray-7:#484848; --gray-8:#606060;
+    --gray-9:#6e6e6e; --gray-10:#7b7b7b; --gray-11:#b4b4b4; --gray-12:#eeeeee;
+    --gray-a2:#ffffff09; --gray-a3:#ffffff12; --gray-a4:#ffffff1b;
+    --gray-a5:#ffffff22; --gray-a6:#ffffff2c; --gray-a7:#ffffff3b; --gray-a8:#ffffff55;
+    --color-panel-solid:#1b1b1b;
+
+    --green-9:#30a46c; --amber-9:#ffb224; --blue-a4:#0090ff2b; --blue-11:#70b8ff;
+
+    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+    --space-5:24px; --space-6:32px; --space-7:40px;
+    --fs-1:12px; --fs-2:14px; --fs-3:16px; --fs-4:18px;
+    --radius-2:4px; --radius-3:6px; --radius-4:8px; --radius-5:12px;
+    --ease:cubic-bezier(0.16,1,0.3,1);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--gray-1);
+    color: var(--gray-12);
+    font-family: var(--font);
+    font-size: var(--fs-2);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Page scaffold ─────────────────────────────────────────────── */
+  .page { max-width: 1180px; margin: 0 auto; padding: var(--space-6) var(--space-5) 96px; }
+  .page-head h1 { font-size: 24px; font-weight: 600; margin: 0 0 var(--space-2); letter-spacing: -0.01em; }
+  .page-head p { color: var(--gray-11); margin: 0 0 var(--space-4); max-width: 760px; }
+  .considerations {
+    display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-4);
+  }
+  .chip {
+    background: var(--gray-a3); border: 1px solid var(--gray-a4); color: var(--gray-11);
+    border-radius: var(--radius-5); font-size: var(--fs-1); padding: var(--space-1) var(--space-3);
+  }
+  .chip b { color: var(--gray-12); font-weight: 600; }
+
+  /* ── Variant tabs ──────────────────────────────────────────────── */
+  .tabs { display: flex; gap: var(--space-1); border-bottom: 1px solid var(--gray-a4); margin: var(--space-5) 0 var(--space-5); flex-wrap: wrap; }
+  .tab-btn {
+    background: none; border: none; color: var(--gray-11); cursor: pointer;
+    font-family: var(--font); font-size: var(--fs-2); font-weight: 500;
+    padding: var(--space-3) var(--space-4); border-bottom: 2px solid transparent;
+    margin-bottom: -1px; display: flex; align-items: center; gap: var(--space-2);
+  }
+  .tab-btn small { color: var(--gray-9); font-weight: 400; font-size: var(--fs-1); }
+  .tab-btn:hover { color: var(--gray-12); }
+  .tab-btn.active { color: var(--gray-12); border-bottom-color: var(--gray-12); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .variant-head { margin-bottom: var(--space-5); }
+  .variant-head h2 { font-size: 20px; font-weight: 600; margin: 0 0 var(--space-2); }
+  .variant-head p { color: var(--gray-11); margin: 0 0 var(--space-3); max-width: 820px; }
+  .addresses { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; max-width: 820px; }
+  .addresses li { color: var(--gray-11); font-size: var(--fs-2); padding-left: 22px; position: relative; }
+  .addresses li::before { content: "✓"; color: var(--green-9); position: absolute; left: 0; font-size: var(--fs-2); }
+  .addresses li b { color: var(--gray-12); font-weight: 600; }
+
+  /* ── State block ───────────────────────────────────────────────── */
+  .state { margin: var(--space-6) 0; }
+  .state-cap { display: flex; align-items: baseline; gap: var(--space-3); margin-bottom: var(--space-3); }
+  .state-num {
+    flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--gray-a4); color: var(--gray-12); font-size: var(--fs-1); font-weight: 600;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .state-cap h3 { font-size: var(--fs-3); font-weight: 600; margin: 0; }
+  .state-cap p { color: var(--gray-10); margin: 0; font-size: var(--fs-2); }
+  .stage {
+    background:
+      radial-gradient(120% 120% at 50% 0%, #1a1a1a 0%, #131313 60%, #0e0e0e 100%);
+    border: 1px solid var(--gray-a4); border-radius: var(--radius-5);
+    padding: var(--space-6); display: flex; justify-content: center;
+  }
+  .stage--tight { padding: var(--space-5); }
+
+  /* ───────────────────────────────────────────────────────────────
+     App chrome — a compact rendering of the uniform-panels workspace
+     ─────────────────────────────────────────────────────────────── */
+  .app {
+    width: 100%; max-width: 1040px; border-radius: var(--radius-5); overflow: hidden;
+    border: 1px solid var(--gray-6); background: var(--gray-1);
+    box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+    position: relative;
+  }
+  .titlebar {
+    height: 38px; display: flex; align-items: center; gap: var(--space-3);
+    padding: 0 var(--space-3); background: var(--gray-2); border-bottom: 1px solid var(--gray-a4);
+  }
+  .lights { display: flex; gap: 7px; }
+  .lights i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+  .lights i:nth-child(1){ background:#ff5f57; } .lights i:nth-child(2){ background:#febc2e; } .lights i:nth-child(3){ background:#28c840; }
+  .ws-name { font-weight: 600; font-size: var(--fs-2); }
+  .branch { color: var(--gray-11); font-size: var(--fs-1); background: var(--gray-a3); border-radius: var(--radius-3); padding: 2px var(--space-2); display: inline-flex; gap: 6px; align-items: center; }
+  .kbd-hint { margin-left: auto; color: var(--gray-9); font-size: var(--fs-1); display: flex; gap: 6px; align-items: center; }
+
+  .ws-body { display: flex; height: 460px; }
+  .ws-main { flex: 1 1 auto; display: flex; min-width: 0; }
+  .col { display: flex; flex-direction: column; min-width: 0; }
+  .col.left { width: 220px; border-right: 1px solid var(--gray-a4); }
+  .col.center { flex: 1 1 auto; }
+  .col.right { width: 280px; border-left: 1px solid var(--gray-a4); }
+  .stack { display: flex; flex-direction: column; height: 100%; min-width: 0; }
+  .row-split { display: flex; flex-direction: column; height: 100%; }
+  .center-wrap { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+  .bottom-bar-region { display: flex; flex-direction: column; }
+
+  /* a section: tab strip + body */
+  .section { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+  .tabstrip {
+    display: flex; align-items: center; gap: 2px; height: 34px; flex-shrink: 0;
+    padding: 0 var(--space-2); background: var(--gray-2); border-bottom: 1px solid var(--gray-a4);
+    overflow: hidden;
+  }
+  .ptab {
+    display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 var(--space-2);
+    border-radius: var(--radius-3); color: var(--gray-11); font-size: var(--fs-1); cursor: default; white-space: nowrap;
+  }
+  .ptab .ic { width: 13px; height: 13px; display: inline-flex; color: var(--gray-10); }
+  .ptab.active { background: var(--gray-a4); color: var(--gray-12); }
+  .ptab.active .ic { color: var(--gray-12); }
+  .add-btn {
+    width: 22px; height: 22px; border-radius: var(--radius-3); border: none; cursor: pointer;
+    background: transparent; color: var(--gray-10); display: inline-flex; align-items: center; justify-content: center;
+    margin-left: 2px;
+  }
+  .add-btn:hover { background: var(--gray-a3); color: var(--gray-12); }
+  .add-btn.pulse { background: var(--gray-a4); color: var(--gray-12); box-shadow: 0 0 0 2px var(--gray-a5); }
+  .add-btn .ic { width: 14px; height: 14px; }
+  .sec-body { flex: 1 1 auto; min-height: 0; overflow: hidden; background: var(--gray-1); position: relative; }
+
+  /* faux content */
+  .filetree { padding: var(--space-2); font-size: var(--fs-1); color: var(--gray-11); }
+  .filetree .f { padding: 3px var(--space-2); border-radius: var(--radius-3); display: flex; gap: 6px; align-items: center; }
+  .filetree .f.sel { background: var(--gray-a3); color: var(--gray-12); }
+  .filetree .ic { width: 12px; height: 12px; color: var(--gray-9); }
+  .filetree .indent { padding-left: var(--space-4); }
+
+  .chat { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); height: 100%; }
+  .bubble { max-width: 78%; border-radius: var(--radius-4); padding: var(--space-2) var(--space-3); font-size: var(--fs-1); color: var(--gray-12); }
+  .bubble.user { align-self: flex-end; background: var(--gray-a4); }
+  .bubble.ai { align-self: flex-start; background: var(--gray-3); color: var(--gray-11); }
+  .chat-spacer { flex: 1 1 auto; }
+  .chat-input { margin-top: auto; border: 1px solid var(--gray-a5); border-radius: var(--radius-4); padding: var(--space-2) var(--space-3); color: var(--gray-9); font-size: var(--fs-1); }
+
+  .term { padding: var(--space-3); font-family: var(--mono); font-size: var(--fs-1); color: var(--gray-11); background: #161412; height: 100%; }
+  .term .p { color: var(--green-9); }
+  .term .c { color: var(--gray-12); }
+
+  .empty-hint { color: var(--gray-9); font-size: var(--fs-1); padding: var(--space-4); }
+
+  /* bottom section spanning width */
+  .ws-bottom { border-top: 1px solid var(--gray-a4); height: 120px; flex-shrink: 0; }
+
+  /* the global bottom toggle bar */
+  .toggle-bar {
+    height: 30px; display: flex; align-items: center; gap: var(--space-2);
+    padding: 0 var(--space-3); background: var(--gray-2); border-top: 1px solid var(--gray-a4);
+    color: var(--gray-10); font-size: var(--fs-1);
+  }
+  .toggle-bar .tg { display: inline-flex; align-items: center; gap: 6px; padding: 2px var(--space-2); border-radius: var(--radius-3); }
+  .toggle-bar .tg.on { background: var(--gray-a4); color: var(--gray-12); }
+  .toggle-bar .spacer { flex: 1 1 auto; }
+
+  /* ── overlay (modal palette) ───────────────────────────────────── */
+  .overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.45); display: flex; justify-content: center; align-items: flex-start; padding-top: 64px; z-index: 5; }
+
+  /* ───────────────────────────────────────────────────────────────
+     Command palette component (Raycast-style, matches CommandPalette.module.scss)
+     ─────────────────────────────────────────────────────────────── */
+  .cp {
+    width: 640px; max-width: 100%; background: var(--color-panel-solid);
+    border: 1px solid var(--gray-a5); border-radius: var(--radius-4);
+    box-shadow: 0 16px 70px rgba(0,0,0,0.45), 0 4px 16px rgba(0,0,0,0.3);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .cp--inline { box-shadow: none; border: none; background: transparent; width: 100%; height: 100%; }
+  .cp--popover { width: 360px; box-shadow: 0 12px 40px rgba(0,0,0,0.5); }
+
+  .cp-header { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4) var(--space-5); }
+  .cp--popover .cp-header { padding: var(--space-3) var(--space-4); }
+  .cp--inline .cp-header { padding: var(--space-3) var(--space-3) var(--space-3); }
+  .cp-search-ic { width: 18px; height: 18px; color: var(--gray-9); flex-shrink: 0; }
+  .cp-scope {
+    flex-shrink: 0; background: var(--gray-a4); color: var(--gray-11); border-radius: var(--radius-3);
+    font-size: var(--fs-1); font-weight: 500; padding: var(--space-1) var(--space-2); display: inline-flex; gap: 6px; align-items: center;
+  }
+  .cp-input { flex: 1 1 auto; min-width: 0; font-size: var(--fs-4); color: var(--gray-12); }
+  .cp--popover .cp-input { font-size: var(--fs-3); }
+  .cp-input .ph { color: var(--gray-9); }
+  .cp-caret { display: inline-block; width: 1px; height: 1.05em; background: var(--gray-11); vertical-align: -2px; margin-left: 1px; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .cp-seg { display: flex; gap: 2px; background: var(--gray-a3); border-radius: var(--radius-3); padding: 2px; }
+  .cp-seg button { background: none; border: none; color: var(--gray-11); font-family: var(--font); font-size: var(--fs-1); font-weight: 500; padding: 4px var(--space-3); border-radius: var(--radius-2); cursor: pointer; }
+  .cp-seg button.on { background: var(--gray-5); color: var(--gray-12); }
+
+  .cp-divider { height: 1px; background: var(--gray-a4); flex-shrink: 0; }
+
+  .cp-list { padding: var(--space-2) var(--space-2) var(--space-3); overflow-y: auto; max-height: 380px; }
+  .cp--popover .cp-list { max-height: 300px; }
+  .cp--inline .cp-list { max-height: none; flex: 1 1 auto; }
+
+  .cp-group { margin-bottom: var(--space-2); }
+  .cp-group-h { color: var(--gray-10); font-size: var(--fs-1); font-weight: 400; padding: var(--space-3) var(--space-3) var(--space-1); display: flex; align-items: center; gap: 6px; }
+  .cp-group-h .meta { margin-left: auto; color: var(--gray-9); font-weight: 400; }
+
+  .cp-item {
+    display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-3); color: var(--gray-12); font-size: var(--fs-2); cursor: pointer;
+  }
+  .cp-item:hover { background: var(--gray-a3); }
+  .cp-item.is-selected { background: var(--gray-a4); }
+  .cp-item.is-selected .cp-loc { color: var(--gray-11); }
+  .cp-item-icon { width: 20px; height: 20px; flex-shrink: 0; color: var(--gray-11); display: inline-flex; align-items: center; justify-content: center; position: relative; }
+  .cp-item-icon svg { width: 17px; height: 17px; }
+  .cp-dot { position: absolute; right: -2px; bottom: -1px; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--color-panel-solid); }
+  .cp-item.is-selected .cp-dot { border-color: #232323; }
+  .cp-dot--working { background: var(--green-9); }
+  .cp-dot--waiting { background: var(--amber-9); }
+  .cp-dot--idle { background: var(--gray-8); }
+
+  .cp-item-body { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: var(--space-2); }
+  .cp-item-title { color: var(--gray-12); flex-shrink: 0; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cp-item-sub { color: var(--gray-10); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .cp-item-trailing { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
+  .cp-loc { color: var(--gray-10); font-size: var(--fs-1); background: var(--gray-a3); border-radius: var(--radius-3); padding: 2px var(--space-2); display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .cp-loc--closed { color: var(--gray-9); }
+  .cp-loc--closed::before { content:""; width:6px; height:6px; border-radius:50%; background: var(--gray-7); display:inline-block; }
+  .cp-kind { color: var(--gray-10); font-size: var(--fs-1); }
+  .cp-shortcut { color: var(--gray-10); font-size: var(--fs-1); }
+
+  /* split action shown on selected/hover rows (move vs copy / restore) */
+  .cp-actions { display: none; align-items: center; gap: 6px; }
+  .cp-item.is-selected .cp-actions, .cp-item:hover .cp-actions { display: inline-flex; }
+  .cp-item.is-selected .cp-loc, .cp-item:hover .cp-loc { display: none; }
+  .cp-act {
+    display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-1); color: var(--gray-11);
+    background: var(--gray-a4); border: none; border-radius: var(--radius-3); padding: 3px var(--space-2); cursor: pointer;
+  }
+  .cp-act .ic { width: 12px; height: 12px; }
+  .cp-act.primary { background: var(--gray-7); color: var(--gray-12); }
+  .cp-act:hover { background: var(--gray-6); color: var(--gray-12); }
+
+  .cp-empty { color: var(--gray-10); font-size: var(--fs-2); padding: var(--space-6) var(--space-4); text-align: center; }
+
+  .cp-footer {
+    display: flex; align-items: center; gap: var(--space-4); padding: var(--space-2) var(--space-4);
+    border-top: 1px solid var(--gray-a4); color: var(--gray-9); font-size: var(--fs-1); flex-shrink: 0;
+  }
+  .cp-footer .grp { display: inline-flex; align-items: center; gap: 6px; }
+  .cp-footer .spacer { flex: 1 1 auto; }
+  .key {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px;
+    padding: 0 4px; border-radius: var(--radius-2); background: var(--gray-a4); color: var(--gray-11); font-size: 11px;
+  }
+  .cp-brand { display: inline-flex; align-items: center; gap: 6px; color: var(--gray-10); }
+  .cp-brand b { color: var(--gray-11); font-weight: 600; }
+
+  /* popover wrapper + pointer */
+  .popwrap { position: absolute; z-index: 6; }
+  .popwrap::before {
+    content: ""; position: absolute; top: -6px; left: 24px; width: 12px; height: 12px;
+    background: var(--color-panel-solid); border-left: 1px solid var(--gray-a5); border-top: 1px solid var(--gray-a5);
+    transform: rotate(45deg);
+  }
+
+  /* inline-embedded section frame */
+  .inline-frame { display: flex; flex-direction: column; height: 100%; background: var(--gray-1); }
+
+  .legend { display: flex; gap: var(--space-4); flex-wrap: wrap; color: var(--gray-10); font-size: var(--fs-1); margin-top: var(--space-3); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .d { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+  .note { color: var(--gray-10); font-size: var(--fs-1); margin-top: var(--space-3); max-width: 820px; }
+  .note b { color: var(--gray-11); }
+
+  /* ── Refined (A★) additions ─────────────────────────────────────── */
+  /* breadcrumb sub-page chip in the header */
+  .cp-bc { display:inline-flex; align-items:center; gap:6px; background:var(--gray-a4); border-radius:var(--radius-3); color:var(--gray-12); font-size:var(--fs-1); font-weight:500; padding:var(--space-1) var(--space-2); flex-shrink:0; }
+  .cp-bc .root { color:var(--gray-10); cursor:pointer; }
+  .cp-bc svg { width:12px; height:12px; color:var(--gray-9); }
+
+  /* interactive target pill (dropdown trigger) */
+  .cp-scope--btn { cursor:pointer; }
+  .cp-scope--btn:hover { background:var(--gray-a5); color:var(--gray-12); }
+  .cp-scope .chev { width:12px; height:12px; opacity:.7; }
+
+  /* the target menu that drops from the pill */
+  .cp.cp--menuopen { overflow:visible; }
+  .cp-target-menu {
+    position:absolute; top:54px; right:16px; width:230px; background:var(--color-panel-solid);
+    border:1px solid var(--gray-a5); border-radius:var(--radius-4); padding:var(--space-1);
+    box-shadow:0 12px 40px rgba(0,0,0,0.5); z-index:30;
+  }
+  .cp-tm-h { color:var(--gray-10); font-size:var(--fs-1); padding:var(--space-2) var(--space-2) var(--space-1); display:flex; }
+  .cp-tm-h .k { margin-left:auto; color:var(--gray-9); }
+  .cp-tm-item { display:flex; align-items:center; gap:var(--space-2); padding:6px var(--space-2); border-radius:var(--radius-3); font-size:var(--fs-2); color:var(--gray-12); cursor:pointer; }
+  .cp-tm-item:hover { background:var(--gray-a3); }
+  .cp-tm-item.on { background:var(--gray-a4); }
+  .cp-tm-item .ic { width:14px; height:14px; color:var(--gray-10); }
+  .cp-tm-item .check { margin-left:auto; color:var(--gray-11); display:inline-flex; }
+  .cp-tm-item .check svg { width:14px; height:14px; }
+  .cp-tm-item.sub { padding-left:var(--space-5); color:var(--gray-11); }
+  .cp-tm-item.sub .ic { opacity:.6; }
+
+  /* nav row (drills into a sub-page) */
+  .cp-chev { color:var(--gray-9); display:inline-flex; } .cp-chev svg { width:15px; height:15px; }
+  .cp-count { color:var(--gray-10); font-size:var(--fs-1); }
+
+  /* new empty-section state: Add panel button + Recents */
+  .empty2 { height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:var(--space-5); padding:var(--space-5); }
+  .empty2-cta { display:flex; flex-direction:column; align-items:center; gap:var(--space-2); }
+  .empty2-add {
+    display:inline-flex; align-items:center; gap:var(--space-2); background:var(--gray-12); color:var(--gray-1);
+    border:none; font-family:var(--font); font-size:var(--fs-2); font-weight:600; padding:var(--space-2) var(--space-4);
+    border-radius:var(--radius-4); cursor:pointer;
+  }
+  .empty2-add:hover { background:#ffffff; }
+  .empty2-add svg { width:15px; height:15px; }
+  .empty2-add kbd { background:rgba(0,0,0,0.18); border-radius:var(--radius-2); font-family:var(--font); font-size:11px; padding:1px 5px; color:rgba(0,0,0,0.6); }
+  .empty2-sub { color:var(--gray-9); font-size:var(--fs-1); }
+  .empty2-recents { width:100%; max-width:300px; }
+  .empty2-recents-h { color:var(--gray-10); font-size:var(--fs-1); padding:0 var(--space-2) 6px; }
+  .empty2-row { display:flex; align-items:center; gap:var(--space-3); padding:var(--space-2); border-radius:var(--radius-3); font-size:var(--fs-2); color:var(--gray-12); cursor:pointer; }
+  .empty2-row:hover { background:var(--gray-a3); }
+  .empty2-row .cp-item-icon { width:18px; height:18px; }
+  .empty2-row .cp-item-icon svg { width:15px; height:15px; }
+  .empty2-row .sub { color:var(--gray-10); font-size:var(--fs-1); margin-left:auto; }
+
+  /* ── Icon sizing safety net — keep unconstrained svgs from blowing up ── */
+  svg { width: 16px; height: 16px; flex-shrink: 0; }
+  .cp-search-ic svg { width:18px; height:18px; }
+  .cp-scope svg { width:13px; height:13px; }
+  .cp-scope .chev svg { width:12px; height:12px; }
+  .cp-tm-item .ic svg { width:14px; height:14px; }
+  .cp-bc svg { width:12px; height:12px; }
+  .cp-brand svg { width:14px; height:14px; }
+  .filetree .ic svg { width:12px; height:12px; }
+  .toggle-bar .tg svg { width:13px; height:13px; }
+  .ptab svg { width:13px; height:13px; }
+  .add-btn svg { width:14px; height:14px; }
+
+  /* ── Iteration 2: empty destination pill + minimalist empty state + location window ── */
+  .cp-scope--empty { background:transparent; border:1px dashed var(--gray-a6); color:var(--gray-9); }
+  .cp-scope--empty:hover { color:var(--gray-11); border-color:var(--gray-a7); }
+
+  .empty2b { height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:var(--space-5); padding:var(--space-5); }
+  .empty2b-add { display:inline-flex; align-items:center; gap:var(--space-2); background:var(--gray-a4); border:1px solid var(--gray-a5); color:var(--gray-12); font-family:var(--font); font-weight:500; font-size:var(--fs-2); padding:6px var(--space-3); border-radius:var(--radius-3); cursor:pointer; }
+  .empty2b-add:hover { background:var(--gray-a5); }
+  .empty2b-add svg { width:14px; height:14px; }
+  .empty2b-add kbd { background:var(--gray-6); border-radius:var(--radius-2); font-family:var(--font); font-size:11px; padding:1px 5px; color:var(--gray-11); }
+  .empty2b-quick { width:100%; max-width:220px; }
+  .empty2b-qh { color:var(--gray-9); font-size:var(--fs-1); padding:0 var(--space-2) 6px; }
+  .empty2b-row { display:flex; align-items:center; gap:var(--space-3); padding:6px var(--space-2); border-radius:var(--radius-3); font-size:var(--fs-2); color:var(--gray-12); cursor:pointer; }
+  .empty2b-row:hover { background:var(--gray-a3); }
+  .empty2b-row .ic { width:16px; height:16px; color:var(--gray-10); display:inline-flex; }
+  .empty2b-row .ic svg { width:15px; height:15px; }
+
+  .loc-title { font-size:var(--fs-3); color:var(--gray-12); font-weight:500; flex:1 1 auto; }
+  .loc-title b { font-weight:600; }
+  .cp-sec-sub { color:var(--gray-10); font-size:var(--fs-1); margin-left:auto; white-space:nowrap; }
+
+  /* ── Iteration 3: quick-add polish + natural section names ── */
+  .empty2b { height:100%; display:flex; align-items:center; justify-content:center; padding:var(--space-5); }
+  .qa-list { width:200px; }
+  .qa-h { color:var(--gray-9); font-size:var(--fs-1); padding:0 var(--space-2) 6px; }
+  .qa-h.center { text-align:center; }
+  .qa-row { display:flex; align-items:center; gap:var(--space-3); padding:7px var(--space-2); border-radius:var(--radius-3); font-size:var(--fs-2); color:var(--gray-12); cursor:pointer; }
+  .qa-row:hover { background:var(--gray-a3); }
+  .qa-row .ic { width:16px; height:16px; color:var(--gray-10); display:inline-flex; }
+  .qa-row .ic svg { width:15px; height:15px; }
+  .qa-more { color:var(--gray-9); font-size:var(--fs-1); padding:10px var(--space-2) 0; cursor:pointer; display:flex; align-items:center; gap:6px; }
+  .qa-more:hover { color:var(--gray-11); }
+  .qa-more.center { justify-content:center; }
+  .qa-tiles-wrap { width:280px; }
+  .qa-tiles { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--space-2); }
+  .qa-tile { display:flex; flex-direction:column; align-items:center; gap:7px; padding:var(--space-3) var(--space-2); border-radius:var(--radius-3); background:var(--gray-a3); color:var(--gray-12); font-size:var(--fs-1); cursor:pointer; text-align:center; }
+  .qa-tile:hover { background:var(--gray-a4); }
+  .qa-tile .ic { color:var(--gray-10); display:inline-flex; }
+  .qa-tile .ic svg { width:18px; height:18px; }
+  .cmp { display:flex; gap:36px; flex-wrap:wrap; justify-content:center; align-items:flex-start; }
+  .cmp-col { display:flex; flex-direction:column; gap:10px; align-items:center; }
+  .cmp-label { color:var(--gray-9); font-size:var(--fs-1); }
+  .sec-frame { border:1px solid var(--gray-a4); border-radius:var(--radius-4); background:var(--gray-1); display:flex; align-items:center; justify-content:center; overflow:hidden; }
+
+  /* ── Iteration 4: open-picker button variants in the empty state ── */
+  .qa-col { width:210px; display:flex; flex-direction:column; }
+  .qa-searchbox { display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--gray-a5); border-radius:var(--radius-3); color:var(--gray-9); font-size:var(--fs-2); margin-bottom:14px; cursor:text; }
+  .qa-searchbox svg { width:15px; height:15px; }
+  .qa-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; margin-top:14px; padding:8px 12px; border:1px solid var(--gray-a5); background:var(--gray-a3); color:var(--gray-12); border-radius:var(--radius-3); font-family:var(--font); font-size:var(--fs-2); font-weight:500; cursor:pointer; }
+  .qa-btn:hover { background:var(--gray-a4); }
+  .qa-btn svg { width:14px; height:14px; }
+  .qa-row--btn { color:var(--gray-11); margin-top:4px; }
+  .qa-row--btn:hover { color:var(--gray-12); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="page-head">
+    <h1>Add Panel Launcher — Mock Explorations</h1>
+    <p>
+      Four end-to-end directions for choosing which panel to add to a section, replacing today's
+      plain <code>+</code> dropdown and the empty-section launcher cards. Each direction is shown in the
+      real workspace context, then in its key states. All four support search and keyboard
+      navigation; they differ in <b>where the picker lives</b> and <b>how they treat moving/restoring
+      existing agents &amp; terminals</b>.
+    </p>
+    <div class="considerations">
+      <span class="chip"><b>Search</b> — many panels</span>
+      <span class="chip"><b>↑ ↓ ↵</b> — keyboard nav</span>
+      <span class="chip"><b>Move / restore</b> — existing agents &amp; terminals</span>
+    </div>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab-btn active" data-tab="r">★ A refined <small>chosen direction</small></button>
+    <button class="tab-btn" data-tab="a">A · Modal palette <small>cmd+k overlay</small></button>
+    <button class="tab-btn" data-tab="b">B · Embedded palette <small>inline in section</small></button>
+    <button class="tab-btn" data-tab="c">C · Anchored popover <small>from the +</small></button>
+    <button class="tab-btn" data-tab="d">D · Location-aware <small>move/restore focus</small></button>
+  </div>
+
+  <!-- ====================== REFINED A★ ====================== -->
+  <section class="tab-panel active" id="panel-r"></section>
+
+  <!-- ====================== VARIANT A ====================== -->
+  <section class="tab-panel" id="panel-a"></section>
+  <!-- ====================== VARIANT B ====================== -->
+  <section class="tab-panel" id="panel-b"></section>
+  <!-- ====================== VARIANT C ====================== -->
+  <section class="tab-panel" id="panel-c"></section>
+  <!-- ====================== VARIANT D ====================== -->
+  <section class="tab-panel" id="panel-d"></section>
+
+</div>
+
+<script>
+/* ───────────────────────── Icons (lucide-style) ───────────────────────── */
+const I = {
+  files:   '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  changes: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M12 10v6"/>',
+  commits: '<circle cx="12" cy="12" r="3"/><line x1="3" y1="12" x2="9" y2="12"/><line x1="15" y1="12" x2="21" y2="12"/>',
+  review:  '<path d="M12 2 2 7l10 5 10-5z"/><path d="m2 12 10 5 10-5"/><path d="m2 17 10 5 10-5"/>',
+  actions: '<path d="M13 2 3 14h7l-1 8 10-12h-7z"/>',
+  skills:  '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9.5" y1="15" x2="14.5" y2="9"/>',
+  browser: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18"/>',
+  notes:   '<rect x="6" y="3" width="14" height="18" rx="2"/><path d="M2 7h4M2 12h4M2 17h4"/><path d="m12 9 3 3-4 1 1-4z"/>',
+  agent:   '<path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7A8.5 8.5 0 0 1 12.5 3 8.4 8.4 0 0 1 21 11.5z"/>',
+  terminal:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3"/><line x1="13" y1="15" x2="17" y2="15"/>',
+  plus:    '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+  search:  '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  move:    '<path d="M3 12h13"/><polyline points="11 7 16 12 11 17"/><line x1="20" y1="5" x2="20" y2="19"/>',
+  copy:    '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
+  restore: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
+  reveal:  '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
+  chevron: '<polyline points="9 6 15 12 9 18"/>',
+  check:   '<polyline points="20 6 9 17 4 12"/>',
+  settings:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  swap:    '<polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/>',
+};
+function svg(name, cls){ return '<svg class="'+(cls||'')+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">'+(I[name]||'')+'</svg>'; }
+
+/* ───────────────────────── Sample data ───────────────────────── */
+const PANELS = [
+  { icon:'files',   title:'Files',      sub:'Browse repo files',                  kind:'Panel', shortcut:'⌘P' },
+  { icon:'changes', title:'Changes',    sub:'View uncommitted & branch changes',  kind:'Panel' },
+  { icon:'commits', title:'Commits',    sub:'Browse the commit history',          kind:'Panel' },
+  { icon:'review',  title:'Review All', sub:'Combined multi-file diff',           kind:'Panel', shortcut:'⌃⇧G' },
+  { icon:'actions', title:'Actions',    sub:'Run saved commands',                 kind:'Panel' },
+  { icon:'skills',  title:'Skills',     sub:'Browse workspace skills',            kind:'Panel' },
+  { icon:'browser', title:'Browser',    sub:'Open a website',                     kind:'Panel', shortcut:'⌘T' },
+  { icon:'notes',   title:'Notes',      sub:'Take notes alongside your work',     kind:'Panel' },
+];
+// existing agents (single-instance per workspace)
+const AGENTS = [
+  { icon:'agent', title:'Build compact layout', status:'working', loc:'Center', sub:'editing PanelSection.tsx' },
+  { icon:'agent', title:'Panel drag-and-drop',  status:'idle',    loc:null,     sub:'idle · 2h ago' },
+  { icon:'agent', title:'Uniform Panels',       status:'idle',    loc:null,     sub:'idle · yesterday' },
+  { icon:'agent', title:'compact-panels-qa',    status:'waiting', loc:'Bottom', sub:'waiting for input' },
+];
+const TERMINALS = [
+  { icon:'terminal', title:'zsh — frontend',  loc:'Bottom', sub:'just dev' },
+  { icon:'terminal', title:'vite (dev)',      loc:null,     sub:'running · :5173' },
+];
+const CLOSED = [
+  { icon:'agent',    title:'Fix terminal focus', sub:'closed · 10m ago', kind:'Agent' },
+  { icon:'terminal', title:'just test-unit',     sub:'closed · 25m ago', kind:'Terminal' },
+];
+const NEW = [
+  { icon:'agent',    title:'New agent',    sub:'Start a side conversation', kind:'Create' },
+  { icon:'terminal', title:'New terminal', sub:'Start an interactive shell', kind:'Create', shortcut:'⌃`' },
+];
+
+/* ───────────────────────── Palette renderer ───────────────────────── */
+function locChip(loc){
+  if (loc === null) return '<span class="cp-loc">not open</span>';
+  if (loc === 'closed') return '<span class="cp-loc cp-loc--closed">closed</span>';
+  return '<span class="cp-loc">in '+loc+'</span>';
+}
+function moveActions(loc){
+  // For existing single-instance things: move into this section, or reveal where it is.
+  if (loc === null) return '<button class="cp-act primary">'+svg('move','ic')+' Add here</button>';
+  return '<button class="cp-act primary">'+svg('move','ic')+' Move here</button>'+
+         '<button class="cp-act">'+svg('reveal','ic')+' Reveal</button>';
+}
+function restoreAction(){ return '<button class="cp-act primary">'+svg('restore','ic')+' Restore here</button>'; }
+
+function item(it, sel, opts){
+  opts = opts || {};
+  const dot = it.status ? '<span class="cp-dot cp-dot--'+it.status+'"></span>' : '';
+  let trailing = '';
+  if (opts.moveable) {
+    trailing = locChip(it.loc) + '<span class="cp-actions">'+ (it.loc==='closed'?restoreAction():moveActions(it.loc)) +'</span>';
+  } else if (opts.restore) {
+    trailing = '<span class="cp-kind">'+(it.kind||'')+'</span><span class="cp-actions">'+restoreAction()+'</span>';
+  } else {
+    if (it.shortcut) trailing += '<span class="cp-shortcut">'+it.shortcut+'</span>';
+    if (it.kind && opts.showKind) trailing += '<span class="cp-kind">'+it.kind+'</span>';
+  }
+  return '<div class="cp-item'+(sel?' is-selected':'')+'">'
+    + '<span class="cp-item-icon">'+svg(it.icon)+dot+'</span>'
+    + '<span class="cp-item-body"><span class="cp-item-title">'+it.title+'</span>'
+    + (it.sub?'<span class="cp-item-sub">'+it.sub+'</span>':'')+'</span>'
+    + '<span class="cp-item-trailing">'+trailing+'</span></div>';
+}
+function group(heading, items, selIdx, opts, meta){
+  let h = '<div class="cp-group"><div class="cp-group-h">'+heading+(meta?'<span class="meta">'+meta+'</span>':'')+'</div>';
+  items.forEach((it,i)=>{ h += item(it, selIdx===i, opts); });
+  return h + '</div>';
+}
+function header(opts){
+  const ic = '<span class="cp-search-ic">'+svg('search')+'</span>';
+  const scope = opts.scope ? '<span class="cp-scope">'+svg('plus')+' '+opts.scope+'</span>' : '';
+  const q = opts.query
+    ? '<span class="cp-input">'+opts.query+'<span class="cp-caret"></span></span>'
+    : '<span class="cp-input"><span class="ph">'+(opts.placeholder||'Add a panel…')+'</span><span class="cp-caret"></span></span>';
+  const seg = opts.seg ? segmented(opts.seg, opts.segActive) : '';
+  return '<div class="cp-header">'+ic+q+seg+scope+'</div>';
+}
+function segmented(items, active){
+  return '<span class="cp-seg">'+items.map(s=>'<button class="'+(s===active?'on':'')+'">'+s+'</button>').join('')+'</span>';
+}
+function footer(){
+  return '<div class="cp-footer">'
+    + '<span class="grp"><span class="key">↑</span><span class="key">↓</span> navigate</span>'
+    + '<span class="grp"><span class="key">↵</span> add</span>'
+    + '<span class="grp"><span class="key">esc</span> close</span>'
+    + '<span class="spacer"></span>'
+    + '<span class="cp-brand">'+svg('plus','')+' <b>Add panel</b></span></div>';
+}
+/* full palette: opts = {variant, scope, query, placeholder, seg, segActive, body, foot} */
+function palette(opts){
+  const cls = 'cp' + (opts.variant?(' cp--'+opts.variant):'');
+  return '<div class="'+cls+'">'
+    + header(opts) + '<div class="cp-divider"></div>'
+    + '<div class="cp-list">'+opts.body+'</div>'
+    + (opts.foot===false?'':footer())
+    + '</div>';
+}
+
+/* ───────────────────────── App chrome ───────────────────────── */
+function tab(it, active){ return '<span class="ptab'+(active?' active':'')+'">'+svg(it.icon,'ic')+it.title+'</span>'; }
+function addBtn(pulse){ return '<button class="add-btn'+(pulse?' pulse':'')+'">'+svg('plus','ic')+'</button>'; }
+
+const LEFT_BODY = '<div class="filetree">'
+  + '<div class="f"><span class="ic">'+svg('files')+'</span>src</div>'
+  + '<div class="f indent sel"><span class="ic">'+svg('changes')+'</span>PanelSection.tsx</div>'
+  + '<div class="f indent"><span class="ic">'+svg('changes')+'</span>CompactLayout.tsx</div>'
+  + '<div class="f indent"><span class="ic">'+svg('changes')+'</span>EmptyPanelLauncher.tsx</div>'
+  + '<div class="f"><span class="ic">'+svg('files')+'</span>package.json</div>'
+  + '</div>';
+const CHAT_BODY = '<div class="chat">'
+  + '<div class="bubble user">Make the add-panel flow searchable</div>'
+  + '<div class="bubble ai">On it — exploring a cmd+k style picker for the section.</div>'
+  + '<div class="chat-spacer"></div>'
+  + '<div class="chat-input">Message Build compact layout…</div></div>';
+const TERM_BODY = '<div class="term"><div><span class="p">~/sculptor</span> <span class="c">just dev</span></div>'
+  + '<div>VITE ready in 412 ms</div><div>➜ Local: http://localhost:5173/</div></div>';
+
+function section(tabsHtml, body, opts){
+  opts = opts || {};
+  return '<div class="section">'
+    + '<div class="tabstrip">'+tabsHtml+addBtn(opts.pulse)+'</div>'
+    + '<div class="sec-body">'+body+'</div></div>';
+}
+
+/* compose the workspace; rightBody / overlay configurable */
+function workspace(opts){
+  opts = opts || {};
+  const left = section(tab({icon:'files',title:'Files'},true)+tab({icon:'changes',title:'Changes'},false)+tab({icon:'commits',title:'Commits'},false), LEFT_BODY, {pulse:opts.pulse==='left'});
+  const center = section(tab({icon:'agent',title:'Build compact layout'},true), CHAT_BODY, {pulse:opts.pulse==='center'});
+  const rightTabs = opts.rightTabs || '';
+  const right = opts.rightBody !== undefined
+    ? section(rightTabs, opts.rightBody, {pulse:opts.pulse==='right'})
+    : null;
+  const bottom = section(tab({icon:'terminal',title:'zsh — frontend'},true), TERM_BODY, {pulse:opts.pulse==='bottom'});
+
+  let html = '<div class="app">'
+    + '<div class="titlebar"><span class="lights"><i></i><i></i><i></i></span>'
+    + '<span class="ws-name">Build compact layout</span>'
+    + '<span class="branch">'+svg('commits',null)+' bryden/build-compact-layout</span>'
+    + '<span class="kbd-hint"><span class="key">⌘</span><span class="key">K</span> commands</span></div>'
+    + '<div class="ws-body"><div class="ws-main">'
+    + '<div class="col left">'+left+'</div>'
+    + '<div class="col center">'+center+'</div>'
+    + (right ? '<div class="col right">'+right+'</div>' : '')
+    + '</div></div>'
+    + '<div class="ws-bottom">'+bottom+'</div>'
+    + '<div class="toggle-bar"><span class="tg on">'+svg('files','ic')+' Left</span>'
+    + '<span class="tg on">'+svg('terminal','ic')+' Bottom</span>'
+    + '<span class="tg'+(right?' on':'')+'">'+svg('review','ic')+' Right</span>'
+    + '<span class="spacer"></span><span>4 panels · 2 agents</span></div>';
+
+  if (opts.overlay) html += '<div class="overlay">'+opts.overlay+'</div>';
+  if (opts.popover) html += '<div class="popwrap" style="'+opts.popover.style+'">'+opts.popover.html+'</div>';
+  html += '</div>';
+  return html;
+}
+
+/* ───────────────────────── Builders for state blocks ───────────────────────── */
+function stateBlock(num, title, desc, inner, tight){
+  return '<div class="state"><div class="state-cap"><span class="state-num">'+num+'</span>'
+    + '<div><h3>'+title+'</h3>'+(desc?'<p>'+desc+'</p>':'')+'</div></div>'
+    + '<div class="stage'+(tight?' stage--tight':'')+'">'+inner+'</div></div>';
+}
+function variantHead(title, lede, addresses){
+  return '<div class="variant-head"><h2>'+title+'</h2><p>'+lede+'</p>'
+    + '<ul class="addresses">'+addresses.map(a=>'<li>'+a+'</li>').join('')+'</ul></div>';
+}
+const LEGEND = '<div class="legend">'
+  + '<span><span class="d" style="background:var(--green-9)"></span> working</span>'
+  + '<span><span class="d" style="background:var(--amber-9)"></span> waiting</span>'
+  + '<span><span class="d" style="background:var(--gray-8)"></span> idle</span>'
+  + '<span>“in Center / in Bottom” = where it currently lives</span></div>';
+
+/* default-add body (Create / Open existing / Panels) used by A */
+function bodyAll(selGroup, selIdx){
+  return group('Create new', NEW, selGroup==='new'?selIdx:-1, {showKind:false})
+    + group('Open existing', AGENTS.concat(TERMINALS), selGroup==='exist'?selIdx:-1, {moveable:true}, AGENTS.length+TERMINALS.length+' available')
+    + group('Panels', PANELS, selGroup==='panel'?selIdx:-1, {showKind:false});
+}
+
+/* ============================== VARIANT A ============================== */
+(function(){
+  let h = variantHead(
+    'A · Modal command palette',
+    'A centered cmd+k overlay, opened from the section <code>+</code> (or a shortcut) and scoped to the target section — the chip reads <b>“+ Right”</b>. One flat, searchable list grouped into <b>Create new</b>, <b>Open existing</b>, and <b>Panels</b>. Mirrors the command palette we already ship, so it feels instantly familiar.',
+    ['<b>Search</b>: the top input filters every group at once.',
+     '<b>Keyboard</b>: ↑/↓ move the selection across groups, ↵ adds, esc closes.',
+     '<b>Move/restore</b>: existing agents &amp; terminals show <b>where they live now</b> and offer “Move here / Reveal” instead of silently duplicating.']
+  );
+
+  // 1 — full context (overlay open over the workspace)
+  const overlay1 = palette({ scope:'Right', query:'', placeholder:'Add a panel to the Right section…',
+    body: bodyAll('exist', 0) });
+  h += stateBlock(1, 'In context — overlay scoped to the Right section',
+    'Clicking the highlighted <code>+</code> in the (empty) Right section opens the palette over a dimmed workspace.',
+    workspace({ rightBody:'<div class="empty-hint">Empty section · press + to add a panel</div>', rightTabs:'', pulse:'right', overlay: overlay1 }));
+
+  // 2 — empty query, all groups
+  h += stateBlock(2, 'Open · empty query',
+    'Everything you can add, grouped. “Open existing” surfaces agents &amp; terminals not in this section, with their current home.',
+    palette({ scope:'Right', query:'', placeholder:'Add a panel…', body: bodyAll('exist',0) }) + LEGEND);
+
+  // 3 — typed query filters
+  const filtered = group('Create new', [NEW[1]], 0, {showKind:false})
+    + group('Open existing', [TERMINALS[0], TERMINALS[1]], -1, {moveable:true})
+    + group('Panels', [], -1, {});
+  h += stateBlock(3, 'Search · “term”',
+    'Typing filters across all groups. Here: <code>New terminal</code> plus the two existing terminals.',
+    palette({ scope:'Right', query:'term', body:
+      group('Create new', [NEW[1]], 0, {showKind:false})
+      + group('Open existing', [TERMINALS[0], TERMINALS[1]], -1, {moveable:true}) }));
+
+  // 4 — keyboard selection lands on an existing agent (shows move affordance)
+  h += stateBlock(4, 'Keyboard navigation → existing agent selected',
+    'Arrowing onto an existing agent reveals its move actions inline. ↵ runs the primary action (Move here).',
+    palette({ scope:'Right', query:'', body:
+      group('Create new', NEW, -1, {showKind:false})
+      + group('Open existing', AGENTS.concat(TERMINALS), 3, {moveable:true})
+      + group('Panels', PANELS, -1, {showKind:false}) }));
+
+  document.getElementById('panel-a').innerHTML = h;
+})();
+
+/* ============================== VARIANT B ============================== */
+(function(){
+  let h = variantHead(
+    'B · Embedded section palette',
+    'No overlay — the picker <b>is</b> the empty section. Instead of launcher cards, an empty section renders the search box + list inline, so adding a panel never leaves the section you’re filling. The section <code>+</code> on a populated section opens the same picker as a transient blank tab.',
+    ['<b>Search</b>: the section’s own input — no modal, no context switch.',
+     '<b>Keyboard</b>: focus is already inside the section; ↑/↓/↵ work immediately.',
+     '<b>Move/restore</b>: same location-aware rows, shown right where the panel will land.']
+  );
+
+  const inlineBody = '<div class="inline-frame">'
+    + palette({ variant:'inline', query:'', placeholder:'Search panels, agents, terminals…',
+        body: group('Create new', NEW, 0, {showKind:false})
+            + group('Open existing', AGENTS.slice(1).concat(TERMINALS), -1, {moveable:true})
+            + group('Panels', PANELS.slice(0,5), -1, {showKind:false}),
+        foot:false })
+    + '</div>';
+
+  // 1 — full context, right section IS the palette
+  h += stateBlock(1, 'In context — the empty Right section is the picker',
+    'The Right section opens straight into a searchable list. Nothing floats over the rest of the app.',
+    workspace({ rightTabs:'<span class="ptab active">'+svg('plus','ic')+'Add panel</span>', rightBody: inlineBody }));
+
+  // 2 — close-up, empty query
+  h += stateBlock(2, 'Embedded · empty query',
+    'Same content and grouping as the modal, rendered flat inside the section (no shadow / no scrim).',
+    '<div style="width:360px;height:420px;border:1px solid var(--gray-a4);border-radius:var(--radius-4);overflow:hidden;background:var(--gray-1)">'+inlineBody+'</div>');
+
+  // 3 — filtered
+  const inlineFiltered = '<div class="inline-frame">'
+    + palette({ variant:'inline', query:'rev',
+        body: group('Panels', [PANELS[3]], 0, {showKind:false})
+            + group('Open existing', [], -1, {}),
+        foot:false })
+    + '</div>';
+  h += stateBlock(3, 'Embedded · search “rev”',
+    'A single match (Review All) is auto-selected; ↵ drops it into this section.',
+    '<div style="width:360px;height:300px;border:1px solid var(--gray-a4);border-radius:var(--radius-4);overflow:hidden;background:var(--gray-1)">'+inlineFiltered+'</div>');
+
+  document.getElementById('panel-b').innerHTML = h;
+})();
+
+/* ============================== VARIANT C ============================== */
+(function(){
+  let h = variantHead(
+    'C · Anchored popover palette',
+    'A compact searchable popover that drops from the section <code>+</code> right where you clicked — smaller than a modal, more capable than today’s dropdown. Best when you want the picker to feel contextual to one section rather than a global overlay.',
+    ['<b>Search</b>: a slim input at the top of the popover.',
+     '<b>Keyboard</b>: ↑/↓/↵ within the popover; esc dismisses.',
+     '<b>Move/restore</b>: existing rows carry the same location chip + Move/Reveal split.']
+  );
+
+  const pop = palette({ variant:'popover', query:'', placeholder:'Add panel…',
+    body: group('Create', NEW, 0, {showKind:false})
+        + group('Open existing', AGENTS.slice(0,2).concat([TERMINALS[0]]), -1, {moveable:true})
+        + group('Panels', PANELS.slice(0,4), -1, {showKind:false}),
+    foot:false });
+
+  // 1 — anchored to the Center section + button
+  h += stateBlock(1, 'In context — popover anchored to the Center +',
+    'The popover opens beneath the section’s <code>+</code>, pointed at the button it came from.',
+    workspace({ pulse:'center', popover:{ style:'top:84px; left:300px; width:360px;', html: pop } }));
+
+  // 2 — close-up empty
+  h += stateBlock(2, 'Popover · empty query',
+    'Tighter footprint (360px) with the same grouped, location-aware content.',
+    pop, true);
+
+  // 3 — filtered + existing terminal selected (move/duplicate split)
+  const popSel = palette({ variant:'popover', query:'',
+    body: group('Open existing', [AGENTS[1], TERMINALS[0]], 1, {moveable:true}),
+    foot:false });
+  h += stateBlock(3, 'Popover · existing terminal selected',
+    'Selecting an existing terminal that already lives in Bottom offers <b>Move here</b> or <b>Reveal</b> — never a silent duplicate.',
+    popSel, true);
+
+  document.getElementById('panel-c').innerHTML = h;
+})();
+
+/* ============================== VARIANT D ============================== */
+(function(){
+  let h = variantHead(
+    'D · Location-aware palette (move / restore focus)',
+    'Same cmd+k shell, but built around the third design consideration. A segmented control — <b>Create · Open existing · Panels</b> — separates making something new from relocating what already exists, and a dedicated <b>Recently closed</b> group makes restoring a killed terminal or agent a first-class action. Can be hosted as a modal (shown) or embedded.',
+    ['<b>Search</b>: filters within the active segment.',
+     '<b>Keyboard</b>: ←/→ switch segments, ↑/↓/↵ act on rows.',
+     '<b>Move/restore</b>: the whole point — every existing item shows its home + Move/Reveal, and closed items get Restore.']
+  );
+
+  // 1 — "Open existing" segment
+  const bodyExisting =
+      group('Agents', AGENTS, 1, {moveable:true})
+    + group('Terminals', TERMINALS, -1, {moveable:true})
+    + group('Recently closed', CLOSED, -1, {restore:true});
+  h += stateBlock(1, 'Segment: Open existing',
+    'Every agent &amp; terminal with where it lives now. Items already placed show <b>Move here / Reveal</b>; unplaced show <b>Add here</b>; closed show <b>Restore here</b>.',
+    palette({ scope:'Right', query:'', placeholder:'Filter existing…',
+      seg:['Create','Open existing','Panels'], segActive:'Open existing', body: bodyExisting }) + LEGEND);
+
+  // 2 — "Create" segment
+  const bodyCreate = group('Create new', NEW, 0, {showKind:false})
+    + group('Recently closed', CLOSED, -1, {restore:true});
+  h += stateBlock(2, 'Segment: Create',
+    'New agent / new terminal up top; the recently-closed group repeats here so “I didn’t mean to close that” is one keystroke away.',
+    palette({ scope:'Right', query:'', placeholder:'Name a new panel…',
+      seg:['Create','Open existing','Panels'], segActive:'Create', body: bodyCreate }));
+
+  // 3 — "Panels" segment
+  h += stateBlock(3, 'Segment: Panels',
+    'The static panels, deduped to those not already in this section.',
+    palette({ scope:'Right', query:'', placeholder:'Filter panels…',
+      seg:['Create','Open existing','Panels'], segActive:'Panels',
+      body: group('Panels', PANELS, 0, {showKind:false}) }));
+
+  // 4 — restore highlighted
+  h += stateBlock(4, 'Restore a closed terminal',
+    'Arrowing onto a closed item swaps the kind label for a single <b>Restore here</b> action.',
+    palette({ scope:'Right', query:'test',
+      seg:['Create','Open existing','Panels'], segActive:'Open existing',
+      body: group('Recently closed', [CLOSED[1]], 0, {restore:true}) }, true));
+
+  document.getElementById('panel-d').innerHTML = h;
+})();
+
+/* ============================== REFINED A★ ============================== */
+(function(){
+  /* ── refined header pieces ── */
+  function inputHtml(query, ph){
+    return query
+      ? '<span class="cp-input">'+query+'<span class="cp-caret"></span></span>'
+      : '<span class="cp-input"><span class="ph">'+(ph||'Add a panel…')+'</span><span class="cp-caret"></span></span>';
+  }
+  function scopePill(label){
+    return '<span class="cp-scope cp-scope--btn">'+svg('plus')+' Add to '+label+' <span class="chev">'+svg('chevron')+'</span></span>';
+  }
+  function headerScope(query, ph, label){
+    return '<div class="cp-header"><span class="cp-search-ic">'+svg('search')+'</span>'+inputHtml(query,ph)+scopePill(label)+'</div>';
+  }
+  function headerBC(page, query, ph){
+    return '<div class="cp-header"><span class="cp-search-ic">'+svg('search')+'</span>'
+      + '<span class="cp-bc"><span class="root">Add panel</span>'+svg('chevron')+page+'</span>'
+      + inputHtml(query, ph) + '</div>';
+  }
+  function footR(extra){
+    return '<div class="cp-footer">'
+      + '<span class="grp"><span class="key">↑</span><span class="key">↓</span> navigate</span>'
+      + '<span class="grp"><span class="key">↵</span> add</span>'
+      + (extra||'')
+      + '<span class="grp"><span class="key">esc</span> close</span>'
+      + '<span class="spacer"></span><span class="cp-brand">'+svg('plus')+' <b>Add panel</b></span></div>';
+  }
+  function navRow(it, sel){
+    return '<div class="cp-item'+(sel?' is-selected':'')+'">'
+      + '<span class="cp-item-icon">'+svg(it.icon)+'</span>'
+      + '<span class="cp-item-body"><span class="cp-item-title">'+it.title+'</span><span class="cp-item-sub">'+it.sub+'</span></span>'
+      + '<span class="cp-item-trailing">'+(it.count?'<span class="cp-count">'+it.count+'</span>':'')+'<span class="cp-chev">'+svg('chevron')+'</span></span></div>';
+  }
+  function navGroup(rows, selIdx){
+    let h='<div class="cp-group">'; rows.forEach((r,i)=>{ h+=navRow(r, selIdx===i); }); return h+'</div>';
+  }
+  function tmItem(icon,label,on){
+    return '<div class="cp-tm-item'+(on?' on':'')+'"><span class="ic">'+svg(icon)+'</span>'+label
+      + (on?'<span class="check">'+svg('check')+'</span>':'')+'</div>';
+  }
+  // The destination list. Sections that are NOT split appear once ("Right");
+  // only a split section expands into natural halves ("Top right" / "Bottom
+  // right"). When nothing is split, no halves show at all.
+  const SECS_NOSPLIT = [
+    { icon:'files',    name:'Left',   sub:'Files · Changes · Commits' },
+    { icon:'agent',    name:'Center', sub:'Build compact layout' },
+    { icon:'review',   name:'Right',  sub:'empty' },
+    { icon:'terminal', name:'Bottom', sub:'zsh — frontend' },
+  ];
+  const SECS_SPLIT = [
+    { icon:'files',    name:'Left',         sub:'Files · Changes · Commits' },
+    { icon:'agent',    name:'Center',       sub:'Build compact layout' },
+    { icon:'review',   name:'Top right',    sub:'Review All' },
+    { icon:'notes',    name:'Bottom right', sub:'empty' },
+    { icon:'terminal', name:'Bottom',       sub:'zsh — frontend' },
+  ];
+  function targetMenu(active, secs){
+    secs = secs || SECS_NOSPLIT;
+    return '<div class="cp-target-menu">'
+      + '<div class="cp-tm-h">Change destination</div>'
+      + secs.map(s=>tmItem(s.icon, s.name, s.name===active)).join('')
+      + '</div>';
+  }
+  function cpShell(headerHtml, body, opts){
+    opts=opts||{};
+    return '<div class="cp'+(opts.menu?' cp--menuopen':'')+'" style="position:relative">'
+      + headerHtml + '<div class="cp-divider"></div>'
+      + '<div class="cp-list">'+body+'</div>'
+      + (opts.foot===false?'':(opts.foot||footR()))
+      + (opts.menu||'')
+      + '</div>';
+  }
+  /* empty destination pill (global ⌘K — no section yet) */
+  function scopePillEmpty(){
+    return '<span class="cp-scope cp-scope--btn cp-scope--empty">'+svg('plus')+' Add to… <span class="chev">'+svg('chevron')+'</span></span>';
+  }
+  function headerScopeEmpty(query, ph){
+    return '<div class="cp-header"><span class="cp-search-ic">'+svg('search')+'</span>'+inputHtml(query,ph)+scopePillEmpty()+'</div>';
+  }
+  /* the separate "choose a section" window that opens when you add from a
+     destination-less ⌘K. Lists every drop target incl. split halves. */
+  function secRow(s, sel){
+    return '<div class="cp-item'+(sel?' is-selected':'')+'">'
+      + '<span class="cp-item-icon">'+svg(s.icon)+'</span>'
+      + '<span class="cp-item-body"><span class="cp-item-title">'+s.name+'</span></span>'
+      + '<span class="cp-item-trailing"><span class="cp-sec-sub">'+s.sub+'</span></span></div>';
+  }
+  function locWindow(panelName, selIdx, secs){
+    secs = secs || SECS_NOSPLIT;
+    let body=''; secs.forEach((s,i)=>{ body+=secRow(s, selIdx===i); });
+    const header='<div class="cp-header"><span class="cp-search-ic">'+svg('plus')+'</span>'
+      + '<span class="loc-title">Add <b>'+panelName+'</b> to…</span></div>';
+    const foot='<div class="cp-footer"><span class="grp"><span class="key">↑</span><span class="key">↓</span> navigate</span>'
+      + '<span class="grp"><span class="key">↵</span> add here</span><span class="grp"><span class="key">esc</span> back</span>'
+      + '<span class="spacer"></span><span class="cp-brand">'+svg('plus')+' <b>Choose section</b></span></div>';
+    return '<div class="cp" style="position:relative;width:440px">'+header+'<div class="cp-divider"></div>'
+      + '<div class="cp-list">'+body+'</div>'+foot+'</div>';
+  }
+
+  /* ── data for refined ── */
+  const NAV = [
+    { icon:'swap',    title:'Open existing agent or terminal', sub:'move one that already exists into this section', count:'6 →' },
+    { icon:'restore', title:'Restore a closed agent or terminal', sub:'bring back something you closed', count:'2 →' },
+  ];
+  // Quick add = up to 5 default options, chosen from what's popular + not
+  // already open in this workspace (NOT a literal recents history).
+  const QUICK = [
+    { icon:'terminal', name:'Terminal' },
+    { icon:'files',    name:'Files' },
+    { icon:'review',   name:'Review All' },
+    { icon:'browser',  name:'Browser' },
+    { icon:'agent',    name:'New agent' },
+  ];
+
+  // Chosen layout: left-aligned list (Option A).
+  function quickRows(){
+    return QUICK.map(q=>'<div class="qa-row"><span class="ic">'+svg(q.icon)+'</span>'+q.name+'</div>').join('');
+  }
+  function quickListPlain(){ return '<div class="qa-h">Quick add</div>'+quickRows(); }
+  // Open-the-full-picker affordances (all open ⌘K scoped to this section).
+  function vSearchbox(){ return '<div class="qa-searchbox">'+svg('search')+'<span>Search panels, agents…</span></div>'; }
+  function vBrowseBtn(){ return '<button class="qa-btn">'+svg('search')+' Browse all panels</button>'; }
+  function vBtnRow(){ return '<div class="qa-row qa-row--btn"><span class="ic">'+svg('search')+'</span>All panels…</div>'; }
+  // (kept for history) Option B tile grid — not chosen.
+  function quickTiles(){
+    return '<div class="qa-tiles-wrap"><div class="qa-h center">Quick add</div><div class="qa-tiles">'
+      + QUICK.map(q=>'<div class="qa-tile"><span class="ic">'+svg(q.icon)+'</span><span>'+q.name+'</span></div>').join('')
+      + '</div></div>';
+  }
+  function secFrame(inner, w, hgt){
+    return '<div class="sec-frame" style="width:'+(w||260)+'px;height:'+(hgt||320)+'px">'+inner+'</div>';
+  }
+  // Default empty state: Quick add (list) + a clear Browse-all button.
+  function emptyState(){ return '<div class="empty2b"><div class="qa-col">'+quickListPlain()+vBrowseBtn()+'</div></div>'; }
+  function emptyVar(which){
+    const inner = which==='search' ? vSearchbox()+quickListPlain()
+      : which==='button' ? quickListPlain()+vBrowseBtn()
+      : quickListPlain()+vBtnRow();
+    return '<div class="empty2b"><div class="qa-col">'+inner+'</div></div>';
+  }
+
+  let h = variantHead(
+    'A★ · Refined modal palette (chosen direction)',
+    'The modal cmd+k from A, evolved with your notes. <b>Open existing</b> and <b>Restore closed</b> are drill-in <b>sub-pages</b>; the panel options live in the same list and in the global ⌘K. Destination follows your Option C: from a section’s <code>+</code> it’s a <b>changeable “Add to … ▾” dropdown</b>; from ⌘K the destination is <b>empty</b> and adding a panel opens a <b>separate “choose section” window</b>. The empty section is just a tidy <b>Quick add</b> — the section header’s <code>+</code> is the way into the full picker, so no extra button.',
+    ['<b>Empty state</b>: a tidy 5-item Quick add (popular / not-already-open) plus the chosen “Browse all panels” button to open the full ⌘K picker — no misleading shortcut. (Alternatives in state 2.)',
+     '<b>No phantom splits</b>: the destination list shows a section once (“Right”) and only expands into natural halves (“Top right” / “Bottom right”) when it’s actually split — lowercased in sentences (“add to the top right section”).',
+     '<b>From a section +</b>: destination pre-filled and changeable inline.',
+     '<b>From ⌘K (no context)</b>: empty destination pill; picking a panel opens a dedicated location window.']
+  );
+
+  // 1 — new empty-section state in context (Quick add + Browse-all button)
+  h += stateBlock(1, 'New empty-section state — Quick add + Browse button',
+    'A tidy 5-item Quick add (popular panels not already open) plus a clear “Browse all panels” button that opens the full ⌘K picker. The section header’s + (highlighted) is a second way in.',
+    workspace({ rightTabs:'', pulse:'right', rightBody: emptyState() }));
+
+  // 2 — open-picker button variants (the list layout is settled = Option A)
+  h += stateBlock(2, 'Opening the full picker — button variants',
+    'Quick add (left-aligned list) is settled; these vary how you open the full ⌘K picker from the empty section. Chosen: option 2, the “Browse all panels” button. (All three open the same palette; the section header + always works too.)',
+    '<div class="cmp">'
+      + '<div class="cmp-col"><span class="cmp-label">1 · Search box (opens ⌘K)</span>'+secFrame(emptyVar('search'),250,330)+'</div>'
+      + '<div class="cmp-col"><span class="cmp-label">2 · “Browse all” button</span>'+secFrame(emptyVar('button'),250,330)+'</div>'
+      + '<div class="cmp-col"><span class="cmp-label">3 · “All panels…” row</span>'+secFrame(emptyVar('btnrow'),250,330)+'</div>'
+      + '</div>');
+
+  // 3 — top-level palette opened from the section + (destination pre-filled, changeable)
+  const topBody = group('Create', NEW, 0, {showKind:false})
+    + group('Panels', PANELS, -1, {showKind:false})
+    + navGroup(NAV, -1);
+  h += stateBlock(3, 'Opened from the right section’s + — destination pre-filled',
+    'Short top level: Create, the panel options, then two drill-in rows. The “Add to right ▾” pill is pre-set to this section and changeable.',
+    cpShell(headerScope('', 'Add a panel to the right section…', 'right'), topBody));
+
+  // 4 — destination dropdown, NO splits (the common case)
+  h += stateBlock(4, 'Changing the destination — nothing split (common case)',
+    'The “Add to … ▾” dropdown lists each section once. With no split sections anywhere, no halves appear at all. (Menu labels stay capitalized; the pill sentence is lowercased.)',
+    cpShell(headerScope('', 'Add a panel to the right section…', 'right'),
+      group('Create', NEW, 0, {showKind:false}) + group('Panels', PANELS.slice(0,4), -1, {showKind:false}),
+      { menu: targetMenu('Right', SECS_NOSPLIT) }));
+
+  // 5 — destination dropdown, edge case: a split section uses natural names
+  h += stateBlock(5, 'Edge case — a split section, in natural language',
+    'Only when the right column is split does it expand into “Top right” and “Bottom right” — the pill reads “add to the top right section”, the menu lists “Top right / Bottom right”.',
+    cpShell(headerScope('', 'Add a panel to the top right section…', 'top right'),
+      group('Create', NEW, 0, {showKind:false}) + group('Panels', PANELS.slice(0,4), -1, {showKind:false}),
+      { menu: targetMenu('Top right', SECS_SPLIT) }));
+
+  // 6 — sub-page: Open existing
+  const existBody = group('Agents', AGENTS, 1, {moveable:true})
+    + group('Terminals', TERMINALS, -1, {moveable:true});
+  h += stateBlock(6, 'Sub-page — Open existing agent or terminal',
+    'Drilled in via breadcrumb (Add panel ▸ Open existing). Each shows where it lives now; ↵ runs Move here. ⌫ / esc returns to the top level.',
+    cpShell(headerBC('Open existing', '', 'Filter agents & terminals…'), existBody) + LEGEND);
+
+  // 7 — sub-page: Restore closed
+  h += stateBlock(7, 'Sub-page — Restore a closed agent or terminal',
+    'The restore list lives on its own page so it never clutters the common path.',
+    cpShell(headerBC('Restore closed', '', 'Filter closed…'), group('Recently closed', CLOSED, 0, {restore:true})));
+
+  // 8 — opened naively from global ⌘K — empty destination
+  const globalBody = group('Add panel', NEW.concat([PANELS[0],PANELS[1],PANELS[3],PANELS[6]]), 0, {showKind:false})
+    + navGroup(NAV, -1)
+    + group('Workspace', [
+        {icon:'swap', title:'Switch workspace…', sub:''},
+        {icon:'settings', title:'Open settings', sub:''},
+      ], -1, {showKind:false});
+  h += stateBlock(8, 'Opened naively from ⌘K — empty destination',
+    'No section context, so the “Add to…” pill is empty (a quiet ghost). Panels live among the commands; choosing one moves to the location step.',
+    cpShell(headerScopeEmpty('', 'Search commands, panels, agents…'), globalBody));
+
+  // 9 — the separate location window that opens on add
+  h += stateBlock(9, 'Choosing the location — a dedicated window',
+    'Adding a panel from a destination-less ⌘K opens this second window: pick the section, ↵ to drop it in, esc to go back. Split sections expand here too (Top right / Bottom right).',
+    locWindow('Files', 2), true);
+
+  document.getElementById('panel-r').innerHTML = h;
+})();
+
+/* ───────────────────────── Tab switching ───────────────────────── */
+document.getElementById('tabs').addEventListener('click', function(e){
+  const btn = e.target.closest('.tab-btn'); if (!btn) return;
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
+  window.scrollTo({top:0});
+});
+</script>
+</body>
+</html>

@@ -12,20 +12,26 @@ import {
   didZenImplyFocusModeAtom,
   focusModeActiveAtom,
   focusModeSavedVisibilityAtom,
+  maximizedZoneAtom,
   panelEnabledAtom,
   panelsInZoneAtom,
   savedSideVisibilityAtom,
   zenModeActiveAtom,
+  zoneAssignmentsAtom,
+  zoneOrderAtom,
   zoneVisibilityAtom,
 } from "~/components/panels/atoms.ts";
 import {
   useFocusMode,
+  useMaximizePanel,
+  usePanelActions,
   usePanelEnabled,
   usePanelKeyboardShortcuts,
   useSideToggle,
   useZenMode,
 } from "~/components/panels/hooks.ts";
 import { PanelRegistryProvider } from "~/components/panels/PanelRegistryProvider";
+import { sectionSplitAtom } from "~/components/panels/sectionLayoutAtoms.ts";
 import type { LayoutSide, PanelDefinition } from "~/components/panels/types.ts";
 import { ZONE_IDS } from "~/components/panels/types.ts";
 
@@ -864,5 +870,181 @@ describe("usePanelKeyboardShortcuts focus-then-toggle dispatch", () => {
     vi.useRealTimers();
     customTarget.remove();
     unmount();
+  });
+});
+
+// ── usePanelActions.movePanel — section-split collapse (Bug 1) ─────────
+
+describe("usePanelActions.movePanel — split collapse on empty primary", () => {
+  const renderActions = (
+    store: ReturnType<typeof createStore>,
+  ): ReturnType<typeof renderHook<ReturnType<typeof usePanelActions>, unknown>> => {
+    const wrapper = ({ children }: { children: ReactNode }): ReactElement => (
+      <Provider store={store}>{children}</Provider>
+    );
+    return renderHook(() => usePanelActions(), { wrapper });
+  };
+
+  it("promotes the split half up and un-splits when a move empties the split primary", () => {
+    const store = createPanelStore(TEST_PANELS);
+    // top-left (primary) holds `info`; top-left:split holds `changes`.
+    store.set(zoneAssignmentsAtom, { info: "top-left", changes: "top-left:split" });
+    store.set(zoneOrderAtom, { "top-left": ["info"], "top-left:split": ["changes"] });
+    store.set(activePanelPerZoneAtom, { "top-left": "info", "top-left:split": "changes" });
+    store.set(sectionSplitAtom, { "top-left": { axis: "vertical", ratio: 0.5 } });
+
+    const { result } = renderActions(store);
+
+    // Drag the primary half's only tab out to the center.
+    act(() => result.current.movePanel("info", "center"));
+
+    // Split collapsed; the surviving half (changes) became the whole section.
+    expect(store.get(sectionSplitAtom)["top-left"]).toBeUndefined();
+    expect(store.get(zoneAssignmentsAtom)).toEqual({ info: "center", changes: "top-left" });
+    expect(store.get(activePanelPerZoneAtom)["top-left"]).toBe("changes");
+    expect(store.get(zoneAssignmentsAtom)["changes"]).toBe("top-left");
+  });
+
+  it("does NOT collapse when a move empties the split SECONDARY half (handled by self-heal)", () => {
+    const store = createPanelStore(TEST_PANELS);
+    store.set(zoneAssignmentsAtom, { info: "top-left", changes: "top-left:split" });
+    store.set(zoneOrderAtom, { "top-left": ["info"], "top-left:split": ["changes"] });
+    store.set(activePanelPerZoneAtom, { "top-left": "info", "top-left:split": "changes" });
+    store.set(sectionSplitAtom, { "top-left": { axis: "vertical", ratio: 0.5 } });
+
+    const { result } = renderActions(store);
+
+    // Drag the secondary half's only tab out — movePanel leaves the split entry
+    // for SplittableSection's self-heal to collapse; it must not promote.
+    act(() => result.current.movePanel("changes", "center"));
+
+    expect(store.get(sectionSplitAtom)["top-left"]).toEqual({ axis: "vertical", ratio: 0.5 });
+    expect(store.get(zoneAssignmentsAtom)["changes"]).toBe("center");
+    expect(store.get(zoneAssignmentsAtom)["info"]).toBe("top-left");
+  });
+
+  it("leaves an unrelated split untouched when moving a non-split panel", () => {
+    const store = createPanelStore(TEST_PANELS);
+    store.set(zoneAssignmentsAtom, { info: "top-left", cost: "top-left", changes: "top-left:split" });
+    store.set(zoneOrderAtom, { "top-left": ["info", "cost"], "top-left:split": ["changes"] });
+    store.set(activePanelPerZoneAtom, { "top-left": "info", "top-left:split": "changes" });
+    store.set(sectionSplitAtom, { "top-left": { axis: "vertical", ratio: 0.5 } });
+
+    const { result } = renderActions(store);
+
+    // Move `info` out — `cost` remains in the primary, so the split stays.
+    act(() => result.current.movePanel("info", "center"));
+
+    expect(store.get(sectionSplitAtom)["top-left"]).toEqual({ axis: "vertical", ratio: 0.5 });
+    expect(store.get(zoneAssignmentsAtom)["changes"]).toBe("top-left:split");
+    expect(store.get(zoneAssignmentsAtom)["cost"]).toBe("top-left");
+  });
+
+  // Regression: placing an UNPLACED panel (no zoneAssignments entry — e.g. an
+  // existing agent added from the Add Panel palette) used to crash in the
+  // source-zone cleanup (`toPrimaryZone(undefined)`), leaving callers' post-move
+  // steps (like closing the palette) unexecuted.
+  it("places an unplaced panel without touching any source zone", () => {
+    const store = createPanelStore(TEST_PANELS);
+    store.set(zoneAssignmentsAtom, { info: "top-left" });
+    store.set(zoneOrderAtom, { "top-left": ["info"] });
+    store.set(activePanelPerZoneAtom, { "top-left": "info" });
+    store.set(zoneVisibilityAtom, { "top-left": true });
+
+    const { result } = renderActions(store);
+
+    act(() => result.current.movePanel("changes", "top-right"));
+
+    expect(store.get(zoneAssignmentsAtom)).toEqual({ info: "top-left", changes: "top-right" });
+    expect(store.get(activePanelPerZoneAtom)["top-right"]).toBe("changes");
+    expect(store.get(zoneVisibilityAtom)["top-right"]).toBe(true);
+    // The unplaced panel had no source section — nothing else may be hidden or
+    // polluted with a bogus "undefined" zone key.
+    expect(store.get(zoneVisibilityAtom)["top-left"]).toBe(true);
+    expect(Object.keys(store.get(zoneOrderAtom))).not.toContain("undefined");
+    expect(Object.keys(store.get(zoneVisibilityAtom))).not.toContain("undefined");
+  });
+});
+
+// ── useMaximizePanel ────────────────────────────────────────────────
+
+const renderMaximizePanel = (
+  store: ReturnType<typeof createStore>,
+): ReturnType<typeof renderHook<ReturnType<typeof useMaximizePanel>, unknown>> => {
+  const wrapper = ({ children }: { children: ReactNode }): ReactElement => (
+    <Provider store={store}>
+      <PanelRegistryProvider panels={TEST_PANELS}>{children}</PanelRegistryProvider>
+    </Provider>
+  );
+  return renderHook(() => useMaximizePanel(), { wrapper });
+};
+
+describe("useMaximizePanel", () => {
+  it("maximizeZone sets the maximized zone and restore clears it", () => {
+    const store = createDefaultStore();
+    const { result } = renderMaximizePanel(store);
+
+    act(() => result.current.maximizeZone("top-left"));
+    expect(result.current.maximizedZone).toBe("top-left");
+    expect(store.get(maximizedZoneAtom)).toBe("top-left");
+
+    act(() => result.current.restore());
+    expect(result.current.maximizedZone).toBeNull();
+    expect(store.get(maximizedZoneAtom)).toBeNull();
+  });
+
+  it("toggleZone maximizes when closed and restores when it is the maximized zone", () => {
+    const store = createDefaultStore();
+    const { result } = renderMaximizePanel(store);
+
+    act(() => result.current.toggleZone("center"));
+    expect(result.current.maximizedZone).toBe("center");
+
+    act(() => result.current.toggleZone("center"));
+    expect(result.current.maximizedZone).toBeNull();
+  });
+
+  it("toggleZone switches directly to a different zone", () => {
+    const store = createDefaultStore();
+    const { result } = renderMaximizePanel(store);
+
+    act(() => result.current.toggleZone("top-left"));
+    act(() => result.current.toggleZone("top-right"));
+    expect(result.current.maximizedZone).toBe("top-right");
+  });
+
+  it("toggleMaximizeFocused restores when something is already maximized", () => {
+    const store = createDefaultStore();
+    const { result } = renderMaximizePanel(store);
+
+    act(() => result.current.maximizeZone("top-left"));
+    act(() => result.current.toggleMaximizeFocused());
+    expect(result.current.maximizedZone).toBeNull();
+  });
+
+  it("toggleMaximizeFocused falls back to the Center section when nothing is focused", () => {
+    const store = createDefaultStore();
+    const { result } = renderMaximizePanel(store);
+
+    // No element with [data-zone-id] holds focus in the test DOM, so the focused
+    // lookup misses and the hook maximizes the always-present Center section.
+    act(() => result.current.toggleMaximizeFocused());
+    expect(result.current.maximizedZone).toBe("center");
+  });
+
+  it("toggleMaximizeFocused maximizes the zone whose element holds focus", () => {
+    const store = createDefaultStore();
+    const { result } = renderMaximizePanel(store);
+
+    const zoneEl = document.createElement("div");
+    zoneEl.setAttribute("data-zone-id", "top-right");
+    zoneEl.tabIndex = -1;
+    document.body.appendChild(zoneEl);
+    zoneEl.focus();
+
+    act(() => result.current.toggleMaximizeFocused());
+    expect(result.current.maximizedZone).toBe("top-right");
+
+    document.body.removeChild(zoneEl);
   });
 });

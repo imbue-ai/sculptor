@@ -37,9 +37,17 @@ export const updateTasksAtom = atom(null, (get, set, updates: Record<string, Cod
       return;
     }
 
-    // Skip atom update when the task data hasn't changed to avoid unnecessary re-renders.
     const current = get(taskAtomFamily(id));
-    if (!isEqual(current, task)) {
+    // Ignore a view strictly older than what we already hold. Task-view frames
+    // carry a monotonically increasing `updatedAt`, so an older one is stale /
+    // out-of-order — e.g. the `createWorkspaceAgent` REST snapshot (captured at
+    // creation time, status BUILDING) resolving AFTER the WebSocket already
+    // settled the agent. Applying it would regress live state; this is what left
+    // a freshly-created agent's status dot stuck on blue/"building" when other
+    // sessions were already running.
+    const isStale = current !== null && new Date(task.updatedAt).getTime() < new Date(current.updatedAt).getTime();
+    // Skip the atom write when stale, or when unchanged (avoid needless re-renders).
+    if (!isStale && !isEqual(current, task)) {
       set(taskAtomFamily(id), task);
     }
 

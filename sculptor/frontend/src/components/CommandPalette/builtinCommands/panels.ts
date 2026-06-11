@@ -1,6 +1,7 @@
 import {
   EyeIcon,
   LayoutPanelLeftIcon,
+  Maximize2,
   PanelBottomIcon,
   PanelLeftIcon,
   PanelRightIcon,
@@ -133,5 +134,18 @@ export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
     order: 50,
     when: (ctx) => ctx.route.isWorkspace,
     perform: () => runtime.ui.toggleZenMode(),
+  },
+  {
+    id: "view.maximize_panel",
+    title: "Maximize panel",
+    subtitle: "Maximize the focused panel to fill the workspace (Esc to restore)",
+    keywords: ["maximize", "fullscreen", "expand", "panel", "restore"],
+    group: "view",
+    icon: Maximize2,
+    shortcut: "maximize_panel",
+    onPage: "view.layout",
+    order: 60,
+    when: (ctx) => ctx.route.isWorkspace,
+    perform: () => runtime.ui.toggleMaximizePanel(),
   },
 ];

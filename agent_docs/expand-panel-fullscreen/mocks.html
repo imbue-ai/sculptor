@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Expand Panel to Fullscreen — Mocks</title>
+<style>
+  /* ---- Radix gray dark scale (app default: appearance=dark, accent=gray) ---- */
+  :root {
+    --g1:#111111; --g2:#191919; --g3:#222222; --g4:#2a2a2a; --g5:#313131;
+    --g6:#3a3a3a; --g7:#484848; --g8:#606060; --g9:#6e6e6e; --g10:#7b7b7b;
+    --g11:#b4b4b4; --g12:#eeeeee;
+    --border: rgba(255,255,255,0.09);
+    --border-strong: rgba(255,255,255,0.16);
+    --focus: #d6d6d6;                 /* monochrome "focused panel" highlight */
+    --focus-glow: rgba(255,255,255,0.13);
+    --add:#3fb950; --del:#f85149;     /* diff add/remove */
+    --addbg: rgba(63,185,80,0.12); --delbg: rgba(248,81,73,0.12);
+    --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; background:#0c0c0c; color:var(--g11); font-family:var(--font);
+    -webkit-font-smoothing:antialiased; }
+  a { color:var(--g12); }
+
+  .page { max-width:1140px; margin:0 auto; padding:40px 28px 120px; }
+  .page > header h1 { font-size:26px; font-weight:600; color:var(--g12); margin:0 0 6px; letter-spacing:-0.02em; }
+  .page > header p { margin:0; color:var(--g10); font-size:14px; max-width:760px; line-height:1.55; }
+
+  /* ---- variant tab switcher ---- */
+  .switcher { display:flex; gap:8px; margin:28px 0 8px; flex-wrap:wrap; }
+  .switcher button {
+    font:inherit; font-size:13px; color:var(--g11); background:var(--g2);
+    border:1px solid var(--border); border-radius:8px; padding:8px 14px; cursor:pointer;
+    transition:background .12s, border-color .12s, color .12s;
+  }
+  .switcher button:hover { background:var(--g3); }
+  .switcher button.active { background:var(--g4); color:var(--g12); border-color:var(--border-strong); }
+  .switcher button .sub { color:var(--g9); font-size:11px; margin-left:7px; }
+
+  .tabpane { display:none; }
+  .tabpane.active { display:block; }
+
+  .vhead { margin:26px 0 4px; }
+  .vhead h2 { font-size:18px; font-weight:600; color:var(--g12); margin:0 0 4px; letter-spacing:-0.01em; }
+  .vhead p { margin:0; color:var(--g10); font-size:13.5px; line-height:1.55; max-width:820px; }
+  .keyline { display:flex; gap:14px; flex-wrap:wrap; margin:14px 0 18px; font-size:12.5px; color:var(--g10); }
+  .keyline .kpair { display:flex; align-items:center; gap:7px; }
+
+  .statecap { font-size:12px; color:var(--g9); margin:18px 0 8px; display:flex; align-items:center; gap:8px; }
+  .statecap .dot { width:6px; height:6px; border-radius:50%; background:var(--g8); }
+  .statecap .live { color:var(--g12); }
+  .statecap b { color:var(--g11); font-weight:600; }
+
+  kbd {
+    font-family:var(--mono); font-size:11px; line-height:1; color:var(--g12);
+    background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.13);
+    border-bottom-color:rgba(255,255,255,0.20); border-radius:5px; padding:3px 6px;
+    display:inline-block; white-space:nowrap;
+  }
+
+  /* =====================  WORKSPACE FRAME (the app mock)  ===================== */
+  .frame {
+    position:relative; width:100%; aspect-ratio:16/10; min-height:430px;
+    background:var(--g1); border:1px solid var(--border); border-radius:11px;
+    overflow:hidden; box-shadow:0 18px 50px rgba(0,0,0,0.55); user-select:none;
+    outline:2px solid transparent; transition:outline-color .15s;
+  }
+  .frame.active-frame { outline-color:rgba(255,255,255,0.10); }
+
+  /* far-left nav rail — ALWAYS visible, never covered by an expand */
+  .rail {
+    position:absolute; top:0; left:0; bottom:0; width:46px; background:#0e0e0e;
+    border-right:1px solid var(--border); z-index:60;
+    display:flex; flex-direction:column; align-items:center; padding:8px 0; gap:4px;
+  }
+  .rail .logo { width:24px; height:24px; border-radius:6px; background:var(--g6);
+    display:flex; align-items:center; justify-content:center; color:var(--g12); font-weight:700; font-size:12px; margin-bottom:6px; }
+  .rail .ricon { width:30px; height:30px; border-radius:7px; display:flex; align-items:center; justify-content:center;
+    color:var(--g9); }
+  .rail .ricon.sel { background:var(--g4); color:var(--g12); }
+  .rail .spacer { flex:1; }
+
+  .main { position:absolute; top:0; left:46px; right:0; bottom:0; display:flex; flex-direction:column; }
+
+  /* top workspace banner (WorkspaceBanner, ~32px) */
+  .topbar {
+    height:33px; min-height:33px; display:flex; align-items:center; gap:10px;
+    padding:0 12px; background:var(--g2); border-bottom:1px solid var(--border);
+    font-size:12px; color:var(--g10); z-index:40;
+  }
+  .topbar .branch { color:var(--g11); font-family:var(--mono); font-size:11.5px; }
+  .topbar .arrow { color:var(--g8); }
+  .topbar .target { color:var(--g10); font-family:var(--mono); font-size:11.5px; }
+  .topbar .pill { font-size:11px; padding:2px 7px; border-radius:5px; background:var(--g3); color:var(--g10); }
+  .topbar .add { color:var(--add); } .topbar .del { color:var(--del); }
+  .topbar .grow { flex:1; }
+  .topbar .tbtn { width:24px; height:24px; border-radius:6px; display:flex; align-items:center; justify-content:center; color:var(--g9); }
+  .topbar .tbtn.on { background:var(--g4); color:var(--g12); }
+
+  /* the compact panel grid */
+  .grid {
+    flex:1; display:grid; min-height:0;
+    grid-template-columns: 190px 1fr 210px;
+    grid-template-rows: 1fr 116px;
+    gap:1px; background:var(--border);
+  }
+  .section { background:var(--g1); display:flex; flex-direction:column; min-width:0; min-height:0; position:relative; }
+  .section.left   { grid-column:1; grid-row:1; }
+  .section.center { grid-column:2; grid-row:1; }
+  .section.right  { grid-column:3; grid-row:1; }
+  .section.bottom { grid-column:1 / -1; grid-row:2; }
+
+  /* tab strip == panel header (41px). Holds tab(s), focus badge, expand icon. */
+  .strip {
+    height:38px; min-height:38px; display:flex; align-items:center; gap:6px;
+    padding:0 6px 0 8px; background:var(--g2); border-bottom:1px solid var(--border);
+  }
+  .tab { display:flex; align-items:center; gap:6px; height:26px; padding:0 8px; border-radius:6px;
+    font-size:12px; color:var(--g10); cursor:pointer; white-space:nowrap; }
+  .tab .ti { display:flex; color:var(--g9); }
+  .tab.active { background:var(--g4); color:var(--g12); }
+  .tab.active .ti { color:var(--g11); }
+  .tab .fbadge { font-family:var(--mono); font-size:9.5px; color:var(--g9);
+    background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.10); border-radius:4px;
+    padding:1px 4px; margin-left:2px; }
+  .tab.active .fbadge { color:var(--g11); background:rgba(255,255,255,0.09); }
+  .strip .grow { flex:1; }
+  .ibtn { width:24px; height:24px; border-radius:6px; display:flex; align-items:center; justify-content:center;
+    color:var(--g9); cursor:pointer; }
+  .ibtn:hover { background:var(--g4); color:var(--g12); }
+  .ibtn.expand:hover { color:var(--focus); }
+
+  .body { flex:1; overflow:hidden; padding:8px 10px; font-size:11.5px; color:var(--g10); min-height:0; }
+
+  /* ---- focused section highlight (monochrome) ---- */
+  .section.focused { box-shadow: inset 0 0 0 1.5px var(--focus); z-index:5; }
+  .section.focused .strip { background:var(--g3); }
+  .section.focused::after {
+    content:""; position:absolute; inset:0; pointer-events:none; border-radius:1px;
+    box-shadow:0 0 0 3px var(--focus-glow);
+  }
+
+  /* ---- maximized panel ---- */
+  .section.is-max { z-index:80; box-shadow:0 0 0 1px var(--border-strong), 0 24px 60px rgba(0,0,0,0.6); }
+  .section.is-max .body { padding:16px 22px; font-size:12.5px; }
+  .section.is-max .strip { height:42px; min-height:42px; }
+  .frame.expanded.va .section.is-max { position:absolute; top:33px;  left:0; right:0; bottom:0; }
+  .frame.expanded.vb .section.is-max { position:absolute; top:0;     left:0; right:0; bottom:0; }
+  .frame.expanded.vc .section.is-max { position:absolute; top:22px; left:22px; right:22px; bottom:22px; border-radius:10px; overflow:hidden; }
+  .frame.expanded.vc .section.is-max .strip { border-radius:10px 10px 0 0; }
+
+  /* Variant D — fills like B, but the section's strip is promoted to a full-width,
+     banner-like tabbed top bar (replacing the workspace banner). */
+  .frame.expanded.vd .section.is-max { position:absolute; top:0; left:0; right:0; bottom:0; }
+  .frame.expanded.vd .section.is-max .strip {
+    height:40px; min-height:40px; background:var(--g2); padding:0 10px 0 12px; gap:8px;
+  }
+  .frame.expanded.vd .section.is-max .strip .tab { height:28px; font-size:12.5px; }
+  .frame.vd .section.is-max .exitpill { display:none !important; } /* D uses the strip's own controls */
+  .strip-esc { display:none; font-size:10px; color:var(--g9); margin-right:2px; align-items:center; }
+  .frame.expanded.vd .section.is-max .strip-esc { display:inline-flex; }
+
+  /* spotlight backdrop (variant C only) */
+  .backdrop { position:absolute; top:0; left:46px; right:0; bottom:0; background:rgba(0,0,0,0.58);
+    z-index:70; display:none; backdrop-filter:blur(1px); }
+  .frame.expanded.vc .backdrop { display:block; }
+
+  /* exit affordance shown on a maximized panel */
+  .exitpill {
+    position:absolute; top:9px; right:12px; z-index:90; display:none; align-items:center; gap:8px;
+    background:rgba(20,20,20,0.85); border:1px solid var(--border-strong); border-radius:8px;
+    padding:5px 9px; font-size:11px; color:var(--g11); backdrop-filter:blur(4px);
+  }
+  .section.is-max .exitpill { display:flex; }
+  .exitpill .x { width:18px; height:18px; display:flex; align-items:center; justify-content:center;
+    color:var(--g9); cursor:pointer; border-radius:5px; }
+  .exitpill .x:hover { background:var(--g4); color:var(--g12); }
+
+  /* floating immersive exit (variant B) lives top-right over covered topbar */
+  .frame.expanded.vb .section.is-max .exitpill { top:9px; right:12px; }
+
+  /* ---------------- panel body content styling ---------------- */
+  .tree div { padding:2px 0; white-space:nowrap; color:var(--g10); }
+  .tree .dir { color:var(--g9); }
+  .tree .f { padding-left:14px; }
+  .tree .f.sel { color:var(--g12); background:var(--g3); border-radius:4px; padding-left:14px; }
+  .tree .m { color:#d6a85a; font-family:var(--mono); font-size:10px; margin-left:6px; }
+  .tree .u { color:var(--g7); font-family:var(--mono); font-size:10px; margin-left:6px; }
+
+  .chat .msg { margin-bottom:12px; }
+  .chat .who { font-size:10.5px; color:var(--g9); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.04em; }
+  .chat .bubble { color:var(--g11); line-height:1.5; }
+  .chat .toolpill { display:inline-flex; align-items:center; gap:6px; margin-top:7px; font-size:11px;
+    color:var(--g10); background:var(--g3); border:1px solid var(--border); border-radius:6px; padding:4px 8px; }
+  .chat .input { margin-top:10px; border:1px solid var(--border); border-radius:8px; background:var(--g2);
+    padding:8px 10px; color:var(--g9); font-size:11.5px; display:flex; align-items:center; justify-content:space-between; }
+
+  .diff { font-family:var(--mono); font-size:11px; line-height:1.55; }
+  .diff .fname { color:var(--g11); font-family:var(--font); font-size:11.5px; margin-bottom:6px; display:flex; gap:8px; align-items:center; }
+  .diff .hunk { color:var(--g8); }
+  .diff .add { background:var(--addbg); color:#7ee787; display:block; padding:0 4px; }
+  .diff .del { background:var(--delbg); color:#ff9a93; display:block; padding:0 4px; }
+  .diff .ctx { color:var(--g9); display:block; padding:0 4px; }
+
+  .term { font-family:var(--mono); font-size:11px; line-height:1.6; color:var(--g10); }
+  .term .p { color:var(--add); } .term .ok { color:#7ee787; } .term .dim { color:var(--g8); }
+
+  /* annotation callouts (overview) */
+  .annot { display:flex; gap:30px; flex-wrap:wrap; margin-top:20px; }
+  .annot .card { background:var(--g2); border:1px solid var(--border); border-radius:10px; padding:16px 18px; flex:1; min-width:240px; }
+  .annot .card h4 { margin:0 0 10px; font-size:13px; color:var(--g12); font-weight:600; }
+  .annot .demohdr { display:flex; align-items:center; gap:6px; height:38px; padding:0 8px; background:var(--g3);
+    border:1px solid var(--border); border-radius:8px; }
+  .annot .note { font-size:12px; color:var(--g10); margin-top:10px; line-height:1.5; }
+  .annot .note b { color:var(--g11); }
+
+  table.cmp { width:100%; border-collapse:collapse; margin-top:18px; font-size:12.5px; }
+  table.cmp th, table.cmp td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+  table.cmp th { color:var(--g11); font-weight:600; font-size:12px; }
+  table.cmp td { color:var(--g10); line-height:1.5; }
+  table.cmp td:first-child, table.cmp th:first-child { color:var(--g12); font-weight:600; white-space:nowrap; }
+
+  .legend { display:flex; gap:22px; flex-wrap:wrap; margin-top:8px; padding:14px 16px; background:var(--g2);
+    border:1px solid var(--border); border-radius:10px; }
+  .legend .row { display:flex; align-items:center; gap:9px; font-size:12.5px; color:var(--g10); }
+  .legend .row b { color:var(--g11); font-weight:600; }
+
+  .hint { margin-top:12px; font-size:12px; color:var(--g9); }
+  .hint b { color:var(--g11); }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>Expand a panel to fullscreen</h1>
+    <p>End-to-end directions for focusing a panel by keyboard and blowing it up to fill the
+       screen. <b>Variant D is the selected direction</b>; A/B/C are kept below as exploration history.
+       Every frame is live — hover a frame, then <b>press 1–6</b> to focus a panel,
+       <b>press F</b> to maximize the focused panel, and <b>Esc</b> to restore. Mouse users can click a
+       panel to focus it and click the <span style="font-family:var(--mono)">⤢</span> icon in its header to expand.</p>
+  </header>
+
+  <div class="switcher" id="switcher">
+    <button data-tab="overview" class="active">Overview</button>
+    <button data-tab="d">Variant D<span class="sub">Immersive + tabbed top bar · ✓ selected</span></button>
+    <button data-tab="a">Variant A<span class="sub">Maximize in grid · explored</span></button>
+    <button data-tab="b">Variant B<span class="sub">Immersive (plain) · explored</span></button>
+    <button data-tab="c">Variant C<span class="sub">Spotlight · explored</span></button>
+  </div>
+
+  <!-- ===================== OVERVIEW ===================== -->
+  <section class="tabpane active" data-pane="overview">
+    <div class="vhead">
+      <h2>How focus &amp; expand work (shared across variants)</h2>
+      <p>All three directions share the same two affordances — a focus hotkey badge surfaced in the
+         panel header, and a Maximize icon. They differ only in <b>what the expanded view covers</b>.</p>
+    </div>
+
+    <div class="legend">
+      <div class="row"><b>Focus a panel</b><kbd>⌘1</kbd>…<kbd>⌘6</kbd>
+        <span>— one per panel; existing named shortcuts (<kbd>⌘P</kbd> Files, <kbd>⌃`</kbd> Terminal) still focus too. In the live mocks, press <kbd>1</kbd>–<kbd>6</kbd>.</span></div>
+    </div>
+    <div class="legend" style="margin-top:10px;">
+      <div class="row"><b>Maximize focused panel</b><kbd>⌃⌘F</kbd></div>
+      <div class="row"><b>Restore</b><kbd>Esc</kbd><span>or <kbd>⌃⌘F</kbd> again</span></div>
+      <div class="row"><b>Mouse</b><span>Maximize icon <span style="font-family:var(--mono)">⤢</span> in the header</span></div>
+    </div>
+
+    <div class="annot">
+      <div class="card">
+        <h4>1 · Focus hotkey badge in the header</h4>
+        <div class="demohdr">
+          <span class="tab active" style="cursor:default">
+            <span class="ti">▤</span> Changes <span class="fbadge">⌘3</span>
+          </span>
+          <span style="flex:1"></span>
+        </div>
+        <div class="note">The active tab carries a small monospace <b>focus badge</b> so the keybinding is
+          discoverable without opening settings. Pressing it focuses (and reveals) the panel.</div>
+      </div>
+      <div class="card">
+        <h4>2 · Maximize icon in the header</h4>
+        <div class="demohdr">
+          <span class="tab active" style="cursor:default"><span class="ti">▤</span> Changes <span class="fbadge">⌘3</span></span>
+          <span style="flex:1"></span>
+          <span class="ibtn expand" style="cursor:default">⤢</span>
+        </div>
+        <div class="note">A <b>Maximize</b> glyph sits at the right edge of the header (it becomes a
+          restore glyph while expanded). Click it, or press <kbd>⌃⌘F</kbd> on the focused panel.</div>
+      </div>
+    </div>
+
+    <table class="cmp">
+      <thead><tr><th>Variant</th><th>Covers top bar?</th><th>Covers nav rail?</th><th>Feel</th><th>Best for</th></tr></thead>
+      <tbody>
+        <tr style="background:rgba(63,185,80,0.06)"><td>D · Immersive + tabbed top bar <span style="color:var(--add)">✓</span></td><td>Replaced by the section's tab strip</td><td>No</td>
+          <td>Zen, but you can still switch tabs up top</td><td>Maximizing a section that holds several panels</td></tr>
+        <tr><td>A · Maximize in grid</td><td>No — stays visible</td><td>No</td>
+          <td>Calm; nothing else moves</td><td>Keeping branch/diff context while you work big</td></tr>
+        <tr><td>B · Immersive full-bleed</td><td>Yes — covered (blank)</td><td>No</td>
+          <td>Zen, maximal pixels</td><td>Deep diff review, long terminal sessions</td></tr>
+        <tr><td>C · Spotlight overlay</td><td>Dimmed behind a card</td><td>No</td>
+          <td>Modal "peek"; click-out to leave</td><td>Quick look without committing to a layout change</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">Open a variant tab above to try each one live. The far-left <b>nav rail stays put in every
+       variant</b> — only the top bar treatment changes.</p>
+  </section>
+
+  <!-- ===================== VARIANT D (selected) ===================== -->
+  <section class="tabpane" data-pane="d">
+    <div class="vhead">
+      <h2>Variant D — Immersive, tabs become the top bar
+        <span style="font-size:12px;color:var(--add);font-weight:600;vertical-align:middle;margin-left:6px">✓ selected direction</span></h2>
+      <p>The immersive full-bleed of Variant B, but the covered top-bar strip isn't blank — it
+         <b>becomes the maximized section's header</b>. If that section holds several panels, their tabs sit
+         along the top so you can switch between them without leaving the maximized view. The far-left nav rail
+         stays put; the workspace banner is replaced (not just hidden) by the section's tab strip + an exit
+         control on the right.</p>
+    </div>
+    <div class="keyline">
+      <span class="kpair"><b style="color:var(--g11)">Focus</b><kbd>⌘1</kbd>–<kbd>⌘6</kbd></span>
+      <span class="kpair"><b style="color:var(--g11)">Maximize</b><kbd>⌃⌘F</kbd></span>
+      <span class="kpair"><b style="color:var(--g11)">Switch tab</b><span>click a tab in the top strip</span></span>
+      <span class="kpair"><b style="color:var(--g11)">Restore</b><kbd>Esc</kbd></span>
+    </div>
+
+    <div class="statecap"><span class="dot"></span><span class="live">▶ Live demo</span> — focus the Changes
+      panel (<b>3</b>), maximize it (<b>F</b>), then <b>click the "Review" tab</b> in the top strip to switch
+      panels while still maximized. <b>Esc</b> restores. The Right section holds Changes + Review.</div>
+    <div class="framehost" data-build="d" data-focus="changes" data-interactive="1"></div>
+
+    <div class="statecap"><span class="dot"></span><b>Maximized state</b> — the Right section maximized: its
+      <b>Changes / Review tabs sit in the top bar</b> (where the banner was), exit control at the right, nav rail still visible.</div>
+    <div class="framehost" data-build="d" data-expanded="changes"></div>
+  </section>
+
+  <!-- ===================== VARIANT A ===================== -->
+  <section class="tabpane" data-pane="a">
+    <div class="vhead">
+      <h2>Variant A — Maximize in grid <span style="font-size:12px;color:var(--g9);font-weight:500;vertical-align:middle;margin-left:6px">· explored, superseded by D</span></h2>
+      <p>The panel grows to fill the panel grid only. The nav rail <b>and</b> the top workspace bar stay
+         visible, so your branch, diff summary, and panel toggles never leave the screen. Least disruptive —
+         everything else just hides behind the maximized panel.</p>
+    </div>
+    <div class="keyline">
+      <span class="kpair"><b style="color:var(--g11)">Focus</b><kbd>⌘1</kbd>–<kbd>⌘4</kbd></span>
+      <span class="kpair"><b style="color:var(--g11)">Maximize</b><kbd>⌃⌘F</kbd></span>
+      <span class="kpair"><b style="color:var(--g11)">Restore</b><kbd>Esc</kbd></span>
+    </div>
+
+    <div class="statecap"><span class="dot"></span><span class="live">▶ Live demo</span> — focus a panel
+      (<b>1–6</b>), then maximize it (<b>F</b>), then restore (<b>Esc</b>).</div>
+    <div class="framehost" data-build="a" data-focus="changes" data-interactive="1"></div>
+
+    <div class="statecap"><span class="dot"></span><b>Maximized state</b> — Changes panel filling the grid;
+      top bar &amp; nav rail still visible; restore via the header glyph or <kbd>Esc</kbd>.</div>
+    <div class="framehost" data-build="a" data-expanded="changes"></div>
+  </section>
+
+  <!-- ===================== VARIANT B ===================== -->
+  <section class="tabpane" data-pane="b">
+    <div class="vhead">
+      <h2>Variant B — Immersive full-bleed <span style="font-size:12px;color:var(--g9);font-weight:500;vertical-align:middle;margin-left:6px">· explored, not chosen</span></h2>
+      <p>The panel covers everything except the far-left nav rail — including the top bar. A single floating
+         "<kbd>Esc</kbd> to exit" pill is the only chrome. Maximum pixels for the work itself; closest to a
+         per-panel zen mode.</p>
+    </div>
+    <div class="keyline">
+      <span class="kpair"><b style="color:var(--g11)">Focus</b><kbd>⌘1</kbd>–<kbd>⌘4</kbd></span>
+      <span class="kpair"><b style="color:var(--g11)">Maximize</b><kbd>⌃⌘F</kbd></span>
+      <span class="kpair"><b style="color:var(--g11)">Restore</b><kbd>Esc</kbd></span>
+    </div>
+
+    <div class="statecap"><span class="dot"></span><span class="live">▶ Live demo</span> — focus a panel
+      (<b>1–6</b>), then maximize it (<b>F</b>). Note the top bar disappears.</div>
+    <div class="framehost" data-build="b" data-focus="agent" data-interactive="1"></div>
+
+    <div class="statecap"><span class="dot"></span><b>Maximized state</b> — Changes panel full-bleed; only the
+      nav rail and a floating exit pill remain.</div>
+    <div class="framehost" data-build="b" data-expanded="changes"></div>
+  </section>
+
+  <!-- ===================== VARIANT C ===================== -->
+  <section class="tabpane" data-pane="c">
+    <div class="vhead">
+      <h2>Variant C — Spotlight overlay <span style="font-size:12px;color:var(--g9);font-weight:500;vertical-align:middle;margin-left:6px">· explored, not chosen</span></h2>
+      <p>The panel lifts into a large centered card over a dimmed backdrop. The rest of the layout stays in
+         place behind the dim (nav rail beside it, fully lit). It's a modal "peek": press <kbd>Esc</kbd> or
+         click the dimmed area to drop straight back. Nothing reflows.</p>
+    </div>
+    <div class="keyline">
+      <span class="kpair"><b style="color:var(--g11)">Focus</b><kbd>⌘1</kbd>–<kbd>⌘4</kbd></span>
+      <span class="kpair"><b style="color:var(--g11)">Maximize</b><kbd>⌃⌘F</kbd></span>
+      <span class="kpair"><b style="color:var(--g11)">Restore</b><kbd>Esc</kbd> / click backdrop</span>
+    </div>
+
+    <div class="statecap"><span class="dot"></span><span class="live">▶ Live demo</span> — focus a panel
+      (<b>1–6</b>), maximize it (<b>F</b>), then click the dimmed backdrop or press <b>Esc</b>.</div>
+    <div class="framehost" data-build="c" data-focus="agent" data-interactive="1"></div>
+
+    <div class="statecap"><span class="dot"></span><b>Maximized state</b> — Changes panel as a spotlight card;
+      backdrop dims the layout; nav rail stays lit.</div>
+    <div class="framehost" data-build="c" data-expanded="changes"></div>
+  </section>
+</div>
+
+<script>
+(function () {
+  // ---------- panel content ----------
+  const PANELS = {
+    files: {
+      label: "Files", icon: "▸", badge: "⌘1",
+      body: `<div class="tree">
+        <div class="dir">▾ src/components/panels</div>
+        <div class="f">PanelSection.tsx<span class="m">M</span></div>
+        <div class="f">PanelHeader.tsx<span class="m">M</span></div>
+        <div class="f">CompactLayout.tsx</div>
+        <div class="f">EmptyPanelLauncher.tsx<span class="u">U</span></div>
+        <div class="dir">▾ src/pages/workspace/panels</div>
+        <div class="f sel">MasterDetailPanel.tsx<span class="m">M</span></div>
+        <div class="f">FilesPanel.tsx</div>
+        <div class="f">ChangesPanel.tsx</div>
+      </div>`
+    },
+    commits: {
+      label: "Commits", icon: "◇", badge: "⌘5",
+      body: `<div class="tree">
+        <div class="f"><span class="m">●</span> a44e3cf  Make agents, terminals &amp; diff viewer uniform panels<span class="u">2h</span></div>
+        <div class="f"><span class="m">●</span> 96ebcb9  Spec: uniform-panels<span class="u">3h</span></div>
+        <div class="f"><span class="m">●</span> c3290ee  Build compact workspace layout spike<span class="u">1d</span></div>
+        <div class="f"><span class="m">●</span> 6ef0c9e  Spec: compact-workspace-layout<span class="u">1d</span></div>
+      </div>`
+    },
+    agent: {
+      label: "Build compact layout", icon: "◍", badge: "⌘2",
+      body: `<div class="chat">
+        <div class="msg"><div class="who">You</div>
+          <div class="bubble">Add a Maximize button to the panel header and wire up ⌃⌘F to expand the focused panel.</div></div>
+        <div class="msg"><div class="who">Agent</div>
+          <div class="bubble">Added a <code>Maximize2</code> icon button to <code>PanelHeader</code> and a
+          <code>maximize_panel</code> keybinding. Restoring on Esc now.</div>
+          <div class="toolpill">✎ Edited PanelHeader.tsx · +18 −2</div></div>
+        <div class="input"><span>Reply to Build compact layout…</span><kbd>⌘⏎</kbd></div>
+      </div>`
+    },
+    changes: {
+      label: "Changes", icon: "▤", badge: "⌘3",
+      body: `<div class="diff">
+        <div class="fname">PanelHeader.tsx <span style="font-family:var(--mono);font-size:10px"><span class="add">+18</span> <span class="del">−2</span></span></div>
+        <span class="hunk">@@ -14,6 +14,9 @@ export const PanelHeader = (</span>
+        <span class="ctx">   &lt;Flex align="center" gap="2"&gt;</span>
+        <span class="ctx">     &lt;Text size="2" weight="medium"&gt;{title}&lt;/Text&gt;</span>
+        <span class="add">+    {focusHotkey &amp;&amp; &lt;Kbd className={styles.badge}&gt;{focusHotkey}&lt;/Kbd&gt;}</span>
+        <span class="ctx">   &lt;/Flex&gt;</span>
+        <span class="add">+  &lt;IconButton variant="ghost" size="1" onClick={onMaximize}&gt;</span>
+        <span class="add">+    &lt;Maximize2 size={14} /&gt;</span>
+        <span class="add">+  &lt;/IconButton&gt;</span>
+        <span class="del">-  {actions}</span>
+        <span class="add">+  {actions}</span>
+      </div>`
+    },
+    review: {
+      label: "Review", icon: "❖", badge: "⌘6",
+      body: `<div class="chat">
+        <div class="who">Review · 3 files · 2 open comments</div>
+        <div class="msg"><div class="bubble" style="color:var(--g11)">PanelHeader.tsx</div>
+          <div class="toolpill">💬 line 18 — Prefer Radix <code>Kbd</code> over a raw &lt;span&gt; for the badge</div></div>
+        <div class="msg"><div class="bubble" style="color:var(--g11)">CompactLayout.tsx</div>
+          <div class="toolpill">💬 line 64 — Extract MIN_DETAIL_PX into constants.ts</div></div>
+        <div class="msg"><div class="bubble" style="color:var(--g9)">ChangesPanel.tsx — ✓ resolved</div></div>
+      </div>`
+    },
+    terminal: {
+      label: "Terminal", icon: "▰", badge: "⌘4",
+      body: `<div class="term">
+        <div><span class="p">~/sculptor</span> $ just check</div>
+        <div class="dim">  ⠿ tsc --noEmit … <span class="ok">ok</span></div>
+        <div class="dim">  ⠿ eslint src … <span class="ok">ok</span></div>
+        <div><span class="p">~/sculptor</span> $ just test-unit panels</div>
+        <div class="ok">  ✓ PanelHeader renders focus badge (12ms)</div>
+        <div class="ok">  ✓ ⌃⌘F maximizes focused panel (8ms)</div>
+      </div>`
+    }
+  };
+  const PANEL_KEYS = ["files", "agent", "changes", "terminal", "commits", "review"]; // ⌘1..⌘6
+
+  // A section can hold several panels (tabs). Maximizing a multi-tab section is
+  // what makes Variant D distinct — its tabs ride along in the promoted top bar,
+  // so you can switch panels without leaving the maximized view.
+  const SECTIONS = [
+    { side: "left",   tabs: ["files", "commits"],  active: "files" },
+    { side: "center", tabs: ["agent"],             active: "agent" },
+    { side: "right",  tabs: ["changes", "review"], active: "changes" },
+    { side: "bottom", tabs: ["terminal"],          active: "terminal" },
+  ];
+
+  function railHTML() {
+    return `<div class="rail">
+      <div class="logo">S</div>
+      <div class="ricon sel">⌂</div>
+      <div class="ricon">◫</div>
+      <div class="ricon">◷</div>
+      <div class="spacer"></div>
+      <div class="ricon">⚙</div>
+    </div>`;
+  }
+  function topbarHTML() {
+    return `<div class="topbar">
+      <span class="tbtn">◧</span>
+      <span class="branch">bryden/build-compact-layout</span>
+      <span class="arrow">→</span><span class="target">main</span>
+      <span class="pill"><span class="add">+142</span> <span class="del">−37</span></span>
+      <span class="grow"></span>
+      <span class="pill">Open PR</span>
+      <span class="tbtn">▱</span><span class="tbtn on">◨</span>
+    </div>`;
+  }
+  function tabHTML(panelId, isActive) {
+    const p = PANELS[panelId];
+    return `<span class="tab ${isActive ? "active" : ""}" data-tab="${panelId}">`
+      + `<span class="ti">${p.icon}</span> ${p.label} <span class="fbadge">${p.badge}</span></span>`;
+  }
+  function sectionHTML(sec) {
+    const tabs = sec.tabs.map(id => tabHTML(id, id === sec.active)).join("");
+    return `<div class="section ${sec.side}" data-side="${sec.side}" data-active="${sec.active}">
+      <div class="strip">
+        ${tabs}
+        <span class="grow"></span>
+        <kbd class="strip-esc">Esc</kbd>
+        <span class="ibtn expand" title="Maximize (⌃⌘F)">⤢</span>
+      </div>
+      <div class="body">${PANELS[sec.active].body}</div>
+      <div class="exitpill"><kbd>Esc</kbd> to exit<span class="x" title="Restore">⤡</span></div>
+    </div>`;
+  }
+  function buildFrame(variant) {
+    const f = document.createElement("div");
+    f.className = "frame v" + variant;
+    f.innerHTML =
+      railHTML() +
+      `<div class="main">` +
+        topbarHTML() +
+        `<div class="grid">` + SECTIONS.map(sectionHTML).join("") + `</div>` +
+      `</div>` +
+      `<div class="backdrop"></div>`;
+    return f;
+  }
+
+  // ---------- behaviour ----------
+  let activeFrame = null;
+  const sectionOf = (frame, panelId) =>
+    frame.querySelector('.section .tab[data-tab="' + panelId + '"]')?.closest(".section") || null;
+
+  function activateTab(sec, panelId) {
+    if (!sec) return;
+    sec.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === panelId));
+    sec.querySelector(".body").innerHTML = PANELS[panelId].body;
+    sec.dataset.active = panelId;
+  }
+  function focusSection(frame, sec) {
+    frame.querySelectorAll(".section").forEach(s => s.classList.remove("focused"));
+    if (sec) sec.classList.add("focused");
+  }
+  function focusPanel(frame, panelId) {
+    const sec = sectionOf(frame, panelId);
+    if (!sec) return;
+    const maxSec = frame.querySelector(".section.is-max");
+    if (maxSec && maxSec !== sec) restore(frame); // focusing a panel elsewhere leaves the maximize
+    activateTab(sec, panelId);
+    focusSection(frame, sec);
+  }
+  function maximize(frame, sec) {
+    if (!sec) return;
+    frame.querySelectorAll(".section").forEach(s => s.classList.remove("is-max"));
+    sec.classList.add("is-max");
+    frame.classList.add("expanded");
+    const g = sec.querySelector(".ibtn.expand"); if (g) g.textContent = "⤡";
+  }
+  function restore(frame) {
+    frame.classList.remove("expanded");
+    frame.querySelectorAll(".section.is-max").forEach(s => {
+      s.classList.remove("is-max");
+      const g = s.querySelector(".ibtn.expand"); if (g) g.textContent = "⤢";
+    });
+  }
+  const focusedSection = (frame) => frame.querySelector(".section.focused");
+
+  function wireFrame(frame, interactive) {
+    frame.addEventListener("mouseenter", () => {
+      if (activeFrame && activeFrame !== frame) activeFrame.classList.remove("active-frame");
+      activeFrame = frame; if (interactive) frame.classList.add("active-frame");
+    });
+    if (!interactive) return;
+    frame.addEventListener("mousedown", (e) => {
+      const sec = e.target.closest(".section");
+      if (e.target.closest(".backdrop")) { restore(frame); return; }
+      if (e.target.closest(".ibtn.expand")) {
+        if (sec && sec.classList.contains("is-max")) restore(frame);
+        else if (sec) { focusSection(frame, sec); maximize(frame, sec); }
+        e.preventDefault(); return;
+      }
+      if (e.target.closest(".exitpill .x")) { restore(frame); e.preventDefault(); return; }
+      const tab = e.target.closest(".tab");
+      if (tab && sec) { activateTab(sec, tab.dataset.tab); focusSection(frame, sec); e.preventDefault(); return; }
+      if (sec) focusSection(frame, sec);
+    });
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (!activeFrame || !activeFrame.classList.contains("active-frame")) return;
+    const f = activeFrame;
+    if (e.key === "Escape") { restore(f); return; }
+    if (e.key >= "1" && e.key <= "6") {
+      const panelId = PANEL_KEYS[parseInt(e.key, 10) - 1];
+      if (panelId) { focusPanel(f, panelId); e.preventDefault(); }
+      return;
+    }
+    if (e.key === "f" || e.key === "F") { maximize(f, focusedSection(f)); e.preventDefault(); return; }
+  });
+
+  // ---------- mount ----------
+  document.querySelectorAll(".framehost").forEach(host => {
+    const variant = host.getAttribute("data-build");
+    const frame = buildFrame(variant);
+    host.appendChild(frame);
+    wireFrame(frame, host.getAttribute("data-interactive") === "1");
+
+    const focusId = host.getAttribute("data-focus");
+    if (focusId) focusPanel(frame, focusId);
+
+    const exp = host.getAttribute("data-expanded");
+    if (exp) { focusPanel(frame, exp); maximize(frame, sectionOf(frame, exp)); }
+  });
+
+  // ---------- variant tabs ----------
+  document.querySelectorAll("#switcher button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const tab = btn.getAttribute("data-tab");
+      document.querySelectorAll("#switcher button").forEach(b => b.classList.toggle("active", b === btn));
+      document.querySelectorAll(".tabpane").forEach(p =>
+        p.classList.toggle("active", p.getAttribute("data-pane") === tab));
+    });
+  });
+})();
+</script>
+</body>
+</html>

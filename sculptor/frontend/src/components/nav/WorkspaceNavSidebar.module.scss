@@ -69,16 +69,6 @@
   white-space: nowrap;
 }
 
-.sectionTitle {
-  color: var(--gray-10);
-  flex-shrink: 0;
-  font-size: var(--font-size-1);
-  font-weight: var(--font-weight-medium);
-  letter-spacing: 0.04em;
-  padding: var(--space-2) var(--space-3) var(--space-1);
-  text-transform: uppercase;
-}
-
 .repoList {
   // Horizontal padding so the row hover pills are inset (and never touch the
   // sidebar edges), matching the top-action nav items.

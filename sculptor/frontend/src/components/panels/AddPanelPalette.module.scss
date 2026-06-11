@@ -1,0 +1,248 @@
+@use "scrollbar" as *;
+
+.overlay {
+  background-color: rgba(0, 0, 0, 40%);
+  inset: 0;
+  position: fixed;
+  z-index: var(--z-modal);
+}
+
+// Rendered inline (no Dialog.Portal) so it inherits the `.radix-themes` token
+// scope — same opaque Raycast-style panel as the command palette.
+.content {
+  background: var(--color-panel-solid);
+  border: 1px solid var(--gray-a5);
+  border-radius: var(--radius-4);
+  box-shadow:
+    0 16px 70px rgba(0, 0, 0, 22%),
+    0 4px 16px rgba(0, 0, 0, 12%);
+  display: flex;
+  flex-direction: column;
+  left: 50%;
+  max-height: min(72vh, 540px);
+  outline: none;
+  overflow: hidden;
+  position: fixed;
+  top: 14%;
+  transform: translateX(-50%);
+  width: min(640px, 92vw);
+  z-index: calc(var(--z-modal) + 1);
+
+  &:focus,
+  &:focus-visible {
+    outline: none;
+  }
+}
+
+.command {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  outline: none;
+
+  &:focus,
+  &:focus-visible {
+    outline: none;
+  }
+}
+
+.header {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-4) var(--space-5);
+}
+
+.searchIcon {
+  align-items: center;
+  color: var(--gray-9);
+  display: flex;
+  flex-shrink: 0;
+}
+
+.input {
+  background: transparent;
+  border: 0;
+  color: var(--gray-12);
+  flex: 1 1 auto;
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-4);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-3);
+  min-width: 0;
+  outline: none;
+  padding: 0;
+
+  &::placeholder {
+    color: var(--gray-9);
+    font-weight: var(--font-weight-regular);
+  }
+}
+
+.breadcrumb {
+  align-items: center;
+  background: var(--gray-a4);
+  border-radius: var(--radius-3);
+  color: var(--gray-12);
+  display: flex;
+  flex-shrink: 0;
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-medium);
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+
+  svg {
+    color: var(--gray-9);
+  }
+}
+
+.breadcrumbRoot {
+  color: var(--gray-10);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--gray-12);
+  }
+}
+
+.breadcrumbClose {
+  background: transparent;
+  border: 0;
+  color: var(--gray-11);
+  cursor: pointer;
+  display: flex;
+  padding: 0;
+
+  &:hover {
+    color: var(--gray-12);
+  }
+}
+
+// The destination select's popup portals to <body> with no z-index of its
+// own; the palette dialog sits at z-modal + 1, so lift the popup above it.
+.destinationMenu {
+  z-index: calc(var(--z-modal) + 2);
+}
+
+.divider {
+  background: var(--gray-a4);
+  flex-shrink: 0;
+  height: 1px;
+}
+
+.list {
+  flex: 1 1 auto;
+  min-height: 0;
+  outline: none;
+  overflow: hidden auto;
+  padding: var(--space-2) var(--space-2) var(--space-3);
+
+  @include thin-scrollbar($autohide: false);
+}
+
+.empty {
+  align-items: center;
+  color: var(--gray-10);
+  display: flex;
+  font-size: var(--font-size-2);
+  justify-content: center;
+  padding: var(--space-6) var(--space-4);
+}
+
+.group {
+  margin-bottom: var(--space-2);
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+:global([cmdk-group-heading]) {
+  color: var(--gray-10);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-regular);
+  letter-spacing: 0;
+  padding: var(--space-3) var(--space-3) var(--space-1);
+  text-transform: none;
+}
+
+.item {
+  align-items: center;
+  border-radius: var(--radius-3);
+  color: var(--gray-12);
+  cursor: pointer;
+  display: flex;
+  font-size: var(--font-size-2);
+  gap: var(--space-3);
+  line-height: 1.35;
+  padding: var(--space-2) var(--space-3);
+  user-select: none;
+}
+
+.item:hover {
+  background: var(--gray-a3);
+}
+
+.item[data-selected="true"] {
+  background: var(--gray-a4);
+  color: var(--gray-12);
+}
+
+.itemIcon {
+  align-items: center;
+  color: var(--gray-11);
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  width: 20px;
+}
+
+.itemBody {
+  align-items: baseline;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: row;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.itemTitle {
+  color: var(--gray-12);
+  flex-shrink: 0;
+  font-size: var(--font-size-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemSubtitle {
+  color: var(--gray-10);
+  font-size: var(--font-size-2);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemTrailing {
+  align-items: center;
+  color: var(--gray-10);
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.count {
+  color: var(--gray-10);
+  font-size: var(--font-size-1);
+}
+
+.chevron {
+  align-items: center;
+  color: var(--gray-9);
+  display: flex;
+}
+

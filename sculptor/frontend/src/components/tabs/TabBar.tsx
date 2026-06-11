@@ -160,8 +160,11 @@ export const TabBar = ({
   };
 
   const handleDragMove = (event: DragMoveEvent): void => {
-    const overId = event.over?.id as string | undefined;
-    setDragState((prev) => ({ ...prev, overId: overId ?? null }));
+    const overId = (event.over?.id as string | undefined) ?? null;
+    // Bail when the hovered tab hasn't changed: this fires on every pointer
+    // move, and an unconditional new state object would re-render the whole
+    // bar — including the active tab's content — per pixel.
+    setDragState((prev) => (prev.overId === overId ? prev : { ...prev, overId }));
   };
 
   const handleDragEnd = (event: DragEndEvent): void => {
@@ -198,7 +201,7 @@ export const TabBar = ({
                   key={tab.id}
                   tab={tab}
                   isActive={tab.id === activeTabId}
-                  isCloseable={isCloseable}
+                  isCloseable={tab.closeable ?? isCloseable}
                   isDragActive={isDragActive}
                   dropIndicator={getDropIndicator(tab.id)}
                   onActivate={onActivate}
@@ -231,7 +234,7 @@ export const TabBar = ({
                     key={tab.id}
                     tab={tab}
                     isActive={tab.id === activeTabId}
-                    isCloseable={isCloseable}
+                    isCloseable={tab.closeable ?? isCloseable}
                     isDragActive={isDragActive}
                     width={tabWidth}
                     dropIndicator={getDropIndicator(tab.id)}

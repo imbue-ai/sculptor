@@ -7,28 +7,67 @@
   width: 100%;
 }
 
-// Highlight a section while a tab dragged from another section is hovering it,
-// signalling it as the drop target. An inset ring avoids shifting layout.
-.dropTarget {
-  box-shadow: inset 0 0 0 2px var(--accent-8);
+// The active-pane indicator and the drag drop-target highlight share one
+// treatment: a thin accent edge so the focused pane and the section a dragged
+// tab will land in read identically. Drawn as a pseudo-element overlay lifted
+// above the opaque tab strip + content (z-index), 1px and flush to the pane
+// edges. `box-sizing: border-box` keeps the border INSIDE the inset:0 box so it
+// isn't pushed past the viewport edge (and clipped by overflow) the way an
+// outset border is.
+.focused::after,
+.dropTarget::after {
+  border: 1px solid var(--accent-9);
+  box-sizing: border-box;
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 1;
+}
+
+// Maximized section (the "expand panel to fullscreen" view). It is absolutely
+// positioned to fill the workspace page container — every ancestor up to that
+// container is static, so it anchors there: it covers the top banner and the
+// rest of the panel grid, while the far-left nav rail (rendered outside the
+// workspace page) stays visible. The section keeps its own tab strip, so that
+// strip becomes the de-facto top bar. Opaque background so the layout beneath
+// (still mounted) is fully hidden.
+.maximized {
+  background: var(--gray-1);
+  inset: 0;
+  position: absolute;
+  z-index: var(--z-sticky);
 }
 
 .tabBar {
   background: var(--gray-2);
-  border-bottom: 1px solid var(--gray-a4);
   flex-shrink: 0;
 }
 
+// No divider line under a section's tab strip — the strip's own background plus
+// the layout gaps separate it from the content. This scoped selector (0-2-0)
+// overrides the shared `.tabBarCompact` border (0-1-0) for panel sections only,
+// leaving other compact strips (e.g. the diff tab bar) untouched.
+.section .tabBar {
+  border-bottom: none;
+}
+
+// Fills the remaining strip width so the "+" stays inline after the last tab
+// while the maximize button is pushed to the far right (justify: between).
 .addButton {
   align-items: center;
   display: flex;
-  flex-shrink: 0;
-  // Small gap so the "+" isn't flush against the last tab.
+  flex-grow: 1;
+  // Small gap so the "+" isn't flush against the last tab, and the maximize
+  // button isn't flush against the section's right edge.
   padding-left: var(--space-1);
+  padding-right: var(--space-2);
 }
 
+// Muted gray matching a non-active tab (.tabCompact), so the "+" and maximize
+// controls recede until hovered.
 .headerButton {
-  color: var(--gray-11);
+  color: var(--gray-a10);
 }
 
 .content {
@@ -38,18 +77,4 @@
   min-height: 0;
   outline: none;
   overflow: hidden;
-}
-
-.emptyState {
-  align-items: center;
-  color: var(--gray-10);
-  display: flex;
-  flex-direction: column;
-  flex-grow: 1;
-  gap: var(--space-2);
-  justify-content: center;
-}
-
-.emptyHint {
-  font-size: var(--font-size-1);
 }

@@ -5,13 +5,24 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { UserConfig } from "~/api";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
+import type { PanelDragState } from "~/components/panels/atoms.ts";
 import {
+  activePanelIdInZoneAtom,
+  activePanelPerZoneAtom,
+  computeDisplayedPanelIds,
   createPanelStore,
   didZenImplyFocusModeAtom,
+  displayedPanelIdsAtom,
+  focusedZoneAtom,
   focusModeActiveAtom,
   focusModeSavedVisibilityAtom,
+  ghostPanelIdAtom,
+  isDropTargetAtom,
+  isPanelDragActiveAtom,
   isSideVisibleAtom,
+  isZoneFocusedAtom,
   isZoneVisibleAtom,
+  panelDragStateAtom,
   panelEnabledAtom,
   panelShortcutsAtom,
   panelsInZoneAtom,
@@ -208,6 +219,215 @@ describe("panel enabled state", () => {
     expect(store.get(panelShortcutsAtom).info).toBe("Cmd+1");
     store.set(panelEnabledAtom, { info: false });
     expect(store.get(panelShortcutsAtom).info).toBeUndefined();
+  });
+});
+
+// ── computeDisplayedPanelIds ─────────────────────────────────────────
+
+describe("computeDisplayedPanelIds", () => {
+  const panelIds = ["a", "b", "c"];
+
+  it("returns the input reference when no drag is in flight", () => {
+    expect(computeDisplayedPanelIds({ zone: "top-left", panelIds, drag: null })).toBe(panelIds);
+  });
+
+  it("returns the input reference for a zone the drag does not touch", () => {
+    const drag: PanelDragState = { activePanelId: "x", sourceZone: "bottom", targetZone: "top-right", insertIndex: 0 };
+    expect(computeDisplayedPanelIds({ zone: "top-left", panelIds, drag })).toBe(panelIds);
+  });
+
+  it("removes the dragged panel from the source zone", () => {
+    const drag: PanelDragState = {
+      activePanelId: "b",
+      sourceZone: "top-left",
+      targetZone: "top-right",
+      insertIndex: 0,
+    };
+    expect(computeDisplayedPanelIds({ zone: "top-left", panelIds, drag })).toEqual(["a", "c"]);
+  });
+
+  it("inserts the ghost into the target zone at the insertion index", () => {
+    const drag: PanelDragState = { activePanelId: "x", sourceZone: "bottom", targetZone: "top-left", insertIndex: 1 };
+    expect(computeDisplayedPanelIds({ zone: "top-left", panelIds, drag })).toEqual(["a", "x", "b", "c"]);
+  });
+
+  it("relocates within the zone when dragging over the same zone", () => {
+    const drag: PanelDragState = {
+      activePanelId: "a",
+      sourceZone: "top-left",
+      targetZone: "top-left",
+      insertIndex: 2,
+    };
+    expect(computeDisplayedPanelIds({ zone: "top-left", panelIds, drag })).toEqual(["b", "c", "a"]);
+  });
+
+  it("clamps an out-of-range insertion index", () => {
+    const drag: PanelDragState = { activePanelId: "x", sourceZone: "bottom", targetZone: "top-left", insertIndex: 99 };
+    expect(computeDisplayedPanelIds({ zone: "top-left", panelIds, drag })).toEqual(["a", "b", "c", "x"]);
+  });
+});
+
+// ── Per-zone drag-state slices ───────────────────────────────────────
+// These pin the notification contract the drag perf depends on: a drag-state
+// change must only notify the zones it actually affects.
+
+describe("per-zone drag-state slices", () => {
+  // Default layout: info → top-left, terminal → bottom, changes → top-right.
+  const dragInfoToTopRight = (insertIndex: number): PanelDragState => ({
+    activePanelId: "info",
+    sourceZone: "top-left",
+    targetZone: "top-right",
+    insertIndex,
+  });
+
+  it("does not notify displayedPanelIds subscribers of uninvolved zones", () => {
+    const store = createPanelStore(TEST_PANELS, { useDefaultLayout: true });
+    let notifications = 0;
+    store.sub(displayedPanelIdsAtom("bottom"), () => {
+      notifications += 1;
+    });
+    store.set(panelDragStateAtom, dragInfoToTopRight(0));
+    store.set(panelDragStateAtom, dragInfoToTopRight(1));
+    store.set(panelDragStateAtom, null);
+    expect(notifications).toBe(0);
+  });
+
+  it("does not notify the source zone's displayedPanelIds at drag start", () => {
+    const store = createPanelStore(TEST_PANELS, { useDefaultLayout: true });
+    let notifications = 0;
+    store.sub(displayedPanelIdsAtom("top-left"), () => {
+      notifications += 1;
+    });
+    // Drag start targets the source zone at the panel's own index — the
+    // displayed list is unchanged, so subscribers must not be notified.
+    store.set(panelDragStateAtom, {
+      activePanelId: "info",
+      sourceZone: "top-left",
+      targetZone: "top-left",
+      insertIndex: 0,
+    });
+    expect(notifications).toBe(0);
+  });
+
+  it("notifies the target zone's displayedPanelIds only when its list changes", () => {
+    const store = createPanelStore(TEST_PANELS, { useDefaultLayout: true });
+    let notifications = 0;
+    store.sub(displayedPanelIdsAtom("top-right"), () => {
+      notifications += 1;
+    });
+    store.set(panelDragStateAtom, dragInfoToTopRight(0));
+    expect(store.get(displayedPanelIdsAtom("top-right"))).toEqual(["info", "changes"]);
+    expect(notifications).toBe(1);
+    // Same target and index in a fresh state object — recomputes to an equal
+    // list, so no notification.
+    store.set(panelDragStateAtom, dragInfoToTopRight(0));
+    expect(notifications).toBe(1);
+    store.set(panelDragStateAtom, dragInfoToTopRight(1));
+    expect(store.get(displayedPanelIdsAtom("top-right"))).toEqual(["changes", "info"]);
+    expect(notifications).toBe(2);
+  });
+
+  it("isDropTargetAtom flips once per zone entry, not per insertion-index change", () => {
+    const store = createPanelStore(TEST_PANELS, { useDefaultLayout: true });
+    let notifications = 0;
+    store.sub(isDropTargetAtom("top-right"), () => {
+      notifications += 1;
+    });
+    store.set(panelDragStateAtom, dragInfoToTopRight(0));
+    expect(store.get(isDropTargetAtom("top-right"))).toBe(true);
+    store.set(panelDragStateAtom, dragInfoToTopRight(1));
+    expect(notifications).toBe(1);
+    store.set(panelDragStateAtom, null);
+    expect(store.get(isDropTargetAtom("top-right"))).toBe(false);
+    expect(notifications).toBe(2);
+  });
+
+  it("isDropTargetAtom stays false for the source zone", () => {
+    const store = createPanelStore(TEST_PANELS, { useDefaultLayout: true });
+    store.set(panelDragStateAtom, {
+      activePanelId: "info",
+      sourceZone: "top-left",
+      targetZone: "top-left",
+      insertIndex: 0,
+    });
+    expect(store.get(isDropTargetAtom("top-left"))).toBe(false);
+  });
+
+  it("ghostPanelIdAtom reports the dragged id only while the zone is targeted", () => {
+    const store = createPanelStore(TEST_PANELS, { useDefaultLayout: true });
+    let notifications = 0;
+    store.sub(ghostPanelIdAtom("top-right"), () => {
+      notifications += 1;
+    });
+    store.set(panelDragStateAtom, dragInfoToTopRight(0));
+    expect(store.get(ghostPanelIdAtom("top-right"))).toBe("info");
+    store.set(panelDragStateAtom, dragInfoToTopRight(1));
+    expect(notifications).toBe(1);
+    store.set(panelDragStateAtom, null);
+    expect(store.get(ghostPanelIdAtom("top-right"))).toBe(null);
+    expect(notifications).toBe(2);
+  });
+
+  it("isPanelDragActiveAtom flips only at drag start and end", () => {
+    const store = createPanelStore(TEST_PANELS, { useDefaultLayout: true });
+    let notifications = 0;
+    store.sub(isPanelDragActiveAtom, () => {
+      notifications += 1;
+    });
+    store.set(panelDragStateAtom, dragInfoToTopRight(0));
+    store.set(panelDragStateAtom, dragInfoToTopRight(1));
+    store.set(panelDragStateAtom, dragInfoToTopRight(2));
+    expect(notifications).toBe(1);
+    store.set(panelDragStateAtom, null);
+    expect(notifications).toBe(2);
+  });
+});
+
+// ── activePanelIdInZoneAtom ──────────────────────────────────────────
+
+describe("activePanelIdInZoneAtom", () => {
+  it("returns the stored active panel when it is in the zone", () => {
+    const store = createPanelStore(TEST_PANELS, { useDefaultLayout: true });
+    expect(store.get(activePanelIdInZoneAtom("top-left"))).toBe("info");
+  });
+
+  it("falls back to the zone's first panel when the stored active panel left the zone", () => {
+    const store = createPanelStore(TEST_PANELS, { useDefaultLayout: true });
+    store.set(activePanelPerZoneAtom, { "top-left": "changes" });
+    expect(store.get(activePanelIdInZoneAtom("top-left"))).toBe("info");
+  });
+
+  it("falls back to the zone's first panel when no active panel is stored", () => {
+    const store = createPanelStore(TEST_PANELS, { useDefaultLayout: true });
+    store.set(activePanelPerZoneAtom, {});
+    expect(store.get(activePanelIdInZoneAtom("top-left"))).toBe("info");
+  });
+
+  it("returns undefined for an empty zone", () => {
+    const store = createPanelStore(TEST_PANELS, { useDefaultLayout: true });
+    expect(store.get(activePanelIdInZoneAtom("bottom-left"))).toBeUndefined();
+  });
+});
+
+// ── isZoneFocusedAtom ────────────────────────────────────────────────
+
+describe("isZoneFocusedAtom", () => {
+  it("tracks the focused zone", () => {
+    const store = createPanelStore(TEST_PANELS, { useDefaultLayout: true });
+    expect(store.get(isZoneFocusedAtom("center"))).toBe(false);
+    store.set(focusedZoneAtom, "center");
+    expect(store.get(isZoneFocusedAtom("center"))).toBe(true);
+  });
+
+  it("does not notify uninvolved zones when focus moves between two others", () => {
+    const store = createPanelStore(TEST_PANELS, { useDefaultLayout: true });
+    let notifications = 0;
+    store.sub(isZoneFocusedAtom("top-left"), () => {
+      notifications += 1;
+    });
+    store.set(focusedZoneAtom, "center");
+    store.set(focusedZoneAtom, "top-right");
+    expect(notifications).toBe(0);
   });
 });
 

@@ -251,6 +251,71 @@ describe("taskSupportsInteractiveBackchannelAtomFamily", () => {
   });
 });
 
+describe("updateTasksAtom out-of-order frames", () => {
+  it("does not let a stale (older) task view overwrite a newer status", () => {
+    // Reproduces the stuck-pending agent-status bug: when a new agent is created
+    // while the environment is already warm (2+ sessions), its settled status
+    // (READY) arrives over the WebSocket BEFORE the createWorkspaceAgent REST
+    // call resolves. The REST response carries a creation-time snapshot
+    // (status BUILDING) that then resolves and used to clobber the live status
+    // back to BUILDING, leaving the tab's status dot stuck on blue forever. A
+    // view older than what we already hold must be ignored.
+    const store = createStore();
+    const settled = createMockTask({
+      id: "agent-1",
+      status: "READY",
+      updatedAt: "2024-01-01T00:00:05Z", // later: the WebSocket-settled frame
+    });
+    const staleOptimistic = createMockTask({
+      id: "agent-1",
+      status: "BUILDING",
+      updatedAt: "2024-01-01T00:00:00Z", // earlier: the create-time snapshot
+    });
+
+    // The WebSocket settles the agent first.
+    store.set(updateTasksAtom, { "agent-1": settled });
+    expect(store.get(taskAtomFamily("agent-1"))?.status).toBe("READY");
+
+    // The stale optimistic create response resolves afterwards and must not win.
+    store.set(updateTasksAtom, { "agent-1": staleOptimistic });
+
+    expect(store.get(taskAtomFamily("agent-1"))?.status).toBe("READY");
+  });
+
+  it("still applies a newer task view (BUILDING -> READY)", () => {
+    const store = createStore();
+    const building = createMockTask({ id: "agent-1", status: "BUILDING", updatedAt: "2024-01-01T00:00:00Z" });
+    const ready = createMockTask({ id: "agent-1", status: "READY", updatedAt: "2024-01-01T00:00:05Z" });
+
+    store.set(updateTasksAtom, { "agent-1": building });
+    expect(store.get(taskAtomFamily("agent-1"))?.status).toBe("BUILDING");
+
+    store.set(updateTasksAtom, { "agent-1": ready });
+    expect(store.get(taskAtomFamily("agent-1"))?.status).toBe("READY");
+  });
+
+  it("applies the first view for a new id (nothing to compare against)", () => {
+    const store = createStore();
+    const building = createMockTask({ id: "agent-2", status: "BUILDING", updatedAt: "2024-01-01T00:00:00Z" });
+
+    store.set(updateTasksAtom, { "agent-2": building });
+
+    expect(store.get(taskAtomFamily("agent-2"))?.status).toBe("BUILDING");
+    expect(store.get(taskIdsAtom)).toContain("agent-2");
+  });
+
+  it("applies an equal-timestamp update so same-tick changes are not dropped", () => {
+    const store = createStore();
+    const first = createMockTask({ id: "agent-3", status: "BUILDING", updatedAt: "2024-01-01T00:00:00Z" });
+    const sameTick = createMockTask({ id: "agent-3", status: "WAITING", updatedAt: "2024-01-01T00:00:00Z" });
+
+    store.set(updateTasksAtom, { "agent-3": first });
+    store.set(updateTasksAtom, { "agent-3": sameTick });
+
+    expect(store.get(taskAtomFamily("agent-3"))?.status).toBe("WAITING");
+  });
+});
+
 describe("stream convergence after optimistic delete", () => {
   it("remains correctly deleted when stream confirms deletion", () => {
     const store = createStore();

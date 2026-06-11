@@ -64,6 +64,7 @@ const makeCommandRuntime = (): CommandRuntime => {
       toggleDevPanel: noop,
       toggleZenMode: noop,
       toggleFocusMode: noop,
+      toggleMaximizePanel: noop,
       toggleLeftPanel: noop,
       toggleBottomPanel: noop,
       toggleRightPanel: noop,

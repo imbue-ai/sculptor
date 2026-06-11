@@ -31,6 +31,17 @@ export const computeToggleAction = (inputs: {
   return { type: "open-zone", zone };
 };
 
+// ── Array identity helpers ───────────────────────────────────────────
+
+/** Shallow element-wise equality, used as a `selectAtom` equality function so
+ *  derived id-list atoms keep their previous reference (and don't notify
+ *  subscribers) when a recompute yields the same ids. */
+export const areArraysShallowEqual = <T>(a: ReadonlyArray<T>, b: ReadonlyArray<T>): boolean => {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  return a.every((value, index) => value === b[index]);
+};
+
 // ── Zone constraint logic ────────────────────────────────────────────
 
 /** Returns true if moving a panel to a bottom zone would leave its sibling top zone empty.

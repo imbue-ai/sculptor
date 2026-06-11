@@ -19,6 +19,9 @@ export type TabDefinition = {
   previewOpenDelay?: number;
   /** Custom content to render instead of the label text (e.g. an inline rename input). */
   labelContent?: ReactNode;
+  /** Display string for this panel's focus shortcut (e.g. "⌘P"), shown as a
+   *  small badge on the active tab so the keybinding is discoverable. */
+  shortcut?: string;
   /** Custom data-testid applied to the tab element. */
   dataTestId?: string;
   /** Custom data-* attributes applied to the tab element (keys without the "data-" prefix). */
@@ -27,6 +30,10 @@ export type TabDefinition = {
   contextMenu?: (children: ReactNode) => ReactElement;
   /** Icon to render in the close button. Defaults to X. */
   closeIcon?: ReactNode;
+  /** Per-tab override for whether the close affordance is shown. Defaults to the
+   *  TabBar-level closeable state. Set false to hide the close button on a tab
+   *  that cannot be closed (e.g. the only/active agent). */
+  closeable?: boolean;
 };
 
 export type TabBarProps = {

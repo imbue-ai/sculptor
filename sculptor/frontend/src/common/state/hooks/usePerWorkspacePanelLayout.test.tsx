@@ -7,16 +7,19 @@ import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  activePanelPerZoneAtom,
   activeWorkspaceIdAtom,
   createPanelStore,
-  zoneSizesAtom,
+  zoneAssignmentsAtom,
   zoneVisibilityAtom,
 } from "~/components/panels/atoms.ts";
-import type { PanelDefinition } from "~/components/panels/types.ts";
-import { diffPanelOpenAtom, diffPanelSplitRatioAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
+import {
+  sectionSizePercentAtom,
+  sectionSizesSharedAtom,
+  sectionSplitAtom,
+} from "~/components/panels/sectionLayoutAtoms.ts";
+import type { DefaultPanelLayout, PanelDefinition } from "~/components/panels/types.ts";
 
-import type { UserConfig } from "../../../api";
-import { userConfigAtom } from "../atoms/userConfig.ts";
 import { usePerWorkspacePanelLayout } from "./usePerWorkspacePanelLayout.ts";
 
 // ── Test fixtures ────────────────────────────────────────────────────
@@ -32,40 +35,29 @@ const TEST_PANELS: ReadonlyArray<PanelDefinition> = [
     component: () => createElement("div"),
   },
   {
-    id: "terminal",
-    displayName: "Terminal",
-    description: "Test panel",
-    icon: Circle,
-    defaultZone: "bottom",
-    defaultShortcut: "",
-    component: () => createElement("div"),
-  },
-  {
     id: "changes",
     displayName: "Changes",
     description: "Test panel",
     icon: Circle,
-    defaultZone: "top-right",
+    defaultZone: "top-left",
     defaultShortcut: "",
     component: () => createElement("div"),
   },
 ];
+
+const TEST_DEFAULT_LAYOUT: DefaultPanelLayout = {
+  zoneAssignments: { files: "top-left", changes: "top-left" },
+  activePanelPerZone: { "top-left": "files" },
+  zoneVisibility: { "top-left": true, center: true, "top-right": false, bottom: false },
+  zoneOrder: { "top-left": ["files", "changes"] },
+};
 
 beforeEach(() => localStorage.clear());
 afterEach(() => localStorage.clear());
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-const createDefaultStore = (): ReturnType<typeof createStore> =>
-  createPanelStore(TEST_PANELS, { useDefaultLayout: true });
-
-const enablePerWorkspace = (store: ReturnType<typeof createStore>): void => {
-  store.set(userConfigAtom, { isPanelLayoutPerWorkspace: true } as unknown as UserConfig);
-};
-
-const disablePerWorkspace = (store: ReturnType<typeof createStore>): void => {
-  store.set(userConfigAtom, { isPanelLayoutPerWorkspace: false } as unknown as UserConfig);
-};
+const createDefaultStore = (): ReturnType<typeof createStore> => createPanelStore(TEST_PANELS);
 
 const renderPerWorkspaceHook = (
   workspaceId: string,
@@ -74,7 +66,7 @@ const renderPerWorkspaceHook = (
   const wrapper = ({ children }: { children: ReactNode }): ReactElement => (
     <Provider store={store}>{children}</Provider>
   );
-  return renderHook(({ workspaceId: wsId }) => usePerWorkspacePanelLayout(wsId), {
+  return renderHook(({ workspaceId: wsId }) => usePerWorkspacePanelLayout(wsId, TEST_DEFAULT_LAYOUT), {
     wrapper,
     initialProps: { workspaceId },
   });
@@ -100,275 +92,128 @@ describe("usePerWorkspacePanelLayout", () => {
     it("updates activeWorkspaceIdAtom when workspace changes", () => {
       const store = createDefaultStore();
       const { rerender } = renderPerWorkspaceHook("ws-1", store);
-      expect(store.get(activeWorkspaceIdAtom)).toBe("ws-1");
-
       rerender({ workspaceId: "ws-2" });
       expect(store.get(activeWorkspaceIdAtom)).toBe("ws-2");
     });
   });
 
-  describe("when per-workspace is disabled", () => {
-    it("does not save or restore visibility on workspace switch", () => {
+  describe("first visit (no saved layout) falls back to the default layout", () => {
+    it("resets layout atoms to the default on initial mount", () => {
       const store = createDefaultStore();
-      // Set specific visibility for ws-1
-      store.set(zoneVisibilityAtom, { "top-left": true, bottom: false, "top-right": true });
+      // Seed some stale, non-default layout to prove it gets reset.
+      store.set(zoneAssignmentsAtom, { stale: "center" });
+      store.set(sectionSplitAtom, { center: { axis: "vertical", ratio: 0.5 } });
 
+      renderPerWorkspaceHook("ws-1", store);
+
+      expect(store.get(zoneAssignmentsAtom)).toEqual(TEST_DEFAULT_LAYOUT.zoneAssignments);
+      expect(store.get(activePanelPerZoneAtom)).toEqual(TEST_DEFAULT_LAYOUT.activePanelPerZone);
+      expect(store.get(sectionSplitAtom)).toEqual({});
+    });
+
+    it("resets to default when switching to a never-visited workspace (no leak)", () => {
+      const store = createDefaultStore();
       const { rerender } = renderPerWorkspaceHook("ws-1", store);
 
-      // Switch to ws-2
+      // Make ws-1 layout distinctive.
+      act(() => {
+        store.set(zoneAssignmentsAtom, { files: "top-right" });
+        store.set(sectionSplitAtom, { "top-right": { axis: "vertical", ratio: 0.5 } });
+      });
+
+      // Switch to an unvisited workspace — must reset to default, not leak ws-1.
       rerender({ workspaceId: "ws-2" });
 
-      // Visibility should remain unchanged (not restored from storage)
-      const vis = store.get(zoneVisibilityAtom);
-      expect(vis["top-left"]).toBe(true);
-      expect(vis["bottom"]).toBe(false);
-      expect(vis["top-right"]).toBe(true);
+      expect(store.get(zoneAssignmentsAtom)).toEqual(TEST_DEFAULT_LAYOUT.zoneAssignments);
+      expect(store.get(sectionSplitAtom)).toEqual({});
     });
   });
 
-  describe("when per-workspace is enabled", () => {
-    it("preserves visibility independently per workspace when switching", () => {
-      const store = createDefaultStore();
-      enablePerWorkspace(store);
-
-      // Start on ws-1, set its visibility
-      store.set(zoneVisibilityAtom, { "top-left": true, bottom: true, "top-right": false });
-      const { rerender } = renderPerWorkspaceHook("ws-1", store);
-
-      // Modify visibility while on ws-1 (triggers persist effect)
-      act(() => {
-        store.set(zoneVisibilityAtom, { "top-left": true, bottom: true, "top-right": false });
-      });
-
-      // Switch to ws-2 — no saved state, so visibility stays as-is
-      rerender({ workspaceId: "ws-2" });
-
-      // Change visibility on ws-2
-      act(() => {
-        store.set(zoneVisibilityAtom, { "top-left": false, bottom: false, "top-right": true });
-      });
-
-      // Switch back to ws-1 — should restore ws-1's saved visibility
-      rerender({ workspaceId: "ws-1" });
-
-      const vis = store.get(zoneVisibilityAtom);
-      expect(vis["top-left"]).toBe(true);
-      expect(vis["bottom"]).toBe(true);
-      expect(vis["top-right"]).toBe(false);
-    });
-
-    it("preserves sizes independently per workspace when switching", () => {
-      const store = createDefaultStore();
-      enablePerWorkspace(store);
-
-      // Start on ws-1 with specific sizes
-      store.set(zoneSizesAtom, { "top-left": 30, bottom: 25 });
-      const { rerender } = renderPerWorkspaceHook("ws-1", store);
-
-      // Trigger persist
-      act(() => {
-        store.set(zoneSizesAtom, { "top-left": 30, bottom: 25 });
-      });
-
-      // Switch to ws-2
-      rerender({ workspaceId: "ws-2" });
-
-      // Change sizes on ws-2
-      act(() => {
-        store.set(zoneSizesAtom, { "top-left": 50, bottom: 40 });
-      });
-
-      // Switch back to ws-1 — should restore ws-1's sizes
-      rerender({ workspaceId: "ws-1" });
-
-      const sizes = store.get(zoneSizesAtom);
-      expect(sizes["top-left"]).toBe(30);
-      expect(sizes["bottom"]).toBe(25);
-    });
-
-    it("loads saved state on initial mount if available", () => {
-      // Pre-populate localStorage with saved state for ws-1
+  describe("restore on mount / switch", () => {
+    it("restores a saved layout (assignments + split) on initial mount", () => {
+      localStorage.setItem("sculptor-zone-assignments-ws-ws-1", JSON.stringify({ "agent:a": "center" }));
       localStorage.setItem(
-        "sculptor-zone-visibility-ws-ws-1",
-        JSON.stringify({ "top-left": false, bottom: true, "top-right": true }),
+        "sculptor-section-split-ws-ws-1",
+        JSON.stringify({ center: { axis: "horizontal", ratio: 0.4 } }),
       );
-      localStorage.setItem("sculptor-zone-sizes-ws-ws-1", JSON.stringify({ "top-left": 15, bottom: 35 }));
+      localStorage.setItem("sculptor-zone-visibility-ws-ws-1", JSON.stringify({ center: true }));
 
       const store = createDefaultStore();
-      enablePerWorkspace(store);
-
       renderPerWorkspaceHook("ws-1", store);
 
-      const vis = store.get(zoneVisibilityAtom);
-      expect(vis["top-left"]).toBe(false);
-      expect(vis["bottom"]).toBe(true);
-
-      const sizes = store.get(zoneSizesAtom);
-      expect(sizes["top-left"]).toBe(15);
-      expect(sizes["bottom"]).toBe(35);
+      expect(store.get(zoneAssignmentsAtom)).toEqual({ "agent:a": "center" });
+      expect(store.get(sectionSplitAtom)).toEqual({ center: { axis: "horizontal", ratio: 0.4 } });
+      expect(store.get(zoneVisibilityAtom)).toEqual({ center: true });
     });
 
-    it("does not overwrite atoms on initial mount when no saved state exists", () => {
+    it("saves the outgoing workspace and restores it when switching back", () => {
       const store = createDefaultStore();
-      enablePerWorkspace(store);
-
-      // Set up some initial visibility
-      store.set(zoneVisibilityAtom, { "top-left": true, bottom: true, "top-right": true });
-      store.set(zoneSizesAtom, { "top-left": 20 });
-
-      renderPerWorkspaceHook("ws-new", store);
-
-      // Should keep the existing values since there's no saved state for ws-new
-      const vis = store.get(zoneVisibilityAtom);
-      expect(vis["top-left"]).toBe(true);
-      expect(vis["bottom"]).toBe(true);
-
-      const sizes = store.get(zoneSizesAtom);
-      expect(sizes["top-left"]).toBe(20);
-    });
-
-    it("persists visibility changes to workspace-scoped localStorage", () => {
-      const store = createDefaultStore();
-      enablePerWorkspace(store);
-
-      renderPerWorkspaceHook("ws-1", store);
-
-      act(() => {
-        store.set(zoneVisibilityAtom, { "top-left": true, bottom: false, "top-right": true });
-      });
-
-      const stored = localStorage.getItem("sculptor-zone-visibility-ws-ws-1");
-      expect(stored).not.toBeNull();
-      expect(JSON.parse(stored!)).toEqual({ "top-left": true, bottom: false, "top-right": true });
-    });
-
-    it("persists size changes to workspace-scoped localStorage", () => {
-      const store = createDefaultStore();
-      enablePerWorkspace(store);
-
-      renderPerWorkspaceHook("ws-1", store);
-
-      act(() => {
-        store.set(zoneSizesAtom, { "top-left": 42, bottom: 33 });
-      });
-
-      const stored = localStorage.getItem("sculptor-zone-sizes-ws-ws-1");
-      expect(stored).not.toBeNull();
-      expect(JSON.parse(stored!)).toEqual({ "top-left": 42, bottom: 33 });
-    });
-
-    it("preserves diff panel open state independently per workspace when switching", () => {
-      const store = createDefaultStore();
-      enablePerWorkspace(store);
-
-      store.set(diffPanelOpenAtom, true);
       const { rerender } = renderPerWorkspaceHook("ws-1", store);
 
-      // Trigger persist for ws-1's "true"
+      // Customize ws-1.
       act(() => {
-        store.set(diffPanelOpenAtom, true);
+        store.set(zoneAssignmentsAtom, { files: "top-left", "agent:a": "center" });
+        store.set(sectionSplitAtom, { center: { axis: "vertical", ratio: 0.6 } });
       });
 
+      // Switch away (ws-2 resets to default) then back to ws-1.
       rerender({ workspaceId: "ws-2" });
-
-      // Close on ws-2
       act(() => {
-        store.set(diffPanelOpenAtom, false);
+        store.set(zoneAssignmentsAtom, { changes: "top-right" });
       });
-
-      // Switching back to ws-1 should restore its saved "true"
       rerender({ workspaceId: "ws-1" });
-      expect(store.get(diffPanelOpenAtom)).toBe(true);
-    });
 
-    it("preserves diff panel split ratio independently per workspace when switching", () => {
-      const store = createDefaultStore();
-      enablePerWorkspace(store);
-
-      store.set(diffPanelSplitRatioAtom, 70);
-      const { rerender } = renderPerWorkspaceHook("ws-1", store);
-
-      act(() => {
-        store.set(diffPanelSplitRatioAtom, 70);
-      });
-
-      rerender({ workspaceId: "ws-2" });
-
-      act(() => {
-        store.set(diffPanelSplitRatioAtom, 30);
-      });
-
-      rerender({ workspaceId: "ws-1" });
-      expect(store.get(diffPanelSplitRatioAtom)).toBe(70);
-    });
-
-    it("loads saved diff panel state on initial mount if available", () => {
-      localStorage.setItem("sculptor-diffPanel-open-ws-ws-1", JSON.stringify(true));
-      localStorage.setItem("sculptor-diffPanel-splitRatio-ws-ws-1", JSON.stringify(65));
-
-      const store = createDefaultStore();
-      enablePerWorkspace(store);
-
-      renderPerWorkspaceHook("ws-1", store);
-
-      expect(store.get(diffPanelOpenAtom)).toBe(true);
-      expect(store.get(diffPanelSplitRatioAtom)).toBe(65);
-    });
-
-    it("persists diff panel open changes to workspace-scoped localStorage", () => {
-      const store = createDefaultStore();
-      enablePerWorkspace(store);
-
-      renderPerWorkspaceHook("ws-1", store);
-
-      act(() => {
-        store.set(diffPanelOpenAtom, true);
-      });
-
-      const stored = localStorage.getItem("sculptor-diffPanel-open-ws-ws-1");
-      expect(stored).not.toBeNull();
-      expect(JSON.parse(stored!)).toBe(true);
-    });
-
-    it("persists diff panel split ratio changes to workspace-scoped localStorage", () => {
-      const store = createDefaultStore();
-      enablePerWorkspace(store);
-
-      renderPerWorkspaceHook("ws-1", store);
-
-      act(() => {
-        store.set(diffPanelSplitRatioAtom, 42);
-      });
-
-      const stored = localStorage.getItem("sculptor-diffPanel-splitRatio-ws-ws-1");
-      expect(stored).not.toBeNull();
-      expect(JSON.parse(stored!)).toBe(42);
+      expect(store.get(zoneAssignmentsAtom)).toEqual({ files: "top-left", "agent:a": "center" });
+      expect(store.get(sectionSplitAtom)).toEqual({ center: { axis: "vertical", ratio: 0.6 } });
     });
   });
 
-  describe("toggling per-workspace mode", () => {
-    it("starts saving per-workspace when enabled after being disabled", () => {
+  describe("persistence to workspace-scoped keys", () => {
+    it("persists assignment and split changes to per-workspace localStorage", () => {
       const store = createDefaultStore();
-      // Start disabled
-      disablePerWorkspace(store);
+      renderPerWorkspaceHook("ws-1", store);
 
-      const { rerender: rerenderHook } = renderPerWorkspaceHook("ws-1", store);
-
-      // Enable per-workspace mode
       act(() => {
-        enablePerWorkspace(store);
+        store.set(zoneAssignmentsAtom, { "agent:a": "center" });
+        store.set(sectionSplitAtom, { center: { axis: "horizontal", ratio: 0.3 } });
       });
 
-      // Re-render to pick up the config change
-      rerenderHook({ workspaceId: "ws-1" });
+      expect(JSON.parse(localStorage.getItem("sculptor-zone-assignments-ws-ws-1")!)).toEqual({ "agent:a": "center" });
+      expect(JSON.parse(localStorage.getItem("sculptor-section-split-ws-ws-1")!)).toEqual({
+        center: { axis: "horizontal", ratio: 0.3 },
+      });
+    });
+  });
 
-      // Now change visibility — should persist to workspace-scoped key
+  describe("section sizes shared vs unique", () => {
+    it("does NOT write a per-workspace size key when sizes are shared (default)", () => {
+      const store = createDefaultStore();
+      store.set(sectionSizesSharedAtom, true);
+      renderPerWorkspaceHook("ws-1", store);
+
       act(() => {
-        store.set(zoneVisibilityAtom, { "top-left": false, bottom: true });
+        store.set(sectionSizePercentAtom, { left: 33 });
       });
 
-      const stored = localStorage.getItem("sculptor-zone-visibility-ws-ws-1");
-      expect(stored).not.toBeNull();
+      expect(localStorage.getItem("sculptor-section-size-percent-ws-ws-1")).toBeNull();
+    });
+
+    it("persists and restores section sizes per workspace when sizes are unique", () => {
+      const store = createDefaultStore();
+      store.set(sectionSizesSharedAtom, false);
+      const { rerender } = renderPerWorkspaceHook("ws-1", store);
+
+      act(() => {
+        store.set(sectionSizePercentAtom, { left: 33 });
+      });
+      expect(JSON.parse(localStorage.getItem("sculptor-section-size-percent-ws-ws-1")!)).toEqual({ left: 33 });
+
+      rerender({ workspaceId: "ws-2" });
+      act(() => {
+        store.set(sectionSizePercentAtom, { left: 50 });
+      });
+      rerender({ workspaceId: "ws-1" });
+      expect(store.get(sectionSizePercentAtom)).toEqual({ left: 33 });
     });
   });
 });

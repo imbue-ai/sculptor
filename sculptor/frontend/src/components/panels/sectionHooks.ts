@@ -12,7 +12,8 @@
 // hooks read/write the RAW `zoneVisibilityAtom` rather than the empty-guarded
 // derived atom.
 
-import { useAtomValue, useSetAtom } from "jotai";
+import type { Atom } from "jotai";
+import { atom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { useCallback, useMemo } from "react";
 
 import {
@@ -27,7 +28,7 @@ import { usePanelActions } from "~/components/panels/hooks.ts";
 import type { SplitAxis } from "~/components/panels/sectionLayoutAtoms.ts";
 import { DEFAULT_SPLIT_RATIO, sectionSplitAtom } from "~/components/panels/sectionLayoutAtoms.ts";
 import type { PanelDefinition, PanelId, ZoneId } from "~/components/panels/types.ts";
-import { isSplitZone, toPrimaryZone, toSplitZone } from "~/components/panels/types.ts";
+import { isSplitZone, toPrimaryZone, toSplitZone, ZONE_IDS } from "~/components/panels/types.ts";
 
 // The single zone backing each section. In the uniform-panels layout the
 // Center is a normal section too (REQ-PANEL-1).
@@ -146,10 +147,21 @@ export const useSplitSection = (zone: ZoneId): ((panelId: PanelId, axis: SplitAx
 };
 
 /** Whether a section can be split right now: a primary section zone (not itself
- *  a split half) that is not already split. */
+ *  a split half) that is not already split. Per-zone boolean atoms so a split
+ *  ratio changing elsewhere (per pointer move during a resize) doesn't notify. */
+const canSplitSectionAtomMap = new Map<ZoneId, Atom<boolean>>(
+  ZONE_IDS.map((zoneId) => [
+    zoneId,
+    atom<boolean>((get) => SECTION_ZONES.includes(zoneId) && get(sectionSplitAtom)[zoneId] === undefined),
+  ]),
+);
+
+export const canSplitSectionAtom = (zone: ZoneId): Atom<boolean> => {
+  return canSplitSectionAtomMap.get(zone)!;
+};
+
 export const useCanSplitSection = (zone: ZoneId): boolean => {
-  const sectionSplit = useAtomValue(sectionSplitAtom);
-  return SECTION_ZONES.includes(zone) && sectionSplit[zone] === undefined;
+  return useAtomValue(canSplitSectionAtom(zone));
 };
 
 /**
@@ -165,10 +177,11 @@ export const useCanSplitSection = (zone: ZoneId): boolean => {
  *    blocked upstream).
  */
 export const useRemovePanelFromSection = (): ((panelId: PanelId) => void) => {
-  const zoneAssignments = useAtomValue(zoneAssignmentsAtom);
-  const zoneOrder = useAtomValue(zoneOrderAtom);
-  const activePanelPerZone = useAtomValue(activePanelPerZoneAtom);
-  const sectionSplit = useAtomValue(sectionSplitAtom);
+  // Layout state is read from the store at call time rather than subscribed
+  // to: subscribing would re-render every caller (each section's tab strip) on
+  // any layout change — including per-pointer-move split-ratio updates — and
+  // would give the returned callback an unstable identity.
+  const store = useStore();
   const setZoneAssignments = useSetAtom(zoneAssignmentsAtom);
   const setZoneOrder = useSetAtom(zoneOrderAtom);
   const setActivePanelPerZone = useSetAtom(activePanelPerZoneAtom);
@@ -177,6 +190,11 @@ export const useRemovePanelFromSection = (): ((panelId: PanelId) => void) => {
 
   return useCallback(
     (panelId) => {
+      const zoneAssignments = store.get(zoneAssignmentsAtom);
+      const zoneOrder = store.get(zoneOrderAtom);
+      const activePanelPerZone = store.get(activePanelPerZoneAtom);
+      const sectionSplit = store.get(sectionSplitAtom);
+
       const zone = zoneAssignments[panelId];
       if (!zone) return;
 
@@ -253,17 +271,7 @@ export const useRemovePanelFromSection = (): ((panelId: PanelId) => void) => {
         setZoneVisibility((prev) => ({ ...prev, [zone]: false }));
       }
     },
-    [
-      zoneAssignments,
-      zoneOrder,
-      activePanelPerZone,
-      sectionSplit,
-      setZoneAssignments,
-      setZoneOrder,
-      setActivePanelPerZone,
-      setZoneVisibility,
-      setSectionSplit,
-    ],
+    [store, setZoneAssignments, setZoneOrder, setActivePanelPerZone, setZoneVisibility, setSectionSplit],
   );
 };
 
@@ -294,5 +302,19 @@ export const useAddableDynamicPanels = (kind: "agent" | "terminal"): ReadonlyArr
   return useMemo(
     () => registry.filter((panel) => panel.kind === kind && zoneAssignments[panel.id] === undefined),
     [registry, zoneAssignments, kind],
+  );
+};
+
+/**
+ * Static panels not open in ANY section. The empty-section Quick add uses this
+ * (rather than `useAddablePanels`, which also offers panels open elsewhere as
+ * moves): quick-adding should only ever surface panels not on screen at all.
+ */
+export const useUnplacedStaticPanels = (): ReadonlyArray<PanelDefinition> => {
+  const registry = useAtomValue(panelRegistryAtom);
+  const zoneAssignments = useAtomValue(zoneAssignmentsAtom);
+  return useMemo(
+    () => registry.filter((panel) => (panel.kind ?? "static") === "static" && zoneAssignments[panel.id] === undefined),
+    [registry, zoneAssignments],
   );
 };

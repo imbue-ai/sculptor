@@ -1,4 +1,6 @@
+import { Flex, Text } from "@radix-ui/themes";
 import { useAtom, useAtomValue } from "jotai";
+import { FileText } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -47,6 +49,13 @@ export const MasterDetailPanel = ({ workspaceId, stateKey, children }: MasterDet
 
   const hasDetail = diffState.activeTabPath != null;
 
+  // When no file is selected we still reserve the detail pane to show a
+  // placeholder ("where the file content will go"), but only when the panel is
+  // wide enough to fit both the list and the detail — otherwise a narrow panel
+  // (e.g. the default Files panel in the Left section) keeps the full-width list.
+  const hasRoomForDetail = containerWidth >= MIN_LIST_PX + MIN_DETAIL_PX + HANDLE_PX;
+  const shouldShowDetail = hasDetail || hasRoomForDetail;
+
   const maxDetail = Math.max(MIN_DETAIL_PX, containerWidth - MIN_LIST_PX - HANDLE_PX);
   const desiredDetail = containerWidth > 0 ? Math.round((detailPercent / 100) * containerWidth) : 0;
   const detailWidth = Math.min(Math.max(desiredDetail, MIN_DETAIL_PX), maxDetail);
@@ -67,7 +76,7 @@ export const MasterDetailPanel = ({ workspaceId, stateKey, children }: MasterDet
   return (
     <div ref={containerRef} className={styles.row}>
       <div className={styles.list}>{children}</div>
-      {hasDetail && (
+      {shouldShowDetail && (
         <>
           <ResizeHandle
             axis="x"
@@ -77,10 +86,22 @@ export const MasterDetailPanel = ({ workspaceId, stateKey, children }: MasterDet
             ariaLabel="Resize file viewer"
           />
           <div className={styles.detail} style={{ width: detailWidth }}>
-            <DiffPanel workspaceId={workspaceId} stateKey={stateKey} singleFile />
+            {hasDetail ? <DiffPanel workspaceId={workspaceId} stateKey={stateKey} singleFile /> : <EmptyDetail />}
           </div>
         </>
       )}
     </div>
+  );
+};
+
+/** Placeholder shown in the detail pane when no file/diff is selected. */
+const EmptyDetail = (): ReactElement => {
+  return (
+    <Flex className={styles.emptyDetail} direction="column" align="center" justify="center" gap="3" p="4">
+      <FileText size={28} strokeWidth={1.5} />
+      <Text size="2" color="gray">
+        Select a file to view its contents
+      </Text>
+    </Flex>
   );
 };

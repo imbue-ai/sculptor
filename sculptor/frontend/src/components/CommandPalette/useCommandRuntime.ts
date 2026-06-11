@@ -13,7 +13,7 @@ import { useDevPanel } from "../../common/state/hooks/useDevPanel.ts";
 import { useHelpDialog } from "../../common/state/hooks/useHelpDialog.ts";
 import { useOpenSettings } from "../../common/state/hooks/useOpenSettings.ts";
 import { useUserConfig } from "../../common/state/hooks/useUserConfig.ts";
-import { useFocusMode, usePanelActions, useSideToggle, useZenMode } from "../panels/hooks.ts";
+import { useFocusMode, useMaximizePanel, usePanelActions, useSideToggle, useZenMode } from "../panels/hooks.ts";
 import { type CommandActionId, commandActionsAtom } from "./commandActions.ts";
 import type { AppStore, CommandRuntime } from "./runtime.ts";
 
@@ -71,6 +71,7 @@ export const useCommandRuntime = (): CommandRuntime => {
   const { toggleDevPanel } = useDevPanel();
   const { toggleFocusMode } = useFocusMode();
   const { toggleZenMode } = useZenMode();
+  const { toggleMaximizeFocused } = useMaximizePanel();
   const { toggle: toggleLeftPanel } = useSideToggle("left");
   const { toggle: toggleBottomPanel } = useSideToggle("bottom");
   const { toggle: toggleRightPanel } = useSideToggle("right");
@@ -119,6 +120,7 @@ export const useCommandRuntime = (): CommandRuntime => {
   const uiToggleDevPanel = useEvent((): void => toggleDevPanel());
   const uiToggleZenMode = useEvent((): void => toggleZenMode());
   const uiToggleFocusMode = useEvent((): void => toggleFocusMode());
+  const uiToggleMaximizePanel = useEvent((): void => toggleMaximizeFocused());
   const uiToggleLeftPanel = useEvent((): void => toggleLeftPanel());
   const uiToggleBottomPanel = useEvent((): void => toggleBottomPanel());
   const uiToggleRightPanel = useEvent((): void => toggleRightPanel());
@@ -168,6 +170,7 @@ export const useCommandRuntime = (): CommandRuntime => {
         toggleDevPanel: uiToggleDevPanel,
         toggleZenMode: uiToggleZenMode,
         toggleFocusMode: uiToggleFocusMode,
+        toggleMaximizePanel: uiToggleMaximizePanel,
         toggleLeftPanel: uiToggleLeftPanel,
         toggleBottomPanel: uiToggleBottomPanel,
         toggleRightPanel: uiToggleRightPanel,
@@ -198,6 +201,7 @@ export const useCommandRuntime = (): CommandRuntime => {
       uiToggleDevPanel,
       uiToggleZenMode,
       uiToggleFocusMode,
+      uiToggleMaximizePanel,
       uiToggleLeftPanel,
       uiToggleBottomPanel,
       uiToggleRightPanel,

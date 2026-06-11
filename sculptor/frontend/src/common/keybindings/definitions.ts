@@ -121,6 +121,13 @@ export const KEYBINDING_DEFINITIONS: ReadonlyArray<KeybindingDefinition> = [
     defaultBinding: "Meta+Shift+\\",
   },
   {
+    id: "maximize_panel",
+    name: "Maximize panel",
+    description: "Maximize the focused panel to fill the workspace (Esc to restore)",
+    category: "general",
+    defaultBinding: "Ctrl+Meta+f",
+  },
+  {
     id: "toggle_left_panel",
     name: "Toggle left panel",
     description: "Show or hide the left sidebar",
@@ -182,5 +189,50 @@ export const KEYBINDING_DEFINITIONS: ReadonlyArray<KeybindingDefinition> = [
     description: "Wipe the active terminal's screen and scrollback (when the terminal is focused)",
     category: "terminal",
     defaultBinding: "Ctrl+L",
+  },
+  // Pane focus navigation (compact layout). Ctrl+Alt+Arrow moves keyboard focus
+  // between sections; it pairs with Meta+Alt+Arrow (toggle a side) and avoids the
+  // bare Alt+Arrow word-navigation consumed by the chat editor / terminals.
+  {
+    id: "focus_pane_left",
+    name: "Previous pane",
+    description: "Cycle focus to the previous pane (wraps around)",
+    category: "navigation",
+    defaultBinding: "Ctrl+Alt+ArrowLeft",
+  },
+  {
+    id: "focus_pane_right",
+    name: "Next pane",
+    description: "Cycle focus to the next pane (wraps around)",
+    category: "navigation",
+    defaultBinding: "Ctrl+Alt+ArrowRight",
+  },
+  {
+    id: "focus_pane_up",
+    name: "Focus pane above",
+    description: "Move focus to the pane above",
+    category: "navigation",
+    defaultBinding: "Ctrl+Alt+ArrowUp",
+  },
+  {
+    id: "focus_pane_down",
+    name: "Focus pane below",
+    description: "Move focus to the pane below",
+    category: "navigation",
+    defaultBinding: "Ctrl+Alt+ArrowDown",
+  },
+  {
+    id: "next_pane_tab",
+    name: "Next tab in pane",
+    description: "Switch to the next tab in the focused pane",
+    category: "navigation",
+    defaultBinding: "Ctrl+Tab",
+  },
+  {
+    id: "previous_pane_tab",
+    name: "Previous tab in pane",
+    description: "Switch to the previous tab in the focused pane",
+    category: "navigation",
+    defaultBinding: "Ctrl+Shift+Tab",
   },
 ];

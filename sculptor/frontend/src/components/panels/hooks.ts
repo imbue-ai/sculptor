@@ -6,9 +6,11 @@ import { isDismissibleOverlayOpen, shouldHandleKeybinding } from "~/common/Short
 import {
   activePanelPerZoneAtom,
   didZenImplyFocusModeAtom,
+  focusedZoneAtom,
   focusModeActiveAtom,
   focusModeSavedVisibilityAtom,
   isSideVisibleAtom,
+  maximizedZoneAtom,
   panelEnabledAtom,
   panelRegistryAtom,
   panelShortcutsAtom,
@@ -21,7 +23,7 @@ import {
 } from "~/components/panels/atoms.ts";
 import { sectionSplitAtom } from "~/components/panels/sectionLayoutAtoms.ts";
 import type { LayoutSide, PanelDefinition, PanelId, ZoneId } from "~/components/panels/types.ts";
-import { SIDE_ZONE_MAP, toPrimaryZone, ZONE_IDS } from "~/components/panels/types.ts";
+import { isSplitZone, SIDE_ZONE_MAP, toPrimaryZone, toSplitZone, ZONE_IDS } from "~/components/panels/types.ts";
 import { computeToggleAction } from "~/components/panels/utils.ts";
 
 // ── usePanelById ────────────────────────────────────────────────────
@@ -114,14 +116,24 @@ export const usePanelActions = (): UsePanelActionsResult => {
   const setZoneAssignments = useSetAtom(zoneAssignmentsAtom);
   const setZoneOrder = useSetAtom(zoneOrderAtom);
   const sectionSplit = useAtomValue(sectionSplitAtom);
+  const setSectionSplit = useSetAtom(sectionSplitAtom);
   const isZenModeActive = useAtomValue(zenModeActiveAtom);
   const isFocusModeActive = useAtomValue(focusModeActiveAtom);
   const setFocusModeActive = useSetAtom(focusModeActiveAtom);
   const setFocusModeSavedVisibility = useSetAtom(focusModeSavedVisibilityAtom);
+  const setFocusedZone = useSetAtom(focusedZoneAtom);
 
   const movePanel = useCallback(
     (panelId: PanelId, targetZone: ZoneId, insertIndex?: number): void => {
-      const sourceZone = zoneAssignments[panelId];
+      // Adding a panel (via the "+"/palette) and dropping one (drag-and-drop)
+      // both flow through here — both are deliberate placements, so the
+      // destination becomes the focused pane (shows the active-pane ring). A
+      // plain click does NOT set focus, keeping the ring intentional.
+      setFocusedZone(targetZone);
+
+      // Undefined for an UNPLACED panel (e.g. an agent/terminal added from the
+      // Add Panel palette) — then there is no source section to clean up.
+      const sourceZone: ZoneId | undefined = zoneAssignments[panelId];
 
       if (sourceZone !== targetZone) {
         // Pre-compute remaining panels in the source zone before any state updates
@@ -134,7 +146,7 @@ export const usePanelActions = (): UsePanelActionsResult => {
 
         setActivePanelPerZone((prev) => {
           const next = { ...prev, [targetZone]: panelId };
-          if (prev[sourceZone] === panelId) {
+          if (sourceZone !== undefined && prev[sourceZone] === panelId) {
             if (remainingInSource.length > 0) {
               next[sourceZone] = remainingInSource[0][0];
             } else {
@@ -148,7 +160,11 @@ export const usePanelActions = (): UsePanelActionsResult => {
           const next = { ...prev, [targetZone]: true };
           // Don't hide an emptied source that belongs to a split section — the
           // section's other half is still populated and must stay on screen.
-          if (remainingInSource.length === 0 && sectionSplit[toPrimaryZone(sourceZone)] === undefined) {
+          if (
+            sourceZone !== undefined &&
+            remainingInSource.length === 0 &&
+            sectionSplit[toPrimaryZone(sourceZone)] === undefined
+          ) {
             next[sourceZone] = false;
           }
           return next;
@@ -170,8 +186,7 @@ export const usePanelActions = (): UsePanelActionsResult => {
           targetOrder.push(panelId);
         }
 
-        const sourceZone = zoneAssignments[panelId];
-        if (sourceZone === targetZone) {
+        if (sourceZone === undefined || sourceZone === targetZone) {
           return { ...prev, [targetZone]: targetOrder };
         }
         const sourceOrder = (prev[sourceZone] ?? getDefaultOrder(sourceZone)).filter((id) => id !== panelId);
@@ -223,6 +238,50 @@ export const usePanelActions = (): UsePanelActionsResult => {
           }
         }
       }
+
+      // Compact-layout section split: if this move emptied a split PRIMARY half,
+      // promote the secondary half's panels up into the primary and un-split, so
+      // the surviving content becomes the whole section (mirrors the tab-close
+      // promote path in useRemovePanelFromSection). An emptied SECONDARY half is
+      // collapsed by SplittableSection's self-heal instead. Splitting a section
+      // that has a single tab intentionally leaves the primary empty — that is a
+      // creation action, not a removal, so it is unaffected by this.
+      if (
+        sourceZone !== undefined &&
+        sourceZone !== targetZone &&
+        !isSplitZone(sourceZone) &&
+        sectionSplit[sourceZone] !== undefined
+      ) {
+        const isSourceNowEmpty = !(Object.entries(zoneAssignments) as Array<[PanelId, ZoneId]>).some(
+          ([pid, zone]) => zone === sourceZone && pid !== panelId,
+        );
+        if (isSourceNowEmpty) {
+          const splitZone = toSplitZone(sourceZone);
+          const splitPanels = (Object.entries(zoneAssignments) as Array<[PanelId, ZoneId]>)
+            .filter(([pid, zone]) => zone === splitZone && pid !== panelId)
+            .map(([pid]) => pid);
+          if (splitPanels.length > 0) {
+            setZoneAssignments((prev) => {
+              const next = { ...prev };
+              for (const id of splitPanels) next[id] = sourceZone;
+              return next;
+            });
+            setZoneOrder((prev) => ({ ...prev, [sourceZone]: prev[splitZone] ?? splitPanels, [splitZone]: [] }));
+            setActivePanelPerZone((prev) => {
+              const next = { ...prev };
+              next[sourceZone] = prev[splitZone] ?? splitPanels[0];
+              delete next[splitZone];
+              return next;
+            });
+            setZoneVisibility((prev) => ({ ...prev, [sourceZone]: true }));
+          }
+          setSectionSplit((prev) => {
+            const next = { ...prev };
+            delete next[sourceZone];
+            return next;
+          });
+        }
+      }
     },
     [
       zoneAssignments,
@@ -232,6 +291,8 @@ export const usePanelActions = (): UsePanelActionsResult => {
       setActivePanelPerZone,
       setZoneVisibility,
       setZoneOrder,
+      setSectionSplit,
+      setFocusedZone,
     ],
   );
 
@@ -558,6 +619,51 @@ export const useZenMode = (): UseZenModeResult => {
   ]);
 
   return { isZenModeActive, toggleZenMode };
+};
+
+// ── useMaximizePanel ────────────────────────────────────────────────
+
+type UseMaximizePanelResult = {
+  maximizedZone: ZoneId | null;
+  maximizeZone: (zone: ZoneId) => void;
+  restore: () => void;
+  /** Maximize the zone if it isn't the maximized one, else restore. */
+  toggleZone: (zone: ZoneId) => void;
+  /** Keyboard entry point: maximize the section that currently holds focus
+   *  (or restore if something is already maximized). */
+  toggleMaximizeFocused: () => void;
+};
+
+/**
+ * Maximize a single section so it fills the workspace area, covering the top
+ * banner while the far-left nav rail stays visible (the rail lives above the
+ * workspace page). The maximized section keeps its own tab strip, so a
+ * multi-panel section can still switch panels while maximized.
+ *
+ * `toggleMaximizeFocused` reads the zone that currently holds keyboard focus
+ * from the focused `[data-zone-id]` element — the same focus target the panel
+ * focus shortcuts drive — and falls back to the always-present Center section
+ * when nothing is focused.
+ */
+export const useMaximizePanel = (): UseMaximizePanelResult => {
+  const [maximizedZone, setMaximizedZone] = useAtom(maximizedZoneAtom);
+
+  const maximizeZone = useCallback((zone: ZoneId): void => setMaximizedZone(zone), [setMaximizedZone]);
+  const restore = useCallback((): void => setMaximizedZone(null), [setMaximizedZone]);
+  const toggleZone = useCallback(
+    (zone: ZoneId): void => setMaximizedZone((prev) => (prev === zone ? null : zone)),
+    [setMaximizedZone],
+  );
+
+  const toggleMaximizeFocused = useCallback((): void => {
+    setMaximizedZone((prev) => {
+      if (prev !== null) return null; // something is maximized → restore
+      const focusedZone = document.activeElement?.closest<HTMLElement>("[data-zone-id]")?.dataset.zoneId;
+      return (focusedZone as ZoneId | undefined) ?? "center";
+    });
+  }, [setMaximizedZone]);
+
+  return { maximizedZone, maximizeZone, restore, toggleZone, toggleMaximizeFocused };
 };
 
 // ── usePanelKeyboardShortcuts ───────────────────────────────────────

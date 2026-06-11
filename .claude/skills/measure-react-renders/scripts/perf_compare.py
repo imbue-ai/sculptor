@@ -47,15 +47,24 @@ COUNTER_SCRIPT = """
 window.__RENDER_COUNTS__ = {};
 window.__COMMIT_COUNT__ = 0;
 var hook = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
+// PerformedWork flag (React 17-19): set on a fiber only when its component
+// actually rendered during the commit. Without this check the walk counts
+// every MOUNTED fiber per commit, which can't distinguish a component that
+// re-rendered from one that bailed out (e.g. via React.memo or unchanged
+// atom subscriptions).
+var PERFORMED_WORK = 1;
 hook.onCommitFiberRoot = function(id, root) {
     if (!root || !root.current) return;
     window.__COMMIT_COUNT__++;
     function walk(fiber) {
         if (!fiber) return;
-        var name = fiber.type?.displayName || fiber.type?.name;
-        if (name && typeof name === 'string' && name.length < 100) {
-            window.__RENDER_COUNTS__[name] =
-                (window.__RENDER_COUNTS__[name] || 0) + 1;
+        var flags = fiber.flags !== undefined ? fiber.flags : (fiber.effectTag || 0);
+        if (flags & PERFORMED_WORK) {
+            var name = fiber.type?.displayName || fiber.type?.name;
+            if (name && typeof name === 'string' && name.length < 100) {
+                window.__RENDER_COUNTS__[name] =
+                    (window.__RENDER_COUNTS__[name] || 0) + 1;
+            }
         }
         walk(fiber.child);
         walk(fiber.sibling);

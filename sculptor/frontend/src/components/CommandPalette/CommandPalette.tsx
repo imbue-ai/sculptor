@@ -22,6 +22,7 @@ import {
   useVisibleCommands,
 } from "./hooks.ts";
 import { PAGE_DEFINITIONS } from "./pages.ts";
+import { PaletteFooter } from "./PaletteFooter.tsx";
 import type { Command as PaletteCommand, CommandGroupId, PaletteContext } from "./types.ts";
 import { isPageScoped, pagesOf } from "./types.ts";
 
@@ -649,6 +650,9 @@ export const CommandPalette = (): ReactElement => {
               </Command.Group>
             ))}
           </Command.List>
+          {/* The esc label mirrors the two-stage Escape above: text → clear,
+              sub-page → back, otherwise close. */}
+          <PaletteFooter enterLabel="run" escLabel={search !== "" ? "clear" : pageDef ? "back" : "close"} />
         </Command>
       </Dialog.Content>
     </Dialog.Root>

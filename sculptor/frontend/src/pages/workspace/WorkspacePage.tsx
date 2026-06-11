@@ -12,11 +12,11 @@ import {
   workspaceIdsAtom,
 } from "../../common/state/atoms/workspaces.ts";
 import { useMarkRead } from "../../common/state/hooks/useMarkRead";
-import { usePanelLayoutSync } from "../../common/state/hooks/usePanelLayoutSync.ts";
 import { usePerWorkspacePanelLayout } from "../../common/state/hooks/usePerWorkspacePanelLayout.ts";
 import { useWorkspaceFiles } from "../../common/state/hooks/useWorkspaceFiles.ts";
 import { CompactLayout } from "../../components/panels/CompactLayout.tsx";
 import { useWorkspaceLayoutBootstrap } from "../workspace/panels/useWorkspaceLayoutBootstrap.ts";
+import { workspaceDefaultLayout } from "../workspace/panels/workspacePanels.ts";
 import { AgentWorkspaceCommands } from "./components/AgentWorkspaceCommands.tsx";
 import { WorkspaceBanner } from "./components/WorkspaceBanner.tsx";
 import { useArtifactSync } from "./hooks/useArtifactSync";
@@ -27,8 +27,7 @@ const WorkspacePageContent = ({ taskID }: { taskID: string }): ReactElement => {
 
   // Sync artifacts for the currently viewed task only
   useArtifactSync(workspaceID, taskID);
-  usePanelLayoutSync();
-  usePerWorkspacePanelLayout(workspaceID);
+  usePerWorkspacePanelLayout(workspaceID, workspaceDefaultLayout);
 
   // Pre-warm the file list cache so @-mention fuzzy search has data ready
   // before the user types, even if the file browser panel is not open.

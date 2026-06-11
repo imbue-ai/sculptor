@@ -1,7 +1,10 @@
+import type { Atom } from "jotai";
+import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 
 import { atomWithDebouncedStorage } from "~/common/state/atoms/atomWithDebouncedStorage.ts";
 import type { ZoneId } from "~/components/panels/types.ts";
+import { toPrimaryZone, ZONE_IDS } from "~/components/panels/types.ts";
 
 // Global experimental setting: render every section's tab strip at the top or
 // bottom (REQ-SET-1). Default top. Stored in localStorage so it is global and
@@ -9,6 +12,16 @@ import type { ZoneId } from "~/components/panels/types.ts";
 export type TabStripPosition = "top" | "bottom";
 
 export const tabStripPositionAtom = atomWithStorage<TabStripPosition>("sculptor-tab-strip-position", "top", undefined, {
+  getOnInit: true,
+});
+
+// Experimental: whether panel SECTION SIZES are shared across workspaces
+// (global, the default) or unique per workspace. The rest of the panel layout
+// (positions, visibility, split state) is always per-workspace; only sizes are
+// toggleable so a comfortable split can optionally carry across workspaces.
+// When false, `sectionSizePercentAtom` is snapshotted/restored per workspace by
+// usePerWorkspacePanelLayout; when true it stays in its global storage key.
+export const sectionSizesSharedAtom = atomWithStorage<boolean>("sculptor-section-sizes-shared", true, undefined, {
   getOnInit: true,
 });
 
@@ -62,3 +75,30 @@ export const sectionSplitAtom = atomWithDebouncedStorage<Partial<Record<ZoneId, 
   {},
   200,
 );
+
+// ── Per-zone split slices ────────────────────────────────────────────
+// Narrow reads over `sectionSplitAtom` so a split ratio changing in one
+// section (every pointer move during a split resize) doesn't re-render
+// components that only care about another zone. Entries in the record are
+// replaced wholesale on update, so plain Object.is dedupes unaffected zones.
+
+const sectionSplitForZoneAtomMap = new Map<ZoneId, Atom<SectionSplit | undefined>>(
+  ZONE_IDS.map((zoneId) => [zoneId, atom<SectionSplit | undefined>((get) => get(sectionSplitAtom)[zoneId])]),
+);
+
+export const sectionSplitForZoneAtom = (primaryZone: ZoneId): Atom<SectionSplit | undefined> => {
+  return sectionSplitForZoneAtomMap.get(primaryZone)!;
+};
+
+// Whether a zone is one half of a split section (its primary zone has split
+// state). True for both the primary half and the ":split" half.
+const isSplitHalfAtomMap = new Map<ZoneId, Atom<boolean>>(
+  ZONE_IDS.map((zoneId) => [
+    zoneId,
+    atom<boolean>((get) => get(sectionSplitAtom)[toPrimaryZone(zoneId)] !== undefined),
+  ]),
+);
+
+export const isSplitHalfAtom = (zoneId: ZoneId): Atom<boolean> => {
+  return isSplitHalfAtomMap.get(zoneId)!;
+};

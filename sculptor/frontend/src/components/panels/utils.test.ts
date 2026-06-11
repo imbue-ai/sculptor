@@ -1,7 +1,30 @@
 import { describe, expect, it } from "vitest";
 
 import type { PanelId, ZoneId } from "~/components/panels/types.ts";
-import { computeToggleAction, isZoneMoveDisabled } from "~/components/panels/utils.ts";
+import { areArraysShallowEqual, computeToggleAction, isZoneMoveDisabled } from "~/components/panels/utils.ts";
+
+// ── areArraysShallowEqual ────────────────────────────────────────────
+
+describe("areArraysShallowEqual", () => {
+  it("is true for the same reference", () => {
+    const arr = ["a", "b"];
+    expect(areArraysShallowEqual(arr, arr)).toBe(true);
+  });
+
+  it("is true for distinct arrays with equal elements", () => {
+    expect(areArraysShallowEqual(["a", "b"], ["a", "b"])).toBe(true);
+    expect(areArraysShallowEqual([], [])).toBe(true);
+  });
+
+  it("is false when lengths differ", () => {
+    expect(areArraysShallowEqual(["a"], ["a", "b"])).toBe(false);
+  });
+
+  it("is false when elements differ or are reordered", () => {
+    expect(areArraysShallowEqual(["a", "b"], ["a", "c"])).toBe(false);
+    expect(areArraysShallowEqual(["a", "b"], ["b", "a"])).toBe(false);
+  });
+});
 
 // ── computeToggleAction ──────────────────────────────────────────────
 
