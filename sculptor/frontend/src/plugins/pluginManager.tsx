@@ -2,6 +2,7 @@ import type { createStore } from "jotai";
 import type { ComponentType, ReactElement } from "react";
 
 import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
+import { queryClient, SCULPTOR_QUERY_KEY_PREFIX } from "~/common/queryClient.ts";
 import type { PanelDefinition } from "~/components/panels/types.ts";
 
 import { installHostRuntime } from "./hostRuntime.ts";
@@ -39,6 +40,26 @@ const addDisposer = (pluginId: string, fn: () => void): void => {
   const list = disposersByPluginId.get(pluginId) ?? [];
   list.push(fn);
   disposersByPluginId.set(pluginId, list);
+};
+
+/**
+ * Dev-only guard for the shared QueryClient's key-namespace convention: host
+ * keys start with the reserved "sculptor" prefix, plugin keys with the plugin
+ * id. Anything else is a query that invalidation can't reach by namespace —
+ * warn so the author (host or plugin) fixes the key shape.
+ */
+const installQueryKeyNamespaceGuard = (): void => {
+  if (!import.meta.env.DEV) return;
+  queryClient.getQueryCache().subscribe((event) => {
+    if (event.type !== "added") return;
+    const first = event.query.queryKey[0];
+    if (first === SCULPTOR_QUERY_KEY_PREFIX) return;
+    if (typeof first === "string" && [...pluginIdBySource.values()].includes(first)) return;
+    console.warn(
+      `[plugins] query key outside any namespace: ${JSON.stringify(event.query.queryKey)} — ` +
+        `host keys must start with "${SCULPTOR_QUERY_KEY_PREFIX}", plugin keys with the plugin id.`,
+    );
+  });
 };
 
 const parseMajor = (range: string): number | null => {
@@ -222,6 +243,7 @@ export const bootstrapPlugins = (store: JotaiStore): void => {
   installHostRuntime();
   if (hasBootstrapped) return;
   hasBootstrapped = true;
+  installQueryKeyNamespaceGuard();
 
   const userSources = store.get(pluginSourcesAtom);
   for (const source of BUILTIN_SOURCES) void loadSource(store, source, true);

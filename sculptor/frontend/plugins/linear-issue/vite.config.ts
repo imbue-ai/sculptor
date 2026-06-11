@@ -39,6 +39,7 @@ export default defineConfig({
         "react-dom",
         "react-dom/client",
         "jotai",
+        "@tanstack/react-query",
         "@radix-ui/themes",
         "lucide-react",
         "@sculptor/plugin-sdk",
