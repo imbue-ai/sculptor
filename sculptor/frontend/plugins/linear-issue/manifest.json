@@ -6,6 +6,7 @@
   "sdkVersion": "^1.0.0",
   "peerDependencies": {
     "@radix-ui/themes": "^3",
+    "@tanstack/react-query": "^5",
     "react": "^18",
     "jotai": "^2"
   }
