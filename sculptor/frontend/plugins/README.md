@@ -38,6 +38,31 @@ GraphQL API, and stores its API key through the plugin-settings SDK.
   plugin's panel and its settings component.
 - `PanelHeader`, `ArtifactType`, and domain types.
 
+## Caching fetched data (`@tanstack/react-query`)
+
+Plugins may use `@tanstack/react-query` directly — it resolves through the
+import map to the host's library and the host's **shared QueryClient** (plugin
+components render under the host's provider). Cached data survives panel
+close/reopen and workspace switches, and concurrent mounts dedupe to one
+request. Rules:
+
+- **Key namespace**: the first element of every query key MUST be your plugin
+  id (e.g. `["linear-issue", "issue", id]`). The host's keys live under the
+  reserved `"sculptor"` prefix. A dev-mode guard warns on keys outside either
+  namespace.
+- **Set `staleTime` explicitly**: the host's default is `Infinity` (its
+  queries are invalidated by the WebSocket stream); without an override your
+  data will never refetch.
+- **Scope imperative calls to your namespace**: `invalidateQueries({ queryKey:
+  ["<your-id>"] })` is fine; never call `clear()` or unfiltered
+  `invalidateQueries()` — the cache is shared with the host.
+- `QueryClient`/`QueryClientProvider` are intentionally not exported by the
+  runtime stub: don't construct your own client, it would cut host components
+  rendered inside your subtree off from the shared cache.
+- Don't put secrets (API keys) in query keys — keys are visible in cache
+  inspection/devtools. Close over them in the `queryFn` and invalidate your
+  namespace when they change (see `linear-issue`).
+
 ## Adding a new plugin to the loader
 
 1. Create `plugins/<id>/` with the same shape as `linear-issue/`.

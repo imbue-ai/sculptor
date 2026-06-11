@@ -1,4 +1,5 @@
 import * as RadixThemes from "@radix-ui/themes";
+import * as TanstackReactQuery from "@tanstack/react-query";
 import * as Jotai from "jotai";
 import * as LucideReact from "lucide-react";
 import * as React from "react";
@@ -26,6 +27,7 @@ export const installHostRuntime = (): void => {
     reactDOM: ReactDOM,
     reactDOMClient: ReactDOMClient,
     jotai: Jotai,
+    tanstackReactQuery: TanstackReactQuery,
     radixThemes: RadixThemes,
     lucideReact: LucideReact,
     sdk,

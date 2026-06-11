@@ -1,9 +1,16 @@
 import { Badge, Box, Button, Flex, Spinner, Text, TextField } from "@radix-ui/themes";
 import { PanelHeader, usePluginSetting, useWorkspaceBranch } from "@sculptor/plugin-sdk";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Hash } from "lucide-react";
-import { type ReactElement, useEffect, useMemo, useState } from "react";
+import { type ReactElement, useMemo } from "react";
 
 const LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql";
+
+/**
+ * Plugin id, doubling as this plugin's query-key namespace on the shared
+ * QueryClient (host keys live under "sculptor"; see plugins/README.md).
+ */
+const PLUGIN_ID = "linear-issue";
 
 type LinearIssue = {
   identifier: string;
@@ -135,39 +142,32 @@ const LinearPanel = (): ReactElement => {
   const [apiKey] = usePluginSetting("apiKey");
   const ticket = useMemo(() => parseTicket(branch), [branch]);
 
-  const [issue, setIssue] = useState<LinearIssue | null>(null);
-  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (!apiKey || !ticket) {
-      setIssue(null);
-      setStatus("idle");
-      setError("");
-      return;
-    }
-    const controller = new AbortController();
-    setStatus("loading");
-    setError("");
-    fetchIssue(apiKey, ticket, controller.signal)
-      .then((result) => {
-        if (controller.signal.aborted) return;
-        setIssue(result);
-        setStatus("idle");
-      })
-      .catch((e: unknown) => {
-        if (controller.signal.aborted) return;
-        setError(e instanceof Error ? e.message : String(e));
-        setStatus("error");
-      });
-    return (): void => controller.abort();
-  }, [apiKey, ticket]);
+  // Cached on the shared QueryClient, so the issue survives panel close/reopen
+  // and workspace switches, and concurrent mounts dedupe to one request. The
+  // API key is deliberately NOT part of the key (it would expose the secret in
+  // cache inspection); the settings component invalidates this namespace when
+  // the key changes instead. staleTime must be explicit — the host's default
+  // is Infinity, tuned for its WebSocket-invalidated queries.
+  const {
+    data: issue,
+    isPending,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: [PLUGIN_ID, "issue", ticket?.identifier],
+    queryFn: ({ signal }) => fetchIssue(apiKey, ticket!, signal),
+    enabled: Boolean(apiKey && ticket),
+    staleTime: 60_000,
+    gcTime: 30 * 60_000,
+    retry: 1,
+  });
 
   const renderBody = (): ReactElement => {
     if (!apiKey) return <EmptyState>Add your Linear API key in the plugin settings to link branches to issues.</EmptyState>;
     if (!branch) return <EmptyState>Waiting for the workspace branch…</EmptyState>;
     if (!ticket) return <EmptyState>{`No Linear ticket found in branch "${branch}".`}</EmptyState>;
-    if (status === "loading") {
+    if (isError) return <EmptyState>{error instanceof Error ? error.message : String(error)}</EmptyState>;
+    if (isPending) {
       return (
         <Flex align="center" justify="center" gap="2" p="5" style={{ flexGrow: 1 }}>
           <Spinner size="1" />
@@ -177,7 +177,6 @@ const LinearPanel = (): ReactElement => {
         </Flex>
       );
     }
-    if (status === "error") return <EmptyState>{error}</EmptyState>;
     if (!issue) return <EmptyState>{`${ticket.identifier} not found in Linear.`}</EmptyState>;
     return <IssueCard issue={issue} />;
   };
@@ -192,6 +191,16 @@ const LinearPanel = (): ReactElement => {
 
 const LinearSettings = (): ReactElement => {
   const [apiKey, setApiKey] = usePluginSetting("apiKey");
+  const queryClient = useQueryClient();
+
+  const handleKeyChange = (value: string): void => {
+    setApiKey(value);
+    // Cached issues were fetched with the old key (the key is intentionally
+    // not part of the query key) — drop this plugin's namespace so panels
+    // refetch with the new credentials.
+    void queryClient.invalidateQueries({ queryKey: [PLUGIN_ID] });
+  };
+
   return (
     <Flex direction="column" gap="2" style={{ maxWidth: 460 }}>
       <Text size="1" color="gray">
@@ -202,7 +211,7 @@ const LinearSettings = (): ReactElement => {
         type="password"
         placeholder="lin_api_..."
         value={apiKey}
-        onChange={(e) => setApiKey(e.target.value)}
+        onChange={(e) => handleKeyChange(e.target.value)}
       />
     </Flex>
   );
@@ -223,7 +232,7 @@ export default function activate(api: {
   registerSettings: (component: () => ReactElement) => () => void;
 }): () => void {
   const disposePanel = api.registerPanel({
-    id: "linear-issue",
+    id: PLUGIN_ID,
     displayName: "Linear",
     description: "Show the Linear issue linked to the workspace branch",
     icon: Hash,
