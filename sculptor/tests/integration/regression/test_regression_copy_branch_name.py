@@ -15,10 +15,10 @@ is deterministic.
 
 from playwright.sync_api import expect
 
+from sculptor.constants import ElementIDs
 from sculptor.testing.elements.clipboard import install_clipboard_interceptor
 from sculptor.testing.elements.clipboard import read_intercepted_clipboard
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
-from sculptor.testing.pages.task_page import PlaywrightTaskPage
+from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
 from sculptor.testing.playwright_utils import soft_reload_page
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -52,41 +52,57 @@ def test_copy_branch_name_copies_workspace_branch(sculptor_instance_: SculptorIn
     sculptor_instance_.repo.checkout_branch("testing")
 
     # Soft-reload so the branch selector picks up the newly created branch
-    # (direct page reload causes ERR_INSUFFICIENT_RESOURCES on CI)
+    # (direct page reload causes ERR_INSUFFICIENT_RESOURCES on CI). After
+    # the reload we land on /home with the modal closed, so open the
+    # new-workspace modal explicitly before filling the form.
     soft_reload_page(page)
-    add_ws_page = PlaywrightAddWorkspacePage(page=page)
-    expect(add_ws_page.get_submit_button()).to_be_visible()
+    navigate_to_add_workspace_page(page)
+    submit_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
+    expect(submit_button).to_be_visible()
 
     # Fill in the workspace name (required field)
-    add_ws_page.get_workspace_name_input().fill("Feature branch workspace")
+    page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT).fill("Feature branch workspace")
 
     # Override the auto-filled branch name so we know exactly what the
-    # workspace's branch will be (the form default is `<user>/<slug>`).
-    branch_input = add_ws_page.get_branch_name_input()
+    # workspace's branch will be.
+    branch_input = page.get_by_test_id(ElementIDs.BRANCH_NAME_INPUT)
     branch_input.fill(workspace_branch)
+    expect(branch_input).to_have_value(workspace_branch)
 
     # Select feature_branch via the branch selector (the source to clone from)
-    add_ws_page.select_branch(feature_branch)
+    branch_selector = page.get_by_test_id(ElementIDs.BRANCH_SELECTOR)
+    branch_selector.click()
+    branch_option = (
+        page.get_by_test_id(ElementIDs.BRANCH_OPTION).filter(has_text=feature_branch).filter(has_not_text="*")
+    )
+    expect(branch_option).to_have_count(1, timeout=30_000)
+    branch_option.click()
 
     # Wait for the selector's displayed value to reflect the click before
     # submitting — without this, submit can fire before React commits the
     # `userSelectedBranch` state update and the request goes out with the
     # project's current branch instead of `feature_branch`.
-    expect(add_ws_page.get_branch_selector()).to_contain_text(feature_branch)
+    expect(branch_selector).to_contain_text(feature_branch)
 
     # Submit to create the workspace (no prompt on the Add Workspace page)
-    add_ws_page.submit_and_wait_for_chat_panel()
+    expect(submit_button).to_be_enabled()
+    submit_button.click()
+
+    # Wait for the chat panel to appear (we navigated to the workspace/agent page)
+    chat_panel_locator = page.get_by_test_id(ElementIDs.CHAT_PANEL)
+    expect(chat_panel_locator).to_be_visible(timeout=30000)
 
     # Clone mode should not show a mode badge (no experimental flags enabled)
-    task_page = PlaywrightTaskPage(page=page)
-    expect(task_page.get_mode_badge()).not_to_be_visible()
+    mode_badge = page.get_by_test_id(ElementIDs.TASK_MODE_BADGE)
+    expect(mode_badge).not_to_be_visible()
 
     # Install a clipboard interceptor so we can read what was written
     install_clipboard_interceptor(page)
 
     # Wait for the branch name to load in the workspace banner (async, can take 1-2s)
     # and click it to copy the value to the clipboard.
-    branch_element = task_page.get_branch_name_element()
+    branch_element = page.get_by_test_id(ElementIDs.BRANCH_NAME)
+    expect(branch_element).to_be_visible(timeout=10000)
     expect(branch_element).to_have_text(workspace_branch)
     branch_element.click()
 

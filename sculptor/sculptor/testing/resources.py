@@ -415,15 +415,14 @@ def _create_packaged_instance(
     # Register the test project. Without this the app lands on /setup (no projects).
     packaged_frontend.register_project(repo_path)
 
-    # Full-reload to the root URL so the SPA rootLoader re-evaluates routing.
-    # It will call getActiveProjects(), find the newly registered project,
-    # and redirect to /ws/new.  We navigate to the bare URL (no hash) so
-    # the hash router starts at "/" and the rootLoader fires.  The previous
-    # approach of page.goto("#/ws/new") + page.reload() was unreliable in
-    # CDP mode: the hash-only goto could race with reload, leaving the page
-    # stuck on #/setup.
+    # Full-reload directly to /home so the SPA mounts on a known route
+    # without going through the rootLoader at "/" — the loader's no-MRU
+    # path appends ?firstLoad=true and that triggers HomePage to auto-open
+    # the new-workspace modal, whose overlay then intercepts pointer
+    # events for the rest of the test. Tests that need the project-picker
+    # flow can navigate explicitly afterwards.
     base_url = page.url.split("#")[0].rstrip("/")
-    page.goto(base_url, wait_until="networkidle")
+    page.goto(f"{base_url}/#/home", wait_until="networkidle")
 
     # Wait for the SPA to render — raise if onboarding shows instead of the main app.
     logger.info("Waiting for SPA to render (checking for ADD_WORKSPACE_BUTTON or onboarding)")

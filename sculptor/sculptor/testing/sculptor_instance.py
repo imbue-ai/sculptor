@@ -32,7 +32,6 @@ from sculptor.testing.frontend_utils import DEFAULT_TEST_VIEWPORT
 from sculptor.testing.mock_repo import MockRepoState
 from sculptor.testing.packaged_electron_frontend import PackagedElectronFactory
 from sculptor.testing.playwright_utils import delete_all_workspaces_via_ui
-from sculptor.testing.playwright_utils import delete_project_via_settings
 from sculptor.testing.playwright_utils import expect_app_not_onboarding
 from sculptor.testing.playwright_utils import reset_active_panel_to_files
 from sculptor.testing.port_manager import PortManager
@@ -201,12 +200,16 @@ class SculptorInstance:
         repo.commit("Stuff", commit_time="2025-01-01T00:00:02")
         self.repo = repo
 
-    def _delete_extra_projects_via_ui(self) -> None:
-        """Delete projects registered by previous tests via the Settings UI.
+    def _delete_extra_projects(self) -> None:
+        """Delete projects registered by previous tests via the backend API.
 
         Checks the backend API for extra projects (those whose path differs
-        from ``self._project_path``), then removes each one through the
-        Settings > Repositories UI.
+        from ``self._project_path``), then removes each one via DELETE
+        ``/api/v1/projects/{id}``. The previous incarnation of this helper
+        navigated to Settings → Repositories and clicked through the UI,
+        but a leftover NewWorkspaceModal / CommandPalette overlay from the
+        previous test could intercept the click for the full 30s timeout.
+        Going through the API entirely sidesteps the overlay race.
         """
         base_url = self.page.url.split("#")[0].rstrip("/")
         try:
@@ -218,6 +221,7 @@ class SculptorInstance:
 
         initial_path = str(self._project_path.resolve())
         projects = response.json()
+        extra_ids = []
         for project in projects:
             project_path = project.get("userGitRepoUrl", "")
             # The initial project's URL is "file://<path>" when started via CLI,
@@ -227,10 +231,16 @@ class SculptorInstance:
             normalized_project_path = str(Path(project_path.removeprefix("file://")).resolve())
             if normalized_project_path == initial_path:
                 continue
-            project_name = project.get("name", "")
-            if not project_name:
+            project_id = project.get("objectId", "")
+            if not project_id:
                 continue
-            delete_project_via_settings(self.page, project_name)
+            extra_ids.append(project_id)
+
+        for project_id in extra_ids:
+            try:
+                self.page.request.delete(f"{base_url}/api/v1/projects/{project_id}")
+            except Exception:
+                logger.warning("Failed to DELETE project {} during pre-test cleanup", project_id, exc_info=True)
 
     def _restore_session_cookie(self) -> None:
         """Re-add the session token cookie after clear_cookies() wipes it.
@@ -287,10 +297,14 @@ class SculptorInstance:
         self._restore_session_cookie()
 
         # Navigate through about:blank to fully unload the SPA before
-        # loading it fresh.  A direct goto + reload causes the /ws/new
-        # redirect loader to fire twice (once on goto, once on reload
-        # before the first redirect completes), creating duplicate
-        # new-workspace tabs.
+        # loading it fresh.  Land directly on /home (skipping the
+        # rootLoader at "/") so we don't trigger the firstLoad=true
+        # auto-open of the new-workspace modal — its overlay would
+        # intercept pointer events for the rest of the next test.
+        # The old flow relied on a /ws/new route with an embedded form,
+        # but the new modal flow has no such page; the topbar's "+"
+        # button is universally visible after the SPA mounts, so wait
+        # on that.
         self.page.goto("about:blank")
 
         # Reset persistent user-config flags only after the previous SPA
@@ -302,12 +316,12 @@ class SculptorInstance:
         # tree, which cancels those pending timers.
         self._reset_user_config_defaults()
 
-        self.page.goto(f"{self.base_url}#/ws/new")
+        self.page.goto(f"{self.base_url}#/home")
 
-        # Wait for the Add Workspace page to render — raise if onboarding
-        # shows instead (no shared-instance test should trigger onboarding).
-        start_task_button = self.page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
-        expect_app_not_onboarding(self.page, start_task_button)
+        # Wait for the topbar to render — raise if onboarding shows
+        # instead (no shared-instance test should trigger onboarding).
+        add_workspace_button = self.page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
+        expect_app_not_onboarding(self.page, add_workspace_button)
 
         # Verify no workspace tabs leaked through via stale WebSocket updates.
         workspace_tabs = self.page.get_by_test_id(ElementIDs.WORKSPACE_TAB)
@@ -478,8 +492,8 @@ class SculptorInstance:
         self._empty_fake_bin_dir()
         self._check_pre_test_timeout("empty_fake_bin_dir", start, test_id)
 
-        self._delete_extra_projects_via_ui()
-        self._check_pre_test_timeout("delete_extra_projects_via_ui", start, test_id)
+        self._delete_extra_projects()
+        self._check_pre_test_timeout("delete_extra_projects", start, test_id)
 
         self._create_fresh_repo()
         self._check_pre_test_timeout("create_fresh_repo", start, test_id)

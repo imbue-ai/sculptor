@@ -15,7 +15,7 @@ import type { CommandRuntime } from "../runtime.ts";
 import type { Command, PaletteContext } from "../types.ts";
 
 const ROOT_CTX: PaletteContext = {
-  route: { isHome: true, isWorkspace: false, isSettings: false, isAddWorkspace: false, isAgent: false },
+  route: { isHome: true, isWorkspace: false, isSettings: false, isAgent: false },
   activeWorkspaceId: null,
   activeAgentId: null,
   hasChatPanel: false,
@@ -26,17 +26,17 @@ const ROOT_CTX: PaletteContext = {
 
 const WORKSPACE_CTX: PaletteContext = {
   ...ROOT_CTX,
-  route: { isHome: false, isWorkspace: true, isSettings: false, isAddWorkspace: false, isAgent: false },
+  route: { isHome: false, isWorkspace: true, isSettings: false, isAgent: false },
 };
 
 const SETTINGS_CTX: PaletteContext = {
   ...ROOT_CTX,
-  route: { isHome: false, isWorkspace: false, isSettings: true, isAddWorkspace: false, isAgent: false },
+  route: { isHome: false, isWorkspace: false, isSettings: true, isAgent: false },
 };
 
 const ADD_WORKSPACE_CTX: PaletteContext = {
   ...ROOT_CTX,
-  route: { isHome: false, isWorkspace: false, isSettings: false, isAddWorkspace: true, isAgent: false },
+  route: { isHome: false, isWorkspace: false, isSettings: false, isAgent: false },
 };
 
 const WORKSPACE_WITH_CHAT_CTX: PaletteContext = {
@@ -56,9 +56,11 @@ const makeRuntime = (overrides: Partial<CommandRuntime> = {}): CommandRuntime =>
     navigate: {
       toHome: vi.fn(),
       toSettings: vi.fn(),
-      toAddWorkspace: vi.fn(),
       toWorkspace: vi.fn(),
       toAgent: vi.fn(),
+    },
+    modal: {
+      openNewWorkspaceFromPalette: vi.fn(),
     },
     ui: {
       toggleHelpDialog: vi.fn(),
@@ -130,11 +132,11 @@ describe("buildNavigationCommands", () => {
     expect(runtime.navigate.toSettings).toHaveBeenCalledWith();
   });
 
-  it("nav.new_workspace perform calls runtime.navigate.toAddWorkspace", () => {
+  it("nav.new_workspace perform opens the new-workspace modal from the palette", () => {
     const runtime = makeRuntime();
     const cmd = buildNavigationCommands(runtime).find((c) => c.id === "nav.new_workspace")!;
     runPerform(cmd);
-    expect(runtime.navigate.toAddWorkspace).toHaveBeenCalledTimes(1);
+    expect(runtime.modal.openNewWorkspaceFromPalette).toHaveBeenCalledTimes(1);
   });
 
   it("nav.settings is titled 'Open settings' (direct nav, distinct from settings.open's 'Go to settings...' picker)", () => {

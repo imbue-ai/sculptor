@@ -2,23 +2,27 @@ import { Flex } from "@radix-ui/themes";
 import { useSetAtom } from "jotai";
 import { HelpCircleIcon, HomeIcon, SearchIcon, SettingsIcon } from "lucide-react";
 import type { ReactElement } from "react";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 
 import { ElementIds } from "../api";
 import { useKeybindingDisplayText } from "../common/keybindings/hooks.ts";
-import { useImbueNavigate } from "../common/NavigateUtils.ts";
-import { ensurePseudoTabAtom } from "../common/state/atoms/workspaces.ts";
+import { useImbueLocation, useImbueNavigate } from "../common/NavigateUtils.ts";
+import { ensurePseudoTabAtom, lastNonHomeLocationAtom } from "../common/state/atoms/workspaces.ts";
 import { useHelpDialog } from "../common/state/hooks/useHelpDialog.ts";
+import { useHomeToggle } from "../common/state/hooks/useHomeToggle.ts";
 import { getTitleBarLeftPadding } from "../electron/utils.ts";
 import { ClosedWorkspacesPill } from "./ClosedWorkspacesPill.tsx";
 import { useCommandPalette } from "./CommandPalette";
 import { TooltipIconButton } from "./TooltipIconButton.tsx";
 import styles from "./TopBar.module.scss";
-import { HOME_TAB_ID, SETTINGS_TAB_ID } from "./workspaceTabIds.ts";
+import { SETTINGS_TAB_ID } from "./workspaceTabIds.ts";
 import { WorkspaceTabs } from "./WorkspaceTabs.tsx";
 
 export const TopBar = (): ReactElement => {
-  const { navigateToGlobalSettings, navigateToHome } = useImbueNavigate();
+  const { navigateToGlobalSettings } = useImbueNavigate();
+  const location = useLocation();
+  const { isHomeRoute } = useImbueLocation();
   const { toggle: toggleCommandPalette } = useCommandPalette();
   const { showHelpDialog } = useHelpDialog();
   // Read the live binding from the registry so the tooltip stays accurate
@@ -28,11 +32,18 @@ export const TopBar = (): ReactElement => {
   const helpShortcut = useKeybindingDisplayText("help");
   const settingsShortcut = useKeybindingDisplayText("settings");
   const ensurePseudoTab = useSetAtom(ensurePseudoTabAtom);
+  const setLastNonHomeLocation = useSetAtom(lastNonHomeLocationAtom);
+  const toggleHome = useHomeToggle();
 
-  const handleOpenHome = useCallback((): void => {
-    ensurePseudoTab(HOME_TAB_ID);
-    navigateToHome();
-  }, [ensurePseudoTab, navigateToHome]);
+  // Remember the last path the user was on outside /home so the Home
+  // icon (and the global "home" keybinding) can toggle back to it.
+  // Updated whenever the pathname changes and isn't /home — including
+  // the initial mount on a workspace URL.
+  useEffect(() => {
+    if (!isHomeRoute) {
+      setLastNonHomeLocation(location.pathname + location.search);
+    }
+  }, [isHomeRoute, location.pathname, location.search, setLastNonHomeLocation]);
 
   const handleOpenSettings = useCallback((): void => {
     ensurePseudoTab(SETTINGS_TAB_ID);
@@ -53,11 +64,13 @@ export const TopBar = (): ReactElement => {
     >
       <TooltipIconButton
         tooltipText={<>Home {homeShortcut && <kbd className={styles.tooltipKbd}>{homeShortcut}</kbd>}</>}
-        variant="ghost"
+        variant={isHomeRoute ? "soft" : "ghost"}
         size="1"
-        onClick={handleOpenHome}
+        onClick={toggleHome}
         aria-label="Home"
+        aria-pressed={isHomeRoute}
         data-testid={ElementIds.HOME_BUTTON}
+        className={styles.homeButton}
       >
         <HomeIcon size={16} />
       </TooltipIconButton>

@@ -7,12 +7,10 @@ import {
   agentIdsByWorkspaceAtom,
   clearAllTabsAtom,
   closeAllWorkspaceTabsAtom,
-  closeNewWorkspaceTabAtom,
   closeOtherWorkspaceTabsAtom,
   closeWorkspaceTabAtom,
   effectiveOpenTabIdsAtom,
   keepOnlyTabAtom,
-  parseDraftIdFromTabId,
 } from "~/common/state/atoms/workspaces.ts";
 
 import { COMPONENT_GALLERY_TAB_ID, HOME_TAB_ID, SETTINGS_TAB_ID } from "./workspaceTabIds.ts";
@@ -37,20 +35,13 @@ export const useWorkspaceTabActions = (): {
   const closeTab = useSetAtom(closeWorkspaceTabAtom);
   const closeOtherTabs = useSetAtom(closeOtherWorkspaceTabsAtom);
   const closeAllTabs = useSetAtom(closeAllWorkspaceTabsAtom);
-  const closeNewWorkspaceTab = useSetAtom(closeNewWorkspaceTabAtom);
   const keepOnlyTab = useSetAtom(keepOnlyTabAtom);
   const clearAllTabs = useSetAtom(clearAllTabsAtom);
   const effectiveOpenTabIds = useAtomValue(effectiveOpenTabIdsAtom);
   const agentIdsByWorkspace = useAtomValue(agentIdsByWorkspaceAtom);
-  const {
-    navigateToWorkspace,
-    navigateToAddWorkspace,
-    navigateToAgent,
-    navigateToHome,
-    navigateToGlobalSettings,
-    navigateToComponentGallery,
-  } = useImbueNavigate();
-  const { addWorkspaceDraftId, isHomeRoute, isSettingsRoute, isComponentGalleryRoute } = useImbueLocation();
+  const { navigateToWorkspace, navigateToAgent, navigateToHome, navigateToGlobalSettings, navigateToComponentGallery } =
+    useImbueNavigate();
+  const { isHomeRoute, isSettingsRoute, isComponentGalleryRoute } = useImbueLocation();
   const { workspaceID: activeWorkspaceID } = useParams<{ workspaceID?: string }>();
 
   const handleWorkspaceClick = useCallback(
@@ -69,7 +60,9 @@ export const useWorkspaceTabActions = (): {
     (closedTabId: string): void => {
       const remaining = effectiveOpenTabIds.filter((id) => id !== closedTabId);
       if (remaining.length === 0) {
-        navigateToAddWorkspace();
+        // No tabs left — land on home. The user can spin up a new
+        // workspace from the topbar plus button when they're ready.
+        navigateToHome();
         return;
       }
       const closedIndex = effectiveOpenTabIds.indexOf(closedTabId);
@@ -81,35 +74,14 @@ export const useWorkspaceTabActions = (): {
       } else if (nextTab === COMPONENT_GALLERY_TAB_ID) {
         navigateToComponentGallery();
       } else {
-        const draftId = parseDraftIdFromTabId(nextTab);
-        if (draftId !== null) {
-          navigateToAddWorkspace(draftId);
-        } else {
-          handleWorkspaceClick(nextTab);
-        }
+        handleWorkspaceClick(nextTab);
       }
     },
-    [
-      effectiveOpenTabIds,
-      handleWorkspaceClick,
-      navigateToAddWorkspace,
-      navigateToHome,
-      navigateToGlobalSettings,
-      navigateToComponentGallery,
-    ],
+    [effectiveOpenTabIds, handleWorkspaceClick, navigateToHome, navigateToGlobalSettings, navigateToComponentGallery],
   );
 
   const handleClose = useCallback(
     (tabId: string): void => {
-      const draftId = parseDraftIdFromTabId(tabId);
-      if (draftId !== null) {
-        closeNewWorkspaceTab(draftId);
-        if (addWorkspaceDraftId === draftId) {
-          navigateToNextTab(tabId);
-        }
-        return;
-      }
-
       if (tabId === HOME_TAB_ID) {
         closeTab(HOME_TAB_ID);
         if (isHomeRoute) {
@@ -140,16 +112,7 @@ export const useWorkspaceTabActions = (): {
         navigateToNextTab(tabId);
       }
     },
-    [
-      activeWorkspaceID,
-      addWorkspaceDraftId,
-      isHomeRoute,
-      isSettingsRoute,
-      isComponentGalleryRoute,
-      closeTab,
-      closeNewWorkspaceTab,
-      navigateToNextTab,
-    ],
+    [activeWorkspaceID, isHomeRoute, isSettingsRoute, isComponentGalleryRoute, closeTab, navigateToNextTab],
   );
 
   const handleCloseOthers = useCallback(
@@ -185,8 +148,8 @@ export const useWorkspaceTabActions = (): {
   const handleCloseAll = useCallback((): void => {
     closeAllTabs();
     clearAllTabs();
-    navigateToAddWorkspace();
-  }, [closeAllTabs, clearAllTabs, navigateToAddWorkspace]);
+    navigateToHome();
+  }, [closeAllTabs, clearAllTabs, navigateToHome]);
 
   return { handleClose, handleCloseOthers, handleCloseAll, navigateToNextTab };
 };

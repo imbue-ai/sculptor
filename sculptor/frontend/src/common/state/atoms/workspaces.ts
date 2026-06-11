@@ -43,7 +43,7 @@ const openWorkspaceIdsAtom = atom<ReadonlyArray<string>>((get) => {
   return workspaces.filter((ws) => ws.isOpen !== false).map((ws) => ws.objectId);
 });
 
-/** Sentinel `activeIndex` meaning "no MRU pointer" — rootLoader sends user to /ws/new. */
+/** Sentinel `activeIndex` meaning "no MRU pointer" — rootLoader sends user to /home. */
 export const INVALID_ACTIVE_INDEX = -1;
 
 export type TabEntry = { tabId: string; agentId: string | null };
@@ -142,10 +142,7 @@ const hasHydratedWorkspaceTabsAtom = atom<boolean>(false);
 
 /** Check whether a tab ID is a pseudo-tab (not a real workspace ID). */
 const isPseudoTabId = (id: string): boolean =>
-  id === "__settings__" ||
-  id === "__component_gallery__" ||
-  id === "__home__" ||
-  id.startsWith(NEW_WORKSPACE_TAB_PREFIX);
+  id === "__settings__" || id === "__component_gallery__" || id === "__home__";
 
 const applyClose = (state: TabsState, tabId: string): TabsState => {
   const removedIndex = state.order.findIndex((e) => e.tabId === tabId);
@@ -199,30 +196,6 @@ const applyReorder = (state: TabsState, newTabIds: Array<string>): TabsState => 
   }
   return { order, activeIndex };
 };
-
-/**
- * Tracks draft IDs that are currently creating a workspace via API.
- * While any draft ID is pending, updateWorkspacesAtom skips auto-adding
- * new workspaces to the tab order — convertNewWorkspaceToTabAtom will place
- * the workspace in the correct tab position once the API call completes.
- */
-const pendingNewWorkspaceCreationDraftIdsAtom = atom<ReadonlySet<string>>(new Set<string>());
-
-/** Mark a draft as creating a workspace (call before the API request). */
-export const markDraftCreatingAtom = atom(null, (get, set, draftId: string): void => {
-  const current = get(pendingNewWorkspaceCreationDraftIdsAtom);
-  const next = new Set(current);
-  next.add(draftId);
-  set(pendingNewWorkspaceCreationDraftIdsAtom, next);
-});
-
-/** Clear a draft's pending-creation flag (call after conversion completes). */
-export const clearDraftCreatingAtom = atom(null, (get, set, draftId: string): void => {
-  const current = get(pendingNewWorkspaceCreationDraftIdsAtom);
-  const next = new Set(current);
-  next.delete(draftId);
-  set(pendingNewWorkspaceCreationDraftIdsAtom, next);
-});
 
 /**
  * Workspace IDs the user has asked to close. Records the user's *intent*, not
@@ -320,6 +293,15 @@ export const effectiveOpenTabIdsAtom = atom<Array<string>>((get) => {
     (id) => (openIds.has(id) || pendingOpen.has(id) || isPseudoTabId(id)) && !pendingClose.has(id),
   );
 });
+
+/**
+ * Last pathname the user was on outside of /home. Drives the "toggle off"
+ * half of the Home button: clicking Home while already on /home pops back
+ * to this pathname so Home behaves like a peekable overlay rather than a
+ * routed destination. Tracked in-memory only — fresh sessions start
+ * empty and fall back to the router's default redirect.
+ */
+export const lastNonHomeLocationAtom = atom<string | null>(null);
 
 /**
  * IDs of workspaces that exist but are closed (is_open=false on the backend),
@@ -461,7 +443,6 @@ export const updateWorkspacesAtom = atom(null, (get, set, workspaces: ReadonlyAr
   const currentWorkspaceIds = new Set(get(workspaceIdsAtom) ?? []);
   const isHydrated = get(hasHydratedWorkspaceTabsAtom);
   const initialTabsState = get(tabsAtom);
-  const pendingCreations = get(pendingNewWorkspaceCreationDraftIdsAtom);
   const pendingClose = get(pendingCloseWorkspaceIdsAtom);
   const pendingOpen = get(pendingOpenWorkspaceIdsAtom);
   let nextTabsState = initialTabsState;
@@ -525,16 +506,8 @@ export const updateWorkspacesAtom = atom(null, (get, set, workspaces: ReadonlyAr
       }
     }
 
-    // After hydration, add genuinely new open workspaces to the tab order — but
-    // skip if ANY workspace creation is in progress from a pseudo-tab.
-    // We suppress all auto-opens (not just the specific workspace being
-    // created) because we don't know the workspace ID until the API returns.
-    // convertNewWorkspaceToTabAtom will place the workspace in the correct
-    // tab position once the API call completes; auto-opening here would
-    // briefly add a duplicate on the far right before being deduped.
-    // Trade-off: workspaces arriving from other sources (e.g. another user)
-    // are briefly suppressed during the creation window.
-    if (isHydrated && isNew && workspace.isOpen && pendingCreations.size === 0) {
+    // After hydration, add genuinely new open workspaces to the tab order.
+    if (isHydrated && isNew && workspace.isOpen) {
       nextTabsState = applyOpen(nextTabsState, { tabId: workspace.objectId, agentId: null }, { setActive: false });
     }
   });
@@ -649,39 +622,16 @@ export const rollbackDeleteWorkspaceAtom = atom(
   },
 );
 
-/** Prefix for new-workspace pseudo-tab IDs: `__new_workspace_<draftId>__`. */
+/**
+ * Prefix for the legacy new-workspace pseudo-tab IDs: `__new_workspace_<draftId>__`.
+ * The pseudo-tab system was replaced by the New Workspace modal; the prefix is
+ * retained so `useHomeToggle.isVisibleTabId` (and unit tests that exercise it)
+ * can keep filtering stale entries left in localStorage by pre-modal sessions.
+ */
 export const NEW_WORKSPACE_TAB_PREFIX = "__new_workspace_";
 
-/** Build a pseudo-tab ID from a draft ID. */
+/** Build a legacy new-workspace pseudo-tab ID from a draft ID (test helper). */
 export const newWorkspaceTabId = (draftId: string): string => `${NEW_WORKSPACE_TAB_PREFIX}${draftId}__`;
-
-/** Extract the draft ID from a new-workspace pseudo-tab ID, or null if it doesn't match. */
-export const parseDraftIdFromTabId = (tabId: string): string | null => {
-  if (!tabId.startsWith(NEW_WORKSPACE_TAB_PREFIX)) return null;
-  return tabId.slice(NEW_WORKSPACE_TAB_PREFIX.length, -2); // strip trailing "__"
-};
-
-/**
- * Derived list of open new-workspace tab draft IDs, extracted from the
- * unified tab order.  New-workspace pseudo-tab IDs live in the same ordered
- * list as real workspace tabs so they can be freely reordered among them.
- */
-export const openNewWorkspaceTabIdsAtom = atom<Array<string>>((get) => {
-  const tabOrder = get(tabOrderAtom);
-  return tabOrder.map((id) => parseDraftIdFromTabId(id)).filter((draftId): draftId is string => draftId !== null);
-});
-
-/** Open a new-workspace tab (add pseudo-tab ID to the unified tab list). */
-export const openNewWorkspaceTabAtom = atom(null, (get, set, draftId: string): void => {
-  const tabId = newWorkspaceTabId(draftId);
-  set(tabsAtom, applyOpen(get(tabsAtom), { tabId, agentId: null }, { setActive: false }));
-});
-
-/** Close a new-workspace tab (remove pseudo-tab ID from the unified tab list). */
-export const closeNewWorkspaceTabAtom = atom(null, (get, set, draftId: string): void => {
-  const tabId = newWorkspaceTabId(draftId);
-  set(tabsAtom, applyClose(get(tabsAtom), tabId));
-});
 
 /**
  * Replace the Home pseudo-tab with a real workspace tab in-place,
@@ -716,42 +666,17 @@ export const convertHomeTabToWorkspaceAtom = atom(null, (get, set, workspaceId: 
 });
 
 /**
- * Replace a new-workspace pseudo-tab with a real workspace tab in-place,
- * so the tab seamlessly "becomes" the workspace without any visual flash.
+ * Backwards-compatible alias — components that previously read
+ * openWorkspaceTabIdsAtom for tab ordering should use tabOrderAtom instead.
+ * @deprecated Use tabOrderAtom directly.
  */
-export const convertNewWorkspaceToTabAtom = atom(
-  null,
-  (get, set, { draftId, workspaceId }: { draftId: string; workspaceId: string }): void => {
-    const tabId = newWorkspaceTabId(draftId);
-    const current = get(tabsAtom);
+export const openWorkspaceTabIdsAtom = tabOrderAtom;
 
-    // Remove any existing entry for workspaceId first — the WebSocket
-    // auto-open in updateWorkspacesAtom may have already added it before
-    // this atom runs, and we must avoid duplicates.
-    const deduped = applyClose(current, workspaceId);
-    const tabIdx = deduped.order.findIndex((e) => e.tabId === tabId);
-    if (tabIdx !== -1) {
-      const order = deduped.order.slice();
-      order[tabIdx] = { tabId: workspaceId, agentId: null };
-      set(tabsAtom, { ...deduped, order });
-    } else {
-      // Pseudo-tab wasn't found (shouldn't happen normally) — just add the workspace
-      set(tabsAtom, applyOpen(deduped, { tabId: workspaceId, agentId: null }, { setActive: false }));
-    }
-
-    // Ensure the workspace ID is in workspaceIdsAtom so effectiveOpenTabIdsAtom
-    // doesn't filter it out before the WebSocket snapshot arrives.
-    const currentIds = new Set(get(workspaceIdsAtom) ?? []);
-    if (!currentIds.has(workspaceId)) {
-      currentIds.add(workspaceId);
-      set(workspaceIdsAtom, Array.from(currentIds));
-    }
-
-    // Clear the pending-creation flag so future WebSocket updates resume
-    // auto-opening new workspaces normally.
-    set(clearDraftCreatingAtom, draftId);
-  },
-);
+/** The currently-active tab entry, or `null` if `activeIndex` is invalid. */
+export const activeTabAtom = atom<TabEntry | null>((get) => {
+  const state = get(tabsAtom);
+  return state.order[state.activeIndex] ?? null;
+});
 
 /** Per-workspace last-viewed agent ID, derived from `tabsAtom.order`. */
 export const agentIdForWorkspaceAtomFamily = atomFamily<string, Atom<string | null>>((wsId) =>

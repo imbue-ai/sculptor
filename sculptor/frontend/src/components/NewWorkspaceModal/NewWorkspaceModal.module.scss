@@ -1,0 +1,423 @@
+@use "scrollbar" as *;
+
+// Override PaletteDialog's default `min(72vh, 560px)` cap — the form's
+// natural height is shorter, and capping it forced the prompt textarea
+// to shrink on smaller viewports.
+.content {
+  max-height: 90vh;
+}
+
+.shell {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+}
+
+// Close affordance pinned to the modal's top-right, aligned with the
+// breadcrumb toolbar baseline. Borderless — a permanent border made
+// it read as another action chip; without one, the X recedes into
+// window-chrome until hovered. Position picks: `top: --space-5` aligns
+// the button's top with `.context`'s top padding (chip row baseline);
+// `right: --space-5` mirrors the modal's standard outer cushion. The
+// `margin: 0` neutralizes Radix's ghost-variant negative margin (size 1:
+// -4px / -8px) so our absolute offsets are honoured exactly. Icon
+// color is forced to `--gray-10` to match the chip icons / chevrons
+// elsewhere in the row.
+.closeButton {
+  margin: 0;
+  position: absolute;
+  right: var(--space-5);
+  top: var(--space-5);
+  z-index: 1;
+
+  svg {
+    color: var(--gray-10);
+  }
+}
+
+// ── Top breadcrumb bar ────────────────────────────────────────────────
+//
+// Small, quiet — sets the project context (repo crumb chip → mode →
+// source-branch → new-branch field). All four chips share the same
+// 12px / tight-padding visual ramp so the row reads as one
+// breadcrumb instead of "small chips + outsized branch field".
+//
+// Right padding intentionally matches `.foot`'s right padding
+// (`var(--space-5)`) so the new-branch field — which flex-grows to
+// fill the remaining row width — ends with its right edge in the
+// same x-position as the Create button below it. Both sit at the
+// modal's `--space-5` outer padding, symmetric with the left edge.
+//
+// `flex-wrap: wrap` is the responsiveness escape hatch: on narrow
+// modals the breadcrumb pills + new-branch field can't all fit on
+// one line, so the new-branch field (the only shrinky child via
+// `flex: 1 1 auto` on its container) wraps onto a second line and
+// expands to full width there. `row-gap` keeps wrapped rows from
+// touching. Without this, the field's pill spilled past the modal's
+// right edge and got clipped.
+//
+// `align-items: flex-start` so the new-branch field's inline error
+// caption (which appears beneath its pill via the field's own
+// flex-column container) doesn't shift the other chips downward by
+// half its height — they stay anchored to the top of the row.
+.context {
+  align-items: flex-start;
+  color: var(--gray-11);
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  font-size: var(--font-size-1);
+  // `gap: <row> <column>` — wrapped rows get more breathing room
+  // (--space-2) than the inline-pill spacing (--space-1) so a
+  // wrapped new-branch field doesn't collide with the chips above.
+  gap: var(--space-2) var(--space-1);
+  // Right padding is bumped past the usual `--space-5` to reserve room
+  // for the absolutely-positioned `.closeButton` in the top-right
+  // corner — `.closeButton` sits at `right: --space-5` and is roughly
+  // chip-sized (~24px), so the field needs `--space-5 + ~24px + small
+  // gap` of clearance to keep the BranchNameField from sliding under
+  // the button's hit area.
+  padding: var(--space-5) calc(var(--space-5) * 2 + var(--space-2)) 0 var(--space-5);
+}
+
+// The crumb is the trigger for the repo dropdown. Background, padding,
+// and hover all live on the trigger button itself so the caret Radix
+// renders for us sits *inside* the same chip surface (a previous
+// iteration kept the bg on the inner span and the caret floated
+// outside, which made it feel like two unrelated elements). Gray
+// palette throughout — the crumb is a neutral context affordance, not
+// a primary action.
+//
+// `margin: 0` neutralizes the negative margin that Radix applies to
+// `Select.Trigger variant="ghost"` (size 1: -4px / -8px). That
+// outdent is intended for ghost triggers that sit inline with prose
+// — here the chip has a visible border, so the negative margin just
+// chews into the gap between adjacent chips/the chevron divider.
+.crumbTrigger {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--gray-a4);
+  border-radius: var(--radius-3);
+  color: var(--gray-12);
+  display: inline-flex;
+  flex-shrink: 0;
+  font-weight: var(--font-weight-medium);
+  gap: var(--space-1);
+  height: auto;
+  letter-spacing: 0.01em;
+  margin: 0;
+  padding: 3px var(--space-2);
+  transition: background var(--duration-fast) ease;
+
+  &:hover {
+    background: var(--gray-a2);
+    border-color: var(--gray-a5);
+  }
+}
+
+.crumb {
+  align-items: center;
+  display: inline-flex;
+  gap: var(--space-1);
+  max-width: 220px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crumbIco {
+  align-items: center;
+  background: var(--gray-a8);
+  border-radius: var(--radius-2);
+  color: var(--gray-1);
+  display: inline-flex;
+  flex-shrink: 0;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- single-letter glyph in a 14px avatar; smallest Radix font-size (--font-size-1, 12px) is too large to fit
+  font-size: 9px;
+  font-weight: var(--font-weight-bold);
+  height: 14px;
+  justify-content: center;
+  text-transform: uppercase;
+  width: 14px;
+}
+
+.crumbName {
+  color: var(--gray-12);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// ── Body: workspace title + first-task description ───────────────────
+//
+// Both inputs render border-less so the modal reads like a Linear
+// "new issue" — title-as-heading, plain prose below.
+.body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  overflow: hidden auto;
+  // Bottom padding bumped from `--space-2` to `--space-4` so the
+  // prompt textarea isn't crammed against the divider above the
+  // footer — combined with `.foot`'s `--space-5` top padding, the
+  // gap above the Create button feels intentional rather than
+  // accidental.
+  padding: var(--space-3) var(--space-5) var(--space-4);
+
+  @include thin-scrollbar($autohide: false);
+}
+
+.title {
+  background: transparent;
+  border: none;
+  color: var(--gray-12);
+  font-family: inherit;
+  font-size: var(--font-size-5);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.005em;
+  line-height: 1.25;
+  outline: none;
+  padding: 0;
+  width: 100%;
+
+  &::placeholder {
+    color: var(--gray-8);
+    font-weight: var(--font-weight-semibold);
+  }
+}
+
+// Wraps the per-prompt agent-settings toolbar (plan / fast / effort /
+// model) that mirrors ChatInput's right-side controls. Always rendered
+// so the row reserves its vertical space — toggling DOM presence on
+// the first typed character was making the modal grow ~40px taller
+// in front of the user. `data-visible="false"` (no prompt yet) hides
+// paint via `visibility: hidden` and blocks interaction via
+// `pointer-events: none`, but the layout box stays put. Right-aligned
+// to echo the chat input's toolbar layout.
+.agentSettings {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  margin-top: var(--space-1);
+
+  &[data-visible="false"] {
+    pointer-events: none;
+    visibility: hidden;
+  }
+}
+
+.description {
+  background: transparent;
+  border: none;
+  color: var(--gray-12);
+  // `field-sizing: content` lets the textarea grow with its content
+  // (Chromium 123+ — Sculptor's Electron runtime). `min-height` is
+  // sized so the empty state hints at "this is where you describe
+  // the work" — ~5 lines at the current line-height — rather than
+  // looking like a skinny single-line caption. `max-height` caps
+  // growth and hands off to internal scrolling so the modal can't
+  // be pushed unboundedly tall by a long prompt. `rows={2}` on the
+  // element is the pre-`field-sizing` fallback for browsers that
+  // don't support it.
+  field-sizing: content;
+  font-family: inherit;
+  font-size: var(--font-size-2);
+  line-height: 1.55;
+  max-height: 240px;
+  min-height: 120px;
+  outline: none;
+  padding: 0;
+  resize: none;
+  width: 100%;
+
+  &::placeholder {
+    color: var(--gray-9);
+  }
+}
+
+// Shared pill styling for the dropdown triggers in this modal (source
+// branch in the context bar, mode in the pills row). Without this,
+// Radix's `variant="ghost"` triggers render as transparent and
+// visually disagree with the adjacent BranchNameField pill, which has
+// its own filled bg. Picking `variant="soft"` instead would pull in
+// the accent color; the redesign wants a gray-only palette here, so
+// we override on top of ghost.
+//
+// The selector is nested under `.shell` to bump specificity above
+// Radix's `.rt-SelectTrigger:where(.rt-r-size-1)` rule, which sets
+// `border-radius: max(--radius-1, --radius-full)` — too small for the
+// pill look we want and a tied-specificity rule that otherwise wins
+// on source order.
+//
+// `margin: 0` neutralizes Radix's ghost-trigger negative margin
+// (size 1: -4px / -8px). That outdent makes inline ghost triggers
+// align with surrounding prose — but here the trigger has a visible
+// border, and the outdent was eating the gap between chips and the
+// chevron divider in the breadcrumb row.
+.shell .toolbarPill {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--gray-a4);
+  border-radius: var(--radius-3);
+  height: auto;
+  margin: 0;
+  padding: 3px var(--space-2);
+  transition:
+    background var(--duration-fast) ease,
+    border-color var(--duration-fast) ease;
+
+  &:hover {
+    background: var(--gray-a2);
+    border-color: var(--gray-a5);
+  }
+
+  // Match every icon in the modal at gray-10 — the BranchNameField
+  // pill already uses gray-10 for its branch icon, so source / mode /
+  // their carets get pulled to the same weight here.
+  svg {
+    color: var(--gray-10);
+  }
+}
+
+.pillsLoading {
+  align-items: center;
+  color: var(--gray-10);
+  display: inline-flex;
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+}
+
+// "required" caption rendered to the right of the branch field when
+// worktree mode demands a non-empty branch name. Lives in the
+// context row alongside the field. Italic + regular weight so it
+// reads as an accompanying note rather than a hard label competing
+// with the input text. red-11 matches the field's red border for a
+// consistent error tone. `padding-top` shifts the caption down by
+// the pill's `1px border + 3px top-padding` so its baseline aligns
+// with the input's, instead of riding the row's flex-start top.
+.branchRequiredLabel {
+  color: var(--red-11);
+  flex-shrink: 0;
+  font-size: var(--font-size-1);
+  font-style: italic;
+  font-weight: var(--font-weight-regular);
+  padding-top: var(--space-1);
+}
+
+// ── Footer: "Create more" toggle + Create button ─────────────────────
+//
+// Outer padding (left / right / bottom) sits at `--space-5` so the
+// modal has a uniform `--space-5` cushion on all four exterior
+// edges, matching the `.context` row at the top. Top padding is
+// also `--space-5` so the Create button has visible breathing room
+// above it — the divider line was previously close enough to the
+// button to feel cramped. Right padding matching `.context` keeps
+// the Create button right-aligned with the new-branch field above
+// it.
+.foot {
+  align-items: center;
+  border-top: 1px solid var(--gray-a3);
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-3);
+  justify-content: space-between;
+  padding: var(--space-5);
+}
+
+// Holds the "Create more" toggle (and any other footer-left affordances).
+.footLeft {
+  align-items: center;
+  color: var(--gray-10);
+  display: flex;
+  flex-shrink: 0;
+  font-size: var(--font-size-1);
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+// Wraps the Switch + caption so clicking either part toggles the
+// switch — mirrors the chip-level click target on the rest of the
+// modal and matches the previous "Open after create" affordance.
+// `user-select: none` so a stray double-click doesn't select the
+// label text.
+//
+// "Create more" is an opt-in convenience, not a primary affordance,
+// so the whole control is dialed down: the caption matches the
+// 11px / gray-8 weight of the `.shortcutHint` opposite it, and the
+// Radix size-1 Switch (already its smallest preset) is scaled a
+// further notch via transform so it visually agrees with that
+// quieter type. `transform-origin: left` so the shrink doesn't
+// drift the switch off the label's baseline alignment.
+//
+// When the switch flips on, the caption pops to gray-11 so the
+// activated state reads as "this is now affecting submit behavior"
+// — still subtler than the gray-12 used for body copy elsewhere.
+.createMore {
+  align-items: center;
+  color: var(--gray-8);
+  cursor: pointer;
+  display: inline-flex;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- match the .shortcutHint opposite us in the footer
+  font-size: 11px;
+  gap: var(--space-1);
+  transition: color var(--duration-fast) ease;
+  user-select: none;
+
+  &:has(button[data-state="checked"]) {
+    color: var(--gray-11);
+  }
+
+  // Scale the (already-smallest) Radix size-1 Switch a notch further
+  // so it reads as ancillary next to the 11px caption.
+  button[role="switch"] {
+    transform: scale(0.85);
+    transform-origin: left center;
+  }
+}
+
+// Cmd+Enter shortcut hint sits inline to the left of the Create button.
+// `align-items: center` so the hint's text baseline lines up with the
+// button's vertical center rather than its top edge.
+.footRight {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-3);
+}
+
+// Smaller / lighter than KeyboardHint's default — sits to the left of
+// the Create button as a subtle keyboard-shortcut nudge, not a
+// primary affordance. Pulls font-size-1 down a half-step to 11px
+// (the smallest readable size in the design). Caption and kbd glyph
+// share a single gray-9 so the line reads as one unit — earlier the
+// caption (gray-8) was a step lighter than the kbd (gray-9), which
+// made "to create" trail off into the background while ⌘↵ stayed
+// crisp.
+.shortcutHint {
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- one-off "even smaller than font-size-1" for the inline hint
+  font-size: 11px;
+
+  // Cover both the wrapper text and the nested `<kbd>` glyphs —
+  // KeyboardHint's own stylesheet pushes `.kbd` to gray-10, which
+  // would otherwise win the cascade and leave the kbd rendering
+  // noticeably darker than the "to create" caption next to it.
+  & > *,
+  & kbd {
+    color: var(--gray-8);
+    // stylelint-disable-next-line sculptor/no-hardcoded-values -- match the wrapper override
+    font-size: 11px;
+  }
+}
+
+.spinnerOverlay {
+  align-items: center;
+  display: flex;
+  height: 200px;
+  justify-content: center;
+}

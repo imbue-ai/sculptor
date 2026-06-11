@@ -82,7 +82,7 @@ const WorkspacePageContent = ({ taskID }: { taskID: string }): ReactElement => {
 
 export const WorkspacePage = (): ReactElement | null => {
   const { workspaceID, agentID: agentIDFromUrl } = useWorkspacePageParams();
-  const { navigateToAgent, navigateToAddWorkspace } = useImbueNavigate();
+  const { navigateToAgent, navigateToHome } = useImbueNavigate();
   const tasks = useAtomValue(tasksArrayAtom);
   const workspaceIds = useAtomValue(workspaceIdsAtom);
   const savedAgentIdAtom = useMemo(() => agentIdForWorkspaceAtomFamily(workspaceID), [workspaceID]);
@@ -99,7 +99,7 @@ export const WorkspacePage = (): ReactElement | null => {
     if (!workspaceIds.includes(workspaceID)) {
       // Workspace was deleted between sessions — drop the tab and bail out.
       removeTab(workspaceID);
-      navigateToAddWorkspace();
+      navigateToHome();
       return;
     }
     if (agentIDFromUrl) return; // URL is authoritative, nothing to fix up
@@ -123,7 +123,7 @@ export const WorkspacePage = (): ReactElement | null => {
     tasks,
     savedAgentId,
     navigateToAgent,
-    navigateToAddWorkspace,
+    navigateToHome,
     setAgentForWorkspace,
     removeTab,
   ]);

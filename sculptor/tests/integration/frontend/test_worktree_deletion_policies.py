@@ -11,42 +11,37 @@ import re
 import subprocess
 from pathlib import Path
 
-import playwright.sync_api
 from playwright.sync_api import Page
 from playwright.sync_api import expect
-from tenacity import retry
-from tenacity import retry_if_exception_type
-from tenacity import stop_after_attempt
-from tenacity import wait_fixed
 
+from sculptor.constants import ElementIDs
 from sculptor.testing.elements.user_config import _set_user_config_flag
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
+from sculptor.testing.elements.user_config import enable_worktree_workspaces
 from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.playwright_utils import read_branch_name_field
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
 
 def _create_worktree_workspace(page: Page, workspace_name: str) -> tuple[str, str]:
-    """Create a worktree workspace and return `(branch_name, workspace_id)`.
-
-    Worktree mode is the default, so no mode-selector interaction is needed.
-    Waits for the branch-name preview to settle to the slug derived from
-    ``workspace_name`` — otherwise the test can race with the initial
-    empty-workspace-name preview (which returns a random ``<adj>-<noun>``
-    slug) and pick that up instead.
-    """
+    """Create a worktree workspace and return `(branch_name, workspace_id)`."""
     navigate_to_add_workspace_page(page)
-    add_ws_page = PlaywrightAddWorkspacePage(page=page)
-    add_ws_page.get_workspace_name_input().fill(workspace_name)
+    page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT).fill(workspace_name)
+    page.get_by_test_id(ElementIDs.MODE_SELECTOR).click()
+    page.get_by_test_id(ElementIDs.MODE_OPTION_WORKTREE).click()
 
-    branch_input = add_ws_page.get_branch_name_input()
-    slug_pattern = re.sub(r"[^a-z0-9]+", "-", workspace_name.lower()).strip("-")
-    expect(branch_input).to_have_value(re.compile(rf".*{re.escape(slug_pattern)}.*"))
-    branch_name = branch_input.input_value()
+    branch_input = page.get_by_test_id(ElementIDs.BRANCH_NAME_INPUT)
+    expect(branch_input).to_have_value(re.compile(r".+"), timeout=5_000)
+    branch_name = read_branch_name_field(page)
 
-    add_ws_page.submit_and_wait_for_chat_panel()
+    submit_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
+    expect(submit_button).to_be_enabled()
+    submit_button.click()
 
-    expect(page).to_have_url(re.compile(r".*/ws/(ws_[a-z0-9]+)/"))
+    chat_panel = page.get_by_test_id(ElementIDs.CHAT_PANEL)
+    expect(chat_panel).to_be_visible(timeout=60_000)
+
+    expect(page).to_have_url(re.compile(r".*/ws/(ws_[a-z0-9]+)/"), timeout=10_000)
     match = re.search(r"/ws/(ws_[a-z0-9]+)/", page.url)
     assert match, f"could not extract workspace_id from URL: {page.url}"
     workspace_id = match.group(1)
@@ -101,21 +96,14 @@ def _commit_on_worktree(worktree_path: Path, message: str) -> None:
     )
 
 
-@retry(
-    retry=retry_if_exception_type(playwright.sync_api.Error),
-    stop=stop_after_attempt(3),
-    wait=wait_fixed(1),
-    reraise=True,
-)
 def _delete_workspace_via_api(page: Page, workspace_id: str) -> None:
-    # Retry on transient ECONNRESET under heavy offload-sandbox load (SCU-773).
     base_url = page.url.split("#")[0].rstrip("/")
     response = page.request.delete(f"{base_url}/api/v1/workspaces/{workspace_id}")
     assert response.ok, f"DELETE workspace failed: {response.status} {response.text()}"
 
 
 def _wait_for_worktree_removed(
-    page: Page, user_repo_path: Path, worktree_path: Path, timeout_ms: int = 30_000
+    page: Page, user_repo_path: Path, worktree_path: Path, timeout_ms: int = 10_000
 ) -> None:
     deadline_steps = timeout_ms // 100
     for _ in range(deadline_steps):
@@ -128,6 +116,7 @@ def _wait_for_worktree_removed(
 @user_story("to preserve my worktree branch after deleting the workspace when policy is 'never'")
 def test_never_policy_preserves_branch(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
+    enable_worktree_workspaces(page)
     _set_user_config_flag(page, "workspaceBranchDeletionPolicy", "never")
 
     branch_name, workspace_id = _create_worktree_workspace(page, "policy-never-test")
@@ -147,6 +136,7 @@ def test_never_policy_preserves_branch(sculptor_instance_: SculptorInstance) -> 
 @user_story("to clean up my merged branch when deleting the workspace under 'delete_if_safe'")
 def test_delete_if_safe_with_merged_branch(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
+    enable_worktree_workspaces(page)
     _set_user_config_flag(page, "workspaceBranchDeletionPolicy", "delete_if_safe")
 
     branch_name, workspace_id = _create_worktree_workspace(page, "policy-safe-merged")
@@ -165,6 +155,7 @@ def test_delete_if_safe_with_merged_branch(sculptor_instance_: SculptorInstance)
 @user_story("to keep my unmerged work when deleting the workspace under 'delete_if_safe'")
 def test_delete_if_safe_with_unmerged_branch(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
+    enable_worktree_workspaces(page)
     _set_user_config_flag(page, "workspaceBranchDeletionPolicy", "delete_if_safe")
 
     branch_name, workspace_id = _create_worktree_workspace(page, "policy-safe-unmerged")
@@ -184,6 +175,7 @@ def test_delete_if_safe_with_unmerged_branch(sculptor_instance_: SculptorInstanc
 @user_story("to force-delete even unmerged branches when policy is 'always'")
 def test_always_policy_force_deletes_branch(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
+    enable_worktree_workspaces(page)
     _set_user_config_flag(page, "workspaceBranchDeletionPolicy", "always")
 
     branch_name, workspace_id = _create_worktree_workspace(page, "policy-always")

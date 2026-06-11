@@ -1,8 +1,7 @@
-"""Integration tests for the Add Workspace page (/ws/new).
+"""Integration tests for the new-workspace modal.
 
 Tests verify:
-- Form draft persistence (workspace name) across navigation
-- Multiple new workspace tabs with independent draft state
+- Form draft persistence (workspace name) across close/reopen
 - Creating a workspace without a prompt (agent in waiting state)
 - Keyboard shortcuts: Cmd+I focuses workspace name input
 - Arrow key focus recovery when nothing is focused
@@ -20,9 +19,8 @@ from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.panels import ensure_terminal_visible
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
-from sculptor.testing.pages.task_page import PlaywrightTaskPage
-from sculptor.testing.playwright_utils import blur_page
+from sculptor.testing.playwright_utils import blur_active_element
+from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -31,201 +29,73 @@ from sculptor.testing.user_stories import user_story
 from sculptor.testing.utils import get_playwright_modifier_key
 
 
-@user_story("to not lose my workspace form entries when navigating away and back")
+@user_story("to not lose my workspace form entries when I close the modal and reopen it")
 def test_workspace_form_draft_persists_after_navigation(
     sculptor_instance_: SculptorInstance,
 ) -> None:
-    """Workspace name should persist after navigating away and back.
+    """Workspace name draft should survive closing and reopening the modal.
 
-    Each new workspace tab has its own draftId, and drafts are keyed by that ID
-    so they survive navigation within the same tab.
+    The modal's draft atoms are not cleared on close — they reset only on
+    successful submit — so a half-filled form survives a Cancel/Escape
+    so the user can come back to it without retyping.
 
     Steps:
-    1. Create an initial workspace so there is a tab to navigate to
-    2. Navigate back to the Add Workspace page via the "+" button
-    3. Fill in the workspace name
-    4. Navigate away by clicking on the existing workspace tab
-    5. Navigate back to the Add Workspace page via the "Open Workspace" tab
+    1. Create an initial workspace so we're on a workspace page
+    2. Open the new-workspace modal via the topbar "+"
+    3. Fill in the workspace name (the draft)
+    4. Press Escape to close the modal
+    5. Open the modal again via the topbar "+"
     6. Verify the workspace name is still populated
     """
     page = sculptor_instance_.page
-    add_ws_page = PlaywrightAddWorkspacePage(page=page)
 
-    # Step 1: Create a workspace so we have somewhere to navigate to.
-    task_page = start_task_and_wait_for_ready(
+    # Step 1: Create a workspace so we end up on a workspace page (not /home).
+    start_task_and_wait_for_ready(
         sculptor_page=page,
         prompt="Setup task",
         workspace_name="Initial Workspace",
     )
 
-    # Step 2: Navigate back to Add Workspace page via the "+" button.
-    add_workspace_button = task_page.get_add_workspace_button()
+    # Step 2: Open the modal via the topbar "+".
+    add_workspace_button = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
     expect(add_workspace_button).to_be_visible()
     add_workspace_button.click()
 
-    submit_button = add_ws_page.get_submit_button()
+    submit_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
     expect(submit_button).to_be_visible()
 
-    # Step 3: Fill in the workspace name.
+    # Step 3: Fill in the workspace name (the draft).
     draft_workspace_name = "My Draft Workspace"
-
-    workspace_name_input = add_ws_page.get_workspace_name_input()
+    workspace_name_input = page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT)
     workspace_name_input.fill(draft_workspace_name)
 
-    # Step 4: Navigate away by clicking on the existing workspace tab.
-    workspace_tab = add_ws_page.get_workspace_tabs().first
-    expect(workspace_tab).to_be_visible()
-    workspace_tab.click()
+    # Step 4: Close the modal with Escape (no Submit). The draft atoms are
+    # left untouched so the next open shows them again.
+    page.keyboard.press("Escape")
+    expect(submit_button).to_be_hidden()
 
-    # Confirm we navigated away — the chat panel of the existing workspace should appear.
-    chat_panel = PlaywrightTaskPage(page=page).get_chat_panel()
-    expect(chat_panel).to_be_visible()
-
-    # Step 5: Navigate back to the Add Workspace page via the "Open Workspace" tab.
-    # Use .last because a stale "new workspace" tab may persist from previous test
-    # cleanup when running on a shared instance with xdist reordering.
-    open_workspace_tab = add_ws_page.get_add_workspace_tabs().last
-    expect(open_workspace_tab).to_be_visible()
-    open_workspace_tab.click()
-
-    submit_button = add_ws_page.get_submit_button()
+    # Step 5: Reopen the modal via the topbar "+".
+    add_workspace_button.click()
     expect(submit_button).to_be_visible()
 
     # Step 6: Verify the workspace name is still populated.
-    workspace_name_input = add_ws_page.get_workspace_name_input()
+    workspace_name_input = page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT)
     expect(workspace_name_input).to_have_value(draft_workspace_name)
 
 
-@user_story("to draft multiple workspaces in parallel, like browser tabs")
-def test_multiple_new_workspace_tabs_with_independent_drafts(
-    sculptor_instance_: SculptorInstance,
-) -> None:
-    """Opening multiple new workspace tabs should give each its own independent draft state.
-
-    Steps:
-    1. On the initial Add Workspace page, fill in a workspace name
-    2. Click the "+" button to open a second new workspace tab
-    3. Verify the second tab has an empty form (independent of the first)
-    4. Fill in a different workspace name on the second tab
-    5. Click the first "Open Workspace" tab to switch back
-    6. Verify the first tab still has its original draft content
-    7. Click the second "Open Workspace" tab to switch back
-    8. Verify the second tab still has its draft content
-    """
-    page = sculptor_instance_.page
-    add_ws_page = PlaywrightAddWorkspacePage(page=page)
-
-    # Step 1: We start on the Add Workspace page. Fill in workspace name.
-    # Record the initial tab count so we can navigate relative to it —
-    # a stale "new workspace" tab may survive from previous test cleanup.
-    submit_button = add_ws_page.get_submit_button()
-    expect(submit_button).to_be_visible()
-
-    all_tabs = add_ws_page.get_add_workspace_tabs()
-    initial_tab_count = all_tabs.count()
-    first_tab_index = initial_tab_count - 1  # the current (last) tab
-
-    first_workspace_name = "First Draft Workspace"
-
-    workspace_name_input = add_ws_page.get_workspace_name_input()
-    workspace_name_input.fill(first_workspace_name)
-
-    # Step 2: Click the "+" button to open a second new workspace tab.
-    add_workspace_button = add_ws_page.get_add_workspace_button()
-    expect(add_workspace_button).to_be_visible()
-    add_workspace_button.click()
-
-    submit_button = add_ws_page.get_submit_button()
-    expect(submit_button).to_be_visible()
-
-    # Step 3: Verify the second tab has an empty form.
-    workspace_name_input = add_ws_page.get_workspace_name_input()
-    expect(workspace_name_input).to_have_value("")
-
-    # Step 4: Fill in a different workspace name on the second tab.
-    second_workspace_name = "Second Draft Workspace"
-    workspace_name_input.fill(second_workspace_name)
-
-    # Step 5: Click the first tab we created to switch back.
-    open_workspace_tabs = add_ws_page.get_add_workspace_tabs()
-    open_workspace_tabs.nth(first_tab_index).click()
-
-    submit_button = add_ws_page.get_submit_button()
-    expect(submit_button).to_be_visible()
-
-    # Step 6: Verify the first tab still has its original draft content.
-    workspace_name_input = add_ws_page.get_workspace_name_input()
-    expect(workspace_name_input).to_have_value(first_workspace_name)
-
-    # Step 7: Click the second (last) "Open Workspace" tab to switch back.
-    open_workspace_tabs = add_ws_page.get_add_workspace_tabs()
-    open_workspace_tabs.last.click()
-
-    submit_button = add_ws_page.get_submit_button()
-    expect(submit_button).to_be_visible()
-
-    # Step 8: Verify the second tab still has its draft content.
-    workspace_name_input = add_ws_page.get_workspace_name_input()
-    expect(workspace_name_input).to_have_value(second_workspace_name)
+# Multi-tab independent-draft testing was removed with the migration from
+# ``/ws/new/<draftId>`` (one route per pseudo-tab) to a single shared modal.
+# The modal now owns one set of draft atoms; "draft per tab" is no longer
+# an expressible concept. The remaining draft test
+# (``test_workspace_form_draft_persists_after_navigation``) covers the
+# replacement behavior — drafts surviving close/reopen of the modal.
 
 
-@user_story("to have a seamless tab transition when creating a workspace from a new-workspace tab")
-def test_no_extra_tab_flash_when_creating_workspace_from_new_tab(
-    sculptor_instance_: SculptorInstance,
-) -> None:
-    """Creating a workspace from a new-workspace tab must not briefly show an extra tab.
-
-    Uses a MutationObserver on the tab bar to record the maximum tab count
-    seen across all DOM mutations between clicking submit and landing on
-    the workspace page.
-    """
-    page = sculptor_instance_.page
-    add_ws_page = PlaywrightAddWorkspacePage(page=page)
-
-    # We start on the Add Workspace page with a single "Open Workspace" tab.
-    submit_button = add_ws_page.get_submit_button()
-    expect(submit_button).to_be_visible()
-
-    # Fill in the workspace name.
-    workspace_name_input = add_ws_page.get_workspace_name_input()
-    workspace_name_input.fill("Flash Test Workspace")
-
-    # Record baseline tab count and install a MutationObserver.
-    page.evaluate("""() => {
-        const tablist = document.querySelector('[role="tablist"]');
-        const countTabs = () => tablist.querySelectorAll('[role="tab"]').length;
-        window.__tabFlashTest = { maxTabCount: countTabs(), baseline: countTabs() };
-        const observer = new MutationObserver(() => {
-            const count = countTabs();
-            if (count > window.__tabFlashTest.maxTabCount) {
-                window.__tabFlashTest.maxTabCount = count;
-            }
-        });
-        observer.observe(tablist, { childList: true, subtree: true });
-        window.__tabFlashTestObserver = observer;
-    }""")
-
-    # Wait for submit to be enabled, then click.
-    expect(submit_button).to_be_enabled()
-    submit_button.click()
-
-    # Wait for the workspace page to load (chat panel visible).
-    chat_panel = PlaywrightTaskPage(page=page).get_chat_panel()
-    expect(chat_panel).to_be_visible()
-
-    # Disconnect observer and read results.
-    result = page.evaluate("""() => {
-        window.__tabFlashTestObserver.disconnect();
-        return window.__tabFlashTest;
-    }""")
-
-    baseline = result["baseline"]
-    max_tab_count = result["maxTabCount"]
-
-    assert max_tab_count <= baseline, (
-        f"Tab count briefly increased from {baseline} to {max_tab_count} during "
-        + "workspace creation — the pseudo-tab was not atomically replaced"
-    )
+# The "no extra tab flash" test was removed with the modal migration. Its
+# premise — that an existing new-workspace pseudo-tab gets atomically
+# replaced by the real workspace tab on submit — is no longer expressible:
+# the modal flow has no pseudo-tab in the tab bar, so creating a workspace
+# always *adds* a tab (count goes from N to N+1) instead of swapping one.
 
 
 @user_story("to create a workspace and fill in the prompt later")
@@ -284,22 +154,22 @@ def test_chat_input_focused_after_workspace_creation(
     page = sculptor_instance_.page
 
     # Scenario 1: Create the first workspace.
-    task_page = start_task_and_wait_for_ready(
+    start_task_and_wait_for_ready(
         sculptor_page=page,
         workspace_name="First Workspace",
     )
 
-    chat_input = task_page.get_chat_panel().get_chat_input()
-    expect(chat_input).to_be_focused()
+    chat_editable = page.get_by_test_id(ElementIDs.CHAT_INPUT)
+    expect(chat_editable).to_be_focused()
 
     # Scenario 2: Create a second workspace via the "+" button.
-    task_page = start_task_and_wait_for_ready(
+    start_task_and_wait_for_ready(
         sculptor_page=page,
         workspace_name="Second Workspace",
     )
 
-    chat_input = task_page.get_chat_panel().get_chat_input()
-    expect(chat_input).to_be_focused()
+    chat_editable = page.get_by_test_id(ElementIDs.CHAT_INPUT)
+    expect(chat_editable).to_be_focused()
 
     # Scenario 3: Ensure the terminal panel is open, then create another workspace.
     # The terminal must not steal focus from the chat input.
@@ -310,50 +180,50 @@ def test_chat_input_focused_after_workspace_creation(
     expect(add_terminal_button).to_be_visible()
 
     # Create a third workspace with the terminal panel open.
-    task_page = start_task_and_wait_for_ready(
+    start_task_and_wait_for_ready(
         sculptor_page=page,
         workspace_name="Third Workspace (Terminal Open)",
     )
 
-    chat_input = task_page.get_chat_panel().get_chat_input()
-    expect(chat_input).to_be_focused()
+    chat_editable = page.get_by_test_id(ElementIDs.CHAT_INPUT)
+    expect(chat_editable).to_be_focused()
 
 
 @user_story("to press Cmd+I and have the primary prompt input focused on any page")
 def test_cmd_i_focuses_prompt_input(sculptor_instance_: SculptorInstance) -> None:
-    """Cmd+I should focus the workspace name on the Add Workspace page and the chat input on workspace pages.
+    """Cmd+I should focus the workspace name in the new-workspace modal and the chat input on workspace pages.
 
     Steps:
-    1. On the Add Workspace page, click elsewhere to blur, then press Cmd+I — verify workspace name is focused.
+    1. In the new-workspace modal, click elsewhere to blur, then press Cmd+I — verify workspace name is focused.
     2. Create a workspace to navigate to a workspace page.
     3. Press Cmd+I — verify the chat input is focused.
     """
     page = sculptor_instance_.page
     mod_key = get_playwright_modifier_key()
-    add_ws_page = PlaywrightAddWorkspacePage(page=page)
 
-    # Step 1: On the Add Workspace page (initial state), blur all inputs then press Cmd+I.
-    name_input = add_ws_page.get_workspace_name_input()
+    # Step 1: Open the new-workspace modal, blur all inputs, then press Cmd+I.
+    navigate_to_add_workspace_page(page)
+    name_input = page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT)
     expect(name_input).to_be_visible()
-    blur_page(page)
+    blur_active_element(page)
     expect(name_input).not_to_be_focused()
     page.keyboard.press(f"{mod_key}+i")
     expect(name_input).to_be_focused()
 
     # Step 2: Create a workspace to navigate to a workspace page.
-    task_page = start_task_and_wait_for_ready(
+    start_task_and_wait_for_ready(
         sculptor_page=page,
         prompt="Cmd+I test workspace",
         workspace_name="Cmd+I Test",
     )
 
     # Step 3: Blur the chat input, then press Cmd+I — the chat input should be focused.
-    chat_input = task_page.get_chat_panel().get_chat_input()
-    expect(chat_input).to_be_visible()
-    blur_page(page)
-    expect(chat_input).not_to_be_focused()
+    chat_editable = page.get_by_test_id(ElementIDs.CHAT_INPUT)
+    expect(chat_editable).to_be_visible()
+    blur_active_element(page)
+    expect(chat_editable).not_to_be_focused()
     page.keyboard.press(f"{mod_key}+i")
-    expect(chat_input).to_be_focused()
+    expect(chat_editable).to_be_focused()
 
 
 @user_story("to regain keyboard control by pressing arrow keys when nothing is focused")
@@ -362,12 +232,12 @@ def test_arrow_down_focuses_name_input_when_nothing_focused(
 ) -> None:
     """Pressing ArrowDown when no element has focus should focus the workspace name input."""
     page = sculptor_instance_.page
-    add_ws_page = PlaywrightAddWorkspacePage(page=page)
 
-    name_input = add_ws_page.get_workspace_name_input()
+    navigate_to_add_workspace_page(page)
+    name_input = page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT)
     expect(name_input).to_be_visible()
 
-    blur_page(page)
+    blur_active_element(page)
     expect(name_input).not_to_be_focused()
 
     page.keyboard.press("ArrowDown")
@@ -380,12 +250,12 @@ def test_arrow_up_focuses_name_input_when_nothing_focused(
 ) -> None:
     """Pressing ArrowUp when no element has focus should focus the workspace name input."""
     page = sculptor_instance_.page
-    add_ws_page = PlaywrightAddWorkspacePage(page=page)
 
-    name_input = add_ws_page.get_workspace_name_input()
+    navigate_to_add_workspace_page(page)
+    name_input = page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT)
     expect(name_input).to_be_visible()
 
-    blur_page(page)
+    blur_active_element(page)
     expect(name_input).not_to_be_focused()
 
     page.keyboard.press("ArrowUp")
@@ -399,12 +269,12 @@ def test_cmd_enter_in_workspace_name_creates_workspace(
     """Pressing Cmd+Enter while focus is in the workspace name input should create the workspace."""
     page = sculptor_instance_.page
     mod_key = get_playwright_modifier_key()
-    add_ws_page = PlaywrightAddWorkspacePage(page=page)
 
-    name_input = add_ws_page.get_workspace_name_input()
+    navigate_to_add_workspace_page(page)
+    name_input = page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT)
     expect(name_input).to_be_visible()
 
-    submit_button = add_ws_page.get_submit_button()
+    submit_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
     expect(submit_button).to_be_enabled()
 
     name_input.fill("Cmd Enter Test")
@@ -413,7 +283,7 @@ def test_cmd_enter_in_workspace_name_creates_workspace(
 
     page.keyboard.press(f"{mod_key}+Enter")
 
-    chat_panel = PlaywrightTaskPage(page=page).get_chat_panel()
+    chat_panel = page.get_by_test_id(ElementIDs.CHAT_PANEL)
     expect(chat_panel).to_be_visible()
 
 
@@ -451,10 +321,24 @@ def test_deleting_project_also_deletes_its_workspaces(
         assert get_response.ok, f"Expected workspace {workspace_id} to exist, got status {get_response.status}"
 
         settings_page = navigate_to_settings_page(page=page)
-        repos_section = settings_page.click_on_repositories()
+        settings_page.click_on_repositories()
 
         # Delete the first repo row (the original project).
-        repos_section.remove_first_repo()
+        repo_rows = page.get_by_test_id(ElementIDs.SETTINGS_REPO_ROW)
+        expect(repo_rows.first).to_be_visible()
+        repo_rows.first.get_by_test_id(ElementIDs.SETTINGS_REMOVE_REPO_BUTTON).click()
+
+        confirm_button = page.get_by_test_id(ElementIDs.SETTINGS_REMOVE_REPO_CONFIRM)
+        expect(confirm_button).to_be_visible()
+        confirm_button.click()
+
+        # Confirm the delete-confirm dialog dismissed (request submitted) before
+        # asserting the resulting state — the dialog stays open while the
+        # request is in flight, so checking it disappears is the cleanest
+        # before/after signal.
+        expect(confirm_button).to_be_hidden()
+        # Then wait for the repo row count to drop to zero.
+        expect(page.get_by_test_id(ElementIDs.SETTINGS_REPO_ROW)).to_have_count(0)
 
         get_response = page.request.get(f"{base_url}/api/v1/workspaces/{workspace_id}")
         assert get_response.status == 404, (

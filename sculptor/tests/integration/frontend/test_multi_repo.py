@@ -1,7 +1,7 @@
 """Integration tests for multi-repo functionality.
 
 These tests verify that Sculptor correctly handles:
-- Creating new repos through the AddWorkspacePage RepoSelector
+- Creating new repos through the new-workspace modal RepoSelector
 - Selecting different repos when creating workspaces
 - Running workspaces in different repos and switching between them
 - Message isolation across workspaces in different repos
@@ -40,7 +40,7 @@ def _add_repo_via_settings(page: Page, repo_path: Path) -> None:
 
 
 @user_story("to create new projects and use them in workspaces")
-def test_create_new_project_from_add_workspace_page(
+def test_create_new_project_from_new_workspace_modal(
     sculptor_instance_: SculptorInstance, test_repo_factory_: TestRepoFactory
 ) -> None:
     """Test creating a new project via API and using it when creating a workspace.
@@ -59,7 +59,7 @@ def test_create_new_project_from_add_workspace_page(
     # Add the repo via the Settings UI
     _add_repo_via_settings(page, repo.base_path)
 
-    # Navigate to the AddWorkspacePage so the UI picks up the new project
+    # Navigate to the new-workspace modal so the UI picks up the new project
     navigate_to_add_workspace_page(page)
     add_ws_page = PlaywrightAddWorkspacePage(page=page)
     expect(add_ws_page.get_submit_button()).to_be_visible()
@@ -91,7 +91,7 @@ def test_git_init_dialog_for_non_git_directories(sculptor_instance_: SculptorIns
 
     page = sculptor_instance_.page
 
-    # Navigate to the AddWorkspacePage
+    # Navigate to the new-workspace modal
     navigate_to_add_workspace_page(page)
     add_ws_page = PlaywrightAddWorkspacePage(page=page)
 
@@ -116,7 +116,7 @@ def test_git_init_dialog_for_non_git_directories(sculptor_instance_: SculptorIns
     # Confirm git init
     git_init_dialog.get_confirm_button().click()
 
-    # Wait for the git init dialog to close and the AddWorkspacePage to be ready
+    # Wait for the git init dialog to close and the new-workspace modal to be ready
     expect(git_init_dialog).to_be_hidden()
     expect(add_ws_page.get_submit_button()).to_be_visible()
 
@@ -268,17 +268,17 @@ def test_send_messages_across_multiple_project_workspaces(
 def test_mru_project_updates_after_creating_workspace(
     sculptor_instance_: SculptorInstance, test_repo_factory_: TestRepoFactory
 ) -> None:
-    """Creating a workspace should update the MRU project so the Add Workspace page defaults to it.
+    """Creating a workspace should update the MRU project so the new-workspace modal defaults to it.
 
     The initial project (project A) is set up by the test fixture. We add a second
     project (project B) — which sets B as MRU via activate_project — then create a
-    workspace in project A. After navigating to the Add Workspace page, project A
+    workspace in project A. After navigating to the new-workspace modal, project A
     should be pre-selected because it was most recently *used*, not project B.
 
     Steps:
     1. Add a second project (project B) — this sets MRU to B via activate_project
     2. Create a workspace in the original project (project A)
-    3. Navigate to the Add Workspace page
+    3. Navigate to the new-workspace modal
     4. Verify that the project selector shows project A (the most recently used project)
     """
     project_b_name = "project_bravo"
@@ -296,7 +296,7 @@ def test_mru_project_updates_after_creating_workspace(
     PlaywrightAddWorkspacePage(page=page).select_project_by_name(project_a_name)
     start_task_and_wait_for_ready(page, prompt="Alpha task", workspace_name="Alpha Workspace")
 
-    # Step 3: Navigate back to the Add Workspace page.
+    # Step 3: Navigate back to the new-workspace modal.
     navigate_to_add_workspace_page(page)
 
     # Step 4: Verify the project selector shows project A (not B) as the default,

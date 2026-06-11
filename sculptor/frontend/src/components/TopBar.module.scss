@@ -17,3 +17,19 @@
 .tooltipKbd {
   font-family: var(--mono-font-family);
 }
+
+// The home button toggles its variant on press (ghost → soft). Radix
+// size-1 ghost IconButton applies a -4px outdent margin (via
+// `--margin-*-override`); soft doesn't. Without this override the
+// layout box collapses by 8px when the button is off, and the tab
+// list slides 8px to the right the moment it turns on. Neutralize
+// the negative margin so the button keeps the same 24×24 footprint
+// regardless of the variant.
+.homeButton {
+  --margin-top-override: 0;
+  --margin-right-override: 0;
+  --margin-bottom-override: 0;
+  --margin-left-override: 0;
+  // stylelint-disable-next-line declaration-no-important -- override Radix ghost negative margin
+  margin: 0 !important;
+}

@@ -157,7 +157,8 @@ def test_clicking_recent_workspace_after_reload_navigates_without_spinner(
         workspace_name="Workspace Beta",
     )
 
-    # Step 3: Fresh-navigate to clear the in-memory mruAgentByWorkspaceAtom.
+    # Step 3: Fresh-navigate to clear in-memory tab state, forcing the
+    # rootLoader to rehydrate from persisted storage instead of memory.
     soft_reload_page(page)
 
     # Step 4: Wait for the app to finish loading after reload.

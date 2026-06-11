@@ -13,6 +13,7 @@ import { useDevPanel } from "../../common/state/hooks/useDevPanel.ts";
 import { useHelpDialog } from "../../common/state/hooks/useHelpDialog.ts";
 import { useOpenSettings } from "../../common/state/hooks/useOpenSettings.ts";
 import { useUserConfig } from "../../common/state/hooks/useUserConfig.ts";
+import { useNewWorkspaceModal } from "../NewWorkspaceModal/hooks.ts";
 import { useFocusMode, usePanelActions, useSideToggle, useZenMode } from "../panels/hooks.ts";
 import { type CommandActionId, commandActionsAtom } from "./commandActions.ts";
 import type { AppStore, CommandRuntime } from "./runtime.ts";
@@ -82,6 +83,8 @@ export const useCommandRuntime = (): CommandRuntime => {
   const updateReportProblem = useSetAtom(updateReportProblemAtom);
   const openWorkspaceTab = useSetAtom(openWorkspaceTabAtom);
 
+  const { open: openNewWorkspaceModal } = useNewWorkspaceModal();
+
   const { updateField } = useUserConfig();
 
   // ── Stable runtime methods ─────────────────────────────────────────
@@ -100,7 +103,7 @@ export const useCommandRuntime = (): CommandRuntime => {
   // useOpenSettings adds SETTINGS_TAB to tabOrderAtom in addition to
   // navigating, so the user gets a closeable Settings tab.
   const toSettings = useEvent((section?: string): void => openSettings(section));
-  const toAddWorkspace = useEvent((): void => navigate.navigateToAddWorkspace());
+  const openNewWorkspaceFromPalette = useEvent((): void => openNewWorkspaceModal("palette"));
   // The palette previously only updated the URL — the tab strip never
   // learned about the navigation, so the user landed on a workspace
   // that wasn't represented as a tab. Open the tab first (idempotent:
@@ -162,7 +165,8 @@ export const useCommandRuntime = (): CommandRuntime => {
       // renders, so capturing it here is fine — commands that need it
       // call `runtime.store.get(atom)`.
       store,
-      navigate: { toHome, toSettings, toAddWorkspace, toWorkspace, toAgent },
+      navigate: { toHome, toSettings, toWorkspace, toAgent },
+      modal: { openNewWorkspaceFromPalette },
       ui: {
         toggleHelpDialog: uiToggleHelpDialog,
         toggleDevPanel: uiToggleDevPanel,
@@ -191,9 +195,9 @@ export const useCommandRuntime = (): CommandRuntime => {
       store,
       toHome,
       toSettings,
-      toAddWorkspace,
       toWorkspace,
       toAgent,
+      openNewWorkspaceFromPalette,
       uiToggleHelpDialog,
       uiToggleDevPanel,
       uiToggleZenMode,

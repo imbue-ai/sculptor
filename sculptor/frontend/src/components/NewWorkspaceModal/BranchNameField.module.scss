@@ -1,0 +1,172 @@
+// Container is one cell of NewWorkspaceModal's context (top breadcrumb)
+// row, sitting alongside the repo / mode / source pills. Stacks the
+// pill on top and the inline error (if any) directly below — keeps
+// the error visually attached to the field that emitted it without
+// lifting the rendering up to the parent.
+//
+// `flex: 1 1 auto` lets the field grow to fill the remaining row
+// width so its right edge aligns with the Create button below it
+// (the modal's `.context` and `.foot` share the same right padding
+// for that reason). `min-width: 0` still lets it shrink past the
+// input's content width when the row gets tight.
+.container {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+// New-branch field lives in the same row as the toolbar pills above —
+// match their type ramp (font-size-1, 12px icons, tight padding) so
+// the row reads as one coherent breadcrumb instead of a "small chips
+// + outsized branch field" mix.
+.pill {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--gray-a4);
+  border-radius: var(--radius-3);
+  box-sizing: border-box;
+  color: var(--gray-12);
+  display: flex;
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+  min-width: 0;
+  // Hard-clip the pill's content so a long branch name can never
+  // visually leak past the rounded border into the row's gap.
+  // Combined with the input's own `min-width: 0`, it also ensures
+  // the pill itself never exceeds its flex-allotted width on narrow
+  // modals.
+  overflow: hidden;
+  padding: 3px var(--space-2);
+  transition:
+    background var(--duration-fast) ease,
+    border-color var(--duration-fast) ease;
+
+  &:hover {
+    background: var(--gray-a2);
+    border-color: var(--gray-a5);
+  }
+
+  &:focus-within {
+    background: var(--gray-a2);
+    border-color: var(--gray-a6);
+  }
+}
+
+// User has overridden the auto-fill — pull the border up a notch so it
+// reads as "manually chosen" without breaking the gray palette.
+.pillActive {
+  background: var(--gray-a2);
+  border-color: var(--gray-a6);
+}
+
+// Required-but-empty / invalid state. Border in red so the field
+// reads as "needs attention"; hover and focus stay red so the user
+// gets consistent feedback while editing back into a valid value.
+.pillError {
+  border-color: var(--red-a7);
+
+  &:hover {
+    border-color: var(--red-a8);
+  }
+
+  &:focus-within {
+    border-color: var(--red-a9);
+  }
+}
+
+.icon {
+  color: var(--gray-10);
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.input {
+  background: transparent;
+  border: none;
+  color: var(--gray-12);
+  flex: 1 1 auto;
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  // `min-width: 0` so the input can shrink past its content's
+  // intrinsic width inside a tight pill — without it the input
+  // refused to go below ~140px and pushed the whole pill past the
+  // modal edge on narrow screens. The input's own horizontal
+  // scroll handles overflow gracefully past that point.
+  min-width: 0;
+  outline: none;
+  padding: 0;
+
+  &::placeholder {
+    color: var(--gray-9);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+  }
+}
+
+.spinnerInline {
+  color: var(--gray-9);
+  flex-shrink: 0;
+  font-size: var(--font-size-1);
+}
+
+// Always-on shuffle button — the trailing affordance on the pill
+// that re-rolls the auto-filled branch name. Subtle by default
+// (gray-9 to match the icon weight elsewhere in the modal), brighter
+// on hover so the click target is discoverable when the user reaches
+// for it.
+//
+// Radix's ghost IconButton applies a negative margin via CSS custom
+// properties (`--margin-*-override = 0 - --icon-button-ghost-padding`)
+// to outdent inline triggers. With our visible-bordered pill, that
+// outdent makes the button's hover surface bleed past the pill's
+// right border into the row's gap (visually colliding with the
+// "required" caption). Zero out the override variables so the
+// calculated margin is 0 — and zero `--icon-button-ghost-padding`
+// for good measure since our own `width`/`height` already define
+// the click surface.
+.pill .shuffleButton {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-2);
+  color: var(--gray-10);
+  cursor: pointer;
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 18px;
+  justify-content: center;
+  // !important neutralizes Radix's ghost-variant negative margin
+  // (margin: var(--margin-*-override)). Without it, the button's
+  // hover surface bleeds past the pill's right border, visually
+  // colliding with whatever sits next to the field. Setting CSS vars
+  // wasn't enough — Radix's `margin` shorthand on a single-class
+  // selector was still winning the cascade for some reason;
+  // !important is the unambiguous fix.
+  // stylelint-disable-next-line declaration-no-important -- override Radix ghost negative margin
+  margin: 0 !important;
+  padding: 0;
+  transition:
+    color var(--duration-fast) ease,
+    background var(--duration-fast) ease;
+  width: 18px;
+
+  &:hover {
+    background: var(--gray-a3);
+    color: var(--gray-12);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 50%;
+  }
+}
+
+.error {
+  color: var(--red-11);
+  font-size: var(--font-size-1);
+  padding: 0 var(--space-2);
+}

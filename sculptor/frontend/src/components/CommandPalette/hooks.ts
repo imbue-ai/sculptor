@@ -62,7 +62,6 @@ export const usePaletteContext = (): PaletteContext => {
         isHome: loc.isHomeRoute,
         isWorkspace,
         isSettings: loc.isSettingsRoute,
-        isAddWorkspace: loc.isAddWorkspaceRoute,
         isAgent: loc.isAgentRoute,
       },
       activeWorkspaceId,
@@ -75,7 +74,6 @@ export const usePaletteContext = (): PaletteContext => {
     [
       loc.isHomeRoute,
       loc.isSettingsRoute,
-      loc.isAddWorkspaceRoute,
       loc.isAgentRoute,
       isWorkspace,
       activeWorkspaceId,

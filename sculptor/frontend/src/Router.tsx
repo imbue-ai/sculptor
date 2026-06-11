@@ -3,10 +3,9 @@ import { redirect } from "react-router-dom";
 import { createHashRouter, RouterProvider } from "react-router-dom";
 
 import type { TabEntry, TabsState } from "./common/state/atoms/workspaces.ts";
-import { INVALID_ACTIVE_INDEX, parseDraftIdFromTabId } from "./common/state/atoms/workspaces.ts";
+import { INVALID_ACTIVE_INDEX } from "./common/state/atoms/workspaces.ts";
 import { COMPONENT_GALLERY_TAB_ID, HOME_TAB_ID, SETTINGS_TAB_ID } from "./components/workspaceTabIds.ts";
 import { PageLayout } from "./layouts/PageLayout";
-import { AddWorkspacePage } from "./pages/add-workspace/AddWorkspacePage.tsx";
 import { ComponentGalleryPage } from "./pages/debug/ComponentGalleryPage.tsx";
 import { NotFoundErrorPage } from "./pages/error/NotFound.tsx";
 import { RouteErrorPage } from "./pages/error/RouteErrorPage.tsx";
@@ -50,20 +49,26 @@ const entryToUrl = (entry: TabEntry): string | null => {
   if (entry.tabId === HOME_TAB_ID) return "/home";
   if (entry.tabId === SETTINGS_TAB_ID) return "/settings";
   if (entry.tabId === COMPONENT_GALLERY_TAB_ID) return "/component-gallery";
-  const draftId = parseDraftIdFromTabId(entry.tabId);
-  if (draftId !== null) return `/ws/new/${draftId}`;
   if (entry.tabId.startsWith("ws_")) {
     return entry.agentId !== null ? `/ws/${entry.tabId}/agent/${entry.agentId}` : `/ws/${entry.tabId}`;
   }
   return null;
 };
 
+/**
+ * No saved active tab (or it points at something we no longer route to —
+ * e.g. a stale `__new_workspace_*__` draft tab from a pre-modal session).
+ * Land on /home with `?firstLoad=true` so HomePage knows to pop the
+ * new-workspace modal on top.
+ */
+const FALLBACK_REDIRECT = "/home?firstLoad=true";
+
 const rootLoader = (): Response => {
   const tabs = readSculptorTabs();
   const entry = tabs.order[tabs.activeIndex];
-  if (!entry) return redirect("/ws/new");
+  if (!entry) return redirect(FALLBACK_REDIRECT);
   const target = entryToUrl(entry);
-  return redirect(target ?? "/ws/new");
+  return redirect(target ?? FALLBACK_REDIRECT);
 };
 
 const router = createHashRouter([
@@ -80,22 +85,6 @@ const router = createHashRouter([
       {
         index: true,
         element: <HomePage />,
-      },
-    ],
-  },
-  {
-    path: "/ws/new",
-    loader: (): Response => redirect(`/ws/new/${crypto.randomUUID()}`),
-    errorElement: <RouteErrorPage />,
-  },
-  {
-    path: "/ws/new/:draftId",
-    element: <PageLayout />,
-    errorElement: <RouteErrorPage />,
-    children: [
-      {
-        index: true,
-        element: <AddWorkspacePage />,
       },
     ],
   },

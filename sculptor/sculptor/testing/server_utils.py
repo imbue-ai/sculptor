@@ -113,7 +113,21 @@ class SculptorFactory:
 
         page: "Page" = self.request.getfixturevalue("page")
         configure_page(page, timeout_ms=self.default_timeout_ms)
-        navigate_to_frontend(page=page, url=f"http://127.0.0.1:{self.port}")
+        # Land on /home directly. The bare URL would route through the
+        # rootLoader at "/", which redirects to /home?firstLoad=true and
+        # triggers HomePage to auto-open the new-workspace modal — its
+        # overlay then intercepts pointer events for every test using
+        # spawn_instance (test_restarts/persistence/etc.).
+        #
+        # Going through about:blank first forces a full SPA reload between
+        # spawns. Hash-only navigation (e.g. from /#/ws/<id> to /#/home)
+        # leaves the prior React app instance running, so its in-memory
+        # tabsAtom would re-sync to localStorage on the next write and
+        # clobber any state the test wrote between spawns
+        # (test_restart_clears_pointer_when_workspace_deleted depends on
+        # the bogus localStorage state surviving into the next spawn).
+        page.goto("about:blank")
+        navigate_to_frontend(page=page, url=f"http://127.0.0.1:{self.port}/#/home")
 
         yield specimen_server, page, page.context, None
 

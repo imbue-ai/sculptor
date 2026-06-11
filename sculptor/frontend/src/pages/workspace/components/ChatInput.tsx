@@ -1,7 +1,7 @@
-import { Flex, IconButton, Tooltip } from "@radix-ui/themes";
+import { Flex } from "@radix-ui/themes";
 import type { Editor as TipTapEditor } from "@tiptap/react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { ListChecks, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { posthog } from "posthog-js";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -11,13 +11,10 @@ import { useKeybinding, useKeybindingDisplayText } from "~/common/keybindings/ho
 import { getModelCapabilities } from "~/common/modelCapabilities.ts";
 import { type ParsedPseudoSkillCommand, parsePseudoSkillCommand } from "~/common/pseudoSkills.ts";
 import { mergeClasses, optional } from "~/common/Utils.ts";
-import { CapabilityGate } from "~/components/CapabilityGate.tsx";
-import { EffortSelector } from "~/components/EffortSelector.tsx";
-import { FastModeToggle } from "~/components/FastModeToggle.tsx";
+import { AgentSettingsControls } from "~/components/AgentSettingsControls.tsx";
 import { FilePreviewList } from "~/components/FilePreviewList.tsx";
 import { processAndValidateFiles, saveFiles } from "~/components/FileUploadUtils.ts";
 import { KeyboardHint } from "~/components/KeyboardHint.tsx";
-import { ModelSelector } from "~/components/ModelSelector.tsx";
 import { SendButton } from "~/components/SendButton.tsx";
 import { CAPABILITY_UNSUPPORTED_COPY } from "~/components/useCapabilityGate.ts";
 
@@ -620,36 +617,18 @@ export const ChatInput = ({
               </TooltipIconButton>
             </Flex>
             <Flex align="center" flexShrink="0">
-              <CapabilityGate
-                capabilityValue={canEnterPlanMode}
-                elementId={ElementIds.CAPABILITY_DISABLED_PLAN_MODE}
-                disabledIcon={<ListChecks size={16} />}
-                size="3"
-                style={{ margin: 0 }}
-              >
-                <Tooltip content={isPlanFirst || isInPlanMode ? "Leave plan mode" : "Enter plan mode"}>
-                  <IconButton
-                    variant="ghost"
-                    size="3"
-                    onClick={() => setIsPlanFirst(!isPlanFirst)}
-                    aria-label="Toggle plan first mode"
-                    data-testid={ElementIds.PLAN_MODE_TOGGLE}
-                    data-active={isPlanFirst || isInPlanMode}
-                    style={
-                      isPlanFirst || isInPlanMode ? { color: "var(--button-primary-bg)", margin: 0 } : { margin: 0 }
-                    }
-                  >
-                    <ListChecks size={16} />
-                  </IconButton>
-                </Tooltip>
-              </CapabilityGate>
-              {modelCapabilities.supportsFastMode && canUseFastMode && (
-                <FastModeToggle isActive={isFastMode} onToggle={() => setIsFastMode(!isFastMode)} />
-              )}
-              <EffortSelector effort={effort} onEffortChange={setEffort} />
-              <Flex pr="1">
-                <ModelSelector model={localModel} onModelChange={(value: LlmModel) => setStoredModel(value)} />
-              </Flex>
+              <AgentSettingsControls
+                model={localModel}
+                onModelChange={(value) => setStoredModel(value)}
+                effort={effort}
+                onEffortChange={setEffort}
+                isFastMode={isFastMode}
+                onFastModeToggle={() => setIsFastMode(!isFastMode)}
+                isPlanMode={isPlanFirst || isInPlanMode}
+                onPlanModeToggle={() => setIsPlanFirst(!isPlanFirst)}
+                canEnterPlanMode={canEnterPlanMode}
+                canUseFastMode={canUseFastMode}
+              />
               <SendButton
                 onClick={handleSend}
                 disabled={(isDisabled && !draftIsBypassCommand(promptDraft)) || !promptDraft?.trim()}

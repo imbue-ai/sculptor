@@ -29,7 +29,9 @@ from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
 
-@pytest.mark.xfail(reason="Mode persistence not yet implemented in AddWorkspacePage (uses local useState)")
+@pytest.mark.xfail(
+    reason="Mode persistence not yet implemented in NewWorkspaceModal (lives in atoms but is not seeded from a per-workspace MRU)"
+)
 @user_story("to have my workspace selection mode persist when creating multiple workspaces")
 def test_workspace_selection_mode_persists_after_workspace_creation(sculptor_instance_: SculptorInstance) -> None:
     """Workspace selection mode should persist after creating a workspace.

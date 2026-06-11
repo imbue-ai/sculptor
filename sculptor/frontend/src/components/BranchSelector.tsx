@@ -16,6 +16,8 @@ type BranchSelectorProps = {
   setUserSelectedBranch: (branch: string) => void;
   disabled?: boolean;
   triggerVariant?: "soft" | "ghost";
+  /** Forwarded to the underlying Select.Trigger — useful for chip-style overrides. */
+  className?: string;
 };
 
 const BranchSelectorComponent = ({
@@ -25,6 +27,7 @@ const BranchSelectorComponent = ({
   setUserSelectedBranch,
   disabled = false,
   triggerVariant = "soft",
+  className,
 }: BranchSelectorProps): ReactElement => {
   const [shouldFetch, setShouldFetch] = useState(false);
   const [isFetchingBranches, setIsFetchingBranches] = useState(false);
@@ -83,7 +86,7 @@ const BranchSelectorComponent = ({
       }
       triggerVariant={triggerVariant}
       testId={ElementIds.BRANCH_SELECTOR}
-      className={styles.dropdownButton}
+      className={className ? `${styles.dropdownButton} ${className}` : styles.dropdownButton}
       onOpenChange={(open) => open && setShouldFetch(true)}
     />
   );

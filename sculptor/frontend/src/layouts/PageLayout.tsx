@@ -1,7 +1,7 @@
 import { Flex } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 
 import { useSyncActiveTabFromRoute } from "../common/hooks/useSyncActiveTabFromRoute.ts";
@@ -21,6 +21,8 @@ import { CommandRegistrations } from "../components/CommandPalette/CommandRegist
 import { DevModeIndicator } from "../components/DevModeIndicator.tsx";
 import { ExitZenModeButton } from "../components/ExitZenModeButton.tsx";
 import { KeyboardShortcutsDialog } from "../components/KeyboardShortcutsDialog.tsx";
+import { NewWorkspaceModal } from "../components/NewWorkspaceModal";
+import { newWorkspaceModalOpenAtom } from "../components/NewWorkspaceModal/atoms.ts";
 import { NotificationToasts } from "../components/NotificationToasts.tsx";
 import { zenModeActiveAtom } from "../components/panels/atoms.ts";
 import { PanelRegistryProvider } from "../components/panels/PanelRegistryProvider.tsx";
@@ -81,6 +83,21 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
     [setMentionChipUnreachableToast],
   );
 
+  // Reset the persistent new-workspace modal atom when this layout
+  // unmounts. Cross-layout navigation (/home → /settings, /home → /ws/<id>)
+  // tears down this PageLayout and mounts a fresh one — without the reset,
+  // the new layout's modal would re-render `isOpen=true` from the
+  // previously-set atom and block the destination page. Safe under
+  // StrictMode's simulated unmount because nothing has had time to set
+  // the atom to true between mount and the simulated cleanup.
+  const setNewWorkspaceModalOpen = useSetAtom(newWorkspaceModalOpenAtom);
+  useEffect(
+    () => (): void => {
+      setNewWorkspaceModalOpen(false);
+    },
+    [setNewWorkspaceModalOpen],
+  );
+
   useUnifiedStream();
   usePageLayoutKeyboardShortcuts();
   useAutoUpdateListener();
@@ -137,6 +154,7 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
       <ExitZenModeButton />
       <CommandRegistrations />
       <CommandPalette />
+      <NewWorkspaceModal />
       <KeyboardShortcutsDialog />
       <RepoPathDialog
         isOpen={isRepoPathDialogOpen}

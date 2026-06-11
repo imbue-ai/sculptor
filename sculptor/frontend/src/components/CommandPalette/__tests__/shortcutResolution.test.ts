@@ -36,7 +36,8 @@ const noop = (): void => {};
 const makeRuntime = (): CommandRuntime =>
   ({
     store: getDefaultStore(),
-    navigate: { toHome: noop, toSettings: vi.fn(), toAddWorkspace: noop, toWorkspace: vi.fn(), toAgent: vi.fn() },
+    navigate: { toHome: noop, toSettings: vi.fn(), toWorkspace: vi.fn(), toAgent: vi.fn() },
+    modal: { openNewWorkspaceFromPalette: noop },
     ui: {
       toggleHelpDialog: noop,
       toggleDevPanel: noop,
@@ -62,7 +63,7 @@ const makeRuntime = (): CommandRuntime =>
   }) as unknown as CommandRuntime;
 
 const WORKSPACE_CTX: PaletteContext = {
-  route: { isHome: false, isWorkspace: true, isSettings: false, isAddWorkspace: false, isAgent: false },
+  route: { isHome: false, isWorkspace: true, isSettings: false, isAgent: false },
   activeWorkspaceId: "ws-1",
   activeAgentId: null,
   hasChatPanel: true,

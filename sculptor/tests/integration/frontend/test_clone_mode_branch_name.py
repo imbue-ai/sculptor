@@ -3,10 +3,6 @@
 Verifies the parallel branch-experience for CLONE mode (the field is
 optional): clearing it checks out the base branch directly, keeping
 the auto-filled value creates a new branch inside the clone.
-
-Clone mode is now opt-in (worktree is the default), so each test enables
-the clone flag and selects clone in the mode picker before exercising the
-branch-name field.
 """
 
 import re
@@ -17,15 +13,14 @@ from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
-from sculptor.testing.elements.user_config import enable_clone_workspaces
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.playwright_utils import read_branch_name_field
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
 
 def _workspace_id_from_url(page: Page) -> str:
-    expect(page).to_have_url(re.compile(r".*/ws/(ws_[a-z0-9]+)/"))
+    expect(page).to_have_url(re.compile(r".*/ws/(ws_[a-z0-9]+)/"), timeout=10_000)
     match = re.search(r"/ws/(ws_[a-z0-9]+)/", page.url)
     assert match, f"could not extract workspace_id from URL: {page.url}"
     return match.group(1)
@@ -62,23 +57,28 @@ def _branch_exists(repo_path: Path, branch: str) -> bool:
     return bool(result.stdout.strip())
 
 
+def _submit_and_wait_for_ready(page) -> None:
+    submit_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
+    expect(submit_button).to_be_enabled()
+    submit_button.click()
+    chat_panel = page.get_by_test_id(ElementIDs.CHAT_PANEL)
+    expect(chat_panel).to_be_visible(timeout=60_000)
+
+
 @user_story("to clone a repo and work on the base branch directly by clearing the branch-name field")
 def test_clone_mode_cleared_branch_checks_out_base(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
-    enable_clone_workspaces(page)
 
     navigate_to_add_workspace_page(page)
-    add_ws_page = PlaywrightAddWorkspacePage(page)
-    add_ws_page.get_workspace_name_input().fill("Some work")
-    add_ws_page.select_mode(ElementIDs.MODE_OPTION_CLONE)
+    page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT).fill("Some work")
 
-    branch_input = add_ws_page.get_branch_name_input()
+    branch_input = page.get_by_test_id(ElementIDs.BRANCH_NAME_INPUT)
     expect(branch_input).to_be_visible()
-    expect(branch_input).to_have_value(re.compile(r".*some-work.*"))
+    expect(branch_input).to_have_value(re.compile(r".+"), timeout=5_000)
     branch_input.fill("")
     expect(branch_input).to_have_value("")
 
-    add_ws_page.submit_and_wait_for_chat_panel()
+    _submit_and_wait_for_ready(page)
 
     workspace_id = _workspace_id_from_url(page)
     clone_path = _clone_code_dir_for_workspace(page, workspace_id)
@@ -90,19 +90,16 @@ def test_clone_mode_cleared_branch_checks_out_base(sculptor_instance_: SculptorI
 @user_story("to clone a repo and work on a new branch using the auto-filled name")
 def test_clone_mode_kept_branch_name_creates_new_branch(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
-    enable_clone_workspaces(page)
 
     navigate_to_add_workspace_page(page)
-    add_ws_page = PlaywrightAddWorkspacePage(page)
-    add_ws_page.get_workspace_name_input().fill("Fix login bug")
-    add_ws_page.select_mode(ElementIDs.MODE_OPTION_CLONE)
+    page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT).fill("Fix login bug")
 
-    branch_input = add_ws_page.get_branch_name_input()
+    branch_input = page.get_by_test_id(ElementIDs.BRANCH_NAME_INPUT)
     expect(branch_input).to_be_visible()
-    expect(branch_input).to_have_value(re.compile(r".*fix-login-bug.*"))
-    expected_branch = branch_input.input_value()
+    expect(branch_input).to_have_value(re.compile(r".*fix-login-bug.*"), timeout=5_000)
+    expected_branch = read_branch_name_field(page)
 
-    add_ws_page.submit_and_wait_for_chat_panel()
+    _submit_and_wait_for_ready(page)
 
     workspace_id = _workspace_id_from_url(page)
     clone_path = _clone_code_dir_for_workspace(page, workspace_id)

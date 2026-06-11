@@ -1,5 +1,4 @@
-import * as Dialog from "@radix-ui/react-dialog";
-import { IconButton, Spinner, Tooltip, VisuallyHidden } from "@radix-ui/themes";
+import { IconButton, Spinner, Tooltip } from "@radix-ui/themes";
 import { Command } from "cmdk";
 import { useAtom, useAtomValue } from "jotai";
 import { ChevronRightIcon, SearchIcon, XIcon } from "lucide-react";
@@ -9,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ElementIds } from "../../api";
 import { keybindingsMapAtom } from "../../common/keybindings/atoms.ts";
 import { formatShortcutForDisplay, shouldHandleKeybinding } from "../../common/ShortcutUtils.ts";
+import { PaletteDialog } from "../PaletteDialog";
 import { commandPaletteOpenAtom, commandPalettePendingAtom, commandPaletteSearchAtom } from "./atoms.ts";
 import styles from "./CommandPalette.module.scss";
 import { buildItemValue, makePaletteFilter, ROW_VALUE_SEP } from "./filter.ts";
@@ -122,7 +122,7 @@ const PaletteRow = ({
             ) : kind ? (
               <span className={styles.itemKind}>{kind}</span>
             ) : null}
-            {command.pageId ? (
+            {command.pageId || command.showChevron ? (
               <span className={styles.itemChevron} aria-hidden>
                 <ChevronRightIcon size={14} />
               </span>
@@ -368,10 +368,12 @@ export const CommandPalette = (): ReactElement => {
         return;
       }
 
-      // Tab enters the active row's sub-page (if it has one).
-      // Shift+Tab exits the current sub-page back to its parent.
-      // We always swallow Tab so Radix Dialog's focus trap never sees it
-      // and tries to shift focus out of the input.
+      // Tab enters the active row's sub-page (if it has one) or runs a
+      // `showChevron` command (chevron-marked commands without a page —
+      // e.g. New workspace, which opens a modal). Shift+Tab exits the
+      // current sub-page back to its parent. We always swallow Tab so
+      // Radix Dialog's focus trap never sees it and tries to shift focus
+      // out of the input.
       if (e.key === "Tab") {
         e.preventDefault();
         e.stopPropagation();
@@ -382,6 +384,8 @@ export const CommandPalette = (): ReactElement => {
 
         if (activeCommand?.pageId != null) {
           pushPage(activeCommand.pageId);
+        } else if (activeCommand?.showChevron) {
+          void runCommand(activeCommand);
         }
         return;
       }
@@ -397,11 +401,20 @@ export const CommandPalette = (): ReactElement => {
         const isCaretAtEnd = target == null || target.selectionStart === target.value.length;
         const isCaretAtStart = target == null || target.selectionEnd === 0;
 
-        if (e.key === "ArrowRight" && isCaretAtEnd && activeCommand?.pageId != null) {
-          e.preventDefault();
-          e.stopPropagation();
-          pushPage(activeCommand.pageId);
-          return;
+        if (e.key === "ArrowRight" && isCaretAtEnd) {
+          if (activeCommand?.pageId != null) {
+            e.preventDefault();
+            e.stopPropagation();
+            pushPage(activeCommand.pageId);
+            return;
+          }
+
+          if (activeCommand?.showChevron) {
+            e.preventDefault();
+            e.stopPropagation();
+            void runCommand(activeCommand);
+            return;
+          }
         }
 
         if (e.key === "ArrowLeft" && isCaretAtStart && ctx.page != null) {
@@ -513,144 +526,135 @@ export const CommandPalette = (): ReactElement => {
   }, [search]);
 
   return (
-    <Dialog.Root open={isOpen} onOpenChange={handleOpenChange}>
-      {/* No Dialog.Portal: portaled content mounts at <body>, OUTSIDE the
-          Radix `.radix-themes` wrapper, and `.dark` / `.light` token
-          overrides are scoped to that class. Rendering inline keeps the
-          dialog inside the Theme tree so dark-mode tokens apply correctly.
-          KeyboardShortcutsDialog uses the same pattern. */}
-      <Dialog.Overlay className={`${styles.overlay}${pendingCommandId != null ? ` ${styles.overlayPending}` : ""}`} />
-      <Dialog.Content
-        className={styles.content}
-        aria-describedby={undefined}
-        data-testid={ElementIds.COMMAND_PALETTE}
-        // Use capture phase so we intercept Cmd+Enter and Backspace
-        // BEFORE cmdk's own input handler runs (which would otherwise
-        // fire onSelect a second time on Cmd+Enter or fall through on
-        // Backspace).
-        onKeyDownCapture={handleKeyDown}
-        // Two-stage Escape: when the search input has text, the FIRST
-        // Esc clears the input (preventDefault stops Radix from closing
-        // the dialog). A second Esc — or the first one with an empty
-        // input — falls through to Radix and triggers `handleOpenChange`,
-        // which pops a sub-page or closes.
-        //
-        // Read the live DOM value via `inputRef` rather than the `search`
-        // state: a user (or test) who clears the input then immediately
-        // presses Escape can fire the keydown before React commits the
-        // `setSearch("")` update, leaving this closure with stale text
-        // and stranding the dialog open. The DOM value is updated
-        // synchronously by the input event, so it's always current.
-        onEscapeKeyDown={(e): void => {
-          if (inputRef.current != null && inputRef.current.value !== "") {
-            e.preventDefault();
-            setSearch("");
-          }
-        }}
+    <PaletteDialog
+      open={isOpen}
+      onOpenChange={handleOpenChange}
+      title="Command palette"
+      contentTestId={ElementIds.COMMAND_PALETTE}
+      overlayClassName={pendingCommandId != null ? styles.overlayPending : undefined}
+      // Use capture phase so we intercept Cmd+Enter and Backspace
+      // BEFORE cmdk's own input handler runs (which would otherwise
+      // fire onSelect a second time on Cmd+Enter or fall through on
+      // Backspace).
+      onKeyDownCapture={handleKeyDown}
+      // Two-stage Escape: when the search input has text, the FIRST
+      // Esc clears the input (preventDefault stops Radix from closing
+      // the dialog). A second Esc — or the first one with an empty
+      // input — falls through to Radix and triggers `handleOpenChange`,
+      // which pops a sub-page or closes.
+      //
+      // Read the live DOM value via `inputRef` rather than the `search`
+      // state: a user (or test) who clears the input then immediately
+      // presses Escape can fire the keydown before React commits the
+      // `setSearch("")` update, leaving this closure with stale text
+      // and stranding the dialog open. The DOM value is updated
+      // synchronously by the input event, so it's always current.
+      onEscapeKeyDown={(e): void => {
+        if (inputRef.current != null && inputRef.current.value !== "") {
+          e.preventDefault();
+          setSearch("");
+        }
+      }}
+    >
+      <Command
+        label="Sculptor command palette"
+        className={styles.command}
+        filter={filter}
+        loop
+        // Let cmdk auto-select the first row on mount and the top-
+        // scoring row on every search change — so Enter works the
+        // moment the palette opens, with no priming arrow-key needed.
+        value={activeValue}
+        onValueChange={setActiveValue}
+        // We disable cmdk's per-item pointer selection and re-implement
+        // it on Command.List below. This lets us swallow the very first
+        // pointermove after open so a cursor that happens to be sitting
+        // on (or moving across) a row when Cmd+K fires doesn't override
+        // the keyboard-selected first row. Click selection is unaffected
+        // — cmdk's per-item onClick handler doesn't read this flag.
+        disablePointerSelection
       >
-        <VisuallyHidden>
-          <Dialog.Title>Command palette</Dialog.Title>
-        </VisuallyHidden>
-        <Command
-          label="Sculptor command palette"
-          className={styles.command}
-          filter={filter}
-          loop
-          // Let cmdk auto-select the first row on mount and the top-
-          // scoring row on every search change — so Enter works the
-          // moment the palette opens, with no priming arrow-key needed.
-          value={activeValue}
-          onValueChange={setActiveValue}
-          // We disable cmdk's per-item pointer selection and re-implement
-          // it on Command.List below. This lets us swallow the very first
-          // pointermove after open so a cursor that happens to be sitting
-          // on (or moving across) a row when Cmd+K fires doesn't override
-          // the keyboard-selected first row. Click selection is unaffected
-          // — cmdk's per-item onClick handler doesn't read this flag.
-          disablePointerSelection
-        >
-          <div className={styles.header}>
-            {pageDef ? (
-              <div className={styles.breadcrumb} data-testid={ElementIds.COMMAND_PALETTE_PAGE_BREADCRUMB}>
-                <span>{pageDef.title}</span>
-                <IconButton
-                  variant="ghost"
-                  size="1"
-                  color="gray"
-                  className={styles.breadcrumbClose}
-                  onClick={() => popPage()}
-                  aria-label="Back"
-                >
-                  <XIcon size={10} />
-                </IconButton>
-              </div>
-            ) : null}
-            <Command.Input
-              ref={inputRef}
-              value={search}
-              onValueChange={setSearch}
-              placeholder={placeholder}
-              className={styles.input}
-              autoFocus
-              data-testid={ElementIds.COMMAND_PALETTE_INPUT}
-            />
-          </div>
-          <div className={styles.divider} aria-hidden />
-          <Command.List
-            ref={listRef}
-            className={styles.list}
-            data-testid={ElementIds.COMMAND_PALETTE_LIST}
-            // Custom pointer selection (cmdk's own is disabled above).
-            // We swallow the first pointermove after open — the cursor
-            // may have been mid-motion when Cmd+K fired, and we don't
-            // want that to override the auto-selected first row. Once
-            // the user has actually moved the cursor, subsequent moves
-            // grab whatever row is under it (matching cmdk's default).
-            onPointerMove={(e): void => {
-              if (!hasCursorMovedRef.current) {
-                hasCursorMovedRef.current = true;
-                return;
-              }
-              const item = (e.target as HTMLElement | null)?.closest("[cmdk-item]");
-              if (!item) return;
-              if (item.getAttribute("aria-disabled") === "true") return;
-              const value = item.getAttribute("data-value");
-              if (value) setActiveValue(value);
-            }}
-          >
-            <Command.Empty className={styles.empty} data-testid={ElementIds.COMMAND_PALETTE_EMPTY}>
-              {totalItems === 0 ? "No commands here." : `No matches for "${search}"`}
-            </Command.Empty>
-            {grouped.map((g) => (
-              // Include `hasQuery` in the key so the group remounts when the
-              // user transitions between searching and not. cmdk's internal
-              // `z()` physically reorders DOM nodes via `appendChild` to sort
-              // by score on every search change, but it early-returns when
-              // search is empty — so without a remount, the score-sorted DOM
-              // positions from the prior search persist and the empty-query
-              // list shows up in the wrong order.
-              <Command.Group
-                key={`${hasQuery ? "q" : "r"}.${g.id}`}
-                heading={groupHeading(g.id)}
-                className={styles.group}
-                data-testid={ElementIds.COMMAND_PALETTE_GROUP}
-                data-group-id={g.id}
+        <div className={styles.header}>
+          {pageDef ? (
+            <div className={styles.breadcrumb} data-testid={ElementIds.COMMAND_PALETTE_PAGE_BREADCRUMB}>
+              <span>{pageDef.title}</span>
+              <IconButton
+                variant="ghost"
+                size="1"
+                color="gray"
+                className={styles.breadcrumbClose}
+                onClick={() => popPage()}
+                aria-label="Back"
               >
-                {g.commands.map((cmd) => (
-                  <PaletteRow
-                    key={`${g.id}.${cmd.id}`}
-                    command={cmd}
-                    isSearching={hasQuery}
-                    ctx={ctx}
-                    binding={cmd.shortcut != null ? (keybindingsMap[cmd.shortcut]?.binding ?? null) : null}
-                    onSelect={onSelect}
-                  />
-                ))}
-              </Command.Group>
-            ))}
-          </Command.List>
-        </Command>
-      </Dialog.Content>
-    </Dialog.Root>
+                <XIcon size={10} />
+              </IconButton>
+            </div>
+          ) : null}
+          <Command.Input
+            ref={inputRef}
+            value={search}
+            onValueChange={setSearch}
+            placeholder={placeholder}
+            className={styles.input}
+            autoFocus
+            data-testid={ElementIds.COMMAND_PALETTE_INPUT}
+          />
+        </div>
+        <div className={styles.divider} aria-hidden />
+        <Command.List
+          ref={listRef}
+          className={styles.list}
+          data-testid={ElementIds.COMMAND_PALETTE_LIST}
+          // Custom pointer selection (cmdk's own is disabled above).
+          // We swallow the first pointermove after open — the cursor
+          // may have been mid-motion when Cmd+K fired, and we don't
+          // want that to override the auto-selected first row. Once
+          // the user has actually moved the cursor, subsequent moves
+          // grab whatever row is under it (matching cmdk's default).
+          onPointerMove={(e): void => {
+            if (!hasCursorMovedRef.current) {
+              hasCursorMovedRef.current = true;
+              return;
+            }
+            const item = (e.target as HTMLElement | null)?.closest("[cmdk-item]");
+            if (!item) return;
+            if (item.getAttribute("aria-disabled") === "true") return;
+            const value = item.getAttribute("data-value");
+            if (value) setActiveValue(value);
+          }}
+        >
+          <Command.Empty className={styles.empty} data-testid={ElementIds.COMMAND_PALETTE_EMPTY}>
+            {totalItems === 0 ? "No commands here." : `No matches for "${search}"`}
+          </Command.Empty>
+          {grouped.map((g) => (
+            // Include `hasQuery` in the key so the group remounts when the
+            // user transitions between searching and not. cmdk's internal
+            // `z()` physically reorders DOM nodes via `appendChild` to sort
+            // by score on every search change, but it early-returns when
+            // search is empty — so without a remount, the score-sorted DOM
+            // positions from the prior search persist and the empty-query
+            // list shows up in the wrong order.
+            <Command.Group
+              key={`${hasQuery ? "q" : "r"}.${g.id}`}
+              heading={groupHeading(g.id)}
+              className={styles.group}
+              data-testid={ElementIds.COMMAND_PALETTE_GROUP}
+              data-group-id={g.id}
+            >
+              {g.commands.map((cmd) => (
+                <PaletteRow
+                  key={`${g.id}.${cmd.id}`}
+                  command={cmd}
+                  isSearching={hasQuery}
+                  ctx={ctx}
+                  binding={cmd.shortcut != null ? (keybindingsMap[cmd.shortcut]?.binding ?? null) : null}
+                  onSelect={onSelect}
+                />
+              ))}
+            </Command.Group>
+          ))}
+        </Command.List>
+      </Command>
+    </PaletteDialog>
   );
 };

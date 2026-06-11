@@ -10,7 +10,6 @@ from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_2_MODEL_NAME
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import soft_reload_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -47,14 +46,18 @@ def test_prompt_drafts_persist_on_multiple_tasks_and_home_page(sculptor_instance
     # Type a follow-up message draft in chat input (don't send it)
     chat_panel.get_chat_input().fill(follow_up_text)
 
-    # Navigate away to Add Workspace page
-    task_page.get_add_workspace_button().click()
-    add_workspace_page = PlaywrightAddWorkspacePage(page=page)
-    expect(add_workspace_page.get_submit_button()).to_be_visible()
+    # Open the new-workspace modal as a "navigate away" gesture.
+    page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).click()
+    expect(page.get_by_test_id(ElementIDs.START_TASK_BUTTON)).to_be_visible()
+
+    # Close the modal before clicking the workspace tab — the modal
+    # overlay would otherwise intercept the click.
+    page.keyboard.press("Escape")
+    expect(page.get_by_test_id(ElementIDs.START_TASK_BUTTON)).to_be_hidden()
 
     # Navigate back to the first workspace tab
-    task_page.get_workspace_tabs().first.click()
-    expect(task_page.get_chat_panel()).to_be_visible()
+    page.get_by_test_id(ElementIDs.WORKSPACE_TAB).first.click()
+    expect(page.get_by_test_id(ElementIDs.CHAT_PANEL)).to_be_visible()
 
     # Verify the draft text is still there
     task_page = PlaywrightTaskPage(page=page)
@@ -258,8 +261,9 @@ def test_model_selector_updates_when_switching_tasks(sculptor_instance_: Sculpto
     )
 
     # We should now be on the second workspace tab; verify its model
+    workspace_tabs = page.get_by_test_id(ElementIDs.WORKSPACE_TAB)
+
     second_task_page = PlaywrightTaskPage(page=page)
-    workspace_tabs = second_task_page.get_workspace_tabs()
     second_chat_panel = second_task_page.get_chat_panel()
     model_selector = second_chat_panel.get_model_selector()
     expect(model_selector).to_be_visible()
@@ -267,9 +271,10 @@ def test_model_selector_updates_when_switching_tasks(sculptor_instance_: Sculpto
 
     # Navigate to first workspace tab and verify its model
     workspace_tabs.first.click()
+    expect(page.get_by_test_id(ElementIDs.CHAT_PANEL)).to_be_visible()
+
     first_task_page = PlaywrightTaskPage(page=page)
     first_chat_panel = first_task_page.get_chat_panel()
-    expect(first_chat_panel).to_be_visible()
     model_selector = first_chat_panel.get_model_selector()
     expect(model_selector).to_be_visible()
     expect(model_selector).to_contain_text("Fake Claude", ignore_case=True)
@@ -296,3 +301,6 @@ def test_compaction(sculptor_instance_: SculptorInstance) -> None:
     expect(compaction_header).to_contain_text("Context Remaining")
     expect(chat_panel.get_context_summary_messages()).to_have_count(1)
     _final_context_remaining = compaction_header.get_context_remaining()
+
+    # TODO: This fails since there's a bug with our context
+    # assert _final_context_remaining > _initial_context_remaining

@@ -18,10 +18,10 @@ from playwright.sync_api import expect
 import sculptor.primitives.ids
 from imbue_core.sculptor.user_config import DependencyPaths
 from imbue_core.sculptor.user_config import UserConfig
+from sculptor.constants import ElementIDs
 from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.dependency_stubs import DependencyState
 from sculptor.testing.dependency_stubs import stub_dependency
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.resources import custom_sculptor_folder_populator
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
@@ -38,6 +38,7 @@ def _make_test_config() -> UserConfig:
         instance_id=hashlib.md5(os.urandom(64)).hexdigest(),
         is_error_reporting_enabled=True,
         is_product_analytics_enabled=True,
+        is_llm_logs_enabled=True,
         is_session_recording_enabled=True,
         is_privacy_policy_consented=True,
         is_telemetry_level_set=True,
@@ -118,11 +119,12 @@ def test_inplace_bootstrap_and_workspace_operations(
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
 
-        add_workspace_page = PlaywrightAddWorkspacePage(page)
-
-        # Verify the Add Workspace page loaded — bootstrap succeeded
+        # Open the new-workspace modal — the form lives behind the topbar +
+        # in the modal flow rather than auto-rendering on /home — and
+        # verify the submit button shows, confirming bootstrap succeeded.
         try:
-            expect(add_workspace_page.get_submit_button()).to_be_visible(timeout=45_000)
+            page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).click()
+            expect(page.get_by_test_id(ElementIDs.START_TASK_BUTTON)).to_be_visible(timeout=45_000)
         except AssertionError:
             _dump_diagnostics(page, instance.sculptor_folder, "bootstrap")
             raise
@@ -180,11 +182,11 @@ def test_full_migration_script_then_frontend(
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
 
-        add_workspace_page = PlaywrightAddWorkspacePage(page)
-
-        # Verify the Add Workspace page loaded — migration succeeded
+        # Open the new-workspace modal (see equivalent comment in the
+        # bootstrap test above) and verify the submit button is reachable.
         try:
-            expect(add_workspace_page.get_submit_button()).to_be_visible(timeout=45_000)
+            page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).click()
+            expect(page.get_by_test_id(ElementIDs.START_TASK_BUTTON)).to_be_visible(timeout=45_000)
         except AssertionError:
             _dump_diagnostics(page, migrated_folder, "migration")
             raise

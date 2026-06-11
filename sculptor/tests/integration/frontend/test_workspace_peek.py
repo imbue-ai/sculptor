@@ -16,7 +16,7 @@ from sculptor.testing.elements.chat_panel import wait_for_completed_message_coun
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.playwright_utils import navigate_to_home_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -41,7 +41,7 @@ def test_workspace_peek_popover_idle_state(
     )
 
     # Navigate away so we can hover over the workspace tab
-    navigate_to_add_workspace_page(page)
+    navigate_to_home_page(page)
 
     # Hover over the workspace tab to trigger the popover
     workspace_tab = layout.get_workspace_tabs().first
@@ -100,7 +100,7 @@ fake_claude:ask_user_question `{
     expect(auq_panel).to_be_visible(timeout=30_000)
 
     # Navigate away so we can hover over the workspace tab
-    navigate_to_add_workspace_page(page)
+    navigate_to_home_page(page)
 
     # Hover over the workspace tab to trigger the popover
     workspace_tab = layout.get_workspace_tabs().first
@@ -136,7 +136,7 @@ def test_workspace_peek_popover_hover_mechanics(
     )
 
     # Navigate away so we can hover over the workspace tab
-    navigate_to_add_workspace_page(page)
+    navigate_to_home_page(page)
 
     workspace_tab = layout.get_workspace_tabs().first
     peek = layout.get_workspace_peek_popover()
@@ -178,7 +178,7 @@ def test_workspace_peek_popover_on_scrolled_tab(
         )
 
     # Navigate away so we're not on any workspace tab
-    navigate_to_add_workspace_page(page)
+    navigate_to_home_page(page)
 
     # Shrink viewport to force tab overflow (3 workspace tabs + "Open Workspace"
     # tab at 200px each = 800px, which won't fit in a 500px-wide viewport).
@@ -252,7 +252,7 @@ def test_workspace_peek_waiting_overrides_running_in_banner(
     expect(auq_panel).to_be_visible()
 
     # Navigate away so the workspace tab is hoverable
-    navigate_to_add_workspace_page(page)
+    navigate_to_home_page(page)
 
     # Hover over the workspace tab to trigger the popover
     workspace_tab = task_page.get_workspace_tabs().first

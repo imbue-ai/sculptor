@@ -35,7 +35,6 @@ export type PaletteRoute = {
   isHome: boolean;
   isWorkspace: boolean;
   isSettings: boolean;
-  isAddWorkspace: boolean;
   isAgent: boolean;
 };
 
@@ -128,6 +127,13 @@ export type Command = {
    * `perform` is still invoked (for telemetry / setup) but its return value is ignored.
    */
   pageId?: PageId;
+  /**
+   * Render a trailing chevron on the row even when the command does not
+   * push a sub-page. Use for entries that transition into a new surface
+   * the user backs out of (e.g. "New workspace" opens a modal) — the
+   * chevron signals the row is a doorway, not an in-place action.
+   */
+  showChevron?: boolean;
   /**
    * Restrict visibility to one or more sub-pages. Pass a single `PageId`
    * for a command that lives on exactly one page, or a `ReadonlyArray` of

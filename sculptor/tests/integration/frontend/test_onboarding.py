@@ -8,10 +8,10 @@ from playwright.sync_api import expect
 
 from imbue_core.sculptor.user_config import DependencyPaths
 from imbue_core.sculptor.user_config import UserConfig
+from sculptor.constants import ElementIDs
 from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.dependency_stubs import DependencyState
 from sculptor.testing.dependency_stubs import stub_dependency
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.pages.onboarding_page import PlaywrightOnboardingPage
 from sculptor.testing.playwright_utils import soft_reload_page
 from sculptor.testing.resources import custom_sculptor_folder_populator
@@ -70,50 +70,12 @@ def test_full_onboarding_flow(sculptor_instance_factory_: SculptorInstanceFactor
         expect(add_repo_step).to_be_visible()
         add_repo_step.complete_step(str(sculptor_instance_factory_.base_repo.base_path))
 
-        # After onboarding, the Add Workspace page should load
-        add_workspace_page = PlaywrightAddWorkspacePage(page)
-        expect(add_workspace_page.get_submit_button()).to_be_visible()
-
-
-@user_story("to see a descriptive validation error when my email is rejected during onboarding")
-@custom_sculptor_folder_populator.with_args(_dont_populate_sculptor_folder)
-def test_invalid_email_surfaces_validation_error(sculptor_instance_factory_: SculptorInstanceFactory) -> None:
-    """A backend 422 during the email step must surface the field validation message.
-
-    Regression test for SCU-1365. ``makeAPIRequest``
-    (``sculptor/frontend/src/apiClient.ts``) only threw ``ValidationError`` when
-    ``errorData.status === 422``, but a FastAPI 422 body is ``{"detail": [...]}``
-    with no top-level ``status`` field — so that branch was unreachable (and it
-    threw from inside a ``try``/``catch`` that swallowed the error anyway). As a
-    result, onboarding email-validation failures were replaced by an opaque
-    ``HTTP 422`` message with no field-level detail.
-
-    ``foo@bar`` clears the client-side ``email.includes("@")`` gate but fails the
-    backend's ``EmailStr`` validation, producing a real 422 with a ``detail`` array.
-
-    Verifies:
-    1. The welcome step accepts and submits the invalid email
-    2. The descriptive field-validation message is shown (correct behavior)
-    3. The opaque ``HTTP 422`` fallback is NOT shown (the bug)
-    """
-    invalid_email = "foo@bar"
-    with sculptor_instance_factory_.spawn_instance() as sculptor_instance:
-        page = sculptor_instance.page
-        onboarding_page = PlaywrightOnboardingPage(page)
-
-        welcome_step = onboarding_page.get_welcome_step()
-        expect(welcome_step).to_be_visible()
-
-        # An email that passes the client-side gate but fails backend validation.
-        welcome_step.enter_email(invalid_email)
-        welcome_step.submit()
-
-        # The inline error must show the validation message from the 422 ``detail``
-        # array — not the opaque "HTTP 422" fallback. (Default 30s timeout: this
-        # waits on a backend round-trip.)
-        error_message = welcome_step.get_error_message()
-        expect(error_message).to_contain_text("is not a valid email address")
-        expect(error_message).not_to_contain_text("HTTP 422")
+        # After onboarding, the user can reach the new-workspace modal
+        # via the topbar + (the modal flow no longer auto-renders the
+        # form on /home).
+        page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).click()
+        submit_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
+        expect(submit_button).to_be_visible(timeout=30000)
 
 
 @user_story("to sign up for Sculptor even when Git is not installed")
@@ -175,13 +137,15 @@ def test_dependency_path_and_version_display(sculptor_instance_factory_: Sculpto
 
         # Expand the Git card to see path/version details
         git_card = installation_step.get_git_card()
-        expect(git_card.locator).to_be_visible()
-        # The card mirrors its `canExpand` gate via `aria-disabled`, so this click
-        # auto-waits for the dependency probe to settle (SCU-1215) — no precondition needed.
+        expect(git_card.locator).to_be_visible(timeout=10000)
+        # DependencyCard swallows clicks while status.state is loading/installing/authenticating
+        # (see canExpand gate). On slower runners the probe is still in "checking" when the
+        # card becomes visible, so clicking immediately is a no-op and the card never expands.
+        expect(git_card.get_status()).not_to_contain_text("checking", timeout=10000)
         git_card.locator.click()
 
         # Git should show path and version (Git is installed in test environments)
-        expect(git_card.get_path()).to_be_visible()
+        expect(git_card.get_path()).to_be_visible(timeout=10000)
         expect(git_card.get_version()).to_be_visible()
 
         # Override link should be available
@@ -212,12 +176,12 @@ def test_invalid_override_path_shows_error(sculptor_instance_factory_: SculptorI
 
         # Expand the Claude card to see override link
         claude_card = installation_step.get_claude_card()
-        expect(claude_card.locator).to_be_visible()
+        expect(claude_card.locator).to_be_visible(timeout=10000)
         claude_card.locator.click()
 
         # Claude card should show override link (not found state)
         override_link = claude_card.get_override_link()
-        expect(override_link).to_be_visible()
+        expect(override_link).to_be_visible(timeout=10000)
         override_link.click()
 
         # Override input should appear
@@ -232,7 +196,7 @@ def test_invalid_override_path_shows_error(sculptor_instance_factory_: SculptorI
 
         # Error should appear
         error = claude_card.get_override_error()
-        expect(error).to_be_visible()
+        expect(error).to_be_visible(timeout=10000)
         expect(error).to_contain_text("No executable found")
 
 
@@ -260,13 +224,13 @@ def test_onboarding_without_claude_installed(sculptor_instance_factory_: Sculpto
 
         # Claude card should be visible
         claude_card = installation_step.get_claude_card()
-        expect(claude_card.locator).to_be_visible()
+        expect(claude_card.locator).to_be_visible(timeout=10000)
 
         # Expand to see override link
         claude_card.locator.click()
 
         # Override link should show the manual path option
-        expect(claude_card.get_override_link()).to_be_visible()
+        expect(claude_card.get_override_link()).to_be_visible(timeout=10000)
 
         # Complete button should be disabled since Claude is missing
         complete_button = installation_step.get_complete_button()
@@ -300,7 +264,7 @@ def test_claude_not_authenticated(sculptor_instance_factory_: SculptorInstanceFa
 
         # Claude card should show "not signed in"
         claude_card = installation_step.get_claude_card()
-        expect(claude_card.get_status()).to_contain_text("not signed in")
+        expect(claude_card.get_status()).to_contain_text("not signed in", timeout=10000)
 
         # Authenticate button should be visible
         auth_button = claude_card.get_authenticate_button()
@@ -339,7 +303,7 @@ def test_back_navigation_preserves_email(sculptor_instance_factory_: SculptorIns
         expect(installation_step).to_be_visible()
 
         # Go back via the step indicator (click the first dot to return to step 1)
-        onboarding_page.get_step_indicator_dot(0).click()
+        page.get_by_test_id(ElementIDs.ONBOARDING_STEP_INDICATOR_DOT).nth(0).click()
 
         # Welcome step should be visible again
         welcome_step = onboarding_page.get_welcome_step()
@@ -432,14 +396,64 @@ def test_installation_step_skips_add_repo_when_project_exists(
         expect(installation_step).to_be_visible()
 
         # Wait for deps to be verified so the "Continue" button is enabled
-        expect(installation_step.get_complete_button()).to_contain_text("Continue")
+        expect(installation_step.get_complete_button()).to_contain_text("Continue", timeout=15000)
 
         # Complete the installation step
         installation_step.complete_step()
 
-        # The main app should appear — not the add-repo step
-        add_workspace_page = PlaywrightAddWorkspacePage(page)
-        expect(add_workspace_page.get_submit_button()).to_be_visible()
+        # The main app should appear — not the add-repo step. The
+        # topbar "+" is the broadest "main app rendered" affordance in
+        # the modal flow (the new-workspace form is no longer always-on).
+        add_workspace_button = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
+        expect(add_workspace_button).to_be_visible(timeout=30000)
 
         # The add-repo step should not have appeared
-        expect(onboarding_page.get_add_repo_step()).not_to_be_visible()
+        add_repo_step = page.get_by_test_id(ElementIDs.ONBOARDING_ADD_REPO_STEP)
+        expect(add_repo_step).not_to_be_visible()
+
+        # And the new-workspace modal should be reachable from the main
+        # app (clicking "+" opens it).
+        add_workspace_button.click()
+        start_task_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
+        expect(start_task_button).to_be_visible(timeout=10000)
+
+
+@user_story("to see a descriptive validation error when my email is rejected during onboarding")
+@custom_sculptor_folder_populator.with_args(_dont_populate_sculptor_folder)
+def test_invalid_email_surfaces_validation_error(sculptor_instance_factory_: SculptorInstanceFactory) -> None:
+    """A backend 422 during the email step must surface the field validation message.
+
+    Regression test for SCU-1365. ``makeAPIRequest``
+    (``sculptor/frontend/src/apiClient.ts``) only threw ``ValidationError`` when
+    ``errorData.status === 422``, but a FastAPI 422 body is ``{"detail": [...]}``
+    with no top-level ``status`` field — so that branch was unreachable (and it
+    threw from inside a ``try``/``catch`` that swallowed the error anyway). As a
+    result, onboarding email-validation failures were replaced by an opaque
+    ``HTTP 422`` message with no field-level detail.
+
+    ``foo@bar`` clears the client-side ``email.includes("@")`` gate but fails the
+    backend's ``EmailStr`` validation, producing a real 422 with a ``detail`` array.
+
+    Verifies:
+    1. The welcome step accepts and submits the invalid email
+    2. The descriptive field-validation message is shown (correct behavior)
+    3. The opaque ``HTTP 422`` fallback is NOT shown (the bug)
+    """
+    invalid_email = "foo@bar"
+    with sculptor_instance_factory_.spawn_instance() as sculptor_instance:
+        page = sculptor_instance.page
+        onboarding_page = PlaywrightOnboardingPage(page)
+
+        welcome_step = onboarding_page.get_welcome_step()
+        expect(welcome_step).to_be_visible()
+
+        # An email that passes the client-side gate but fails backend validation.
+        welcome_step.enter_email(invalid_email)
+        welcome_step.submit()
+
+        # The inline error must show the validation message from the 422 ``detail``
+        # array — not the opaque "HTTP 422" fallback. (Default 30s timeout: this
+        # waits on a backend round-trip.)
+        error_message = welcome_step.get_error_message()
+        expect(error_message).to_contain_text("is not a valid email address")
+        expect(error_message).not_to_contain_text("HTTP 422")
