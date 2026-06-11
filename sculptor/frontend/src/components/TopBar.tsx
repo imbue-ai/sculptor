@@ -33,7 +33,7 @@ export const TopBar = (): ReactElement => {
   const settingsShortcut = useKeybindingDisplayText("settings");
   const ensurePseudoTab = useSetAtom(ensurePseudoTabAtom);
   const setLastNonHomeLocation = useSetAtom(lastNonHomeLocationAtom);
-  const toggleHome = useHomeToggle();
+  const { toggleHome, isToggleNoOp: isHomeToggleNoOp } = useHomeToggle();
 
   // Remember the last path the user was on outside /home so the Home
   // icon (and the global "home" keybinding) can toggle back to it.
@@ -69,6 +69,10 @@ export const TopBar = (): ReactElement => {
         onClick={toggleHome}
         aria-label="Home"
         aria-pressed={isHomeRoute}
+        // On /home with nowhere to toggle back to, the click is a no-op —
+        // reflect that in the DOM rather than silently swallowing it. The
+        // handler keeps its own early-return as the real gate.
+        aria-disabled={isHomeToggleNoOp}
         data-testid={ElementIds.HOME_BUTTON}
         className={styles.homeButton}
       >

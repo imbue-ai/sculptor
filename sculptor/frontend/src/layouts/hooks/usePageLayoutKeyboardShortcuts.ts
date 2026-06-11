@@ -29,7 +29,7 @@ export const usePageLayoutKeyboardShortcuts = (): void => {
   } = useCommandPalette();
   const { toggleHelpDialog } = useHelpDialog();
   const { open: openNewWorkspaceModal } = useNewWorkspaceModal();
-  const toggleHome = useHomeToggle();
+  const { toggleHome } = useHomeToggle();
   const setChatSearchVisible = useSetAtom(chatSearchVisibleAtom);
   const setFocusRequest = useSetAtom(chatSearchFocusRequestAtom);
   const openSettings = useOpenSettings();

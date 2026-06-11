@@ -96,7 +96,7 @@ const renderToggle = (
     tabIds?: ReadonlyArray<string>;
     lastNonHome?: string | null;
   } = {},
-): { toggle: () => void } => {
+): { toggle: () => void; isToggleNoOp: boolean } => {
   routeState.isHomeRoute = options.onHome ?? false;
 
   const initialValues: AtomInitialValues = [
@@ -112,7 +112,7 @@ const renderToggle = (
     ),
   });
 
-  return { toggle: result.current };
+  return { toggle: result.current.toggleHome, isToggleNoOp: result.current.isToggleNoOp };
 };
 
 // ── Tests ───────────────────────────────────────────────────────────────
@@ -278,6 +278,24 @@ describe("useHomeToggle", () => {
       act(() => toggle());
 
       expect(mockNavigate).toHaveBeenCalledExactlyOnceWith("/ws/ws-1/agent/agent-1");
+    });
+  });
+
+  describe("isToggleNoOp (drives the Home button's aria-disabled)", () => {
+    it("is false off /home (the toggle always navigates home there)", () => {
+      expect(renderToggle({ onHome: false, tabIds: [], lastNonHome: null }).isToggleNoOp).toBe(false);
+    });
+
+    it("is true on /home with no visible tab", () => {
+      expect(renderToggle({ onHome: true, tabIds: ["__home__"], lastNonHome: "/ws/ws-1" }).isToggleNoOp).toBe(true);
+    });
+
+    it("is true on /home with a visible tab but no remembered location", () => {
+      expect(renderToggle({ onHome: true, tabIds: ["ws-1"], lastNonHome: null }).isToggleNoOp).toBe(true);
+    });
+
+    it("is false on /home when there's a visible tab and a remembered location", () => {
+      expect(renderToggle({ onHome: true, tabIds: ["ws-1"], lastNonHome: "/ws/ws-1" }).isToggleNoOp).toBe(false);
     });
   });
 });
