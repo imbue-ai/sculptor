@@ -582,13 +582,17 @@ export const NewWorkspaceModal = (): ReactElement => {
   );
 
   const hasNoBranches = repoInfo?.recentBranches?.length === 0;
-  // Suppress the required-error visuals while the auto-fill preview is
-  // still loading — `effectiveBranchName` is `""` during that window
-  // and we don't want a red flash before the suggested name lands.
-  const isBranchNameRequired =
-    mode === WorkspaceInitializationStrategy.WORKTREE &&
-    effectiveBranchName.trim() === "" &&
-    !isBranchNamePreviewLoading;
+  // Worktree mode needs a branch name before it can submit. This drives
+  // the submit gate (below) and must NOT be suppressed while the preview
+  // loads: `handleSubmit` silently bails on an empty worktree branch, so
+  // if the button were enabled during the loading window a click would
+  // be swallowed and the workspace never created.
+  const isBranchNameMissing = mode === WorkspaceInitializationStrategy.WORKTREE && effectiveBranchName.trim() === "";
+  // Visual-only: suppress the required-error border/caption while the
+  // auto-fill preview is still loading — `effectiveBranchName` is `""`
+  // during that window and we don't want a red flash before the
+  // suggested name lands.
+  const isBranchNameRequired = isBranchNameMissing && !isBranchNamePreviewLoading;
   // Branch-name validation per git's ref-format rules. Drives both
   // the inline error message in the field and the disabled submit —
   // without this, an invalid name (e.g. trailing `/`) silently makes
@@ -600,7 +604,12 @@ export const NewWorkspaceModal = (): ReactElement => {
     hasNoBranches ||
     isPending ||
     isLoadingProjects ||
-    isBranchNameRequired ||
+    isBranchNameMissing ||
+    // Keep submit disabled until the auto-fill preview settles, so the
+    // button never flips enabled while the branch name is still `""`
+    // (or stale from a prior workspace name) — clicking in that window
+    // would hit `handleSubmit`'s silent empty-branch bail.
+    isBranchNamePreviewLoading ||
     branchNameValidationError !== null;
   const submitTooltipContent = !selectedProjectId
     ? "Select a repository first"
