@@ -137,15 +137,15 @@ def test_dependency_path_and_version_display(sculptor_instance_factory_: Sculpto
 
         # Expand the Git card to see path/version details
         git_card = installation_step.get_git_card()
-        expect(git_card.locator).to_be_visible(timeout=10000)
+        expect(git_card.locator).to_be_visible()
         # DependencyCard swallows clicks while status.state is loading/installing/authenticating
         # (see canExpand gate). On slower runners the probe is still in "checking" when the
         # card becomes visible, so clicking immediately is a no-op and the card never expands.
-        expect(git_card.get_status()).not_to_contain_text("checking", timeout=10000)
+        expect(git_card.get_status()).not_to_contain_text("checking")
         git_card.locator.click()
 
         # Git should show path and version (Git is installed in test environments)
-        expect(git_card.get_path()).to_be_visible(timeout=10000)
+        expect(git_card.get_path()).to_be_visible()
         expect(git_card.get_version()).to_be_visible()
 
         # Override link should be available
@@ -176,12 +176,12 @@ def test_invalid_override_path_shows_error(sculptor_instance_factory_: SculptorI
 
         # Expand the Claude card to see override link
         claude_card = installation_step.get_claude_card()
-        expect(claude_card.locator).to_be_visible(timeout=10000)
+        expect(claude_card.locator).to_be_visible()
         claude_card.locator.click()
 
         # Claude card should show override link (not found state)
         override_link = claude_card.get_override_link()
-        expect(override_link).to_be_visible(timeout=10000)
+        expect(override_link).to_be_visible()
         override_link.click()
 
         # Override input should appear
@@ -196,7 +196,7 @@ def test_invalid_override_path_shows_error(sculptor_instance_factory_: SculptorI
 
         # Error should appear
         error = claude_card.get_override_error()
-        expect(error).to_be_visible(timeout=10000)
+        expect(error).to_be_visible()
         expect(error).to_contain_text("No executable found")
 
 
@@ -224,13 +224,13 @@ def test_onboarding_without_claude_installed(sculptor_instance_factory_: Sculpto
 
         # Claude card should be visible
         claude_card = installation_step.get_claude_card()
-        expect(claude_card.locator).to_be_visible(timeout=10000)
+        expect(claude_card.locator).to_be_visible()
 
         # Expand to see override link
         claude_card.locator.click()
 
         # Override link should show the manual path option
-        expect(claude_card.get_override_link()).to_be_visible(timeout=10000)
+        expect(claude_card.get_override_link()).to_be_visible()
 
         # Complete button should be disabled since Claude is missing
         complete_button = installation_step.get_complete_button()
@@ -264,7 +264,7 @@ def test_claude_not_authenticated(sculptor_instance_factory_: SculptorInstanceFa
 
         # Claude card should show "not signed in"
         claude_card = installation_step.get_claude_card()
-        expect(claude_card.get_status()).to_contain_text("not signed in", timeout=10000)
+        expect(claude_card.get_status()).to_contain_text("not signed in")
 
         # Authenticate button should be visible
         auth_button = claude_card.get_authenticate_button()
@@ -396,7 +396,7 @@ def test_installation_step_skips_add_repo_when_project_exists(
         expect(installation_step).to_be_visible()
 
         # Wait for deps to be verified so the "Continue" button is enabled
-        expect(installation_step.get_complete_button()).to_contain_text("Continue", timeout=15000)
+        expect(installation_step.get_complete_button()).to_contain_text("Continue")
 
         # Complete the installation step
         installation_step.complete_step()
@@ -415,7 +415,7 @@ def test_installation_step_skips_add_repo_when_project_exists(
         # app (clicking "+" opens it).
         add_workspace_button.click()
         start_task_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
-        expect(start_task_button).to_be_visible(timeout=10000)
+        expect(start_task_button).to_be_visible()
 
 
 @user_story("to see a descriptive validation error when my email is rejected during onboarding")

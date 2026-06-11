@@ -100,26 +100,13 @@ def navigate_to_add_workspace_page(page: Page) -> None:
 
     Clicks the topbar "+" button to open the modal, or is a no-op if the
     submit button is already visible (i.e. the modal is already open).
-
-    If an add-workspace pseudo-tab already exists in the tab bar (a
-    leftover from a pre-modal session migrated forward), clicks it
-    instead of creating a new one via "+".  This avoids opening a stale
-    tab in addition to a fresh modal.
     """
     submit_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
     if submit_button.is_visible():
         return
 
-    # If an add-workspace tab already exists (e.g. a stale pseudo-tab from
-    # an older session), click it instead of opening a fresh modal.
-    add_workspace_tab = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_TAB)
-    if add_workspace_tab.count() > 0:
-        add_workspace_tab.first.click()
-        expect(submit_button).to_be_visible(timeout=45_000)
-        return
-
     # Wait for the topbar + button to render before clicking.  The early
-    # ``is_visible()`` checks above don't wait, so on a freshly-spawned
+    # ``is_visible()`` check above doesn't wait, so on a freshly-spawned
     # instance the SPA may still be on the loading spinner — we'd fall
     # through to here before the topbar mounts.  Using ``to_be_visible``
     # (which polls) avoids the previous fallback that re-navigated to the
@@ -201,16 +188,6 @@ def delete_all_workspaces_via_ui(page: Page) -> None:
             expect(close_btn).to_be_visible()
             close_btn.click()
             expect(tab).not_to_be_visible()
-
-    # Close extra "Open Workspace" tabs (multiple can exist now).
-    # Leave at most one — it won't have a close button when it's the sole tab.
-    add_workspace_tabs = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_TAB)
-    while add_workspace_tabs.count() > 1:
-        tab = add_workspace_tabs.first
-        tab.hover()
-        close_btn = tab.get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON)
-        expect(close_btn).to_be_visible()
-        close_btn.click()
 
     navigate_to_home_page(page)
 

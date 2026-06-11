@@ -7,10 +7,10 @@ to copy it copies the project-level repo branch instead.
 Root cause: The copy mechanism uses the project repo branch instead of the workspace's
 working directory branch (useWorkspaceBranch) to determine the branch name.
 
-Note: CLONE workspaces now always create their own branch (the requestedBranchName
-auto-fill from the New Workspace form), so the workspace's branch differs from the
-selected source branch. The test sets an explicit branch name so the expected value
-is deterministic.
+Note: CLONE workspaces always create their own branch (the requestedBranchName
+from the New Workspace form), so the workspace's branch differs from the selected
+source branch. The test sets an explicit branch name so the expected value is
+deterministic.
 """
 
 from playwright.sync_api import expect
@@ -18,8 +18,9 @@ from playwright.sync_api import expect
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.clipboard import install_clipboard_interceptor
 from sculptor.testing.elements.clipboard import read_intercepted_clipboard
+from sculptor.testing.elements.user_config import enable_clone_workspaces
+from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
-from sculptor.testing.playwright_utils import soft_reload_page
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
@@ -51,58 +52,45 @@ def test_copy_branch_name_copies_workspace_branch(sculptor_instance_: SculptorIn
     # Switch back to the default branch so the project repo is on a different branch
     sculptor_instance_.repo.checkout_branch("testing")
 
-    # Soft-reload so the branch selector picks up the newly created branch
-    # (direct page reload causes ERR_INSUFFICIENT_RESOURCES on CI). After
-    # the reload we land on /home with the modal closed, so open the
-    # new-workspace modal explicitly before filling the form.
-    soft_reload_page(page)
+    # Enable clone mode. This reloads the page, which also makes the branch
+    # selector pick up the newly created feature_branch. After the reload we
+    # land on /home with the modal closed, so open it explicitly.
+    enable_clone_workspaces(page)
     navigate_to_add_workspace_page(page)
-    submit_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
-    expect(submit_button).to_be_visible()
+    add_workspace = PlaywrightAddWorkspacePage(page=page)
 
-    # Fill in the workspace name (required field)
-    page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT).fill("Feature branch workspace")
+    add_workspace.get_workspace_name_input().fill("Feature branch workspace")
+    add_workspace.select_clone_mode()
 
     # Override the auto-filled branch name so we know exactly what the
     # workspace's branch will be.
-    branch_input = page.get_by_test_id(ElementIDs.BRANCH_NAME_INPUT)
+    branch_input = add_workspace.get_branch_name_input()
     branch_input.fill(workspace_branch)
     expect(branch_input).to_have_value(workspace_branch)
 
-    # Select feature_branch via the branch selector (the source to clone from)
-    branch_selector = page.get_by_test_id(ElementIDs.BRANCH_SELECTOR)
-    branch_selector.click()
-    branch_option = (
-        page.get_by_test_id(ElementIDs.BRANCH_OPTION).filter(has_text=feature_branch).filter(has_not_text="*")
-    )
-    expect(branch_option).to_have_count(1, timeout=30_000)
-    branch_option.click()
+    # Select feature_branch via the branch selector (the source to clone from).
+    add_workspace.select_branch(feature_branch)
 
     # Wait for the selector's displayed value to reflect the click before
     # submitting — without this, submit can fire before React commits the
     # `userSelectedBranch` state update and the request goes out with the
     # project's current branch instead of `feature_branch`.
-    expect(branch_selector).to_contain_text(feature_branch)
+    expect(add_workspace.get_branch_selector()).to_contain_text(feature_branch)
 
-    # Submit to create the workspace (no prompt on the Add Workspace page)
-    expect(submit_button).to_be_enabled()
-    submit_button.click()
+    add_workspace.submit_and_wait_for_chat_panel()
 
-    # Wait for the chat panel to appear (we navigated to the workspace/agent page)
-    chat_panel_locator = page.get_by_test_id(ElementIDs.CHAT_PANEL)
-    expect(chat_panel_locator).to_be_visible(timeout=30000)
-
-    # Clone mode should not show a mode badge (no experimental flags enabled)
+    # Clone mode shows a "clone" badge on the workspace page.
     mode_badge = page.get_by_test_id(ElementIDs.TASK_MODE_BADGE)
-    expect(mode_badge).not_to_be_visible()
+    expect(mode_badge).to_be_visible()
+    expect(mode_badge).to_have_text("clone")
 
     # Install a clipboard interceptor so we can read what was written
     install_clipboard_interceptor(page)
 
-    # Wait for the branch name to load in the workspace banner (async, can take 1-2s)
-    # and click it to copy the value to the clipboard.
+    # Wait for the branch name to load in the workspace banner and click it to
+    # copy the value to the clipboard.
     branch_element = page.get_by_test_id(ElementIDs.BRANCH_NAME)
-    expect(branch_element).to_be_visible(timeout=10000)
+    expect(branch_element).to_be_visible()
     expect(branch_element).to_have_text(workspace_branch)
     branch_element.click()
 

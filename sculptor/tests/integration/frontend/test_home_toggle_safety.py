@@ -85,7 +85,7 @@ def test_home_button_is_noop_when_only_invisible_pseudo_tab_is_open(
     # Must still be on /home. With the bug, the safety check counted
     # the invisible ``__home__`` pseudo-tab and navigated the user to
     # ``lastNonHomeLocation`` (the workspace URL).
-    expect(page).to_have_url(re.compile(r".*#/home$"), timeout=2_000)
+    expect(page).to_have_url(re.compile(r".*#/home$"))
 
 
 @user_story("to not be unexpectedly navigated into a workspace when stale draft tabs linger from older sessions")
@@ -120,7 +120,7 @@ def test_home_button_is_noop_when_only_stale_new_workspace_pseudo_tab_is_open(
 
     expect(workspace_tabs).to_have_count(0)
     page.get_by_test_id(ElementIDs.HOME_BUTTON).click()
-    expect(page).to_have_url(re.compile(r".*#/home$"), timeout=2_000)
+    expect(page).to_have_url(re.compile(r".*#/home$"))
 
 
 @user_story("to also have the Home keybinding be a no-op when there are no tabs open")
@@ -156,7 +156,7 @@ def test_home_keybinding_is_noop_when_only_invisible_pseudo_tab_is_open(
     mod = get_playwright_modifier_key()
     page.keyboard.press(f"{mod}+Period")
 
-    expect(page).to_have_url(re.compile(r".*#/home$"), timeout=2_000)
+    expect(page).to_have_url(re.compile(r".*#/home$"))
 
 
 @user_story("to toggle between a workspace and Home with the Home button")
@@ -175,7 +175,7 @@ def test_home_button_golden_path_toggle(
     )
 
     # We start on the workspace.
-    expect(page).to_have_url(re.compile(r".*#/ws/ws_[a-z0-9]+"), timeout=10_000)
+    expect(page).to_have_url(re.compile(r".*#/ws/ws_[a-z0-9]+"))
     workspace_url_pattern = re.compile(r".*#/ws/ws_[a-z0-9]+")
 
     home_button = page.get_by_test_id(ElementIDs.HOME_BUTTON)
@@ -183,12 +183,12 @@ def test_home_button_golden_path_toggle(
 
     # Toggle ON: workspace → /home.
     home_button.click()
-    expect(page).to_have_url(re.compile(r".*#/home$"), timeout=2_000)
+    expect(page).to_have_url(re.compile(r".*#/home$"))
     expect(home_button).to_have_attribute("aria-pressed", "true")
 
     # Toggle OFF: /home → back to the workspace. The visible workspace
     # tab is what gates the safety check through.
     expect(page.get_by_test_id(ElementIDs.WORKSPACE_TAB)).to_have_count(1)
     home_button.click()
-    expect(page).to_have_url(workspace_url_pattern, timeout=2_000)
+    expect(page).to_have_url(workspace_url_pattern)
     expect(home_button).to_have_attribute("aria-pressed", "false")

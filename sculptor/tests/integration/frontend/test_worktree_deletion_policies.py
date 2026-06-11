@@ -14,34 +14,25 @@ from pathlib import Path
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.user_config import _set_user_config_flag
-from sculptor.testing.elements.user_config import enable_worktree_workspaces
+from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
-from sculptor.testing.playwright_utils import read_branch_name_field
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
 
 def _create_worktree_workspace(page: Page, workspace_name: str) -> tuple[str, str]:
-    """Create a worktree workspace and return `(branch_name, workspace_id)`."""
+    """Create a worktree workspace and return `(branch_name, workspace_id)`.
+
+    Worktree is the default mode, so there's no mode selection to make.
+    """
     navigate_to_add_workspace_page(page)
-    page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT).fill(workspace_name)
-    page.get_by_test_id(ElementIDs.MODE_SELECTOR).click()
-    page.get_by_test_id(ElementIDs.MODE_OPTION_WORKTREE).click()
+    add_workspace = PlaywrightAddWorkspacePage(page=page)
+    add_workspace.get_workspace_name_input().fill(workspace_name)
+    branch_name = add_workspace.wait_for_branch_preview()
+    add_workspace.submit_and_wait_for_chat_panel()
 
-    branch_input = page.get_by_test_id(ElementIDs.BRANCH_NAME_INPUT)
-    expect(branch_input).to_have_value(re.compile(r".+"), timeout=5_000)
-    branch_name = read_branch_name_field(page)
-
-    submit_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
-    expect(submit_button).to_be_enabled()
-    submit_button.click()
-
-    chat_panel = page.get_by_test_id(ElementIDs.CHAT_PANEL)
-    expect(chat_panel).to_be_visible(timeout=60_000)
-
-    expect(page).to_have_url(re.compile(r".*/ws/(ws_[a-z0-9]+)/"), timeout=10_000)
+    expect(page).to_have_url(re.compile(r".*/ws/(ws_[a-z0-9]+)/"))
     match = re.search(r"/ws/(ws_[a-z0-9]+)/", page.url)
     assert match, f"could not extract workspace_id from URL: {page.url}"
     workspace_id = match.group(1)
@@ -116,7 +107,6 @@ def _wait_for_worktree_removed(
 @user_story("to preserve my worktree branch after deleting the workspace when policy is 'never'")
 def test_never_policy_preserves_branch(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
-    enable_worktree_workspaces(page)
     _set_user_config_flag(page, "workspaceBranchDeletionPolicy", "never")
 
     branch_name, workspace_id = _create_worktree_workspace(page, "policy-never-test")
@@ -136,7 +126,6 @@ def test_never_policy_preserves_branch(sculptor_instance_: SculptorInstance) -> 
 @user_story("to clean up my merged branch when deleting the workspace under 'delete_if_safe'")
 def test_delete_if_safe_with_merged_branch(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
-    enable_worktree_workspaces(page)
     _set_user_config_flag(page, "workspaceBranchDeletionPolicy", "delete_if_safe")
 
     branch_name, workspace_id = _create_worktree_workspace(page, "policy-safe-merged")
@@ -155,7 +144,6 @@ def test_delete_if_safe_with_merged_branch(sculptor_instance_: SculptorInstance)
 @user_story("to keep my unmerged work when deleting the workspace under 'delete_if_safe'")
 def test_delete_if_safe_with_unmerged_branch(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
-    enable_worktree_workspaces(page)
     _set_user_config_flag(page, "workspaceBranchDeletionPolicy", "delete_if_safe")
 
     branch_name, workspace_id = _create_worktree_workspace(page, "policy-safe-unmerged")
@@ -175,7 +163,6 @@ def test_delete_if_safe_with_unmerged_branch(sculptor_instance_: SculptorInstanc
 @user_story("to force-delete even unmerged branches when policy is 'always'")
 def test_always_policy_force_deletes_branch(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
-    enable_worktree_workspaces(page)
     _set_user_config_flag(page, "workspaceBranchDeletionPolicy", "always")
 
     branch_name, workspace_id = _create_worktree_workspace(page, "policy-always")

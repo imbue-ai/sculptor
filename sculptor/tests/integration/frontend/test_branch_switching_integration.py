@@ -7,17 +7,20 @@ from sculptor.testing.elements.chat_panel import select_model_by_name
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
+from sculptor.testing.elements.user_config import enable_clone_workspaces
 from sculptor.testing.elements.user_config import enable_in_place_workspaces
+from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
+from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
 
-@user_story("to create workspaces from different branches using the branch selector")
+@user_story("to create a clone workspace from a different branch using the branch selector")
 def test_branch_switching_with_untracked_file(sculptor_instance_: SculptorInstance) -> None:
-    """Test that sets up a test repo with two branches A and B as well as a single untracked file,
-    checks out branch A, starts sculptor, and uses the branch selector on the New Workspace page
-    to create a workspace cloned from branch B.
+    """Set up a test repo with branches A and B plus an untracked file, check out
+    branch A, start Sculptor, and use the branch selector in the New Workspace
+    modal to create a CLONE workspace from branch B.
     """
     page = sculptor_instance_.page
 
@@ -52,40 +55,30 @@ def test_branch_switching_with_untracked_file(sculptor_instance_: SculptorInstan
     assert branch_a in all_branches, f"Branch {branch_a} not found in repo. Available branches: {all_branches}"
     assert branch_b in all_branches, f"Branch {branch_b} not found in repo. Available branches: {all_branches}"
 
-    # Open the new-workspace modal — the form lives behind the topbar +
-    # in the modal flow rather than auto-rendering on /home.
-    page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).click()
-    submit_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
-    expect(submit_button).to_be_visible()
+    # Clone mode is opt-in — enable it before opening the modal.
+    enable_clone_workspaces(page)
 
-    # Fill in the workspace name (required field)
-    page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT).fill("Branch B workspace")
+    navigate_to_add_workspace_page(page)
+    add_workspace = PlaywrightAddWorkspacePage(page=page)
+    add_workspace.get_workspace_name_input().fill("Branch B workspace")
+    add_workspace.select_clone_mode()
 
-    # Select branch B via the branch selector on the New Workspace page
-    branch_selector = page.get_by_test_id(ElementIDs.BRANCH_SELECTOR)
-    branch_selector.click()
-    branch_option = page.get_by_test_id(ElementIDs.BRANCH_OPTION).filter(has_text=branch_b).filter(has_not_text="*")
-    expect(branch_option).to_have_count(1)
-    branch_option.click()
+    # Select branch B as the clone source via the branch selector.
+    add_workspace.select_branch(branch_b)
 
-    # Submit to create the workspace (no prompt on the Add Workspace page)
-    expect(submit_button).to_be_enabled()
-    submit_button.click()
+    add_workspace.submit_and_wait_for_chat_panel()
 
-    # Wait for the chat panel to appear (we navigated to the workspace/agent page)
-    chat_panel_locator = page.get_by_test_id(ElementIDs.CHAT_PANEL)
-    expect(chat_panel_locator).to_be_visible(timeout=30000)
-
-    # Switch to the Fake Claude model on the chat panel, then send the prompt.
+    # Switch to the Fake Claude model on the chat panel, then send a prompt.
     task_page = PlaywrightTaskPage(page=page)
     chat_panel = task_page.get_chat_panel()
     select_model_by_name(chat_panel=chat_panel, model_name=FAKE_CLAUDE_MODEL_NAME)
     send_chat_message(chat_panel=chat_panel, message="Hello!")
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    # Clone mode should not show a mode badge
+    # Clone mode shows a "clone" badge on the workspace page.
     mode_badge = page.get_by_test_id(ElementIDs.TASK_MODE_BADGE)
-    expect(mode_badge).not_to_be_visible()
+    expect(mode_badge).to_be_visible()
+    expect(mode_badge).to_have_text("clone")
 
 
 @user_story("to see task mode displayed correctly on the workspace page")
@@ -96,31 +89,14 @@ def test_in_place_mode_displayed_correctly(sculptor_instance_: SculptorInstance)
     # Enable the experimental in-place workspaces flag so the mode selector is visible.
     enable_in_place_workspaces(page)
 
-    # Open the new-workspace modal — the form lives behind the topbar +
-    # in the modal flow rather than auto-rendering on /home.
-    page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).click()
-    submit_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
-    expect(submit_button).to_be_visible()
+    navigate_to_add_workspace_page(page)
+    add_workspace = PlaywrightAddWorkspacePage(page=page)
+    add_workspace.get_workspace_name_input().fill("In-place workspace")
+    add_workspace.select_in_place_mode()
 
-    # Fill in the workspace name (required field)
-    page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT).fill("In-place workspace")
+    add_workspace.submit_and_wait_for_chat_panel()
 
-    # Switch to in-place mode via the mode selector dropdown.
-    mode_selector = page.get_by_test_id(ElementIDs.MODE_SELECTOR)
-    mode_selector.click()
-    in_place_option = page.get_by_test_id(ElementIDs.MODE_OPTION_IN_PLACE)
-    expect(in_place_option).to_be_visible()
-    in_place_option.click()
-
-    # Submit to create the workspace (no prompt on the Add Workspace page)
-    expect(submit_button).to_be_enabled()
-    submit_button.click()
-
-    # Wait for the chat panel to appear (we navigated to the workspace/agent page)
-    chat_panel_locator = page.get_by_test_id(ElementIDs.CHAT_PANEL)
-    expect(chat_panel_locator).to_be_visible(timeout=30000)
-
-    # Switch to the Fake Claude model on the chat panel, then send the prompt.
+    # Switch to the Fake Claude model on the chat panel, then send a prompt.
     task_page = PlaywrightTaskPage(page=page)
     chat_panel = task_page.get_chat_panel()
     select_model_by_name(chat_panel=chat_panel, model_name=FAKE_CLAUDE_MODEL_NAME)

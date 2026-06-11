@@ -163,14 +163,12 @@ def test_cmd_w_on_new_workspace_modal_returns_to_workspace(
     # usePageLayoutKeyboardShortcuts re-dispatches Esc for Cmd+W when an
     # overlay is open).
     mod_key = get_playwright_modifier_key()
-    for attempt in range(3):
-        page.keyboard.press(f"{mod_key}+w")
-        try:
-            expect(workspace_name_input).to_be_hidden(timeout=5_000)
-            break
-        except AssertionError:
-            if attempt == 2:
-                raise
+    page.keyboard.press(f"{mod_key}+w")
+    # macOS Chromium can drop the modifier keyup after a chord, leaving the
+    # modifier "held"; release it explicitly so the re-dispatched Esc lands as
+    # a plain key instead of a modified one.
+    page.keyboard.up(mod_key)
+    expect(workspace_name_input).to_be_hidden()
 
     # We should be back on the workspace page
     expect(chat_panel).to_be_visible()

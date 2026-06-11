@@ -62,7 +62,7 @@ def test_close_workspace_tab_removes_tab_without_deletion(
 
     # Step 6: Verify the closed workspace still exists in the workspace list.
     workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
-    expect(workspace_rows).to_have_count(2, timeout=10000)
+    expect(workspace_rows).to_have_count(2)
 
 
 @user_story("to close the active workspace tab via keyboard shortcut")
@@ -132,7 +132,7 @@ def test_reopen_closed_workspace_from_list(
 
     # Step 6: Find the closed workspace in the list and click it.
     closed_workspace_row = page.get_by_test_id(ElementIDs.WORKSPACE_ROW).filter(has_text="Closeable WS")
-    expect(closed_workspace_row).to_be_visible(timeout=10000)
+    expect(closed_workspace_row).to_be_visible()
     closed_workspace_row.click()
 
     # Step 7: Verify tab count goes back to 2.
@@ -179,7 +179,7 @@ def test_close_all_workspace_tabs_via_context_menu(
     # workspaces still exist by checking the home-page rows.
     expect(page).to_have_url(re.compile(r".*#/home$"))
     workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
-    expect(workspace_rows).to_have_count(2, timeout=10000)
+    expect(workspace_rows).to_have_count(2)
 
 
 @user_story("to close all other workspace tabs except the selected one")
@@ -248,7 +248,7 @@ def test_reopen_closed_workspace_from_home_page(
 
     # Click the closed workspace in the list
     closed_workspace_row = page.get_by_test_id(ElementIDs.WORKSPACE_ROW).filter(has_text="Home Reopen WS")
-    expect(closed_workspace_row).to_be_visible(timeout=10000)
+    expect(closed_workspace_row).to_be_visible()
     closed_workspace_row.click()
 
     # Verify tab count goes back to 2
@@ -300,10 +300,11 @@ def test_closed_workspace_stays_closed(
     close_button.click()
     expect(workspace_tabs).to_have_count(1)
 
-    # Wait a moment for any WebSocket updates to arrive
-    page.wait_for_timeout(2000)
-
-    # Verify the workspace stays closed — tab count should still be 1
+    # The close has fully round-tripped once the closed-workspaces pill
+    # reflects it — wait on that settle signal instead of a fixed sleep, then
+    # confirm a stale, out-of-order open PATCH response didn't reopen the tab.
+    closed_pill = page.get_by_test_id(ElementIDs.CLOSED_WORKSPACES_PILL)
+    expect(closed_pill).to_be_visible()
     expect(workspace_tabs).to_have_count(1)
 
 
@@ -363,10 +364,11 @@ def test_close_after_reopen_from_home_page(
     workspace_tabs.nth(0).get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON).click()
     expect(workspace_tabs).to_have_count(1)
 
-    # Wait for any out-of-order WebSocket updates to arrive
-    page.wait_for_timeout(3000)
-
-    # Verify the workspace stays closed — dropdown path
+    # Wait for the close to round-trip (the pill reflects the now-closed
+    # workspace) rather than sleeping a fixed window, then confirm an
+    # out-of-order open PATCH response didn't reopen it.
+    closed_pill = page.get_by_test_id(ElementIDs.CLOSED_WORKSPACES_PILL)
+    expect(closed_pill).to_be_visible()
     expect(workspace_tabs).to_have_count(1)
 
 
@@ -406,14 +408,14 @@ def test_close_after_reopen_from_home(
     # Reopen the first workspace from the Home page
     navigate_to_home_page(page)
     first_row = page.get_by_test_id(ElementIDs.WORKSPACE_ROW).filter(has_text="Home Close A")
-    expect(first_row).to_be_visible(timeout=10000)
+    expect(first_row).to_be_visible()
     first_row.click()
     expect(workspace_tabs).to_have_count(1)
 
     # Reopen the second workspace from the Home page
     navigate_to_home_page(page)
     second_row = page.get_by_test_id(ElementIDs.WORKSPACE_ROW).filter(has_text="Home Close B")
-    expect(second_row).to_be_visible(timeout=10000)
+    expect(second_row).to_be_visible()
     second_row.click()
     expect(workspace_tabs).to_have_count(2)
 
@@ -422,10 +424,11 @@ def test_close_after_reopen_from_home(
     workspace_tabs.nth(0).get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON).click()
     expect(workspace_tabs).to_have_count(1)
 
-    # Wait for any out-of-order WebSocket updates to arrive
-    page.wait_for_timeout(3000)
-
-    # Verify the workspace stays closed — Home page path
+    # Wait for the close to round-trip (the pill reflects the now-closed
+    # workspace) rather than sleeping, then confirm an out-of-order open PATCH
+    # response didn't reopen it.
+    closed_pill = page.get_by_test_id(ElementIDs.CLOSED_WORKSPACES_PILL)
+    expect(closed_pill).to_be_visible()
     expect(workspace_tabs).to_have_count(1)
 
 
@@ -479,11 +482,10 @@ def test_localstorage_migration_preserves_closed_state(
     # start as false).
     page.reload()
 
-    # Wait for migration to complete — the batch PATCH needs time to process
-    page.wait_for_timeout(2000)
-
-    # The open workspace should have a tab; the closed one should not
-    expect(workspace_tabs).to_have_count(1, timeout=10000)
+    # The open workspace should have a tab; the closed one should not. The
+    # migration's batch PATCH runs during hydration — the auto-retrying count
+    # assertion waits it out, so no fixed sleep is needed.
+    expect(workspace_tabs).to_have_count(1)
 
     # The closed workspace should appear in the closed workspaces dropdown
     pill = page.get_by_test_id(ElementIDs.CLOSED_WORKSPACES_PILL)

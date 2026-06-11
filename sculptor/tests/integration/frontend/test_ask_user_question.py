@@ -20,6 +20,7 @@ from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.alpha_chat_view import enable_legacy_chat_view
+from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
@@ -106,47 +107,39 @@ def verify_tool_block_shows_dismissed_state(tool_block: Locator) -> None:
     expect(status_badge).to_contain_text("Dismissed")
 
 
+# The active Q&A panel is identical across the classic and alpha views, so
+# these helpers delegate to the shared ``PlaywrightAskUserQuestionPanelElement``
+# POM rather than re-reading the panel's test ids here. (The tool-block helpers
+# above stay local — the classic view renders the *answered* block with
+# different test ids than the alpha block POM models.)
 def navigate_to_next_question(page: Page) -> None:
     """Click the Next button to navigate to the next question in multi-question flow."""
-    next_button = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_NEXT_BUTTON)
-    next_button.click()
+    get_ask_user_question_panel(page).navigate_next()
 
 
 def navigate_to_previous_question(page: Page) -> None:
     """Click the Previous button to navigate to the previous question in multi-question flow."""
-    prev_button = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PREVIOUS_BUTTON)
-    prev_button.click()
+    get_ask_user_question_panel(page).navigate_previous()
 
 
 def select_option_by_text(page: Page, option_text: str) -> None:
     """Select an option in the Q&A panel by clicking on it."""
-    if option_text == "Other":
-        # "Other" is a special option with its own test ID
-        other_option = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OTHER_OPTION)
-        other_option.click()
-    else:
-        # Regular options have the ASK_USER_QUESTION_OPTION test ID
-        options = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
-        option = options.filter(has_text=option_text)
-        option.first.click()
+    get_ask_user_question_panel(page).select_option(option_text)
 
 
 def type_other_text(page: Page, text: str) -> None:
     """Type custom text into the 'Other' input field."""
-    other_input = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OTHER_INPUT)
-    other_input.fill(text)
+    get_ask_user_question_panel(page).type_other_text(text)
 
 
 def submit_answers(page: Page) -> None:
     """Click the Submit button to submit answers."""
-    submit_button = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_SUBMIT)
-    submit_button.click()
+    get_ask_user_question_panel(page).submit()
 
 
 def dismiss_questions(page: Page) -> None:
     """Click the Dismiss button instead of answering."""
-    dismiss_button = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_DISMISS_BUTTON)
-    dismiss_button.click()
+    get_ask_user_question_panel(page).dismiss()
 
 
 # ========== Tests ==========
@@ -224,7 +217,7 @@ fake_claude:ask_user_question `{
 
     # The chat input should reappear (back to normal mode)
     chat_input = chat_panel.get_chat_input()
-    expect(chat_input).to_be_visible(timeout=10_000)
+    expect(chat_input).to_be_visible()
 
     # The agent should continue processing after receiving the answer.
     # Wait for the agent to finish streaming.
@@ -754,7 +747,7 @@ fake_claude:ask_user_question `{
 
     # Question should still be pending and visible
     ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
-    expect(ask_panel).to_be_visible(timeout=10_000)
+    expect(ask_panel).to_be_visible()
     expect(ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_TEXT)).to_contain_text("programming language")
 
     # Should be able to answer normally
@@ -813,14 +806,16 @@ fake_claude:ask_user_question `{
 
     # Soft-reload to refresh state (direct reload causes ERR_INSUFFICIENT_RESOURCES on CI)
     soft_reload_page(page)
-    page.wait_for_timeout(2000)
 
-    # Q&A panel should NOT reappear
+    # Wait for the reloaded chat to re-render the submitted tool block (a
+    # positive signal that the page came back) instead of sleeping, then
+    # confirm the answered Q&A panel did NOT reappear.
+    tool_block = get_first_tool_block(page)
+    expect(tool_block).to_be_visible()
     ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
     expect(ask_panel).not_to_be_visible()
 
     # Tool block should show submitted state with answers
-    tool_block = get_first_tool_block(page)
     verify_tool_block_shows_submitted_state(tool_block)
     verify_tool_block_question_text(tool_block, "programming language")
     verify_tool_block_answer_text(tool_block, "Python")
@@ -1234,7 +1229,7 @@ fake_claude:ask_user_question `{
 
         # After messages are loaded, verify only one tool block exists
         ask_tool_blocks_after_restart = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_TOOL_BLOCK)
-        expect(ask_tool_blocks_after_restart).to_have_count(1, timeout=10_000)
+        expect(ask_tool_blocks_after_restart).to_have_count(1)
 
         # CRITICAL: Check for the bug symptom - fail fast if "Called Tools" grouping appears.
         # Bug symptom: tools are grouped with 2 children instead of a single "Questions answered" block.
@@ -1296,9 +1291,7 @@ fake_claude:ask_user_question `{
     # REGRESSION: After answering, the task status must transition to RUNNING while
     # the agent processes the UserQuestionAnswerMessage. The ThinkingIndicator
     # should be visible while the agent processes the answer.
-    expect(chat_panel.get_thinking_indicator(), "task should be RUNNING while processing answer").to_be_visible(
-        timeout=10_000
-    )
+    expect(chat_panel.get_thinking_indicator(), "task should be RUNNING while processing answer").to_be_visible()
 
     # Wait for the agent to finish processing the answer
     expect(chat_panel.get_thinking_indicator(), "agent to finish").not_to_be_visible()
@@ -1403,7 +1396,7 @@ fake_claude:ask_user_question `{
     navigate_away_and_back(page)
 
     # The Q&A panel should reappear (pendingUserQuestion persists in Jotai)
-    expect(ask_panel).to_be_visible(timeout=10_000)
+    expect(ask_panel).to_be_visible()
 
     # The "Other" input should still be visible with the typed text preserved
     other_input = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OTHER_INPUT)
@@ -1460,7 +1453,7 @@ fake_claude:ask_user_question `{
     navigate_away_and_back(page)
 
     # The Q&A panel should reappear
-    expect(ask_panel).to_be_visible(timeout=10_000)
+    expect(ask_panel).to_be_visible()
 
     # The submit button should still be enabled (option still selected)
     expect(submit_button).to_be_enabled()
@@ -1832,7 +1825,7 @@ fake_claude:ask_user_question `{
     # Bug: React reuses AskUserQuestion (both branches render it), so currentIndex=2
     # carries over, but agent 2 only has 1 question → questions[2] is undefined → crash.
     agent_tabs.last.click()
-    expect(ask_panel).to_be_visible(timeout=10_000)
+    expect(ask_panel).to_be_visible()
     expect(ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_TEXT)).to_contain_text("framework")
 
     # Agent 2's AUQ should be answerable normally.

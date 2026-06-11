@@ -1,9 +1,12 @@
 """Integration tests for the worktree workspace happy path.
 
 Covers the three scenarios from the spec:
-1. Default branch name: flag on → preview auto-fills → submit → worktree created.
+1. Default branch name: preview auto-fills → submit → worktree created.
 2. Custom branch name: user overrides preview before submit.
 3. Random slug: empty workspace name → preview uses `<user>/<adj>-<noun>`.
+
+Worktree is the product-default mode, so these tests don't touch the mode
+selector (it's hidden unless clone / in-place is enabled).
 """
 
 import re
@@ -12,10 +15,8 @@ from pathlib import Path
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
-from sculptor.testing.elements.user_config import enable_worktree_workspaces
+from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
-from sculptor.testing.playwright_utils import read_branch_name_field
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
@@ -58,41 +59,18 @@ def _git_branch(worktree_path: Path) -> str:
     return result.stdout.strip()
 
 
-def _wait_for_branch_preview(page, expected_regex: str, timeout_ms: int = 5000) -> str:
-    """Wait for the branch-name field to match `expected_regex` and return its value."""
-    branch_input = page.get_by_test_id(ElementIDs.BRANCH_NAME_INPUT)
-    expect(branch_input).to_be_visible(timeout=timeout_ms)
-    expect(branch_input).to_have_value(re.compile(expected_regex), timeout=timeout_ms)
-    return read_branch_name_field(page)
-
-
-def _select_worktree_mode(page) -> None:
-    page.get_by_test_id(ElementIDs.MODE_SELECTOR).click()
-    page.get_by_test_id(ElementIDs.MODE_OPTION_WORKTREE).click()
-
-
-def _submit_and_wait_for_ready(page) -> None:
-    submit_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
-    expect(submit_button).to_be_enabled()
-    submit_button.click()
-    chat_panel = page.get_by_test_id(ElementIDs.CHAT_PANEL)
-    expect(chat_panel).to_be_visible(timeout=60_000)
-
-
 @user_story("to create a worktree workspace using the auto-filled branch name")
 def test_worktree_create_with_default_branch_name(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
-    enable_worktree_workspaces(page)
-
     navigate_to_add_workspace_page(page)
-    workspace_name_input = page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT)
-    workspace_name_input.fill("Fix login bug")
-    _select_worktree_mode(page)
+    add_workspace = PlaywrightAddWorkspacePage(page=page)
 
-    branch_name = _wait_for_branch_preview(page, r".*fix-login-bug.*")
+    add_workspace.get_workspace_name_input().fill("Fix login bug")
+
+    branch_name = add_workspace.wait_for_branch_preview(re.compile(r".*fix-login-bug.*"))
     assert branch_name.endswith("fix-login-bug"), f"expected slug to end in fix-login-bug, got: {branch_name!r}"
 
-    _submit_and_wait_for_ready(page)
+    add_workspace.submit_and_wait_for_chat_panel()
 
     paths = _worktree_paths(sculptor_instance_.project_path)
     assert paths, "no worktree created"
@@ -106,21 +84,20 @@ def test_worktree_create_with_default_branch_name(sculptor_instance_: SculptorIn
 @user_story("to create a worktree workspace with a custom branch name")
 def test_worktree_create_with_custom_branch_name(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
-    enable_worktree_workspaces(page)
-
     navigate_to_add_workspace_page(page)
-    page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT).fill("Some task")
-    _select_worktree_mode(page)
-    _wait_for_branch_preview(page, r".+")
+    add_workspace = PlaywrightAddWorkspacePage(page=page)
+
+    add_workspace.get_workspace_name_input().fill("Some task")
+    add_workspace.wait_for_branch_preview()
 
     custom_branch = "imbue/scu-42-custom"
-    branch_input = page.get_by_test_id(ElementIDs.BRANCH_NAME_INPUT)
+    branch_input = add_workspace.get_branch_name_input()
     branch_input.fill(custom_branch)
     expect(branch_input).to_have_value(custom_branch)
-    full_branch = read_branch_name_field(page)
+    full_branch = add_workspace.read_branch_name()
     assert full_branch == custom_branch, f"expected branch {custom_branch!r}, got: {full_branch!r}"
 
-    _submit_and_wait_for_ready(page)
+    add_workspace.submit_and_wait_for_chat_panel()
 
     paths = _worktree_paths(sculptor_instance_.project_path)
     assert paths, "no worktree created"
@@ -128,20 +105,47 @@ def test_worktree_create_with_custom_branch_name(sculptor_instance_: SculptorIns
     assert _git_branch(worktree_path) == full_branch
 
 
+@user_story("to not accidentally create an empty-branch workspace before the branch name finishes loading")
+def test_submit_disabled_until_branch_name_preview_settles(sculptor_instance_: SculptorInstance) -> None:
+    """Regression for the submit race fixed in commit 20505d4666.
+
+    Changing the workspace name kicks off a fresh debounced branch-name preview
+    fetch. While that fetch is in flight the worktree branch name is empty/stale,
+    so submit must stay disabled — otherwise a click in that window lands on an
+    empty branch name and `handleSubmit` silently bails, leaving the user
+    thinking they created a workspace that never appears.
+    """
+    page = sculptor_instance_.page
+    navigate_to_add_workspace_page(page)
+    add_workspace = PlaywrightAddWorkspacePage(page=page)
+
+    # Let the initial preview settle so submit is enabled to begin with.
+    add_workspace.wait_for_branch_preview()
+    expect(add_workspace.get_submit_button()).to_be_enabled()
+
+    # Typing a new name restarts the debounced preview fetch. Submit must drop
+    # back to disabled while the new branch name is loading...
+    add_workspace.get_workspace_name_input().fill("Refactor the auth middleware")
+    expect(add_workspace.get_submit_button()).to_be_disabled()
+
+    # ...and only re-enable once the new branch name has landed. The backend
+    # truncates the slug, so match the leading word rather than the full name.
+    add_workspace.wait_for_branch_preview(re.compile(r".*refactor.*"))
+    expect(add_workspace.get_submit_button()).to_be_enabled()
+
+
 @user_story("to create a worktree workspace with an empty workspace name (random slug)")
 def test_worktree_create_with_empty_workspace_name_random_slug(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
-    enable_worktree_workspaces(page)
-
     navigate_to_add_workspace_page(page)
-    _select_worktree_mode(page)
+    add_workspace = PlaywrightAddWorkspacePage(page=page)
 
-    branch_name = _wait_for_branch_preview(page, r".*[a-z0-9]+-[a-z0-9]+$")
+    branch_name = add_workspace.wait_for_branch_preview(re.compile(r".*[a-z0-9]+-[a-z0-9]+$"))
     assert re.search(r"[a-z0-9]+-[a-z0-9]+$", branch_name), (
         f"expected a two-word random slug at the end, got: {branch_name!r}"
     )
 
-    _submit_and_wait_for_ready(page)
+    add_workspace.submit_and_wait_for_chat_panel()
 
     paths = _worktree_paths(sculptor_instance_.project_path)
     assert paths, "no worktree created"
