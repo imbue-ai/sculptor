@@ -98,7 +98,7 @@ def test_pi_settings_managed_shows_managed_controls_and_no_manual_install(
     sculptor_instance_factory_: SculptorInstanceFactory,
 ) -> None:
     """Under MANAGED the section shows the Binary-Source selector + a managed
-    install control, hides the npm/curl manual block, and shows no auth surface."""
+    install control, hides the npm manual block, and shows no auth surface."""
     _set_pi_config(sculptor_instance_factory_, "MANAGED")
     _stage_fake_pi_managed_binary(sculptor_instance_factory_)
 
@@ -117,7 +117,7 @@ def test_pi_settings_managed_shows_managed_controls_and_no_manual_install(
         expect(pi_section.get_up_to_date()).to_contain_text("Pinned")
         expect(pi_section.get_install_button().or_(pi_section.get_up_to_date())).to_be_visible()
 
-        # The manual npm/curl block is CUSTOM-only and must be hidden here.
+        # The manual npm block is CUSTOM-only and must be hidden here.
         expect(pi_section.get_install_commands_block()).to_have_count(0)
 
         # pi authenticates via env-var injection; no sign-in surface (REQ-SVC-4).
@@ -128,7 +128,7 @@ def test_pi_settings_managed_shows_managed_controls_and_no_manual_install(
 def test_pi_settings_custom_shows_binary_path_and_manual_install(
     sculptor_instance_factory_: SculptorInstanceFactory,
 ) -> None:
-    """Under CUSTOM the section shows the binary-path field and the npm/curl block."""
+    """Under CUSTOM the section shows the binary-path field and the npm block."""
     _set_pi_config(sculptor_instance_factory_, "CUSTOM")
 
     with sculptor_instance_factory_.spawn_instance() as instance:

@@ -80,6 +80,11 @@ export const PiSettingsSection = ({
 
   const pinnedVersion = pi?.versionRange?.recommendedVersion ?? null;
   const statusTooltip = pi?.versionRange ? `Pinned version: ${pi.versionRange.recommendedVersion}` : undefined;
+  const customInstallWarning =
+    "Not recommended — Sculptor ships pi for you. Switch Binary Source to Managed to install the " +
+    "pinned version automatically. A self-installed pi must match the pinned version" +
+    (pinnedVersion ? ` (${pinnedVersion})` : "") +
+    " exactly, or Sculptor will refuse to run it.";
 
   return (
     <SettingsSectionLayout description="Pi is an experimental second agent harness. Workspaces created with pi run pi as a subprocess and stream its responses; pi is pinned to a single version to keep the RPC schema known.">
@@ -271,12 +276,23 @@ export const PiSettingsSection = ({
       {displayMode === "CUSTOM" && (
         <SettingRow
           title="Install pi"
-          description="Sculptor does not bundle pi. Install the pinned version with one of the following commands."
+          description="Managed mode installs and version-pins pi for you. Only self-install if you have a specific reason."
         >
           <Box>
             <Flex direction="column" gap="2">
-              <Code size="2">npm install -g @earendil-works/pi-coding-agent</Code>
-              <Code size="2">curl -fsSL https://pi.dev/install.sh | sh</Code>
+              <Callout.Root color="orange">
+                <Callout.Icon>
+                  <ExclamationTriangleIcon />
+                </Callout.Icon>
+                <Callout.Text>{customInstallWarning}</Callout.Text>
+              </Callout.Root>
+              {pinnedVersion ? (
+                <Code size="2">npm install -g @earendil-works/pi-coding-agent@{pinnedVersion}</Code>
+              ) : (
+                <Text size="2" color="gray">
+                  Pinned version unavailable — use Managed mode to install pi.
+                </Text>
+              )}
             </Flex>
           </Box>
         </SettingRow>
