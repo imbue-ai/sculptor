@@ -665,19 +665,6 @@ export const convertHomeTabToWorkspaceAtom = atom(null, (get, set, workspaceId: 
   }
 });
 
-/**
- * Backwards-compatible alias — components that previously read
- * openWorkspaceTabIdsAtom for tab ordering should use tabOrderAtom instead.
- * @deprecated Use tabOrderAtom directly.
- */
-export const openWorkspaceTabIdsAtom = tabOrderAtom;
-
-/** The currently-active tab entry, or `null` if `activeIndex` is invalid. */
-export const activeTabAtom = atom<TabEntry | null>((get) => {
-  const state = get(tabsAtom);
-  return state.order[state.activeIndex] ?? null;
-});
-
 /** Per-workspace last-viewed agent ID, derived from `tabsAtom.order`. */
 export const agentIdForWorkspaceAtomFamily = atomFamily<string, Atom<string | null>>((wsId) =>
   atom<string | null>((get) => get(tabsAtom).order.find((e) => e.tabId === wsId)?.agentId ?? null),

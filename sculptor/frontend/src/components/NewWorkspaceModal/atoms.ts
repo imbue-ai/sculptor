@@ -1,6 +1,7 @@
 import { atom } from "jotai";
 
 import { WorkspaceInitializationStrategy } from "../../api";
+import type { ToastContent } from "../Toast.tsx";
 
 /**
  * The user's path into the modal — only "palette" gets the back-arrow
@@ -62,3 +63,22 @@ export const resetDraftAtom = atom(null, (_get, set): void => {
  * it without creating a workspace and then navigates around.
  */
 export const newWorkspaceModalAutoOpenedAtom = atom<boolean>(false);
+
+/**
+ * Transient toast for the modal (success / error). Lives in an atom — not
+ * the form's local state — so a toast set right before the form unmounts
+ * (e.g. "initial message failed" → close + navigate to the new agent) still
+ * renders. The always-mounted modal shell owns the `<Toast>`; the inner form
+ * only writes here.
+ */
+export const newWorkspaceToastAtom = atom<ToastContent | null>(null);
+
+/**
+ * True while a create is in flight. Shared between the inner form (which sets
+ * it around the create pipeline and disables its controls) and the always-
+ * mounted shell (which refuses to close the dialog mid-create so a stray Esc
+ * or overlay click can't cancel the request). Kept as an atom rather than form
+ * state because the shell — which owns the dialog's `onOpenChange` — needs to
+ * read it even though the form owns the submit.
+ */
+export const newWorkspaceSubmittingAtom = atom<boolean>(false);

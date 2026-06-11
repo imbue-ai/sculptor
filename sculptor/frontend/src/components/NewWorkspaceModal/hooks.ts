@@ -13,6 +13,13 @@ type UseNewWorkspaceModal = {
   open: (source: NewWorkspaceModalEntrySource) => void;
   close: () => void;
   toggle: (source: NewWorkspaceModalEntrySource) => void;
+  /**
+   * Close the modal and re-open the command palette. Drives the "swap in
+   * place" feel for the palette entry path (the back-arrow and Esc-once /
+   * ArrowLeft-at-position-0 affordances) without rendering two overlapping
+   * dimmed overlays.
+   */
+  returnToPalette: () => void;
 };
 
 /**
@@ -44,17 +51,27 @@ export const useNewWorkspaceModal = (): UseNewWorkspaceModal => {
     setIsOpen(false);
   }, [setIsOpen]);
 
+  // Keep the state updater pure: branch on the current `isOpen` from render
+  // scope and perform the entry-source / palette-close writes outside the
+  // setter. `toggle` re-creates when `isOpen` flips, but callers register it
+  // through `useEvent` so its identity churn doesn't re-bind the keybinding.
   const toggle = useCallback(
     (source: NewWorkspaceModalEntrySource): void => {
-      setIsOpen((prev) => {
-        if (prev) return false;
-        setEntrySource(source);
-        setCommandPaletteOpen(false);
-        return true;
-      });
+      if (isOpen) {
+        setIsOpen(false);
+        return;
+      }
+      setEntrySource(source);
+      setCommandPaletteOpen(false);
+      setIsOpen(true);
     },
-    [setIsOpen, setEntrySource, setCommandPaletteOpen],
+    [isOpen, setIsOpen, setEntrySource, setCommandPaletteOpen],
   );
 
-  return { isOpen, open, close, toggle };
+  const returnToPalette = useCallback((): void => {
+    setIsOpen(false);
+    setCommandPaletteOpen(true);
+  }, [setIsOpen, setCommandPaletteOpen]);
+
+  return { isOpen, open, close, toggle, returnToPalette };
 };
