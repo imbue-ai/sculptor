@@ -362,8 +362,10 @@ def test_arrow_up_scrolls_current_turn_to_top_first(sculptor_instance_: Sculptor
     # viewport's top by > 20px (outside the isScrolledPastActive tolerance).
     # Starting from the top and scrolling DOWN incrementally is robust across
     # viewport sizes — we don't assume any particular starting scroll position.
+    # scroll_alpha_chat_to_top already settles across several animation frames
+    # (it awaits its own rAF chain), and the incremental loop below re-reads and
+    # self-corrects, so no extra fixed wait is needed here.
     scroll_alpha_chat_to_top(page)
-    page.wait_for_timeout(300)
     last_user_top = get_message_top_offset(page, 4)
     attempts = 0
     while last_user_top > -50 and attempts < 40:

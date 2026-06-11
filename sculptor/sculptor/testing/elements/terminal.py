@@ -54,6 +54,18 @@ def run_command_in_active_terminal(page: Page, command: str) -> None:
     textarea.press("Enter")
 
 
+def type_with_global_keyboard(page: Page, text: str, *, delay_ms: int = 30) -> None:
+    """Type ``text`` via the global keyboard, which routes to whatever element
+    currently holds focus (``document.activeElement``).
+
+    Unlike ``locator.press_sequentially`` / ``type_with_delay`` (which dispatch
+    keystrokes straight to a target element regardless of focus), this exercises
+    real focus routing -- so a caller can prove which element actually receives
+    keyboard input.
+    """
+    page.keyboard.type(text, delay=delay_ms)
+
+
 def get_xterm_active_line(page: Page) -> str:
     """Read the current input line from the xterm buffer (the line the cursor is on)."""
     return page.evaluate(
@@ -117,6 +129,33 @@ def wait_for_xterm_substring(page: Page, substring: str) -> None:
         raise AssertionError(
             f"Expected xterm buffer to contain {substring!r}, but timed out. Buffer:\n{buffer_text}"
         ) from e
+
+
+def wait_for_xterm_buffer_nonempty(page: Page) -> None:
+    """Wait until the xterm buffer has rendered some shell output.
+
+    A non-empty buffer means the WebSocket connected and the shell delivered its
+    prompt -- i.e. the terminal mount/connect cycle has settled. Use this as a
+    condition-based alternative to a fixed ``wait_for_timeout`` after opening the
+    panel: it adapts to however long the connection actually takes, instead of
+    guessing a window that is simultaneously too long on fast machines and too
+    short under CI load.
+    """
+    try:
+        page.wait_for_function(
+            """() => {
+                const xterm = window.__xterm;
+                if (!xterm) return false;
+                const buffer = xterm.buffer.active;
+                for (let i = 0; i <= buffer.baseY + buffer.cursorY; i++) {
+                    const line = buffer.getLine(i);
+                    if (line && line.translateToString(true).trim().length > 0) return true;
+                }
+                return false;
+            }"""
+        )
+    except PlaywrightTimeoutError as e:
+        raise AssertionError("xterm buffer never rendered any shell output (terminal failed to connect).") from e
 
 
 def get_xterm_cursor_row(page: Page) -> int:

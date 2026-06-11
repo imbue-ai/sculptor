@@ -127,5 +127,15 @@ def test_user_can_scroll_during_streaming(sculptor_instance_: SculptorInstance) 
     jump_btn = get_jump_to_bottom_button(page)
     expect(jump_btn).to_be_visible()
 
+    # Auto-scroll must STAY disengaged as the agent keeps streaming. Wait for the
+    # agent to make further progress (a span of continued streaming), then
+    # re-assert the button is still visible — if auto-scroll had silently
+    # re-engaged it would have snapped the view back to the bottom and hidden the
+    # button. We gauge progress via the elapsed timer rather than scrollHeight
+    # because the streaming message is off-screen (and unmounted) once we scroll
+    # to the top, so its growth is not observable from the DOM.
+    chat_panel.wait_for_agent_progress()
+    expect(jump_btn).to_be_visible()
+
     # Wait for the agent to finish before cleanup
     expect(chat_panel.get_thinking_indicator()).not_to_be_visible()

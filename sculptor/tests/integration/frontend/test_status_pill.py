@@ -157,13 +157,27 @@ def test_status_pill_timer_persists_across_tab_switch(sculptor_instance_: Sculpt
     # Wait for the status pill to reappear
     expect(status_pill).to_be_visible()
 
-    # The timer should NOT have reset — wait for a value >= pre-switch, confirming continuity.
-    page.wait_for_function(
-        f"""() => {{
+    # The timer should NOT have reset. On remount the timer is restored
+    # synchronously from its persisted origin, so the FIRST non-zero value it
+    # displays is already the continued time. A reset bug instead restarts at
+    # 0.0s and ticks up from ~0.1s. Capturing that first non-zero value and
+    # asserting it is already >= the pre-switch value distinguishes "continued"
+    # from "reset" with no dependence on a timing margin — unlike a plain
+    # ``>= threshold`` wait, which a reset-then-climb would eventually satisfy
+    # (the agent keeps ticking) and thereby mask the regression.
+    first_value_handle = page.wait_for_function(
+        """() => {
             const el = document.querySelector('[data-testid="STATUS_PILL_ELAPSED"]');
-            if (!el) return false;
-            return parseFloat(el.textContent) >= {elapsed_before - 0.5};
-        }}""",
+            if (!el) return null;
+            const value = parseFloat(el.textContent);
+            return value > 0 ? value : null;
+        }""",
+    )
+    first_value_after = first_value_handle.json_value()
+    assert first_value_after >= elapsed_before - 0.5, (
+        f"Timer reset on tab switch: first value after returning was {first_value_after}s,"
+        + f" expected >= {elapsed_before - 0.5}s (continuing from {elapsed_before}s before the switch)."
+        + " Expected the timer to resume, not restart from 0."
     )
 
 

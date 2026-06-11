@@ -22,6 +22,7 @@ from sculptor.testing.elements.terminal import get_xterm_active_line
 from sculptor.testing.elements.terminal import get_xterm_buffer_text
 from sculptor.testing.elements.terminal import get_xterm_cursor_row
 from sculptor.testing.elements.terminal import open_terminal_and_wait
+from sculptor.testing.elements.terminal import wait_for_xterm_buffer_nonempty
 from sculptor.testing.elements.terminal import wait_for_xterm_substring
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -82,10 +83,14 @@ def test_terminal_panel_creates_single_websocket_connection(sculptor_instance_: 
     expect(panel_content).to_be_visible(timeout=10_000)
     expect(add_button).to_be_visible(timeout=60_000)
 
-    # Wait for any additional WebSocket connections to be created.
-    # The bug causes a second connection to be created shortly after the first
-    # due to the async race condition in the useEffect cleanup.
-    page.wait_for_timeout(3000)
+    # Wait for the shell prompt to render in the (single) connection's buffer.
+    # A rendered prompt means the WebSocket connected and the mount/connect cycle
+    # settled -- the bug's duplicate connection fires during that same cycle (the
+    # async useEffect-cleanup race opens a second socket "shortly after the
+    # first"), so by the time output lands, any duplicate would already have been
+    # registered by the listener above. This replaces a blind fixed wait with a
+    # signal tied to the connection actually coming up.
+    wait_for_xterm_buffer_nonempty(page)
 
     assert len(terminal_ws_connections) == 1, (
         "Expected exactly 1 terminal WebSocket connection, but got"
@@ -506,23 +511,10 @@ def test_solicited_cursor_position_report_reaches_program(sculptor_instance_: Sc
     type_with_delay(terminal_textarea, repro, 10)
     terminal_textarea.press("Enter")
 
-    # Poll for the runtime-assembled success marker.  With the bug the program
-    # blocks in read() and CPRGOTREPLY never appears.
-    deadline = 20  # seconds
-    for _ in range(deadline * 2):
-        buffer_text = get_xterm_buffer_text(page)
-        if "CPRGOTREPLY" in buffer_text:
-            break
-        page.wait_for_timeout(500)
-    else:
-        buffer_text = get_xterm_buffer_text(page)
-
-    assert "CPRGOTREPLY" in buffer_text, (
-        "A solicited cursor position report (CPR) never reached the program: it"
-        + " emitted a DSR query (ESC[6n) and blocked reading the reply, so the"
-        + " read never completed and the runtime-assembled CPRGOTREPLY marker"
-        + " was never printed. This is the same hang that freezes"
-        + " `gh auth login`. (CPRPROBE_START appears once the program starts; if"
-        + " it is missing too, python3 may be unavailable in the terminal.)"
-        + f"\nTerminal buffer:\n{buffer_text}"
-    )
+    # Wait for the runtime-assembled success marker.  With the bug the program
+    # blocks in read() and CPRGOTREPLY never appears, so this times out and
+    # raises with the full buffer (whether CPRPROBE_START is present tells you
+    # if the program even started -- if it is missing too, python3 may be
+    # unavailable in the terminal). This is the same hang that freezes
+    # `gh auth login`.
+    wait_for_xterm_substring(page, "CPRGOTREPLY")
