@@ -11,10 +11,12 @@ from sculptor.database.models import Task
 from sculptor.foundation.common import is_running_within_a_pytest_tree
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.event_utils import ReadOnlyEvent
+from sculptor.interfaces.agents.agent import is_terminal_agent_config
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.task_service.data_types import ServiceCollectionForTask
 from sculptor.tasks.handlers.noop.v1 import run_noop_task_v1
 from sculptor.tasks.handlers.run_agent.v1 import run_agent_task_v1
+from sculptor.tasks.handlers.run_terminal_agent.v1 import run_terminal_agent_task_v1
 
 
 def run_task(
@@ -35,6 +37,10 @@ def run_task(
     data = task.input_data
     match data:
         case AgentTaskInputsV2():
+            if is_terminal_agent_config(data.agent_config):
+                return run_terminal_agent_task_v1(
+                    data, task, services, task_deadline, settings, concurrency_group, shutdown_event, on_started
+                )
             return run_agent_task_v1(
                 data, task, services, task_deadline, settings, concurrency_group, shutdown_event, on_started
             )
