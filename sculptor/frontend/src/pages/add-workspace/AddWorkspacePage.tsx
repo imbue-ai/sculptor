@@ -31,6 +31,7 @@ import {
 } from "../../common/state/atoms/workspaces.ts";
 import { useDraftTabName } from "../../common/state/hooks/usePromptDraft.ts";
 import { useRepoInfo } from "../../common/state/hooks/useRepoInfo.ts";
+import { useTerminalAgentRegistrations } from "../../common/state/hooks/useTerminalAgentRegistrations.ts";
 import { BranchSelector } from "../../components/BranchSelector.tsx";
 import { RepoSelector } from "../../components/RepoSelector.tsx";
 import { Toast, type ToastContent, ToastType } from "../../components/Toast.tsx";
@@ -67,8 +68,15 @@ export const AddWorkspacePage = (): ReactElement => {
   // Form state. Worktree is the default mode; clone and in-place are opt-in.
   const [mode, setMode] = useState<WorkspaceInitializationStrategy>(WorkspaceInitializationStrategy.WORKTREE);
   // The type of the workspace's first agent (agent type is per-agent, not
-  // per-workspace). Registered terminal agents join in phase 4.
-  const [agentType, setAgentType] = useState<AgentTypeName>("claude");
+  // per-workspace). Registered terminal agents select as `registered:<id>`.
+  const [agentTypeValue, setAgentTypeValue] = useState<string>("claude");
+  const { registrations, refresh: refreshRegistrations } = useTerminalAgentRegistrations();
+  const agentType: AgentTypeName = agentTypeValue.startsWith("registered:")
+    ? "registered"
+    : (agentTypeValue as AgentTypeName);
+  const registrationId = agentTypeValue.startsWith("registered:")
+    ? agentTypeValue.slice("registered:".length)
+    : undefined;
   const [workspaceNameDraft, setWorkspaceNameDraft] = useDraftTabName(draftId);
   const workspaceName = workspaceNameDraft ?? "";
   const setWorkspaceName = useCallback(
@@ -229,13 +237,15 @@ export const AddWorkspacePage = (): ReactElement => {
       setWorkspaceNameDraft(null);
 
       // Create first agent (no prompt in the simplified form). Terminal
-      // agents have no model concept, so the default-model preference only
-      // applies to chat types. (registrationId joins in phase 4.)
+      // agents (plain and registered) have no model concept, so the
+      // default-model preference only applies to chat types.
+      const isTerminalType = agentType === "terminal" || agentType === "registered";
       const agentResponse = await createWorkspaceAgent({
         path: { workspace_id: workspaceId },
         body: {
-          model: agentType === "terminal" ? undefined : (defaultModelPreference as LlmModel),
+          model: isTerminalType ? undefined : (defaultModelPreference as LlmModel),
           agentType,
+          registrationId,
         },
       });
 
@@ -287,6 +297,7 @@ export const AddWorkspacePage = (): ReactElement => {
     draftId,
     mode,
     agentType,
+    registrationId,
     sourceBranch,
     workspaceName,
     effectiveBranchName,
@@ -400,10 +411,18 @@ export const AddWorkspacePage = (): ReactElement => {
 
             {/* First-agent type selector — the same per-agent choice as the
                 tab bar's + menu. Only the pi option is gated behind the
-                experimental multi-harness flag; Claude and Terminal are
-                available to everyone. Registered terminal agents join in
-                phase 4. */}
-            <Select.Root size="1" value={agentType} onValueChange={(value) => setAgentType(value as AgentTypeName)}>
+                experimental multi-harness flag; Claude, Terminal, and any
+                registered terminal agents are available to everyone. */}
+            <Select.Root
+              size="1"
+              value={agentTypeValue}
+              onValueChange={setAgentTypeValue}
+              onOpenChange={(open) => {
+                // Re-read the registrations directory on every open so the
+                // options track the filesystem without a restart (REQ-REG-3).
+                if (open) refreshRegistrations();
+              }}
+            >
               <Select.Trigger
                 variant="ghost"
                 className={styles.compactSelector}
@@ -412,7 +431,13 @@ export const AddWorkspacePage = (): ReactElement => {
                 <Flex align="center" gap="1">
                   <BotIcon size={12} />
                   <Text className={styles.selectorLabel}>agent</Text>
-                  {agentType === "pi" ? "pi (experimental)" : agentType === "terminal" ? "Terminal" : "Claude"}
+                  {agentType === "registered"
+                    ? (registrations.find((r) => r.registrationId === registrationId)?.displayName ?? "Registered")
+                    : agentType === "pi"
+                      ? "pi (experimental)"
+                      : agentType === "terminal"
+                        ? "Terminal"
+                        : "Claude"}
                 </Flex>
               </Select.Trigger>
               <Select.Content position="popper" side="bottom" sideOffset={5}>
@@ -427,6 +452,16 @@ export const AddWorkspacePage = (): ReactElement => {
                 <Select.Item value="terminal" data-testid={ElementIds.AGENT_TYPE_OPTION_TERMINAL}>
                   Terminal
                 </Select.Item>
+                {registrations.map((registration) => (
+                  <Select.Item
+                    key={registration.registrationId}
+                    value={`registered:${registration.registrationId}`}
+                    data-testid={ElementIds.AGENT_TYPE_OPTION_REGISTERED}
+                    data-registration-id={registration.registrationId}
+                  >
+                    {registration.displayName}
+                  </Select.Item>
+                ))}
               </Select.Content>
             </Select.Root>
 

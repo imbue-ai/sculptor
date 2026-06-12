@@ -86,3 +86,43 @@ def test_agent_type_menu_gates_pi_behind_multi_harness(
         page.keyboard.press("Escape")
     finally:
         disable_multi_harness(page)
+
+
+@user_story("to see registered terminal agents in the type menu without restarting")
+def test_registered_terminal_agent_appears_in_menu_and_creates(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """Dropping a registration TOML makes it appear on the next menu open
+    (REQ-REG-3 — the backend re-reads the directory per request); creating
+    it names the tab from display_name and opens a terminal panel."""
+    page = sculptor_instance_.page
+    task_page = PlaywrightTaskPage(page=page)
+    agent_tab_bar = task_page.get_agent_tab_bar()
+
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Registered Agent WS")
+
+    # The registration does not exist yet — the menu shows no registered entry.
+    agent_tab_bar.open_agent_type_menu()
+    expect(agent_tab_bar.get_agent_type_menu_item_registered("fake-reg")).to_have_count(0)
+    page.keyboard.press("Escape")
+    expect(agent_tab_bar.get_agent_type_menu()).not_to_be_visible()
+
+    # Drop a registration file into the live instance's sculptor folder.
+    registrations_dir = sculptor_instance_.sculptor_folder / "terminal_agents"
+    registrations_dir.mkdir(parents=True, exist_ok=True)
+    (registrations_dir / "fake-reg.toml").write_text(
+        'display_name = "Fake Reg"\nlaunch_command = "echo hello-from-registration"\n'
+    )
+    try:
+        # No restart: the entry appears on the next menu open.
+        agent_tab_bar.open_agent_type_menu()
+        registered_item = agent_tab_bar.get_agent_type_menu_item_registered("fake-reg")
+        expect(registered_item).to_be_visible()
+        registered_item.click()
+
+        # Created agent is named from display_name and shows a terminal panel.
+        expect(agent_tab_bar.get_agent_tab_by_name("Fake Reg 1")).to_have_count(1)
+        expect(page.get_by_test_id(ElementIDs.AGENT_TERMINAL_PANEL)).to_be_visible()
+        expect(page.get_by_test_id(ElementIDs.CHAT_INPUT)).to_have_count(0)
+    finally:
+        (registrations_dir / "fake-reg.toml").unlink(missing_ok=True)

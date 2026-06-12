@@ -23,6 +23,7 @@ from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.data_model_service.api import CompletedTransaction
 from sculptor.services.task_service.api import TaskMessageContainer
+from sculptor.services.terminal_agent_registry.registry import TerminalAgentRegistration
 from sculptor.services.workspace_service.api import GitOperationResult
 from sculptor.state.chat_state import AskUserQuestionData
 from sculptor.state.messages import EffortLevel
@@ -180,6 +181,12 @@ class CreateAgentRequest(RequestModel):
 
 class RenameAgentRequest(RequestModel):
     title: str
+
+
+class ListTerminalAgentRegistrationsResponse(SerializableModel):
+    """Current terminal-agent registrations (re-read from disk per request)."""
+
+    registrations: list[TerminalAgentRegistration]
 
 
 class SignalEventRequest(RequestModel):
