@@ -38,6 +38,7 @@ from sculptor.interfaces.agents.agent import AutoCompactingAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingDoneAgentMessage
 from sculptor.interfaces.agents.agent import EnvironmentAcquiredRunnerMessage
 from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessage
+from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageAgentMessage
 from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
@@ -404,6 +405,15 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
     @property
     def harness_capabilities(self) -> HarnessCapabilities:
         return self._resolve_harness().capabilities()
+
+    @computed_field
+    @property
+    def accepts_automated_prompts(self) -> bool:
+        # Stamped from the registration TOML at creation (architecture §9):
+        # only opted-in registered terminal agents can receive automated
+        # prompts through the terminal-input endpoint.
+        agent_config = self.task_input.agent_config
+        return isinstance(agent_config, RegisteredTerminalAgentConfig) and agent_config.accepts_automated_prompts
 
     @computed_field
     @property

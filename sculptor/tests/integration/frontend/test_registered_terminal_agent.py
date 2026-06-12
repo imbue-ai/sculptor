@@ -73,8 +73,13 @@ def test_registered_terminal_agent_launches_program(sculptor_instance_: Sculptor
         (registrations_dir / "fake-tui.toml").unlink(missing_ok=True)
 
 
+# The SESSION-REPORTED marker is assembled via printf so the echoed command
+# line never contains it: the xterm wait must trip on the program OUTPUT
+# (the session-id POST completed) — matching the command echo would let the
+# instance shut down before the signal persists, and the restart would
+# relaunch instead of resume.
 _FAKE_RESUME_LAUNCH = (
-    "echo FIRST-RUN-BANNER; sculpt signal session-id fake-session-42; echo session-reported; read -r _line"
+    "echo FIRST-RUN-BANNER; sculpt signal session-id fake-session-42; printf %sREPORTED SESSION-; echo; read -r _line"
 )
 _FAKE_RESUME_TEMPLATE = "echo RESUMED-WITH {session_id}; read -r _line"
 
@@ -107,7 +112,7 @@ def test_registered_terminal_agent_resumes_after_restart(
 
         wait_for_xterm_substring(page, "FIRST-RUN-BANNER")
         # The session id reached the backend (the sculpt call returned).
-        wait_for_xterm_substring(page, "session-reported")
+        wait_for_xterm_substring(page, "SESSION-REPORTED")
 
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page

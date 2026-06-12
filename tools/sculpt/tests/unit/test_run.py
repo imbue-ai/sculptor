@@ -72,6 +72,7 @@ def _task_response_dict(
         "isCompacting": False,
         "isClearingContext": False,
         "isAutoCompacting": False,
+        "acceptsAutomatedPrompts": False,
         "artifactNames": [],
         "initialPrompt": "Fix the bug",
         "titleOrSomethingLikeIt": "Fix the bug",

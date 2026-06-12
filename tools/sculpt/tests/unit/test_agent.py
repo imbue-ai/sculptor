@@ -57,6 +57,7 @@ def _task_response_dict(
         "isCompacting": False,
         "isClearingContext": False,
         "isAutoCompacting": False,
+        "acceptsAutomatedPrompts": False,
         "artifactNames": [],
         "initialPrompt": "Test prompt",
         "titleOrSomethingLikeIt": "Test task title",

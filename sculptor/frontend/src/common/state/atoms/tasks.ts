@@ -159,3 +159,7 @@ export const taskSupportsToolUseRenderingAtomFamily = atomFamily<string, Atom<bo
 export const taskSupportsChatInterfaceAtomFamily = atomFamily<string, Atom<boolean | undefined>>((taskId) =>
   atom((get) => get(taskAtomFamily(taskId))?.harnessCapabilities.supportsChatInterface),
 );
+
+export const taskAcceptsAutomatedPromptsAtomFamily = atomFamily<string, Atom<boolean | undefined>>((taskId) =>
+  atom((get) => get(taskAtomFamily(taskId))?.acceptsAutomatedPrompts),
+);
