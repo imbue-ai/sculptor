@@ -245,12 +245,11 @@ sides in the same commit).
 
 ### Frontend issues
 
-**LOW** — `useTerminalAgentRegistrations.ts:27-41` returns
+**LOW — RESOLVED (`e40dd5c8c1`)** — `useTerminalAgentRegistrations` returned
 `{ registrations, refresh }` instead of the standard `BackendQueryResult<T>`
-bundle (`use_tanstack_result_bundle`). The menus render fine from an empty
-default and arguably don't need pending/error states, but the convention exists
-so consumers never guess hook shapes; returning the bundle (plus the derived
-`registrations`) is a five-line change.
+bundle (`use_tanstack_result_bundle`). It now returns the bundle intersected
+with the ergonomic `registrations` accessor, and both menu consumers use the
+bundle's `refetch`.
 
 Everything else checks out: TanStack hook under the `["sculptor", …]` key
 prefix with `staleTime: 0` and explicit refetch-on-open (the documented pattern
@@ -265,16 +264,17 @@ in `atomWithDebouncedStorage` is a justified best-effort catch.
 
 ### Integration test issues
 
-**MEDIUM→LOW (residual)** — `use_pom_hierarchy`: the earlier pass's POM finding
-was partially addressed (shared `get_agent_terminal_panel` /
+**MEDIUM→LOW — RESOLVED (`6530a3ece7`)** — `use_pom_hierarchy`: the earlier
+pass's POM finding was partially addressed (shared `get_agent_terminal_panel` /
 `get_agent_terminal_textarea` helpers, `open_agent_type_menu` with
-Radix-teardown retry). Test bodies still reach for
+Radix-teardown retry), but test bodies still reached for
 `page.get_by_test_id(ElementIDs.CHAT_INPUT)` (4×) and `ElementIDs.AGENT_TAB`
-(1×, `test_add_workspace_agent_type.py:78`); a `chat input absent` helper
-would finish the job. Low impact — the IDs are stable and the assertions are
-one-liners.
+(1×). Both directions of the panel switch are now POM helpers
+(`expect_terminal_panel_replaces_chat` / `expect_chat_replaces_terminal_panel`)
+and the tab lookup goes through the tab-bar page object.
 
-**LOW** — the five remaining `timeout=15_000` assertions (see Test coverage).
+**LOW — RESOLVED (`2f52ea0505`)** — the five `timeout=15_000` assertions (see
+Test coverage).
 
 No `use_expect_not_assert` violations (the bare `assert`s read non-DOM state:
 SQLite, xterm buffer snapshots after a retrying wait); no `no_sleep_then_assert`
@@ -310,15 +310,20 @@ review pass's findings were fixed and verified, and every suite that can run
 deterministically is green (unit, lint/types/ratchets, 42 Playwright tests
 across feature + regression files).
 
-Remaining items, all LOW and none blocking:
+All review findings are resolved on this branch:
 
 1. ~~Restore default timeouts on the five remaining `timeout=15_000` assertions~~
    — resolved in `2f52ea0505`.
-2. Return the standard `BackendQueryResult` bundle from
-   `useTerminalAgentRegistrations`.
-3. Optional: a POM helper for the repeated `CHAT_INPUT`-absent assertion.
-4. Consider one `@real_claude` run of `test_claude_code_terminal_agent.py`
-   before a release that advertises the bundled Claude Code sample.
+2. ~~Return the standard `BackendQueryResult` bundle from
+   `useTerminalAgentRegistrations`~~ — resolved in `e40dd5c8c1`.
+3. ~~POM helpers for the repeated panel-switch assertions~~ — resolved in
+   `6530a3ece7`.
+
+One advisory item remains (not a code change): consider one `@real_claude` run
+of `test_claude_code_terminal_agent.py` before a release that advertises the
+bundled Claude Code sample. After each fix the affected Playwright files were
+re-run green (3, then 11 tests) and `just format` / `just check` /
+`just test-unit` passed.
 
 Biggest residual risk: the bundled Claude Code hooks JSON is pinned to the
 hook-event names and CLI flags of Claude Code 2.x (the README documents this);
