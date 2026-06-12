@@ -781,8 +781,8 @@ class SQLDataModelService(TaskDataModelService, Generic[TQ]):
         self._parent_watch_shutdown_event.set()
 
     @contextmanager
-    def open_task_transaction(self) -> Generator[SQLTransaction, None, None]:
-        with self.open_transaction(RequestID(), is_user_request=False) as transaction:
+    def open_task_transaction(self, *, immediate: bool = False) -> Generator[SQLTransaction, None, None]:
+        with self.open_transaction(RequestID(), is_user_request=False, immediate=immediate) as transaction:
             yield transaction
 
     @contextmanager

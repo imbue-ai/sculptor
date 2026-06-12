@@ -10,7 +10,7 @@ snapshotting — Sculptor never parses the shell's output.
 The task ends only via shutdown/archive/delete (`UserPausedTaskError`, which
 the task-service runner maps to QUEUED — or DELETED when archiving). A shell
 self-exit does NOT end the task: the WebSocket route respawns the PTY on the
-next connection (architecture §3).
+next connection.
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
     LocalAgentExecutionEnvironment,
 )
 from sculptor.tasks.handlers.run_agent.setup import load_initial_task_state
-from sculptor.tasks.handlers.run_agent.v1 import _on_exception
+from sculptor.tasks.handlers.run_agent.v1 import on_exception
 from sculptor.tasks.handlers.run_terminal_agent.diff_refresh import PeriodicDiffRefresher
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import AgentTerminalConfig
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import create_agent_terminal
@@ -63,10 +63,10 @@ _DIFF_REFRESH_INTERVAL_SECONDS: float = 3.0
 def launch_command_for_start(task_data: AgentTaskInputsV2, task_state: AgentTaskStateV2) -> str | None:
     """The command to write into the freshly spawned shell, or None for a bare shell.
 
-    Plain terminal agents get nothing (a restart yields a fresh shell,
-    REQ-LIFE-4). Registered ones resume their previous session when the
-    program reported a session id and the registration has a resume template
-    (REQ-LIFE-3); otherwise the plain launch command.
+    Plain terminal agents get nothing (a restart yields a fresh shell).
+    Registered ones resume their previous session when the program reported a
+    session id and the registration has a resume template; otherwise the plain
+    launch command.
     """
     config = task_data.agent_config
     if not isinstance(config, RegisteredTerminalAgentConfig):
@@ -79,10 +79,12 @@ def launch_command_for_start(task_data: AgentTaskInputsV2, task_state: AgentTask
 def _persist_terminal_shell_pid(task_id: TaskID, pid: int | None, services: ServiceCollectionForTask) -> None:
     """Record (or clear) the handler's PTY shell pid on the task state.
 
-    Re-reads the row and evolves only this field so concurrent state writers
-    (renames, session-id signals) are not clobbered.
+    Opens an immediate (writer-slot-first) transaction and re-reads the row
+    inside it, so a concurrent state writer (a rename, a session-id signal)
+    committing between the read and the write cannot be clobbered by a stale
+    snapshot.
     """
-    with services.data_model_service.open_task_transaction() as transaction:
+    with services.data_model_service.open_task_transaction(immediate=True) as transaction:
         task_row = transaction.get_task(task_id)
         assert task_row is not None
         db_state = AgentTaskStateV2.model_validate(task_row.current_state)
@@ -130,7 +132,7 @@ def run_terminal_agent_task_v1(
                 ) as environment,
             ):
                 # Emit EnvironmentAcquiredRunnerMessage — the run-start anchor
-                # the terminal status driver keys on (architecture §5).
+                # the terminal status driver keys on for run-scoping.
                 assert isinstance(environment, LocalAgentExecutionEnvironment)
                 underlying_env = cast(EnvironmentTypes, environment.underlying_environment)
                 with services.data_model_service.open_task_transaction() as transaction:
@@ -165,10 +167,10 @@ def run_terminal_agent_task_v1(
                         )
     # handle ConcurrencyExceptionGroup as a general exception
     except ConcurrencyExceptionGroup as e:
-        _on_exception(e, task_id, user_reference, services, shutdown_event)
+        on_exception(e, task_id, user_reference, services, shutdown_event)
     # all other exceptions should be handled and turned into task failures
     except Exception as e:
-        _on_exception(e, task_id, user_reference, services, shutdown_event)
+        on_exception(e, task_id, user_reference, services, shutdown_event)
     return None
 
 
@@ -219,14 +221,14 @@ def _run_terminal_agent_in_environment(
     try:
         # Reap any crash-surviving shell from the previous run BEFORE spawning
         # (a stale program could otherwise race the resumed one on the same
-        # session — architecture §3), then forget the pid.
+        # session), then forget the pid.
         if task_state.terminal_shell_pid is not None:
             reap_stale_shell(task_state.terminal_shell_pid)
             _persist_terminal_shell_pid(task.object_id, None, services)
 
         # Eager spawn. A failure is non-fatal: the WS route retries on demand
         # (with a BARE shell — the launch command is written only here, so a
-        # program/shell exit never auto-relaunches, REQ-LIFE-5).
+        # program/shell exit never auto-relaunches).
         manager = create_agent_terminal(task.object_id)
         if manager is None:
             logger.info("Failed to eagerly start terminal for agent {}; will retry on demand", task.object_id)
