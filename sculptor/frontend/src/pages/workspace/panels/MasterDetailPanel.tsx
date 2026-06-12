@@ -2,7 +2,7 @@ import { Flex, Text } from "@radix-ui/themes";
 import { useAtom, useAtomValue } from "jotai";
 import { FileText } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
 import { ResizeHandle } from "~/components/panels/ResizeHandle.tsx";
 import { masterDetailDetailPercentAtom } from "~/components/panels/sectionLayoutAtoms.ts";
@@ -36,9 +36,15 @@ export const MasterDetailPanel = ({ workspaceId, stateKey, children }: MasterDet
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
 
-  useEffect(() => {
+  // Measure synchronously on mount (pre-paint): with only the ResizeObserver
+  // (which fires after paint), the first painted frame sizes the detail pane
+  // from containerWidth=0 — the 280px minimum — and it visibly jumps to its
+  // real percentage width a frame later on every panel mount (e.g. every
+  // workspace switch).
+  useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    setContainerWidth(el.offsetWidth);
     const observer = new ResizeObserver((entries) => {
       const rect = entries[0]?.contentRect;
       if (rect) setContainerWidth(rect.width);
