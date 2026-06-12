@@ -117,7 +117,8 @@ Key facts the design builds on:
    │ run_terminal_agent_task_v1 (NEW, no chat loop)                               │
    │  • acquire environment (reuse agent_environment_context)                      │
    │  • emit EnvironmentAcquiredRunnerMessage (wires workspace_id, diff path)      │
-   │  • spawn an agent-scoped PTY (terminal manager keyed by task id)              │
+   │  • spawn an agent-scoped PTY (registered under the environment id,            │
+   │      with a task-derived terminal id — see §3)                                 │
    │      – inject signal-API env (endpoint, agent id, session token) + SCULPT_*  │
    │      – plain Terminal: just the login shell                                   │
    │      – registered: write the launch (or resume) command into the shell        │
@@ -237,18 +238,42 @@ The handler:
    wired identically to native agents).
 2. Spawns an **agent-scoped PTY**. The PTY reuses the
    `LocalTerminalManager` / `SpawnedPtyProcess` machinery (login shell,
-   fork-safety, persistence across WS disconnect) but is keyed by **task id**
-   rather than `(environment_id, terminal_index)`, so it is addressable as
-   *this agent's* terminal and never collides with the workspace terminal
-   panel's index space.
+   fork-safety, persistence across WS disconnect). Its **route** is
+   agent-scoped — addressable as *this agent's* terminal, never colliding
+   with the workspace terminal panel's index space — but the manager is
+   **registered under the workspace's environment id** with a task-derived
+   terminal id (the registry key is an arbitrary string;
+   `stop_terminals_for_environment` matches on the manager's
+   `_environment_id`, not on the key). Cooperative task shutdown (item 6)
+   is the primary teardown; the environment-scoped stop at workspace
+   teardown is the **backstop**, so a wedged handler cannot leak the shell
+   (REQ-LIFE-2).
 3. For a **plain Terminal** (REQ-TERM-1): nothing further — the login shell
    is the agent.
 4. For a **registered** agent (REQ-LIFE-5): writes the launch command into
-   the shell (as if typed), so the program runs **as a shell job**. When it
-   exits (`/exit`, crash) the user lands back at the prompt in the same
-   terminal — no auto-relaunch on self-exit — and status returns to neutral.
-5. Runs a lightweight loop: keep the task RUNNING while the shell is alive,
-   honor `shutdown_event`, and drive the periodic diff refresh (§7).
+   the shell (as if typed), so the program runs **as a shell job**. No
+   shell-ready signal exists in the PTY machinery today (the pty is marked
+   ready when the fd lands, before the shell prints its prompt), so the
+   handler waits for the shell's **first output bytes** — with a short
+   timeout fallback — before writing the command; this readiness wait is a
+   small new mechanism, not something the existing input path provides.
+   When the program exits (`/exit`, crash) the user lands back at the
+   prompt in the same terminal — no auto-relaunch on self-exit — and
+   status returns to neutral.
+5. Runs a lightweight loop: keep the task RUNNING **for the agent's
+   lifetime** (not merely while the shell is alive), honor
+   `shutdown_event`, and drive the periodic diff refresh (§7).
+   **Shell self-exit (decision):** if the user exits the shell itself
+   (`exit`, Ctrl-D), the task does **not** complete — the terminal is
+   *respawnable*: the handler spawns a fresh login shell (lazily, on the
+   next terminal connection/keystroke, rate-limited; exact trigger is
+   plan-level), mirroring how the workspace terminal route re-creates a
+   missing terminal on demand. For a registered agent the respawned shell
+   is bare — the program is not auto-relaunched (REQ-LIFE-5). Completing
+   the task on shell exit was rejected: only QUEUED/RUNNING tasks are
+   re-queued after a backend restart, so a completed terminal agent would
+   come back as a permanently dead tab, breaking REQ-LIFE-4's fresh-shell
+   guarantee. The task ends only via archive/delete/teardown.
 6. On archive/delete/teardown (REQ-LIFE-2): stops the PTY (terminate the
    shell, close the primary fd, unregister) as part of normal task teardown.
 
@@ -264,6 +289,20 @@ session id was reported (§4) and the registration has a resume template, the
 handler runs the resume command (e.g. `claude --resume <id>`); otherwise it
 runs the plain launch command. Scrollback before the restart is not
 preserved.
+
+**Stale processes from the previous run.** On a graceful shutdown the
+workspace service stops all terminals (`stop_all_terminals`). On a crash,
+pty hangup semantics do most of the work: after the SCM_RIGHTS handoff the
+pty primary fd lives only in the backend process, so backend death closes
+it and the kernel delivers SIGHUP/EOF to the shell's foreground process
+group — the previous shell tree normally dies with the backend. That is
+not airtight (a program that ignores SIGHUP or detaches from the tty
+survives), and a surviving instance would race the relaunch — e.g.
+`claude --resume <id>` attaching to a session the pre-crash `claude` still
+holds. **Decision:** the handler persists the spawned shell pid alongside
+the session id and, on every (re)start, reaps any still-alive process tree
+from the previous run before spawning the new PTY. (Pid-reuse guards are
+plan-level.)
 
 ### 4. Signal API & sculpt CLI (REQ-SIG-1, SIG-2, SIG-3, SIG-4)
 
@@ -292,6 +331,13 @@ call is **scoped by agent id in the path** (`/api/v1/agents/{agent_id}/…`).
 Exact variable names are plan-level. The tradeoff — the full local-API token
 now lives inside the terminal session — is recorded in *Risks*.
 
+**Session-id hygiene.** The `session-id` value originates from whatever
+program runs in the terminal and is later interpolated into the resume
+command and written into a shell (§3) — an unvalidated value is a
+shell-injection vector. The API validates it on receipt (conservative
+charset and length, e.g. `[A-Za-z0-9._-]{1,128}`; reject otherwise) and
+the relaunch path shell-quotes it when rendering the resume template.
+
 Sculptor ships thin `sculpt` CLI subcommands wrapping the HTTP API
 (REQ-SIG-3): `sculpt signal busy|idle|waiting`, `sculpt signal
 files-changed`, `sculpt signal session-id <id>`. These read the injected env
@@ -309,7 +355,8 @@ signal events and must drive the **same** tab indicators (REQ-SIG-5).
 `CodingAgentTaskView.status` gains a terminal-harness branch that reads the
 latest one. This reuses the entire existing path end-to-end — message
 persistence/replay, the SSE `TaskUpdate` stream, `updated_at`/unread
-tracking, and `getAgentDotStatus` in `AgentTabs.tsx` — with one new branch
+tracking, and `getAgentDotStatus` (`components/statusDot/statusUtils.ts`,
+consumed by `AgentTabs.tsx`) — with one new branch
 and no new wire format, subscription, or frontend status field. It also
 inherits the task's restart/idempotency story (messages already replay on
 restart) instead of needing a second, parallel status channel to reconcile.
@@ -329,20 +376,38 @@ recent run-start marker" resets for free across a restart.
 
 Within a single run the indicators map by kind:
 
+- **(pre-environment)** → before the current run's
+  `EnvironmentAcquiredRunnerMessage`, the terminal branch reports
+  `BUILDING` — the generic derivation would yield `READY` here (no chat
+  input, no environment message), misreading "still acquiring the
+  environment" as calm.
 - **busy / idle** → drive the live spinner; a busy→idle transition does
   **not** mark the tab unread.
 - **waiting-on-input** → drives the waiting/attention dot while the run is
   live.
+- **Unread dot — deliberate deviation from REQ-SIG-5 as originally
+  written:** terminal signals never drive the unread dot. Signals are
+  run-scoped status, not content, and ephemeral messages are excluded from
+  `updated_at` by the existing content-message filter. The spec's
+  REQ-SIG-5 is amended to match (busy spinner and waiting/attention dot
+  only).
 
 The status messages must **survive a frontend reload** (page refresh while
 the backend task is alive) so the dot is correct after refresh, but must
-**not survive a backend restart** (per the run-scoped invariant above). The
-precise message types and the persistent/ephemeral mechanism that achieves
-"survives reload, resets on restart" are plan-level — the **invariant** (a
-restart never resurrects a stale `waiting`) is the architectural commitment.
-Because of this, terminal `waiting` is deliberately **not** modeled as a
-persisted content message that would bump `updated_at` across restarts; any
-unread/attention treatment for terminal `waiting` is run-scoped.
+**not survive a backend restart** (per the run-scoped invariant above).
+**The existing machinery provides exactly this — decision: signal events
+are *ephemeral* runner messages.** The task service retains every message,
+ephemeral included, in its in-memory `_messages_by_task_id` for the server
+lifetime and replays them to each new subscriber
+(`task_service/base_implementation.py` subscribe paths), while only
+persistent message types are written to the DB. Ephemeral signal messages
+therefore survive a frontend reload and vanish on a backend restart with
+zero new mechanism. The run-start anchor is still required for one case:
+the in-memory list outlives a task re-run *within* one server process
+(a re-queue without a restart), where signals from the prior run would
+otherwise linger. Because the signals are ephemeral, terminal `waiting`
+never bumps `updated_at` across restarts; any unread/attention treatment
+for terminal `waiting` is run-scoped.
 
 A **files-changed** event triggers the existing
 `maybe_refresh_workspace_diff` path (REQ-SIG-6), reusing `on_diff_needed`;
@@ -385,8 +450,15 @@ the registration (§8) and stamps a `RegisteredTerminalAgentConfig`.
 **Default tab naming (decision):** registered agents default-name from the
 registration **display name**; plain terminals get **"Terminal N"** (reusing
 the lowest-available-number scheme of `_compute_next_agent_name`). Native
-agents auto-name from the conversation, which terminal agents can't; the user
-can still rename either (REQ-UI-3).
+agents title-generate from the **initial prompt** (`generate_title_from_prompt`)
+— prompt-less `+`-button agents already keep their "Agent N" default today,
+so terminal-agent naming is consistent with the status quo; the user can
+still rename either (REQ-UI-3).
+
+**First-agent intro message:** `create_workspace_agent` auto-sends a
+help-prompt `ChatInputUserMessage` when it creates the first-ever agent
+(`web/app.py:1744`). A terminal agent has no chat stream to receive it, so
+the intro send is **skipped** when the first agent is a terminal agent.
 
 ### 7. Periodic diff refresh for terminal agents (REQ-TERM-3)
 
@@ -429,9 +501,11 @@ Several features act *on behalf of* the user by sending a
 `ChatInputUserMessage` into a chat agent's stream: the **Commit button**
 (`fileBrowser/CommitButton.tsx` → `chatActions.sendMessage(commit_prompt)`),
 the **Create PR/MR button** (`PrButton.tsx` →
-`sendMessage("<pr_creation_prompt> …")`), and **custom actions**
-(`ActionsPanel.tsx`). A terminal agent has no message stream, so each must
-resolve a target. v1 ships **both** tiers below.
+`sendMessage("<pr_creation_prompt> …")`), **custom actions**
+(`ActionsPanel.tsx`), and the **git / open-in-runtime actions**
+(`useGitAndOpenInRuntime.ts`, two call sites). A terminal agent has no
+message stream, so each must resolve a target. v1 ships **both** tiers
+below.
 
 **Fallback — gate off (always correct).** When the active agent is a terminal
 agent that can't accept an automated prompt, these affordances are **disabled
@@ -479,7 +553,10 @@ needs the message stream) and never drives a terminal agent. It currently
 selects its config via `workspace.harness` (`coordinator.py:297`), which this
 feature **deletes** (REQ-TYPE-3); it must instead create a default chat agent
 (Claude, or pi when `ENABLE_MULTI_HARNESS`) directly. This is a required
-ripple of the harness-column removal, not optional.
+ripple of the harness-column removal, not optional. The same file has a
+second touch point: `_select_model_for_workspace` (`coordinator.py:328`)
+iterates the workspace's tasks reading model defaults off their agent
+configs — terminal-agent configs carry no model and must be skipped there.
 
 ---
 
@@ -494,8 +571,10 @@ ripple of the harness-column removal, not optional.
 - **`database/models.py`** — remove `Workspace.harness` (DELIBERATE-TEMPORARY)
   per REQ-TYPE-3 via a schema migration; persist the reported **session id**
   for registered agents (likely on `AgentTaskStateV2`, alongside
-  `last_processed_message_id`) for resume (REQ-LIFE-3). No terminal-status
-  field is added — status is carried by synthetic runner messages (§5).
+  `last_processed_message_id`) for resume (REQ-LIFE-3), and the spawned
+  **shell pid** for stale-process reaping on relaunch (§3). No
+  terminal-status field is added — status is carried by synthetic runner
+  messages (§5).
 - **Registration config** — a pydantic registration model loaded from
   per-registration TOML files in `~/.sculptor/terminal_agents/` (§8), plus the
   bundled Claude Code example shipped as a copyable sample.
@@ -505,8 +584,9 @@ ripple of the harness-column removal, not optional.
   declare it.
 - **`web/data_types.py`** — `CreateAgentRequest` / `CreateWorkspaceRequestV2`
   gain an agent-type field; drop the `harness` field. New request/response
-  types for the signal API and (if needed) listing registrations for the
-  menu.
+  types for the signal API and a **registration-listing endpoint** for the
+  menu (required, not optional — registrations are read server-side and the
+  menu is frontend).
 - **Signal events** — a small JSON event schema (`event` + payload); the v1
   vocabulary is closed (busy/idle/waiting/files-changed/session-id) but the
   parser ignores unknown events (REQ-SIG-4).
@@ -561,7 +641,8 @@ never carry the new variants).
   `agent_config` type → terminal handler.
 - `sculptor/sculptor/web/app.py` — agent-type→config factory (replace
   `_agent_config_for_workspace`); agent-scoped terminal WS route; wire signal
-  API; drop `harness` usage.
+  API; drop `harness` usage; skip the first-agent intro message when the
+  first agent is a terminal agent (§6).
 - `sculptor/sculptor/web/derived.py` — terminal-harness branch in
   `CodingAgentTaskView.status` reading the latest signal since the last
   run-start marker (run-scoped, §5).
@@ -569,11 +650,12 @@ never carry the new variants).
 - `sculptor/sculptor/database/models.py` — remove `Workspace.harness`; persist
   session id for registered-agent resume.
 - `sculptor/sculptor/services/ci_babysitter_service/coordinator.py` — stop
-  reading `workspace.harness` (deleted); create a default chat agent directly
-  (§9).
+  reading `workspace.harness` (deleted); create a default chat agent directly;
+  skip terminal-agent configs in `_select_model_for_workspace` (§9).
 - `sculptor/frontend/.../fileBrowser/CommitButton.tsx`,
-  `components/PrButton.tsx`, `panels/ActionsPanel.tsx` — resolve the button
-  target: gate off for terminal agents that can't accept an automated prompt;
+  `components/PrButton.tsx`, `panels/ActionsPanel.tsx`,
+  `useGitAndOpenInRuntime.ts` — resolve the send target:
+  gate off for terminal agents that can't accept an automated prompt;
   route to the terminal-input endpoint for automated-prompt-capable terminal
   agents at a prompt (§9).
 - (Automated-prompt path, §9) terminal-input route
@@ -627,6 +709,9 @@ never carry the new variants).
 - **Reuse the workspace+index terminal route** for the agent's PTY. Rejected:
   it shares an index space with the workspace terminal panel and isn't
   addressable as "this agent's terminal"; an agent-scoped route is cleaner.
+  Note this rejects only the *route/index space* — the manager still
+  registers under the workspace's **environment id** (with a task-derived
+  terminal id) so environment teardown remains the cleanup backstop (§3).
 - **Parse terminal agent output into a chat UI.** Rejected per spec — terminal
   agents explicitly have no rich chat UI.
 - **Repo-scope registrations / settings UI.** Rejected per spec — v1 is
@@ -654,9 +739,12 @@ never carry the new variants).
   Audit each `CodingAgentTaskView` computed field for terminal-harness
   behavior during the plan.
 - **PTY launch race for registered programs.** Writing the launch command
-  into the shell before it is ready could drop characters. *Mitigation:*
-  spawn the login shell, then write the command on shell-ready, matching how
-  the existing PTY handles input; the program runs as a job so a slightly
+  into the shell before it is ready could drop characters, and **no
+  shell-ready signal exists in the PTY machinery today** (the pty is marked
+  ready when the fd lands, before the shell prints its prompt; even the
+  existing tests just sleep before writing). *Mitigation:* the handler
+  waits for the shell's first output bytes, with a short timeout fallback,
+  before writing the command (§3); the program runs as a job so a slightly
   late write still works.
 - **Signal API auth / token exposure.** Auth reuses the global session token
   (§4), which is injected into the terminal-agent PTY env — so any program in
@@ -670,6 +758,22 @@ never carry the new variants).
   could start the wrong conversation or none. *Mitigation:* persist the
   reported session id; fall back to the plain launch command when absent;
   `--continue`-style resume is explicitly insufficient (multiple sessions).
+- **Surviving process from a previous run.** Pty hangup normally kills the
+  shell tree when the backend dies (the primary fd closes → SIGHUP), but a
+  program that ignores SIGHUP or detaches from the tty survives, and a
+  relaunch (`--resume`) could then race a still-running prior instance.
+  *Mitigation:* persist the shell pid and reap any still-alive previous
+  process tree before spawning the new PTY (§3).
+- **Leaked agent PTY on teardown.** If teardown relied only on cooperative
+  task shutdown, a wedged handler would leak the shell (which outlives the
+  panel by design). *Mitigation:* the agent PTY's manager registers under
+  the workspace's environment id (§3), so `stop_terminals_for_environment`
+  at workspace teardown kills it regardless of handler state.
+- **Shell injection via reported session id.** The resume template
+  interpolates a value reported by whatever runs in the terminal, and the
+  relaunch writes the result into a shell. *Mitigation:* validate the value
+  on receipt (conservative charset/length) and shell-quote at
+  template-rendering time (§4).
 - **Stale status across restart.** A `waiting-on-input` reported before a
   backend crash may not be true after the program is relaunched/resumed, so a
   persisted status would mislead. *Mitigation:* status is **run-scoped** (§5)
@@ -703,9 +807,11 @@ never carry the new variants).
   terminal handler; `TerminalHarness.capabilities()` (all-false); the
   status-driver mapping (each signal → expected `TaskStatus`, no-signal →
   neutral, **and status reset across a simulated restart** — a pre-restart
-  `waiting` must not survive); the registration loader
-  (valid/invalid/enable-bundled); the CI babysitter creating a native chat
-  agent without `workspace.harness`.
+  `waiting` must not survive; pre-environment status is `BUILDING`); the
+  registration loader (valid/invalid/enable-bundled); the CI babysitter
+  creating a native chat agent without `workspace.harness` and skipping
+  terminal-agent configs in model selection; the first-agent intro message
+  skipped when the first agent is a terminal agent.
 - **Prompt-based feature targeting:** Commit / Create PR / custom-action
   affordances are disabled for a terminal agent that can't accept an automated
   prompt, present for chat agents in the same workspace, and (§9) route to the
@@ -713,12 +819,16 @@ never carry the new variants).
   prompt; the send is blocked when the agent is neutral/exited; multi-line
   prompts paste atomically (bracketed paste) without premature submission.
 - **Signal API:** event acceptance + auth (token required, agent-scoped),
-  unknown-event ignore, files-changed → diff refresh, session-id persistence;
-  `sculpt signal …` subcommands hit the API with injected env.
+  unknown-event ignore, files-changed → diff refresh, session-id persistence
+  **and charset validation (malformed ids rejected; quoted at resume
+  rendering)**; `sculpt signal …` subcommands hit the API with injected env.
 - **Lifecycle:** PTY spawn for plain vs registered; program-exit drops to
-  shell (REQ-LIFE-5); restart re-creates fresh shell (LIFE-4) and resumes via
-  session id (LIFE-3); teardown on archive/delete stops the PTY (LIFE-2);
-  PTY survives WS disconnect (LIFE-1).
+  shell (REQ-LIFE-5); shell self-exit does **not** complete the task and the
+  shell is respawned (§3); restart re-creates fresh shell (LIFE-4) and
+  resumes via session id (LIFE-3), reaping a surviving previous shell pid
+  first; teardown on archive/delete stops the PTY (LIFE-2), with the
+  environment-teardown backstop catching a wedged handler; PTY survives WS
+  disconnect (LIFE-1).
 - **Frontend / integration:** split button one-click + chevron menu
   (incl. pi gating), terminal panel replaces chat for terminal agents,
   capability-gated chat affordances hidden, status dots driven by signals,
@@ -734,10 +844,13 @@ never carry the new variants).
 
 These are carried into Q&A and the plan; spec Open Questions are tagged.
 
-1. **Status driver (spec):** RESOLVED — synthetic runner messages, **run-scoped**
-   (latest signal since the last run-start marker; resets on backend restart so
-   a stale `waiting` is never resurrected) (§5). Exact message types /
-   persistence mechanism are plan-level under that invariant.
+1. **Status driver (spec):** RESOLVED — synthetic **ephemeral** runner
+   messages, **run-scoped** (latest signal since the last run-start marker;
+   resets on backend restart so a stale `waiting` is never resurrected) (§5).
+   The persistence mechanism is the existing in-memory message replay —
+   ephemeral messages survive a frontend reload and vanish on backend
+   restart with no new machinery; only the exact message type names are
+   plan-level.
 2. **Registration file format (spec):** RESOLVED — a directory of
    per-registration TOML files at `~/.sculptor/terminal_agents/`, re-read on
    menu open; bundled Claude example shipped as a copyable sample (§8).
@@ -767,3 +880,16 @@ These are carried into Q&A and the plan; spec Open Questions are tagged.
     state-gated and bracketed-paste-wrapped (§9). (Flag named
     `accepts_automated_prompts`, not "prompt injection," to avoid colliding
     with the security term.)
+11. **Shell self-exit semantics (review):** RESOLVED — the task never
+    completes on shell exit; the terminal is respawnable (fresh login shell
+    on demand), keeping the task RUNNING so restart re-queue still applies
+    (§3).
+12. **Stale PTY / teardown backstop (review):** RESOLVED — shell pid
+    persisted and any surviving previous process tree reaped on (re)start;
+    the agent PTY registers under the environment id so workspace teardown
+    is the cleanup backstop for a wedged handler (§3).
+13. **Session-id shell injection (review):** RESOLVED — charset/length
+    validated on receipt, shell-quoted at resume-template rendering (§4).
+14. **Unread dot for terminal agents (review):** RESOLVED — deliberately not
+    driven by signals; REQ-SIG-5 amended to busy spinner + waiting dot only
+    (§5).

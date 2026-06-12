@@ -142,7 +142,9 @@ the terminal, status stays neutral, diffs refresh periodically
   The API MUST be designed so new event types can be added later without
   breaking existing integrations (unknown events are logged and ignored).
 - `REQ-SIG-5`: Status events MUST drive the same tab indicators native agents
-  use (busy spinner, waiting/attention dot, unread dot).
+  use (busy spinner, waiting/attention dot). The unread dot is deliberately
+  NOT driven by terminal signals in v1 — signals are run-scoped status, not
+  content (see architecture §5).
 - `REQ-SIG-6`: A files-changed event MUST trigger a workspace diff refresh
   (the existing `maybe_refresh_workspace_diff` path).
 
