@@ -20,7 +20,17 @@ surfaced).
 The preflight-failure path (`fake_pi:error`) emits a `response` with
 `success:false` and no session events, matching pi's behavior
 when the prompt is rejected before the agent starts (e.g. missing API
-key). `abort` is acknowledged with a `response` envelope too.
+key).
+
+`abort` is acknowledged with a `response` envelope and, like real pi, leaves
+the process alive for the next prompt — it does NOT exit. If a turn is in
+flight, abort preempts it and emits an `agent_end` whose assistant message
+carries `stopReason:"aborted"` plus whatever partial text the directives
+produced. To let abort interrupt a turn blocked in a
+directive (`fake_pi:sleep` / `wait_for_file`), stdin is read on a background
+thread that sets an abort flag the directive handlers poll between steps —
+kept deterministic via sentinel-file pauses, never wall-clock races. The
+process exits on stdin EOF (Sculptor closes stdin at shutdown).
 
 CLI surface matches what ``PiAgent.start`` spawns:
 
@@ -44,6 +54,7 @@ import json
 import re
 import shlex
 import sys
+import threading
 import time
 import uuid
 from collections.abc import Callable
@@ -51,6 +62,9 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
+from queue import Empty
+from queue import Queue
+from threading import Event
 
 from sculptor.services.dependency_management_service import PI_VERSION_RANGE
 
@@ -65,6 +79,15 @@ _DEFAULT_RESPONSE_TEXT = "[FakePi] Task completed."
 
 class UnknownFakePiCommandError(ValueError):
     """Raised when an unknown ``fake_pi:`` directive is encountered."""
+
+
+class _TurnAborted(Exception):
+    """Raised inside a directive when an ``abort`` preempts the running turn."""
+
+
+# stdout is written from two threads (the stdin reader emits the abort ack; the
+# main loop emits turn events), so serialize whole lines to avoid interleaving.
+_STDOUT_LOCK = threading.Lock()
 
 
 @dataclass
@@ -173,8 +196,10 @@ def _extract_directives(text: str) -> list[str]:
 
 
 def _emit(event: dict) -> None:
-    sys.stdout.write(json.dumps(event, separators=(",", ":")) + "\n")
-    sys.stdout.flush()
+    line = json.dumps(event, separators=(",", ":")) + "\n"
+    with _STDOUT_LOCK:
+        sys.stdout.write(line)
+        sys.stdout.flush()
 
 
 def _assistant_message(text: str, stop_reason: str = "stop") -> dict:
@@ -238,20 +263,39 @@ def _emit_agent_end(text: str) -> None:
     )
 
 
-def _handle_emit_text(args: dict, builder: _TurnBuilder, state: _SessionState) -> None:
+def _emit_aborted_agent_end(text: str) -> None:
+    """Emit the interrupted-turn boundary: an `agent_end` whose assistant message
+    carries `stopReason:"aborted"` plus the partial text streamed so far.
+
+    Real pi keeps partial content blocks on the aborted message and fires
+    `agent_end` with `willRetry:false`. PiAgent treats this as the interrupted
+    boundary (no `PiCrashError`) while an interrupt is pending.
+    """
+    _emit(
+        {
+            "type": "agent_end",
+            "messages": [_assistant_message(text, stop_reason="aborted")],
+            "willRetry": False,
+        }
+    )
+
+
+def _handle_emit_text(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
     text = args.get("text", "")
     accumulated = builder.full_text + text
     _emit_text_delta(text, accumulated)
     builder.emit(text)
 
 
-def _handle_stream_text(args: dict, builder: _TurnBuilder, state: _SessionState) -> None:
+def _handle_stream_text(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
     text: str = args.get("text", "")
     chunk_size: int = int(args.get("chunk_size", 8))
     delay_seconds: float = float(args.get("delay_seconds", 0.0))
     if chunk_size <= 0:
         chunk_size = max(1, len(text))
     for offset in range(0, len(text), chunk_size):
+        if abort_event.is_set():
+            raise _TurnAborted()
         chunk = text[offset : offset + chunk_size]
         accumulated = builder.full_text + chunk
         _emit_text_delta(chunk, accumulated)
@@ -260,7 +304,7 @@ def _handle_stream_text(args: dict, builder: _TurnBuilder, state: _SessionState)
             time.sleep(delay_seconds)
 
 
-def _handle_tool_call(args: dict, builder: _TurnBuilder, state: _SessionState) -> None:
+def _handle_tool_call(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
     """Emit one tool call: close the current assistant message with a toolCall
     block, then stream the tool-execution lane (start → updates → end).
 
@@ -329,23 +373,31 @@ def _handle_tool_call(args: dict, builder: _TurnBuilder, state: _SessionState) -
     )
 
 
-def _handle_sleep(args: dict, builder: _TurnBuilder, state: _SessionState) -> None:
+def _handle_sleep(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
     seconds = float(args.get("seconds", 0))
-    if seconds > 0:
-        time.sleep(seconds)
+    if seconds <= 0:
+        return
+    # Poll in small steps so an abort can preempt the sleep.
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if abort_event.is_set():
+            raise _TurnAborted()
+        time.sleep(0.05)
 
 
-def _handle_wait_for_file(args: dict, builder: _TurnBuilder, state: _SessionState) -> None:
+def _handle_wait_for_file(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
     timeout_seconds = float(args.get("timeout_seconds", 120))
     sentinel = Path(args["path"])
     deadline = time.monotonic() + timeout_seconds
     while not sentinel.exists():
+        if abort_event.is_set():
+            raise _TurnAborted()
         if time.monotonic() >= deadline:
             raise RuntimeError(f"fake_pi:wait_for_file timed out after {timeout_seconds}s waiting for {sentinel}")
         time.sleep(0.05)
 
 
-def _handle_recall(args: dict, builder: _TurnBuilder, state: _SessionState) -> None:
+def _handle_recall(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
     """Emit the user messages remembered from BEFORE this turn.
 
     Recall succeeds only if the prior session was reloaded from disk by
@@ -360,7 +412,7 @@ def _handle_recall(args: dict, builder: _TurnBuilder, state: _SessionState) -> N
         builder.emit("RECALL:NO_PRIOR_CONTEXT")
 
 
-_COMMAND_REGISTRY: dict[str, Callable[[dict, _TurnBuilder, _SessionState], None]] = {
+_COMMAND_REGISTRY: dict[str, Callable[[dict, _TurnBuilder, Event, _SessionState], None]] = {
     "emit_text": _handle_emit_text,
     "stream_text": _handle_stream_text,
     "tool_call": _handle_tool_call,
@@ -370,13 +422,17 @@ _COMMAND_REGISTRY: dict[str, Callable[[dict, _TurnBuilder, _SessionState], None]
 }
 
 
-def _dispatch_directives(directives: Iterable[str], builder: _TurnBuilder, state: _SessionState) -> None:
+def _dispatch_directives(
+    directives: Iterable[str], builder: _TurnBuilder, abort_event: Event, state: _SessionState
+) -> None:
     for directive in directives:
+        if abort_event.is_set():
+            raise _TurnAborted()
         name, args = _parse_directive(directive)
         handler = _COMMAND_REGISTRY.get(name)
         if handler is None:
             raise UnknownFakePiCommandError(f"unknown command '{name}'")
-        handler(args, builder, state)
+        handler(args, builder, abort_event, state)
 
 
 def _find_error_directive(directives: Iterable[str]) -> str | None:
@@ -409,6 +465,7 @@ def _run_turn(
     prompt_text: str,
     turn_directives: list[str],
     system_directives: list[str],
+    abort_event: Event,
     state: _SessionState,
 ) -> None:
     """Emit the wire sequence for one user turn.
@@ -426,7 +483,10 @@ def _run_turn(
 
     The turn is recorded into ``state`` AFTER emission, so a `recall`
     directive in this turn sees only prior turns, and so a preflight error
-    records nothing.
+    records nothing. If ``abort_event`` is set while the turn is running, the
+    turn is preempted and emits the interrupted boundary (`agent_end` with
+    `stopReason:"aborted"` plus the partial text streamed so far) in place of
+    the happy-path end.
     """
     directives = turn_directives or system_directives
     error_message = _find_error_directive(directives)
@@ -437,7 +497,18 @@ def _run_turn(
     _emit_response("prompt", success=True, prompt_id=prompt_id)
     _emit({"type": "agent_start"})
     _emit_user_message_end(prompt_text)
-    _dispatch_directives(directives, builder, state)
+    try:
+        _dispatch_directives(directives, builder, abort_event, state)
+        # An abort that lands after the last directive (or during a non-blocking
+        # one) is caught here before the happy-path end is emitted.
+        if abort_event.is_set():
+            raise _TurnAborted()
+    except _TurnAborted:
+        # The user message reached pi, so record the (partial) turn for resume,
+        # then stop — no happy-path end.
+        _emit_aborted_agent_end(builder.full_text)
+        state.record_turn(prompt_text)
+        return
     if not builder.has_text:
         _emit_text_delta(_DEFAULT_RESPONSE_TEXT, _DEFAULT_RESPONSE_TEXT)
         builder.emit(_DEFAULT_RESPONSE_TEXT)
@@ -448,38 +519,75 @@ def _run_turn(
 
 
 def _run_rpc_loop(system_prompt: str, session_dir: Path | None, session_id: str) -> int:
+    """Drive the RPC loop, reading stdin on a background thread.
+
+    Only `abort` is handled out-of-band by the reader thread (it acks the abort
+    and sets ``abort_event``, which the directive handlers poll, so it can
+    preempt a turn blocked in a directive). `prompt` and `get_state` are queued
+    and handled IN ORDER by the main loop, so `get_state` reflects the message
+    count of every preceding turn (PiAgent reads it to verify a resume). Real pi
+    stays alive after abort, so the loop keeps going; the process exits on stdin
+    EOF (Sculptor closes stdin at shutdown).
+    """
     system_directives = _extract_directives(system_prompt)
     # Load (or initialize) the session once at startup; a relaunch with the same
     # dir + id reloads the prior transcript so `recall` / get_state see it.
     state = _SessionState.load(session_dir, session_id)
-    for raw_line in sys.stdin:
-        line = raw_line.strip()
-        if not line:
-            continue
+    command_queue: Queue[dict] = Queue()
+    abort_event = Event()
+    stdin_closed = Event()
+
+    def _read_stdin() -> None:
+        for raw_line in sys.stdin:
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            event_type = payload.get("type")
+            command_id = payload.get("id") if isinstance(payload.get("id"), str) else None
+            if event_type == "abort":
+                # Out-of-band: ack and signal any in-flight turn to wind down; do
+                # NOT exit (real pi stays alive — see module docstring).
+                _emit_response("abort", success=True, prompt_id=command_id)
+                abort_event.set()
+            elif event_type in ("prompt", "get_state"):
+                # In-order: queued so get_state observes preceding turns' state.
+                command_queue.put(payload)
+            # Other command types are ignored.
+        stdin_closed.set()
+
+    reader = threading.Thread(target=_read_stdin, name="fake_pi-stdin-reader", daemon=True)
+    reader.start()
+
+    exit_code = 0
+    while True:
         try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
+            payload = command_queue.get(timeout=0.05)
+        except Empty:
+            if stdin_closed.is_set() and command_queue.empty():
+                break
             continue
-        if not isinstance(payload, dict):
+        command_id = payload.get("id") if isinstance(payload.get("id"), str) else None
+        if payload.get("type") == "get_state":
+            _emit_state(command_id, state)
             continue
-        event_type = payload.get("type")
-        prompt_id = payload.get("id") if isinstance(payload.get("id"), str) else None
-        if event_type == "get_state":
-            _emit_state(prompt_id, state)
-            continue
-        if event_type == "abort":
-            _emit_response("abort", success=True, prompt_id=prompt_id)
-            return 0
-        if event_type != "prompt":
-            continue
+        # A fresh turn clears any abort that raced in between turns (mirrors
+        # PiAgent clearing interrupt-pending when it sends the next prompt).
+        abort_event.clear()
         message_text = payload.get("message", "") or ""
         turn_directives = _extract_directives(message_text)
         try:
-            _run_turn(prompt_id, message_text, turn_directives, system_directives, state)
+            _run_turn(command_id, message_text, turn_directives, system_directives, abort_event, state)
         except UnknownFakePiCommandError as e:
-            _emit_response("prompt", success=False, prompt_id=prompt_id, error=str(e))
-            return 1
-    return 0
+            _emit_response("prompt", success=False, prompt_id=command_id, error=str(e))
+            exit_code = 1
+            break
+    return exit_code
 
 
 def main(argv: list[str] | None = None) -> int:

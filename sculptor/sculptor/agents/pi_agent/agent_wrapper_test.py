@@ -10,6 +10,8 @@ session-stream.
 from __future__ import annotations
 
 import json
+import threading
+import time
 from pathlib import Path
 from queue import Queue
 from typing import Any
@@ -395,6 +397,246 @@ def test_agent_end_with_aborted_message_raises_pi_crash_error() -> None:
     )
     with pytest.raises(PiCrashError):
         agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+
+# --- Interruption (supports_interruption) ----------------------------------
+
+
+def _wait_until(predicate: Callable[[], bool], timeout: float = 5.0) -> None:
+    """Poll ``predicate`` until true; used to synchronize the two-thread interrupt
+    path deterministically (no fixed sleeps)."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return
+        time.sleep(0.01)
+    raise AssertionError("condition not met within timeout")
+
+
+def _abort_was_written(process: MagicMock) -> bool:
+    for call in process.write_stdin.call_args_list:
+        try:
+            payload = json.loads(call.args[0].rstrip("\n"))
+        except (json.JSONDecodeError, IndexError):
+            continue
+        if isinstance(payload, dict) and payload.get("type") == "abort":
+            return True
+    return False
+
+
+def test_push_message_interrupt_is_handled_and_sends_abort() -> None:
+    """InterruptProcessUserMessage is handled (returns True), writes `abort` to stdin,
+    and resolves its own request so the frontend's /interrupt POST returns."""
+    agent = _make_agent()
+    process = MagicMock()
+    agent._process = process
+    interrupt = InterruptProcessUserMessage()
+    handled = agent._push_message(interrupt)
+    assert handled is True
+    assert agent._was_interrupted.is_set()
+    assert agent._interrupt_pending.is_set()
+    assert _abort_was_written(process)
+    # The interrupt request itself must be completed (request_id == the interrupt
+    # message id) — `await_message_response` blocks the /interrupt POST until then,
+    # leaving the StatusPill stuck in "stopping".
+    emitted = _drain(agent._output_messages)
+    completions = [
+        m for m in emitted if isinstance(m, RequestSuccessAgentMessage) and m.request_id == interrupt.message_id
+    ]
+    assert len(completions) == 1
+    # This control action is not itself an interrupted generation turn.
+    assert completions[0].interrupted is False
+
+
+def test_interrupt_mid_turn_resolves_interrupted_and_finalizes_partial() -> None:
+    """Interrupt during a turn: abort is written, the aborted boundary finalizes
+    the partial text without raising, and the turn resolves interrupted=True."""
+    agent = _make_agent()
+    out_queue: Queue[tuple[str, bool]] = Queue()
+    out_queue.put((_event({"type": "agent_start"}), True))
+    out_queue.put((_event(_text_delta_update("partial", "partial")), True))
+    process = MagicMock()
+    process.get_queue.return_value = out_queue
+    process.is_finished.return_value = False
+    agent._process = process
+
+    # Drive the turn on a worker thread and interrupt from this (request-handling)
+    # thread once the partial has streamed — the real two-thread interrupt path.
+    worker = threading.Thread(target=agent._run_prompt_turn, args=(ChatInputUserMessage(text="long task"),))
+    worker.start()
+    try:
+        _wait_until(lambda: agent._output_messages.qsize() >= 2)
+        agent._request_interrupt()
+        # pi's abort-induced boundary: an assistant message with stopReason aborted.
+        out_queue.put(
+            (
+                _event(
+                    {
+                        "type": "agent_end",
+                        "messages": [_assistant_msg("partial", stop_reason="aborted")],
+                        "willRetry": False,
+                    }
+                ),
+                True,
+            )
+        )
+        worker.join(timeout=5.0)
+    finally:
+        if worker.is_alive():
+            agent._shutdown_event.set()
+            worker.join(timeout=5.0)
+    assert not worker.is_alive(), "interrupted turn did not resolve"
+
+    assert _abort_was_written(process)
+    emitted = _drain(agent._output_messages)
+    successes = [m for m in emitted if isinstance(m, RequestSuccessAgentMessage)]
+    assert len(successes) == 1
+    assert successes[0].interrupted is True
+    finals = [m for m in emitted if isinstance(m, ResponseBlockAgentMessage)]
+    assert len(finals) == 1
+    assert finals[0].content == (TextBlock(text="partial"),)
+
+
+def test_interrupt_with_no_turn_in_flight_does_not_poison_next_turn() -> None:
+    """A stale interrupt (no turn in flight) must not mark the NEXT turn interrupted."""
+    agent = _make_agent()
+    # An interrupt that raced in with no turn in flight leaves both flags set.
+    agent._was_interrupted.set()
+    agent._interrupt_pending.set()
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event(_text_delta_update("hello", "hello")),
+            _event({"type": "agent_end", "messages": [_assistant_msg("hello")], "willRetry": False}),
+        ]
+    )
+    agent._run_prompt_turn(ChatInputUserMessage(text="fresh turn"))
+    emitted = _drain(agent._output_messages)
+    successes = [m for m in emitted if isinstance(m, RequestSuccessAgentMessage)]
+    assert len(successes) == 1
+    assert successes[0].interrupted is False
+
+
+def test_aborted_agent_end_with_interrupt_pending_finalizes_without_crash() -> None:
+    """`stopReason:"aborted"` on agent_end is the expected boundary when interrupt-pending — finalize, don't raise."""
+    agent = _make_agent()
+    agent._interrupt_pending.set()
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event(_text_delta_update("partial", "partial")),
+            _event(
+                {
+                    "type": "agent_end",
+                    "messages": [_assistant_msg("partial", stop_reason="aborted")],
+                    "willRetry": False,
+                }
+            ),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+    finals = [m for m in _drain(agent._output_messages) if isinstance(m, ResponseBlockAgentMessage)]
+    assert len(finals) == 1
+    assert finals[0].content == (TextBlock(text="partial"),)
+
+
+def test_aborted_message_end_with_interrupt_pending_finalizes_without_crash() -> None:
+    """`stopReason:"aborted"` on message_end finalizes the partial when interrupt-pending."""
+    agent = _make_agent()
+    agent._interrupt_pending.set()
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event(_text_delta_update("partial", "partial")),
+            _event({"type": "message_end", "message": _assistant_msg("partial", stop_reason="aborted")}),
+            _event(
+                {
+                    "type": "agent_end",
+                    "messages": [_assistant_msg("partial", stop_reason="aborted")],
+                    "willRetry": False,
+                }
+            ),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+    finals = [m for m in _drain(agent._output_messages) if isinstance(m, ResponseBlockAgentMessage)]
+    # message_end finalizes the partial and resets the accumulator, so agent_end
+    # does not double-emit.
+    assert len(finals) == 1
+    assert finals[0].content == (TextBlock(text="partial"),)
+
+
+def test_aborted_message_end_without_interrupt_pending_raises_pi_crash_error() -> None:
+    """Without an interrupt pending, `stopReason:"aborted"` is an unexpected failure — it crashes."""
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event({"type": "message_end", "message": _assistant_msg("oops", stop_reason="aborted")}),
+        ]
+    )
+    with pytest.raises(PiCrashError):
+        agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+
+def test_escalate_interrupt_terminates_process_when_pending_and_running() -> None:
+    agent = _make_agent()
+    agent._interrupt_pending.set()
+    process = MagicMock()
+    process.is_finished.return_value = False
+    agent._process = process
+    agent._escalate_interrupt()
+    process.terminate.assert_called_once()
+
+
+def test_escalate_interrupt_is_noop_when_interrupt_already_resolved() -> None:
+    agent = _make_agent()
+    # interrupt-pending cleared → the turn already ended after the abort.
+    process = MagicMock()
+    process.is_finished.return_value = False
+    agent._process = process
+    agent._escalate_interrupt()
+    process.terminate.assert_not_called()
+
+
+def test_escalate_interrupt_is_noop_when_process_already_finished() -> None:
+    agent = _make_agent()
+    agent._interrupt_pending.set()
+    process = MagicMock()
+    process.is_finished.return_value = True
+    agent._process = process
+    agent._escalate_interrupt()
+    process.terminate.assert_not_called()
+
+
+def test_await_interrupt_escalation_cancelled_within_grace_does_not_terminate() -> None:
+    agent = _make_agent()
+    agent._interrupt_pending.set()
+    process = MagicMock()
+    process.is_finished.return_value = False
+    agent._process = process
+    cancel = threading.Event()
+    cancel.set()  # the turn ended within the grace window
+    agent._await_interrupt_escalation(cancel)
+    process.terminate.assert_not_called()
+
+
+def test_escalation_terminate_lets_turn_resolve_via_process_exit() -> None:
+    """No agent_end → SIGTERM → the process-exit fallback resolves the turn."""
+    agent = _make_agent()
+    agent._interrupt_pending.set()
+    out_queue: Queue[tuple[str, bool]] = Queue()
+    process = MagicMock()
+    process.get_queue.return_value = out_queue
+    finished = {"value": False}
+    process.is_finished.side_effect = lambda: finished["value"]
+    process.terminate.side_effect = lambda: finished.__setitem__("value", True)
+    agent._process = process
+
+    agent._escalate_interrupt()
+    process.terminate.assert_called_once()
+    # The dispatcher's `process.is_finished() and queue empty` fallback returns.
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
 
 
 def test_auto_retry_end_failure_raises_pi_crash_error() -> None:
@@ -798,11 +1040,11 @@ def test_push_message_enqueues_chat_input_returns_true() -> None:
 
 # The capability-correlated control messages pi cannot handle; each must be
 # dead-lettered (one logged error) and return unhandled.
-# ResumeAgentResponseRunnerMessage is NOT here — it is now handled (see
-# test_push_message_resume_resolves_in_flight_request).
+# ResumeAgentResponseRunnerMessage and InterruptProcessUserMessage are NOT here —
+# both are handled now (session resume, and pi's `abort` command via
+# supports_interruption; see the resume and interrupt tests below).
 _DEAD_LETTER_MESSAGES: list[Message] = [
     ClearContextUserMessage(),
-    InterruptProcessUserMessage(),
     UserQuestionAnswerMessage(
         message_id=AgentMessageID(),
         answers={"q": "a"},

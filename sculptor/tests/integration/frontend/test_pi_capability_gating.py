@@ -209,37 +209,39 @@ def test_skills_panel_empty_under_pi(sculptor_instance_: SculptorInstance, harne
 
 
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
-@user_story("to disable the Stop button with a tooltip in harnesses that cannot interrupt a turn")
+@user_story("to stop an in-flight turn from the Stop button in every harness, now including pi")
 def test_stop_button_gated_on_interruption(sculptor_instance_: SculptorInstance, harness: HarnessTestConfig) -> None:
-    """While the agent is busy: Claude shows the live Stop button; pi shows the
-    disabled-with-tooltip placeholder (the Stop control is never hidden)."""
+    """While the agent is busy, BOTH Claude and pi now show the live Stop button
+    (the disabled-with-tooltip placeholder is absent for both), and pressing it
+    ends the in-flight turn — pi gained interruption via its `abort` command."""
     page = sculptor_instance_.page
     release_path = Path(tempfile.gettempdir()) / f"pi_cap_stop_{uuid.uuid4().hex}"
     try:
-        _start_busy_workspace_for_harness(sculptor_instance_, harness, "Stop Button Gate", release_path)
+        task_page = _start_busy_workspace_for_harness(sculptor_instance_, harness, "Stop Button Gate", release_path)
+        chat_panel = task_page.get_chat_panel()
         # The pill is only up while the agent is in a cancellable (busy) state.
         expect(page.get_by_test_id(ElementIDs.STATUS_PILL)).to_be_visible(timeout=15000)
-        if harness.workspace_harness == HarnessName.CLAUDE:
-            expect(page.get_by_test_id(ElementIDs.STATUS_PILL_STOP)).to_be_visible()
-            expect(page.get_by_test_id(ElementIDs.CAPABILITY_DISABLED_STOP)).to_have_count(0)
-        else:
-            # The disabled-with-tooltip placeholder replaces the live Stop
-            # button (the placeholder's button is asserted disabled by the
-            # CapabilityGate unit test).
-            expect(page.get_by_test_id(ElementIDs.CAPABILITY_DISABLED_STOP)).to_be_visible()
-            expect(page.get_by_test_id(ElementIDs.STATUS_PILL_STOP)).to_have_count(0)
+        # The real Stop button renders for both harnesses; the gated-off
+        # placeholder appears for neither.
+        expect(page.get_by_test_id(ElementIDs.STATUS_PILL_STOP)).to_be_visible()
+        expect(page.get_by_test_id(ElementIDs.CAPABILITY_DISABLED_STOP)).to_have_count(0)
+        # Pressing Stop ends the in-flight turn.
+        chat_panel.get_stop_button().click()
+        expect(chat_panel.get_thinking_indicator()).not_to_be_visible(timeout=15000)
     finally:
-        # Let the blocked turn finish so the shared instance tears down cleanly.
+        # Harmless if the turn already ended via Stop; releases the blocked turn
+        # if a Stop assertion failed before the click.
         release_path.touch()
 
 
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
-@user_story("to disable the queued-message interrupt-and-send button in harnesses that cannot interrupt")
+@user_story("to interrupt-and-send a queued message in every harness, now including pi")
 def test_queued_interrupt_gated_on_interruption(
     sculptor_instance_: SculptorInstance, harness: HarnessTestConfig
 ) -> None:
     """A message queued while the agent is busy shows an interrupt-and-send
-    button — live for Claude, disabled-with-tooltip for pi."""
+    button — now live for BOTH Claude and pi (the disabled-with-tooltip
+    placeholder is absent for both)."""
     page = sculptor_instance_.page
     # Queuing only happens with always-interrupt-and-send OFF; disable it
     # defensively in case a sibling test left it on the shared instance.
@@ -257,15 +259,10 @@ def test_queued_interrupt_gated_on_interruption(
         # Queue a second message while the agent is blocked on the sentinel.
         send_chat_message(chat_panel=chat_panel, message="queued while running")
         expect(chat_panel.get_queued_message_bar()).to_have_count(1)
-        if harness.workspace_harness == HarnessName.CLAUDE:
-            expect(page.get_by_test_id(ElementIDs.QUEUED_MESSAGE_SEND_BUTTON)).to_be_visible()
-            expect(page.get_by_test_id(ElementIDs.CAPABILITY_DISABLED_QUEUED_INTERRUPT)).to_have_count(0)
-        else:
-            # The disabled-with-tooltip placeholder replaces the live
-            # interrupt-and-send button (disabled state covered by the
-            # CapabilityGate unit test).
-            expect(page.get_by_test_id(ElementIDs.CAPABILITY_DISABLED_QUEUED_INTERRUPT)).to_be_visible()
-            expect(page.get_by_test_id(ElementIDs.QUEUED_MESSAGE_SEND_BUTTON)).to_have_count(0)
+        # pi now supports interruption: the live interrupt-and-send button
+        # renders for both harnesses; the gated-off placeholder for neither.
+        expect(page.get_by_test_id(ElementIDs.QUEUED_MESSAGE_SEND_BUTTON)).to_be_visible()
+        expect(page.get_by_test_id(ElementIDs.CAPABILITY_DISABLED_QUEUED_INTERRUPT)).to_have_count(0)
     finally:
         release_path.touch()
 

@@ -19,7 +19,9 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
+from typing import Callable
 
 import pytest
 
@@ -262,7 +264,9 @@ def test_fake_pi_rpc_per_turn_directives_take_precedence_over_system_prompt() ->
     assert update.assistant_message_event.get("delta") == "from-turn"
 
 
-def test_fake_pi_rpc_abort_emits_response_and_exits_cleanly() -> None:
+def test_fake_pi_rpc_abort_with_no_turn_acks_and_exits_on_eof() -> None:
+    """An abort with no turn in flight is acked; the process then exits on stdin
+    EOF (it does NOT terminate on the abort itself — real pi stays alive)."""
     result = _run_fake_pi(
         ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
         stdin_input=json.dumps({"type": "abort", "id": "a1"}) + "\n",
@@ -275,6 +279,65 @@ def test_fake_pi_rpc_abort_emits_response_and_exits_cleanly() -> None:
     assert response.command == "abort"
     assert response.success is True
     assert response.id == "a1"
+
+
+def _read_until(stream: object, predicate: Callable[[dict], bool], timeout: float = 10.0) -> dict:
+    """Read JSONL lines from a live fake_pi stdout until ``predicate`` matches.
+
+    Blocking ``readline`` keeps this deterministic: each event is consumed in
+    order, with no fixed sleeps.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        line = stream.readline()  # type: ignore[attr-defined]
+        if not line:
+            raise AssertionError("fake_pi closed stdout before the predicate matched")
+        stripped = line.strip()
+        if not stripped:
+            continue
+        event = json.loads(stripped)
+        if predicate(event):
+            return event
+    raise AssertionError("timed out waiting for predicate")
+
+
+def test_fake_pi_rpc_abort_preempts_blocked_turn_and_process_stays_alive(tmp_path: Path) -> None:
+    """An abort sent while a turn is blocked in a directive preempts it (emitting
+    the `stopReason:"aborted"` boundary) and the process serves the next prompt.
+
+    Driven over a live stdin pipe so the abort lands AFTER the turn is in flight
+    (deterministic — no racing the reader against the turn-start abort reset).
+    """
+    never = tmp_path / "never-created"
+    blocking = f'fake_pi:wait_for_file `{{"path": "{never}"}}`'
+    follow_up = 'fake_pi:emit_text `{"text": "after-abort"}`'
+
+    proc = subprocess.Popen(
+        [sys.executable, "-m", _FAKE_PI_MODULE, "--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    assert proc.stdin is not None and proc.stdout is not None
+    try:
+        # Start the turn that blocks on a sentinel file that never appears.
+        proc.stdin.write(_send_prompt(blocking, prompt_id="p1"))
+        proc.stdin.flush()
+        _read_until(proc.stdout, lambda e: e.get("type") == "agent_start")
+        # Interrupt: the blocked wait_for_file must bail with the aborted boundary.
+        proc.stdin.write(json.dumps({"type": "abort", "id": "a1"}) + "\n")
+        proc.stdin.flush()
+        aborted_end = _read_until(proc.stdout, lambda e: e.get("type") == "agent_end")
+        assert aborted_end["messages"][0]["stopReason"] == "aborted"
+        # The same process serves a follow-up prompt — it did NOT exit on abort.
+        proc.stdin.write(_send_prompt(follow_up, prompt_id="p2"))
+        proc.stdin.flush()
+        done_end = _read_until(proc.stdout, lambda e: e.get("type") == "agent_end")
+        assert done_end["messages"][0]["content"][0]["text"] == "after-abort"
+    finally:
+        proc.stdin.close()
+        proc.wait(timeout=10.0)
+    assert proc.returncode == 0
 
 
 def test_fake_pi_rpc_unknown_directive_emits_failure_response_and_exits_nonzero() -> None:

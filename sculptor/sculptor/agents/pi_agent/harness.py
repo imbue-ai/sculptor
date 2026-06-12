@@ -76,9 +76,10 @@ class PiHarness(Harness):
             # tool calls render with name, input, in-progress state, and result.
             supports_tool_use_rendering=True,
             supports_file_attachments=False,
-            # Pi drops InterruptProcessUserMessage (see agent_wrapper._push_message),
-            # so the user-facing Stop button cannot halt a pi turn — false.
-            supports_interruption=False,
+            # Pi handles InterruptProcessUserMessage via its `abort` command (see
+            # agent_wrapper._request_interrupt), so the user-facing Stop button
+            # halts a pi turn promptly and the session stays usable — true.
+            supports_interruption=True,
             # Pi resolves @-mention path references via its own file-reading loop,
             # the same as Claude — true.
             supports_file_references=True,
