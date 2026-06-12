@@ -71,6 +71,7 @@ from sculptor.foundation.pydantic_serialization import model_dump
 from sculptor.foundation.pydantic_utils import model_update
 from sculptor.foundation.serialization import SerializedException
 from sculptor.foundation.subprocess_utils import ProcessSetupError
+from sculptor.interfaces.agents.agent import AgentConfigTypes
 from sculptor.interfaces.agents.agent import AgentMessageID
 from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
 from sculptor.interfaces.agents.agent import ClearContextUserMessage
@@ -79,6 +80,7 @@ from sculptor.interfaces.agents.agent import InterruptProcessUserMessage
 from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessage
 from sculptor.interfaces.agents.agent import PiAgentConfig
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageUserMessage
+from sculptor.interfaces.agents.agent import TerminalAgentConfig
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
 from sculptor.interfaces.agents.agent import is_terminal_agent_config
 from sculptor.interfaces.agents.artifacts import ArtifactType
@@ -159,6 +161,7 @@ from sculptor.web.auth import SESSION_TOKEN_HEADER_NAME
 from sculptor.web.auth import SessionTokenMiddleware
 from sculptor.web.auth import UserSession
 from sculptor.web.data_types import AgentDiagnosticsResponse
+from sculptor.web.data_types import AgentTypeName
 from sculptor.web.data_types import AnswerQuestionRequest
 from sculptor.web.data_types import ArtifactDataResponse
 from sculptor.web.data_types import AuthResult
@@ -1583,6 +1586,23 @@ def _agent_config_for_workspace(workspace: Workspace) -> ClaudeCodeSDKAgentConfi
     return ClaudeCodeSDKAgentConfig()
 
 
+def _agent_config_for_request(
+    agent_type: AgentTypeName,
+    registration_id: str | None,
+    workspace: Workspace,
+) -> AgentConfigTypes:
+    """Resolve the requested agent type into a stamped `AgentConfigTypes`."""
+    if agent_type == AgentTypeName.TERMINAL:
+        return TerminalAgentConfig()
+    if agent_type == AgentTypeName.REGISTERED:
+        # Registration resolution lands with the registration loader (phase 4).
+        raise HTTPException(status_code=422, detail="registered terminal agents are not available yet")
+    # DELIBERATE-TEMPORARY: claude/pi still defer to the workspace-bound
+    # harness shim so phase 1 leaves pi-workspace behavior unchanged; phase 2
+    # deletes the shim and makes these explicit per-type configs.
+    return _agent_config_for_workspace(workspace)
+
+
 def _get_tasks_for_workspace(
     workspace: Workspace,
     transaction: DataModelTransaction,
@@ -1617,13 +1637,14 @@ def _validate_agent_in_workspace(
     return task
 
 
-def _compute_next_agent_name(existing_tasks: list[Task]) -> str:
-    """Compute the next auto-generated agent name like 'Agent N'.
+def _compute_next_agent_name(existing_tasks: list[Task], prefix: str = "Agent") -> str:
+    """Compute the next auto-generated agent name like 'Agent N' (or '<prefix> N').
 
     Reuses the lowest available number so that deleting "Agent 1" and creating
     a new agent produces "Agent 1" again instead of an ever-increasing counter.
+    Numbering is independent per prefix ("Terminal N" for terminal agents).
     """
-    pattern = re.compile(r"^Agent (\d+)$")
+    pattern = re.compile(rf"^{re.escape(prefix)} (\d+)$")
     used_numbers: set[int] = set()
     for task in existing_tasks:
         if isinstance(task.current_state, AgentTaskStateV2) and task.current_state.title:
@@ -1633,7 +1654,7 @@ def _compute_next_agent_name(existing_tasks: list[Task]) -> str:
     n = 1
     while n in used_numbers:
         n += 1
-    return f"Agent {n}"
+    return f"{prefix} {n}"
 
 
 @router.post("/api/v1/workspaces/{workspace_id}/agents")
@@ -1659,6 +1680,8 @@ def create_workspace_agent(
             raise HTTPException(status_code=404, detail="Workspace project not found")
 
         if agent_request.prompt:
+            if agent_request.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED):
+                raise HTTPException(status_code=422, detail="terminal agents do not take an initial prompt")
             # Delegate to existing start_task logic
             model = agent_request.model
             if model is None:
@@ -1697,20 +1720,23 @@ def create_workspace_agent(
         _prevent_action_if_out_of_free_space(services)
 
         workspace_tasks = _get_tasks_for_workspace(workspace, transaction)
-        task_name = agent_request.name or _compute_next_agent_name(workspace_tasks)
+        agent_config = _agent_config_for_request(agent_request.agent_type, agent_request.registration_id, workspace)
+        name_prefix = "Terminal" if is_terminal_agent_config(agent_config) else "Agent"
+        task_name = agent_request.name or _compute_next_agent_name(workspace_tasks, name_prefix)
         task_id = TaskID()
 
         # Check if this is the user's very first agent ever (including deleted ones).
         # get_all_tasks() includes deleted tasks, so this stays False once any agent
         # has ever been created — even if all workspaces were later deleted.
         # Skip during integration tests to avoid injecting unexpected messages.
+        # Terminal agents (resolved config, so registered ones too) have no chat
+        # stream — an intro message would sit in their queue forever, so skip it.
         is_first_agent = (
             not settings.TESTING.INTEGRATION_ENABLED
+            and not is_terminal_agent_config(agent_config)
             and len(workspace_tasks) == 0
             and len(transaction.get_all_tasks()) == 0  # pyre-fixme[16]
         )
-
-        agent_config = _agent_config_for_workspace(workspace)
 
         with services.git_repo_service.open_local_user_git_repo_for_read(project) as repo:
             initial_commit_hash = repo.get_current_commit_hash()

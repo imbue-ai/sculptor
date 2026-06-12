@@ -8,7 +8,9 @@ NOTE: Endpoints are not currently tested for cross-user authorization (preventin
 
 from typing import Generator
 
+import httpx
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 import sculptor.services.user_config.user_config as user_config_module
@@ -23,7 +25,10 @@ from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.pydantic_serialization import model_dump
 from sculptor.foundation.pydantic_utils import model_update
 from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
+from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.interfaces.agents.agent import HelloAgentConfig
+from sculptor.interfaces.agents.agent import PiAgentConfig
+from sculptor.interfaces.agents.agent import TerminalAgentConfig
 from sculptor.interfaces.agents.artifacts import ArtifactType
 from sculptor.interfaces.agents.artifacts import DiffArtifact
 from sculptor.interfaces.agents.tasks import TaskState
@@ -39,9 +44,11 @@ from sculptor.state.chat_state import ToolUseBlock
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
 from sculptor.state.messages import ResponseBlockAgentMessage
+from sculptor.web.app import _agent_config_for_request
 from sculptor.web.auth import SESSION_TOKEN_HEADER_NAME
 from sculptor.web.auth import UserSession
 from sculptor.web.auth import authenticate_anonymous
+from sculptor.web.data_types import AgentTypeName
 from sculptor.web.data_types import CreateAgentRequest
 from sculptor.web.data_types import SendMessageRequest
 from sculptor.web.data_types import StartTaskRequest
@@ -957,3 +964,128 @@ def test_complete_onboarding_rejects_empty_email_without_welcome_step(
     response = client.post("/api/v1/config/complete")
     assert response.status_code == 400, response.text
     assert "Welcome step" in response.json()["detail"]
+
+
+# Agent-type creation path (terminal agents).
+
+
+def test_agent_config_for_request_resolves_each_type(
+    test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        claude_workspace = _create_workspace(transaction, test_services, test_project, "claude ws")
+        pi_workspace = test_services.workspace_service.create_workspace(
+            project=test_project,
+            initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
+            source_branch=None,
+            requested_branch_name=None,
+            description="pi ws",
+            transaction=transaction,
+            harness=HarnessName.PI,
+        )
+
+    assert isinstance(_agent_config_for_request(AgentTypeName.TERMINAL, None, claude_workspace), TerminalAgentConfig)
+    with pytest.raises(HTTPException) as exc_info:
+        _agent_config_for_request(AgentTypeName.REGISTERED, "some-registration", claude_workspace)
+    assert exc_info.value.status_code == 422
+    # Chat types still defer to the workspace-bound harness shim (phase 1).
+    assert isinstance(
+        _agent_config_for_request(AgentTypeName.CLAUDE, None, claude_workspace), ClaudeCodeSDKAgentConfig
+    )
+    assert isinstance(_agent_config_for_request(AgentTypeName.PI, None, pi_workspace), PiAgentConfig)
+
+
+def _post_agent(client: TestClient, workspace: Workspace, body: dict) -> httpx.Response:
+    return client.post(f"/api/v1/workspaces/{workspace.object_id}/agents", json=body)
+
+
+def test_create_terminal_agent_stamps_terminal_config_and_names_terminal_n(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+
+    first = _post_agent(client, workspace, {"agentType": "terminal"})
+    assert first.status_code == 200, first.text
+    assert first.json()["title"] == "Terminal 1"
+    first_task_id = TaskID(first.json()["id"])
+
+    with user_session.open_transaction(test_services) as transaction:
+        task = test_services.task_service.get_task(first_task_id, transaction)
+    assert task is not None
+    assert isinstance(task.input_data, AgentTaskInputsV2)
+    assert task.input_data.agent_config.object_type == "TerminalAgentConfig"
+
+    # Numbering is independent per prefix: a chat agent is still "Agent 1".
+    chat = _post_agent(client, workspace, {})
+    assert chat.status_code == 200, chat.text
+    assert chat.json()["title"] == "Agent 1"
+
+    second = _post_agent(client, workspace, {"agentType": "terminal"})
+    assert second.status_code == 200, second.text
+    assert second.json()["title"] == "Terminal 2"
+
+    # Lowest-available reuse: deleting "Terminal 1" frees its number.
+    delete_response = client.delete(f"/api/v1/workspaces/{workspace.object_id}/agents/{first_task_id}")
+    assert delete_response.status_code in (200, 204)
+    third = _post_agent(client, workspace, {"agentType": "terminal"})
+    assert third.status_code == 200, third.text
+    assert third.json()["title"] == "Terminal 1"
+
+
+def test_create_terminal_agent_with_prompt_is_rejected(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+
+    response = _post_agent(client, workspace, {"agentType": "terminal", "prompt": "hi"})
+    assert response.status_code == 422
+    response = _post_agent(client, workspace, {"agentType": "registered", "prompt": "hi"})
+    assert response.status_code == 422
+
+
+def test_create_registered_agent_is_not_available_yet(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+
+    response = _post_agent(client, workspace, {"agentType": "registered", "registrationId": "claude-code"})
+    assert response.status_code == 422
+
+
+def test_first_terminal_agent_gets_no_intro_message(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+
+    response = _post_agent(client, workspace, {"agentType": "terminal"})
+    assert response.status_code == 200, response.text
+    task_id = TaskID(response.json()["id"])
+
+    with user_session.open_transaction(test_services) as transaction:
+        messages = test_services.task_service.get_saved_messages_for_task(task_id, transaction)
+    assert not any(isinstance(m, ChatInputUserMessage) for m in messages)
+
+
+def test_first_claude_agent_still_gets_intro_message(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+
+    response = _post_agent(client, workspace, {})
+    assert response.status_code == 200, response.text
+    task_id = TaskID(response.json()["id"])
+
+    with user_session.open_transaction(test_services) as transaction:
+        messages = test_services.task_service.get_saved_messages_for_task(task_id, transaction)
+    assert any(isinstance(m, ChatInputUserMessage) for m in messages)

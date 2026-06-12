@@ -36,6 +36,19 @@ class TaskInterface(StrEnum):
     API = "API"
 
 
+class AgentTypeName(StrEnum):
+    """The per-agent type chosen at creation time (REQ-TYPE-1).
+
+    `REGISTERED` requires a `registration_id` alongside it. Distinct from the
+    DELIBERATE-TEMPORARY workspace-bound `HarnessName`, which phase 2 deletes.
+    """
+
+    CLAUDE = "claude"
+    PI = "pi"
+    TERMINAL = "terminal"
+    REGISTERED = "registered"
+
+
 class WorkspaceBranchInfo(SerializableModel):
     """Current branch for a workspace's working directory."""
 
@@ -162,6 +175,9 @@ class CreateAgentRequest(RequestModel):
     fast_mode: bool = False
     effort: EffortLevel = EffortLevel.EXTRA_HIGH
     sent_via: str | None = None
+    agent_type: AgentTypeName = AgentTypeName.CLAUDE
+    # Required iff agent_type is REGISTERED.
+    registration_id: str | None = None
 
 
 class RenameAgentRequest(RequestModel):
