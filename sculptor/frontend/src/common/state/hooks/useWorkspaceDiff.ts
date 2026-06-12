@@ -77,6 +77,21 @@ export const prefetchWorkspaceDiff = (workspaceId: string, targetBranch: string 
   });
 
 /**
+ * Get the cached diff if fresh, otherwise fetch it. Like `prefetchWorkspaceDiff`
+ * but returns the data — for prefetch steps that derive further work from the
+ * diff (e.g. warming the changed files' contents).
+ */
+export const ensureWorkspaceDiff = async (
+  workspaceId: string,
+  targetBranch: string | null,
+): Promise<DiffArtifact | null> => {
+  return await queryClient.ensureQueryData({
+    queryKey: workspaceDiffQueryKey(workspaceId, targetBranch).key,
+    queryFn: ({ signal }) => fetchDiff(workspaceId, signal),
+  });
+};
+
+/**
  * Force a fresh diff fetch from the backend, bypassing any backend-side cache.
  *
  * Goes through `queryClient.fetchQuery` (rather than a manual fetch +

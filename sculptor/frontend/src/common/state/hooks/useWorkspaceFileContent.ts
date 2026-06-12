@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { ReadFileAtRefResponse } from "../../../api";
 import { workspaceReadFile, workspaceReadFileAtRef } from "../../../api";
 import type { BackendQueryKeyResult, BackendQueryResult } from "../../queryClient.ts";
-import { SCULPTOR_QUERY_KEY_PREFIX } from "../../queryClient.ts";
+import { queryClient, SCULPTOR_QUERY_KEY_PREFIX } from "../../queryClient.ts";
 
 export type WorkspaceFilePayload = ReadFileAtRefResponse;
 
@@ -54,6 +54,21 @@ const fetchPayload = (
   }
   return fetchWorkspaceFileAtRef(workspaceId, filePath, gitRef, signal);
 };
+
+/**
+ * Warm the cache for a file's content without subscribing. A no-op when fresh
+ * data is already cached. Used by the workspace prefetch so a diff's hunk
+ * expansion data is already local when the diff panel mounts on a switch.
+ */
+export const prefetchWorkspaceFileContent = (
+  workspaceId: string,
+  filePath: string,
+  gitRef: string | null,
+): Promise<void> =>
+  queryClient.prefetchQuery({
+    queryKey: workspaceFileContentQueryKey(workspaceId, filePath, gitRef).key,
+    queryFn: ({ signal }) => fetchPayload(workspaceId, filePath, gitRef, signal),
+  });
 
 /**
  * Subscribe to a workspace file's text content (utf-8 only).
