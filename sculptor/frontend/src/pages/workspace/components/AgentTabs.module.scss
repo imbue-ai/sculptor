@@ -8,3 +8,14 @@
 .addButton {
   flex-shrink: 0;
 }
+
+.addButtonGroup {
+  flex-shrink: 0;
+}
+
+.addButtonChevron {
+  flex-shrink: 0;
+  // The chevron is the secondary segment of the split button — keep it
+  // visually narrower than the primary plus segment.
+  width: var(--space-4);
+}
