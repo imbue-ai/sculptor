@@ -29,6 +29,11 @@ export const useArtifactSync = (workspaceId: string, taskId: string): void => {
   const inFlightArtifacts = useRef<Set<ArtifactType>>(new Set());
   // Track artifacts that received an update while a fetch was in-flight
   const needsRefetch = useRef<Set<ArtifactType>>(new Set());
+  // Aborts the previous task's in-flight fetches on task switch. The refs
+  // above track the CURRENT task's state, so a late response from the old
+  // task must neither clear them nor re-enqueue work; checking this
+  // controller's signal is how a fetch knows its bookkeeping went stale.
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchArtifact = useCallback(
     async (artifactType: ArtifactType): Promise<void> => {
@@ -38,10 +43,13 @@ export const useArtifactSync = (workspaceId: string, taskId: string): void => {
         return;
       }
       inFlightArtifacts.current.add(artifactType);
+      abortControllerRef.current ??= new AbortController();
+      const controller = abortControllerRef.current;
 
       try {
         const { data } = await getWorkspaceAgentArtifact({
           path: { workspace_id: workspaceId, agent_id: taskId, artifact_name: artifactType },
+          meta: { signal: controller.signal },
         });
 
         if (!data) {
@@ -69,16 +77,21 @@ export const useArtifactSync = (workspaceId: string, taskId: string): void => {
           },
         });
       } catch (error) {
-        console.error(`Error fetching artifact ${artifactType}:`, error);
+        if (!controller.signal.aborted) {
+          console.error(`Error fetching artifact ${artifactType}:`, error);
+        }
       } finally {
-        inFlightArtifacts.current.delete(artifactType);
-        clearTaskUpdatedArtifacts({ taskId, artifactTypes: [artifactType] });
+        // After an abort the refs belong to the NEW task — leave them alone.
+        if (!controller.signal.aborted) {
+          inFlightArtifacts.current.delete(artifactType);
+          clearTaskUpdatedArtifacts({ taskId, artifactTypes: [artifactType] });
 
-        // If an update arrived while we were fetching, re-enqueue via the atom
-        // so the useEffect triggers a new non-recursive fetch
-        if (needsRefetch.current.has(artifactType)) {
-          needsRefetch.current.delete(artifactType);
-          updateTaskUpdatedArtifacts({ taskId, artifactTypes: [artifactType] });
+          // If an update arrived while we were fetching, re-enqueue via the atom
+          // so the useEffect triggers a new non-recursive fetch
+          if (needsRefetch.current.has(artifactType)) {
+            needsRefetch.current.delete(artifactType);
+            updateTaskUpdatedArtifacts({ taskId, artifactTypes: [artifactType] });
+          }
         }
       }
     },
@@ -94,10 +107,19 @@ export const useArtifactSync = (workspaceId: string, taskId: string): void => {
     }
   }, [updatedArtifacts, fetchArtifact]);
 
-  // Reset requested artifacts when task changes
+  // Reset requested artifacts when the viewed task changes, aborting the
+  // previous task's in-flight fetches so their responses are dropped.
   useEffect(() => {
-    inFlightArtifacts.current.clear();
-    needsRefetch.current.clear();
+    // The Sets are stable containers for the hook's lifetime; captured here so
+    // the cleanup clears the same instances it saw.
+    const inFlight = inFlightArtifacts.current;
+    const pendingRefetch = needsRefetch.current;
+    return (): void => {
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+      inFlight.clear();
+      pendingRefetch.clear();
+    };
   }, [taskId]);
 };
 
