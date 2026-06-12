@@ -211,6 +211,7 @@ from sculptor.web.data_types import SignalEventRequest
 from sculptor.web.data_types import SkillInfo
 from sculptor.web.data_types import SkipAccountSetupRequest
 from sculptor.web.data_types import StartTaskRequest
+from sculptor.web.data_types import TerminalInputRequest
 from sculptor.web.data_types import UpdateUserConfigRequest
 from sculptor.web.data_types import UpdateWorkspaceRequest
 from sculptor.web.data_types import UploadDiagnosticsRequest
@@ -229,6 +230,7 @@ from sculptor.web.derived import CodingAgentTaskView
 from sculptor.web.derived import TaskInterface
 from sculptor.web.derived import TaskViewTypes
 from sculptor.web.derived import create_initial_task_view
+from sculptor.web.derived import scan_terminal_signal_state
 from sculptor.web.message_conversion import convert_agent_messages_to_task_update
 from sculptor.web.middleware import App
 from sculptor.web.middleware import DecoratedAPIRouter
@@ -3240,6 +3242,77 @@ def post_agent_signal(
             logger.info("ignoring unknown terminal signal event {} for task {}", event, task.object_id)
     if diff_workspace_id is not None:
         services.workspace_service.maybe_refresh_workspace_diff(diff_workspace_id)
+    return Response(status_code=204)
+
+
+# Bracketed-paste markers: TUIs that support them (Claude Code's included)
+# treat the wrapped block as one paste and do not auto-submit on embedded
+# newlines, so the program — not us — controls submission.
+_BRACKETED_PASTE_START = b"\x1b[200~"
+_BRACKETED_PASTE_END = b"\x1b[201~"
+
+
+@router.post("/api/v1/agents/{agent_id}/terminal/input", status_code=204)
+def post_agent_terminal_input(
+    agent_id: str,
+    request: Request,
+    input_request: TerminalInputRequest,
+    user_session: UserSession = Depends(get_user_session),
+) -> Response:
+    """Write an automated prompt into a registered terminal agent's PTY (architecture §9).
+
+    The reverse channel that lets Sculptor features (Commit, Create PR,
+    custom actions) reach a TUI as if the user typed the prompt. Guarded so
+    text is only ever written to a program that expects it; works with the
+    terminal panel closed (server-side write, not the WebSocket layer).
+    """
+    validated_task_id = validate_task_id(agent_id)
+    services = get_services_from_request_or_websocket(request)
+    with user_session.open_transaction(services) as transaction:
+        task = services.task_service.get_task(validated_task_id, transaction)
+    if task is None or task.is_deleted:
+        raise HTTPException(status_code=404, detail=f"Terminal agent {agent_id} not found")
+    input_data = task.input_data
+    if not isinstance(input_data, AgentTaskInputsV2) or not is_terminal_agent_config(input_data.agent_config):
+        # 404 for chat agents too — don't leak the task type.
+        raise HTTPException(status_code=404, detail=f"Terminal agent {agent_id} not found")
+
+    # Guard 1: only registrations that opted in. Plain terminals and
+    # non-opt-in registrations NEVER receive writes — a bare shell would
+    # execute the prompt as commands.
+    agent_config = input_data.agent_config
+    if not isinstance(agent_config, RegisteredTerminalAgentConfig) or not agent_config.accepts_automated_prompts:
+        raise HTTPException(status_code=409, detail="this agent does not accept automated prompts")
+
+    # Guard 2: the program must be at its prompt — the latest signal of the
+    # CURRENT run must be IDLE or WAITING (answering a question is a primary
+    # use case). "Run started but no signals yet" is NOT enough: a registered
+    # agent whose hooks are broken degrades to plain-terminal behavior
+    # (REQ-TERM-2), and we must not write into an unknown state. The check is
+    # inherently racy (the program may go busy between check and write) —
+    # acceptable: it prevents the systematic misuse, not a TOCTOU-proof lock.
+    run_started, latest_signal = scan_terminal_signal_state(
+        services.task_service.get_live_messages_for_task(task.object_id)
+    )
+    if not run_started or latest_signal not in (TerminalStatusSignal.IDLE, TerminalStatusSignal.WAITING):
+        raise HTTPException(status_code=409, detail="agent is busy or not at its prompt")
+
+    # Guard 3: a live PTY to write into.
+    terminal_manager = get_terminal_manager(make_agent_terminal_id(task.object_id))
+    if terminal_manager is None:
+        raise HTTPException(status_code=409, detail="terminal not running")
+
+    text = input_request.text
+    if "\n" in text:
+        # One write for the paste block, one for the submit — mirrors how a
+        # human pastes then hits Enter.
+        terminal_manager.write(_BRACKETED_PASTE_START + text.encode() + _BRACKETED_PASTE_END)
+        if input_request.submit:
+            terminal_manager.write(b"\r")
+    else:
+        terminal_manager.write(text.encode() + (b"\r" if input_request.submit else b""))
+    # Log the event, never the text — prompts can embed user content.
+    logger.info("Wrote automated prompt ({} chars) to terminal agent {}", len(text), task.object_id)
     return Response(status_code=204)
 
 

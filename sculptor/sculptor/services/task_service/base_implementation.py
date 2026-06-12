@@ -324,6 +324,11 @@ class BaseTaskService(TaskService, ABC):
         assert isinstance(transaction, SQLTransaction)
         return tuple(x.message for x in transaction.get_messages_for_task(task_id))
 
+    def get_live_messages_for_task(self, task_id: TaskID) -> tuple[Message, ...]:
+        # Same lock as create_message's append so the snapshot is consistent.
+        with self._subscription_lock:
+            return tuple(self._messages_by_task_id.get(task_id, ()))
+
     @contextmanager
     def subscribe_to_all_tasks_for_user(
         self, user_reference: UserReference

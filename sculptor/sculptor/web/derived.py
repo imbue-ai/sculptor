@@ -1,6 +1,7 @@
 import datetime
 import json
 from abc import ABC
+from collections.abc import Sequence
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
@@ -90,6 +91,27 @@ class WorkspacePeekAgentStatus(StrEnum):
     ERROR = "ERROR"
     COMPLETED = "COMPLETED"
     IDLE = "IDLE"
+
+
+def scan_terminal_signal_state(messages: Sequence[Message]) -> tuple[bool, TerminalStatusSignal | None]:
+    """(run_started, latest_signal_this_run) from a task's live messages.
+
+    The single home for the run-scoping subtleties shared by the status
+    derivation below and the terminal-input endpoint:
+    EnvironmentAcquiredRunnerMessage is the run-start anchor — both it and
+    the signal messages are ephemeral, so the result reflects the live
+    program, resets on every (re)start, and a relaunched program's hooks
+    re-drive it. Scanned in reverse: the latest signal wins, but only if it
+    arrived after the most recent run start. No anchor at all means the run
+    hasn't started (still acquiring the environment).
+    """
+    latest_signal: TerminalStatusSignal | None = None
+    for msg in reversed(messages):
+        if latest_signal is None and isinstance(msg, TerminalAgentSignalRunnerMessage):
+            latest_signal = msg.signal
+        if isinstance(msg, EnvironmentAcquiredRunnerMessage):
+            return True, latest_signal
+    return False, None
 
 
 TaskInputType = TypeVar("TaskInputType", bound=TaskInputs)
@@ -430,20 +452,12 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
         if is_terminal_agent_config(self.task_input.agent_config):
             # Terminal agents have no chat: status comes from the latest
             # signal posted since the most recent run start (architecture §5).
-            # EnvironmentAcquiredRunnerMessage is the run-start anchor — both
-            # it and the signals are ephemeral, so status reflects the live
-            # program, resets on every (re)start, and a relaunched program's
-            # hooks re-drive it. No signals this run → calm neutral READY
-            # (REQ-TERM-2); signals never drive the unread dot (REQ-SIG-5).
-            latest_signal: TerminalStatusSignal | None = None
-            for msg in reversed(self._messages):
-                if latest_signal is None and isinstance(msg, TerminalAgentSignalRunnerMessage):
-                    latest_signal = msg.signal
-                if isinstance(msg, EnvironmentAcquiredRunnerMessage):
-                    break
-            else:
-                # No run-start anchor at all: still acquiring the environment
-                # (no "no user message → READY" special case applies).
+            # No signals this run → calm neutral READY (REQ-TERM-2); signals
+            # never drive the unread dot (REQ-SIG-5). No run-start anchor at
+            # all → still acquiring the environment (no "no user message →
+            # READY" special case applies).
+            run_started, latest_signal = scan_terminal_signal_state(self._messages)
+            if not run_started:
                 return TaskStatus.BUILDING
             if latest_signal == TerminalStatusSignal.BUSY:
                 return TaskStatus.RUNNING
