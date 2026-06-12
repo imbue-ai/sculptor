@@ -1,9 +1,12 @@
 """Tests for the terminal-agent registration loader."""
 
+import json
+import re
 from pathlib import Path
 
 import pytest
 
+from sculptor.services.terminal_agent_registry.bundled import get_bundled_claude_code_dir
 from sculptor.services.terminal_agent_registry import registry as registry_module
 from sculptor.services.terminal_agent_registry.registry import get_registration
 from sculptor.services.terminal_agent_registry.registry import load_registrations
@@ -118,3 +121,49 @@ def test_bundled_claude_code_sample_round_trips_through_loader(registrations_dir
     # A resumed session must come back with exactly the launch flags.
     assert registration.resume_command_template == f"{registration.launch_command} --resume {{session_id}}"
     assert registration.accepts_automated_prompts is True
+
+
+def test_bundled_claude_cli_hooks_only_signal_waiting_for_genuine_attention() -> None:
+    """The shipped hooks must not turn the tab yellow without a question.
+
+    The TUI's Notification hook fires for every notification type it emits --
+    including the after-60s-idle ``idle_prompt`` reminder -- so an unfiltered
+    Notification->waiting mapping shows the attention dot with nothing to
+    answer. Questions themselves never fire a Notification at all: the
+    AskUserQuestion / ExitPlanMode tool lifecycle is the question signal
+    (PreToolUse = question shown -> waiting; PostToolUse = answered -> busy).
+    """
+    sample_dir = get_bundled_claude_code_dir()
+    assert sample_dir is not None, "bundled claude-code sample not found"
+    hooks = json.loads((sample_dir / "claude-code-hooks.json").read_text())["hooks"]
+
+    notification_groups = hooks["Notification"]
+    waiting_matchers = []
+    for group in notification_groups:
+        matcher = group.get("matcher")
+        assert matcher, "Notification hooks must filter by notification type (idle_prompt is not attention)"
+        assert re.search(matcher, "idle_prompt") is None, f"matcher {matcher!r} would fire on the idle reminder"
+        if any("signal waiting" in hook["command"] for hook in group["hooks"]):
+            waiting_matchers.append(matcher)
+    for notification_type in ("permission_prompt", "worker_permission_prompt"):
+        assert any(re.search(matcher, notification_type) for matcher in waiting_matchers), (
+            f"permission notifications must signal waiting: {notification_type}"
+        )
+
+    question_groups = [
+        group
+        for group in hooks["PreToolUse"]
+        if any("signal waiting" in hook["command"] for hook in group["hooks"])
+    ]
+    answered_groups = [
+        group
+        for group in hooks["PostToolUse"]
+        if any("signal busy" in hook["command"] for hook in group["hooks"])
+    ]
+    for tool_name in ("AskUserQuestion", "ExitPlanMode"):
+        assert any(re.search(group["matcher"], tool_name) for group in question_groups), (
+            f"{tool_name} must signal waiting when the question/plan UI appears"
+        )
+        assert any(re.search(group["matcher"], tool_name) for group in answered_groups), (
+            f"{tool_name} must signal busy once answered"
+        )
