@@ -76,6 +76,20 @@ def get_agent_terminal_textarea(page: Page) -> Locator:
     return page.get_by_test_id(ElementIDs.AGENT_TERMINAL_PANEL).get_by_label("Terminal input")
 
 
+def type_into_agent_terminal(page: Page, text: str, press_enter: bool = True) -> None:
+    """Type ``text`` into the agent terminal's xterm without shell padding.
+
+    For TUIs (e.g. Claude Code) whose input box is not a shell prompt — the
+    ``run_command_in_agent_terminal`` no-op padding would pollute the prompt.
+    """
+    textarea = get_agent_terminal_textarea(page)
+    textarea.focus()
+    page.wait_for_timeout(300)
+    page.keyboard.type(text, delay=20)
+    if press_enter:
+        page.keyboard.press("Enter")
+
+
 def run_command_in_agent_terminal(page: Page, command: str) -> None:
     """Type ``command`` into a terminal agent's xterm and press Enter.
 
