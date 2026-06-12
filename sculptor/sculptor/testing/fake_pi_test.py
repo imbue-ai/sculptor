@@ -30,6 +30,7 @@ from sculptor.agents.pi_agent.output_processor import ParsedMessageEnd
 from sculptor.agents.pi_agent.output_processor import ParsedMessageUpdate
 from sculptor.agents.pi_agent.output_processor import RpcResponse
 from sculptor.services.dependency_management_service import PI_VERSION_RANGE
+from sculptor.testing.fake_pi import _parse_args
 from sculptor.testing.fake_pi import install_fake_pi_binary
 
 _FAKE_PI_MODULE = "sculptor.testing.fake_pi"
@@ -235,6 +236,40 @@ def test_fake_pi_rpc_default_response_when_no_directives_present() -> None:
     assert "FakePi" in update.assistant_message_event.get("delta", "")
     ParsedMessageEnd.model_validate(_by_type(events, "message_end")[-1])
     ParsedAgentEnd.model_validate(_by_type(events, "agent_end")[0])
+
+
+def test_fake_pi_parses_repeatable_skill_flags() -> None:
+    # PiAgent hands pi the workspace's skill dirs as repeatable --skill flags;
+    # FakePi parses them first-class so tests can assert what was passed.
+    parsed = _parse_args(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", "", "--skill", "/a/skills", "--skill", "/b/skills"]
+    )
+    assert parsed.skill == ["/a/skills", "/b/skills"]
+
+
+def test_fake_pi_accepts_skill_flags_and_runs_a_turn() -> None:
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", "", "--skill", "/some/skills"],
+        stdin_input=_send_prompt("hello"),
+    )
+    assert result.returncode == 0
+    events = _parse_jsonl(result.stdout)
+    RpcResponse.model_validate(events[0])
+    ParsedAgentEnd.model_validate(_by_type(events, "agent_end")[0])
+
+
+def test_fake_pi_echoes_followed_skill_for_skill_invocation() -> None:
+    # A prompt already rewritten to pi's /skill:<name> shape (with no fake_pi:
+    # directive) makes FakePi echo that it "followed" the skill, so an
+    # integration test can assert PiAgent rewrote a picked /name into /skill:.
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=_send_prompt("/skill:fix-bug the login flow"),
+    )
+    assert result.returncode == 0
+    events = _parse_jsonl(result.stdout)
+    update = _first_update(events)
+    assert "followed skill: fix-bug" in update.assistant_message_event.get("delta", "")
 
 
 def test_fake_pi_rpc_directives_in_system_prompt_drive_turn() -> None:

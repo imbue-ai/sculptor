@@ -10,11 +10,13 @@ from pathlib import Path
 import pytest
 
 from sculptor.web.data_types import SkillInfo
-from sculptor.web.skills import _parse_command_frontmatter
+from sculptor.web.skills import SkillSourceKind
 from sculptor.web.skills import _parse_skill_frontmatter
 from sculptor.web.skills import _scan_commands_directory
 from sculptor.web.skills import _scan_skills_directory
 from sculptor.web.skills import discover_skills
+from sculptor.web.skills import get_skill_source_directories
+from sculptor.web.skills import parse_command_frontmatter
 
 # --- _parse_skill_frontmatter tests ---
 
@@ -87,37 +89,37 @@ def test_parse_skill_frontmatter_drops_non_str_description() -> None:
 
 def test_parse_command_frontmatter_extracts_description() -> None:
     content = "---\ndescription: Identify style issues\n---\nBody content\n"
-    description = _parse_command_frontmatter(content)
+    description = parse_command_frontmatter(content)
     assert description == "Identify style issues"
 
 
 def test_parse_command_frontmatter_strips_multiline_description() -> None:
     content = "---\ndescription: |\n  Fix ratchet violations\n  in the codebase.\n---\nBody\n"
-    description = _parse_command_frontmatter(content)
+    description = parse_command_frontmatter(content)
     assert description == "Fix ratchet violations\nin the codebase."
 
 
 def test_parse_command_frontmatter_returns_none_without_frontmatter() -> None:
     content = "Just a markdown file\n"
-    description = _parse_command_frontmatter(content)
+    description = parse_command_frontmatter(content)
     assert description is None
 
 
 def test_parse_command_frontmatter_returns_none_without_description() -> None:
     content = "---\nargument-hint: <file>\n---\nBody\n"
-    description = _parse_command_frontmatter(content)
+    description = parse_command_frontmatter(content)
     assert description is None
 
 
 def test_parse_command_frontmatter_returns_none_for_invalid_yaml() -> None:
     content = "---\n: bad: yaml: [[\n---\n"
-    description = _parse_command_frontmatter(content)
+    description = parse_command_frontmatter(content)
     assert description is None
 
 
 def test_parse_command_frontmatter_returns_none_for_non_dict_yaml() -> None:
     content = "---\n- a list\n---\n"
-    description = _parse_command_frontmatter(content)
+    description = parse_command_frontmatter(content)
     assert description is None
 
 
@@ -484,6 +486,53 @@ def test_discover_skills_plugin_does_not_shadow_unprefixed_repo_skill(
     result = discover_skills(repo_dir, plugin_dirs=[plugin_dir])
     names = sorted(s.name for s in result)
     assert names == ["fix-bug", "sculptor:fix-bug"]
+
+
+# --- get_skill_source_directories tests ---
+
+
+def test_get_skill_source_directories_lists_repo_and_home_in_order() -> None:
+    """The repo/home sources appear in discover order with the right kinds."""
+    repo = Path("/repo")
+    home = Path("/home/dev")
+    result = get_skill_source_directories(repo, home_path=home)
+    assert result == [
+        (repo / ".claude" / "skills", SkillSourceKind.SKILL_DIR, None),
+        (repo / ".claude" / "commands", SkillSourceKind.COMMAND_FILES, None),
+        (home / ".claude" / "skills", SkillSourceKind.SKILL_DIR, None),
+        (home / ".claude" / "commands", SkillSourceKind.COMMAND_FILES, None),
+    ]
+
+
+def test_get_skill_source_directories_puts_plugins_first_with_namespace(tmp_path: Path) -> None:
+    """Plugin `skills/` dirs come first, tagged SKILL_DIR with the plugin namespace."""
+    plugin_dir = tmp_path / "plugin"
+    _write_plugin_json(plugin_dir, "sculptor")
+    repo = tmp_path / "repo"
+    home = tmp_path / "home"
+
+    result = get_skill_source_directories(repo, plugin_dirs=[plugin_dir], home_path=home)
+
+    assert result[0] == (plugin_dir / "skills", SkillSourceKind.SKILL_DIR, "sculptor")
+    # The repo/home sources follow the plugin source.
+    assert [s.path for s in result[1:]] == [
+        repo / ".claude" / "skills",
+        repo / ".claude" / "commands",
+        home / ".claude" / "skills",
+        home / ".claude" / "commands",
+    ]
+
+
+def test_get_skill_source_directories_defaults_home_to_path_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Omitting home_path falls back to Path.home() (matches discover_skills)."""
+    fake_home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+
+    result = get_skill_source_directories(tmp_path / "repo")
+    home_sources = [s.path for s in result if str(s.path).startswith(str(fake_home))]
+    assert home_sources == [fake_home / ".claude" / "skills", fake_home / ".claude" / "commands"]
 
 
 def test_discover_skills_namespaces_multiple_plugins_separately(

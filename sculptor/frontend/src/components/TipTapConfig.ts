@@ -338,7 +338,11 @@ export const createTipTapExtensions = ({
             suggestions: [
               // CAPABILITY-GAP: supportsFileReferences — the @-mention file/folder picker resolves path references the agent reads itself; both Claude and pi report true today, so no harness suppresses it yet. createTipTapExtensions has no taskID, so gate here (thread the capability through Editor) when a harness reports !supportsFileReferences.
               ...(workspaceID && projectID ? [createFileSuggestion(projectID, workspaceID)] : []),
-              // CAPABILITY-GAP: supportsSkills — slash-command skill picker fetches the full skill list regardless of harness; pi has no skills layer, so the items should be suppressed at the picker source when the active task's harness reports !supportsSkills.
+              // The slash-command skill picker fetches the full discover_skills
+              // list regardless of harness, and stays harness-agnostic by
+              // design: pi now supports skills (supports_skills=True), and
+              // PiAgent rewrites a picked `/name` into pi's `/skill:<name>`
+              // form, so the same picker text works for both harnesses.
               ...(workspaceID
                 ? [createSkillSuggestion({ workspaceID })]
                 : projectID

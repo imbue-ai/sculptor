@@ -1,12 +1,13 @@
 """PiAgent — `DefaultAgentWrapper` subclass wrapping `pi --mode rpc`.
 
 The agent spawns a long-lived `pi --mode rpc --session-dir <dir>
---session-id <id> --append-system-prompt <prompt>` subprocess and pumps
-user turns over JSONL stdin/stdout. The session flags persist the
-conversation as a JSONL file under a per-task dir and pin its id
-Sculptor-side, so relaunching after an agent-process restart resumes the
-full conversation (`supports_session_resume`). Pi's stdout multiplexes
-three channels
+--session-id <id> --append-system-prompt <prompt> [--skill <dir> ...]`
+subprocess and pumps user turns over JSONL stdin/stdout. The session flags
+persist the conversation as a JSONL file under a per-task dir and pin its id
+Sculptor-side, so relaunching after an agent-process restart resumes the full
+conversation (`supports_session_resume`). The `--skill` flags point pi at the
+workspace's Claude-visible skill sources so its skill set matches the slash
+picker's (`supports_skills`). Pi's stdout multiplexes three channels
 (`response`, `extension_ui_request`, and the `AgentSessionEvent` union);
 the dispatcher distinguishes them by top-level `type`. Pi's tool calls
 render as rich tool blocks (`supports_tool_use_rendering=True`): the
@@ -27,8 +28,11 @@ from __future__ import annotations
 import json
 import os
 import queue
+import re
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from queue import Empty
 from queue import Queue
 from threading import Event
@@ -75,6 +79,7 @@ from sculptor.agents.pi_agent.output_processor import parse_rpc_message
 from sculptor.agents.pi_agent.tool_rendering import build_tool_result_content
 from sculptor.agents.pi_agent.tool_rendering import extract_text_from_tool_payload
 from sculptor.agents.pi_agent.tool_rendering import map_pi_tool_call
+from sculptor.common.plugin import get_plugin_dirs
 from sculptor.foundation.common import generate_id
 from sculptor.foundation.secrets_utils import Secret
 from sculptor.foundation.thread_utils import ObservableThread
@@ -105,6 +110,10 @@ from sculptor.state.claude_state import get_tool_invocation_string
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import Message
 from sculptor.state.messages import ResponseBlockAgentMessage
+from sculptor.web.skills import SkillSourceKind
+from sculptor.web.skills import discover_skills
+from sculptor.web.skills import get_skill_source_directories
+from sculptor.web.skills import parse_command_frontmatter
 
 # Pi's file-mutating tools, keyed by their lowercase RPC `toolName`
 # (pi 0.78.0 `packages/coding-agent/src/core/tools/{edit,write,bash}.ts`;
@@ -173,6 +182,54 @@ class _ToolCall:
     partial_text: str = ""
 
 
+# Matches a leading slash-command token (`/name`) and captures the remainder
+# (args), DOTALL so multi-line prompts keep their tail. `\S+` lets the name
+# carry a `:` so a plugin-namespaced `/sculptor-workflow:fix-bug` is captured
+# whole before the namespace is stripped.
+_SKILL_INVOCATION_RE = re.compile(r"^/(\S+)(.*)$", re.DOTALL)
+
+
+def _rewrite_skill_invocation(text: str, discovered_skill_names: frozenset[str]) -> str:
+    """Rewrite a leading Sculptor skill invocation into pi's `/skill:<name>` shape.
+
+    The frontend stays harness-agnostic: it sends a picked skill as the same
+    `/name [args]` text it sends Claude. pi instead invokes a skill as
+    `/skill:<name>`. When `name` is one of the workspace's discovered skills
+    (the set the slash picker offers), rewrite `/name [args]` →
+    `/skill:<name> [args]`; otherwise the text is passed through untouched.
+
+    Gating on the discovered set is what keeps the rewrite safe: pseudo-skills
+    (`/clear`, `/copy`, `/btw`) are parsed frontend-side and never reach here
+    nor appear in that set, and ordinary text that merely starts with `/` is
+    left alone. A plugin-namespaced name (`<plugin>:<skill>`) is reduced to its
+    bare `<skill>` because pi registers plugin skills un-namespaced (tracked as
+    a FOLLOWUPS divergence in the tranche MR).
+    """
+    if not text.startswith("/"):
+        return text
+    match = _SKILL_INVOCATION_RE.match(text)
+    if match is None:
+        return text
+    name, rest = match.group(1), match.group(2)
+    if name not in discovered_skill_names:
+        return text
+    bare_name = name.rsplit(":", 1)[-1]
+    return f"/skill:{bare_name}{rest}"
+
+
+def _render_synthesized_skill(name: str, description: str, body: str) -> str:
+    """Render a SKILL.md that wraps a loose `.claude/commands/*.md` command.
+
+    pi only discovers skills as `SKILL.md` directories, so a loose command file
+    is wrapped in one. `name`/`description` are JSON-encoded (valid YAML flow
+    scalars) so colons, quotes, or stray characters in either can't break the
+    frontmatter; the description is flattened to one line because pi refuses to
+    load a skill whose description is missing.
+    """
+    flat_description = " ".join(description.split())
+    return f"---\nname: {json.dumps(name)}\ndescription: {json.dumps(flat_description)}\n---\n\n{body}"
+
+
 class _TurnState:
     """Per-turn streaming accumulator state.
 
@@ -221,6 +278,10 @@ class PiAgent(DefaultAgentWrapper):
     # The current escalation timer's cancel signal (one per interrupt). Set when
     # the turn ends so the grace-window thread stands down without SIGTERM.
     _escalation_cancel: Event | None = PrivateAttr(default=None)
+    # The workspace's discovered skill names (the same set the slash picker
+    # offers), captured at launch so `_run_prompt_turn` can rewrite a picked
+    # `/name` into pi's `/skill:<name>` form. Empty until `start()`.
+    _discovered_skill_names: frozenset[str] = PrivateAttr(default_factory=frozenset)
 
     def start(self, secrets: Mapping[str, str | Secret]) -> None:
         # Resolve and validate the pi binary BEFORE super().start so the
@@ -268,6 +329,12 @@ class PiAgent(DefaultAgentWrapper):
             )
 
         system_prompt = self._build_system_prompt()
+        # Point pi at the workspace's Claude-visible skill sources (--skill) and
+        # capture the picker's skill names so invocations can be rewritten to
+        # pi's /skill: shape. Both derive from the same discover_skills roots so
+        # the picker list and pi's loaded set stay in lockstep.
+        skill_args = self._build_skill_launch_args()
+        self._discovered_skill_names = self._discover_skill_names()
         # `--session-id` (Sculptor-pinned id, "creating it if missing") is the
         # resume lever, chosen over `--session <id>`: it never errors on an
         # absent/corrupt session (real pi 0.78.0 exits non-zero for an unknown
@@ -284,6 +351,7 @@ class PiAgent(DefaultAgentWrapper):
             self._session_id,
             "--append-system-prompt",
             system_prompt,
+            *skill_args,
         ]
         self._process = self.environment.run_process_in_background(
             command,
@@ -403,6 +471,87 @@ class PiAgent(DefaultAgentWrapper):
         if self.system_prompt:
             parts.append(f"<User instructions>\n{self.system_prompt.strip()}\n</User instructions>")
         return "\n\n".join(parts)
+
+    def _discover_skill_names(self) -> frozenset[str]:
+        """The workspace's discovered skill names, matching the slash picker.
+
+        Sourced from `discover_skills` (the same authority the `/api/v1/skills`
+        endpoint serves the picker), so the rewrite accepts exactly the names a
+        user can pick. The names may be plugin-namespaced (`<plugin>:<skill>`);
+        `_rewrite_skill_invocation` reduces those to bare names for pi.
+        """
+        skills = discover_skills(self.environment.get_working_directory(), get_plugin_dirs())
+        return frozenset(skill.name for skill in skills)
+
+    def _build_skill_launch_args(self) -> list[str]:
+        """Build the repeatable `--skill <path>` flags pointing pi at the
+        workspace's Claude-visible skill sources.
+
+        Sources come from `get_skill_source_directories` — the same roots
+        `discover_skills` (and so the picker) scans — resolved against this
+        agent's environment paths. SKILL.md-directory sources (repo/home
+        `.claude/skills`, plugin `skills/`) map onto pi's agentskills.io
+        discovery directly. Loose `.claude/commands/*.md` files are not a shape
+        pi discovers, so they are wrapped in synthesized SKILL.md dirs (see
+        `_synthesize_command_skills`). Missing source dirs are skipped quietly
+        (a repo without `.claude/skills` is normal); flag order is deterministic
+        (the helper's discovery order) so `get_commands`-based debugging is
+        stable.
+        """
+        sources = get_skill_source_directories(
+            self.environment.get_working_directory(),
+            plugin_dirs=get_plugin_dirs(),
+            home_path=self.environment.get_user_home_directory(),
+        )
+        args: list[str] = []
+        command_files: list[Path] = []
+        for source in sources:
+            if not source.path.is_dir():
+                continue
+            if source.kind is SkillSourceKind.SKILL_DIR:
+                args += ["--skill", str(source.path)]
+            else:
+                command_files += sorted(source.path.glob("*.md"))
+        synthesized_dir = self._synthesize_command_skills(command_files)
+        if synthesized_dir is not None:
+            args += ["--skill", str(synthesized_dir)]
+        return args
+
+    def _synthesize_command_skills(self, command_files: Sequence[Path]) -> Path | None:
+        """Wrap loose command-style `.md` files in synthesized SKILL.md dirs pi can load.
+
+        pi discovers skills only as `SKILL.md` directories, not the loose `.md`
+        command files Claude also supports (`.claude/commands/*.md`). For each
+        such file write a `<state>/pi_skills/<name>/SKILL.md` wrapper and return
+        the `pi_skills` parent to hand to a single `--skill`, or None when there
+        are no command files. The wrappers live under the per-task state dir —
+        outside the repo and outside `~/.claude` — so neither `discover_skills`
+        (the picker source) nor pi's own ancestor auto-discovery lists them a
+        second time; only the explicit `--skill` loads them. The file stem is
+        the skill name (matching `discover_skills`), the body is carried
+        through, and a description is synthesized when the command file has none
+        (pi refuses to load a skill with no description). First name wins,
+        matching `discover_skills`' cross-source precedence.
+        """
+        if not command_files:
+            return None
+        skills_root = self.environment.get_state_path() / "pi_skills"
+        seen_names: set[str] = set()
+        for command_file in command_files:
+            name = command_file.stem
+            if name in seen_names:
+                continue
+            try:
+                body = command_file.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as e:
+                logger.debug("PiAgent skipping unreadable command file {}: {}", command_file, e)
+                continue
+            seen_names.add(name)
+            description = parse_command_frontmatter(body) or f"Project command '{name}' (from {command_file.name})."
+            skill_md = skills_root / name / "SKILL.md"
+            skill_md.parent.mkdir(parents=True, exist_ok=True)
+            skill_md.write_text(_render_synthesized_skill(name, description, body), encoding="utf-8")
+        return skills_root if seen_names else None
 
     def _collect_api_key_secrets(self) -> dict[str, Secret]:
         config = get_user_config_instance()
@@ -600,7 +749,8 @@ class PiAgent(DefaultAgentWrapper):
             self._cancel_interrupt_escalation()
             prompt_id = generate_id()
             self._turn_in_flight.set()
-            self._send_rpc({"type": "prompt", "id": prompt_id, "message": message.text})
+            prompt_text = _rewrite_skill_invocation(message.text, self._discovered_skill_names)
+            self._send_rpc({"type": "prompt", "id": prompt_id, "message": prompt_text})
             try:
                 self._consume_until_turn_end(prompt_id)
             finally:

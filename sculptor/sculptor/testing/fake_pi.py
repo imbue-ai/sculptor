@@ -76,6 +76,19 @@ _COMMAND_REGEX = re.compile(r"fake_pi:\S+(?:\s+`[^`]*`)?")
 
 _DEFAULT_RESPONSE_TEXT = "[FakePi] Task completed."
 
+# A prompt rewritten to pi's skill-invocation shape (`/skill:<name> [args]`).
+# When such a prompt carries no `fake_pi:` directive, FakePi echoes that it
+# "followed" the skill so tests can assert PiAgent rewrote a picked `/name`
+# into `/skill:<name>` (FakePi only ever sees the already-rewritten text).
+_SKILL_INVOCATION_REGEX = re.compile(r"^/skill:(\S+)")
+_SKILL_FOLLOWED_PREFIX = "[FakePi] followed skill: "
+
+
+def _skill_invocation_name(prompt_text: str) -> str | None:
+    """Return the skill name if ``prompt_text`` is a ``/skill:<name>`` invocation."""
+    match = _SKILL_INVOCATION_REGEX.match(prompt_text.strip())
+    return match.group(1) if match else None
+
 
 class UnknownFakePiCommandError(ValueError):
     """Raised when an unknown ``fake_pi:`` directive is encountered."""
@@ -117,6 +130,10 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--session-dir", default=None)
     parser.add_argument("--session-id", default=None)
     parser.add_argument("--append-system-prompt", default="")
+    # PiAgent passes the workspace's skill source dirs as repeatable --skill
+    # flags. Parse them first-class (rather than swallowing them into _extra) so
+    # tests can assert which paths were handed to pi.
+    parser.add_argument("--skill", action="append", default=[], dest="skill")
     parsed, _extra = parser.parse_known_args(argv)
     return parsed
 
@@ -509,8 +526,10 @@ def _run_turn(
         state.record_turn(prompt_text)
         return
     if not builder.has_text:
-        _emit_text_delta(_DEFAULT_RESPONSE_TEXT, _DEFAULT_RESPONSE_TEXT)
-        builder.emit(_DEFAULT_RESPONSE_TEXT)
+        skill_name = _skill_invocation_name(prompt_text)
+        fallback = f"{_SKILL_FOLLOWED_PREFIX}{skill_name}" if skill_name is not None else _DEFAULT_RESPONSE_TEXT
+        _emit_text_delta(fallback, fallback)
+        builder.emit(fallback)
     full_text = builder.full_text
     _emit_message_end(full_text)
     _emit_agent_end(full_text)

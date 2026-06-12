@@ -10,16 +10,24 @@ import type { SkillEntry } from "~/common/state/hooks/useSkills";
 
 import { SkillsPanel } from "./SkillsPanel";
 
-// `vi.mock` is hoisted to the top of the file, so the spy binding has to
-// live inside `vi.hoisted` to be available when the mock factory runs.
-const { mockUseSkills } = vi.hoisted(() => ({
+// `vi.mock` is hoisted to the top of the file, so the spy bindings have to
+// live inside `vi.hoisted` to be available when the mock factories run.
+const { mockUseSkills, mockUseTaskSupportsSkills } = vi.hoisted(() => ({
   mockUseSkills: vi.fn<() => { skills: ReadonlyArray<SkillEntry>; isLoading: boolean; error: string | null }>(),
+  mockUseTaskSupportsSkills: vi.fn<() => boolean | undefined>(),
 }));
 
 // Mock the data hook so we can drive the panel from tests without an HTTP
 // stub. The real hook is exercised separately in useSkills.test.ts.
 vi.mock("~/common/state/hooks/useSkills", () => ({
   useSkills: (): { skills: ReadonlyArray<SkillEntry>; isLoading: boolean; error: string | null } => mockUseSkills(),
+}));
+
+// Mock the capability hook so a test can drive the skills gate directly. No
+// shipping harness reports supports_skills=False, so the gated-off state can
+// only be exercised here (the integration test covers the supported state).
+vi.mock("~/common/state/hooks/useTaskHelpers", () => ({
+  useTaskSupportsSkills: (): boolean | undefined => mockUseTaskSupportsSkills(),
 }));
 
 const customSkill = (overrides: Partial<SkillEntry> = {}): SkillEntry => ({
@@ -79,6 +87,9 @@ const renderSkillsPanel = (
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default to a skills-supporting harness so the listing/search/insert tests
+  // render the skills they pass in; the gated-off test overrides this.
+  mockUseTaskSupportsSkills.mockReturnValue(true);
 });
 
 afterEach(() => {
@@ -102,6 +113,16 @@ describe("SkillsPanel — render states", () => {
     expect(screen.getByText("No skills found")).toBeInTheDocument();
     // Empty-state hint points the user at .claude/skills/.
     expect(screen.getByText((c) => c.includes(".claude/skills/"))).toBeInTheDocument();
+  });
+
+  it("collapses to the unavailable empty state when the harness does not support skills", () => {
+    // REQ-TEST-4 gated-off coverage: even with skills available, a
+    // !supportsSkills harness shows no chips and the unavailable copy.
+    mockUseTaskSupportsSkills.mockReturnValue(false);
+    renderSkillsPanel({ skills: [customSkill(), builtinSkill()] });
+    expect(document.querySelectorAll('[data-testid="SKILL_CHIP"]')).toHaveLength(0);
+    expect(screen.getByText("Skills unavailable")).toBeInTheDocument();
+    expect(screen.getByText("This harness does not support skills.")).toBeInTheDocument();
   });
 
   it("shows the no-matches empty state when search filters everything out", () => {

@@ -6,8 +6,11 @@ sub-agents, no compaction. It DOES render tool calls
 Sculptor's harness-agnostic tool blocks (see `agent_wrapper` / `tool_rendering`).
 Session resume IS supported — pi persists a per-task JSONL session
 (`--session-dir`/`--session-id`) that a relaunched process resumes (see
-`agent_wrapper.PiAgent`). The `capabilities()` override is the truthful
-declaration that consumers gate on.
+`agent_wrapper.PiAgent`). Skills ARE supported — pi is pointed at the
+workspace's skill directories via `--skill` flags and follows an invoked skill
+(see `agent_wrapper._build_skill_launch_args` / `_rewrite_skill_invocation`).
+The `capabilities()` override is the truthful declaration that consumers gate
+on.
 
 Agent construction is owned by the registry
 (`harness_registry.create_agent_for_run`), not this module, so the pi
@@ -58,7 +61,11 @@ class PiHarness(Harness):
     def capabilities(self) -> HarnessCapabilities:
         return HarnessCapabilities(
             supports_interactive_backchannel=False,
-            supports_skills=False,
+            # Pi reads the workspace's Claude-visible skills via repeatable
+            # --skill flags (agent_wrapper._build_skill_launch_args), enumerates
+            # them through its own skills layer, and follows a picked skill
+            # rewritten to /skill:<name> (agent_wrapper._rewrite_skill_invocation).
+            supports_skills=True,
             supports_sub_agents=False,
             supports_image_input=False,
             supports_fast_mode=False,
