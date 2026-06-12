@@ -16,6 +16,16 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Pin the GITHUB_TOKEN scopes this workflow needs. The
+# mikepenz/action-junit-report steps below create check runs ("backend pytest"
+# and "sculpt CLI pytest"), which requires `checks: write`. Without this block
+# the job inherits the repository's default token permission; when that default
+# is read-only the action 403s ("Resource not accessible by integration") and
+# the required checks never get reported, leaving PRs stuck on a pending status.
+permissions:
+  contents: read
+  checks: write
+
 jobs:
   checks-and-unit-tests:
     name: checks + unit tests
