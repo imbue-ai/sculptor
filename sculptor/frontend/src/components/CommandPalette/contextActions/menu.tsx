@@ -1,4 +1,4 @@
-import { ContextMenu } from "@radix-ui/themes";
+import { ContextMenu, DropdownMenu } from "@radix-ui/themes";
 import { FolderOpenIcon } from "lucide-react";
 import type { ReactElement } from "react";
 import { Fragment } from "react";
@@ -8,7 +8,15 @@ import { getOpenWithItems } from "../../../common/openInApp/items.tsx";
 import type { AccentColor } from "../../../common/state/atoms/themeBuilder";
 import type { Agent, AgentAction, ContextActionShared, WorkspaceAction } from "./types.ts";
 
+/**
+ * Radix's ContextMenu and DropdownMenu expose the same item primitives. The
+ * menu bodies below are rendered through this union so the same action list
+ * can back both the right-click menu and click-triggered "..." dropdowns.
+ */
+type MenuKit = typeof ContextMenu | typeof DropdownMenu;
+
 type RenderMenuProps<TAction extends ContextActionShared, TTarget> = {
+  menu: MenuKit;
   actions: ReadonlyArray<TAction>;
   target: TTarget;
   /**
@@ -40,6 +48,7 @@ type RenderMenuProps<TAction extends ContextActionShared, TTarget> = {
 const renderMenuItems = <TAction extends ContextActionShared, TTarget>(
   props: RenderMenuProps<TAction, TTarget>,
 ): Array<ReactElement> => {
+  const { Item, Separator } = props.menu;
   const visible = props.actions.filter((a) => {
     const v = (a as { visible?: (t: TTarget) => boolean }).visible;
     return v ? v(props.target) : true;
@@ -55,8 +64,8 @@ const renderMenuItems = <TAction extends ContextActionShared, TTarget>(
     const title = getTitleFn ? getTitleFn(props.target) : action.title;
     out.push(
       <Fragment key={action.id}>
-        {isSeparatorVisible ? <ContextMenu.Separator /> : null}
-        <ContextMenu.Item
+        {isSeparatorVisible ? <Separator /> : null}
+        <Item
           data-testid={action.testId}
           color={action.destructive ? props.destructiveColor : undefined}
           disabled={isDisabled}
@@ -68,7 +77,7 @@ const renderMenuItems = <TAction extends ContextActionShared, TTarget>(
           }}
         >
           {action.icon ? <action.icon size={14} /> : null} {title}
-        </ContextMenu.Item>
+        </Item>
       </Fragment>,
     );
     if (props.injectAfter && props.injectAfter.actionId === action.id) {
@@ -89,12 +98,7 @@ export type OpenInRuntime = {
   isMacUi: () => boolean;
 };
 
-export const WorkspaceContextMenuContent = ({
-  actions,
-  workspace,
-  destructiveColor,
-  openInRuntime,
-}: {
+type WorkspaceMenuProps = {
   actions: ReadonlyArray<WorkspaceAction>;
   workspace: Workspace;
   destructiveColor: AccentColor;
@@ -104,7 +108,16 @@ export const WorkspaceContextMenuContent = ({
    * absent the submenu is omitted entirely.
    */
   openInRuntime?: OpenInRuntime;
-}): ReactElement => {
+};
+
+const WorkspaceMenuItems = ({
+  menu,
+  actions,
+  workspace,
+  destructiveColor,
+  openInRuntime,
+}: WorkspaceMenuProps & { menu: MenuKit }): ReactElement => {
+  const { Item, Sub, SubTrigger, SubContent } = menu;
   const isOpenInVisible =
     openInRuntime != null && openInRuntime.canOpenInOS() && openInRuntime.isMacUi() && getOpenWithItems().length > 0;
   // Render the Open-in submenu inline, immediately after the `open_pr`
@@ -112,31 +125,48 @@ export const WorkspaceContextMenuContent = ({
   // Open MR. Falls back when the menu has no `open_pr` row
   // (it just won't appear).
   const openInSub = isOpenInVisible ? (
-    <ContextMenu.Sub>
-      <ContextMenu.SubTrigger>
+    <Sub>
+      <SubTrigger>
         <FolderOpenIcon size={14} /> Open in...
-      </ContextMenu.SubTrigger>
-      <ContextMenu.SubContent>
+      </SubTrigger>
+      <SubContent>
         {getOpenWithItems().map((item) => (
-          <ContextMenu.Item key={item.app} onSelect={(): void => openInRuntime.openInApp(workspace, item.app)}>
+          <Item key={item.app} onSelect={(): void => openInRuntime.openInApp(workspace, item.app)}>
             <img src={item.icon} alt="" width={14} height={14} /> {item.label}
-          </ContextMenu.Item>
+          </Item>
         ))}
-      </ContextMenu.SubContent>
-    </ContextMenu.Sub>
+      </SubContent>
+    </Sub>
   ) : null;
   return (
-    <ContextMenu.Content size="1" onCloseAutoFocus={(e): void => e.preventDefault()}>
+    <>
       {renderMenuItems<WorkspaceAction, Workspace>({
+        menu,
         actions,
         target: workspace,
         destructiveColor,
         performFor: (action) => (): void | Promise<void> => action.perform(workspace),
         injectAfter: openInSub != null ? { actionId: "open_pr", content: openInSub } : undefined,
       })}
-    </ContextMenu.Content>
+    </>
   );
 };
+
+export const WorkspaceContextMenuContent = (props: WorkspaceMenuProps): ReactElement => (
+  <ContextMenu.Content size="1" onCloseAutoFocus={(e): void => e.preventDefault()}>
+    <WorkspaceMenuItems menu={ContextMenu} {...props} />
+  </ContextMenu.Content>
+);
+
+/**
+ * The same workspace action menu as `WorkspaceContextMenuContent`, but for a
+ * click-triggered dropdown (e.g. the "..." button on sidebar workspace rows).
+ */
+export const WorkspaceDropdownMenuContent = (props: WorkspaceMenuProps): ReactElement => (
+  <DropdownMenu.Content size="1" onCloseAutoFocus={(e): void => e.preventDefault()}>
+    <WorkspaceMenuItems menu={DropdownMenu} {...props} />
+  </DropdownMenu.Content>
+);
 
 export const AgentContextMenuContent = ({
   actions,
@@ -150,6 +180,7 @@ export const AgentContextMenuContent = ({
   return (
     <ContextMenu.Content size="1" onCloseAutoFocus={(e): void => e.preventDefault()}>
       {renderMenuItems<AgentAction, Agent>({
+        menu: ContextMenu,
         actions,
         target: agent,
         destructiveColor: "red",
