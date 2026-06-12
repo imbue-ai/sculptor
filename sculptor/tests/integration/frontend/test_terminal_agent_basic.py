@@ -68,7 +68,7 @@ def test_terminal_agent_basic(sculptor_instance_: SculptorInstance) -> None:
     task_page.activate_changes_panel()
     changes_tree = get_changes_tree(page)
     expect(changes_tree).to_be_visible()
-    expect(changes_tree.get_tree_rows().filter(has_text="a_new_file.txt")).to_be_visible(timeout=15_000)
+    expect(changes_tree.get_tree_rows().filter(has_text="a_new_file.txt")).to_be_visible()
 
     # While idle the tab's status dot is neutral (read/unread) — terminal
     # agents never derive running/waiting from chat state.

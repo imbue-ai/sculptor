@@ -49,13 +49,13 @@ def test_terminal_agent_signals_drive_tab_status_dot(sculptor_instance_: Sculpto
     expect(terminal_tab).to_have_attribute("data-dot-status", re.compile(r"^(read|unread)$"))
 
     _post_signal_from_terminal(page, "busy")
-    expect(terminal_tab).to_have_attribute("data-dot-status", "running", timeout=15_000)
+    expect(terminal_tab).to_have_attribute("data-dot-status", "running")
 
     _post_signal_from_terminal(page, "waiting")
-    expect(terminal_tab).to_have_attribute("data-dot-status", "waiting", timeout=15_000)
+    expect(terminal_tab).to_have_attribute("data-dot-status", "waiting")
 
     _post_signal_from_terminal(page, "idle")
-    expect(terminal_tab).to_have_attribute("data-dot-status", re.compile(r"^(read|unread)$"), timeout=15_000)
+    expect(terminal_tab).to_have_attribute("data-dot-status", re.compile(r"^(read|unread)$"))
 
     # files-changed refreshes the Changes panel for a file the shell created.
     run_command_in_agent_terminal(page, "touch signal_file.txt")
@@ -63,4 +63,4 @@ def test_terminal_agent_signals_drive_tab_status_dot(sculptor_instance_: Sculpto
     task_page.activate_changes_panel()
     changes_tree = get_changes_tree(page)
     expect(changes_tree).to_be_visible()
-    expect(changes_tree.get_tree_rows().filter(has_text="signal_file.txt")).to_be_visible(timeout=15_000)
+    expect(changes_tree.get_tree_rows().filter(has_text="signal_file.txt")).to_be_visible()
