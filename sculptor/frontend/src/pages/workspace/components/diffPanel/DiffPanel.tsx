@@ -1,7 +1,7 @@
 import { Box, Flex, Text } from "@radix-ui/themes";
 import { useAtom, useAtomValue } from "jotai";
 import type { ReactElement } from "react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ElementIds, UserConfigField } from "~/api";
 import { useTimedLatch } from "~/common/Hooks.ts";
@@ -25,9 +25,10 @@ import { DeletedFileBanner } from "./DeletedFileBanner.tsx";
 import { DiffErrorBanner } from "./DiffErrorBanner.tsx";
 import { DiffFileHeader, type DiffViewOptions } from "./DiffFileHeader.tsx";
 import styles from "./DiffPanel.module.scss";
+import { DiffSkeleton } from "./DiffSkeleton.tsx";
 import { useActiveFileDiff } from "./hooks.ts";
 import { InFileSearchBar } from "./InFileSearchBar.tsx";
-import { LargeDiffGate } from "./LargeDiffGate.tsx";
+import { LARGE_DIFF_LINE_THRESHOLD, LargeDiffGate } from "./LargeDiffGate.tsx";
 import { PierreDiffView } from "./PierreDiffView.tsx";
 import { ReadOnlyPreview } from "./ReadOnlyPreview.tsx";
 import { RenameBanner } from "./RenameBanner.tsx";
@@ -58,6 +59,10 @@ const PROGRESS_START_DELAY_MS = 120;
 // Once shown, hold the progress bar visible long enough to register even when
 // the underlying fetch returns in under a frame.
 const PROGRESS_MIN_HOLD_MS = 500;
+
+// Longest we wait for hunk-expansion file contents before rendering the diff
+// without them (see the hold effect in DiffPanel).
+const FILE_LINES_HOLD_MS = 1200;
 
 const renderDiffContent = ({
   diffString,
@@ -136,7 +141,11 @@ export const DiffPanel = ({ workspaceId, stateKey, singleFile = false }: DiffPan
     [commitFileDiffString],
   );
 
-  const { oldLines, newLines } = useFileLines(
+  const {
+    oldLines,
+    newLines,
+    isLoading: areFileLinesLoading,
+  } = useFileLines(
     workspaceId,
     shouldSkipFileLines ? null : activeFileDiff.filePath,
     shouldSkipFileLines ? null : activeFileDiff.previousFilePath,
@@ -150,6 +159,20 @@ export const DiffPanel = ({ workspaceId, stateKey, singleFile = false }: DiffPan
     // uncommitted scope diffs against HEAD, so oldLines come from HEAD.
     activeFileDiff.isTargetBranchDiff ? (activeFileDiff.targetBranchMergeBase ?? undefined) : "HEAD",
   );
+  // Hold the diff briefly while its expansion data (full file contents) is
+  // loading, so it paints once, fully formed — without the hold it paints
+  // immediately without expansion data and then fully re-renders (a new diff
+  // web component) when the contents land. After the timeout, render without
+  // expansion rather than blocking on a slow fetch. With the workspace
+  // prefetch warming changed files' contents, the hold rarely engages.
+  const [hasFileLinesHoldExpired, setHasFileLinesHoldExpired] = useState(false);
+  useEffect(() => {
+    setHasFileLinesHoldExpired(false);
+    if (!areFileLinesLoading) return;
+    const timeout = setTimeout(() => setHasFileLinesHoldExpired(true), FILE_LINES_HOLD_MS);
+    return (): void => clearTimeout(timeout);
+  }, [areFileLinesLoading, activeFileDiff.filePath]);
+
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchFocusRequest, setSearchFocusRequest] = useState(0);
@@ -287,6 +310,13 @@ export const DiffPanel = ({ workspaceId, stateKey, singleFile = false }: DiffPan
     // Read-only preview for files with no diff
     if (!diffString) {
       return <ReadOnlyPreview workspaceId={workspaceId} filePath={filePath} />;
+    }
+
+    // Hold for the expansion data unless the diff is large enough that the
+    // LargeDiffGate truncates it (truncated diffs don't use the line arrays).
+    const isWithinExpansionThreshold = diffString.split("\n").length <= LARGE_DIFF_LINE_THRESHOLD;
+    if (areFileLinesLoading && !hasFileLinesHoldExpired && isWithinExpansionThreshold) {
+      return <DiffSkeleton />;
     }
 
     // Added or deleted files have only one side, so a side-by-side split is meaningless.

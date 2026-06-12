@@ -1,0 +1,8 @@
+// Static, low-contrast placeholder bars — intentionally no animation (see
+// DiffSkeleton.tsx).
+.row {
+  background: var(--gray-a2);
+  border-radius: var(--radius-1);
+  flex-shrink: 0;
+  height: 12px;
+}

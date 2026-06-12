@@ -4,7 +4,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 
 import { truncateAtHunkBoundary } from "./truncateAtHunkBoundary";
 
-const LARGE_DIFF_LINE_THRESHOLD = 500;
+export const LARGE_DIFF_LINE_THRESHOLD = 500;
 
 type LargeDiffGateProps = {
   diffString: string;

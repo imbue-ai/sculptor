@@ -13,6 +13,10 @@ const SPLIT_WITH_NEWLINES = /(?<=\n)/;
 type FileLines = {
   oldLines: Array<string> | undefined;
   newLines: Array<string> | undefined;
+  /** True while a side this diff needs is still being fetched. Consumers can
+   * hold rendering briefly instead of painting once without expansion data
+   * and again (a full re-render of the diff web component) when it lands. */
+  isLoading: boolean;
 };
 
 /**
@@ -64,25 +68,33 @@ export const useFileLines = (
   const isNewFile = fileStatus === "A";
   const isDeletedFile = fileStatus === "D";
 
+  const isOldSideEnabled = !isNewFile && filePath !== null;
+  const isNewSideEnabled = !isDeletedFile && filePath !== null;
+
   // Old content — skip for new files
-  const { data: oldContent } = useWorkspaceFileContent(
-    isNewFile || !filePath ? null : workspaceId,
+  const { data: oldContent, isPending: isOldPending } = useWorkspaceFileContent(
+    isOldSideEnabled ? workspaceId : null,
     isNewFile ? null : (previousFilePath ?? filePath),
     baseRef,
   );
 
   // New content — skip for deleted files
-  const { data: newContent } = useWorkspaceFileContent(
-    isDeletedFile || !filePath ? null : workspaceId,
+  const { data: newContent, isPending: isNewPending } = useWorkspaceFileContent(
+    isNewSideEnabled ? workspaceId : null,
     isDeletedFile ? null : filePath,
     null,
   );
+
+  // isPending stays true forever for disabled queries — only count sides this
+  // diff actually fetches.
+  const isLoading = (isOldSideEnabled && isOldPending) || (isNewSideEnabled && isNewPending);
 
   return useMemo(
     () => ({
       oldLines: splitContentIntoLines(oldContent),
       newLines: splitContentIntoLines(newContent),
+      isLoading,
     }),
-    [oldContent, newContent],
+    [oldContent, newContent, isLoading],
   );
 };
