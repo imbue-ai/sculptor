@@ -1595,8 +1595,8 @@ def _agent_config_for_request(
 ) -> AgentConfigTypes:
     """Resolve the requested agent type into a stamped `AgentConfigTypes`.
 
-    Agent type comes ONLY from the creation request (REQ-TYPE-3) — the
-    workspace-bound harness selection is gone.
+    Agent type comes ONLY from the creation request — the workspace-bound
+    harness selection is gone.
     """
     if agent_type == AgentTypeName.TERMINAL:
         return TerminalAgentConfig()
@@ -1611,7 +1611,7 @@ def _agent_config_for_request(
                 detail=f"Terminal-agent registration '{registration_id}' not found",
             )
         # Stamped at creation so the task stays self-describing even if the
-        # registration file later changes (architecture §1).
+        # registration file later changes.
         return RegisteredTerminalAgentConfig(
             registration_id=registration.registration_id,
             display_name=registration.display_name,
@@ -3178,13 +3178,13 @@ def list_terminal_agent_registrations(
     """List the current terminal-agent registrations.
 
     Re-reads the registrations directory on every call — that IS the
-    no-restart re-read the menus rely on (REQ-REG-3); no caching.
+    no-restart re-read the menus rely on; no caching.
     """
     del request, user_session
     return ListTerminalAgentRegistrationsResponse(registrations=load_registrations())
 
 
-# Wire names for the status events (REQ-SIG-4); `files-changed` and
+# Wire names for the status events; `files-changed` and
 # `session-id` are events, not status, and are handled separately.
 _TERMINAL_SIGNAL_STATUS_BY_EVENT: dict[str, TerminalStatusSignal] = {
     "busy": TerminalStatusSignal.BUSY,
@@ -3203,17 +3203,19 @@ def post_agent_signal(
     signal_request: SignalEventRequest,
     user_session: UserSession = Depends(get_user_session),
 ) -> Response:
-    """The local HTTP event API terminal-agent integrations post to (REQ-SIG-1).
+    """The local HTTP event API terminal-agent integrations post to.
 
     Status events become ephemeral runner messages (run-scoped, no unread
     tracking); `files-changed` refreshes the workspace diff; `session-id` is
     validated and persisted for resume; unknown events are logged and ignored
-    so the vocabulary can evolve additively (REQ-SIG-4).
+    so the vocabulary can evolve additively.
     """
     validated_task_id = validate_task_id(agent_id)
     services = get_services_from_request_or_websocket(request)
     diff_workspace_id: WorkspaceID | None = None
-    with user_session.open_transaction(services) as transaction:
+    # Immediate (writer-slot-first) so the session-id read-then-write below
+    # cannot clobber a concurrent state writer (e.g. a rename) on a stale snapshot.
+    with user_session.open_transaction(services, immediate=True) as transaction:
         task = services.task_service.get_task(validated_task_id, transaction)
         if (
             task is None
@@ -3245,8 +3247,8 @@ def post_agent_signal(
                     status_code=422,
                     detail="session-id event requires a session_id matching [A-Za-z0-9._-]{1,128}",
                 )
-            # Evolve only this field on the state read in this transaction so
-            # concurrent state writers (e.g. a rename) are not clobbered.
+            # Evolve only this field; the immediate transaction (above) keeps
+            # the read-then-write atomic against a concurrent state writer.
             updated_state = current_state.evolve(current_state.ref().terminal_session_id, session_id)
             updated_task = task.evolve(task.ref().current_state, updated_state)
             transaction.upsert_task(updated_task)  # pyre-fixme[16]
@@ -3271,7 +3273,7 @@ def post_agent_terminal_input(
     input_request: TerminalInputRequest,
     user_session: UserSession = Depends(get_user_session),
 ) -> Response:
-    """Write an automated prompt into a registered terminal agent's PTY (architecture §9).
+    """Write an automated prompt into a registered terminal agent's PTY.
 
     The reverse channel that lets Sculptor features (Commit, Create PR,
     custom actions) reach a TUI as if the user typed the prompt. Guarded so
@@ -3299,8 +3301,8 @@ def post_agent_terminal_input(
     # Guard 2: the program must be at its prompt — the latest signal of the
     # CURRENT run must be IDLE or WAITING (answering a question is a primary
     # use case). "Run started but no signals yet" is NOT enough: a registered
-    # agent whose hooks are broken degrades to plain-terminal behavior
-    # (REQ-TERM-2), and we must not write into an unknown state. The check is
+    # agent whose hooks are broken degrades to plain-terminal behavior,
+    # and we must not write into an unknown state. The check is
     # inherently racy (the program may go busy between check and write) —
     # acceptable: it prevents the systematic misuse, not a TOCTOU-proof lock.
     run_started, latest_signal = scan_terminal_signal_state(
@@ -3338,7 +3340,7 @@ async def agent_terminal_websocket(
     Connects to the agent-scoped terminal manager spawned by the terminal task
     handler. When the shell has self-exited (the manager unregistered itself)
     or the eager spawn failed, a fresh login shell is created on demand — no
-    registered program is relaunched here (REQ-LIFE-5). Spawn rate is bounded
+    registered program is relaunched here. Spawn rate is bounded
     without extra machinery: one spawn attempt per client connection, and the
     frontend backs off 2s between 4404 retries.
     """
