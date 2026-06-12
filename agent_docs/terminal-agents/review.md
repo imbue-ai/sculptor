@@ -128,10 +128,11 @@ This is cleaner than editing each consumer and delivers the same behavior.
   this diff modified (`test_minimum_interface_conformance.py`,
   `test_pi_basic.py`, `test_pi_capability_gating.py`,
   `test_pi_managed_install.py`) — **29 passed in 103.4s**. Zero failures.
-- **Not run:** `real_claude/test_claude_code_terminal_agent.py` (`@real_claude`,
-  600s timeout). It burns real tokens and is excluded from the default CI runs
-  by design; the deterministic fake-program tests cover the same plumbing. Run
-  it once before release if the bundled sample is part of the release story.
+- **Real-Claude e2e:** `real_claude/test_claude_code_terminal_agent.py` was run
+  once after the review fixes landed — **1 passed in 23.9s**. The bundled
+  sample's hooks work against the actual Claude Code TUI: session id persisted,
+  busy dot during the turn, neutral dot after. (`@real_claude` stays excluded
+  from CI by design; the deterministic fake-program tests cover the plumbing.)
 - **Skipped / xfail:** none introduced. The two `pytestmark = skipif(win32)`
   guards on PTY test modules are correct (PTYs are POSIX-only).
 
@@ -319,11 +320,10 @@ All review findings are resolved on this branch:
 3. ~~POM helpers for the repeated panel-switch assertions~~ — resolved in
    `6530a3ece7`.
 
-One advisory item remains (not a code change): consider one `@real_claude` run
-of `test_claude_code_terminal_agent.py` before a release that advertises the
-bundled Claude Code sample. After each fix the affected Playwright files were
-re-run green (3, then 11 tests) and `just format` / `just check` /
-`just test-unit` passed.
+The advisory item was also completed: the `@real_claude` e2e for the bundled
+Claude Code sample was run and **passed** (1 passed, 23.9s). After each fix the
+affected Playwright files were re-run green (3, then 11 tests) and
+`just format` / `just check` / `just test-unit` passed.
 
 Biggest residual risk: the bundled Claude Code hooks JSON is pinned to the
 hook-event names and CLI flags of Claude Code 2.x (the README documents this);
