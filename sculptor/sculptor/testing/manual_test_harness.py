@@ -15,6 +15,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
+from typing import BinaryIO
 
 import requests
 from loguru import logger
@@ -104,10 +105,16 @@ class ManualTestHarness:
         screenshots_dir: Path | None = None,
         viewport: dict[str, int] | None = None,
         project_path: Path | None = None,
+        init_scripts: list[str] | None = None,
+        is_headless: bool = True,
     ) -> None:
         self._screenshots_dir = screenshots_dir or Path(tempfile.mkdtemp(prefix="sculptor_screenshots_"))
         self._viewport = viewport or _DEFAULT_VIEWPORT
         self._project_path = project_path
+        # Scripts injected into every page before any app code runs (e.g. perf
+        # instrumentation toggles for the frame-capture tooling).
+        self._init_scripts = init_scripts or []
+        self._is_headless = is_headless
 
         # Populated during start()
         self._playwright: Playwright | None = None
@@ -122,6 +129,7 @@ class ManualTestHarness:
         self._port: int | None = None
         self._vite_port: int | None = None
         self._vite_process: subprocess.Popen[bytes] | None = None
+        self._vite_log_file: BinaryIO | None = None
         self._port_manager: PortManager | None = None
 
     @property
@@ -181,10 +189,12 @@ class ManualTestHarness:
         # correctly in headless Chromium (the WebGL addon produces a blank canvas
         # when Chromium's GPU compositor is stubbed out, as it is in --headless=new).
         self._browser = self._playwright.chromium.launch(
-            headless=True,
+            headless=self._is_headless,
             args=["--disable-webgl", "--disable-webgl2"],
         )
         self._browser_context = self._browser.new_context(viewport=self._viewport, device_scale_factor=2)
+        for script in self._init_scripts:
+            self._browser_context.add_init_script(script)
         self._page = self._browser_context.new_page()
         configure_page(self._page, timeout_ms=_DEFAULT_TIMEOUT_MS)
 
@@ -260,11 +270,15 @@ class ManualTestHarness:
             "SCULPTOR_FRONTEND_PORT": str(self._vite_port),
         }
         logger.info("Starting Vite dev server on port {} (proxying to backend port {})", self._vite_port, self._port)
+        # Write Vite's output to a file rather than a pipe: nothing drains the
+        # pipe, and a blocked write inside the dev server (or its generate-api
+        # child) stalls startup until _wait_for_vite times out.
+        self._vite_log_file = open(self._screenshots_dir / "vite.log", "wb")
         self._vite_process = subprocess.Popen(
             ["npm", "run", "dev"],
             cwd=str(frontend_dir),
             env=vite_env,
-            stdout=subprocess.PIPE,
+            stdout=self._vite_log_file,
             stderr=subprocess.STDOUT,
             preexec_fn=os.setsid,
         )
@@ -340,6 +354,9 @@ class ManualTestHarness:
                 except ProcessLookupError:
                     pass
             self._vite_process = None
+        if self._vite_log_file is not None:
+            self._vite_log_file.close()
+            self._vite_log_file = None
 
     def stop(self) -> None:
         """Kill the backend and close the browser."""
