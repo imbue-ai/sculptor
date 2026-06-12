@@ -1241,8 +1241,6 @@ def _drain(queue: Queue) -> list:
     return out
 
 
-# --- Typed protocol module: parse + dispatch coverage ----------------------
-
 # Wire-shape fixtures for every documented event type (RPC §5/§7/§9), lifted
 # from the protocol doc's examples. Each must parse to a typed variant whose
 # discriminator matches.
@@ -1333,8 +1331,6 @@ def test_extract_tool_call_blocks_returns_only_tool_call_blocks() -> None:
     assert blocks[0]["type"] == "toolCall"
 
 
-# --- skill-invocation rewrite (_rewrite_skill_invocation) ---
-
 _DISCOVERED = frozenset({"fix-bug", "sculptor-workflow:review", "write-release-notes"})
 
 
@@ -1378,9 +1374,6 @@ def test_rewrite_skill_invocation_handles_multiline_prompt() -> None:
 
 def test_rewrite_skill_invocation_empty_discovered_set_is_noop() -> None:
     assert _rewrite_skill_invocation("/fix-bug", frozenset()) == "/fix-bug"
-
-
-# --- launch-flag assembly (_build_skill_launch_args / _synthesize_command_skills) ---
 
 
 def _agent_with_skill_dirs(

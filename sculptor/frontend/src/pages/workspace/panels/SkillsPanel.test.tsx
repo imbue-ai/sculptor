@@ -23,9 +23,7 @@ vi.mock("~/common/state/hooks/useSkills", () => ({
   useSkills: (): { skills: ReadonlyArray<SkillEntry>; isLoading: boolean; error: string | null } => mockUseSkills(),
 }));
 
-// Mock the capability hook so a test can drive the skills gate directly. No
-// shipping harness reports supports_skills=False, so the gated-off state can
-// only be exercised here (the integration test covers the supported state).
+// Mock the capability hook so a test can drive the skills gate directly.
 vi.mock("~/common/state/hooks/useTaskHelpers", () => ({
   useTaskSupportsSkills: (): boolean | undefined => mockUseTaskSupportsSkills(),
 }));
@@ -116,8 +114,6 @@ describe("SkillsPanel — render states", () => {
   });
 
   it("collapses to the unavailable empty state when the harness does not support skills", () => {
-    // REQ-TEST-4 gated-off coverage: even with skills available, a
-    // !supportsSkills harness shows no chips and the unavailable copy.
     mockUseTaskSupportsSkills.mockReturnValue(false);
     renderSkillsPanel({ skills: [customSkill(), builtinSkill()] });
     expect(document.querySelectorAll('[data-testid="SKILL_CHIP"]')).toHaveLength(0);

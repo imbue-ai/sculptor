@@ -18,8 +18,6 @@ from sculptor.web.skills import discover_skills
 from sculptor.web.skills import get_skill_source_directories
 from sculptor.web.skills import parse_command_frontmatter
 
-# --- _parse_skill_frontmatter tests ---
-
 
 def test_parse_skill_frontmatter_extracts_name_and_description() -> None:
     content = "---\nname: fix-bug\ndescription: Fix a bug using TDD\n---\nBody content\n"
@@ -84,9 +82,6 @@ def test_parse_skill_frontmatter_drops_non_str_description() -> None:
     assert description is None
 
 
-# --- _parse_command_frontmatter tests ---
-
-
 def test_parse_command_frontmatter_extracts_description() -> None:
     content = "---\ndescription: Identify style issues\n---\nBody content\n"
     description = parse_command_frontmatter(content)
@@ -121,9 +116,6 @@ def test_parse_command_frontmatter_returns_none_for_non_dict_yaml() -> None:
     content = "---\n- a list\n---\n"
     description = parse_command_frontmatter(content)
     assert description is None
-
-
-# --- _scan_skills_directory tests ---
 
 
 def test_scan_skills_directory_finds_valid_skills(tmp_path: Path) -> None:
@@ -218,9 +210,6 @@ def test_scan_skills_directory_uses_empty_description_when_missing(tmp_path: Pat
     assert result == [SkillInfo(name="no-desc", description="", source="custom", file_path=str(skill / "SKILL.md"))]
 
 
-# --- _scan_commands_directory tests ---
-
-
 def test_scan_commands_directory_finds_markdown_commands(tmp_path: Path) -> None:
     commands_dir = tmp_path / ".claude" / "commands"
     commands_dir.mkdir(parents=True)
@@ -280,9 +269,6 @@ def test_scan_commands_directory_ignores_subdirectories(tmp_path: Path) -> None:
 def test_scan_commands_directory_returns_empty_for_missing_directory(tmp_path: Path) -> None:
     result = _scan_commands_directory(tmp_path / "nonexistent")
     assert result == []
-
-
-# --- discover_skills tests ---
 
 
 def test_discover_skills_combines_skills_and_commands(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -486,9 +472,6 @@ def test_discover_skills_plugin_does_not_shadow_unprefixed_repo_skill(
     result = discover_skills(repo_dir, plugin_dirs=[plugin_dir])
     names = sorted(s.name for s in result)
     assert names == ["fix-bug", "sculptor:fix-bug"]
-
-
-# --- get_skill_source_directories tests ---
 
 
 def test_get_skill_source_directories_lists_repo_and_home_in_order() -> None:

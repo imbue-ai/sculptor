@@ -202,8 +202,7 @@ def test_chat_remains_usable_when_uploads_gated(
 
 def _create_skill_in_directory(project_path: Path, skill_name: str, description: str) -> None:
     """Commit a custom skill to the project's .claude/skills/ so the workspace
-    clone (and pi's --skill flags) include it. Mirrors the helper in
-    test_skills_panel.py / test_skill_autocomplete.py."""
+    clone (and pi's --skill flags) include it."""
     skill_dir = project_path / ".claude" / "skills" / skill_name
     skill_dir.mkdir(parents=True, exist_ok=True)
     (skill_dir / "SKILL.md").write_text(f"---\nname: {skill_name}\ndescription: {description}\n---\nInstructions.\n")
@@ -218,10 +217,8 @@ def test_skills_panel_and_picker_list_skills(sculptor_instance_: SculptorInstanc
     list the workspace's skills under pi exactly as under Claude (the picker is
     harness-agnostic; PiAgent rewrites a picked /name into pi's /skill:<name>).
 
-    This is the flipped gate-state test: it previously asserted the panel was
-    empty under pi. The gated-off (supports_skills=False) state is now covered
-    at the component level by SkillsPanel.test.tsx, since no shipping harness
-    reports False."""
+    The gated-off (supports_skills=False) state is covered at the component
+    level by SkillsPanel.test.tsx, since no shipping harness reports False."""
     skill_name = "skills-gate-custom"
     _create_skill_in_directory(sculptor_instance_.project_path, skill_name, "Skill for the pi skills gate test")
 

@@ -72,7 +72,7 @@ def parse_command_frontmatter(content: str) -> str | None:
     Commands use a simpler format than skills: the filename is the command name,
     and the frontmatter may optionally contain a description field. Public
     because the pi agent reuses it when wrapping loose commands in synthesized
-    SKILL.md files, keeping the description consistent with the picker's.
+    SKILL.md files.
     """
     if not content.startswith("---"):
         return None

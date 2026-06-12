@@ -8,12 +8,6 @@ the reply. This exercises the whole supports_skills mechanism — ``--skill``
 launch flags (``agent_wrapper._build_skill_launch_args``), the slash-picker
 list, and the ``/name`` → ``/skill:<name>`` rewrite
 (``agent_wrapper._rewrite_skill_invocation``).
-
-REQ-TEST-1 counterpart: the real_claude suite has no skills test (Claude's own
-skill layer is exercised by the deterministic fake-claude integration tests,
-e.g. test_skills_panel.py / test_skill_autocomplete.py). This real_pi test is
-the first cross-harness end-to-end skills check; the divergence is that there
-is no symmetric real_claude/test_skills.py to mirror.
 """
 
 import subprocess
@@ -30,8 +24,7 @@ from tests.integration.real_pi.helpers import RESPONSE_TIMEOUT_MS
 from tests.integration.real_pi.helpers import real_pi
 
 # A fixed sentinel the skill tells pi to emit. Narrow skill description +
-# explicit body so progressive disclosure can't auto-fire the skill un-invoked
-# (the supports_skills gotcha).
+# explicit body so progressive disclosure can't auto-fire the skill un-invoked.
 _SENTINEL = "SKILL-OK-73194"
 _SKILL_NAME = "pi-skills-sentinel"
 _SKILL_DESCRIPTION = "Internal Sculptor integration-test sentinel; only run when explicitly invoked by name."

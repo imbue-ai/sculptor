@@ -198,12 +198,11 @@ def _rewrite_skill_invocation(text: str, discovered_skill_names: frozenset[str])
     (the set the slash picker offers), rewrite `/name [args]` →
     `/skill:<name> [args]`; otherwise the text is passed through untouched.
 
-    Gating on the discovered set is what keeps the rewrite safe: pseudo-skills
-    (`/clear`, `/copy`, `/btw`) are parsed frontend-side and never reach here
-    nor appear in that set, and ordinary text that merely starts with `/` is
-    left alone. A plugin-namespaced name (`<plugin>:<skill>`) is reduced to its
-    bare `<skill>` because pi registers plugin skills un-namespaced (tracked as
-    a FOLLOWUPS divergence in the tranche MR).
+    Pseudo-skills (`/clear`, `/copy`, `/btw`) are parsed frontend-side and
+    never reach here nor appear in the discovered set, so they pass through;
+    ordinary text that merely starts with `/` is left alone. A plugin-namespaced
+    name (`<plugin>:<skill>`) is reduced to its bare `<skill>` because pi
+    registers plugin skills un-namespaced.
     """
     if not text.startswith("/"):
         return text
@@ -494,9 +493,8 @@ class PiAgent(DefaultAgentWrapper):
         discovery directly. Loose `.claude/commands/*.md` files are not a shape
         pi discovers, so they are wrapped in synthesized SKILL.md dirs (see
         `_synthesize_command_skills`). Missing source dirs are skipped quietly
-        (a repo without `.claude/skills` is normal); flag order is deterministic
-        (the helper's discovery order) so `get_commands`-based debugging is
-        stable.
+        (a repo without `.claude/skills` is normal); flag order follows the
+        helper's discovery order.
         """
         sources = get_skill_source_directories(
             self.environment.get_working_directory(),
