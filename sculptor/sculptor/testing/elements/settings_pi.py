@@ -53,7 +53,7 @@ class PlaywrightPiSettingsElement(PlaywrightIntegrationTestElement):
         return self.get_by_test_id(ElementIDs.PI_PINNED_VERSION)
 
     def get_disabled_banner(self) -> Locator:
-        """Get the multi-harness-disabled callout banner."""
+        """Get the pi-agent-disabled callout banner."""
         return self.get_by_test_id(ElementIDs.PI_SETTINGS_DISABLED_BANNER)
 
     def get_install_commands_block(self) -> Locator:

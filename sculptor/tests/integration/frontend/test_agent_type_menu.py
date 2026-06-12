@@ -1,6 +1,6 @@
 """Integration tests for the split `+` button and its agent-type menu.
 
-The chevron menu lists the agent types (pi gated behind multi-harness),
+The chevron menu lists the agent types (pi gated behind pi-agent),
 selecting Terminal creates a "Terminal N" agent, and a plain `+` click
 creates the last-used type. Terminal-panel behavior is covered by the
 terminal-agent tests; here we only assert tab titles.
@@ -9,8 +9,8 @@ terminal-agent tests; here we only assert tab titles.
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.terminal import expect_terminal_panel_replaces_chat
-from sculptor.testing.elements.user_config import disable_multi_harness
-from sculptor.testing.elements.user_config import enable_multi_harness
+from sculptor.testing.elements.user_config import disable_pi_agent
+from sculptor.testing.elements.user_config import enable_pi_agent
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -59,8 +59,8 @@ def test_agent_type_menu_creates_terminal_agent_and_remembers_type(
     expect(agent_tab_bar.get_agent_tab_by_name("Claude 3")).to_have_count(1)
 
 
-@user_story("to only see the pi agent type when multi-harness is enabled")
-def test_agent_type_menu_gates_pi_behind_multi_harness(
+@user_story("to only see the pi agent type when pi-agent is enabled")
+def test_agent_type_menu_gates_pi_behind_pi_agent_flag(
     sculptor_instance_: SculptorInstance,
 ) -> None:
     page = sculptor_instance_.page
@@ -68,7 +68,7 @@ def test_agent_type_menu_gates_pi_behind_multi_harness(
     agent_tab_bar = task_page.get_agent_tab_bar()
 
     # The flag is sticky on the shared instance — reset it defensively.
-    disable_multi_harness(page)
+    disable_pi_agent(page)
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Pi Gating WS")
 
     menu = agent_tab_bar.open_agent_type_menu()
@@ -79,12 +79,12 @@ def test_agent_type_menu_gates_pi_behind_multi_harness(
     expect(menu).not_to_be_visible()
 
     try:
-        enable_multi_harness(page)
+        enable_pi_agent(page)
         agent_tab_bar.open_agent_type_menu()
         expect(agent_tab_bar.get_agent_type_menu_item_pi()).to_be_visible()
         page.keyboard.press("Escape")
     finally:
-        disable_multi_harness(page)
+        disable_pi_agent(page)
 
 
 @user_story("to see registered terminal agents in the type menu without restarting")

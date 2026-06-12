@@ -29,7 +29,7 @@ import {
 } from "~/common/state/atoms/agentTabs.ts";
 import { debugViewAtomFamily } from "~/common/state/atoms/alphaScroll.ts";
 import { pendingAgentTitlesAtom, tasksArrayAtom, updateTasksAtom } from "~/common/state/atoms/tasks.ts";
-import { isMultiHarnessEnabledAtom } from "~/common/state/atoms/userConfig.ts";
+import { isPiAgentEnabledAtom } from "~/common/state/atoms/userConfig.ts";
 import { useOptimisticTaskDelete } from "~/common/state/hooks/useOptimisticTaskDelete.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
 import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
@@ -227,11 +227,11 @@ export const AgentTabs = (): ReactElement | null => {
   );
 
   const [lastUsedAgentType, setLastUsedAgentType] = useAtom(lastUsedAgentTypeAtom);
-  const isMultiHarnessEnabled = useAtomValue(isMultiHarnessEnabledAtom);
+  const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
   const { registrations, refetch: refreshRegistrations } = useTerminalAgentRegistrations();
-  // A stored "pi" is unusable once multi-harness is turned off — fall back to Claude.
+  // A stored "pi" is unusable once pi-agent is turned off — fall back to Claude.
   const defaultAgentType: StoredAgentType =
-    lastUsedAgentType === "pi" && !isMultiHarnessEnabled ? "claude" : lastUsedAgentType;
+    lastUsedAgentType === "pi" && !isPiAgentEnabled ? "claude" : lastUsedAgentType;
 
   const handleCreateAgent = useCallback(
     async (requestedType?: AgentTypeName, requestedRegistrationId?: string): Promise<void> => {
@@ -541,7 +541,7 @@ export const AgentTabs = (): ReactElement | null => {
               >
                 Claude
               </DropdownMenu.Item>
-              {isMultiHarnessEnabled && (
+              {isPiAgentEnabled && (
                 <DropdownMenu.Item
                   data-testid={ElementIds.AGENT_TYPE_MENU_ITEM_PI}
                   onSelect={() => void handleCreateAgent("pi")}

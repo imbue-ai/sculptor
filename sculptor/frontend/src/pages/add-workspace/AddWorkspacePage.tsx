@@ -28,7 +28,7 @@ import {
   defaultModelAtom,
   isCloneWorkspacesEnabledAtom,
   isInPlaceWorkspacesEnabledAtom,
-  isMultiHarnessEnabledAtom,
+  isPiAgentEnabledAtom,
 } from "../../common/state/atoms/userConfig.ts";
 import {
   clearDraftCreatingAtom,
@@ -54,7 +54,7 @@ export const AddWorkspacePage = (): ReactElement => {
   const { navigateToAgent } = useImbueNavigate();
   const isInPlaceWorkspacesEnabled = useAtomValue(isInPlaceWorkspacesEnabledAtom);
   const isCloneWorkspacesEnabled = useAtomValue(isCloneWorkspacesEnabledAtom);
-  const isMultiHarnessEnabled = useAtomValue(isMultiHarnessEnabledAtom);
+  const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
   // Worktree mode is always the default; the selector only appears when an
   // opt-in mode (clone or in-place) has been enabled and the user has more
   // than one option to choose from.
@@ -78,11 +78,11 @@ export const AddWorkspacePage = (): ReactElement => {
   // The form opens preset to the shared last-used type (the same MRU the tab
   // bar's + button reads) — a deliberate mount-time snapshot the user can
   // change freely; the MRU is written back only when a workspace is actually
-  // created. A stored "pi" is unusable when multi-harness is off.
+  // created. A stored "pi" is unusable when pi-agent is off.
   const lastUsedAgentType = useAtomValue(lastUsedAgentTypeAtom);
   const setLastUsedAgentType = useSetAtom(lastUsedAgentTypeAtom);
   const [agentTypeValue, setAgentTypeValue] = useState<string>(
-    lastUsedAgentType === "pi" && !isMultiHarnessEnabled ? "claude" : lastUsedAgentType,
+    lastUsedAgentType === "pi" && !isPiAgentEnabled ? "claude" : lastUsedAgentType,
   );
   const { registrations, refetch: refreshRegistrations } = useTerminalAgentRegistrations();
   const { agentType, registrationId } = parseStoredAgentType(agentTypeValue as StoredAgentType);
@@ -426,7 +426,7 @@ export const AddWorkspacePage = (): ReactElement => {
 
             {/* First-agent type selector — the same per-agent choice as the
                 tab bar's + menu. Only the pi option is gated behind the
-                experimental multi-harness flag; Claude, Terminal, and any
+                experimental pi-agent flag; Claude, Terminal, and any
                 registered terminal agents are available to everyone. */}
             <Select.Root
               size="1"
@@ -459,7 +459,7 @@ export const AddWorkspacePage = (): ReactElement => {
                 <Select.Item value="claude" data-testid={ElementIds.AGENT_TYPE_OPTION_CLAUDE}>
                   Claude
                 </Select.Item>
-                {isMultiHarnessEnabled && (
+                {isPiAgentEnabled && (
                   <Select.Item value="pi" data-testid={ElementIds.AGENT_TYPE_OPTION_PI}>
                     pi (experimental)
                   </Select.Item>
