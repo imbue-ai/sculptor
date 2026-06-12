@@ -77,3 +77,32 @@ def test_terminal_first_agent(
 
     expect_terminal_panel_replaces_chat(page)
     expect(PlaywrightAgentTabBarElement(page).get_agent_tab_by_name("Terminal 1")).to_have_count(1)
+
+
+@user_story("to have the new-workspace picker remember my last-used agent type")
+def test_first_agent_type_defaults_to_shared_last_used(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """Both creation surfaces share one MRU: creating a workspace whose first
+    agent is a Terminal makes the tab bar's plain + click create a Terminal
+    too, and the next new-workspace form opens preset to Terminal."""
+    page = sculptor_instance_.page
+    start_task_and_wait_for_ready(
+        sculptor_page=page,
+        workspace_name="MRU Source WS",
+        model_name=None,
+        agent_type="terminal",
+    )
+
+    # The form's creation recorded the MRU — a plain + click (no menu) now
+    # creates another Terminal in the tab bar.
+    agent_tab_bar = PlaywrightAgentTabBarElement(page)
+    agent_tab_bar.get_add_agent_button().click()
+    expect(agent_tab_bar.get_agent_tab_by_name("Terminal 2")).to_have_count(1)
+
+    # And the next new-workspace form opens preset to Terminal. (No cleanup
+    # needed: the per-test browser reset clears localStorage, so the MRU
+    # cannot leak into other tests.)
+    navigate_to_add_workspace_page(page)
+    picker = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_AGENT_TYPE_SELECT)
+    expect(picker).to_contain_text("Terminal")
