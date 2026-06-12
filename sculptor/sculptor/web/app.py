@@ -80,6 +80,8 @@ from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessa
 from sculptor.interfaces.agents.agent import PiAgentConfig
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageUserMessage
 from sculptor.interfaces.agents.agent import TerminalAgentConfig
+from sculptor.interfaces.agents.agent import TerminalAgentSignalRunnerMessage
+from sculptor.interfaces.agents.agent import TerminalStatusSignal
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
 from sculptor.interfaces.agents.agent import is_terminal_agent_config
 from sculptor.interfaces.agents.artifacts import ArtifactType
@@ -201,6 +203,7 @@ from sculptor.web.data_types import RenameAgentRequest
 from sculptor.web.data_types import RepoInfo
 from sculptor.web.data_types import SendMessageRequest
 from sculptor.web.data_types import SetTelemetryRequest
+from sculptor.web.data_types import SignalEventRequest
 from sculptor.web.data_types import SkillInfo
 from sculptor.web.data_types import SkipAccountSetupRequest
 from sculptor.web.data_types import StartTaskRequest
@@ -3136,6 +3139,79 @@ async def workspace_terminal_websocket(
 
     await websocket.accept()
     await websocket.close(code=4404, reason=f"Terminal {index} not found for workspace {workspace_id}")
+
+
+# Wire names for the status events (REQ-SIG-4); `files-changed` and
+# `session-id` are events, not status, and are handled separately.
+_TERMINAL_SIGNAL_STATUS_BY_EVENT: dict[str, TerminalStatusSignal] = {
+    "busy": TerminalStatusSignal.BUSY,
+    "idle": TerminalStatusSignal.IDLE,
+    "waiting-on-input": TerminalStatusSignal.WAITING,
+}
+# Session ids are later interpolated into a resume shell command — keep the
+# accepted alphabet far away from anything shell-significant.
+_TERMINAL_SESSION_ID_PATTERN = re.compile(r"[A-Za-z0-9._-]{1,128}")
+
+
+@router.post("/api/v1/agents/{agent_id}/signal", status_code=204)
+def post_agent_signal(
+    agent_id: str,
+    request: Request,
+    signal_request: SignalEventRequest,
+    user_session: UserSession = Depends(get_user_session),
+) -> Response:
+    """The local HTTP event API terminal-agent integrations post to (REQ-SIG-1).
+
+    Status events become ephemeral runner messages (run-scoped, no unread
+    tracking); `files-changed` refreshes the workspace diff; `session-id` is
+    validated and persisted for resume; unknown events are logged and ignored
+    so the vocabulary can evolve additively (REQ-SIG-4).
+    """
+    validated_task_id = validate_task_id(agent_id)
+    services = get_services_from_request_or_websocket(request)
+    diff_workspace_id: WorkspaceID | None = None
+    with user_session.open_transaction(services) as transaction:
+        task = services.task_service.get_task(validated_task_id, transaction)
+        if (
+            task is None
+            or task.is_deleted
+            or not isinstance(task.current_state, AgentTaskStateV2)
+            or not isinstance(task.input_data, AgentTaskInputsV2)
+            or not is_terminal_agent_config(task.input_data.agent_config)
+        ):
+            # 404 for chat agents too — don't leak the task type.
+            raise HTTPException(status_code=404, detail=f"Terminal agent {agent_id} not found")
+        current_state = task.current_state
+        assert isinstance(current_state, AgentTaskStateV2)
+
+        event = signal_request.event
+        status_signal = _TERMINAL_SIGNAL_STATUS_BY_EVENT.get(event)
+        if status_signal is not None:
+            services.task_service.create_message(
+                TerminalAgentSignalRunnerMessage(signal=status_signal),
+                task_id=task.object_id,
+                transaction=transaction,
+            )
+        elif event == "files-changed":
+            # Refreshed below, outside this transaction (it opens its own).
+            diff_workspace_id = current_state.workspace_id
+        elif event == "session-id":
+            session_id = signal_request.session_id
+            if session_id is None or _TERMINAL_SESSION_ID_PATTERN.fullmatch(session_id) is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail="session-id event requires a session_id matching [A-Za-z0-9._-]{1,128}",
+                )
+            # Evolve only this field on the state read in this transaction so
+            # concurrent state writers (e.g. a rename) are not clobbered.
+            updated_state = current_state.evolve(current_state.ref().terminal_session_id, session_id)
+            updated_task = task.evolve(task.ref().current_state, updated_state)
+            transaction.upsert_task(updated_task)  # pyre-fixme[16]
+        else:
+            logger.info("ignoring unknown terminal signal event {} for task {}", event, task.object_id)
+    if diff_workspace_id is not None:
+        services.workspace_service.maybe_refresh_workspace_diff(diff_workspace_id)
+    return Response(status_code=204)
 
 
 @APP.websocket("/api/v1/agents/{agent_id}/terminal/ws")

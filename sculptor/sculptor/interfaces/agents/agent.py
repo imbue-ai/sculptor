@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import abc
 import datetime
+from enum import StrEnum
 from typing import Annotated
 from typing import Mapping
 
@@ -204,6 +205,30 @@ class TaskStatusRunnerMessage(EphemeralRunnerMessage):
     outcome: TaskState
 
 
+class TerminalStatusSignal(StrEnum):
+    """Status vocabulary a terminal-agent integration may signal (REQ-SIG-4).
+
+    `files-changed` and `session-id` are events, not status — they never
+    become one of these values.
+    """
+
+    BUSY = "BUSY"
+    IDLE = "IDLE"
+    WAITING = "WAITING"
+
+
+class TerminalAgentSignalRunnerMessage(EphemeralRunnerMessage):
+    """A status signal posted by a terminal agent's integration.
+
+    Ephemeral on purpose: signals are run-scoped (they survive frontend
+    reloads via the in-memory replay but vanish on backend restart) and
+    never drive unread tracking (architecture §5).
+    """
+
+    object_type: str = "TerminalAgentSignalRunnerMessage"
+    signal: TerminalStatusSignal
+
+
 class ResumeAgentResponseRunnerMessage(PersistentRunnerMessage):
     object_type: str = "ResumeAgentResponseRunnerMessage"
     for_user_message_id: AgentMessageID
@@ -229,6 +254,7 @@ EphemeralRunnerMessageUnion = (
     Annotated[TaskStatusRunnerMessage, Tag("TaskStatusRunnerMessage")]
     | Annotated[EnvironmentAcquiredRunnerMessage, Tag("EnvironmentAcquiredRunnerMessage")]
     | Annotated[EnvironmentReleasedRunnerMessage, Tag("EnvironmentReleasedRunnerMessage")]
+    | Annotated[TerminalAgentSignalRunnerMessage, Tag("TerminalAgentSignalRunnerMessage")]
 )
 RunnerMessageUnion = PersistentRunnerMessageUnion | EphemeralRunnerMessageUnion
 

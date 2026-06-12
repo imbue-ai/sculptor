@@ -187,6 +187,10 @@ class AgentTaskStateV2(BaseTaskState):
     last_processed_message_id: AgentMessageID | None = None
     title: str | None = None
     workspace_id: WorkspaceID
+    # Terminal agents only: the session id the registered program last
+    # signalled (validated to [A-Za-z0-9._-]{1,128}), used to resume the
+    # program after a backend restart.
+    terminal_session_id: str | None = None
 
 
 class NoOpTaskStateV1(BaseTaskState):
