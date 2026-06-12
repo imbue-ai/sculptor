@@ -494,7 +494,9 @@ export const AgentTabs = (): ReactElement | null => {
         alwaysCloseable
         contextMenuContent={contextMenuContent}
       >
-        <Flex gap="2" align="center" className={styles.addButtonGroup}>
+        {/* gap="0" + neutralized ghost margins (see the SCSS): the two
+            segments must sit flush to read as one split button. */}
+        <Flex gap="0" align="center" className={styles.addButtonGroup}>
           <IconButton
             variant="ghost"
             size="1"
