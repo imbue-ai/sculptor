@@ -132,15 +132,16 @@ PI_SESSION_ID_STATE_FILE: str = "pi_session_id"
 # gate should keep them from reaching pi, so one arriving means a gate has
 # failed. Each maps to the capability whose handler will replace its drop:
 #   UserQuestionAnswerMessage        → supports_interactive_backchannel
-#   InterruptProcessUserMessage      → supports_interruption
 #   ClearContextUserMessage          → supports_context_reset
-# ResumeAgentResponseRunnerMessage is no longer here — `_push_message` handles it
-# (supports_session_resume).
 _DEAD_LETTER_MESSAGE_TYPES: tuple[type[Message], ...] = (
     UserQuestionAnswerMessage,
-    InterruptProcessUserMessage,
     ClearContextUserMessage,
 )
+
+# If pi's abort-induced `agent_end` does not arrive within this grace window
+# (pi wedged or ignoring the abort), escalate to SIGTERM; the process-exit
+# fallback in `_consume_until_turn_end` then resolves the turn.
+_INTERRUPT_ESCALATION_GRACE_SECONDS: float = 5.0
 
 
 def _pi_version_in_range(version: str) -> bool:
@@ -209,6 +210,17 @@ class PiAgent(DefaultAgentWrapper):
     # The pi session id this process resumes / creates (pinned via --session-id);
     # persisted in PI_SESSION_ID_STATE_FILE so a restart reuses it.
     _session_id: str = PrivateAttr(default="")
+    # Set while a turn is actively draining pi's stdout — gates the interrupt
+    # escalation so an interrupt that races in between turns never SIGTERMs an
+    # idle (but healthy) pi.
+    _turn_in_flight: Event = PrivateAttr(default_factory=Event)
+    # Set when an interrupt has been requested and we are waiting for pi's
+    # abort-induced boundary. The dispatcher consults it so `stopReason:"aborted"`
+    # finalizes the partial response instead of raising `PiCrashError`.
+    _interrupt_pending: Event = PrivateAttr(default_factory=Event)
+    # The current escalation timer's cancel signal (one per interrupt). Set when
+    # the turn ends so the grace-window thread stands down without SIGTERM.
+    _escalation_cancel: Event | None = PrivateAttr(default=None)
 
     def start(self, secrets: Mapping[str, str | Secret]) -> None:
         # Resolve and validate the pi binary BEFORE super().start so the
@@ -313,6 +325,23 @@ class PiAgent(DefaultAgentWrapper):
                     request_id=message.for_user_message_id,
                     error=None,
                     interrupted=True,
+                )
+            )
+            return True
+        if isinstance(message, InterruptProcessUserMessage):
+            self._request_interrupt()
+            # Resolve the interrupt request itself: the frontend's POST to
+            # /interrupt blocks in `await_message_response` until a
+            # RequestComplete carries this message's id, and the StatusPill
+            # stays "stopping" until then. The interrupted chat turn resolves
+            # separately when pi's abort-induced `agent_end` arrives; this
+            # control action is itself never interrupted, hence interrupted=False.
+            self._output_messages.put(
+                RequestSuccessAgentMessage(
+                    message_id=AgentMessageID(),
+                    request_id=message.message_id,
+                    error=None,
+                    interrupted=False,
                 )
             )
             return True
@@ -488,16 +517,98 @@ class PiAgent(DefaultAgentWrapper):
         else:
             logger.info("PiAgent resumed pi session {} (messageCount={})", expected_session_id, message_count)
 
+    def _request_interrupt(self) -> None:
+        """Halt the in-flight pi turn via pi's `abort` command (supports_interruption).
+
+        Runs on the request-handling thread, concurrently with the
+        message-processing thread draining the turn. Sets the base
+        `_was_interrupted` event (the wrapper's success path reads-and-clears it
+        to surface `RequestSuccess(interrupted=True)`) and an interrupt-pending
+        flag the dispatcher consults so the abort-induced `stopReason:"aborted"`
+        finalizes the partial response instead of raising `PiCrashError`. The
+        turn keeps draining inside `_handle_user_message` until pi's `agent_end`;
+        if that never arrives, the escalation ladder SIGTERMs pi so the
+        process-exit fallback in `_consume_until_turn_end` still resolves the turn.
+        """
+        self._was_interrupted.set()
+        self._interrupt_pending.set()
+        self._send_rpc({"type": "abort", "id": generate_id()})
+        # Arm escalation only when a turn is actually in flight: an interrupt
+        # that raced in between turns must not force-kill a healthy idle pi.
+        if self._turn_in_flight.is_set():
+            cancel = Event()
+            self._escalation_cancel = cancel
+            self.concurrency_group.start_new_thread(
+                target=self._await_interrupt_escalation,
+                args=(cancel,),
+            )
+
+    def _await_interrupt_escalation(self, cancel: Event) -> None:
+        """Wait out the grace window, then SIGTERM pi if the turn hasn't ended."""
+        if cancel.wait(timeout=_INTERRUPT_ESCALATION_GRACE_SECONDS):
+            return
+        self._escalate_interrupt()
+
+    def _escalate_interrupt(self) -> None:
+        """SIGTERM pi when the abort produced no `agent_end` within the grace window.
+
+        `_consume_until_turn_end`'s `process.is_finished()` exit path then resolves
+        the turn. A no-op if the turn already ended after the abort
+        (`_interrupt_pending` cleared) or the process is already gone.
+        """
+        if not self._interrupt_pending.is_set():
+            return
+        process = self._process
+        if process is None or process.is_finished():
+            return
+        logger.info(
+            "PiAgent abort grace window ({}s) expired without agent_end; escalating to SIGTERM",
+            _INTERRUPT_ESCALATION_GRACE_SECONDS,
+        )
+        process.terminate()
+
+    def _cancel_interrupt_escalation(self) -> None:
+        cancel = self._escalation_cancel
+        if cancel is not None:
+            cancel.set()
+
+    def _is_abort_expected(self) -> bool:
+        """Whether a `stopReason:"aborted"` message is the expected interrupted boundary.
+
+        True when we asked pi to stop — an interrupt is pending, or we are
+        shutting down (`wait()` sends `abort` then closes stdin). Otherwise an
+        `aborted` message is an unexpected pi failure and must raise
+        `PiCrashError` (see `_handle_message_end` / `_handle_agent_end`).
+        """
+        return self._interrupt_pending.is_set() or self._shutdown_event.is_set()
+
     def _process_message_queue(self) -> None:
         while not self._shutdown_event.is_set():
             try:
                 message = self._input_agent_messages.get(timeout=0.5)
             except queue.Empty:
                 continue
-            with self._handle_user_message(message):
-                prompt_id = generate_id()
-                self._send_rpc({"type": "prompt", "id": prompt_id, "message": message.text})
+            self._run_prompt_turn(message)
+
+    def _run_prompt_turn(self, message: ChatInputUserMessage) -> None:
+        with self._handle_user_message(message):
+            # A fresh turn starts un-interrupted: clear interrupt state left by an
+            # interrupt that raced in with no turn in flight, which would otherwise
+            # mis-mark this turn as interrupted.
+            self._was_interrupted.clear()
+            self._interrupt_pending.clear()
+            self._cancel_interrupt_escalation()
+            prompt_id = generate_id()
+            self._turn_in_flight.set()
+            self._send_rpc({"type": "prompt", "id": prompt_id, "message": message.text})
+            try:
                 self._consume_until_turn_end(prompt_id)
+            finally:
+                # Turn over: stand down escalation and drop interrupt-pending so a
+                # late grace-window thread can't SIGTERM the next turn's pi.
+                self._turn_in_flight.clear()
+                self._interrupt_pending.clear()
+                self._cancel_interrupt_escalation()
 
     def _consume_until_turn_end(self, prompt_id: str = "") -> None:
         """Drive pi's stdout until the current agent run terminates.
@@ -689,7 +800,10 @@ class PiAgent(DefaultAgentWrapper):
         advertised, so the UI collapses partials into a stable final block.
         The accumulator is then reset for the next message; the tool-call
         registry persists (the lane's result events arrive after this reset).
-        A terminal-error `stopReason` raises `PiCrashError`. Non-assistant
+        A terminal-error `stopReason` raises `PiCrashError`;
+        `stopReason:"aborted"` does too UNLESS an abort is expected (an
+        interrupt is pending, or shutdown) — then it is the interrupted
+        boundary and the partial content is finalized normally. Non-assistant
         `message_end`s (notably the role="user" prompt echo pi emits at
         agent-run start) are dropped.
         """
@@ -703,7 +817,8 @@ class PiAgent(DefaultAgentWrapper):
         if parsed.message.role != "assistant":
             logger.debug("PiAgent dropping non-assistant message_end (role={})", parsed.message.role)
             return
-        if parsed.message.stop_reason in ("error", "aborted"):
+        stop_reason = parsed.message.stop_reason
+        if stop_reason == "error" or (stop_reason == "aborted" and not self._is_abort_expected()):
             text = extract_assistant_text(parsed.message) or state.accumulated_text or "pi message ended in error"
             raise PiCrashError(text, exit_code=None, metadata=None)
         content = self._build_interleaved_content(parsed.message, state)
@@ -886,14 +1001,22 @@ class PiAgent(DefaultAgentWrapper):
         accumulated text is finalized here using the partials' IDs so
         the UI still settles on a stable block. A terminal `stopReason`
         on any assistant message in the final transcript raises
-        `PiCrashError`. `willRetry: true` means pi will start another
-        agent run, typically after a transient failure — the current
-        turn still ends so the caller can drain the next pump.
+        `PiCrashError` — EXCEPT `stopReason:"aborted"` when an abort is
+        expected (interrupt pending, or shutdown), which is the interrupted
+        boundary and finalizes the partial text instead.
+        `willRetry: true` means pi will start another agent run, typically
+        after a transient failure — the current turn still ends so the caller
+        can drain the next pump.
         """
+        abort_expected = self._is_abort_expected()
         for message in parsed.messages:
-            if message.role == "assistant" and message.stop_reason in ("error", "aborted"):
-                text = extract_assistant_text(message) or state.accumulated_text or "pi agent ended in error"
-                raise PiCrashError(text, exit_code=None, metadata=None)
+            if message.role != "assistant" or message.stop_reason not in ("error", "aborted"):
+                continue
+            if message.stop_reason == "aborted" and abort_expected:
+                # Expected interrupted boundary: finalize the partial below, don't raise.
+                continue
+            text = extract_assistant_text(message) or state.accumulated_text or "pi agent ended in error"
+            raise PiCrashError(text, exit_code=None, metadata=None)
         if state.accumulated_text:
             self._output_messages.put(
                 ResponseBlockAgentMessage(
