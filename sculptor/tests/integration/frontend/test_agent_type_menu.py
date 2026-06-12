@@ -8,8 +8,7 @@ terminal-agent tests; here we only assert tab titles.
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
-from sculptor.testing.elements.terminal import get_agent_terminal_panel
+from sculptor.testing.elements.terminal import expect_terminal_panel_replaces_chat
 from sculptor.testing.elements.user_config import disable_multi_harness
 from sculptor.testing.elements.user_config import enable_multi_harness
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
@@ -45,8 +44,7 @@ def test_agent_type_menu_creates_terminal_agent_and_remembers_type(
     agent_tab_bar.get_agent_type_menu_item_terminal().click()
     expect(agent_tabs).to_have_count(3)
     expect(agent_tab_bar.get_agent_tab_by_name("Terminal 1")).to_have_count(1)
-    expect(get_agent_terminal_panel(page)).to_be_visible()
-    expect(page.get_by_test_id(ElementIDs.CHAT_INPUT)).to_have_count(0)
+    expect_terminal_panel_replaces_chat(page)
 
     # Last-used type persisted: a plain + click now creates another Terminal.
     agent_tab_bar.get_add_agent_button().click()
@@ -123,7 +121,6 @@ def test_registered_terminal_agent_appears_in_menu_and_creates(
 
         # Created agent is named from display_name and shows a terminal panel.
         expect(agent_tab_bar.get_agent_tab_by_name("Fake Reg 1")).to_have_count(1)
-        expect(get_agent_terminal_panel(page)).to_be_visible()
-        expect(page.get_by_test_id(ElementIDs.CHAT_INPUT)).to_have_count(0)
+        expect_terminal_panel_replaces_chat(page)
     finally:
         (registrations_dir / "fake-reg.toml").unlink(missing_ok=True)

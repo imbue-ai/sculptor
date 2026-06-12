@@ -11,9 +11,10 @@ import re
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
 from sculptor.testing.elements.file_tree import get_changes_tree
+from sculptor.testing.elements.terminal import expect_chat_replaces_terminal_panel
+from sculptor.testing.elements.terminal import expect_terminal_panel_replaces_chat
 from sculptor.testing.elements.terminal import get_agent_terminal_panel
 from sculptor.testing.elements.terminal import get_agent_terminal_textarea
 from sculptor.testing.elements.terminal import run_command_in_agent_terminal
@@ -54,8 +55,7 @@ def test_terminal_agent_basic(sculptor_instance_: SculptorInstance) -> None:
     expect(terminal_tab).to_be_visible()
 
     # The terminal occupies the chat space: panel present, chat input absent.
-    expect(get_agent_terminal_panel(page)).to_be_visible()
-    expect(page.get_by_test_id(ElementIDs.CHAT_INPUT)).to_have_count(0)
+    expect_terminal_panel_replaces_chat(page)
 
     # Shell round trip in the workspace code directory.
     _wait_for_terminal_ready(page)
@@ -78,8 +78,7 @@ def test_terminal_agent_basic(sculptor_instance_: SculptorInstance) -> None:
     # terminal reconnects with the scrollback replay (the PTY survived the
     # WebSocket disconnect).
     agent_tabs.first.click()
-    expect(page.get_by_test_id(ElementIDs.CHAT_INPUT)).to_be_visible()
-    expect(get_agent_terminal_panel(page)).to_have_count(0)
+    expect_chat_replaces_terminal_panel(page)
     terminal_tab.click()
     expect(get_agent_terminal_panel(page)).to_be_visible()
     wait_for_xterm_substring(page, "hello-sculptor")

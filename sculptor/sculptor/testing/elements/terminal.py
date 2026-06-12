@@ -71,6 +71,24 @@ def get_agent_terminal_panel(page: Page) -> Locator:
     return page.get_by_test_id(ElementIDs.AGENT_TERMINAL_PANEL)
 
 
+def expect_terminal_panel_replaces_chat(page: Page) -> None:
+    """Assert the main panel is the terminal, not the chat.
+
+    Both halves of the panel switch for terminal agents: the agent terminal
+    panel is visible AND no chat input is mounted anywhere on the page
+    (page-level check — the chat-panel POM is scoped to a panel that does
+    not exist here).
+    """
+    expect(get_agent_terminal_panel(page)).to_be_visible()
+    expect(page.get_by_test_id(ElementIDs.CHAT_INPUT)).to_have_count(0)
+
+
+def expect_chat_replaces_terminal_panel(page: Page) -> None:
+    """Assert the main panel is the chat, not the terminal (the inverse switch)."""
+    expect(page.get_by_test_id(ElementIDs.CHAT_INPUT)).to_be_visible()
+    expect(get_agent_terminal_panel(page)).to_have_count(0)
+
+
 def get_agent_terminal_textarea(page: Page) -> Locator:
     """The agent terminal panel's xterm input textarea.
 
