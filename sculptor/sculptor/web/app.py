@@ -110,6 +110,7 @@ from sculptor.services.project_service.default_implementation import get_most_re
 from sculptor.services.project_service.default_implementation import update_most_recently_used_project
 from sculptor.services.task_service.errors import InvalidTaskOperation
 from sculptor.services.task_service.errors import TaskNotFound
+from sculptor.services.terminal_agent_registry.bundled import install_bundled_registrations
 from sculptor.services.terminal_agent_registry.registry import get_registration
 from sculptor.services.terminal_agent_registry.registry import load_registrations
 from sculptor.services.user_config.telemetry_info import get_onboarding_telemetry_info
@@ -400,6 +401,10 @@ def on_startup():
     if not check_sculptor_directory_writable():
         logger.error("Sculptor cannot start: data directory is not writable")
         raise RuntimeError("Sculptor data directory is not writable. Please check permissions.")
+
+    # One-time install of the bundled Claude Code terminal-agent registration
+    # (a no-op once its sentinel exists; never fatal).
+    install_bundled_registrations()
 
 
 register_on_startup(on_startup)
