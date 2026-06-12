@@ -306,10 +306,10 @@ export const ChatInput = ({
           message: promptDraft?.replace(/\u200B/g, "\u00A0").replace(/(\n\n\u00A0)+$/, ""),
           model: localModel,
           files: attachedFiles,
-          // CAPABILITY-GAP: supportsInteractiveBackchannel — the plan-mode
-          // toggle is gated disabled-with-tooltip for harnesses without the
-          // backchannel, so `isPlanFirst`/`isInPlanMode` stay false there and
-          // these fields are inert.
+          // The plan-mode toggle is gated (disabled-with-tooltip) for harnesses
+          // without the interactive backchannel, so `isPlanFirst`/`isInPlanMode`
+          // stay false there and these fields are inert; harnesses that support
+          // it (Claude, pi) drive plan mode through them.
           enter_plan_mode: isPlanFirst,
           exit_plan_mode: !isPlanFirst && isInPlanMode,
           fast_mode: modelCapabilities.supportsFastMode && isFastMode,

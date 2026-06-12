@@ -22,6 +22,13 @@ The preflight-failure path (`fake_pi:error`) emits a `response` with
 when the prompt is rejected before the agent starts (e.g. missing API
 key). `abort` is acknowledged with a `response` envelope too.
 
+The `fake_pi:ui_request` directive scripts the interactive-backchannel lane:
+it emits an `extension_ui_request` (the shape the `sculptor_backchannel`
+extension's dialogs produce), blocks until the matching
+`extension_ui_response` arrives on stdin, then streams the answer back as
+assistant text — exercising the full ask-user-question / plan-approval
+round-trip without loading any real extension.
+
 CLI surface matches what ``PiAgent.start`` spawns:
 
     pi --mode rpc --session-dir <dir> --session-id <id> --append-system-prompt <prompt>
@@ -71,10 +78,21 @@ class UnknownFakePiCommandError(ValueError):
 class _TurnBuilder:
     """Accumulates the text emitted by directives in a single turn."""
 
+    prompt_id: str | None = None
     chunks: list[str] = field(default_factory=list)
+    _ui_counter: int = 0
 
     def emit(self, text: str) -> None:
         self.chunks.append(text)
+
+    def reset(self) -> None:
+        """Drop accumulated text — used after flushing a message_end mid-turn."""
+        self.chunks = []
+
+    def next_ui_request_id(self) -> str:
+        """A fresh extension_ui_request id, unique within the turn."""
+        self._ui_counter += 1
+        return f"{self.prompt_id or 'turn'}-ui-{self._ui_counter}"
 
     @property
     def has_text(self) -> bool:
@@ -360,6 +378,68 @@ def _handle_recall(args: dict, builder: _TurnBuilder, state: _SessionState) -> N
         builder.emit("RECALL:NO_PRIOR_CONTEXT")
 
 
+def _read_extension_ui_response(expected_id: str) -> dict:
+    """Block on stdin until the matching `extension_ui_response` arrives.
+
+    Mirrors how the real backchannel extension's dialog blocks until the client
+    posts a response with the same `id`. Uses `readline()` (not iteration) so it
+    composes with the readline-based RPC loop without read-ahead buffering
+    swallowing lines. An `abort` (or stdin EOF) resolves as a cancellation.
+    """
+    while True:
+        raw_line = sys.stdin.readline()
+        if raw_line == "":
+            return {"cancelled": True}
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("type") == "abort":
+            return {"cancelled": True}
+        if payload.get("type") == "extension_ui_response" and payload.get("id") == expected_id:
+            return payload
+
+
+def _handle_ui_request(args: dict, builder: _TurnBuilder, state: _SessionState) -> None:
+    """Emit a backchannel dialog, block for the answer, echo it into the turn.
+
+    Scripts the real extension's blocking-dialog lane without loading any
+    extension: emit `extension_ui_request {method,title,options}`, wait for the
+    matching `extension_ui_response` on stdin, then stream the answer back as
+    assistant text so a test can assert the agent used it. A `message_end` is
+    flushed first (mirroring pi ending the assistant message that carried the
+    tool call) so the post-answer text streams as a fresh assistant message.
+
+    `state` is unused (backchannel dialogs are not session-dependent) but the
+    signature matches the shared 3-arg directive-handler contract.
+
+    Args: `method` ("select"/"input"), `title`, optional `options`, optional
+    `answer_prefix` (default "ANSWER="), optional `dismissed_text`.
+    """
+    _emit_message_end(builder.full_text)
+    builder.reset()
+    request_id = builder.next_ui_request_id()
+    event: dict = {"type": "extension_ui_request", "id": request_id, "method": args.get("method", "select")}
+    if "title" in args:
+        event["title"] = args["title"]
+    if "options" in args:
+        event["options"] = args["options"]
+    _emit(event)
+    response = _read_extension_ui_response(request_id)
+    if response.get("cancelled"):
+        answer_text = str(args.get("dismissed_text", "[dismissed]"))
+    else:
+        answer_text = str(response.get("value", ""))
+    rendered = str(args.get("answer_prefix", "ANSWER=")) + answer_text
+    _emit_text_delta(rendered, builder.full_text + rendered)
+    builder.emit(rendered)
+
+
 _COMMAND_REGISTRY: dict[str, Callable[[dict, _TurnBuilder, _SessionState], None]] = {
     "emit_text": _handle_emit_text,
     "stream_text": _handle_stream_text,
@@ -367,6 +447,7 @@ _COMMAND_REGISTRY: dict[str, Callable[[dict, _TurnBuilder, _SessionState], None]
     "sleep": _handle_sleep,
     "wait_for_file": _handle_wait_for_file,
     "recall": _handle_recall,
+    "ui_request": _handle_ui_request,
 }
 
 
@@ -433,7 +514,7 @@ def _run_turn(
     if error_message is not None:
         _emit_response("prompt", success=False, prompt_id=prompt_id, error=error_message)
         return
-    builder = _TurnBuilder()
+    builder = _TurnBuilder(prompt_id=prompt_id)
     _emit_response("prompt", success=True, prompt_id=prompt_id)
     _emit({"type": "agent_start"})
     _emit_user_message_end(prompt_text)
@@ -452,7 +533,12 @@ def _run_rpc_loop(system_prompt: str, session_dir: Path | None, session_id: str)
     # Load (or initialize) the session once at startup; a relaunch with the same
     # dir + id reloads the prior transcript so `recall` / get_state see it.
     state = _SessionState.load(session_dir, session_id)
-    for raw_line in sys.stdin:
+    # readline() (not `for line in sys.stdin`) so the ui_request handler can read
+    # the extension_ui_response from the same stream without read-ahead buffering.
+    while True:
+        raw_line = sys.stdin.readline()
+        if raw_line == "":
+            break
         line = raw_line.strip()
         if not line:
             continue
