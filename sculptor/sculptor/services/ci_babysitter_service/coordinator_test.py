@@ -746,7 +746,7 @@ def test_pipeline_failed_dispatch_dedupes_per_pipeline_id(
     assert state.last_dispatched_pipeline_failed_id == 2
 
 
-# Chat-agent config inheritance for babysitter tasks (terminal-agents phase 2):
+# Chat-agent config inheritance for babysitter tasks:
 # the babysitter inherits the config TYPE of the workspace's most recent chat
 # agent; terminal agents are skipped; fallback is Claude.
 

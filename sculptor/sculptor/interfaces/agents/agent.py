@@ -206,7 +206,7 @@ class TaskStatusRunnerMessage(EphemeralRunnerMessage):
 
 
 class TerminalStatusSignal(StrEnum):
-    """Status vocabulary a terminal-agent integration may signal (REQ-SIG-4).
+    """Status vocabulary a terminal-agent integration may signal.
 
     `files-changed` and `session-id` are events, not status — they never
     become one of these values.
@@ -222,7 +222,7 @@ class TerminalAgentSignalRunnerMessage(EphemeralRunnerMessage):
 
     Ephemeral on purpose: signals are run-scoped (they survive frontend
     reloads via the in-memory replay but vanish on backend restart) and
-    never drive unread tracking (architecture §5).
+    never drive unread tracking.
     """
 
     object_type: str = "TerminalAgentSignalRunnerMessage"

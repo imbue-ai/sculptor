@@ -972,7 +972,7 @@ def test_complete_onboarding_rejects_empty_email_without_welcome_step(
 
 
 def test_agent_config_for_request_resolves_each_type() -> None:
-    # Agent type comes only from the creation request (REQ-TYPE-3).
+    # Agent type comes only from the creation request.
     assert isinstance(_agent_config_for_request(AgentTypeName.TERMINAL, None), TerminalAgentConfig)
     with pytest.raises(HTTPException) as exc_info:
         _agent_config_for_request(AgentTypeName.REGISTERED, "some-registration")
@@ -1103,7 +1103,7 @@ def test_first_claude_agent_still_gets_intro_message(
     assert any(isinstance(m, ChatInputUserMessage) for m in messages)
 
 
-# Terminal-agent registrations (phase 4).
+# Terminal-agent registrations.
 
 
 @pytest.fixture

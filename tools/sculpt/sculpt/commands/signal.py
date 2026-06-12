@@ -1,4 +1,4 @@
-"""Report terminal-agent integration signals to Sculptor (REQ-SIG-3).
+"""Report terminal-agent integration signals to Sculptor.
 
 Thin wrappers over POST /api/v1/agents/{agent_id}/signal so shell-based
 hooks never hand-roll HTTP. Invoked from hooks on every state transition —

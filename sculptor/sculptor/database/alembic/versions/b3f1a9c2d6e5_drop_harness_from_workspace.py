@@ -1,7 +1,7 @@
 """drop harness from Workspace
 
 Agent type is a per-agent property carried on each task's agent_config;
-the workspace-bound harness selection is gone (terminal-agents phase 2).
+the workspace-bound harness selection is gone.
 
 Revision ID: b3f1a9c2d6e5
 Revises: 587b6b6e8747

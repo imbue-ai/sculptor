@@ -256,7 +256,7 @@ def test_launch_command_for_start_selects_per_config() -> None:
     state = AgentTaskStateV2(workspace_id=WorkspaceID())
     state_with_session = AgentTaskStateV2(workspace_id=WorkspaceID(), terminal_session_id="sess-42")
     plain = AgentTaskInputsV2(agent_config=TerminalAgentConfig(), git_hash="x")
-    # Plain terminals always get a bare shell — also after restart (REQ-LIFE-4).
+    # Plain terminals always get a bare shell — also after restart.
     assert launch_command_for_start(plain, state) is None
     assert launch_command_for_start(plain, state_with_session) is None
 
@@ -271,7 +271,7 @@ def test_launch_command_for_start_selects_per_config() -> None:
     )
     # No session reported yet → plain launch.
     assert launch_command_for_start(registered, state) == "claude"
-    # Session + template → rendered resume command (REQ-LIFE-3).
+    # Session + template → rendered resume command.
     assert launch_command_for_start(registered, state_with_session) == "claude --resume sess-42"
 
     registered_no_template = AgentTaskInputsV2(

@@ -22,14 +22,14 @@ type ChatPanelContentProps = {
 };
 
 /**
- * The main-panel switch (REQ-UI-1/2): terminal agents get a full-pane
- * terminal in the space the chat interface occupies for chat agents,
- * driven by the `supports_chat_interface` capability.
+ * The main-panel switch: terminal agents get a full-pane terminal in the
+ * space the chat interface occupies for chat agents, driven by the
+ * `supports_chat_interface` capability.
  *
  * The switch lives outside `ChatPanelInner` because `useChatData` must not
  * run for terminal agents — it registers `chatActionsAtom` closures, which
  * is exactly what keeps Commit / Create PR / custom actions disabled for
- * them (the load-bearing gate; see architecture §9).
+ * them (the load-bearing gate).
  */
 export const ChatPanelContent = ({
   appendTextRef,

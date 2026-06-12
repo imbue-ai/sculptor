@@ -4,7 +4,7 @@ A terminal agent owns one PTY, registered in the shared terminal-manager
 registry under ``agent:<task_id>`` — a readable, collision-free key beside
 the 16-hex-char workspace terminal ids. The manager is constructed with the
 workspace's *environment id*, so ``stop_terminals_for_environment`` remains
-the teardown backstop (architecture §3).
+the teardown backstop.
 
 The config registry mirrors ``register_environment_config`` in
 ``local_terminal_manager.py``: the task handler registers an
@@ -148,7 +148,7 @@ def render_resume_command(template: str, session_id: str) -> str:
     not crash (the loader already validates this; belt-and-suspenders).
     `shlex.quote` even though the API-validated charset
     ([A-Za-z0-9._-]{1,128}) can't currently contain shell metacharacters —
-    two independent layers per architecture §4.
+    two independent layers of defense.
     """
     return template.replace("{session_id}", shlex.quote(session_id))
 
@@ -196,7 +196,7 @@ def write_launch_command(manager: LocalTerminalManager, command: str, timeout_se
 
     Waits for the shell's first output bytes (the prompt — or at least rc-file
     noise — has printed) before writing, so the keystrokes aren't swallowed by
-    shell init (architecture §3 item 4). On timeout the command is written
+    shell init. On timeout the command is written
     anyway: the program runs as a shell job either way, and a slightly-late
     write still works. The command comes from a user-authored registration —
     the same trust level as the user typing into their own shell.
