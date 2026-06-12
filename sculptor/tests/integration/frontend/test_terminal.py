@@ -13,11 +13,17 @@ from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.base import type_with_delay
+from sculptor.testing.elements.terminal import get_add_terminal_button
+from sculptor.testing.elements.terminal import get_terminal_panel_icon
+from sculptor.testing.elements.terminal import get_terminal_starting_text
+from sculptor.testing.elements.terminal import get_terminal_tabs
 from sculptor.testing.elements.terminal import get_terminal_textarea
 from sculptor.testing.elements.terminal import get_xterm_active_line
 from sculptor.testing.elements.terminal import get_xterm_buffer_text
 from sculptor.testing.elements.terminal import get_xterm_cursor_row
 from sculptor.testing.elements.terminal import open_terminal_and_wait
+from sculptor.testing.elements.terminal import wait_for_xterm_buffer_nonempty
+from sculptor.testing.elements.terminal import wait_for_xterm_substring
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -41,18 +47,18 @@ def test_terminal_panel_creates_single_websocket_connection(sculptor_instance_: 
 
     # Wait for the workspace page to load — the terminal sidebar icon only
     # exists on the workspace page (not the add workspace page).
-    terminal_icon = page.get_by_test_id(ElementIDs.PANEL_ICON_TERMINAL)
+    terminal_icon = get_terminal_panel_icon(page)
     expect(terminal_icon).to_be_visible()
 
     # If the terminal panel is already open (from a previous test's localStorage
     # state), close it first so we can track WebSocket connections from scratch.
-    add_button = page.get_by_test_id(ElementIDs.ADD_TERMINAL_BUTTON)
-    starting_text = page.get_by_test_id(ElementIDs.TERMINAL_STARTING_TEXT)
+    add_button = get_add_terminal_button(page)
+    starting_text = get_terminal_starting_text(page)
     panel_content = add_button.or_(starting_text)
 
     if panel_content.is_visible():
         terminal_icon.click()
-        expect(panel_content).not_to_be_visible(timeout=5_000)
+        expect(panel_content).not_to_be_visible()
         # Allow time for the terminal component to unmount and close its WebSocket.
         page.wait_for_timeout(1000)
 
@@ -77,10 +83,14 @@ def test_terminal_panel_creates_single_websocket_connection(sculptor_instance_: 
     expect(panel_content).to_be_visible(timeout=10_000)
     expect(add_button).to_be_visible(timeout=60_000)
 
-    # Wait for any additional WebSocket connections to be created.
-    # The bug causes a second connection to be created shortly after the first
-    # due to the async race condition in the useEffect cleanup.
-    page.wait_for_timeout(3000)
+    # Wait for the shell prompt to render in the (single) connection's buffer.
+    # A rendered prompt means the WebSocket connected and the mount/connect cycle
+    # settled -- the bug's duplicate connection fires during that same cycle (the
+    # async useEffect-cleanup race opens a second socket "shortly after the
+    # first"), so by the time output lands, any duplicate would already have been
+    # registered by the listener above. This replaces a blind fixed wait with a
+    # signal tied to the connection actually coming up.
+    wait_for_xterm_buffer_nonempty(page)
 
     assert len(terminal_ws_connections) == 1, (
         "Expected exactly 1 terminal WebSocket connection, but got"
@@ -112,11 +122,19 @@ def test_opt_left_moves_cursor_back_by_word(sculptor_instance_: SculptorInstance
 
     # Type two words without pressing Enter.
     type_with_delay(terminal_textarea, "hello world", 50)
-    page.wait_for_timeout(500)
+    wait_for_xterm_substring(page, "hello world")
+
+    # Record cursor column before Opt+Left so we can wait for it to move.
+    cursor_x_before = page.evaluate("() => window.__xterm?.buffer.active.cursorX ?? -1")
 
     # Press Opt+Left (Alt+Left) to move the cursor back by one word.
     terminal_textarea.press("Alt+ArrowLeft")
-    page.wait_for_timeout(500)
+
+    # Wait for the cursor to move back (the keystroke has been processed).
+    page.wait_for_function(
+        "(beforeX) => { const x = window.__xterm; return x && x.buffer.active.cursorX < beforeX; }",
+        arg=cursor_x_before,
+    )
 
     # Read the current line from the xterm buffer. If the bug is present, it will
     # contain ";3D" (the tail of the CSI escape sequence \x1b[1;3D that leaked as
@@ -153,14 +171,19 @@ def test_ctrl_c_cancels_input(sculptor_instance_: SculptorInstance) -> None:
 
     # Type some text without pressing Enter.
     type_with_delay(terminal_textarea, "some partial input", 50)
-    page.wait_for_timeout(500)
+    wait_for_xterm_substring(page, "some partial input")
 
     # Record the cursor row before Ctrl+C.
     cursor_y_before = get_xterm_cursor_row(page)
 
     # Press Ctrl+C to cancel.
     terminal_textarea.press("Control+c")
-    page.wait_for_timeout(1000)
+
+    # Wait for the shell to print "^C" and advance to a new prompt line.
+    page.wait_for_function(
+        "(beforeY) => { const x = window.__xterm; return x && (x.buffer.active.cursorY + x.buffer.active.baseY) > beforeY; }",
+        arg=cursor_y_before,
+    )
 
     # The shell should have printed "^C" and moved to a new prompt line, so the
     # cursor row should be greater than before.
@@ -189,7 +212,7 @@ def test_add_terminal_tab_creates_new_session(sculptor_instance_: SculptorInstan
     open_terminal_and_wait(page)
 
     # Verify initial state: one terminal tab.
-    terminal_tabs = page.get_by_test_id(ElementIDs.TERMINAL_TAB)
+    terminal_tabs = get_terminal_tabs(page)
     expect(terminal_tabs).to_have_count(1)
     expect(terminal_tabs.first).to_have_text("Terminal 1")
     expect(terminal_tabs.first).to_have_attribute("aria-selected", "true")
@@ -204,7 +227,7 @@ def test_add_terminal_tab_creates_new_session(sculptor_instance_: SculptorInstan
     page.on("websocket", on_websocket)
 
     # Click the '+' button to add a second terminal tab.
-    add_button = page.get_by_test_id(ElementIDs.ADD_TERMINAL_BUTTON)
+    add_button = get_add_terminal_button(page)
     add_button.click()
 
     # Verify two tabs exist, with the second one now active.
@@ -238,10 +261,10 @@ def test_close_terminal_tab_switches_to_neighbor(sculptor_instance_: SculptorIns
     open_terminal_and_wait(page)
 
     # Add a second terminal tab.
-    add_button = page.get_by_test_id(ElementIDs.ADD_TERMINAL_BUTTON)
+    add_button = get_add_terminal_button(page)
     add_button.click()
 
-    terminal_tabs = page.get_by_test_id(ElementIDs.TERMINAL_TAB)
+    terminal_tabs = get_terminal_tabs(page)
     expect(terminal_tabs).to_have_count(2)
 
     # Close the active second tab by clicking its close button.
@@ -272,12 +295,12 @@ def test_terminal_tab_reuses_lowest_available_number(sculptor_instance_: Sculpto
     open_terminal_and_wait(page)
 
     # Verify initial state: one tab labelled "Terminal 1".
-    terminal_tabs = page.get_by_test_id(ElementIDs.TERMINAL_TAB)
+    terminal_tabs = get_terminal_tabs(page)
     expect(terminal_tabs).to_have_count(1)
     expect(terminal_tabs.first).to_have_text("Terminal 1")
 
     # Add a second terminal tab.
-    add_button = page.get_by_test_id(ElementIDs.ADD_TERMINAL_BUTTON)
+    add_button = get_add_terminal_button(page)
     add_button.click()
     expect(terminal_tabs).to_have_count(2)
     expect(terminal_tabs.nth(1)).to_have_text("Terminal 2")
@@ -327,7 +350,7 @@ def test_terminal_does_not_expose_sculptor_api_port(sculptor_instance_: Sculptor
     # "LEAK_CHECK:NOT_SET".  If it is set (the bug), we see e.g. "LEAK_CHECK:5050".
     type_with_delay(terminal_textarea, 'echo "LEAK_CHECK:${SCULPTOR_API_PORT:-NOT_SET}"', 30)
     terminal_textarea.press("Enter")
-    page.wait_for_timeout(2000)
+    wait_for_xterm_substring(page, "LEAK_CHECK:")
 
     buffer_text = get_xterm_buffer_text(page)
 
@@ -402,25 +425,7 @@ def test_decrqm_does_not_kill_xterm_write_buffer(sculptor_instance_: SculptorIns
     type_with_delay(terminal_textarea, "echo XTERM_WRITE_BUFFER_OK", 30)
     terminal_textarea.press("Enter")
 
-    # Poll until the marker appears in the terminal buffer.  Use the
-    # get_xterm_buffer_text helper in a retry loop rather than
-    # wait_for_function which may not resolve in CI.
-    deadline = 30  # seconds
-    for _ in range(deadline * 2):
-        buffer_text = get_xterm_buffer_text(page)
-        if "XTERM_WRITE_BUFFER_OK" in buffer_text:
-            break
-        page.wait_for_timeout(500)
-    else:
-        buffer_text = get_xterm_buffer_text(page)
-
-    assert "XTERM_WRITE_BUFFER_OK" in buffer_text, (
-        "Terminal output was lost after sending a DECRQM escape sequence."
-        + " This indicates xterm.js's write buffer was killed by a"
-        + " ReferenceError in requestMode(), likely caused by esbuild's"
-        + " minifier removing const-enum variable declarations in the xterm.js bundle."
-        + f"\nTerminal buffer:\n{buffer_text}"
-    )
+    wait_for_xterm_substring(page, "XTERM_WRITE_BUFFER_OK")
 
 
 @user_story("to see that the shell exited instead of getting a frozen terminal")
@@ -446,21 +451,7 @@ def test_ctrl_d_shows_process_exited_message(sculptor_instance_: SculptorInstanc
     terminal_textarea.press("Control+d")
 
     # Wait for the shell to exit and the exit message to appear.
-    # Poll the buffer since the message is written asynchronously by the read loop.
-    deadline = 15  # seconds
-    for _ in range(deadline * 2):
-        buffer_text = get_xterm_buffer_text(page)
-        if "[Process exited]" in buffer_text:
-            break
-        page.wait_for_timeout(500)
-    else:
-        buffer_text = get_xterm_buffer_text(page)
-
-    assert "[Process exited]" in buffer_text, (
-        "Pressing Ctrl+D should show a '[Process exited]' message in the terminal,"
-        + " but no such message appeared. The terminal likely froze after the shell exited."
-        + f"\nTerminal buffer:\n{buffer_text}"
-    )
+    wait_for_xterm_substring(page, "[Process exited]")
 
 
 @user_story("to run interactive CLIs like `gh auth login` that query the terminal")
@@ -520,23 +511,10 @@ def test_solicited_cursor_position_report_reaches_program(sculptor_instance_: Sc
     type_with_delay(terminal_textarea, repro, 10)
     terminal_textarea.press("Enter")
 
-    # Poll for the runtime-assembled success marker.  With the bug the program
-    # blocks in read() and CPRGOTREPLY never appears.
-    deadline = 20  # seconds
-    for _ in range(deadline * 2):
-        buffer_text = get_xterm_buffer_text(page)
-        if "CPRGOTREPLY" in buffer_text:
-            break
-        page.wait_for_timeout(500)
-    else:
-        buffer_text = get_xterm_buffer_text(page)
-
-    assert "CPRGOTREPLY" in buffer_text, (
-        "A solicited cursor position report (CPR) never reached the program: it"
-        + " emitted a DSR query (ESC[6n) and blocked reading the reply, so the"
-        + " read never completed and the runtime-assembled CPRGOTREPLY marker"
-        + " was never printed. This is the same hang that freezes"
-        + " `gh auth login`. (CPRPROBE_START appears once the program starts; if"
-        + " it is missing too, python3 may be unavailable in the terminal.)"
-        + f"\nTerminal buffer:\n{buffer_text}"
-    )
+    # Wait for the runtime-assembled success marker.  With the bug the program
+    # blocks in read() and CPRGOTREPLY never appears, so this times out and
+    # raises with the full buffer (whether CPRPROBE_START is present tells you
+    # if the program even started -- if it is missing too, python3 may be
+    # unavailable in the terminal). This is the same hang that freezes
+    # `gh auth login`.
+    wait_for_xterm_substring(page, "CPRGOTREPLY")

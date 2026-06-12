@@ -12,9 +12,8 @@ from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.alpha_chat_view import click_visible_in_chat_viewport
+from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
 from sculptor.testing.elements.alpha_chat_view import get_alpha_container_height
-from sculptor.testing.elements.alpha_chat_view import get_alpha_scroll_height
-from sculptor.testing.elements.alpha_chat_view import get_alpha_scroll_position
 from sculptor.testing.elements.alpha_chat_view import scroll_alpha_chat_by
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -63,24 +62,25 @@ def test_table_wrap_toggle_is_per_table_and_does_not_scroll_chat(sculptor_instan
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    tables = page.get_by_test_id(ElementIDs.ALPHA_CHAT_TABLE)
+    alpha_view = get_alpha_chat_view(page)
+    tables = alpha_view.get_tables()
     expect(tables).to_have_count(2)
 
-    wrap_toggles = page.get_by_test_id(ElementIDs.ALPHA_CHAT_TABLE_WRAP_TOGGLE)
+    wrap_toggles = alpha_view.get_table_wrap_toggles()
     expect(wrap_toggles).to_have_count(2)
     # Default per-table state is "scroll" — both toggles say "Switch to wrap".
-    for toggle in wrap_toggles.all():
-        expect(toggle).to_have_attribute("aria-label", "Switch to wrap")
+    expect(wrap_toggles.nth(0)).to_have_attribute("aria-label", "Switch to wrap")
+    expect(wrap_toggles.nth(1)).to_have_attribute("aria-label", "Switch to wrap")
 
     # Scroll up so we are not pinned at the bottom — only then can we see if
     # the toggle yanks the scroll.
     container_height = get_alpha_container_height(page)
     scroll_alpha_chat_by(page, -int(container_height))
-    page.wait_for_timeout(400)
-
-    scroll_top_before = get_alpha_scroll_position(page)
-    assert scroll_top_before > 100, (
-        f"Test setup failed: chat was not scrolled away from the bottom (scrollTop={scroll_top_before})."
+    page.wait_for_function(
+        f"""() => {{
+            const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
+            return el ? el.scrollTop > 100 : false;
+        }}"""
     )
 
     # Dispatch the click directly so Playwright doesn't first scroll the
@@ -89,22 +89,16 @@ def test_table_wrap_toggle_is_per_table_and_does_not_scroll_chat(sculptor_instan
 
     # Exactly one toggle should have flipped — the other table's wrap state
     # must stay independent.
-    labels = [t.get_attribute("aria-label") for t in wrap_toggles.all()]
-    assert labels.count("Switch to scroll") == 1, (
-        f"Expected exactly one toggle to flip after click; got labels={labels}"
-    )
-    assert labels.count("Switch to wrap") == 1, (
-        f"Expected the other toggle to stay in scroll mode; got labels={labels}"
-    )
+    switched = alpha_view.get_table_wrap_toggles_with_label("Switch to scroll")
+    expect(switched).to_have_count(1)
+    unchanged = alpha_view.get_table_wrap_toggles_with_label("Switch to wrap")
+    expect(unchanged).to_have_count(1)
 
-    # Allow layout to settle and check scroll did not jump to the bottom.
-    page.wait_for_timeout(400)
-    scroll_top_after = get_alpha_scroll_position(page)
-    scroll_height = get_alpha_scroll_height(page)
-    distance_from_bottom_after = scroll_height - scroll_top_after - container_height
-    assert distance_from_bottom_after > 200, (
-        "Wrap toggle yanked the chat to the bottom: "
-        + f"scrollTop went from {scroll_top_before:.0f} to {scroll_top_after:.0f}; "
-        + f"final distance from bottom = {distance_from_bottom_after:.0f}px "
-        + f"(scrollHeight={scroll_height:.0f}, clientHeight={container_height:.0f})."
+    # Confirm scroll did not jump to the bottom after layout settles.
+    page.wait_for_function(
+        f"""() => {{
+            const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
+            if (!el) return false;
+            return (el.scrollHeight - el.scrollTop - el.clientHeight) > 200;
+        }}"""
     )

@@ -1,12 +1,13 @@
 """Integration tests for scroll-to-top on user message send."""
 
 from playwright.sync_api import Locator
-from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
+from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
 from sculptor.testing.elements.alpha_chat_view import get_alpha_container_height
 from sculptor.testing.elements.alpha_chat_view import get_jump_to_bottom_button
+from sculptor.testing.elements.alpha_chat_view import get_jump_to_bottom_wrapper
 from sculptor.testing.elements.alpha_chat_view import get_message_top_offset
 from sculptor.testing.elements.alpha_chat_view import scroll_alpha_chat_by
 from sculptor.testing.elements.chat_panel import send_chat_message
@@ -23,20 +24,19 @@ _SHORT_TEXT = "Hello, this is a short reply."
 _LONG_STREAM_TEXT = "The quick brown fox jumps over the lazy dog. " * 112  # ~5040 chars
 
 
-def _expect_jump_button_hidden(jump_btn: Locator, *, timeout: int = 5000) -> None:
+def _expect_jump_button_hidden(jump_btn: Locator) -> None:
     """Assert the jump button is in its hidden state (aria-hidden on wrapper).
 
     The button is always in the DOM (for focus-management), so we check the
     wrapper's aria-hidden attribute rather than Playwright's visibility check.
     """
-    wrapper = jump_btn.page.get_by_test_id(ElementIDs.ALPHA_JUMP_TO_BOTTOM_WRAPPER)
-    expect(wrapper).to_have_attribute("aria-hidden", "true", timeout=timeout)
+    wrapper = get_jump_to_bottom_wrapper(jump_btn.page)
+    expect(wrapper).to_have_attribute("aria-hidden", "true")
 
 
-def _wait_for_agent_idle_alpha(page: Page, *, timeout: int = 30000) -> None:
-    """Wait for the agent to finish by checking the StatusPill disappears."""
-    status_pill = page.get_by_test_id(ElementIDs.STATUS_PILL)
-    expect(status_pill).not_to_be_visible(timeout=timeout)
+def _wait_for_agent_idle_alpha(chat_panel, *, timeout: int = 30000) -> None:
+    """Wait for the agent to finish by checking the thinking indicator disappears."""
+    expect(chat_panel.get_thinking_indicator()).not_to_be_visible(timeout=timeout)
 
 
 @user_story("to verify user message scrolls to the top of the viewport on send")
@@ -52,7 +52,7 @@ def test_scroll_to_top_on_send(sculptor_instance_: SculptorInstance) -> None:
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    expect(page.get_by_test_id(ElementIDs.ALPHA_CHAT_VIEW)).to_be_visible()
+    expect(get_alpha_chat_view(page)).to_be_visible()
 
     # Send a streaming message and verify the user message is scrolled to the
     # upper portion of the viewport (scroll-to-top behavior). The exact offset
@@ -76,7 +76,6 @@ def test_scroll_to_top_on_send(sculptor_instance_: SculptorInstance) -> None:
                 const halfHeight = container.clientHeight / 2;
                 return offset >= 0 && offset < halfHeight;
             }}""",
-            timeout=10000,
         )
     except Exception:
         diag = get_message_top_offset(page, data_index=2)
@@ -86,7 +85,7 @@ def test_scroll_to_top_on_send(sculptor_instance_: SculptorInstance) -> None:
         )
 
     # Wait for agent to finish before cleanup
-    _wait_for_agent_idle_alpha(page, timeout=60000)
+    _wait_for_agent_idle_alpha(chat_panel, timeout=60000)
 
 
 @user_story("to verify response fills below user message then transitions to pin-to-bottom")
@@ -101,7 +100,7 @@ def test_filling_to_pin_transition(sculptor_instance_: SculptorInstance) -> None
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    expect(page.get_by_test_id(ElementIDs.ALPHA_CHAT_VIEW)).to_be_visible()
+    expect(get_alpha_chat_view(page)).to_be_visible()
 
     # Send a streaming message with a long response
     send_chat_message(
@@ -110,8 +109,7 @@ def test_filling_to_pin_transition(sculptor_instance_: SculptorInstance) -> None
     )
 
     # Wait for streaming to complete and agent to become idle
-    _wait_for_agent_idle_alpha(page, timeout=60000)
-    page.wait_for_timeout(500)
+    _wait_for_agent_idle_alpha(chat_panel, timeout=60000)
 
     # After streaming completes with a long response, auto-scroll should have
     # transitioned to pin-to-bottom.  The jump button should be hidden (at bottom).
@@ -137,7 +135,7 @@ def test_jump_button_suppressed_on_send(sculptor_instance_: SculptorInstance) ->
     # final "still hidden" assertion below.
     close_bottom_panel(page)
 
-    expect(page.get_by_test_id(ElementIDs.ALPHA_CHAT_VIEW)).to_be_visible()
+    expect(get_alpha_chat_view(page)).to_be_visible()
 
     # Send a message — the jump button should be suppressed immediately after
     send_chat_message(
@@ -146,13 +144,11 @@ def test_jump_button_suppressed_on_send(sculptor_instance_: SculptorInstance) ->
     )
 
     # Check immediately — button should be hidden even though we scrolled to top
-    page.wait_for_timeout(300)
     jump_btn = get_jump_to_bottom_button(page)
     _expect_jump_button_hidden(jump_btn)
 
     # Wait for response to complete using alpha-view-compatible wait
-    _wait_for_agent_idle_alpha(page, timeout=30000)
-    page.wait_for_timeout(500)
+    _wait_for_agent_idle_alpha(chat_panel)
 
     # After completion, button should still be hidden (at bottom via pin-to-bottom)
     _expect_jump_button_hidden(jump_btn)
@@ -170,7 +166,7 @@ def test_user_scroll_exits_filling(sculptor_instance_: SculptorInstance) -> None
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    expect(page.get_by_test_id(ElementIDs.ALPHA_CHAT_VIEW)).to_be_visible()
+    expect(get_alpha_chat_view(page)).to_be_visible()
 
     # Send a streaming message
     send_chat_message(
@@ -179,18 +175,19 @@ def test_user_scroll_exits_filling(sculptor_instance_: SculptorInstance) -> None
     )
 
     # Wait for streaming to start producing content
-    page.wait_for_timeout(1000)
+    page.wait_for_function(
+        f"""() => document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"] [data-index="3"]') !== null"""
+    )
 
     # Scroll away — this should exit filling and disengage auto-scroll
     scroll_alpha_chat_by(page, 300)
-    page.wait_for_timeout(500)
 
     # Jump button should appear since we scrolled away from the anchor
     jump_btn = get_jump_to_bottom_button(page)
-    expect(jump_btn).to_be_visible(timeout=5000)
+    expect(jump_btn).to_be_visible()
 
     # Wait for agent to finish before cleanup
-    _wait_for_agent_idle_alpha(page, timeout=60000)
+    _wait_for_agent_idle_alpha(chat_panel, timeout=60000)
 
 
 @user_story("to verify dynamic padding constrains scroll range for short responses")
@@ -213,32 +210,29 @@ def test_short_response_keeps_user_message_visible(sculptor_instance_: SculptorI
     # Must be done after workspace creation since the terminal only exists in workspaces.
     close_bottom_panel(page)
 
-    expect(page.get_by_test_id(ElementIDs.ALPHA_CHAT_VIEW)).to_be_visible()
+    expect(get_alpha_chat_view(page)).to_be_visible()
 
     # Send a follow-up message with a short response
     send_chat_message(
         chat_panel,
         f'fake_claude:text `{{"text": "{_SHORT_TEXT}"}}`',
     )
-    _wait_for_agent_idle_alpha(page)
-    page.wait_for_timeout(500)
+    _wait_for_agent_idle_alpha(chat_panel)
 
     # Try to scroll down as far as possible
     scroll_alpha_chat_by(page, 10000)
-    page.wait_for_timeout(500)
 
     # The last user message (data-index=2) should still be visible in the
     # viewport.  With proper dynamic padding, the scroll range is constrained
     # so the user message can't be pushed off-screen.
-    user_msg_offset = get_message_top_offset(page, data_index=2)
-    container_height = get_alpha_container_height(page)
-
-    assert user_msg_offset >= 0, (
-        f"User message scrolled off-screen (offset={user_msg_offset:.0f}px)."
-        + " Dynamic paddingEnd should constrain the scroll range."
-    )
-    assert user_msg_offset < container_height, (
-        f"User message not in viewport (offset={user_msg_offset:.0f}px, viewport={container_height:.0f}px)."
+    page.wait_for_function(
+        f"""() => {{
+            const container = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
+            const item = container && container.querySelector('[data-index="2"]');
+            if (!container || !item) return false;
+            const offset = item.getBoundingClientRect().top - container.getBoundingClientRect().top;
+            return offset >= 0 && offset < container.clientHeight;
+        }}"""
     )
 
 
@@ -262,7 +256,7 @@ def test_scroll_to_top_first_message(sculptor_instance_: SculptorInstance) -> No
     # Close the bottom panel (terminal) to maximize chat height.
     close_bottom_panel(page)
 
-    expect(page.get_by_test_id(ElementIDs.ALPHA_CHAT_VIEW)).to_be_visible()
+    expect(get_alpha_chat_view(page)).to_be_visible()
 
     # Use a short prompt so the user message itself fits inside the viewport.
     # fake_claude:stream_text embeds the full text in the prompt, so the user
@@ -288,7 +282,6 @@ def test_scroll_to_top_first_message(sculptor_instance_: SculptorInstance) -> No
                 const halfHeight = container.clientHeight / 2;
                 return offset >= 0 && offset < halfHeight;
             }}""",
-            timeout=15000,
         )
     except Exception:
         diag = get_message_top_offset(page, data_index=0)
@@ -297,7 +290,7 @@ def test_scroll_to_top_first_message(sculptor_instance_: SculptorInstance) -> No
             f"First user message not in upper half after scroll-to-top. offset={diag:.0f} containerH={container_h:.0f}"
         )
 
-    _wait_for_agent_idle_alpha(page, timeout=60000)
+    _wait_for_agent_idle_alpha(chat_panel, timeout=60000)
 
 
 @user_story("to verify auto-scroll re-engages after clicking jump-to-bottom during streaming")
@@ -313,7 +306,7 @@ def test_reengagement_after_scroll_to_top(sculptor_instance_: SculptorInstance) 
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    expect(page.get_by_test_id(ElementIDs.ALPHA_CHAT_VIEW)).to_be_visible()
+    expect(get_alpha_chat_view(page)).to_be_visible()
 
     # Send a streaming message with a long response.  Use a slower chunk
     # delay (0.1s) so streaming lasts ~5s instead of ~2.5s — the test needs
@@ -324,15 +317,16 @@ def test_reengagement_after_scroll_to_top(sculptor_instance_: SculptorInstance) 
     )
 
     # Wait for streaming to produce content
-    page.wait_for_timeout(1500)
+    page.wait_for_function(
+        f"""() => document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"] [data-index="3"]') !== null"""
+    )
 
     # Scroll away — this should disengage auto-scroll
     scroll_alpha_chat_by(page, 300)
-    page.wait_for_timeout(500)
 
     # Jump button should be visible since we scrolled away
     jump_btn = get_jump_to_bottom_button(page)
-    expect(jump_btn).to_be_visible(timeout=5000)
+    expect(jump_btn).to_be_visible()
 
     # Click jump-to-bottom to re-engage auto-scroll
     jump_btn.click(force=True)
@@ -342,19 +336,16 @@ def test_reengagement_after_scroll_to_top(sculptor_instance_: SculptorInstance) 
     # than checking after streaming ends, because post-streaming layout
     # adjustments (paddingEnd recalculations, item re-measurements) can
     # shift the scroll position after the ResizeObserver disconnects.
-    is_near_bottom = page.wait_for_function(
+    page.wait_for_function(
         f"""() => {{
             const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
             if (!el) return false;
             return el.scrollHeight - el.scrollTop - el.clientHeight < 300;
-        }}""",
-        timeout=10000,
-    ).json_value()
-
-    assert is_near_bottom, "Should be near the bottom after re-engaging auto-scroll via jump-to-bottom"
+        }}"""
+    )
 
     # Wait for agent to finish before cleanup
-    _wait_for_agent_idle_alpha(page, timeout=60000)
+    _wait_for_agent_idle_alpha(chat_panel, timeout=60000)
 
 
 @user_story("to verify scroll-to-top works correctly for rapid successive sends")
@@ -374,26 +365,25 @@ def test_scroll_to_top_rapid_successive_sends(sculptor_instance_: SculptorInstan
     # Must be done after workspace creation since the terminal only exists in workspaces.
     close_bottom_panel(page)
 
-    expect(page.get_by_test_id(ElementIDs.ALPHA_CHAT_VIEW)).to_be_visible()
+    expect(get_alpha_chat_view(page)).to_be_visible()
 
     # Send first streaming message
     send_chat_message(
         chat_panel,
         f'fake_claude:stream_text `{{"text": "{_LONG_STREAM_TEXT}", "chunk_size": 100, "delay_seconds": 0.05}}`',
     )
-    _wait_for_agent_idle_alpha(page, timeout=60000)
+    _wait_for_agent_idle_alpha(chat_panel, timeout=60000)
 
     # Send second message with a short response
     send_chat_message(
         chat_panel,
         f'fake_claude:text `{{"text": "{_SHORT_TEXT}"}}`',
     )
-    _wait_for_agent_idle_alpha(page, timeout=30000)
-    page.wait_for_timeout(500)
+    _wait_for_agent_idle_alpha(chat_panel)
 
     # The last user message (highest data-index user message) should be in the
     # upper half of the viewport after scroll-to-top.
-    in_upper_half = page.wait_for_function(
+    page.wait_for_function(
         f"""() => {{
             const container = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
             if (!container) return false;
@@ -411,8 +401,5 @@ def test_scroll_to_top_rapid_successive_sends(sculptor_instance_: SculptorInstan
             const offset = item.getBoundingClientRect().top - container.getBoundingClientRect().top;
             const halfHeight = container.clientHeight / 2;
             return offset >= 0 && offset < halfHeight;
-        }}""",
-        timeout=10000,
-    ).json_value()
-
-    assert in_upper_half, "Last user message should be in the upper half after scroll-to-top on second send"
+        }}"""
+    )

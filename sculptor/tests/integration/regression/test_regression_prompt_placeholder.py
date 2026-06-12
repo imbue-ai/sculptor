@@ -19,13 +19,11 @@ import re
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
-from sculptor.testing.elements.base import tiptap_has_placeholder
+from sculptor.testing.elements.base import get_tiptap_placeholder_paragraphs
 from sculptor.testing.elements.base import type_into_tiptap
 from sculptor.testing.elements.base import type_trigger_char
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
-from sculptor.testing.playwright_utils import get_local_storage_item
 from sculptor.testing.playwright_utils import soft_reload_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -68,14 +66,16 @@ def test_placeholder_and_slash_suggestions_survive_reload(sculptor_instance_: Sc
     send_chat_message(chat_panel, "follow-up message")
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=4)
 
-    # Wait for debounced localStorage write (300ms + margin)
-    page.wait_for_timeout(500)
-
-    # Verify \u200B did NOT leak into localStorage
+    # Verify \u200B did NOT leak into localStorage after the debounced write
     agent_id = _get_agent_id_from_url(page.url)
     draft_key = f"sculptor-prompt-draft-{agent_id}"
-    stored = get_local_storage_item(page, draft_key)
-    assert stored != ZWS, f"ZWSP leaked into localStorage prompt draft: {stored!r}. onUpdate should normalize."
+    page.wait_for_function(
+        """([key, zws]) => {
+            const val = window.localStorage.getItem(key);
+            return val !== zws;
+        }""",
+        arg=[draft_key, ZWS],
+    )
 
     # Reload the page to recreate the editor from localStorage
     soft_reload_page(page)
@@ -87,8 +87,8 @@ def test_placeholder_and_slash_suggestions_survive_reload(sculptor_instance_: Sc
 
     # "/" must open the skill-suggestion popover
     type_trigger_char(chat_input, "/")
-    mention_list = page.get_by_test_id(ElementIDs.MENTION_LIST)
-    expect(mention_list).to_be_visible(timeout=5_000)
+    mention_list = chat_panel.get_mention_list()
+    expect(mention_list).to_be_visible()
 
 
 # ---------------------------------------------------------------------------
@@ -126,6 +126,5 @@ def test_placeholder_hidden_when_editor_has_content(sculptor_instance_: Sculptor
     page.keyboard.press("ArrowUp")
 
     # The placeholder text must NOT appear — the editor has content ("hello world").
-    assert not tiptap_has_placeholder(chat_input, PLACEHOLDER_TEXT), (
-        "Placeholder is visible on an empty paragraph even though the editor has content"
-    )
+    placeholder_paragraphs = get_tiptap_placeholder_paragraphs(chat_input, PLACEHOLDER_TEXT)
+    expect(placeholder_paragraphs).to_have_count(0)
