@@ -22,9 +22,10 @@ type JotaiStore = ReturnType<typeof createStore>;
 
 /**
  * Built-in plugin sources, always loaded regardless of the user's saved list
- * and not removable from the settings UI.
+ * and not removable from the settings UI. Empty in the base scaffolding —
+ * no plugin ships bundled yet; sources serve from `public/plugins/<id>/`.
  */
-const BUILTIN_SOURCES: ReadonlyArray<string> = ["/plugins/linear-issue"];
+const BUILTIN_SOURCES: ReadonlyArray<string> = [];
 
 /** SDK major version the host currently provides. */
 const HOST_SDK_VERSION = 1;

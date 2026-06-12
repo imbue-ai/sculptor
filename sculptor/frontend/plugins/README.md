@@ -3,18 +3,19 @@
 This directory holds the source for runtime-loaded frontend plugins. Each
 subdirectory is an independent Vite project that builds an ESM bundle into
 the host's `public/plugins/<id>/` tree. The host loads built-in plugins plus
-any user-added sources (see Settings → Plugins) — see `src/plugins/pluginManager.tsx`.
+any user-added sources — see `src/plugins/pluginManager.tsx`.
 
-The example plugin is `linear-issue`: it reads the workspace branch via the
-SDK, parses a Linear ticket id out of it, fetches that issue from Linear's
-GraphQL API, and stores its API key through the plugin-settings SDK.
+No plugin ships bundled yet (`BUILTIN_SOURCES` is empty); this is the
+scaffolding the first plugins will target. The Plugins settings section is
+likewise hidden from the sidebar until something loads through it — it stays
+reachable at `#/settings?section=PLUGINS` for development.
 
 ## How a plugin is built and loaded
 
 1. Plugin source lives in `plugins/<id>/src/index.tsx`. Its `vite.config.ts`
    marks every shared dependency (`react`, `@radix-ui/themes`, `jotai`,
-   `lucide-react`, `@sculptor/plugin-sdk`, etc.) as external, so the
-   bundle contains only the plugin's own code.
+   `@tanstack/react-query`, `lucide-react`, `@sculptor/plugin-sdk`, etc.) as
+   external, so the bundle contains only the plugin's own code.
 2. `cd plugins/<id> && npm install && npm run build` emits
    `public/plugins/<id>/main.js` and copies `manifest.json` alongside it.
 3. At runtime the host fetches `/plugins/<id>/manifest.json`, validates the
@@ -47,7 +48,7 @@ close/reopen and workspace switches, and concurrent mounts dedupe to one
 request. Rules:
 
 - **Key namespace**: the first element of every query key MUST be your plugin
-  id (e.g. `["linear-issue", "issue", id]`). The host's keys live under the
+  id (e.g. `["my-plugin", "issue", id]`). The host's keys live under the
   reserved `"sculptor"` prefix. A dev-mode guard warns on keys outside either
   namespace.
 - **Set `staleTime` explicitly**: the host's default is `Infinity` (its
@@ -61,13 +62,16 @@ request. Rules:
   rendered inside your subtree off from the shared cache.
 - Don't put secrets (API keys) in query keys — keys are visible in cache
   inspection/devtools. Close over them in the `queryFn` and invalidate your
-  namespace when they change (see `linear-issue`).
+  namespace when they change.
 
-## Adding a new plugin to the loader
+## Adding a plugin
 
-1. Create `plugins/<id>/` with the same shape as `linear-issue/`.
+1. Create `plugins/<id>/` — a small Vite project with a `manifest.json`
+   (`id`, `name`, `version`, `entry`, `sdkVersion`, `peerDependencies`) and a
+   build that externalises the shared deps and outputs
+   `public/plugins/<id>/main.js`.
 2. Add `/plugins/<id>` to `BUILTIN_SOURCES` in `src/plugins/pluginManager.tsx`
-   (or just add it as a source at runtime via Settings → Plugins).
+   to bundle it, or add it as a source at runtime via the Plugins settings.
 3. Build it once; the host picks it up on next reload.
 
 ## What's mocked vs. real
@@ -76,8 +80,8 @@ request. Rules:
   the existing `taskDetailAtomFamily`. It will move to TanStack Query and
   the public hook signature won't change.
 - The built-in plugin list is hardcoded; user sources are persisted to
-  localStorage and managed from Settings → Plugins.
+  localStorage and managed from the Plugins settings.
 - The SDK package is published as a runtime stub via the import map; it
   is not yet a separate npm package.
 - `usePluginSetting` persists to localStorage in the renderer; it is not a
-  secure secret store. The Linear API key lives there in plaintext.
+  secure secret store.

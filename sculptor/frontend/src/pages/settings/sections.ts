@@ -8,7 +8,6 @@ import {
   LayoutGridIcon,
   PaintbrushIcon,
   PlayIcon,
-  PuzzleIcon,
   ShieldCheckIcon,
   ShieldIcon,
   TerminalIcon,
@@ -100,14 +99,18 @@ export const SETTINGS_SECTIONS: ReadonlyArray<SettingsSectionDescriptor> = [
     icon: LayoutGridIcon,
     testId: ElementIds.SETTINGS_NAV_PANELS,
   },
-  {
-    id: SettingsSection.PLUGINS,
-    displayName: "Plugins",
-    paletteSubtitle: "Installed plugins and their settings",
-    paletteKeywords: ["extensions", "addons"],
-    icon: PuzzleIcon,
-    testId: ElementIds.SETTINGS_NAV_PLUGINS,
-  },
+  // The Plugins section is hidden from the sidebar and palette until a
+  // plugin actually ships through the scaffolding (no built-in plugins yet,
+  // so the section would always render empty). The page itself stays
+  // reachable at #/settings?section=PLUGINS for plugin development.
+  // {
+  //   id: SettingsSection.PLUGINS,
+  //   displayName: "Plugins",
+  //   paletteSubtitle: "Installed plugins and their settings",
+  //   paletteKeywords: ["extensions", "addons"],
+  //   icon: PuzzleIcon,
+  //   testId: ElementIds.SETTINGS_NAV_PLUGINS,
+  // },
   {
     id: SettingsSection.DEPENDENCIES,
     displayName: "Dependencies",
