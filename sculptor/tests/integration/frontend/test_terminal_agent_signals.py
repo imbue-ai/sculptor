@@ -1,10 +1,10 @@
 """Integration tests for terminal-agent signals driving the tab status dot.
 
-Signals are posted from inside the agent's own terminal via the local HTTP
-event API (REQ-SIG-1/5) — the shell env carries SCULPT_AGENT_ID and
-SCULPT_API_PORT precisely for this. busy → spinner, waiting-on-input →
-attention dot, idle → calm neutral; files-changed refreshes the Changes
-panel (REQ-SIG-6).
+Signals are posted from inside the agent's own terminal via the `sculpt
+signal` CLI (REQ-SIG-3), which reads SCULPT_AGENT_ID / SCULPT_API_PORT from
+the injected shell env and posts to the local HTTP event API (REQ-SIG-1/5).
+busy → spinner, waiting → attention dot, idle → calm neutral; files-changed
+refreshes the Changes panel (REQ-SIG-6).
 """
 
 import re
@@ -22,18 +22,13 @@ from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
 
-def _post_signal_from_terminal(page: Page, event: str) -> None:
-    """POST a signal event from inside the agent's shell via curl.
+def _post_signal_from_terminal(page: Page, subcommand: str) -> None:
+    """Run `sculpt signal <subcommand>` inside the agent's shell.
 
-    The integration backend runs tokenless, so no session token is needed;
-    the shell env provides the port and agent id.
+    The CLI resolves the agent and port from the injected env and
+    self-fetches the session token — exactly how real hooks invoke it.
     """
-    body = '{"event":"' + event + '"}'
-    command = (
-        f"curl -s -o /dev/null -X POST -H 'content-type: application/json' -d '{body}' "
-        '"http://localhost:$SCULPT_API_PORT/api/v1/agents/$SCULPT_AGENT_ID/signal"'
-    )
-    run_command_in_agent_terminal(page, command)
+    run_command_in_agent_terminal(page, f"sculpt signal {subcommand}")
 
 
 @user_story("to see a terminal agent's tab reflect the signals its program posts")
@@ -56,7 +51,7 @@ def test_terminal_agent_signals_drive_tab_status_dot(sculptor_instance_: Sculpto
     _post_signal_from_terminal(page, "busy")
     expect(terminal_tab).to_have_attribute("data-dot-status", "running", timeout=15_000)
 
-    _post_signal_from_terminal(page, "waiting-on-input")
+    _post_signal_from_terminal(page, "waiting")
     expect(terminal_tab).to_have_attribute("data-dot-status", "waiting", timeout=15_000)
 
     _post_signal_from_terminal(page, "idle")
