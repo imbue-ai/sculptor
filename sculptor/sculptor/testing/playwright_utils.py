@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import itertools
 import json
+import re
 from collections.abc import Callable
 from typing import TypeVar
 
@@ -20,6 +21,7 @@ from tenacity import wait_fixed
 from sculptor.constants import ElementIDs
 from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.interfaces.agents.agent import HarnessName
+from sculptor.state.messages import LLMModel
 from sculptor.testing.elements.base import type_into_tiptap
 from sculptor.testing.elements.chat_panel import select_model_by_name
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
@@ -469,6 +471,44 @@ def delete_project_via_settings(
 
     # Navigate back to the Add Workspace page after deletion
     navigate_to_add_workspace_page(page)
+
+
+def upload_file_via_api(page: Page, *, name: str, mime_type: str, content: bytes) -> str:
+    """Upload a file through the harness-agnostic upload endpoint, returning its id.
+
+    The endpoint accepts any file type — the image-only validation lives in the
+    frontend — so this is how an integration test attaches a non-image file the
+    UI would refuse. ``page.request`` inherits the page's session cookie.
+    """
+    base_url = page.url.split("#")[0].rstrip("/")
+    response = page.request.post(
+        f"{base_url}/api/v1/upload-file",
+        multipart={"file": {"name": name, "mimeType": mime_type, "buffer": content}},
+    )
+    assert response.ok, f"upload-file failed: {response.status} {response.text()}"
+    # The endpoint serializes UploadFileResponse with a camelCase alias, so the
+    # JSON key is `fileId` (matching the frontend's FileUploadUtils reader).
+    return response.json()["fileId"]
+
+
+def send_message_via_api(
+    page: Page, *, message: str, files: list[str], model: LLMModel = LLMModel.CLAUDE_4_OPUS_200K
+) -> None:
+    """Send a chat message (with attached upload ids) to the active agent via the API.
+
+    Parses the workspace/agent ids from the page URL (``/ws/<ws>/agent/<agent>``).
+    pi ignores ``model`` (it reads its own ``models.json``), so the default is
+    only a schema-valid placeholder for pi workspaces.
+    """
+    base_url = page.url.split("#")[0].rstrip("/")
+    match = re.search(r"/ws/([^/]+)/agent/([^/?#]+)", page.url)
+    assert match is not None, f"could not parse workspace/agent ids from URL: {page.url}"
+    workspace_id, agent_id = match.group(1), match.group(2)
+    response = page.request.post(
+        f"{base_url}/api/v1/workspaces/{workspace_id}/agents/{agent_id}/messages",
+        data={"message": message, "model": model.value, "files": files},
+    )
+    assert response.ok, f"send-message failed: {response.status} {response.text()}"
 
 
 # NOTE: The helpers below use page.goto() and page.evaluate(), which are

@@ -76,6 +76,10 @@ from sculptor.agents.pi_agent.output_processor import ParsedUnknownEvent
 from sculptor.agents.pi_agent.output_processor import RpcResponse
 from sculptor.agents.pi_agent.output_processor import extract_assistant_text
 from sculptor.agents.pi_agent.output_processor import parse_rpc_message
+from sculptor.agents.pi_agent.prompt_assembly import build_attachment_instructions
+from sculptor.agents.pi_agent.prompt_assembly import build_image_block
+from sculptor.agents.pi_agent.prompt_assembly import save_attachments_to_environment
+from sculptor.agents.pi_agent.prompt_assembly import split_image_and_path_attachments
 from sculptor.agents.pi_agent.tool_rendering import build_tool_result_content
 from sculptor.agents.pi_agent.tool_rendering import extract_text_from_tool_payload
 from sculptor.agents.pi_agent.tool_rendering import map_pi_tool_call
@@ -747,8 +751,7 @@ class PiAgent(DefaultAgentWrapper):
             self._cancel_interrupt_escalation()
             prompt_id = generate_id()
             self._turn_in_flight.set()
-            prompt_text = _rewrite_skill_invocation(message.text, self._discovered_skill_names)
-            self._send_rpc({"type": "prompt", "id": prompt_id, "message": prompt_text})
+            self._send_rpc(self._build_prompt_payload(prompt_id, message))
             try:
                 self._consume_until_turn_end(prompt_id)
             finally:
@@ -757,6 +760,33 @@ class PiAgent(DefaultAgentWrapper):
                 self._turn_in_flight.clear()
                 self._interrupt_pending.clear()
                 self._cancel_interrupt_escalation()
+
+    def _build_prompt_payload(self, prompt_id: str, message: ChatInputUserMessage) -> dict[str, Any]:
+        """Assemble the `prompt` command for one user turn, attachments included.
+
+        Attachments (`ChatInputUserMessage.files`) are split by type: images
+        ride the `images[]` field as base64 + mimeType; everything else is
+        presented as paths in the prompt text for pi to read with its own
+        `read` tool. See `prompt_assembly` for the helpers.
+        """
+        saved_paths = save_attachments_to_environment(self.environment, message.files)
+        image_paths, path_attachments = split_image_and_path_attachments(saved_paths)
+        rewritten_text = _rewrite_skill_invocation(message.text, self._discovered_skill_names)
+        prompt_text = build_attachment_instructions(path_attachments) + rewritten_text
+        payload: dict[str, Any] = {"type": "prompt", "id": prompt_id, "message": prompt_text}
+        if image_paths:
+            # No per-model image-capability gating here yet, only the
+            # harness-level "pi can carry images" flag. When per-model gating is
+            # added it belongs at this assembly site, mirroring the frontend's
+            # `getModelCapabilities` map (`frontend/src/.../modelCapabilities.ts`).
+            payload["images"] = [build_image_block(path, self._read_attachment_bytes(path)) for path in image_paths]
+        return payload
+
+    def _read_attachment_bytes(self, path: str) -> bytes:
+        """Read a saved attachment's bytes from the environment copy."""
+        content = self.environment.read_file(path, mode="rb")
+        assert isinstance(content, bytes), "binary read must return bytes"
+        return content
 
     def _consume_until_turn_end(self, prompt_id: str = "") -> None:
         """Drive pi's stdout until the current agent run terminates.

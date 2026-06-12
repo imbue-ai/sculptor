@@ -229,10 +229,12 @@ export const Editor = ({
         handlePaste: (view, event) => {
           // Only handle paste when the attach handlers are present. ChatInput
           // omits `onFilesChange` for a harness that can't accept file
-          // attachments, so the paste-to-attach path is inert there.
-          // CAPABILITY-GAP: supportsImageInput — a harness that accepts file
-          // attachments but not image input would still route pasted images
-          // here; the +menu/toolbar surfaces gate that, the paste path does not.
+          // attachments, so the paste-to-attach path is inert there. Every
+          // harness that accepts attachments today (Claude and pi) also accepts
+          // image input, so routing pasted images here is correct for all of
+          // them. Were a future harness to accept attachments but not image
+          // input, paste would still route images here while the +menu/toolbar
+          // gate them — re-gate this on supportsImageInput at that point.
           if (!onFilesChangeRef.current || !onErrorRef.current) {
             return false;
           }
