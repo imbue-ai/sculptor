@@ -11,9 +11,12 @@
   background-color: light-dark(var(--color-panel-solid), var(--color-background));
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow: auto;
 
-  @include thin-scrollbar;
+  // `both` — wide rendered-markdown content (e.g. a large GFM table) makes
+  // this container scroll sideways, and the horizontal bar should be the
+  // same thin bar as the vertical one.
+  @include thin-scrollbar(both);
 }
 
 // Layout for the rendered-markdown view. GFM features need a few extra rules
@@ -59,6 +62,8 @@
     margin: 0.5em 0;
     overflow-x: auto;
     padding: 0.75em 1em;
+
+    @include thin-scrollbar(horizontal);
 
     code {
       background: none;
