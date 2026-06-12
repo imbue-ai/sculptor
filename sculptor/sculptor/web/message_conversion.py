@@ -37,6 +37,7 @@ from sculptor.interfaces.agents.agent import BackgroundTaskStartedAgentMessage
 from sculptor.interfaces.agents.agent import ContextClearedMessage
 from sculptor.interfaces.agents.agent import ContextSummaryMessage
 from sculptor.interfaces.agents.agent import EnvironmentCrashedRunnerMessage
+from sculptor.interfaces.agents.agent import ErrorMessage
 from sculptor.interfaces.agents.agent import ErrorMessageUnion
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import PlanModeAgentMessage
@@ -1004,6 +1005,8 @@ def _add_context_summary_to_message(
     message: ContextSummaryMessage,
 ) -> ChatMessage:
     """Add error block to message."""
+    # although all elements of `ContextSummaryMessage` are `Message`s, keep the runtime assert as a defensive guard
+    assert isinstance(message, Message)
 
     context_summary_block = ContextSummaryBlock(
         text=message.content,
@@ -1039,6 +1042,8 @@ def _add_error_to_message(
     message: ErrorMessageUnion,
 ) -> ChatMessage:
     """Add error block to message."""
+    # although all elements of `ErrorMessageUnion` are `ErrorMessage`s, keep the runtime assert as a defensive guard
+    assert isinstance(message, ErrorMessage)
     error = message.error
     chat_message_id = message.message_id
     if not isinstance(error, SerializedException):
@@ -1069,6 +1074,8 @@ def _add_warning_to_message(in_progress: ChatMessage | None, message: WarningMes
     traceback = None
     warning_type = None
 
+    # although WarningMessage is a Message, keep the runtime assert as a defensive guard
+    assert isinstance(message, Message)
     error = message.error
 
     if isinstance(error, SerializedException):

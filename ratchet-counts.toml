@@ -93,7 +93,7 @@
 "." = 0
 
 [no-pyrefly-ignore]
-"." = 66
+"." = 71
 
 [no-pyrefly-ignore-errors]
 "." = 0

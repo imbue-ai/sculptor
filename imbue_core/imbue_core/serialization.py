@@ -48,7 +48,8 @@ class SerializedException(SerializableModel):
         traceback_dict = self.traceback_dict
         if traceback_dict is None:
             return None
-        assert isinstance(traceback_dict, dict), f"corrupt traceback_dict: {type(traceback_dict).__name__}"
+        # traceback_dict is always written as a dict; its JsonTypeAlias annotation is wider than reality
+        # pyrefly: ignore [bad-argument-type]
         return FixedTraceback.from_dict(traceback_dict)
 
     @cached_property

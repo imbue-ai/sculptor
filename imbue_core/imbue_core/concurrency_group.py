@@ -527,15 +527,17 @@ class ConcurrencyGroup(MutableModel, AbstractContextManager):
                 is_checked_by_group=False,
                 log_command=log_command,
             )
-            returncode = process.wait()
+            result = process.wait()
             if is_checked_after:
                 process.check()
 
-            subprocess_handle.report_return_code(returncode)
+            # returncode is always set once wait() has returned
+            # pyrefly: ignore [bad-argument-type]
+            subprocess_handle.report_return_code(process.returncode)
 
             return FinishedProcess(
                 command=tuple(process.command),
-                returncode=returncode,
+                returncode=process.returncode,
                 stdout=process.read_stdout(),
                 stderr=process.read_stderr(),
                 is_timed_out=process.get_timed_out(),

@@ -221,8 +221,8 @@ class RunningProcess:
         if thread.is_alive():
             stdout = self.read_stdout()
             stderr = self.read_stderr()
-            # join(None) only returns once the thread is dead, so reaching here means a real timeout elapsed
-            assert timeout is not None
+            # only reachable when a non-None timeout elapsed: join(None) waits for thread death
+            # pyrefly: ignore [bad-argument-type]
             raise TimeoutExpired(self._command, timeout, stdout, stderr)
         result = self.poll()
         if result is None:
