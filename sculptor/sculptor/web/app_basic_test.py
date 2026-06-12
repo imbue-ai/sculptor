@@ -6,6 +6,7 @@ NOTE: Endpoints are not currently tested for cross-user authorization (preventin
 
 """
 
+from pathlib import Path
 from typing import Generator
 
 import httpx
@@ -27,6 +28,7 @@ from sculptor.foundation.pydantic_utils import model_update
 from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
 from sculptor.interfaces.agents.agent import HelloAgentConfig
 from sculptor.interfaces.agents.agent import PiAgentConfig
+from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.interfaces.agents.agent import TerminalAgentConfig
 from sculptor.interfaces.agents.artifacts import ArtifactType
 from sculptor.interfaces.agents.artifacts import DiffArtifact
@@ -37,6 +39,7 @@ from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import ToolUseID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.data_model_service.data_types import DataModelTransaction
+from sculptor.services.terminal_agent_registry import registry as registry_module
 from sculptor.services.user_config.user_config import get_privacy_settings_for_telemetry
 from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.state.chat_state import ToolUseBlock
@@ -1068,17 +1071,6 @@ def test_create_terminal_agent_with_prompt_is_rejected(
     assert response.status_code == 422
 
 
-def test_create_registered_agent_is_not_available_yet(
-    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
-) -> None:
-    user_session = authenticate_anonymous(test_services, RequestID())
-    with user_session.open_transaction(test_services) as transaction:
-        workspace = _create_workspace(transaction, test_services, test_project)
-
-    response = _post_agent(client, workspace, {"agentType": "registered", "registrationId": "claude-code"})
-    assert response.status_code == 422
-
-
 def test_first_terminal_agent_gets_no_intro_message(
     client: TestClient, test_services: CompleteServiceCollection, test_project: Project
 ) -> None:
@@ -1109,3 +1101,96 @@ def test_first_claude_agent_still_gets_intro_message(
     with user_session.open_transaction(test_services) as transaction:
         messages = test_services.task_service.get_saved_messages_for_task(task_id, transaction)
     assert any(isinstance(m, ChatInputUserMessage) for m in messages)
+
+
+# Terminal-agent registrations (phase 4).
+
+
+@pytest.fixture
+def registrations_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.setattr(registry_module, "get_sculptor_folder", lambda: tmp_path)
+    directory = tmp_path / "terminal_agents"
+    directory.mkdir()
+    return directory
+
+
+def test_list_terminal_agent_registrations_rereads_per_request(client: TestClient, registrations_dir: Path) -> None:
+    response = client.get("/api/v1/terminal-agent-registrations")
+    assert response.status_code == 200
+    assert response.json()["registrations"] == []
+
+    # A file dropped between two calls appears without a restart (no caching).
+    (registrations_dir / "claude-code.toml").write_text('display_name = "Claude Code"\nlaunch_command = "claude"\n')
+    response = client.get("/api/v1/terminal-agent-registrations")
+    assert response.status_code == 200
+    listed = response.json()["registrations"]
+    assert [r["registrationId"] for r in listed] == ["claude-code"]
+    assert listed[0]["displayName"] == "Claude Code"
+
+
+def test_list_terminal_agent_registrations_skips_bad_files(client: TestClient, registrations_dir: Path) -> None:
+    (registrations_dir / "broken.toml").write_text("not [valid toml")
+    (registrations_dir / "good.toml").write_text('display_name = "Good"\nlaunch_command = "good"\n')
+
+    response = client.get("/api/v1/terminal-agent-registrations")
+
+    assert response.status_code == 200
+    assert [r["registrationId"] for r in response.json()["registrations"]] == ["good"]
+
+
+def test_create_registered_agent_stamps_resolved_config_and_names_from_display_name(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    test_project: Project,
+    registrations_dir: Path,
+) -> None:
+    (registrations_dir / "claude-code.toml").write_text(
+        """\
+display_name = "Claude Code"
+launch_command = "claude"
+resume_command_template = "claude --resume {session_id}"
+accepts_automated_prompts = true
+"""
+    )
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+
+    response = _post_agent(client, workspace, {"agentType": "registered", "registrationId": "claude-code"})
+    assert response.status_code == 200, response.text
+    assert response.json()["title"] == "Claude Code 1"
+
+    with user_session.open_transaction(test_services) as transaction:
+        task = test_services.task_service.get_task(TaskID(response.json()["id"]), transaction)
+    assert task is not None
+    assert isinstance(task.input_data, AgentTaskInputsV2)
+    config = task.input_data.agent_config
+    assert isinstance(config, RegisteredTerminalAgentConfig)
+    assert config.registration_id == "claude-code"
+    assert config.display_name == "Claude Code"
+    assert config.launch_command == "claude"
+    assert config.resume_command_template == "claude --resume {session_id}"
+    assert config.accepts_automated_prompts is True
+
+
+def test_create_registered_agent_with_unknown_or_deleted_registration_fails(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    test_project: Project,
+    registrations_dir: Path,
+) -> None:
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+
+    assert _post_agent(client, workspace, {"agentType": "registered", "registrationId": "nope"}).status_code == 422
+
+    # Menu-raced deletion: the file existed when the menu listed it but is
+    # gone by creation time.
+    path = registrations_dir / "fleeting.toml"
+    path.write_text('display_name = "Fleeting"\nlaunch_command = "x"\n')
+    assert client.get("/api/v1/terminal-agent-registrations").json()["registrations"]
+    path.unlink()
+    response = _post_agent(client, workspace, {"agentType": "registered", "registrationId": "fleeting"})
+    assert response.status_code == 422
+    assert "fleeting" in response.json()["detail"]

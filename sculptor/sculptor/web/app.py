@@ -78,6 +78,7 @@ from sculptor.interfaces.agents.agent import ClearContextUserMessage
 from sculptor.interfaces.agents.agent import InterruptProcessUserMessage
 from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessage
 from sculptor.interfaces.agents.agent import PiAgentConfig
+from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageUserMessage
 from sculptor.interfaces.agents.agent import TerminalAgentConfig
 from sculptor.interfaces.agents.agent import TerminalAgentSignalRunnerMessage
@@ -109,6 +110,8 @@ from sculptor.services.project_service.default_implementation import get_most_re
 from sculptor.services.project_service.default_implementation import update_most_recently_used_project
 from sculptor.services.task_service.errors import InvalidTaskOperation
 from sculptor.services.task_service.errors import TaskNotFound
+from sculptor.services.terminal_agent_registry.registry import get_registration
+from sculptor.services.terminal_agent_registry.registry import load_registrations
 from sculptor.services.user_config.telemetry_info import get_onboarding_telemetry_info
 from sculptor.services.user_config.telemetry_info import get_telemetry_info as get_telemetry_info_impl
 from sculptor.services.user_config.user_config import get_config_path
@@ -185,6 +188,7 @@ from sculptor.web.data_types import EmailConfigRequest
 from sculptor.web.data_types import EnvVarNamesResponse
 from sculptor.web.data_types import HealthCheckResponse
 from sculptor.web.data_types import InitializeGitRepoRequest
+from sculptor.web.data_types import ListTerminalAgentRegistrationsResponse
 from sculptor.web.data_types import ListWorkspacesResponse
 from sculptor.web.data_types import NamingPatternRequest
 from sculptor.web.data_types import OpenFileUiAction
@@ -1595,8 +1599,24 @@ def _agent_config_for_request(
     if agent_type == AgentTypeName.TERMINAL:
         return TerminalAgentConfig()
     if agent_type == AgentTypeName.REGISTERED:
-        # Registration resolution lands with the registration loader (phase 4).
-        raise HTTPException(status_code=422, detail="registered terminal agents are not available yet")
+        if registration_id is None:
+            raise HTTPException(status_code=422, detail="registered terminal agents require a registration_id")
+        registration = get_registration(registration_id)
+        if registration is None:
+            # The menu may have raced a registration-file deletion.
+            raise HTTPException(
+                status_code=422,
+                detail=f"Terminal-agent registration '{registration_id}' not found",
+            )
+        # Stamped at creation so the task stays self-describing even if the
+        # registration file later changes (architecture §1).
+        return RegisteredTerminalAgentConfig(
+            registration_id=registration.registration_id,
+            display_name=registration.display_name,
+            launch_command=registration.launch_command,
+            resume_command_template=registration.resume_command_template,
+            accepts_automated_prompts=registration.accepts_automated_prompts,
+        )
     if agent_type == AgentTypeName.PI:
         return PiAgentConfig()
     return ClaudeCodeSDKAgentConfig()
@@ -1721,7 +1741,14 @@ def create_workspace_agent(
 
         workspace_tasks = _get_tasks_for_workspace(workspace, transaction)
         agent_config = _agent_config_for_request(agent_request.agent_type, agent_request.registration_id)
-        name_prefix = "Terminal" if is_terminal_agent_config(agent_config) else "Agent"
+        # Registered agents default-name from their display name; plain
+        # terminals are "Terminal N"; chat agents stay "Agent N".
+        if isinstance(agent_config, RegisteredTerminalAgentConfig):
+            name_prefix = agent_config.display_name
+        elif is_terminal_agent_config(agent_config):
+            name_prefix = "Terminal"
+        else:
+            name_prefix = "Agent"
         task_name = agent_request.name or _compute_next_agent_name(workspace_tasks, name_prefix)
         task_id = TaskID()
 
@@ -3139,6 +3166,20 @@ async def workspace_terminal_websocket(
 
     await websocket.accept()
     await websocket.close(code=4404, reason=f"Terminal {index} not found for workspace {workspace_id}")
+
+
+@router.get("/api/v1/terminal-agent-registrations")
+def list_terminal_agent_registrations(
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> ListTerminalAgentRegistrationsResponse:
+    """List the current terminal-agent registrations.
+
+    Re-reads the registrations directory on every call — that IS the
+    no-restart re-read the menus rely on (REQ-REG-3); no caching.
+    """
+    del request, user_session
+    return ListTerminalAgentRegistrationsResponse(registrations=load_registrations())
 
 
 # Wire names for the status events (REQ-SIG-4); `files-changed` and

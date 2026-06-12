@@ -19,11 +19,12 @@ import { keybindingsMapAtom } from "~/common/keybindings/atoms.ts";
 import { useImbueNavigate, useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { isDismissibleOverlayOpen } from "~/common/overlayUtils.ts";
 import { shouldHandleKeybinding } from "~/common/ShortcutUtils.ts";
-import { agentTabOrderAtom, lastUsedAgentTypeAtom } from "~/common/state/atoms/agentTabs.ts";
+import { agentTabOrderAtom, lastUsedAgentTypeAtom, type StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import { debugViewAtomFamily } from "~/common/state/atoms/alphaScroll.ts";
 import { pendingAgentTitlesAtom, tasksArrayAtom, updateTasksAtom } from "~/common/state/atoms/tasks.ts";
 import { isMultiHarnessEnabledAtom } from "~/common/state/atoms/userConfig.ts";
 import { useOptimisticTaskDelete } from "~/common/state/hooks/useOptimisticTaskDelete.ts";
+import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
 import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
 import { buildAgentActions } from "~/components/CommandPalette/contextActions/agentActions.ts";
 import { agentDeleteTargetAtom, renamingAgentIdAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
@@ -221,20 +222,34 @@ export const AgentTabs = (): ReactElement | null => {
 
   const [lastUsedAgentType, setLastUsedAgentType] = useAtom(lastUsedAgentTypeAtom);
   const isMultiHarnessEnabled = useAtomValue(isMultiHarnessEnabledAtom);
+  const { registrations, refresh: refreshRegistrations } = useTerminalAgentRegistrations();
   // A stored "pi" is unusable once multi-harness is turned off — fall back to Claude.
-  const defaultAgentType: AgentTypeName =
+  const defaultAgentType: StoredAgentType =
     lastUsedAgentType === "pi" && !isMultiHarnessEnabled ? "claude" : lastUsedAgentType;
 
   const handleCreateAgent = useCallback(
-    async (requestedType?: AgentTypeName): Promise<void> => {
+    async (requestedType?: AgentTypeName, requestedRegistrationId?: string): Promise<void> => {
       if (isCreating) return;
       setIsCreating(true);
       try {
         // Explicit menu choice wins (and becomes the new default); a plain
-        // click / keybinding / Cmd+K creates the last-used type.
-        const agentType = requestedType ?? defaultAgentType;
+        // click / keybinding / Cmd+K creates the last-used type. Registered
+        // agents are remembered as `registered:<id>`.
+        let agentType: AgentTypeName;
+        let registrationId: string | undefined;
         if (requestedType !== undefined) {
-          setLastUsedAgentType(requestedType);
+          agentType = requestedType;
+          registrationId = requestedRegistrationId;
+          setLastUsedAgentType(
+            requestedType === "registered" && requestedRegistrationId !== undefined
+              ? `registered:${requestedRegistrationId}`
+              : requestedType,
+          );
+        } else if (defaultAgentType.startsWith("registered:")) {
+          agentType = "registered";
+          registrationId = defaultAgentType.slice("registered:".length);
+        } else {
+          agentType = defaultAgentType as AgentTypeName;
         }
         // Inherit the model from the currently viewed agent so the new agent
         // starts with the same model selection. Terminal agents never read it.
@@ -244,7 +259,7 @@ export const AgentTabs = (): ReactElement | null => {
         try {
           response = await createWorkspaceAgent({
             path: { workspace_id: workspaceID },
-            body: { model, agentType },
+            body: { model, agentType, registrationId },
           });
         } catch (error) {
           // A stored type can become unavailable (e.g. a registered agent
@@ -485,12 +500,22 @@ export const AgentTabs = (): ReactElement | null => {
             onClick={() => void handleCreateAgent()}
             disabled={isCreating}
             aria-label="Add agent"
-            title={`New ${AGENT_TYPE_LABELS[defaultAgentType]} agent`}
+            title={
+              defaultAgentType.startsWith("registered:")
+                ? "New agent"
+                : `New ${AGENT_TYPE_LABELS[defaultAgentType as AgentTypeName]} agent`
+            }
             data-testid={ElementIds.ADD_AGENT_BUTTON}
           >
             <PlusIcon size={14} />
           </IconButton>
-          <DropdownMenu.Root>
+          <DropdownMenu.Root
+            onOpenChange={(open) => {
+              // Re-read the registrations directory on every open so the
+              // menu tracks the filesystem without a restart (REQ-REG-3).
+              if (open) refreshRegistrations();
+            }}
+          >
             <DropdownMenu.Trigger>
               <IconButton
                 variant="ghost"
@@ -525,7 +550,16 @@ export const AgentTabs = (): ReactElement | null => {
               >
                 Terminal
               </DropdownMenu.Item>
-              {/* registered terminal agents appended in task 4.1 */}
+              {registrations.map((registration) => (
+                <DropdownMenu.Item
+                  key={registration.registrationId}
+                  data-testid={ElementIds.AGENT_TYPE_MENU_ITEM_REGISTERED}
+                  data-registration-id={registration.registrationId}
+                  onSelect={() => void handleCreateAgent("registered", registration.registrationId)}
+                >
+                  {registration.displayName}
+                </DropdownMenu.Item>
+              ))}
             </DropdownMenu.Content>
           </DropdownMenu.Root>
         </Flex>
