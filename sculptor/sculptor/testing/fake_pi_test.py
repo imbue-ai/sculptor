@@ -211,6 +211,52 @@ def test_fake_pi_rpc_tool_call_error_result_sets_is_error() -> None:
     assert end["result"]["content"][0]["text"] == "ENOENT"
 
 
+def test_fake_pi_rpc_compaction_directive_emits_start_end_pair_mid_turn() -> None:
+    """fake_pi:compaction emits a compaction_start/end pair between text directives."""
+    prompt = (
+        'fake_pi:emit_text `{"text": "before"}` '
+        'fake_pi:compaction `{"reason": "threshold"}` '
+        'fake_pi:emit_text `{"text": "after"}`'
+    )
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=_send_prompt(prompt),
+    )
+
+    assert result.returncode == 0
+    events = _parse_jsonl(result.stdout)
+    starts = _by_type(events, "compaction_start")
+    ends = _by_type(events, "compaction_end")
+    assert len(starts) == 1
+    assert starts[0]["reason"] == "threshold"
+    assert len(ends) == 1
+    assert ends[0]["reason"] == "threshold"
+    assert ends[0]["aborted"] is False
+    assert ends[0]["willRetry"] is False
+    # The pair lands mid-turn: start before end, both before the agent_end boundary.
+    types = [e["type"] for e in events]
+    assert types.index("compaction_start") < types.index("compaction_end") < types.index("agent_end")
+    # The surrounding text directives still stream in order.
+    deltas = [e["assistantMessageEvent"]["delta"] for e in events if e.get("type") == "message_update"]
+    assert deltas == ["before", "after"]
+
+
+def test_fake_pi_rpc_compaction_directive_passes_through_overflow_flags() -> None:
+    """The overflow case (willRetry/aborted) is forwarded onto compaction_end."""
+    prompt = 'fake_pi:compaction `{"reason": "overflow", "will_retry": true, "aborted": true}`'
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=_send_prompt(prompt),
+    )
+
+    assert result.returncode == 0
+    events = _parse_jsonl(result.stdout)
+    end = _by_type(events, "compaction_end")[0]
+    assert end["reason"] == "overflow"
+    assert end["willRetry"] is True
+    assert end["aborted"] is True
+
+
 def test_fake_pi_rpc_error_directive_emits_failure_response_and_no_session_events() -> None:
     prompt = 'fake_pi:error `{"message": "boom"}`'
     result = _run_fake_pi(

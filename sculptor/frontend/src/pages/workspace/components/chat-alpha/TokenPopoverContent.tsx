@@ -27,7 +27,11 @@ export const TokenPopoverContent = ({
     }
   }
 
-  // CAPABILITY-GAP: supportsCompaction — the "Context" row displays the auto-compact threshold; harnesses without compaction (pi) never produce a threshold so the row already collapses, but the surrounding chrome should treat compaction as a per-harness capability rather than relying on null thresholds.
+  // DIVERGENCE (supportsCompaction, REQ-CAP-ALL-3): the "Context" row shows the
+  // auto-compact threshold. pi compacts (its "Compacting" pill chrome fires) but
+  // exposes no numeric threshold on the wire, so for pi `autoCompactThreshold` is
+  // null and this row stays absent. That empty threshold is an accepted
+  // per-harness divergence — not a gap to fill with a fabricated number.
   if (turnContextTokens != null && turnContextTokens > 0 && autoCompactThreshold != null && autoCompactThreshold > 0) {
     rows.push({
       label: "Context",

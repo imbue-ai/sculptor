@@ -358,11 +358,38 @@ def test_clear_pseudo_skill_gated_on_context_reset(
 
 
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
-@user_story("to keep compaction chrome absent for harnesses that do not compact context")
-def test_compaction_chrome_absent_under_pi(sculptor_instance_: SculptorInstance, harness: HarnessTestConfig) -> None:
-    """Compaction is status-only chrome (no disabled-with-tooltip treatment); for
-    pi the compaction bar/button are absent."""
-    _create_workspace_for_harness(sculptor_instance_, harness, "Compaction Chrome Gate")
-    if harness.workspace_harness == HarnessName.PI:
-        expect(sculptor_instance_.page.get_by_test_id(ElementIDs.COMPACTION_BAR)).to_have_count(0)
-        expect(sculptor_instance_.page.get_by_test_id(ElementIDs.COMPACTION_BUTTON)).to_have_count(0)
+@user_story("to show truthful compaction chrome under harnesses that compact context")
+def test_compaction_chrome_truthful_under_pi(sculptor_instance_: SculptorInstance, harness: HarnessTestConfig) -> None:
+    """Compaction is status-only chrome — the StatusPill "Compacting" state.
+
+    Under pi, a scripted compaction held open shows the Compacting pill while
+    active, and the pill clears once compaction ends and the turn finishes.
+    Claude is unchanged: it has no manual /compact surface to script here (parity
+    bar), so its branch only confirms the harness path is healthy — the pi branch
+    carries this test's claim. (Pi's deterministic show-then-clear and the
+    stuck-pill edges are covered at unit level in ``agent_wrapper_test``.)
+    """
+    page = sculptor_instance_.page
+    if harness.workspace_harness != HarnessName.PI:
+        _create_workspace_for_harness(sculptor_instance_, harness, "Compaction Chrome")
+        return
+
+    install_fake_pi_binary(sculptor_instance_.fake_bin_dir)
+    release_path = Path(tempfile.gettempdir()) / f"pi_compaction_{uuid.uuid4().hex}"
+    label = page.get_by_test_id(ElementIDs.STATUS_PILL_LABEL)
+    try:
+        start_task_and_wait_for_ready(
+            sculptor_page=page,
+            workspace_name="Compaction Chrome",
+            model_name=None,
+            harness=HarnessName.PI,
+            # The compaction is held open on the sentinel so the Compacting pill
+            # state is observable deterministically (no wall-clock race).
+            prompt=f'fake_pi:compaction `{{"reason": "threshold", "wait_path": "{release_path}"}}`',
+            wait_for_agent_to_finish=False,
+        )
+        expect(label).to_contain_text("Compacting", timeout=15000)
+    finally:
+        release_path.touch()
+    # Once compaction ends, the turn finishes and the Compacting chrome clears.
+    expect(page.get_by_test_id(ElementIDs.STATUS_PILL)).to_have_count(0, timeout=15000)

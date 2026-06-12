@@ -1,7 +1,7 @@
 """The pi harness — non-Claude implementor of `Harness`.
 
 Pi ships as a degraded harness: no AskUserQuestion, no plan mode, no
-sub-agents, no compaction. It DOES render tool calls
+sub-agents. It DOES render tool calls
 (`supports_tool_use_rendering=True`): pi's tool-execution lane is adapted onto
 Sculptor's harness-agnostic tool blocks (see `agent_wrapper` / `tool_rendering`).
 Session resume IS supported — pi persists a per-task JSONL session
@@ -10,8 +10,9 @@ Session resume IS supported — pi persists a per-task JSONL session
 workspace's skill directories via `--skill` flags and follows an invoked skill
 (see `agent_wrapper._build_skill_launch_args` / `_rewrite_skill_invocation`).
 It also carries file references, image input, and file attachments (delivered
-by prompt assembly). The `capabilities()` override is the truthful declaration
-that consumers gate on.
+by prompt assembly), and compacts context — `compaction_start/end` events drive
+the StatusPill "Compacting" chrome. The `capabilities()` override is the
+truthful declaration that consumers gate on.
 
 Agent construction is owned by the registry
 (`harness_registry.create_agent_for_run`), not this module, so the pi
@@ -77,7 +78,13 @@ class PiHarness(Harness):
             # Pi drops ClearContextUserMessage (see agent_wrapper._push_message),
             # so the `/clear` context-reset path is unavailable — false.
             supports_context_reset=False,
-            supports_compaction=False,
+            # Pi emits compaction_start/end (agent_wrapper maps them onto the
+            # AutoCompacting* message pair → StatusPill "Compacting"), and
+            # autoCompactionEnabled defaults true — the compaction chrome is
+            # truthful. The TokenPopover threshold row stays empty: pi exposes
+            # no numeric auto-compact threshold on the wire (recorded
+            # divergence, REQ-CAP-ALL-3).
+            supports_compaction=True,
             supports_background_tasks=False,
             # Pi persists a per-task JSONL session and relaunches against it with
             # --session-dir/--session-id (see agent_wrapper.PiAgent.start), so a

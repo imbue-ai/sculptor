@@ -32,7 +32,10 @@ import { useElapsedTime } from "./useElapsedTime.ts";
 
 type StatusPillProps = {
   taskStatus: TaskStatus | null;
-  // CAPABILITY-GAP: supportsCompaction — `isAutoCompacting` drives a "Compacting" state in the pill that is meaningful only for harnesses that compact context (Claude). Pi never sets this.
+  // `isAutoCompacting` drives the "Compacting" pill state. Every harness that
+  // compacts (Claude and pi) feeds it truthfully via the AutoCompacting*
+  // message pair → the `is_auto_compacting` derivation, so the chrome is
+  // per-harness-correct and needs no capability gate here.
   isAutoCompacting: boolean;
   isStreaming: boolean;
   inProgressChatMessage: ChatMessage | null;
