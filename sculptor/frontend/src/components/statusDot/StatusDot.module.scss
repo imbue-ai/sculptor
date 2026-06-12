@@ -1,0 +1,20 @@
+.errorDot {
+  --inner-color: var(--red-9);
+}
+
+.waitingDot {
+  --inner-color: var(--yellow-9);
+}
+
+.runningDot {
+  --inner-color: var(--blue-9);
+  --outer-color: var(--blue-a4);
+}
+
+.readyDot {
+  --inner-color: var(--green-9);
+}
+
+.readDot {
+  --inner-color: var(--gray-8);
+}

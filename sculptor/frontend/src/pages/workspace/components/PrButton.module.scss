@@ -1,0 +1,305 @@
+@use "scrollbar" as *;
+
+.splitButtonBase {
+  align-items: center;
+  background: var(--gray-a3);
+  border: none;
+  border-radius: var(--radius-2);
+  display: inline-flex;
+  flex-shrink: 0;
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-1);
+  white-space: nowrap;
+}
+
+.createSplitButton {
+  composes: splitButtonBase;
+}
+
+.createMainArea {
+  align-items: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  font-family: inherit;
+  font-size: inherit;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+
+  &:hover {
+    background: var(--gray-a4);
+    border-radius: var(--radius-2) 0 0 var(--radius-2);
+  }
+}
+
+.createChevronArea {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--gray-a4);
+  cursor: pointer;
+  display: inline-flex;
+  padding: 2px var(--space-1);
+
+  &:hover {
+    background: var(--gray-a4);
+    border-radius: 0 var(--radius-2) var(--radius-2) 0;
+  }
+}
+
+.plusIcon {
+  color: var(--gray-9);
+  flex-shrink: 0;
+}
+
+.openButton {
+  align-items: center;
+  background: var(--gray-a3);
+  border: none;
+  border-radius: var(--radius-2);
+  display: inline-flex;
+  font-family: var(--mono-font-family);
+  font-size: var(--font-size-1);
+}
+
+.prNumberArea {
+  align-items: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  font-family: inherit;
+  font-size: inherit;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+
+  &:hover {
+    background: var(--gray-a4);
+    border-radius: var(--radius-2) 0 0 var(--radius-2);
+  }
+}
+
+.chevronArea {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--gray-a4);
+  cursor: pointer;
+  display: inline-flex;
+  padding: 2px var(--space-1);
+
+  &:hover {
+    background: var(--gray-a4);
+    border-radius: 0 var(--radius-2) var(--radius-2) 0;
+  }
+}
+
+.statusDot {
+  border-radius: 50%;
+  height: 6px;
+  width: 6px;
+}
+
+.dotRunning {
+  animation: pulse 1.5s ease-in-out infinite;
+  background: var(--blue-9);
+}
+
+.dotPassed {
+  background: var(--green-9);
+}
+
+.dotFailed {
+  background: var(--red-9);
+}
+
+.dotPending {
+  background: var(--orange-9);
+}
+
+.dotApproved {
+  background: var(--green-9);
+}
+
+.dotMuted {
+  background: var(--gray-7);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 100%;
+  }
+
+  50% {
+    opacity: 40%;
+  }
+}
+
+.loadingButton {
+  align-items: center;
+  background: var(--gray-a3);
+  border: none;
+  border-radius: var(--radius-2);
+  color: var(--gray-9);
+  display: inline-flex;
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+}
+
+.mergedButton {
+  align-items: center;
+  background: var(--gray-a2);
+  border: none;
+  border-radius: var(--radius-2);
+  color: var(--gray-9);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: var(--mono-font-family);
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+
+  &:hover {
+    background: var(--gray-a3);
+  }
+}
+
+.mergeIcon {
+  color: var(--purple-9);
+  flex-shrink: 0;
+}
+
+.mergedLabel {
+  color: var(--green-11);
+  font-family: var(--mono-font-family);
+  font-weight: var(--font-weight-medium);
+}
+
+.assignButton {
+  composes: splitButtonBase;
+}
+
+.assignMainArea {
+  align-items: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  font-family: inherit;
+  font-size: inherit;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+
+  &:hover {
+    background: var(--gray-a4);
+    border-radius: var(--radius-2);
+  }
+}
+
+.assignMergeIcon {
+  color: var(--gray-9);
+  flex-shrink: 0;
+}
+
+.monoBranch {
+  font-family: var(--mono-font-family);
+}
+
+.errorSplitButton {
+  composes: splitButtonBase;
+  opacity: 60%;
+
+  &:hover {
+    opacity: 80%;
+  }
+}
+
+.errorMainArea {
+  align-items: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  font-family: inherit;
+  font-size: inherit;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+
+  &:hover {
+    background: var(--gray-a4);
+    border-radius: var(--radius-2) 0 0 var(--radius-2);
+  }
+}
+
+.errorChevronArea {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--gray-a4);
+  cursor: pointer;
+  display: inline-flex;
+  padding: 2px var(--space-1);
+
+  &:hover {
+    background: var(--gray-a4);
+    border-radius: 0 var(--radius-2) var(--radius-2) 0;
+  }
+}
+
+.warningIcon {
+  color: var(--amber-11);
+  flex-shrink: 0;
+}
+
+.infoIcon {
+  color: var(--gray-9);
+  flex-shrink: 0;
+}
+
+.errorPopoverContent {
+  max-width: 280px;
+}
+
+.errorCommand {
+  background: var(--gray-a3);
+  border-radius: var(--radius-1);
+  padding: var(--space-1) var(--space-2);
+}
+
+.errorCommandText {
+  font-family: var(--mono-font-family);
+  word-break: break-all;
+}
+
+.errorCopyButton {
+  flex-shrink: 0;
+}
+
+.errorDetails {
+  summary {
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+  }
+}
+
+.errorMessageDetail {
+  display: block;
+  font-family: var(--mono-font-family);
+  font-size: var(--font-size-1);
+  margin-top: var(--space-1);
+  max-height: 80px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+
+  @include thin-scrollbar;
+}

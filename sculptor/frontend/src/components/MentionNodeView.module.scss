@@ -1,0 +1,82 @@
+.mention {
+  align-items: baseline;
+  background-color: var(--accent-3);
+  border: 1px solid var(--accent-4);
+  border-radius: var(--radius-1);
+  box-decoration-break: clone;
+  color: var(--accent-12);
+  cursor: default;
+  display: inline-flex;
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-1-5);
+  font-style: normal;
+  font-weight: var(--font-weight-regular);
+  gap: 0.15em;
+  line-height: 1.25;
+  // Cap the chip at the paragraph width and forbid intra-chip wrapping so a
+  // long disambiguated path (e.g. `clone-strategy-cleanup/.../implementation_plan`)
+  // can never break mid-word across two lines. Overflow is handled by the
+  // inner label's start-ellipsis (`.fileLabel`).
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0 calc(0.2em + 1px);
+  vertical-align: baseline;
+  white-space: nowrap;
+
+  > svg {
+    align-self: center;
+    flex-shrink: 0;
+  }
+
+  // Tiptap's ReactNodeViewRenderer puts `.ProseMirror-selectednode` on the
+  // outer wrapper (the `.node-mention` span), not on the inner `.mention`
+  // span that carries the visual styling — so the selected-state rule has
+  // to reach through from the wrapper.
+  // stylelint-disable-next-line selector-class-pattern -- external (ProseMirror) class
+  :global(.ProseMirror-selectednode) > & {
+    border-color: var(--accent-7);
+  }
+}
+
+// Suppress the browser's default focus outline on the outer wrapper so
+// only the inner chip styling communicates the selected state.
+// stylelint-disable-next-line selector-class-pattern -- external (Tiptap / ProseMirror) classes
+:global(.node-mention.ProseMirror-selectednode) {
+  outline: none;
+}
+
+.clickableMention {
+  composes: mention;
+  cursor: pointer;
+
+  &:hover {
+    background-color: var(--accent-4);
+  }
+}
+
+// Start-truncation for the file/folder chip's text label. The classic
+// `direction: rtl` + `text-align: left` recipe puts the ellipsis on the
+// visual left so the basename (which users scan for, and which is what
+// disambiguation puts at the right end of the string) stays visible.
+// `min-width: 0` lets the span shrink inside the inline-flex chip.
+.fileLabel {
+  direction: rtl;
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill {
+  background-color: var(--accent-3);
+  border-radius: var(--radius-1);
+  box-decoration-break: clone;
+  color: var(--accent-12);
+  font-family: var(--mono-font-family);
+  font-size: var(--font-size-1-5);
+  font-style: normal;
+  font-weight: var(--font-weight-regular);
+  line-height: 21px;
+  padding: 2px 3px;
+}

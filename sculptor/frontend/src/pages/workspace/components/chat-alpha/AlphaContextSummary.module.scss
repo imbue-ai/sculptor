@@ -1,0 +1,81 @@
+@use "scrollbar" as *;
+
+.row {
+  align-items: baseline;
+  cursor: pointer;
+  display: flex;
+  flex-wrap: nowrap;
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+  height: 28px;
+  min-width: 0;
+  outline: none;
+}
+
+.row:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent-a7);
+}
+
+.pillLabel {
+  color: var(--gray-11);
+  flex-shrink: 0;
+  font-weight: var(--font-weight-medium);
+  transition: color var(--duration-fast) ease;
+}
+
+.pillHint {
+  color: var(--gray-a8);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowOpen .pillLabel {
+  color: var(--accent-11);
+}
+
+.row:hover .pillLabel {
+  color: var(--gray-12);
+}
+
+.popoverContent {
+  animation: none !important;
+  border-radius: var(--radius-1) !important;
+}
+
+.popoverBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  max-height: inherit;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.header {
+  align-items: center;
+  border-bottom: 1px solid var(--gray-a4);
+  display: flex;
+  flex-shrink: 0;
+  height: 32px;
+  padding: 0 var(--space-3);
+}
+
+.headerLabel {
+  color: var(--gray-12);
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-medium);
+}
+
+.content {
+  flex: 1;
+  font-size: var(--font-size-2);
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-3);
+
+  @include thin-scrollbar;
+}

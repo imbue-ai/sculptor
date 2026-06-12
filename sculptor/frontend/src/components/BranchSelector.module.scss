@@ -1,0 +1,21 @@
+.dropdownButton {
+  color: var(--accent-11);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-medium);
+  max-width: 200px;
+  overflow: hidden;
+}
+
+.infoIcon {
+  color: var(--accent-11);
+}
+
+.branchName {
+  white-space: nowrap;
+}
+
+.selectorLabel {
+  color: var(--accent-9);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-medium);
+}

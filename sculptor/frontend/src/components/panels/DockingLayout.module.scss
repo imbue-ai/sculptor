@@ -1,0 +1,166 @@
+@use "scrollbar" as *;
+
+.container {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+  overflow: hidden;
+  width: 100%;
+}
+
+.panelGroup {
+  flex-grow: 1;
+  height: 100%;
+  overflow: hidden;
+  width: 100%;
+}
+
+// Visible dividers are 1px but the clickable hit area extends further via a
+// transparent pseudo-element. Position/z-index lifts the pseudo-element above
+// adjacent scrollbars so they don't steal pointer events near the edge.
+.horizontalResizeHandle {
+  background-color: var(--gray-a5);
+  cursor: col-resize;
+  flex-shrink: 0;
+  position: relative;
+  transition: background-color var(--duration-normal);
+  width: 1px;
+  z-index: 1;
+
+  &::before {
+    content: "";
+    // stylelint-disable-next-line sculptor/no-hardcoded-values -- 4px hit-area extension each side
+    inset: 0 -4px;
+    position: absolute;
+  }
+
+  &:hover {
+    background-color: var(--gray-a7);
+  }
+
+  &[data-resize-handle-active] {
+    background-color: var(--accent-9);
+  }
+}
+
+.verticalResizeHandle {
+  background-color: var(--gray-a5);
+  cursor: row-resize;
+  flex-shrink: 0;
+  height: 1px;
+  position: relative;
+  transition: background-color var(--duration-normal);
+  z-index: 1;
+
+  &::before {
+    content: "";
+    // stylelint-disable-next-line sculptor/no-hardcoded-values -- 4px hit-area extension each side
+    inset: -4px 0;
+    position: absolute;
+  }
+
+  &:hover {
+    background-color: var(--gray-a7);
+  }
+
+  &[data-resize-handle-active] {
+    background-color: var(--accent-9);
+  }
+}
+
+.outerVertical {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+.topRow {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: row;
+  min-height: 0;
+  width: 100%;
+}
+
+.sidePanel {
+  display: flex;
+  flex-direction: column;
+  // Side panels can shrink from their stored width down to the inline
+  // min-width floor (SIDE_PANEL_MIN_WIDTH_PX). When even that doesn't fit
+  // alongside the center's minimum, DockingLayout flips the zone off.
+  flex-shrink: 1;
+  height: 100%;
+  overflow: hidden;
+}
+
+.centerPanel {
+  flex: 1 1 0;
+  height: 100%;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- matches CENTER_PANEL_MIN_WIDTH_PX in constants.ts
+  min-width: 400px;
+  overflow: hidden;
+}
+
+.bottomPanel {
+  flex-shrink: 1;
+  min-height: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.innerVertical {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+.innerTop {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.innerBottom {
+  flex-shrink: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.centerWrapper {
+  height: 100%;
+  overflow-x: auto;
+
+  @include thin-scrollbar(horizontal);
+}
+
+.centerInner {
+  height: 100%;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- 400px is the minimum usable width for the chat interface
+  min-width: 400px;
+}
+
+.centerContent {
+  align-items: center;
+  color: var(--gray-a11);
+  display: flex;
+  font-size: var(--font-size-2);
+  height: 100%;
+  justify-content: center;
+  width: 100%;
+}
+
+.dragOverlayIcon {
+  align-items: center;
+  background-color: var(--gray-2);
+  border: 1px solid var(--accent-a7);
+  border-radius: var(--radius-2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 12%);
+  color: var(--accent-9);
+  cursor: grabbing;
+  display: flex;
+  height: 32px;
+  justify-content: center;
+  width: 32px;
+}

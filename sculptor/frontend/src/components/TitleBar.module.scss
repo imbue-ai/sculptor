@@ -1,0 +1,10 @@
+.draggable {
+  app-region: drag;
+  // Match TopBar: don't let the bar render shorter than the native macOS
+  // traffic-light row at zoom < 1.
+  min-height: calc(40px / var(--app-zoom));
+}
+
+.nonDraggable {
+  app-region: no-drag;
+}

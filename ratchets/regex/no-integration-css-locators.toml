@@ -1,0 +1,9 @@
+[rule]
+id = "no-integration-css-locators"
+description = "Disallow raw .locator() CSS selectors in integration tests"
+severity = "warning"
+
+[match]
+pattern = "\\.locator\\("
+languages = ["python"]
+include = ["sculptor/tests/integration/**/*.py"]

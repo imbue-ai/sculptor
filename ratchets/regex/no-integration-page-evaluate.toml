@@ -1,0 +1,9 @@
+[rule]
+id = "no-integration-page-evaluate"
+description = "Disallow .evaluate() JS injection in integration tests; interact via UI"
+severity = "warning"
+
+[match]
+pattern = "\\.evaluate\\("
+languages = ["python"]
+include = ["sculptor/tests/integration/**/*.py"]

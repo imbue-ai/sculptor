@@ -1,0 +1,9 @@
+[rule]
+id = "no-integration-page-reload"
+description = "Disallow page.reload() in integration tests; causes ERR_INSUFFICIENT_RESOURCES on CI"
+severity = "error"
+
+[match]
+pattern = "\\.reload\\(\\)"
+languages = ["python"]
+include = ["sculptor/tests/integration/**/*.py"]

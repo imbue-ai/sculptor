@@ -1,0 +1,73 @@
+# Sculptor's curated ratchet set: the v2 port of the rules the old Python
+# ratchets enforced (imbue_core/imbue_core/ratchets/ratchet_values.json), plus
+# sculptor-specific additions since.
+# Enabling `$sculptor` in ratchets.toml turns on exactly these rules — v2 is
+# opt-in, so nothing runs unless named here.
+#
+# Members are the library builtins (shipped in the `ratchets` binary) and the
+# sculptor-specific custom rules (under ratchets/regex/, auto-discovered). The
+# `rules` list below is the source of truth — counts are intentionally not
+# repeated in prose so adding or removing a rule is a one-line change here.
+
+[set]
+id = "sculptor"
+description = "Every lint rule sculptor enforces: the library builtins ported from its bespoke Python ratchets implementation, plus the sculptor-specific custom rules under ratchets/regex/."
+languages = []
+
+rules = [
+    # Library builtins: plain regex
+    "no-pytorch-lightning",
+    "no-logger-warning",
+    "no-logger-exception",
+    "no-quarantine-import",
+    "no-quarantine-paths",
+    "no-walrus-operator",
+    "no-ssh-subprocess",
+    "no-os-path-join",
+    "no-todo-remove-comment",
+    "no-implicit-string-concat",
+    "no-builtin-hash",
+    "no-make-composite-seed",
+    "no-numpy-default-rng",
+    "no-asyncio-run",
+    "no-pydantic-model-copy-update",
+    "no-tree-sitter-text-decode",
+    "no-byte-index-source",
+    "no-mypy-ignore-errors",
+    "no-pyre-ignore",
+    "no-pyre-fixme",
+    "no-type-ignore",
+    "no-namedtuple-usage",
+    "no-relative-imports",
+    "no-inline-imports",
+    "no-typing-builtin-imports",
+
+    # Library builtins: tree-sitter AST
+    "no-underscore-imports",
+    "no-inline-functions",
+    "attrs-decorator",
+    "no-untyped-args-kwargs",
+    "no-bare-exit",
+    "classmethod-builder-naming",
+    "staticmethod-private-only",
+    "no-mutable-attr-in-frozen-dataclass",
+    "no-unnumbered-pyre-ignore",
+    "no-unnumbered-pyre-fixme",
+    "no-unlabeled-type-ignore",
+    "no-typing-cast",
+    "no-eval-usage",
+    "match-must-assert-never",
+
+    # Sculptor-specific custom rules (ratchets/regex/)
+    "no-integration-css-locators",
+    "no-integration-non-testid-queries",
+    "no-integration-page-evaluate",
+    "no-integration-page-goto",
+    "no-integration-page-reload",
+    "no-integration-time-sleep",
+    "no-integration-type-method",
+    "no-raw-html-button",
+    "no-sculptor-copytree",
+    "no-sculptor-subprocess",
+    "no-direct-harness-capability-read",
+]

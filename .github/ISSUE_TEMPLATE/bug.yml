@@ -1,0 +1,37 @@
+name: Bug Report
+description: Report something that's broken
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Before you start:** read [CONTRIBUTING.md](https://github.com/imbue-ai/sculptor/blob/main/CONTRIBUTING.md).
+
+        Issues are open to everyone — file away. We may be slow, and we may close issues we aren't going to act on, but go ahead and tell us what's broken.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Be specific. Include the exact error message if there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The minimal steps to trigger the bug.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: Sculptor version and OS
+      description: e.g. 0.27 on macOS 14 (Apple Silicon)
+    validations:
+      required: false

@@ -1,0 +1,377 @@
+/* ── Pill animations — HTML/CSS matching mocks/11_combined_selection.html ── */
+
+/* 1: Orbit — two dots rotating in a circle */
+@keyframes orbit {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.orbit {
+  align-items: center;
+  display: inline-flex;
+  height: 16px;
+  justify-content: center;
+  width: 16px;
+}
+
+.orbitTrack {
+  animation: orbit 1.5s linear infinite;
+  height: 10px;
+  position: relative;
+  width: 10px;
+}
+
+.orbitDot1 {
+  background: currentColor;
+  border-radius: 50%;
+  height: 4px;
+  left: 3px;
+  position: absolute;
+  top: 0;
+  width: 4px;
+}
+
+.orbitDot2 {
+  background: currentColor;
+  border-radius: 50%;
+  bottom: 0;
+  height: 4px;
+  left: 3px;
+  opacity: 40%;
+  position: absolute;
+  width: 4px;
+}
+
+/* 2: Bouncing dots — three dots bouncing up with stagger */
+@keyframes bounceDot {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+  }
+
+  40% {
+    transform: translateY(-5px);
+  }
+}
+
+.bounce {
+  align-items: center;
+  display: inline-flex;
+  gap: 2px;
+  height: 16px;
+}
+
+.bounceDot1 {
+  animation: bounceDot 1.2s ease-in-out infinite;
+  background: currentColor;
+  border-radius: 50%;
+  height: 4px;
+  width: 4px;
+}
+
+.bounceDot2 {
+  animation: bounceDot 1.2s ease-in-out 0.15s infinite;
+  background: currentColor;
+  border-radius: 50%;
+  height: 4px;
+  width: 4px;
+}
+
+.bounceDot3 {
+  animation: bounceDot 1.2s ease-in-out 0.3s infinite;
+  background: currentColor;
+  border-radius: 50%;
+  height: 4px;
+  width: 4px;
+}
+
+/* 3: Wave dots — three dots rising and fading */
+@keyframes waveDot {
+  0%,
+  100% {
+    opacity: 40%;
+    transform: translateY(0);
+  }
+
+  50% {
+    opacity: 100%;
+    transform: translateY(-4px);
+  }
+}
+
+.wave {
+  align-items: center;
+  display: inline-flex;
+  gap: 2px;
+  height: 16px;
+}
+
+.waveDot1 {
+  animation: waveDot 1.5s ease-in-out infinite;
+  background: currentColor;
+  border-radius: 50%;
+  height: 5px;
+  width: 5px;
+}
+
+.waveDot2 {
+  animation: waveDot 1.5s ease-in-out 0.2s infinite;
+  background: currentColor;
+  border-radius: 50%;
+  height: 5px;
+  width: 5px;
+}
+
+.waveDot3 {
+  animation: waveDot 1.5s ease-in-out 0.4s infinite;
+  background: currentColor;
+  border-radius: 50%;
+  height: 5px;
+  width: 5px;
+}
+
+/* 4: Audio bars — three bars growing/shrinking */
+@keyframes growBar {
+  0%,
+  100% {
+    height: 4px;
+    opacity: 40%;
+  }
+
+  50% {
+    height: 12px;
+    opacity: 100%;
+  }
+}
+
+.bars {
+  align-items: center;
+  display: inline-flex;
+  gap: 2px;
+  height: 16px;
+}
+
+.audioBar1 {
+  animation: growBar 1.2s ease-in-out infinite;
+  background: currentColor;
+  width: 3px;
+}
+
+.audioBar2 {
+  animation: growBar 1.2s ease-in-out 0.15s infinite;
+  background: currentColor;
+  width: 3px;
+}
+
+.audioBar3 {
+  animation: growBar 1.2s ease-in-out 0.3s infinite;
+  background: currentColor;
+  width: 3px;
+}
+
+/* 5: Cascade — dots materialize and fade */
+@keyframes cascade {
+  0% {
+    opacity: 0%;
+    transform: scale(0.5);
+  }
+
+  20% {
+    opacity: 100%;
+    transform: scale(1);
+  }
+
+  80% {
+    opacity: 100%;
+    transform: scale(1);
+  }
+
+  100% {
+    opacity: 0%;
+    transform: scale(0.5);
+  }
+}
+
+.cascadeWrap {
+  align-items: center;
+  display: inline-flex;
+  gap: 2px;
+  height: 16px;
+}
+
+.cascadeDot1 {
+  animation: cascade 2s ease-in-out infinite;
+  background: currentColor;
+  border-radius: 50%;
+  height: 5px;
+  width: 5px;
+}
+
+.cascadeDot2 {
+  animation: cascade 2s ease-in-out 0.25s infinite;
+  background: currentColor;
+  border-radius: 50%;
+  height: 5px;
+  width: 5px;
+}
+
+.cascadeDot3 {
+  animation: cascade 2s ease-in-out 0.5s infinite;
+  background: currentColor;
+  border-radius: 50%;
+  height: 5px;
+  width: 5px;
+}
+
+/* 6: Spark — three dots with staggered scale+opacity pulses */
+@keyframes spark1 {
+  0%,
+  100% {
+    opacity: 15%;
+    transform: scale(0.6);
+  }
+
+  30% {
+    opacity: 100%;
+    transform: scale(1.2);
+  }
+
+  60% {
+    opacity: 15%;
+    transform: scale(0.6);
+  }
+}
+
+@keyframes spark2 {
+  0%,
+  100% {
+    opacity: 15%;
+    transform: scale(0.6);
+  }
+
+  50% {
+    opacity: 100%;
+    transform: scale(1.2);
+  }
+
+  80% {
+    opacity: 15%;
+    transform: scale(0.6);
+  }
+}
+
+@keyframes spark3 {
+  0%,
+  20% {
+    opacity: 15%;
+    transform: scale(0.6);
+  }
+
+  70% {
+    opacity: 100%;
+    transform: scale(1.2);
+  }
+
+  100% {
+    opacity: 15%;
+    transform: scale(0.6);
+  }
+}
+
+.sparkWrap {
+  align-items: center;
+  display: inline-flex;
+  gap: 3px;
+  height: 16px;
+}
+
+.sparkDot1 {
+  animation: spark1 2s ease-in-out infinite;
+  background: currentColor;
+  border-radius: 50%;
+  height: 4px;
+  width: 4px;
+}
+
+.sparkDot2 {
+  animation: spark2 2s ease-in-out infinite;
+  background: currentColor;
+  border-radius: 50%;
+  height: 4px;
+  width: 4px;
+}
+
+.sparkDot3 {
+  animation: spark3 2s ease-in-out infinite;
+  background: currentColor;
+  border-radius: 50%;
+  height: 4px;
+  width: 4px;
+}
+
+/* Pulsing dot — tool execution indicator */
+@keyframes pulseRadius {
+  0%,
+  100% {
+    opacity: 30%;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 15%;
+    transform: scale(1.4);
+  }
+}
+
+.pulsingDot {
+  align-items: center;
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 12px;
+  justify-content: center;
+  position: relative;
+  width: 12px;
+}
+
+.pulsingDotOuter {
+  animation: pulseRadius 2s ease-in-out infinite;
+  background: var(--accent-a4);
+  border-radius: 50%;
+  height: 100%;
+  left: 0;
+  position: absolute;
+  top: 0;
+  width: 100%;
+}
+
+.pulsingDotInner {
+  background: var(--accent-8);
+  border-radius: 50%;
+  height: 50%;
+  position: relative;
+  width: 50%;
+}
+
+/* Spinner — CSS border spinner for compacting */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  animation: spin 0.8s linear infinite;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  border-top-color: var(--accent-8);
+  flex-shrink: 0;
+  height: 14px;
+  opacity: 30%;
+  width: 14px;
+}

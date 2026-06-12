@@ -1,0 +1,10 @@
+/* Neutralize app-level body/#root styles from index.css that conflict with Storybook's layout */
+body {
+  display: block;
+  height: auto;
+  place-items: unset;
+}
+
+#root {
+  height: auto;
+}

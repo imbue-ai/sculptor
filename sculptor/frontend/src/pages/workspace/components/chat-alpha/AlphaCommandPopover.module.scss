@@ -1,0 +1,88 @@
+@use "scrollbar" as *;
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 100%;
+  }
+
+  50% {
+    opacity: 0%;
+  }
+}
+
+.popover {
+  display: flex;
+  flex-direction: column;
+  max-height: 380px;
+  overflow: hidden;
+  position: relative;
+}
+
+.popoverSection {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.popoverSection + .popoverSection {
+  border-top: 1px solid var(--gray-a4);
+}
+
+.copyButton {
+  opacity: 50%;
+  position: absolute;
+  right: var(--space-2);
+  top: var(--space-2);
+  transition: opacity var(--duration-fast) var(--ease-out);
+  z-index: 1;
+}
+
+.copyButton:hover {
+  opacity: 100%;
+}
+
+// Description shown above the command in the header's title slot.
+// Matches the typography of every other tool popover's title (the
+// shared `.titleCode` rule): same monospace family, same font-size-1,
+// same gray-12 color. The only difference is `display: block` so the
+// description sits on its own line above the command.
+.description {
+  color: var(--gray-12);
+  display: block;
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  line-height: 1.4;
+  margin-bottom: var(--space-1);
+  overflow-wrap: anywhere;
+}
+
+.popoverBody {
+  color: var(--gray-12);
+  flex: 1;
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  line-height: 1.5;
+  max-height: 300px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-3);
+  padding-right: var(--space-6);
+  white-space: pre-wrap;
+  word-break: break-all;
+
+  @include thin-scrollbar;
+}
+
+.streamCursor {
+  animation: blink 1s step-end infinite;
+  background: var(--accent-11);
+  display: inline-block;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  width: 2px;
+}

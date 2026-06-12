@@ -1,0 +1,93 @@
+@keyframes chipShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.chip {
+  align-items: center;
+  background: var(--color-panel-solid);
+  border: 1px solid var(--gray-a4);
+  border-radius: var(--radius-1);
+  box-sizing: border-box;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+  height: 28px;
+  outline: none;
+  padding: 0 var(--space-2);
+  transition:
+    background var(--duration-fast) var(--ease-default),
+    border-color var(--duration-fast) var(--ease-default);
+  white-space: nowrap;
+}
+
+.chip:hover {
+  border-color: var(--gray-a6);
+}
+
+.chipOpen {
+  background: var(--color-panel-solid);
+  border-color: var(--gray-a6);
+  border-width: 1.5px;
+  padding: 0 calc(var(--space-2) - 0.5px);
+}
+
+.chipExecuting {
+  animation: chipShimmer 1.5s infinite linear;
+  background: linear-gradient(
+    90deg,
+    var(--color-panel-solid) 0%,
+    var(--gray-a3) 50%,
+    var(--color-panel-solid) 100%
+  );
+  background-size: 200% 100%;
+  cursor: default;
+  pointer-events: auto;
+}
+
+.chipExecuting:hover {
+  background: linear-gradient(
+    90deg,
+    var(--color-panel-solid) 0%,
+    var(--gray-a3) 50%,
+    var(--color-panel-solid) 100%
+  );
+  background-size: 200% 100%;
+  border-color: var(--gray-a4);
+}
+
+.chipError {
+  background: var(--red-a2);
+  border-color: var(--red-a4);
+}
+
+.chipError:hover {
+  background: var(--red-a3);
+  border-color: var(--red-a5);
+}
+
+.chipErrorName {
+  color: var(--red-11);
+}
+
+.statsAdded {
+  color: var(--green-11);
+}
+
+.statsRemoved {
+  color: var(--red-11);
+}
+
+.statsSkeleton {
+  /* Match the inline size of two monospace characters (e.g. "+3") */
+  height: 1em;
+  width: 2ch;
+}

@@ -1,0 +1,141 @@
+# Runs `just check` and `just test-unit` on a GitHub-hosted ubuntu-latest
+# runner, with JUnit reporting on PRs.
+
+name: checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# GitLab's `auto_cancel.on_new_commit: interruptible` equivalent. PR runs
+# cancel on new pushes; main runs are queued (no cancel) so we don't lose
+# signal on merged commits.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks-and-unit-tests:
+    name: checks + unit tests
+    runs-on: ubuntu-latest
+    # Mirrors GitLab's `allow_failure: true` for MRs into release/* branches.
+    # The cherry-pick MR re-runs the suite for visibility but doesn't gate the
+    # merge — the change was already validated on main.
+    continue-on-error: ${{ startsWith(github.base_ref, 'release/') }}
+    env:
+      JUST_VERBOSE: "1"
+      # imbue_core.common.get_filesystem_root() defaults to /mnt/private on
+      # Linux, a mount GitHub-hosted ubuntu doesn't have. Use a literal /tmp
+      # path (the OSX fallback) via the supported SCIENCE_FILESYSTEM_ROOT
+      # override.
+      # Note: can't use ${{ runner.temp }} here — the `runner` context isn't
+      # available at job-level env, only inside step env/with/run.
+      SCIENCE_FILESYSTEM_ROOT: /tmp/science
+      # GH retires Node 20 on JS actions on 2026-06-16. Opt every third-party
+      # action into Node 24 now; revisit when actions/checkout, setup-node,
+      # upload-artifact ship Node-24 majors and we can drop this.
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure git user
+        run: |
+          git config --global user.email "ci@sculptor.dev"
+          git config --global user.name "Sculptor CI"
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tmux
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.13.1
+
+      - name: Setup just
+        uses: extractions/setup-just@v2
+
+      # The `ratchets` lint binary (used by `just ratchets` inside `just check`)
+      # installs into a CARGO_HOME dedicated to ratchets, so its cargo install
+      # ledger stays separate from any other cargo usage in this job. Cache that
+      # dir (binary + ledger) so the install no-ops on a hit.
+      - name: Cache ratchets binary
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/ratchets-cargo/bin/ratchets
+            ${{ runner.temp }}/ratchets-cargo/.crates.toml
+            ${{ runner.temp }}/ratchets-cargo/.crates2.json
+          # Bump the version suffix in lockstep with `ratchets_version` in the
+          # justfile, and bump the -v3 suffix whenever the cached `path:` set changes.
+          key: ratchets-bin-${{ runner.os }}-0.3.1-v3
+
+      - name: Install ratchets
+        env:
+          CARGO_HOME: ${{ runner.temp }}/ratchets-cargo
+        run: |
+          just install-ratchets
+          echo "${{ runner.temp }}/ratchets-cargo/bin" >> "$GITHUB_PATH"
+
+      # Intentionally unpinned. We want early signal on Claude Code
+      # compatibility regressions, matching the GitLab pipeline's behavior.
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Sync Python deps
+        run: uv sync --frozen
+
+      - name: Verify toolchain
+        run: just --version && uv --version && node --version && npm --version
+
+      - name: Run checks + unit tests
+        run: |
+          FAILED=""
+          echo "=== Running check ===" && just check || FAILED="$FAILED check"
+          echo "=== Running test-unit ===" && just test-unit junitxml=true || FAILED="$FAILED test-unit"
+          if [ -n "$FAILED" ]; then
+            echo ""
+            echo "=== FAILED STEPS:$FAILED ==="
+            exit 1
+          fi
+          echo "=== All checks passed ==="
+
+      - name: Upload JUnit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-reports
+          path: |
+            sculptor/pytest_junit.xml
+            sculpt_junit.xml
+          if-no-files-found: ignore
+
+      # Split into one invocation per report so each surfaces as a distinct
+      # PR check. A single invocation with two report_paths triggers the
+      # action's "checkName has a different number of items than reportPaths"
+      # warning and merges both into one bucket.
+      - name: Publish backend pytest report
+        if: always()
+        uses: mikepenz/action-junit-report@v4
+        with:
+          report_paths: sculptor/pytest_junit.xml
+          check_name: backend pytest
+          fail_on_failure: false
+          require_tests: false
+
+      - name: Publish sculpt CLI pytest report
+        if: always()
+        uses: mikepenz/action-junit-report@v4
+        with:
+          report_paths: sculpt_junit.xml
+          check_name: sculpt CLI pytest
+          fail_on_failure: false
+          require_tests: false

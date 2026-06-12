@@ -1,0 +1,48 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.placeholder {
+  align-items: center;
+  color: var(--gray-11);
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  padding: var(--space-4);
+  text-align: center;
+}
+
+.toolbar {
+  border-bottom: 1px solid var(--gray-a5);
+  box-sizing: border-box;
+  flex-shrink: 0;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- matches PanelHeader / WorkspaceBanner height
+  height: 41px;
+  padding: var(--space-1) var(--space-2);
+}
+
+.addressInput {
+  flex-grow: 1;
+}
+
+.errorBar {
+  background-color: var(--red-2);
+  border-bottom: 1px solid var(--red-a5);
+  color: var(--red-11);
+  flex-shrink: 0;
+  padding: var(--space-1) var(--space-3);
+}
+
+.webviewContainer {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+
+  /* stylelint-disable-next-line selector-type-no-unknown */
+  webview {
+    flex: 1;
+  }
+}

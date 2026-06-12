@@ -1,0 +1,49 @@
+.groupWrapper {
+  border-bottom: 2px solid transparent;
+  // Always-present border slots so the layout never shifts when drop indicators appear.
+  border-top: 2px solid transparent;
+
+  &.dropBefore {
+    border-top-color: var(--accent-9);
+  }
+
+  &.dropAfter {
+    border-bottom-color: var(--accent-9);
+  }
+}
+
+.groupHeader {
+  border-radius: var(--radius-2);
+  transition: opacity var(--duration-fast);
+
+  &.dragging {
+    opacity: 35%;
+    pointer-events: none;
+  }
+}
+
+.dragHandle {
+  align-items: center;
+  color: var(--gray-9);
+  cursor: grab;
+  display: flex;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.emptyGroupDrop {
+  align-items: center;
+  border: 2px dashed var(--gray-6);
+  border-radius: var(--radius-2);
+  display: flex;
+  justify-content: center;
+  padding: var(--space-3);
+  transition: border-color var(--duration-fast), background-color var(--duration-fast);
+
+  &.emptyGroupDropActive {
+    background-color: var(--accent-a2);
+    border-color: var(--accent-9);
+  }
+}

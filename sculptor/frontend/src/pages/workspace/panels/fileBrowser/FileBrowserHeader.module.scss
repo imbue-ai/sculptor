@@ -1,0 +1,21 @@
+@keyframes refreshSpin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// Base class on the icon: when the spinning class is removed, the rotation
+// transitions smoothly back to its rest position with ease-out, so brief
+// fetches don't snap. Goes backwards (90° → 0°), which on small angles
+// reads as a natural settle.
+.refreshIcon {
+  transition: transform var(--duration-slower) var(--ease-out);
+}
+
+.refreshSpinning {
+  animation: refreshSpin calc(var(--duration-slower) * 4) linear infinite;
+}

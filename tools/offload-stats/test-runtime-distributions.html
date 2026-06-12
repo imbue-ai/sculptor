@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Offload test runtime distributions</title>
+<style>
+  @font-face {
+    font-family: 'et-book';
+    src: url('https://edwardtufte.github.io/et-book/et-book/et-book-roman-line-figures/et-book-roman-line-figures.woff') format('woff');
+    font-weight: normal; font-style: normal;
+  }
+  @font-face {
+    font-family: 'et-book';
+    src: url('https://edwardtufte.github.io/et-book/et-book/et-book-display-italic-old-style-figures/et-book-display-italic-old-style-figures.woff') format('woff');
+    font-weight: normal; font-style: italic;
+  }
+  @font-face {
+    font-family: 'et-book';
+    src: url('https://edwardtufte.github.io/et-book/et-book/et-book-bold-line-figures/et-book-bold-line-figures.woff') format('woff');
+    font-weight: bold; font-style: normal;
+  }
+
+  html { font-size: 15px; }
+  body {
+    background: #fffff8;
+    color: #111;
+    font-family: et-book, Palatino, "Palatino Linotype", "Palatino LT STD", "Book Antiqua", Georgia, serif;
+    margin: 0;
+    padding: 3em 4% 5em;
+    max-width: 1600px;
+  }
+  h1 { font-style: italic; font-weight: 400; margin: 0 0 0.2em; font-size: 2.6rem; letter-spacing: -0.01em; }
+  h2 { font-style: italic; font-weight: 400; margin: 2em 0 0.4em; font-size: 1.4rem; }
+  .subtitle { font-style: italic; color: #555; margin: 0 0 2em; font-size: 1.1rem; }
+  .figcap { font-style: italic; color: #666; margin: 0.4em 0 1em; font-size: 0.9rem; }
+
+  .controls {
+    display: flex; gap: 2em; flex-wrap: wrap; align-items: baseline;
+    margin: 1.5em 0 1em; padding: 0.6em 0;
+    border-top: 1px solid #c0c0b8; border-bottom: 1px solid #c0c0b8;
+    font-size: 0.95rem;
+  }
+  .controls label { font-style: italic; color: #444; margin-right: 0.4em; }
+  .controls select, .controls input[type=text] {
+    background: #fffff8; border: none; border-bottom: 1px solid #888;
+    padding: 0.2em 0.4em; font-family: inherit; font-size: inherit; color: #111; outline: none;
+  }
+  .controls input[type=text] { width: 22em; }
+  .controls .totals { margin-left: auto; color: #555; font-style: italic; }
+
+  .row {
+    display: grid;
+    grid-template-columns:
+      minmax(360px, 2.4fr)
+      minmax(260px, 1.4fr)
+      7em 5em 5em 9em 5em;
+    gap: 1.4em;
+    align-items: center;
+    padding: 0.55em 0;
+    border-top: 1px solid #e2e2d4;
+  }
+  .row.head {
+    border-top: 1px solid #c0c0b8; border-bottom: 1px solid #c0c0b8;
+    color: #555; font-style: italic; font-size: 0.85rem; padding: 0.4em 0;
+  }
+  .row .num { text-align: right; font-variant-numeric: oldstyle-nums tabular-nums; }
+  .row .name { font-size: 0.95rem; line-height: 1.3; word-break: break-word; }
+  .row .name .file { color: #777; }
+  .row .name .case { color: #111; }
+  .row:hover { background: #faf9ee; }
+
+  .spark-cell { min-width: 0; overflow: hidden; }
+  .sparkline { display: block; width: 100%; height: 32px; }
+
+  .succ { display: flex; flex-direction: column; align-items: stretch; gap: 2px; min-width: 0; }
+  .succ .pct { text-align: right; font-variant-numeric: oldstyle-nums tabular-nums; white-space: nowrap; }
+  .succ .pct small { color: #888; }
+  .pct-bar { height: 2px; background: #d8d8c8; }
+  .pct-bar > span { display: block; height: 2px; background: #111; }
+
+  .footer {
+    margin-top: 4em; padding-top: 1em;
+    border-top: 1px solid #c0c0b8; color: #777;
+    font-style: italic; font-size: 0.85rem;
+  }
+
+  .spark-axis { stroke: #c0c0b8; stroke-width: 0.5; vector-effect: non-scaling-stroke; }
+  .spark-line { fill: none; stroke: #111; stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .spark-dot-ok { fill: #111; }
+  .spark-dot-fail { fill: #a02020; }
+  .spark-mean { stroke: #888; stroke-width: 0.5; stroke-dasharray: 2 2; vector-effect: non-scaling-stroke; }
+  .spark-q { stroke: #888; stroke-width: 0.5; vector-effect: non-scaling-stroke; }
+
+  .bigcdf { background: transparent; }
+  .bigcdf .axis { stroke: #999; stroke-width: 0.6; }
+  .bigcdf .grid  { stroke: #e6e4d4; stroke-width: 0.5; }
+  .bigcdf .line  { fill: none; stroke: #111; stroke-width: 1.2; }
+  .bigcdf .pdot  { fill: #a02020; }
+  .bigcdf .ptext { font-size: 11px; fill: #444; font-style: italic; }
+  .bigcdf .lbl   { font-size: 11px; fill: #444; }
+  .bigcdf .lbli  { font-size: 11px; fill: #444; font-style: italic; }
+
+  .loaderr {
+    border: 1px solid #b3431d; color: #b3431d; background: #fffef7;
+    padding: 14px 18px; max-width: 760px; margin: 1.5em 0;
+  }
+  .loaderr pre {
+    background: #f6f3e8; padding: 8px 12px; margin: 6px 0;
+    color: #2b2a26; font-size: 13px;
+  }
+  .loaderr .hint { color: #2b2a26; margin-top: 10px; font-size: 13px; line-height: 1.55; }
+</style>
+</head>
+<body>
+
+<h1>Offload test runtime distributions</h1>
+<p class="subtitle">small multiples of <span id="totalTests">…</span> integration tests, <span id="totalRuns">…</span> runs, <span id="totalHours">…</span> cumulative hours of CI time</p>
+
+<div id="loadStatus"></div>
+
+<div id="content" style="display:none">
+  <h2>Distribution of test mean runtimes</h2>
+  <p class="figcap">Empirical CDF across all tests: each point is one test, plotted at its mean runtime; the curve gives the share of tests at or below a given mean. Marked: median, 90th, 99th percentile.</p>
+  <div id="bigCdf"></div>
+
+  <h2>Per-test detail</h2>
+
+  <div class="controls">
+    <span>
+      <label for="sort">sort by</label>
+      <select id="sort">
+        <option value="mean_s">mean runtime</option>
+        <option value="cumulative_s">cumulative time</option>
+        <option value="success_pct">success rate</option>
+        <option value="fail">failure count</option>
+        <option value="n">total runs</option>
+        <option value="std_s">runtime variance</option>
+        <option value="max_s">slowest run</option>
+        <option value="name">name</option>
+      </select>
+    </span>
+    <span>
+      <label for="dir">order</label>
+      <select id="dir">
+        <option value="desc">descending</option>
+        <option value="asc">ascending</option>
+      </select>
+    </span>
+    <span>
+      <label for="filter">filter</label>
+      <input type="text" id="filter" placeholder="test name substring">
+    </span>
+    <span class="totals" id="visibleCount"></span>
+  </div>
+
+  <div class="row head">
+    <div>test</div>
+    <div>runtime, sorted ascending — flat = consistent, S-curve = normal, jumps = outliers</div>
+    <div class="num">success</div>
+    <div class="num">mean</div>
+    <div class="num">median</div>
+    <div class="num">min – max</div>
+    <div class="num">std</div>
+  </div>
+
+  <div id="rows"></div>
+
+  <p class="footer">data drawn from <code>offload-history.jsonl</code> (resolved relative to this page); per-test mini-charts plot each test's runs sorted ascending by duration; black = ok, red = failures; thin verticals at q1, median, q3; dashed gray = mean.</p>
+</div>
+
+<script>
+const DATA_URL = "../../offload-history.jsonl";
+let DATA = [];
+
+const fmtSec = s => s >= 60 ? (s/60).toFixed(s>=600?0:1) + 'm' : s.toFixed(s<10?2:1) + 's';
+
+function quantile(sorted, q) {
+  if (sorted.length === 0) return 0;
+  if (sorted.length === 1) return sorted[0];
+  const pos = (sorted.length - 1) * q;
+  const lo = Math.floor(pos), hi = Math.ceil(pos), frac = pos - lo;
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * frac;
+}
+
+function summarize(rec) {
+  // rec.k = [config_file, test_id]
+  // rec.v = {n, f, last_run, ok: [[run_id, ts_ms, dur_s], ...], fail: [...]}
+  const name = rec.k[1];
+  const v = rec.v || {};
+  const ok = v.ok || [];
+  const fail = v.fail || [];
+  const okDurs = ok.map(r => r[2]);
+  const failDurs = fail.map(r => r[2]);
+  const all = okDurs.concat(failDurs);
+  const n = all.length;
+  if (n === 0) return null;
+  const sum = all.reduce((a,b) => a + b, 0);
+  const mean = sum / n;
+  const sorted = all.slice().sort((a,b) => a - b);
+  const median = quantile(sorted, 0.5);
+  const variance = all.reduce((acc, v) => acc + (v - mean) * (v - mean), 0) / n;
+  const std = Math.sqrt(variance);
+  return {
+    name,
+    n,
+    ok: ok.length,
+    fail: fail.length,
+    success_pct: 100 * ok.length / n,
+    cumulative_s: sum,
+    mean_s: mean,
+    median_s: median,
+    min_s: sorted[0],
+    max_s: sorted[sorted.length - 1],
+    std_s: std,
+    ok_durs: okDurs,
+    fail_durs: failDurs,
+  };
+}
+
+async function loadData() {
+  const r = await fetch(DATA_URL);
+  if (!r.ok) throw new Error("HTTP " + r.status + " loading " + DATA_URL);
+  const text = await r.text();
+  const rows = text.trim().split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
+  return rows.map(summarize).filter(Boolean);
+}
+
+function showLoadError(err) {
+  const here = window.location.pathname.split("/").slice(0, -1).join("/") || ".";
+  document.getElementById("loadStatus").innerHTML =
+    '<div class="loaderr">' +
+    '<strong>Could not load <code>' + DATA_URL + '</code></strong>: ' +
+    String(err && err.message || err) +
+    '<div class="hint">' +
+    'If you opened this file directly via <code>file://</code>, browsers ' +
+    'block local <code>fetch()</code>. Serve the repository over HTTP:' +
+    '<pre>cd ' + here + '/../..\n' +
+    'python3 -m http.server 8765\n' +
+    '# then open http://localhost:8765/tools/offload-stats/test-runtime-distributions.html</pre>' +
+    'The file is generated by the <code>offload</code> CLI as you run tests; ' +
+    'it lives at <code>offload-history.jsonl</code> in the repo root and is gitignored.' +
+    '</div></div>';
+}
+
+// ---- big CDF of mean runtimes across tests ----
+function renderBigCdf() {
+  const means = DATA.map(t => t.mean_s).sort((a,b) => a - b);
+  const n = means.length;
+  const W = 1100, H = 280;
+  const padL = 50, padR = 24, padT = 16, padB = 36;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const xMax = means[n-1];
+  const niceStep = (range, target) => {
+    const raw = range / target;
+    const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+    const norm = raw / pow;
+    let step = 1;
+    if (norm >= 5) step = 5;
+    else if (norm >= 2) step = 2;
+    return step * pow;
+  };
+  const xStep = niceStep(xMax, 8);
+  const yStep = 0.1;
+  const xOf = v => padL + (v / xMax) * innerW;
+  const yOf = f => padT + innerH - f * innerH;
+
+  const linePts = means.map((v,i) => `${xOf(v).toFixed(1)},${yOf((i+1)/n).toFixed(1)}`).join(' ');
+  const p50 = quantile(means, 0.50);
+  const p90 = quantile(means, 0.90);
+  const p99 = quantile(means, 0.99);
+
+  let svg = `<svg class="bigcdf" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+  for (let f = 0; f <= 1.0001; f += yStep) {
+    const y = yOf(f).toFixed(1);
+    svg += `<line class="grid" x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}"/>`;
+    svg += `<text class="lbl" x="${padL-6}" y="${(yOf(f)+3).toFixed(1)}" text-anchor="end">${(f*100).toFixed(0)}%</text>`;
+  }
+  for (let v = 0; v <= xMax + 0.0001; v += xStep) {
+    const x = xOf(v).toFixed(1);
+    svg += `<line class="grid" x1="${x}" y1="${padT}" x2="${x}" y2="${padT+innerH}"/>`;
+    svg += `<text class="lbl" x="${x}" y="${padT+innerH+14}" text-anchor="middle">${fmtSec(v)}</text>`;
+  }
+  svg += `<line class="axis" x1="${padL}" y1="${padT+innerH}" x2="${W-padR}" y2="${padT+innerH}"/>`;
+  svg += `<line class="axis" x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT+innerH}"/>`;
+  svg += `<text class="lbli" x="${padL+innerW/2}" y="${H-6}" text-anchor="middle">mean runtime per test</text>`;
+  svg += `<text class="lbli" x="${-(padT+innerH/2)}" y="14" transform="rotate(-90)" text-anchor="middle">share of tests at or below</text>`;
+  svg += `<polyline class="line" points="${linePts}"/>`;
+  const markers = [
+    {q: 0.50, v: p50, label: 'median'},
+    {q: 0.90, v: p90, label: 'p90'},
+    {q: 0.99, v: p99, label: 'p99'},
+  ];
+  markers.forEach(m => {
+    const x = xOf(m.v).toFixed(1);
+    const y = yOf(m.q).toFixed(1);
+    svg += `<line class="grid" x1="${x}" y1="${padT+innerH}" x2="${x}" y2="${y}" stroke="#888" stroke-dasharray="2 2"/>`;
+    svg += `<line class="grid" x1="${padL}" y1="${y}" x2="${x}" y2="${y}" stroke="#888" stroke-dasharray="2 2"/>`;
+    svg += `<circle class="pdot" cx="${x}" cy="${y}" r="2.5"/>`;
+    svg += `<text class="ptext" x="${(parseFloat(x)+6).toFixed(1)}" y="${(parseFloat(y)+12).toFixed(1)}">${m.label}: ${fmtSec(m.v)}</text>`;
+  });
+  svg += `</svg>`;
+  document.getElementById('bigCdf').innerHTML = svg;
+}
+
+function sparkline(test) {
+  const tagged = test.ok_durs.map(v => ({v, ok: true}))
+    .concat(test.fail_durs.map(v => ({v, ok: false})));
+  if (tagged.length === 0) return '';
+  tagged.sort((a,b) => a.v - b.v);
+  const all = tagged.map(t => t.v);
+
+  const W = 360, H = 32, padL = 2, padR = 28, padT = 4, padB = 6;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const max = Math.max(...all);
+  const x = i => padL + (all.length === 1 ? innerW/2 : (i*innerW/(all.length-1)));
+  const y = v => padT + innerH - (v/(max||1))*innerH;
+
+  const linePts = all.map((v,i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const meanY = y(test.mean_s).toFixed(1);
+  const xq1 = x((all.length-1)*0.25).toFixed(1);
+  const xq2 = x((all.length-1)*0.50).toFixed(1);
+  const xq3 = x((all.length-1)*0.75).toFixed(1);
+  const tickY1 = (padT+innerH).toFixed(1);
+  const tickY0 = (padT+innerH-3).toFixed(1);
+
+  let svg = `<svg class="sparkline" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">`;
+  svg += `<line class="spark-axis" x1="${padL}" y1="${tickY1}" x2="${W-padR}" y2="${tickY1}"/>`;
+  svg += `<line class="spark-mean" x1="${padL}" y1="${meanY}" x2="${W-padR}" y2="${meanY}"/>`;
+  svg += `<line class="spark-q" x1="${xq1}" y1="${tickY0}" x2="${xq1}" y2="${tickY1}"/>`;
+  svg += `<line class="spark-q" x1="${xq2}" y1="${tickY0}" x2="${xq2}" y2="${tickY1}"/>`;
+  svg += `<line class="spark-q" x1="${xq3}" y1="${tickY0}" x2="${xq3}" y2="${tickY1}"/>`;
+  svg += `<polyline class="spark-line" points="${linePts}"/>`;
+  tagged.forEach((t,i) => {
+    const cls = t.ok ? 'spark-dot-ok' : 'spark-dot-fail';
+    svg += `<ellipse class="${cls}" cx="${x(i).toFixed(1)}" cy="${y(t.v).toFixed(1)}" rx="2.4" ry="1.6"/>`;
+  });
+  svg += `<text x="${W-padR+3}" y="${(y(max)+3).toFixed(1)}" font-size="9" fill="#888" font-style="italic">${fmtSec(max)}</text>`;
+  svg += `</svg>`;
+  return svg;
+}
+
+function renderRow(test) {
+  const parts = test.name.split('::');
+  const file = parts[0];
+  const caseName = parts.slice(1).join('::');
+  return `
+    <div class="row">
+      <div class="name"><span class="file">${file}</span> <span style="color:#aaa">::</span> <span class="case">${caseName||'&nbsp;'}</span></div>
+      <div class="spark-cell">${sparkline(test)}</div>
+      <div class="succ">
+        <div class="pct">${test.success_pct.toFixed(1)}% <small>(${test.ok}/${test.n})</small></div>
+        <div class="pct-bar"><span style="width:${test.success_pct}%"></span></div>
+      </div>
+      <div class="num">${fmtSec(test.mean_s)}</div>
+      <div class="num">${fmtSec(test.median_s)}</div>
+      <div class="num">${fmtSec(test.min_s)} – ${fmtSec(test.max_s)}</div>
+      <div class="num">${fmtSec(test.std_s)}</div>
+    </div>
+  `;
+}
+
+function rerender() {
+  const sortKey = document.getElementById('sort').value;
+  const dir = document.getElementById('dir').value;
+  const filter = document.getElementById('filter').value.toLowerCase().trim();
+  const sign = dir === 'asc' ? 1 : -1;
+  let rows = DATA.slice();
+  if (filter) rows = rows.filter(t => t.name.toLowerCase().includes(filter));
+  rows.sort((a,b) => {
+    const av = a[sortKey], bv = b[sortKey];
+    if (typeof av === 'string') return sign * av.localeCompare(bv);
+    return sign * (av - bv);
+  });
+  document.getElementById('visibleCount').textContent =
+    `showing ${rows.length.toLocaleString()} of ${DATA.length.toLocaleString()}`;
+  document.getElementById('rows').innerHTML = rows.map(renderRow).join('');
+}
+
+function init(rows) {
+  DATA = rows;
+  document.getElementById('totalTests').textContent = DATA.length.toLocaleString();
+  document.getElementById('totalRuns').textContent = DATA.reduce((a,t) => a+t.n, 0).toLocaleString();
+  document.getElementById('totalHours').textContent = (DATA.reduce((a,t) => a+t.cumulative_s, 0)/3600).toFixed(1);
+  document.getElementById('content').style.display = '';
+  renderBigCdf();
+  document.getElementById('sort').addEventListener('change', rerender);
+  document.getElementById('dir').addEventListener('change', rerender);
+  document.getElementById('filter').addEventListener('input', rerender);
+  rerender();
+}
+
+loadData().then(init).catch(showLoadError);
+</script>
+</body>
+</html>

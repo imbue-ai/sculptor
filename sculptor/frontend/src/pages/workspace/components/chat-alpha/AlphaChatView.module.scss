@@ -1,0 +1,407 @@
+@use "scrollbar" as *;
+
+.scrollArea {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden auto;
+  width: 100%;
+
+  @include thin-scrollbar;
+}
+
+.tracebackScroll {
+  max-height: 400px;
+  overflow-y: auto;
+
+  @include thin-scrollbar;
+}
+
+.scrollAreaPositioned {
+  position: relative;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-left: auto;
+  margin-right: auto;
+  max-width: calc(min(80%, var(--main-content-width)));
+  overflow-wrap: break-word;
+  padding: var(--space-8) var(--space-4) var(--space-9);
+}
+
+.empty {
+  color: var(--gray-9);
+  font-size: var(--font-size-2);
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.newCycle {
+  margin-top: var(--space-9);
+}
+
+.afterUser {
+  margin-top: var(--space-4);
+}
+
+.afterAssistant {
+  margin-top: var(--space-4);
+}
+
+.userBubble {
+  background-color: var(--accent-a3);
+  border-radius: var(--radius-3);
+  margin-left: calc(-1 * var(--space-2));
+  margin-right: calc(-1 * var(--space-2));
+  padding: var(--space-3);
+
+  // Strengthen inline code and code block backgrounds for better contrast
+  // against the accent bubble background.
+  :not(pre) > code[class] {
+    background-color: var(--accent-a3);
+    border-color: var(--accent-a4);
+  }
+
+  pre {
+    background-color: var(--accent-a2);
+    border-color: var(--accent-a5);
+  }
+
+  // Lighten chip backgrounds one step and darken borders one step against
+  // the accent bubble, so the chips lift off the bubble with a slightly
+  // firmer edge.
+  [data-testid="MENTION_SPAN"] {
+    background-color: var(--accent-2);
+    border-color: var(--accent-5);
+  }
+
+  [data-testid="MENTION_SPAN"]:hover {
+    background-color: var(--accent-3);
+  }
+
+  [data-entity-type="repository"] {
+    background-color: var(--amber-2);
+    border-color: var(--amber-7);
+  }
+
+  [data-entity-type="workspace"] {
+    background-color: var(--teal-2);
+    border-color: var(--teal-7);
+  }
+
+  [data-entity-type="agent"] {
+    background-color: var(--violet-2);
+    border-color: var(--violet-7);
+  }
+
+  [data-entity-deleted] {
+    background-color: var(--gray-2);
+    border-color: var(--gray-7);
+  }
+}
+
+.userBubbleFooter {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--space-1);
+}
+
+.userTimestamp {
+  color: var(--accent-a9);
+  font-size: var(--font-size-1);
+}
+
+.messageText {
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-2);
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.toolLine {
+  cursor: pointer;
+  opacity: 50%;
+  transition: opacity var(--duration-fast) ease;
+}
+
+.toolLine:hover {
+  opacity: 80%;
+}
+
+.expandedToolLine {
+  opacity: 100%;
+}
+
+.expandedToolLine:hover {
+  opacity: 100%;
+}
+
+.executingToolLine {
+  opacity: 100%;
+}
+
+.executingToolLine:hover {
+  opacity: 100%;
+}
+
+.errorToolLine {
+  opacity: 100%;
+}
+
+.errorToolLine:hover {
+  opacity: 100%;
+}
+
+.diffResultContainer {
+  margin-top: var(--space-1);
+  max-height: 500px;
+  overflow: auto;
+
+  @include thin-scrollbar(both);
+}
+
+.diffPanelButton {
+  align-items: center;
+  background: none;
+  border: none;
+  border-radius: var(--radius-1);
+  color: var(--gray-8);
+  cursor: pointer;
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 2px;
+  transition: color var(--duration-fast) ease;
+}
+
+.diffPanelButton:hover {
+  color: var(--gray-11);
+}
+
+.toolHeader {
+  align-items: baseline;
+  display: flex;
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+  line-height: var(--line-height-2);
+  min-width: 0;
+}
+
+.toolName {
+  flex-shrink: 0;
+  font-weight: var(--font-weight-medium);
+}
+
+.toolInput {
+  color: var(--gray-8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chevronClosed {
+  flex-shrink: 0;
+  position: relative;
+  top: 2px;
+  transition: transform var(--duration-fast) ease;
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+
+.chevronOpen {
+  flex-shrink: 0;
+  position: relative;
+  top: 2px;
+  transform: rotate(90deg);
+  transition: transform var(--duration-fast) ease;
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+
+.subagentTools {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 240px;
+  overflow-y: auto;
+  padding-left: var(--space-4);
+
+  @include thin-scrollbar;
+}
+
+.toolResult {
+  border-left: 1px solid var(--gray-6);
+  color: var(--gray-10);
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  margin: var(--space-1) 0 0;
+  max-height: 200px;
+  overflow: auto;
+  padding-left: var(--space-3);
+  white-space: pre-wrap;
+  word-break: break-word;
+
+  @include thin-scrollbar(both);
+}
+
+// Error styling on tool results
+.toolResultError {
+  background-color: var(--red-2);
+  border-left-color: var(--red-9);
+}
+
+// Subagent prompt/response sections
+.subagentPrompt {
+  background: var(--gray-3);
+  border-radius: var(--radius-2);
+  margin-bottom: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+}
+
+.subagentResponse {
+  margin-top: var(--space-1);
+  padding: var(--space-1) 0;
+}
+
+// Error block
+.errorBlock {
+  border-left: 3px solid var(--red-9);
+  padding-left: var(--space-2);
+}
+
+.errorHeader {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  font-size: var(--font-size-2);
+  gap: var(--space-2);
+}
+
+.errorMessage {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.errorTraceback {
+  color: var(--gray-10);
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  margin: 0;
+  padding: var(--space-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+// Warning block
+.warningBlock {
+  border-left: 3px solid var(--orange-9);
+  padding-left: var(--space-2);
+}
+
+.warningHeader {
+  align-items: center;
+  display: flex;
+  font-size: var(--font-size-2);
+  gap: var(--space-2);
+}
+
+.warningMessage {
+  word-break: break-word;
+}
+
+// Resume response indicator
+.resumeIndicator {
+  color: var(--gray-9);
+  font-size: var(--font-size-2);
+  padding: var(--space-1) 0;
+}
+
+// ExitPlanMode blocks
+.planBlock {
+  padding: var(--space-1) 0;
+}
+
+// Tool group header
+.toolGroupHeader {
+  align-items: baseline;
+  cursor: pointer;
+  display: flex;
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+  line-height: var(--line-height-2);
+  min-width: 0;
+  opacity: 50%;
+  transition: opacity var(--duration-fast) ease;
+}
+
+.toolGroupHeader:hover {
+  opacity: 80%;
+}
+
+// Skill pill
+.skillPill {
+  color: var(--accent-12);
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-medium);
+}
+
+// Badge shown on messages sent via the sculpt CLI
+.sentViaBadge {
+  background-color: var(--accent-a3);
+  border-radius: var(--radius-2);
+  color: var(--accent-11);
+  display: inline-block;
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-medium);
+  margin-bottom: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+}
+
+// Copy button on user messages
+.copyButton {
+  background: none;
+  border: none;
+  color: var(--accent-9);
+  cursor: pointer;
+  opacity: 0%;
+  padding: var(--space-1);
+  transition: opacity var(--duration-normal) ease-in-out;
+}
+
+// Show copy button on bubble hover, full opacity on button hover
+.copyButton:hover {
+  opacity: 100% !important;
+}
+
+.userBubble:hover .copyButton {
+  opacity: 50%;
+}
+
+:global(.alphaSearchMatch) {
+  background-color: var(--yellow-a4);
+  border-radius: var(--radius-1);
+  color: inherit;
+}
+
+:global(.alphaSearchActive) {
+  background-color: var(--red-a4);
+  border-radius: var(--radius-1);
+  color: inherit;
+}

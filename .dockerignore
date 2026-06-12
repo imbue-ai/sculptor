@@ -1,0 +1,33 @@
+.git
+
+# Some of us keep our Python environment inside our source tree in these folders.
+# See the same list inside .gitignore.
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+sculptor/frontend/out/
+# Keep local frontend builds out of the base image — post_patch_cmd
+# runs `npm run build` against the post-thin-diff source, and the
+# backend's serve_static prefers frontend-dist/ over frontend/dist/, so
+# any leaked stale frontend-dist/ would shadow the freshly-built bundle.
+sculptor/frontend-dist/
+sculptor/frontend/dist/
+.venv/
+
+.jj/
+__pycache__
+*.egg-info
+.dev_sculptor
+.offload
+.offload-image-cache
+test-results
+.just-logs
+.pytest_cache
+node_modules
+*.pyc
+*.ipc
+offload-history.jsonl

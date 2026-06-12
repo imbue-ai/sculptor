@@ -1,0 +1,25 @@
+.hotkeyRecording {
+  background: var(--green-4);
+  border-radius: var(--radius-3);
+  color: var(--green-11);
+  height: 32px;
+  text-align: center;
+}
+
+.hotkeySet {
+  background: var(--accent-4);
+  border-radius: var(--radius-3);
+  color: var(--accent-12);
+  height: 32px;
+  min-width: 100px;
+}
+
+.hotkeyClear {
+  color: var(--accent-10);
+  padding: var(--space-1);
+
+  &:hover {
+    background: var(--accent-5);
+    color: var(--accent-12);
+  }
+}

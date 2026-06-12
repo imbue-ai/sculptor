@@ -1,0 +1,9 @@
+[rule]
+id = "no-integration-time-sleep"
+description = "Disallow time.sleep() in integration tests; use Playwright auto-retrying expect()/wait helpers"
+severity = "warning"
+
+[match]
+pattern = "time\\.sleep\\("
+languages = ["python"]
+include = ["sculptor/tests/integration/**/*.py"]

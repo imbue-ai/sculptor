@@ -1,0 +1,12 @@
+.button {
+  background: var(--button-primary-bg);
+
+  &:hover {
+    background: var(--button-primary-bg-hover);
+  }
+
+  &:disabled {
+    background: var(--send-button-disabled-bg);
+    cursor: not-allowed;
+  }
+}

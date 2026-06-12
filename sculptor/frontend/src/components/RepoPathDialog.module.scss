@@ -1,0 +1,112 @@
+@use "scrollbar" as *;
+
+.modalContainer {
+  background: var(--accent-1);
+  border-radius: var(--radius-6);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 15%), 0 2px 8px rgba(0, 0, 0, 8%);
+  display: flex;
+  flex-direction: column;
+  left: 50%;
+  max-height: 85vh;
+  overflow: hidden;
+  position: fixed;
+  top: 40%;
+  transform: translate(-50%, -50%);
+  width: min(600px, 90vw);
+  z-index: var(--z-modal);
+}
+
+.body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.panel {
+  border: 1px solid var(--accent-5);
+  border-radius: var(--radius-5) var(--radius-5) 0 0;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  position: relative;
+
+  @include thin-scrollbar($autohide: false);
+}
+
+.panelBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+
+  @include thin-scrollbar($autohide: false);
+}
+
+.footer {
+  background: var(--accent-2);
+  border-top: 1px solid var(--accent-5);
+  flex: 0 0 auto;
+}
+
+.title {
+  color: var(--accent-12);
+}
+
+.text {
+  color: var(--accent-11);
+}
+
+.folderIcon {
+  color: var(--accent-10);
+}
+
+.pathBox {
+  background: var(--accent-3);
+  border: 1px solid var(--accent-5);
+  border-radius: var(--radius-4);
+  color: var(--accent-12);
+  padding: var(--space-3);
+}
+
+.infoBox {
+  background: var(--accent-2);
+  border: 1px solid var(--accent-4);
+  border-radius: var(--radius-4);
+  padding: var(--space-3);
+}
+
+.helpBox {
+  background: var(--accent-2);
+  border: 1px solid var(--accent-6);
+  border-left-width: 3px;
+  border-radius: var(--radius-2);
+  color: var(--accent-11);
+  padding: var(--space-3);
+}
+
+.futureNote {
+  color: var(--accent-10);
+  font-style: italic;
+  text-align: center;
+}
+
+.closeButton {
+  background: var(--accent-9);
+  border: none;
+  border-radius: var(--radius-2);
+  color: var(--accent-1);
+  cursor: pointer;
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-medium);
+  padding: 6px var(--space-3);
+
+  &:hover {
+    background: var(--accent-10);
+  }
+
+  &:active {
+    background: var(--accent-11);
+  }
+}

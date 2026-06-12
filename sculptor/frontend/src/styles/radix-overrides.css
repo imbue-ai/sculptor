@@ -1,0 +1,243 @@
+/* RADIX OVERRIDES */
+/* NOTE: needed for text truncation to work inside solid-variant Select items. */
+.rt-SelectContent:where(.rt-variant-solid) :where(.rt-SelectItem[data-highlighted]) {
+  background-color: var(--accent-3);
+  color: var(--gray-12);
+  cursor: pointer;
+}
+
+.rt-ScrollAreaRoot [data-radix-scroll-area-viewport] > * {
+  width: auto;
+}
+
+.rt-TextFieldInput:where(:disabled, :read-only) {
+  color: var(--gray-a9);
+  -webkit-text-fill-color: var(--gray-a9);
+}
+
+.rt-TextFieldRoot:where(.rt-variant-surface) :where(.rt-TextFieldInput)::placeholder {
+  color: var(--gray-a9);
+}
+
+.rt-BaseButton {
+  cursor: pointer;
+}
+
+.rt-reset:where(button) {
+  cursor: pointer;
+}
+
+.rt-reset:where([data-disabled]) {
+  cursor: not-allowed;
+}
+
+.rt-BaseMenuItem {
+  cursor: pointer;
+}
+
+.rt-BaseMenuItem:where([data-disabled]) {
+  cursor: not-allowed;
+}
+
+.rt-BaseMenuItem:where(:hover):where(:not([data-disabled])) {
+  background: var(--accent-3);
+  color: inherit;
+}
+
+.rt-BaseMenuItem:where([data-accent-color]):hover:where(:not([data-disabled])) {
+  color: var(--accent-a11);
+}
+
+.rt-Link:where(a:not([href])) {
+  cursor: var(--cursor-link);
+  text-decoration-line: none;
+  text-decoration-style: solid;
+  text-decoration-thickness: min(2px, max(1px, 0.05em));
+  text-underline-offset: calc(0.025em + 2px);
+  text-decoration-color: var(--accent-a5);
+}
+
+.rt-Link:where(a:not([href])):where(.rt-underline-auto):where(:hover) {
+  text-decoration-line: underline;
+}
+
+/* Use a subtler shadow for all menus, popovers, and selects */
+.rt-BaseMenuContent,
+.rt-PopoverContent,
+.rt-SelectContent {
+  box-shadow: var(--shadow-2);
+}
+
+.rt-BaseDialogContent:where(.rt-r-size-3) {
+  --dialog-content-padding: var(--space-5);
+  border-radius: var(--radius-2);
+}
+
+/*
+ * Saturated tinted grays
+ *
+ * Radix's tinted gray scales (mauve, slate, sage, olive, sand) are nearly
+ * indistinguishable from neutral gray. We boost the chroma of each scale by
+ * 3.2× so the tint is more visible. Because Radix maps
+ * --gray-* from these source variables via [data-gray-color], the theme
+ * builder continues to work — switching gray scales just works.
+ *
+ * Neutral gray is left untouched.
+ */
+
+/* Light mode — overrides :root definitions from @radix-ui/colors */
+.radix-themes {
+  /* Mauve — purple tint */
+  --mauve-1: #fefbff;
+  --mauve-2: #fbf8ff;
+  --mauve-3: #f6ecfb;
+  --mauve-4: #eee4f6;
+  --mauve-5: #e8daf4;
+  --mauve-6: #dfd4f1;
+  --mauve-7: #d4c8ed;
+  --mauve-8: #beb4e4;
+  --mauve-9: #9086b6;
+  --mauve-10: #867ca9;
+  --mauve-11: #675e83;
+  --mauve-12: #231b35;
+
+  /* Slate — blue tint */
+  --slate-1: #fcfcff;
+  --slate-2: #f9f8ff;
+  --slate-3: #f0effa;
+  --slate-4: #e7e7f6;
+  --slate-5: #dee0f2;
+  --slate-6: #d8d7f1;
+  --slate-7: #cacce9;
+  --slate-8: #b4b8e1;
+  --slate-9: #868ab2;
+  --slate-10: #7a81a6;
+  --slate-11: #586381;
+  --slate-12: #14202f;
+
+  /* Sage — green tint */
+  --sage-1: #f8fefb;
+  --sage-2: #f4faf7;
+  --sage-3: #e9f3ef;
+  --sage-4: #e1ebe7;
+  --sage-5: #dae4dd;
+  --sage-6: #d2dcd8;
+  --sage-7: #c5d2ca;
+  --sage-8: #b2bfb7;
+  --sage-9: #789388;
+  --sage-10: #6e897e;
+  --sage-11: #556961;
+  --sage-12: #0a251a;
+
+  /* Olive — olive/green tint */
+  --olive-1: #fafefa;
+  --olive-2: #f5fcf4;
+  --olive-3: #ecf3eb;
+  --olive-4: #e4ebe3;
+  --olive-5: #dae4d9;
+  --olive-6: #d2dcd1;
+  --olive-7: #c7d1c6;
+  --olive-8: #b5bfb0;
+  --olive-9: #829278;
+  --olive-10: #78886e;
+  --olive-11: #586953;
+  --olive-12: #162410;
+
+  /* Sand — warm/tan tint */
+  --sand-1: #fdfdfa;
+  --sand-2: #f9f9f6;
+  --sand-3: #f3f0ec;
+  --sand-4: #ebe8e1;
+  --sand-5: #e4e1d6;
+  --sand-6: #dcd9ce;
+  --sand-7: #d1cfc0;
+  --sand-8: #bfbca5;
+  --sand-9: #8e8f74;
+  --sand-10: #83846d;
+  --sand-11: #646451;
+  --sand-12: #232010;
+}
+
+/* Dark mode — overrides .dark definitions from @radix-ui/colors */
+.radix-themes:is(.dark, .dark-theme) {
+  /* Mauve — purple tint */
+  --mauve-1: #131017;
+  --mauve-2: #1b181f;
+  --mauve-3: #24202b;
+  --mauve-4: #2e2635;
+  --mauve-5: #352d3f;
+  --mauve-6: #40354b;
+  --mauve-7: #4b435d;
+  --mauve-8: #66597e;
+  --mauve-9: #716890;
+  --mauve-10: #7e759d;
+  --mauve-11: #b9add2;
+  --mauve-12: #eeedf5;
+
+  /* Slate — blue tint */
+  --slate-1: #111018;
+  --slate-2: #161920;
+  --slate-3: #1f212c;
+  --slate-4: #212a36;
+  --slate-5: #283140;
+  --slate-6: #2e3a4d;
+  --slate-7: #39485e;
+  --slate-8: #4c627f;
+  --slate-9: #5f6d8e;
+  --slate-10: #6f7a9b;
+  --slate-11: #a8b4ca;
+  --slate-12: #ebeef5;
+
+  /* Sage — green tint */
+  --sage-1: #0c1310;
+  --sage-2: #141a17;
+  --sage-3: #1d2320;
+  --sage-4: #222c28;
+  --sage-5: #29332f;
+  --sage-6: #303e36;
+  --sage-7: #3b4c45;
+  --sage-8: #4f665b;
+  --sage-9: #4a7866;
+  --sage-10: #5a8476;
+  --sage-11: #9fbaaf;
+  --sage-12: #e9efec;
+
+  /* Olive — olive/green tint */
+  --olive-1: #10130b;
+  --olive-2: #171a12;
+  --olive-3: #20231c;
+  --olive-4: #252c20;
+  --olive-5: #2c3328;
+  --olive-6: #353c2d;
+  --olive-7: #414b38;
+  --olive-8: #52674c;
+  --olive-9: #5b7650;
+  --olive-10: #6b8361;
+  --olive-11: #a6ba9c;
+  --olive-12: #e9f0e8;
+
+  /* Sand — warm/tan tint */
+  --sand-1: #11110d;
+  --sand-2: #191916;
+  --sand-3: #22221f;
+  --sand-4: #2a2b23;
+  --sand-5: #313226;
+  --sand-6: #3d3a2f;
+  --sand-7: #4b4839;
+  --sand-8: #66604d;
+  --sand-9: #736d53;
+  --sand-10: #7f7c61;
+  --sand-11: #b9b39d;
+  --sand-12: #eeefe7;
+}
+
+@media (hover: hover) {
+  .rt-BaseButton:where(.rt-variant-surface):where(:hover):where(:not([data-disabled])) {
+    box-shadow: inset 0 0 0 1px var(--accent-a8);
+    background-color: var(--accent-3);
+  }
+
+  .rt-BaseTabListTrigger:where(:hover) :where(.rt-BaseTabListTriggerInner) {
+    background-color: var(--accent-a3);
+  }
+}

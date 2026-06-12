@@ -1,0 +1,153 @@
+# Ratchet violation budgets
+# These counts represent the maximum tolerated violations.
+# Counts can only be reduced (tightened) or explicitly bumped with justification.
+
+[attrs-decorator]
+"." = 0
+
+[classmethod-builder-naming]
+"." = 5
+
+[match-must-assert-never]
+"." = 7
+
+[no-asyncio-run]
+"." = 8
+
+[no-bare-exit]
+"." = 0
+
+[no-builtin-hash]
+"." = 3
+
+[no-byte-index-source]
+"." = 0
+
+[no-direct-harness-capability-read]
+"." = 0
+
+[no-eval-usage]
+"." = 0
+
+[no-implicit-string-concat]
+"." = 24
+
+[no-inline-functions]
+"." = 33
+
+[no-inline-imports]
+"." = 63
+
+[no-integration-css-locators]
+"." = 0
+
+[no-integration-non-testid-queries]
+"." = 1
+
+[no-integration-page-evaluate]
+"." = 25
+
+[no-integration-page-goto]
+"." = 0
+
+[no-integration-page-reload]
+"." = 4
+
+[no-integration-time-sleep]
+"." = 8
+
+[no-integration-type-method]
+"." = 0
+
+[no-logger-exception]
+"." = 1
+
+[no-logger-warning]
+"." = 57
+
+[no-make-composite-seed]
+"." = 0
+
+[no-mutable-attr-in-frozen-dataclass]
+"." = 0
+
+[no-mypy-ignore-errors]
+"." = 0
+
+[no-namedtuple-usage]
+"." = 0
+
+[no-numpy-default-rng]
+"." = 0
+
+[no-os-path-join]
+"." = 4
+
+[no-pydantic-model-copy-update]
+"." = 0
+
+[no-pyre-fixme]
+"." = 44
+
+[no-pyre-ignore]
+"." = 51
+
+[no-pytorch-lightning]
+"." = 0
+
+[no-quarantine-import]
+"." = 0
+
+[no-quarantine-paths]
+"." = 0
+
+[no-raw-html-button]
+"." = 17
+
+[no-relative-imports]
+"." = 0
+
+[no-sculptor-copytree]
+"." = 1
+
+[no-sculptor-subprocess]
+"." = 2
+
+[no-ssh-subprocess]
+"." = 0
+
+[no-todo-remove-comment]
+"." = 0
+
+[no-tree-sitter-text-decode]
+"." = 0
+
+[no-type-ignore]
+"." = 41
+
+[no-typing-builtin-imports]
+"." = 2
+
+[no-typing-cast]
+"." = 49
+
+[no-underscore-imports]
+"." = 6
+
+[no-unlabeled-type-ignore]
+"." = 18
+
+[no-unnumbered-pyre-fixme]
+"." = 0
+
+[no-unnumbered-pyre-ignore]
+"." = 0
+
+[no-untyped-args-kwargs]
+"." = 33
+
+[no-walrus-operator]
+"." = 0
+
+[staticmethod-private-only]
+"." = 0

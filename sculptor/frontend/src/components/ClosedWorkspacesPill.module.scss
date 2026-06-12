@@ -1,0 +1,32 @@
+@use "scrollbar" as *;
+
+.pill {
+  app-region: no-drag;
+  gap: var(--space-1);
+}
+
+.dropdown {
+  padding: 0;
+  width: 440px;
+}
+
+.header {
+  align-items: center;
+  border-bottom: 1px solid var(--gray-a4);
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-3);
+}
+
+.title {
+  color: var(--gray-12);
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-medium);
+}
+
+.scrollArea {
+  max-height: 360px;
+  overflow-y: auto;
+
+  @include thin-scrollbar;
+}

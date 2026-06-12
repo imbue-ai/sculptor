@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "imbue-core"
+version = "0.0.9"
+description = "Utilities for imbue-desktop."
+readme = "README.md"
+authors = [
+  { name="Imbue", email="imbue@imbue.com" },
+]
+license = { text = "MIT" }
+# NOTE: This list is replicated in sculptor/pyproject.toml, and the copy there must be kept in sync.
+dependencies = [
+    "anyio",
+    "attrs",
+    "boto3>=1.38.27",
+    "cachetools",
+    "cattrs",
+    "httpx",
+    "inline-snapshot",
+    "loguru",
+    "pathspec",
+    "pydantic-settings",
+    "pydantic>=2.11.4",
+    "pygit2>=1.18.0",
+    "pygments>=2.0.0",
+    "pyhumps",
+    "pytest",
+    "pytest-asyncio",
+    "pytest-mock",
+    "syrupy",
+    "tblib==2.0.0", # pinned: downstream code relies on "get_locals"
+    "tenacity>=8.2.2",
+    "toml",
+    "traceback-with-variables>=2.2.0",
+    "typeid-python",
+    "yasoo",
+]
+requires-python = ">=3.11,<3.13"
+
+[project.urls]
+"homepage" = "https://imbue.com/"
+
+[tool.setuptools.package-data]
+"imbue" = ["py.typed"]
+
+[tool.setuptools.packages.find]
+include = ["imbue_core*"]
+
+[dependency-groups]
+dev = [
+    "moto>=4.1.12",
+]

@@ -1,0 +1,41 @@
+.trigger.trigger {
+  --select-trigger-ghost-padding-x: var(--space-2);
+  --select-trigger-ghost-padding-y: var(--space-2);
+
+  border-radius: var(--radius-2);
+  box-shadow: none;
+  color: var(--accent-11);
+  font-size: var(--font-size-1);
+  font-style: normal;
+  font-weight: var(--font-weight-medium);
+
+  /* Override ghost variant negative margins that cause overlap with adjacent elements */
+  margin: 0;
+
+  max-width: 200px;
+  overflow: hidden;
+
+  /* Hide the default caret icon */
+  /* stylelint-disable-next-line selector-class-pattern -- Radix UI class */
+  :global(.rt-SelectIcon) {
+    display: none;
+  }
+}
+
+.fillBar {
+  background-color: color-mix(in srgb, currentcolor 25%, transparent);
+  border-radius: var(--radius-1);
+  display: flex;
+  flex-direction: column;
+  height: 12px;
+  justify-content: flex-end;
+  overflow: hidden;
+  width: 4px;
+}
+
+.fillBarInner {
+  background-color: currentcolor;
+  border-radius: var(--radius-1);
+  display: block;
+  width: 100%;
+}

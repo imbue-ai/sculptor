@@ -1,0 +1,17 @@
+.description {
+  color: var(--gray-11);
+}
+
+.browseHint {
+  color: var(--gray-11);
+}
+
+.browseLink {
+  color: var(--accent-9);
+  cursor: pointer;
+  text-decoration: underline;
+
+  &:hover {
+    text-decoration: none;
+  }
+}

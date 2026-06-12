@@ -1,0 +1,28 @@
+.sidebar {
+  background-color: var(--gray-2);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: var(--space-2);
+  width: 42px;
+
+  &.left {
+    border-right: 1px solid var(--gray-a5);
+  }
+
+  &.right {
+    border-left: 1px solid var(--gray-a5);
+  }
+}
+
+.divider {
+  background-color: var(--gray-a5);
+  height: 1px;
+  margin: var(--space-3) auto;
+  width: 24px;
+}
+
+.spacer {
+  flex: 1;
+}

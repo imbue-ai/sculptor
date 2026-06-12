@@ -1,0 +1,76 @@
+.header {
+  // Top-align so the aside stays pinned to the top-right when the title
+  // wraps to multiple lines.
+  align-items: flex-start;
+  background: var(--color-panel-translucent);
+  border-bottom: 1px solid var(--gray-a4);
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+}
+
+.title {
+  color: var(--gray-12);
+  // basis 0 — title takes the space the aside doesn't claim. min-width: 0
+  // lets long content break instead of forcing the title to overflow.
+  flex: 1 1 0;
+  font-size: var(--font-size-1);
+  line-height: 1.4;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.aside {
+  align-items: center;
+  display: flex;
+  // Pinned: meta + actions never shrink and never wrap to a new row below
+  // the title. Tools that have *content* belonging in the title (e.g. a
+  // search path) should put it there, not in meta, so this stays small.
+  flex-shrink: 0;
+  gap: var(--space-2);
+}
+
+.meta {
+  color: var(--gray-9);
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  line-height: 1.4;
+}
+
+.actions {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-1);
+}
+
+// ─── Title role classes ──────────────────────────────────────────────────────
+//
+// Shared typography roles for content placed inside `<PopoverHeader title={…}>`.
+// PopoverHeader's default title style is a sans-serif "label" (descriptions,
+// tool names). When the title is a code identifier (file path, command,
+// pattern, URL), wrap it in `titleCode` so typography stays consistent
+// across popovers. Use `titleConnector` for connector words like " in ".
+//
+// `overflow-wrap: anywhere` lets long values break across lines instead of
+// being truncated — popovers are not full-bleed surfaces, so a wrapped path
+// is more readable than an ellipsized one.
+
+.titleCode {
+  // No explicit color — inherit from the wrapping context. Inside the
+  // popover header `.title` (gray-12) it still reads as strong contrast;
+  // inside the expanded chat row's `.rowTitle` (gray-11) it dims to a
+  // quieter summary tone without us having to swap class names per use.
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  overflow-wrap: anywhere;
+}
+
+// Connector word inside a title (e.g. the " in " between a Grep pattern
+// and its path). Lower contrast and monospace-matching so the connector
+// recedes and the surrounding code identifiers carry the visual weight.
+.titleConnector {
+  color: var(--gray-9);
+  font-family: var(--code-font-family);
+}

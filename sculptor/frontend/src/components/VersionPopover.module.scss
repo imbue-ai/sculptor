@@ -1,0 +1,50 @@
+@use "scrollbar" as *;
+
+.trigger {
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.content {
+  max-height: var(--radix-popover-content-available-height);
+  max-width: min(600px, var(--radix-popover-content-available-width));
+  min-width: 220px;
+  overflow-y: auto;
+  width: max-content;
+
+  @include thin-scrollbar($autohide: false);
+}
+
+.details {
+  background: var(--accent-3);
+  border-radius: var(--radius-2);
+  padding: var(--space-2);
+}
+
+.value {
+  font-family: var(--mono-font-family);
+  overflow-wrap: break-word;
+  text-align: right;
+  word-break: break-all;
+}
+
+.updateDot {
+  background-color: var(--accent-9);
+  border-radius: 50%;
+  display: inline-block;
+  height: 6px;
+  margin-left: var(--space-1);
+  vertical-align: middle;
+  width: 6px;
+}
+
+.closeButton {
+  color: var(--gray-11);
+
+  &:hover {
+    background-color: var(--gray-a3);
+  }
+}

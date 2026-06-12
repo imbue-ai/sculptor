@@ -1,0 +1,128 @@
+@use "scrollbar" as *;
+
+.popover {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  max-height: inherit;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.header {
+  align-items: center;
+  border-bottom: 1px solid var(--gray-a4);
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-5);
+  height: 32px;
+  justify-content: space-between;
+  overflow: hidden;
+  padding: 0 var(--space-3);
+}
+
+.headerLeft {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.filePath {
+  display: flex;
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  min-width: 0;
+}
+
+.filePathDir {
+  color: var(--gray-a9);
+  direction: rtl;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filePathSep {
+  color: var(--gray-a9);
+  flex-shrink: 0;
+}
+
+.filePathBase {
+  color: var(--gray-12);
+  flex-shrink: 0;
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+
+.headerRight {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-2);
+}
+
+.headerActions {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+}
+
+.headerActionButton {
+  opacity: 50%;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.headerActionButton:hover {
+  opacity: 100%;
+}
+
+.newFileBadge {
+  background: var(--green-a3);
+  border-radius: var(--radius-1);
+  color: var(--green-11);
+  flex-shrink: 0;
+  font-size: var(--font-size-1);
+  padding: 1px var(--space-1);
+}
+
+.failedLabel {
+  color: var(--red-11);
+  flex-shrink: 0;
+  font-weight: var(--font-weight-medium);
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  position: relative;
+
+  @include thin-scrollbar;
+}
+
+.bodyError {
+  background: var(--red-a2);
+  padding: var(--space-3);
+}
+
+.headerError {
+  background: var(--red-a2);
+}
+
+.errorDetail {
+  color: var(--gray-12);
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.errorFallback {
+  color: var(--gray-a9);
+  font-size: var(--font-size-1);
+  font-style: italic;
+}

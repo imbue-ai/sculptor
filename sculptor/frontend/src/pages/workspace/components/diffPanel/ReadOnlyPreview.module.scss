@@ -1,0 +1,71 @@
+@use "scrollbar" as *;
+
+.wrapper {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.container {
+  background-color: light-dark(var(--color-panel-solid), var(--color-background));
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+
+  @include thin-scrollbar;
+}
+
+// Layout for the rendered-markdown view. GFM features need a few extra rules
+// because the browser default for `<table>` has no borders, `<input
+// type=checkbox>` inside a `<li>` keeps the bullet, and the global
+// `code { … }` rule in `src/index.css` gives every `<code>` an inline-pill
+// border / padding / background — fine for inline code but turns a
+// multi-line fenced block into a single weirdly-styled inline blob.
+.markdownBody {
+  table {
+    border-collapse: collapse;
+    margin: 0.75em 0;
+  }
+
+  th,
+  td {
+    border: 1px solid var(--gray-6);
+    padding: 0.4em 0.75em;
+    text-align: left;
+  }
+
+  thead th {
+    background-color: var(--gray-3);
+    font-weight: var(--font-weight-bold);
+  }
+
+  // GFM emits `<li class="task-list-item"><input type="checkbox" disabled>`.
+  // The class name is fixed by mdast-util-to-hast, so target via attribute.
+  li[class~="task-list-item"] {
+    list-style: none;
+    margin-left: -1em;
+
+    input[type="checkbox"] {
+      margin-right: 0.5em;
+    }
+  }
+
+  // Give `<pre>` its own block container and strip the inline-code styling
+  // off the nested `<code>` so a fenced block looks like a block.
+  pre {
+    background-color: var(--gray-3);
+    border-radius: var(--radius-2);
+    margin: 0.5em 0;
+    overflow-x: auto;
+    padding: 0.75em 1em;
+
+    code {
+      background: none;
+      border: none;
+      border-radius: 0;
+      font-size: var(--font-size-1);
+      padding: 0;
+    }
+  }
+}

@@ -1,0 +1,30 @@
+.readOnlyField {
+  background: var(--gray-4);
+  border-radius: var(--radius-3);
+  color: var(--gray-11);
+  cursor: pointer;
+  height: 32px;
+  padding: var(--space-2) var(--space-3);
+
+  &:hover {
+    background: var(--gray-5);
+  }
+}
+
+.readOnlyFieldNonEditable {
+  background: var(--gray-4);
+  border-radius: var(--radius-3);
+  color: var(--gray-11);
+  cursor: text;
+  height: 32px;
+  padding: var(--space-2) var(--space-3);
+}
+
+.textField {
+  height: 32px;
+  width: 100%;
+}
+
+.unsetValue {
+  font-style: italic;
+}

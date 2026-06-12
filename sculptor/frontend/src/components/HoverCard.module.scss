@@ -1,0 +1,13 @@
+.content {
+  border-radius: var(--radius-1);
+  box-shadow: var(--shadow-2);
+  padding: 0;
+
+  // Suppress Radix's default enter/exit fade-scale. The shared hover-group
+  // already opens sibling popovers instantly; animating the content on top
+  // of that added a visible lag when sliding between adjacent chips.
+  &:where([data-state="open"]),
+  &:where([data-state="closed"]) {
+    animation: none;
+  }
+}

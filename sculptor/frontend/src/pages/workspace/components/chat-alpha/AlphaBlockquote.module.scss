@@ -1,0 +1,41 @@
+.blockquoteOuter {
+  margin: 0.75em 0;
+  position: relative;
+}
+
+.blockquote {
+  border-left: 1px solid var(--accent-8);
+  color: var(--gray-11);
+  font-style: italic;
+  margin: 0;
+  padding: 0.5em 1em;
+
+  p {
+    margin: 0.25em 0;
+  }
+}
+
+.copyButton {
+  background-color: var(--gray-2);
+  bottom: var(--space-1);
+  cursor: pointer;
+  opacity: 0%;
+  padding: 2px;
+  position: absolute;
+  right: var(--space-1);
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+// `!important` overrides `.blockquoteOuter:hover .copyButton`, which would
+// otherwise win on specificity and pin the button at 50% on direct hover.
+.copyButton:hover {
+  opacity: 100% !important;
+}
+
+.blockquoteOuter:hover .copyButton {
+  opacity: 50%;
+}
+
+.blockquoteOuter .blockquoteOuter .copyButton {
+  display: none;
+}

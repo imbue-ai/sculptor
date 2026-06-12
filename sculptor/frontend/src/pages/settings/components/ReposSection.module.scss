@@ -1,0 +1,30 @@
+.reposSection {
+  width: 100%;
+}
+
+.reposList {
+  margin-bottom: 0;
+}
+
+.separator {
+  background-color: var(--gray-4);
+  margin: var(--space-4) 0;
+}
+
+.emptyState {
+  color: var(--gray-11);
+  padding: var(--space-8);
+  text-align: center;
+}
+
+.openNewButton {
+  display: inline-flex !important;
+  width: fit-content !important;
+}
+
+.loadingState {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  padding: var(--space-8);
+}

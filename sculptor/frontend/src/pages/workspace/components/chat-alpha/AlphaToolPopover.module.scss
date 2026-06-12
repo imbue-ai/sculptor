@@ -1,0 +1,73 @@
+@use "scrollbar" as *;
+
+.popover {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  max-height: inherit;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+
+  @include thin-scrollbar;
+}
+
+// ─── Entry ────────────────────────────────────────────────────────────────────
+
+// Each entry is a PopoverHeader (with its own padding) plus an optional body.
+// No surrounding padding here — the header and body each style themselves.
+.entry {
+  display: flex;
+  flex-direction: column;
+}
+
+.entryActionButton {
+  opacity: 50%;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.entryActionButton:hover {
+  opacity: 100%;
+}
+
+.entryBody {
+  color: var(--gray-12);
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  margin: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-3);
+  white-space: pre-wrap;
+  word-break: break-word;
+
+  @include thin-scrollbar;
+}
+
+.entryBodyTerminal {
+  background: var(--gray-a3);
+}
+
+.entryBodyError {
+  background: var(--red-a3);
+  color: var(--red-12);
+}
+
+// Description shown above a command in an entry's title slot. Matches the
+// shared `.titleCode` typography (same monospace family + font-size-1 +
+// gray-12 color); only `display: block` differs so the description sits
+// on its own line above the command. Used by Bash and Monitor entries.
+.entryDescription {
+  color: var(--gray-12);
+  display: block;
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  line-height: 1.4;
+  margin-bottom: var(--space-1);
+  overflow-wrap: anywhere;
+}

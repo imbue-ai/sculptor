@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Browser panel fixture - cookie</title>
+  </head>
+  <body>
+    <h1 data-testid="browser-panel-fixture-cookie">Hello from cookie</h1>
+    <pre id="cookie-value"></pre>
+    <script>
+      const params = new URLSearchParams(location.search);
+      const value = params.get("v");
+      if (value !== null) {
+        document.cookie = "btest=" + value + "; path=/";
+      }
+      document.getElementById("cookie-value").textContent = document.cookie;
+    </script>
+  </body>
+</html>

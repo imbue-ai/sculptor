@@ -1,0 +1,73 @@
+# Offload configuration for integration tests (Playwright/Chromium).
+# Run with: just test-offload
+#
+# Uses checkpoint-based image caching via git notes. The Dockerfile copies
+# source and installs deps; the resulting image is snapshotted as a checkpoint.
+# Subsequent runs apply only a thin diff of changed files.
+
+[offload]
+max_parallel = 200
+test_timeout_secs = 900
+stream_output = true
+sandbox_project_root = "/app/sculptor"
+sandbox_repo_root = "/app"
+# Finalize the cached base image: install deps, write tool stubs, seed
+# /tmp/repo. All of this lives in scripts/finalize-base-image.sh so it
+# can be a real bash script (with comments and structure) instead of an
+# escaped shell one-liner. Per-run regeneration of derived artifacts
+# (frontend api client + bundle, sculpt CLI client) lives in
+# post_patch_cmd below, which runs after the thin-diff applies.
+sandbox_init_cmd = "bash /app/scripts/finalize-base-image.sh"
+post_patch_cmd = "export PATH=/root/.nvm/versions/node/v${NODE_VERSION}/bin:$PATH && cd /app/sculptor/frontend && npm run generate-api && npm run build && cd /app && just generate-sculpt-client"
+
+[provider]
+type = "modal"
+dockerfile = ".devcontainer/Dockerfile"
+include_cwd = false
+
+# Env vars for the test harness. Note: real_claude / real_pi tests are filtered
+# out of every group below, so no host ANTHROPIC_API_KEY is needed — the
+# harness sets a hidden placeholder via get_testing_environment().
+[provider.env]
+SESSION_TOKEN = ""
+PROJECT_PATH = "/tmp/repo"
+GOOGLE_API_KEY = "fake"
+
+# Integration tests need playwright, a frontend build, and special env setup.
+[framework]
+type = "pytest"
+command = "uv run --project sculptor pytest"
+paths = ["sculptor/tests/integration/"]
+run_args = "-p no:xdist"
+
+[groups.stable]
+retry_count = 1
+filters = "-m 'not real_claude and not real_pi and not isolated'"
+
+[groups.isolated]
+retry_count = 1
+schedule_individual = true
+filters = "-m 'isolated and not real_claude and not real_pi'"
+
+[checkpoint]
+build_inputs = [
+    ".devcontainer/Dockerfile",
+    ".dockerignore",
+    ".github/workflows/offload.yml",
+    "offload.toml",
+    "scripts/finalize-base-image.sh",
+    "pyproject.toml",
+    "sculptor/pyproject.toml",
+    "imbue_core/pyproject.toml",
+    "sculptor/frontend/package.json",
+    "uv.lock",
+]
+
+[history]
+record_history = "flag"
+
+[report]
+output_dir = "test-results"
+junit = true
+junit_file = "junit-integration.xml"
+download_globs = ["test-results/**"]

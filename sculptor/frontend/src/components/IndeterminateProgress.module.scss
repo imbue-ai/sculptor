@@ -1,0 +1,41 @@
+@keyframes indeterminateShimmer {
+  from {
+    background-position: 0 0;
+  }
+
+  to {
+    background-position: 480px 0;
+  }
+}
+
+// Heights mirror Radix Progress sizing: size 1 = --space-1, size 2 = 0.75 * --space-2,
+// size 3 = --space-2. Border-radius matches Radix Progress so the form factor matches.
+.root {
+  animation: indeterminateShimmer 2.4s linear infinite;
+  background-color: var(--accent-a3);
+  background-image: linear-gradient(90deg, transparent 0%, var(--accent-9) 50%, transparent 100%);
+  background-repeat: repeat;
+  background-size: 480px 100%;
+  width: 100%;
+}
+
+.size1 {
+  border-radius: max(calc(var(--space-1) / 3), var(--radius-1));
+  height: var(--space-1);
+}
+
+.size2 {
+  border-radius: max(calc(var(--space-2) * 0.25), var(--radius-1));
+  height: calc(var(--space-2) * 0.75);
+}
+
+.size3 {
+  border-radius: max(calc(var(--space-2) / 3), var(--radius-1));
+  height: var(--space-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .root {
+    animation: none;
+  }
+}

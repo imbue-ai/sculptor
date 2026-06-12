@@ -1,0 +1,147 @@
+/* =============================================================================
+   DESIGN TOKENS
+   Custom design values for the Sculptor frontend that supplement Radix UI's
+   built-in token system.
+
+   For spacing, font sizes, border radius, and colors, use Radix's built-in
+   variables directly (e.g., --space-*, --font-size-*, --radius-*, --gray-*).
+   See: https://www.radix-ui.com/themes/docs/theme/spacing
+
+   This file defines tokens for things Radix does NOT provide:
+   animation timing, z-index scale, shadows, and semantic colors.
+   ============================================================================= */
+
+/* =============================================================================
+   TYPOGRAPHY SUPPLEMENTS
+   Tokens for values Radix does not provide.
+   ============================================================================= */
+
+:root {
+  --font-weight-semibold: 600;
+}
+
+.radix-themes {
+  --font-size-1-5: calc(13px * var(--scaling));
+}
+
+/* =============================================================================
+   ANIMATION TIMING
+   ============================================================================= */
+
+:root {
+  --duration-fast: 100ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+  --duration-slower: 500ms;
+
+  --ease-default: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* =============================================================================
+   Z-INDEX SCALE
+   Defined stacking contexts to prevent z-index conflicts.
+   ============================================================================= */
+
+:root {
+  --z-base: 0;
+  --z-above: 1;
+  --z-dropdown: 10;
+  --z-sticky: 100;
+  --z-modal: 1000;
+  --z-popover: 2000;
+  --z-tooltip: 3000;
+  --z-toast: 4000;
+  --z-max: 2147483647;
+}
+
+/* =============================================================================
+   SCROLLBAR
+   Apply these via the mixins in styles/_scrollbar.scss:
+     @use "scrollbar" as *;
+     .myScroll { overflow: auto; @include thin-scrollbar; }
+
+   Note: the color tokens live on `.radix-themes` (not `:root`) so that they
+   are defined in the same scope as `--gray-a*`. Webkit scrollbar pseudo-
+   elements don't reliably resolve a nested var() chain when the middleman
+   variable is on an ancestor outside that scope.
+   ============================================================================= */
+
+:root {
+  --scrollbar-size: 4px;
+  --scrollbar-size-thin: 4px;
+  --scrollbar-thumb-radius: var(--radius-1);
+}
+
+.radix-themes {
+  --scrollbar-thumb-color: var(--gray-a8);
+  --scrollbar-thumb-color-hover: var(--gray-a9);
+}
+
+/* =============================================================================
+   SHADOWS
+   ============================================================================= */
+
+:root {
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.15);
+  --shadow-xl: 0 8px 16px rgba(0, 0, 0, 0.2);
+  --shadow-overlay: 0 4px 16px rgba(0, 0, 0, 0.28);
+}
+
+/* =============================================================================
+   SEMANTIC COLORS
+   Application-specific color tokens that supplement Radix theme colors.
+   ============================================================================= */
+
+.radix-themes {
+  /* Terminal colors */
+  --terminal-bg: var(--gray-1);
+  --terminal-text: var(--gray-12);
+  --terminal-border: var(--gray-6);
+
+  /* Button colors */
+  --button-primary-bg: var(--indigo-9);
+  --button-primary-bg-hover: var(--indigo-a10);
+
+  /* Code syntax colors (light theme) */
+  --code-syntax-color: rgb(192, 19, 67);
+
+  /* Lightbox navigation buttons */
+  --lightbox-nav-bg: var(--black-a9);
+  --lightbox-nav-bg-hover: var(--black-a11);
+  --lightbox-nav-color: white;
+}
+
+/* =============================================================================
+   THEME SWITCH TRANSITION SUPPRESSION
+   Applied momentarily during light/dark toggle to prevent CSS transitions
+   from animating between old and new theme colors.
+   ============================================================================= */
+
+.theme-switching,
+.theme-switching * {
+  transition: none !important;
+}
+
+/* Dark theme overrides */
+.dark,
+.dark-theme {
+  --terminal-bg: #1a1814;
+  --terminal-text: #e6e2dc;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.3);
+  --shadow-xl: 0 8px 16px rgba(0, 0, 0, 0.4);
+  --shadow-overlay: 0 4px 16px rgba(0, 0, 0, 0.5);
+
+  --code-syntax-color: #e8912d;
+
+  --lightbox-nav-bg: var(--white-a9);
+  --lightbox-nav-bg-hover: var(--white-a11);
+  --lightbox-nav-color: black;
+}

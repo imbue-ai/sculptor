@@ -1,0 +1,217 @@
+// Expanded tool-call row. Inline alternative to the comma-separated pill
+// row — one row per call, with the icon + tool name leading and the
+// popover-header content (title / meta / actions) inlined to the right.
+// `align-items: flex-start` keeps the leading column and aside pinned to
+// the top edge when the title wraps to multiple lines.
+//
+// `line-height: 1.4` set on the row root so every text descendant
+// (leading label, title, meta) shares the same line-box height — that's
+// what keeps their baselines flush across columns.
+.row {
+  align-items: flex-start;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-1);
+  color: var(--gray-11);
+  cursor: pointer;
+  display: flex;
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  // gap is space-1 — the `·` separators inside the leading column and the
+  // bash title are the visual dividers between segments, so the column
+  // gaps just need to provide breathing room. A tight gap lets the row
+  // read as a continuous summary line rather than a fixed column grid.
+  gap: var(--space-1);
+  line-height: 1.4;
+  padding: var(--space-1);
+  text-align: left;
+  transition: background var(--duration-fast) ease;
+  width: 100%;
+}
+
+.row:hover,
+.row:focus-visible {
+  background: var(--gray-a3);
+  color: var(--gray-12);
+  outline: none;
+}
+
+.rowOpen,
+.rowOpen:hover,
+.rowOpen:focus-visible {
+  background: var(--accent-a3);
+  color: var(--accent-11);
+}
+
+.rowError {
+  color: var(--red-11);
+}
+
+// Leading column sizes to its content (icon + tool name + `·`). No
+// fixed/min width — short names like "Bash" pack tightly against their
+// title; long names like "NotebookEdit" expand naturally for that row.
+// The `·` separator carries the visual divide between leading and title.
+.rowLeading {
+  align-items: baseline;
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: var(--space-1);
+}
+
+// Middle-dot separator between the tool name and the title. gray-9 keeps
+// it quiet — it's a typographic cue, not a glyph that should grab focus.
+.rowSeparator {
+  color: var(--gray-9);
+  user-select: none;
+}
+
+// Vertically center the icon on the row's flex line, then nudge it up
+// 1px so its geometric center reads as aligned with the *optical*
+// cap-mid of the surrounding monospace text (which sits a hair above
+// the line's geometric center because of the font's ascender/descender
+// asymmetry). Without this nudge the icon looks slightly low next to
+// the leading "Bash" label.
+.rowIcon {
+  align-self: center;
+  color: var(--gray-9);
+  display: block;
+  flex-shrink: 0;
+  height: 12px;
+  transform: translateY(-1px);
+  width: 12px;
+}
+
+.rowOpen .rowIcon {
+  color: var(--accent-11);
+}
+
+.rowError .rowIcon {
+  color: var(--red-11);
+}
+
+.rowLabel {
+  color: inherit;
+}
+
+.rowLabelError {
+  color: var(--red-11);
+}
+
+.rowTitle {
+  // gray-11 (one step softer than gray-12) so the row reads as a quick-scan
+  // summary line and doesn't compete with body text in chat. The popover
+  // itself still uses gray-12 for its header, so the title gets full
+  // contrast when actively focused.
+  color: var(--gray-11);
+  // basis 0 — title takes the space the leading column and aside don't claim.
+  // min-width: 0 lets long content break instead of forcing overflow.
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rowOpen .rowTitle {
+  color: var(--accent-12);
+}
+
+// Aside (meta + actions) shares the row's baseline so the duration sits
+// flush with the title and label text instead of riding above them.
+// Extra inline-start margin opens up a clear gutter between the title's
+// trailing content (e.g. a long bash command) and the duration meta, so
+// the timer doesn't crowd against the command's right edge.
+.rowAside {
+  align-items: baseline;
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-2);
+  margin-inline-start: var(--space-4);
+}
+
+.rowMeta {
+  color: var(--gray-9);
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+}
+
+// Command-style row title (used by Bash and Monitor — both have a
+// `description` + `command` shape on their input block):
+// `[description]                [command]`, locked to a single line.
+// Description anchors to the left of the title slot, command anchors to
+// the right; the wide gap (--space-8) sets a minimum buffer between them
+// while flex-grow on the command lets it consume any extra width in the
+// title slot. The command is the only piece of content that may be lossy
+// — the description, leading tool label, and duration meta on the right
+// all stay fully readable.
+.commandTitle {
+  align-items: baseline;
+  display: flex;
+  gap: var(--space-8);
+  // min-width: 0 lets the flex container shrink below its content's
+  // intrinsic width, which is what allows the command child below to
+  // actually truncate instead of forcing the row wider.
+  min-width: 0;
+  width: 100%;
+}
+
+// Description: takes its natural width, never wraps, never truncates.
+// Long-form descriptions push the command's available space down — the
+// command absorbs the squeeze.
+.commandDescription {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+// Shell-prompt `$` glyph leading the command. Lighter than the command
+// itself (gray-8 vs the command's gray-9) so it reads as a typographic
+// cue and doesn't compete with the command text for attention.
+.commandPrompt {
+  color: var(--gray-8);
+  user-select: none;
+}
+
+// Command: takes whatever the description leaves and truncates from the
+// right with an ellipsis when the row is tight. `flex-basis: 0` plus
+// `flex-grow: 1` makes it greedy for leftover space; `min-width: 0`
+// lets the flex algorithm shrink it past its content's intrinsic width
+// so the ellipsis kicks in. `text-align: right` anchors short commands
+// to the right edge of the title slot — the trail span fills the
+// leftover row width, and the text within hugs that span's right edge.
+.commandTrail {
+  color: var(--gray-9);
+  flex: 1 1 0;
+  font-family: var(--code-font-family);
+  min-width: 0;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes statusDotPulse {
+  0%,
+  100% {
+    opacity: 30%;
+  }
+
+  50% {
+    opacity: 100%;
+  }
+}
+
+// Pulsing executing indicator for command-style rows. Matches the pill
+// version's width so the label position is identical between idle and
+// executing states.
+.statusDot {
+  align-self: center;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+  height: 6px;
+  margin: 0 3px;
+  width: 6px;
+}
+
+.statusDotPulsing {
+  animation: statusDotPulse 1s ease-in-out infinite;
+  background: var(--accent-11);
+}

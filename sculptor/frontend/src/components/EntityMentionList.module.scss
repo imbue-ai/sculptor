@@ -1,0 +1,75 @@
+// Row-internal styles for the entity picker. The surrounding list shell
+// (popover background, scroll area, section-header row padding) lives in
+// `SuggestionListContainer` — only the bits a caller can customise via the
+// `renderItem` callback stay here. Mirrors the file/folder picker's row
+// shape (icon + name + secondary) so the two pickers feel of a piece.
+
+.sectionHeader {
+  color: var(--gray-9);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.05em;
+  padding: var(--space-1) var(--space-2);
+  text-transform: uppercase;
+  user-select: none;
+  width: 100%;
+}
+
+.icon {
+  align-self: center;
+  flex-shrink: 0;
+  height: calc(1em - 1px);
+  width: calc(1em - 1px);
+}
+
+.name {
+  font-size: var(--font-size-1-5);
+  font-weight: var(--font-weight-medium);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.highlight {
+  font-weight: var(--font-weight-bold);
+}
+
+// Trailing slot that holds the optional subtitle and the optional chevron.
+// Wrapping them lets `margin-left: auto` live on a single element so the
+// pair always pins the row's right edge, even when only one of the two is
+// rendered.
+.tail {
+  align-items: center;
+  display: flex;
+  flex-shrink: 1;
+  gap: var(--space-1);
+  margin-left: auto;
+  min-width: 0;
+}
+
+.subtitle {
+  color: var(--gray-9);
+  font-size: var(--font-size-1);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// Trailing chevron on workspace rows. Folder-style affordance: hints that
+// Tab drills into the workspace to surface its agents. Sized like the
+// leading icon and tinted to read as muted chrome rather than primary text.
+.chevron {
+  color: var(--gray-9);
+  flex-shrink: 0;
+  height: calc(1em - 1px);
+  width: calc(1em - 1px);
+}
+
+.emptyState {
+  color: var(--gray-9);
+  font-size: var(--font-size-1);
+  font-style: italic;
+  padding: var(--space-2);
+}

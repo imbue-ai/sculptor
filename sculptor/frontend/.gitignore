@@ -1,0 +1,46 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+.vite/
+src/api.generated.schemas.ts
+src/api.generated.ts
+src/api
+out/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+sculptor_schema.json
+package-lock.json
+generated-*.ts
+
+# Lint caches
+.stylelintcache
+
+# Test coverage output
+coverage/
+
+*storybook.log
+storybook-static/
+
+# App signing secrets
+config/*.p8
+config/*.p12

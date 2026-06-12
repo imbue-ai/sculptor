@@ -1,0 +1,106 @@
+.row {
+  align-items: center;
+  border-radius: var(--radius-3);
+  cursor: pointer;
+  display: flex;
+  gap: var(--space-2);
+  line-height: 1;
+  min-height: 24px;
+  padding: var(--space-3) var(--space-3);
+  user-select: none;
+
+  &:hover,
+  &.focused {
+    background: var(--accent-a2);
+
+    .repo,
+    .deleteButton {
+      opacity: 100%;
+    }
+  }
+}
+
+.dot {
+  flex-shrink: 0;
+  opacity: var(--ws-dot-opacity);
+  transition: opacity var(--duration-slow) var(--ease-in-out) var(--ws-transition-delay);
+  width: 16px;
+  will-change: opacity;
+}
+
+.leftGroup {
+  display: flex;
+  flex: 1;
+  gap: var(--space-2);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.name {
+  color: var(--ws-name-color);
+  flex-shrink: 0;
+  font-size: var(--font-size-1-5);
+  font-weight: var(--font-weight-medium);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color var(--duration-slow) var(--ease-in-out) var(--ws-transition-delay);
+  white-space: nowrap;
+  will-change: color;
+}
+
+.branch {
+  color: var(--ws-branch-color);
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color var(--duration-slow) var(--ease-in-out) var(--ws-transition-delay);
+  white-space: nowrap;
+  will-change: color;
+}
+
+.rightGroup {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-2);
+}
+
+.prButton {
+  flex-shrink: 0;
+}
+
+.time {
+  color: var(--ws-time-color);
+  font-size: var(--font-size-1);
+  text-align: right;
+  transition: color var(--duration-slow) var(--ease-in-out) var(--ws-transition-delay);
+  white-space: nowrap;
+  width: 60px;
+}
+
+/* stylelint-disable no-descending-specificity -- opacity toggled by parent .row hover */
+
+.deleteButton {
+  opacity: 0%;
+  transition: opacity var(--duration-slow) var(--ease-out);
+
+  &:hover {
+    color: var(--red-9);
+  }
+}
+
+.repo {
+  color: var(--gray-9);
+  font-size: var(--font-size-1);
+  opacity: 0%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity var(--duration-slow) var(--ease-out);
+  white-space: nowrap;
+  width: 80px;
+}
+
+/* stylelint-enable no-descending-specificity */

@@ -1,0 +1,192 @@
+.rail {
+  align-items: center;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- statically aligned with the bottom border of the prompt input (accounts for KeyboardHint row + ChatInput container padding)
+  bottom: 40px;
+  display: flex;
+  flex-direction: column;
+  left: var(--space-2);
+  opacity: 45%;
+  pointer-events: auto;
+  position: absolute;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- smoother ease-out-quint curve for rail slide
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), opacity var(--duration-normal) ease-in-out;
+  will-change: transform;
+  z-index: 5;
+
+  &:hover {
+    opacity: 100%;
+  }
+
+  @container (max-width: 800px) {
+    // stylelint-disable-next-line sculptor/no-hardcoded-values -- small negative inset pulls the rail away from the user message on narrow panels
+    left: -6px;
+  }
+}
+
+.railPopoverOpen {
+  opacity: 100%;
+}
+
+.dot {
+  background: var(--accent-7);
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- no matching radius token for 1px
+  border-radius: 1px;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- rectangular dot shape matching end marker
+  height: 4px;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- no matching duration token for 0.15s
+  transition: transform 0.15s ease, background 0.15s ease;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- 30% wider than original 12px
+  width: 16px;
+}
+
+.dotWrapper:hover .dot {
+  background: var(--accent-9);
+  transform: scaleX(1.17);
+}
+
+.dotActive {
+  background: var(--accent-9);
+  transform: scaleX(1.17);
+}
+
+.dotWrapper {
+  align-items: center;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- entry animation for new dots
+  animation: dotEnter 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- 12px horizontal grace zone extends the hover target beyond the visible dot
+  padding: 2px 12px;
+  position: relative;
+
+  &:focus,
+  &:focus-visible {
+    outline: none;
+  }
+}
+
+@keyframes dotEnter {
+  from {
+    opacity: 0%;
+    transform: scale(0.4);
+  }
+
+  to {
+    opacity: 100%;
+    transform: scale(1);
+  }
+}
+
+.collapsedIndicator {
+  color: var(--accent-9);
+  cursor: default;
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.02em;
+  line-height: 1;
+  padding: var(--space-1) 0;
+  text-align: center;
+}
+
+.collapsedIndicatorClickable {
+  cursor: pointer;
+
+  &:hover {
+    color: var(--accent-11);
+  }
+}
+
+.popoverHitArea {
+  left: 0;
+  position: fixed;
+  top: 0;
+  // Anchor to the left side, vertically centered on the hovered dot.
+  translate: 0 -50%;
+  will-change: transform;
+  z-index: var(--z-tooltip);
+}
+
+.popover {
+  background: var(--color-panel-solid);
+  border-radius: var(--radius-3);
+  box-shadow: var(--shadow-2);
+  color: var(--gray-12);
+  max-width: 260px;
+  min-width: 180px;
+  overflow: hidden;
+  padding: var(--space-2) var(--space-3);
+  white-space: normal;
+}
+
+.popoverAnimated {
+  transition: transform var(--duration-fast) ease-out;
+}
+
+.popoverHeader {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--space-1);
+}
+
+.popoverLabel {
+  color: var(--accent-9);
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- no matching font-size token for 10px
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.popoverCopyButton {
+  color: var(--accent-9);
+  cursor: pointer;
+  opacity: 50%;
+  transition: opacity var(--duration-normal) ease-in-out;
+
+  &:hover {
+    color: var(--accent-11);
+    opacity: 100%;
+  }
+}
+
+.popoverText {
+  -webkit-box-orient: vertical;
+  display: -webkit-box;
+  font-size: var(--font-size-2);
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- compact clamp keeps the preview from dominating the chat
+  -webkit-line-clamp: 8;
+  line-height: 1.4;
+  overflow: hidden;
+
+  // The popover routes markdown through MarkdownBlock, which wraps text in
+  // <p>/<h*>/<blockquote>/code-block wrappers; the default vertical margins
+  // on those tags would both waste preview space and confuse the line-clamp's
+  // line count. Strip margins on every block-level child so the clamp counts
+  // text lines, not gaps. MarkdownBlock substitutes a code fence with
+  // <div class="codeBlockWrapper"> (not a <pre>) and uses <hr> for ---, both
+  // of which carry 1em+ margins from MarkdownBlock.module.scss — match them
+  // by class fragment (CSS modules hash the class) and by tag.
+  p,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  blockquote,
+  ul,
+  ol,
+  hr,
+  [class*="codeBlockWrapper"] {
+    margin: 0;
+  }
+
+  // The code-block wrapper carries its own "Copy code" IconButton, which
+  // overlaps the popover's own "Copy prompt" button and confuses the preview
+  // affordance — hide it so the popover's single copy button is the only
+  // interactive surface.
+  [class*="codeBlockCopyButton"] {
+    display: none;
+  }
+}

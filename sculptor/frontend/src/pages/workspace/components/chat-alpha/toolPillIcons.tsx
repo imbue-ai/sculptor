@@ -1,0 +1,42 @@
+import {
+  Activity,
+  Bot,
+  FileText,
+  FolderOpen,
+  Globe,
+  ListPlus,
+  type LucideIcon,
+  Notebook,
+  NotebookPen,
+  Pencil,
+  PencilLine,
+  Search,
+  Sparkles,
+  SquareTerminal,
+  TextSearch,
+  Wrench,
+} from "lucide-react";
+
+const TOOL_ICONS: Record<string, LucideIcon> = {
+  Bash: SquareTerminal,
+  Monitor: Activity,
+  Read: FileText,
+  Write: FileText,
+  Edit: Pencil,
+  MultiEdit: Pencil,
+  Glob: Search,
+  Grep: TextSearch,
+  LS: FolderOpen,
+  WebFetch: Globe,
+  WebSearch: Globe,
+  TaskCreate: ListPlus,
+  TaskUpdate: PencilLine,
+  ToolSearch: Wrench,
+  Skill: Sparkles,
+  NotebookRead: Notebook,
+  NotebookEdit: NotebookPen,
+  Task: Bot,
+  Agent: Bot,
+};
+
+export const getToolIcon = (toolName: string): LucideIcon => TOOL_ICONS[toolName] ?? Wrench;

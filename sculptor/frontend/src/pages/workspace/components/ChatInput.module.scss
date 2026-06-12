@@ -1,0 +1,82 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  margin: 0 auto;
+  // Cap at half the chat panel so the input can never crowd out the message
+  // area. The flex-shrink chain below (min-height: 0 down to the Editor's
+  // scrollArea) lets the editor compress and scroll internally past this cap.
+  max-height: 50%;
+  min-height: 0;
+  overflow: visible;
+  position: relative;
+  width: calc(min(86%, calc(var(--main-content-width) * 86 / 80)));
+}
+
+.unifiedContainer {
+  background: var(--accent-1);
+  border: 2px solid var(--accent-6);
+  border-radius: var(--radius-4);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+
+  &:focus-within {
+    border-color: var(--accent-8);
+  }
+}
+
+.unifiedContainerDisabled {
+  background: var(--gray-3);
+  border-color: var(--gray-6);
+  cursor: not-allowed;
+  opacity: 60%;
+
+  &:focus-within {
+    border-color: var(--gray-6);
+  }
+}
+
+.editorInner {
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.toolbar {
+  --send-button-disabled-bg: var(--accent-5);
+
+  min-height: 40px;
+  padding: 0 var(--space-3) var(--space-3) var(--space-4);
+}
+
+.separator {
+  background: var(--accent-6);
+  height: 20px;
+  margin: 0 var(--space-1);
+  width: 1px;
+}
+
+.dragging {
+  border-color: var(--accent-9);
+  box-shadow: 0 0 0 3px var(--accent-5), 0 0 12px var(--accent-6);
+}
+
+.dragOverlay {
+  align-items: center;
+  background: var(--accent-a3);
+  border-radius: var(--radius-4);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  position: absolute;
+  z-index: 5;
+}
+
+.dragOverlayText {
+  color: var(--accent-11);
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-medium);
+}

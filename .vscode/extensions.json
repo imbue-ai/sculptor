@@ -1,0 +1,21 @@
+{
+  "recommendations": [
+    // Includes Pylance, Debugger
+    "ms-python.python",
+    "ms-toolsai.jupyter",
+    //
+    // if in vscode, not cursor
+    "GitHub.copilot",
+    //
+    // Used to trigger rsync.toNotebook
+    "Gruntfuggly.triggertaskonsave",
+    //
+    "charliermarsh.ruff",
+    //
+    // CI-compliant type checking
+    "pyre-check.pyre-check",
+    //
+    // For having VSCode source .envrc
+    "cab404.vscode-direnv",
+  ]
+}

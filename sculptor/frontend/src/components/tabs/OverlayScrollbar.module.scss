@@ -1,0 +1,24 @@
+.track {
+  bottom: 0;
+  cursor: pointer;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- match scrollbar height
+  height: 4px;
+  left: 0;
+  opacity: 0%;
+  position: absolute;
+  right: 0;
+  transition: opacity var(--duration-fast);
+}
+
+.thumb {
+  background-color: var(--gray-a3);
+  border-radius: var(--radius-1);
+  cursor: grab;
+  height: 100%;
+  position: absolute;
+  top: 0;
+
+  &:active {
+    cursor: grabbing;
+  }
+}

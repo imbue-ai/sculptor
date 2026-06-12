@@ -1,0 +1,89 @@
+// Shared layout for the three mention detail panes.  Every colour, spacing,
+// radius, and typography value comes from Radix tokens or
+// src/styles/tokens.css — no ad-hoc values so the pane inherits theme
+// changes for free.
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--default-font-family);
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+}
+
+.header {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.icon {
+  flex-shrink: 0;
+  height: var(--font-size-2);
+  width: var(--font-size-2);
+}
+
+.title {
+  color: var(--gray-12);
+  flex: 1 1 auto;
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-medium);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  align-self: flex-start;
+}
+
+.body {
+  color: var(--gray-11);
+  display: flex;
+  flex-direction: column;
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+  line-height: var(--line-height-2);
+}
+
+.bodyLine {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mono {
+  font-family: var(--code-font-family);
+}
+
+.meta {
+  color: var(--gray-10);
+  font-size: var(--font-size-1);
+}
+
+.strikethrough {
+  text-decoration: line-through;
+}
+
+// Per-type icon colours mirror the chip colour scheme in MentionChip.
+// Lucide icons render via `currentColor` for stroke, so setting `color`
+// is enough to tint them.
+.iconAmber {
+  color: var(--amber-9);
+}
+
+.iconTeal {
+  color: var(--teal-9);
+}
+
+.iconViolet {
+  color: var(--violet-9);
+}
+
+// Used for both an explicit gray-coloured pane and the deleted-state
+// fallback applied to any other colour.
+.iconGray {
+  color: var(--gray-9);
+}

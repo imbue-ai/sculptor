@@ -1,0 +1,41 @@
+// Entity chips reuse the shared `.mention` / `.clickableMention` palette
+// from `MentionNodeView.module.scss` so all four chip kinds (file / folder
+// / skill / entity) read as one family. This file only carries the bits
+// the entity variant needs on top of that base: a tighter max-width cap,
+// the deleted-state override, and the icon sizing rule.
+
+.entityChip {
+  // Tighter than `.mention`'s `max-width: 100%` so multi-mention messages
+  // stay scannable when an agent title is long.
+  max-width: 200px; // stylelint-disable-line sculptor/no-hardcoded-values
+}
+
+// Sized to mirror the file-chip icon: 1em minus 1px keeps the icon
+// visually balanced against the text x-height; `align-self: center` lifts
+// it off the text baseline.
+.icon {
+  align-self: center;
+  flex-shrink: 0;
+  height: calc(1em - 1px);
+  width: calc(1em - 1px);
+}
+
+.displayName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.strikethrough {
+  text-decoration: line-through;
+}
+
+// Deleted entity: mute to gray and disable hover/click. Wins over the
+// shared `.mention` palette by being applied alongside it; later rules
+// in the cascade beat earlier ones at equal specificity.
+.deleted {
+  background-color: var(--gray-3);
+  border-color: var(--gray-6);
+  color: var(--gray-9);
+  pointer-events: none;
+}

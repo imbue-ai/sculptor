@@ -1,0 +1,167 @@
+import type { ReactElement } from "react";
+import { useMemo } from "react";
+
+import type { ToolResultBlock, ToolUseBlock } from "~/api";
+import type { BlockUnion } from "~/common/Guards";
+import { isToolUseBlock } from "~/common/Guards";
+import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
+import {
+  useTaskSupportsInteractiveBackchannel,
+  useTaskSupportsSubAgents,
+} from "~/common/state/hooks/useTaskHelpers.ts";
+import type { SubagentMetadata, SubagentTreeNode } from "~/pages/workspace/utils/subagentTree.ts";
+import { SUBAGENT_TOOL_NAMES } from "~/pages/workspace/utils/subagentTree.ts";
+import {
+  isAskUserQuestionTool,
+  isEnterPlanModeTool,
+  isExitPlanModeTool,
+  isHiddenTool,
+} from "~/pages/workspace/utils/utils.ts";
+
+import { AlphaAskUserQuestionBlock } from "./AlphaAskUserQuestionBlock.tsx";
+import { AlphaExitPlanModeBlock } from "./AlphaExitPlanModeBlock.tsx";
+import { AlphaSubagentPill } from "./AlphaSubagentPill.tsx";
+import { CompletedToolLine, ToolLine } from "./AlphaToolLines.tsx";
+import { renderToolSegments } from "./renderToolSegments.tsx";
+import { ToolNavigationProvider } from "./ToolNavigationContext.tsx";
+
+const getToolName = (block: ToolUseBlock | ToolResultBlock): string =>
+  block.type === "tool_use" ? block.name : (block as ToolResultBlock).toolName;
+
+const isTopLevelToolBlock = (block: ToolUseBlock | ToolResultBlock): boolean => {
+  const toolName = getToolName(block);
+  return isEnterPlanModeTool(toolName);
+};
+
+const isSpecialToolUse = (block: ToolUseBlock): boolean =>
+  isAskUserQuestionTool(block.name) || isExitPlanModeTool(block.name);
+
+// AUQ / ExitPlanMode tool_result blocks are consumed by the inline
+// AlphaAskUserQuestionBlock / AlphaExitPlanModeBlock via the
+// submittedQuestionAnswers lookup. Rendering them as a separate generic
+// tool-call card would duplicate what the inline block already shows.
+const isSpecialToolResult = (block: ToolUseBlock | ToolResultBlock): boolean => {
+  if (block.type !== "tool_result") return false;
+  const toolName = getToolName(block);
+  return isAskUserQuestionTool(toolName) || isExitPlanModeTool(toolName);
+};
+
+export const ToolBlockGroup = ({
+  blocks,
+  node,
+  toolResultMap,
+  subagentMetadataMap,
+  inProgressMessageId,
+  isActive,
+}: {
+  blocks: Array<ToolUseBlock | ToolResultBlock>;
+  node: SubagentTreeNode;
+  toolResultMap: Map<string, ToolResultBlock>;
+  subagentMetadataMap: Map<string, SubagentMetadata>;
+  inProgressMessageId?: string | null;
+  isActive: boolean;
+}): ReactElement => {
+  const { agentID: taskID } = useWorkspacePageParams();
+  // Per-harness gates centralized here so the leaf components stay test-isolated:
+  //   `supportsSubAgents` hides the AlphaSubagentPill
+  //   `supportsInteractiveBackchannel` hides AlphaAskUserQuestionBlock + AlphaExitPlanModeBlock
+  // `?? true` preserves existing Claude behavior while the task is still loading.
+  const canRenderSubAgents = useTaskSupportsSubAgents(taskID ?? "") ?? true;
+  const canRenderInteractiveBackchannel = useTaskSupportsInteractiveBackchannel(taskID ?? "") ?? true;
+  // Separate blocks into subagent, top-level, special, and regular categories
+  const { subagentBlocks, topLevelBlocks, specialBlocks, regularBlocks } = useMemo(() => {
+    const subagent: Array<ToolUseBlock> = [];
+    const topLevel: Array<ToolUseBlock | ToolResultBlock> = [];
+    const special: Array<ToolUseBlock> = [];
+    const regular: Array<ToolUseBlock | ToolResultBlock> = [];
+
+    for (const block of blocks) {
+      if (isHiddenTool(getToolName(block))) continue;
+      if (isSpecialToolResult(block)) continue;
+
+      if (isToolUseBlock(block as BlockUnion)) {
+        const toolBlock = block as ToolUseBlock;
+        const children = node.children.get(toolBlock.id);
+        if (SUBAGENT_TOOL_NAMES.has(toolBlock.name) || (children && children.length > 0)) {
+          subagent.push(toolBlock);
+        } else if (isSpecialToolUse(toolBlock)) {
+          special.push(toolBlock);
+        } else if (isTopLevelToolBlock(block)) {
+          topLevel.push(block);
+        } else {
+          regular.push(block);
+        }
+      } else if (isTopLevelToolBlock(block)) {
+        topLevel.push(block);
+      } else {
+        // Skip tool_result blocks that belong to subagent tool calls —
+        // their content is already rendered inside the AlphaSubagentPill.
+        // Check both tree structure and tool name so results are hidden
+        // even when the ToolResultBlock is in a different message.
+        const resultBlock = block as ToolResultBlock;
+        if (SUBAGENT_TOOL_NAMES.has(resultBlock.toolName)) continue;
+        const toolUseId = resultBlock.toolUseId;
+        const children = toolUseId ? node.children.get(toolUseId) : undefined;
+        if (children && children.length > 0) continue;
+
+        regular.push(block);
+      }
+    }
+
+    return { subagentBlocks: subagent, topLevelBlocks: topLevel, specialBlocks: special, regularBlocks: regular };
+  }, [blocks, node.children]);
+
+  return (
+    <ToolNavigationProvider>
+      {canRenderSubAgents &&
+        subagentBlocks.map((block, index) => {
+          const children = node.children.get(block.id) ?? [];
+          return (
+            <AlphaSubagentPill
+              key={block.id}
+              rowIndex={index}
+              parentBlock={block}
+              childNodes={children}
+              toolResultMap={toolResultMap}
+              subagentMetadataMap={subagentMetadataMap}
+            />
+          );
+        })}
+      {canRenderInteractiveBackchannel &&
+        specialBlocks.map((block) => {
+          if (isAskUserQuestionTool(block.name)) {
+            return <AlphaAskUserQuestionBlock key={block.id} toolBlock={block} />;
+          }
+
+          if (isExitPlanModeTool(block.name)) {
+            return <AlphaExitPlanModeBlock key={block.id} toolBlock={block} />;
+          }
+          return null;
+        })}
+      {topLevelBlocks.map((block) => {
+        if (isToolUseBlock(block as BlockUnion)) {
+          const toolBlock = block as ToolUseBlock;
+          const isExecuting = inProgressMessageId !== null && !toolResultMap.has(toolBlock.id);
+          return (
+            <ToolLine
+              key={toolBlock.id}
+              block={toolBlock}
+              result={toolResultMap.get(toolBlock.id)}
+              isExecuting={isExecuting}
+            />
+          );
+        }
+        const resultBlock = block as ToolResultBlock;
+        return <CompletedToolLine key={resultBlock.toolUseId} block={resultBlock} />;
+      })}
+      {renderToolSegments(regularBlocks, toolResultMap, {
+        isActive,
+        inProgressMessageId: inProgressMessageId ?? null,
+        // Only subagent pills above register with the nav context (one row each);
+        // top-level/special blocks render inline and don't participate in
+        // arrow-key navigation, so they don't shift the row offset.
+        rowIndexOffset: subagentBlocks.length,
+      })}
+    </ToolNavigationProvider>
+  );
+};

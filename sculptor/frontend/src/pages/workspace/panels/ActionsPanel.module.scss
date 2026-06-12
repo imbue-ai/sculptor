@@ -1,0 +1,103 @@
+@use "scrollbar" as *;
+
+.panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.scrollArea {
+  flex: 1;
+  overflow-y: auto;
+
+  @include thin-scrollbar;
+}
+
+.chipGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.groupHeader {
+  align-items: center;
+  border-radius: var(--radius-2);
+  cursor: pointer;
+  display: flex;
+  min-height: 28px;
+  padding: var(--space-1);
+  user-select: none;
+
+  &:hover {
+    background-color: var(--gray-3);
+  }
+}
+
+.groupName {
+  font-size: var(--font-size-1);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.countBadge {
+  border-radius: var(--radius-5);
+  font-size: var(--font-size-1);
+  padding: 2px 6px;
+}
+
+.dragGhost {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 15%);
+  cursor: grabbing;
+}
+
+// Chip wrapper with always-present transparent borders for drop indicators (no layout shift).
+.chipWrapper {
+  border-left: 2px solid transparent;
+  border-right: 2px solid transparent;
+
+  &.dropBefore {
+    border-left-color: var(--accent-9);
+  }
+
+  &.dropAfter {
+    border-right-color: var(--accent-9);
+  }
+
+  &.chipDragging {
+    opacity: 35%;
+    pointer-events: none;
+  }
+}
+
+// Group header wrapper with drop indicators for group reordering (no layout shift).
+.groupHeaderWrapper {
+  border-bottom: 2px solid transparent;
+  border-top: 2px solid transparent;
+
+  &.groupDropBefore {
+    border-top-color: var(--accent-9);
+  }
+
+  &.groupDropAfter {
+    border-bottom-color: var(--accent-9);
+  }
+
+  &.groupDragging {
+    opacity: 35%;
+    pointer-events: none;
+  }
+}
+
+.emptyGroupDrop {
+  align-items: center;
+  border: 2px dashed var(--gray-6);
+  border-radius: var(--radius-2);
+  display: flex;
+  justify-content: center;
+  padding: var(--space-2);
+  transition: border-color var(--duration-fast), background-color var(--duration-fast);
+
+  &.emptyGroupDropActive {
+    background-color: var(--accent-a2);
+    border-color: var(--accent-9);
+  }
+}

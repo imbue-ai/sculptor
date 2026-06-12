@@ -1,0 +1,36 @@
+// Content-specific styles for file mention suggestions.
+// Shared container and item styles live in SuggestionList.module.scss.
+
+.emptyText {
+  padding: var(--space-1);
+}
+
+.icon {
+  align-self: center;
+  flex-shrink: 0;
+  height: calc(1em - 1px);
+  width: calc(1em - 1px);
+}
+
+.name {
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-1-5);
+  font-weight: var(--font-weight-regular);
+  white-space: nowrap;
+}
+
+.highlight {
+  color: var(--accent-12);
+  font-weight: var(--font-weight-bold);
+}
+
+.parentPath {
+  color: var(--accent-10);
+  flex-shrink: 1;
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-1-5);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

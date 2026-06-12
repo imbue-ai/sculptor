@@ -1,0 +1,10 @@
+[rule]
+id = "no-sculptor-subprocess"
+description = "Disallow subprocess.run/check_output/check_call in sculptor's production code; use run_blocking() helper"
+severity = "error"
+
+[match]
+pattern = "subprocess\\.(run|check_output|check_call)\\("
+languages = ["python"]
+include = ["sculptor/sculptor/**/*.py"]
+exclude = ["**/test/**", "**/testing/**", "**/scripts/**", "**/*_test.py"]

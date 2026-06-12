@@ -1,0 +1,159 @@
+.tab {
+  align-items: center;
+  app-region: no-drag;
+  background: transparent;
+  border-right: 1px solid var(--gray-a4);
+  box-sizing: border-box;
+  color: var(--gray-a10);
+  cursor: pointer;
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-1);
+  padding: 6px var(--space-2);
+  position: relative;
+  transition: background-color var(--duration-fast), color var(--duration-fast);
+  user-select: none;
+}
+
+.hovered {
+  background: var(--gray-a2);
+}
+
+.active {
+  background: var(--gray-2);
+  color: var(--gray-12);
+}
+
+.dragging {
+  opacity: 40%;
+}
+
+.dropLeft::after,
+.dropRight::after {
+  background-color: var(--accent-9);
+  bottom: 0;
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 2px;
+  z-index: 1;
+}
+
+.dropLeft::after {
+  left: -1px;
+}
+
+.dropRight::after {
+  right: -1px;
+}
+
+.icon {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  margin-left: var(--space-1);
+}
+
+.label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.closeButton {
+  flex-shrink: 0;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- 18px matches the compact tab height
+  height: 18px;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- 18px matches the compact tab height
+  width: 18px;
+}
+
+.previewContent {
+  background: var(--color-panel-solid);
+  border: 1px solid var(--gray-a5);
+  border-radius: var(--radius-4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 15%);
+  color: var(--gray-12);
+  max-width: 320px;
+  padding: var(--space-3);
+  z-index: var(--z-dropdown);
+}
+
+// --- Compact variant ---
+
+.tabCompact {
+  align-items: center;
+  background: transparent;
+  border-radius: var(--radius-2);
+  color: var(--gray-a10);
+  cursor: pointer;
+  display: flex;
+  flex-shrink: 0;
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  transition: background-color var(--duration-fast), color var(--duration-fast);
+  user-select: none;
+
+  &:hover {
+    background-color: var(--gray-a3);
+  }
+}
+
+.compactActive {
+  background-color: var(--gray-4);
+  color: var(--gray-12);
+
+  // Keep the active background when hovered — prevents flicker from
+  // the base :hover rule applying a lighter color over the active state.
+  &:hover {
+    background-color: var(--gray-4);
+  }
+}
+
+.compactHovered {
+  background-color: var(--gray-a3);
+}
+
+.compactDragging {
+  opacity: 50%;
+}
+
+.compactDropLeft {
+  box-shadow: -2px 0 0 0 var(--accent-9);
+}
+
+.compactDropRight {
+  box-shadow: 2px 0 0 0 var(--accent-9);
+}
+
+.compactLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compactCloseButton {
+  align-items: center;
+  background: none;
+  border: none;
+  border-radius: var(--radius-1);
+  color: var(--gray-9);
+  cursor: pointer;
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  margin-left: var(--space-1);
+  padding: 0;
+
+  &:hover {
+    background-color: var(--gray-a4);
+    color: var(--gray-12);
+  }
+
+  .tabCompact:not(.compactActive, :hover) & {
+    opacity: 0%;
+  }
+}

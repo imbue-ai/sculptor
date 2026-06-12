@@ -1,0 +1,116 @@
+[project]
+name = "sculptor-workspace"
+version = "0.0.1"
+requires-python = ">=3.11,<3.13"
+license = { text = "MIT" }
+dependencies = [
+    "imbue-core",
+    "pydevd-pycharm>=251.23774.123",
+    "pyjson5==1.6.9",
+    "mcp>=1.9.1",
+    "fastmcp>=2.1.2",
+    "junit2html>=31.0.2",
+]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+
+[tool.setuptools]
+packages = []
+
+[tool.formatters.python]
+ignore_import_changes = []
+do_not_remove_imports = ["__init__.py", "warlock.py"]
+do_not_autotype = []
+
+[tool.coverage.run]
+omit = [
+    # omit anything that starts or ends with .py
+    "*/test_*.py",
+    "*/*_test.py",
+]
+
+[tool.coverage.report]
+# Regexes for lines to exclude from consideration
+exclude_also = [
+    # Don't complain about abstract methods, they aren't run:
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.uv.config-settings]
+# Needed for mypy - without it it doesn't pick up the installed editable packages
+editable_mode = "compat"
+
+[tool.uv.workspace]
+members = [
+    "imbue_core",
+    "tools/sculpt",
+    "sculptor",
+]
+
+[tool.uv.sources]
+imbue-core = { workspace = true }
+sculpt = { workspace = true }
+sculptor = { workspace = true }
+
+[tool.uv]
+cache-keys = [{ git = { commit = true } }]
+override-dependencies = [
+    "colorama==0.4.4",
+    "editdistance>=0.6.2",
+    "fsspec==2023.5.0",
+    "htmldate==1.5.1",
+    "lxml==4.9.2",
+    "s3fs==2024.6.1",
+]
+
+
+package = false
+required-version = ">=0.7.22"
+
+[tool.ruff]
+line-length = 119
+exclude = [
+  "**/__mock_llm_responses__/**",
+  "**/__snapshots__/**",
+  "**/quarantine/**",
+  "test_data/**",
+  "**/*.ipynb",
+]
+
+[tool.ruff.format]
+docstring-code-line-length = 119
+quote-style = "double"
+indent-style = "space"
+
+[tool.ruff.lint.isort]
+force-single-line = true
+case-sensitive = true
+order-by-type = false
+known-first-party = [
+    "imbue_core",
+    "sculptor",
+    "tests",
+]
+known-third-party = [
+    "docker",
+    "wandb",
+]
+no-lines-before = ["future"]
+
+[dependency-groups]
+dev = [
+    "ipdb>=0.13.13",
+    "ipython>=8.12.0",
+    "pydevd-pycharm>=251.23774.123",
+    "pydevd>=3.3.0",
+    "pyre-check>=0.9.23",
+    "pytest-watcher>=0.4.3",
+    # Ruff uses minor versions to signal breaking changes until 1.0.0 is reached.
+    "pytest-xdist>=3.8.0",
+    "ruff~=0.12.8",
+]
+
+control-plane = [
+        "imbue_core",
+]

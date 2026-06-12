@@ -1,0 +1,43 @@
+// Category-row styles for the `+` prefilter picker. Container, item
+// hover/selected backgrounds, and scrollbar live in SuggestionList.module.scss.
+// Sizing/typography mirror SkillList so the two pickers feel like the same
+// component.
+
+.name {
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-1-5);
+  font-weight: var(--font-weight-regular);
+  white-space: nowrap;
+}
+
+.rowIcon {
+  align-self: center;
+  color: var(--accent-10);
+  flex-shrink: 0;
+}
+
+.highlight {
+  color: var(--accent-12);
+  font-weight: var(--font-weight-bold);
+}
+
+.detailPane {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-4);
+}
+
+.detailDescription {
+  color: var(--gray-12);
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-1-5);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-2);
+}
+
+.emptyState {
+  color: var(--accent-10);
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-1-5);
+  padding: var(--space-2);
+}

@@ -1,0 +1,48 @@
+@use "scrollbar" as *;
+
+.codeBlockWrapper {
+  margin: 1em 0;
+  position: relative;
+}
+
+.codeBlock {
+  background-color: var(--gray-3);
+  border: 1px solid var(--gray-4);
+  border-radius: var(--radius-2);
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  margin: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: var(--space-2) var(--space-3);
+  white-space: pre;
+
+  @include thin-scrollbar(horizontal);
+
+  code {
+    background: none;
+    border: none;
+    color: inherit;
+    font-size: inherit;
+    padding: 0;
+  }
+}
+
+.copyButton {
+  bottom: var(--space-2);
+  cursor: pointer;
+  opacity: 0%;
+  position: absolute;
+  right: var(--space-2);
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+// `!important` overrides `.codeBlockWrapper:hover .copyButton`, which would
+// otherwise win on specificity and pin the button at 50% on direct hover.
+.copyButton:hover {
+  opacity: 100% !important;
+}
+
+.codeBlockWrapper:hover .copyButton {
+  opacity: 50%;
+}

@@ -1,0 +1,9 @@
+[rule]
+id = "no-raw-html-button"
+description = "Disallow raw <button> JSX in sculptor's frontend; use Radix Button/IconButton"
+severity = "warning"
+
+[match]
+pattern = "<button(\\s|>|$)"
+languages = ["typescript"]
+include = ["sculptor/frontend/src/**/*.tsx"]

@@ -1,0 +1,7 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Usage questions and help
+    url: https://github.com/imbue-ai/sculptor/tree/main/docs/help
+    about: For "how do I use Sculptor" questions, start with the help docs rather than opening an issue.
+# No security contact link here — GitHub adds its own "Report a security
+# vulnerability" entry to the issue chooser because the repo has a SECURITY.md.

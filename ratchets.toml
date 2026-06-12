@@ -1,0 +1,32 @@
+# Ratchets configuration (schema v2, ratchets >= 0.3.0).
+#
+# v2 enablement is opt-in: no rule runs unless it is named in
+# `enabled_ratchets` (directly, or via a `$set` reference). The curated
+# `$sculptor` set — defined in ratchets/sets/sculptor.toml — lists the 49
+# rules sculptor's bespoke Python ratchets implementation enforced. See the
+# v1->v2 upgrade notes: `ratchets list` prints the guide when it rejects a v1
+# config, canonical copy at
+# https://github.com/imbue-ai/ratchets/blob/main/docs/upgrade-v1-to-v2.md
+
+enabled_ratchets = ["$sculptor"]
+disabled_ratchets = []
+
+[ratchets]
+version = "2"
+languages = ["python", "typescript"]
+
+# Paths excluded from measurement live in .ratchetignore (gitignore format)
+# at the top level; the file walker honours it automatically.
+
+[patterns]
+# Referenced by AST rules (e.g. no-inline-functions, no-underscore-imports)
+# via `exclude = "@python_tests"` to skip Python test files.
+python_tests = [
+    "**/test_*.py",
+    "**/*_test.py",
+    "**/tests/**",
+    "**/conftest.py",
+]
+
+[output]
+format = "human"

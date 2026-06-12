@@ -1,0 +1,72 @@
+// Content-specific styles for skill/slash-command suggestions.
+// Shared container and item styles live in SuggestionList.module.scss.
+
+.name {
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-1-5);
+  font-weight: var(--font-weight-regular);
+  white-space: nowrap;
+}
+
+.highlight {
+  color: var(--accent-12);
+  font-weight: var(--font-weight-bold);
+}
+
+// Right-hand detail panel rendered next to the skill list. Shows the
+// active row's name, type badge, and full description — effectively the
+// chip hover popover inlined into the picker.
+.detailPane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+}
+
+.detailTitle {
+  color: var(--gray-12);
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detailDescription {
+  color: var(--gray-12);
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-1-5);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-2);
+}
+
+// Sized and colored by Radix `<Badge variant="soft" color="...">`. The only
+// thing we override is alignment: in the column-flex .detailPane, default
+// `align-items: stretch` would stretch the badge across the full pane width.
+.badge {
+  align-self: flex-start;
+}
+
+.emptyRow {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-1);
+}
+
+.emptyHint {
+  color: var(--accent-10);
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-regular);
+  white-space: nowrap;
+
+  code {
+    background: var(--accent-3);
+    border-radius: 2px; // stylelint-disable-line sculptor/no-hardcoded-values
+    font-family: var(--mono-font-family);
+    font-size: 11px; // stylelint-disable-line sculptor/no-hardcoded-values
+    padding: 1px 3px;
+  }
+}

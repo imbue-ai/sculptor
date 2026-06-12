@@ -1,0 +1,36 @@
+@use "scrollbar" as *;
+
+.selectContent {
+  max-height: 500px;
+  overflow-y: auto;
+  padding-bottom: var(--space-1);
+
+  @include thin-scrollbar($autohide: false);
+}
+
+.newRepoSeparator {
+  margin-left: calc(-1 * var(--select-content-padding));
+  margin-right: calc(-1 * var(--select-content-padding));
+}
+
+.repoItem {
+  height: auto;
+  padding-bottom: var(--space-2);
+  padding-top: var(--space-2);
+}
+
+.repoName {
+  color: var(--gray-12);
+}
+
+.repoPath {
+  color: var(--gray-10);
+  font-family: var(--code-font-family);
+  word-break: break-all;
+}
+
+.selectorLabel {
+  color: var(--accent-9);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-medium);
+}

@@ -1,0 +1,72 @@
+{
+  "extends": ["stylelint-config-standard-scss"],
+  "plugins": [
+    "stylelint-order",
+    "./scripts/stylelint-plugin-design-tokens/index.js"
+  ],
+  "rules": {
+    "selector-class-pattern": [
+      "^[a-z][a-zA-Z0-9]+$",
+      {
+        "message": "Expected class selector to be camelCase"
+      }
+    ],
+    "property-no-unknown": [true, { "ignoreProperties": ["composes"] }],
+    "order/properties-alphabetical-order": true,
+    "scss/dollar-variable-pattern": null,
+    "scss/at-extend-no-missing-placeholder": null,
+    "scss/at-mixin-pattern": null,
+    "keyframes-name-pattern": null,
+    "declaration-property-value-keyword-no-deprecated": null,
+    "scss/no-global-function-names": true,
+    "color-function-notation": "legacy",
+    "color-function-alias-notation": null,
+    "property-no-deprecated": null,
+    "alpha-value-notation": "percentage",
+    "declaration-block-no-redundant-longhand-properties": true,
+    "shorthand-property-no-redundant-values": true,
+    "no-descending-specificity": true,
+    "scss/double-slash-comment-empty-line-before": null,
+    "no-empty-source": true,
+    "declaration-empty-line-before": null,
+    "custom-property-empty-line-before": null,
+    "custom-property-pattern": null,
+    "rule-empty-line-before": [
+      "always",
+      {
+        "except": ["first-nested"],
+        "ignore": ["after-comment"]
+      }
+    ],
+    "selector-pseudo-class-no-unknown": [
+      true,
+      {
+        "ignorePseudoClasses": ["global"]
+      }
+    ],
+    "selector-not-notation": "complex",
+    "length-zero-no-unit": true,
+    "block-no-empty": true,
+    "declaration-block-no-duplicate-properties": true,
+    "font-family-no-missing-generic-family-keyword": true,
+    "scss/double-slash-comment-whitespace-inside": "always",
+    "no-duplicate-selectors": true,
+    "property-no-vendor-prefix": true,
+    "scss/load-partial-extension": null,
+    "font-family-name-quotes": "always-where-recommended",
+    "value-keyword-case": [
+      "lower",
+      {
+        "ignoreKeywords": ["currentColor"],
+        "ignoreProperties": ["composes"]
+      }
+    ],
+    "scss/dollar-variable-empty-line-before": null,
+    "selector-attribute-quotes": "always",
+    "scss/comment-no-empty": null,
+    "sculptor/no-hardcoded-values": true,
+    "sculptor/no-var-fallback": true,
+    "sculptor/no-uppercase-custom-property": true
+  },
+  "ignoreFiles": ["**/node_modules/**", "**/dist/**", "**/coverage/**", "**/tokens.css"]
+}

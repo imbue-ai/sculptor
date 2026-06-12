@@ -1,0 +1,20 @@
+# Include everything that the wheel (a.k.a bdist) will contain
+recursive-include frontend-dist *
+
+# Include special metadata files
+recursive-include sculptor/primitives/hashes *
+
+# Exclude self-generated directories
+global-exclude build/*
+global-exclude _vendor/*
+
+# Exclude test directories and files throughout the project
+global-exclude **/tests/**
+global-exclude **/testing/**
+global-exclude sculptor/testing/**
+
+
+# Exclude all test-related Python files at any depth
+global-exclude **/*_test.py
+global-exclude **/test_*.py
+global-exclude **/conftest.py

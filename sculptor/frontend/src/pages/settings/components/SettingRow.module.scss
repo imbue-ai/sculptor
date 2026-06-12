@@ -1,0 +1,24 @@
+.settingRow {
+  border-bottom: 1px solid var(--gray-4);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.descriptionText {
+  color: var(--gray-11);
+}
+
+.labelGroup {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.controlRow {
+  flex-wrap: wrap;
+}
+
+.control {
+  flex-shrink: 0;
+}

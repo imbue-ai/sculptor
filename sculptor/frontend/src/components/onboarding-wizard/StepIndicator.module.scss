@@ -1,0 +1,36 @@
+.container {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  justify-content: center;
+  padding: var(--space-4) 0;
+}
+
+.dot {
+  border-radius: max(var(--radius-full), var(--radius-6));
+  display: inline-block;
+  height: 8px;
+  transition: all var(--duration-normal) var(--ease-default);
+  width: 8px;
+}
+
+.visited {
+  background-color: var(--gray-12);
+}
+
+.current {
+  background-color: var(--gray-12);
+  width: 24px;
+}
+
+.upcoming {
+  background-color: var(--gray-7);
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.dot:not(.clickable) {
+  cursor: default;
+}

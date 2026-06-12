@@ -1,0 +1,81 @@
+# Offload runner for the backend unit suite. Run with: just test-unit-offload.
+# Alternative to `just test-unit-backend` (pytest -n 8).
+
+[offload]
+# Parallel sandboxes. Measured on this suite: more fan-out is faster — 32
+# sandboxes warm ≈90s internal / ≈135s wall vs 12 sandboxes ≈146s / ≈181s — so
+# per-sandbox test load, not a single longest-test floor, drives the makespan at
+# this size. Cost is trivial either way (~$0.01, ~220 CPU-s per warm run), so
+# keep fan-out high; dropping to ~12 only made it ~34% slower for no real saving.
+max_parallel = 32
+# Per-batch test-execution timeout (down from 600). Warm batches complete in
+# minutes at most, so 240s is comfortable headroom yet fails a wedged sandbox in
+# 4 min instead of 10; with retry_count=1 a false timeout just retries rather
+# than failing the whole run.
+test_timeout_secs = 240
+stream_output = true
+sandbox_project_root = "/app/sculptor"
+sandbox_repo_root = "/app"
+# Reuses offload.toml's base image: deps pre-synced, package installed editable,
+# so tests run against the thin-diffed source. No post_patch_cmd — unit tests
+# need no generated artifacts.
+sandbox_init_cmd = "bash /app/scripts/finalize-base-image.sh"
+# Run each batch exactly once. With this on (the default), idle sandboxes
+# speculatively re-run straggler batches, executing some tests more than once.
+impatiently_requeue_batches = false
+
+[provider]
+type = "modal"
+dockerfile = ".devcontainer/Dockerfile"
+include_cwd = false
+
+# Placeholder harness env; real_claude/real_pi are excluded in the group filter.
+[provider.env]
+SESSION_TOKEN = ""
+PROJECT_PATH = "/tmp/repo"
+GOOGLE_API_KEY = "fake"
+
+# Tests live next to the source under sculptor/sculptor/; paths are relative to
+# sandbox_repo_root. -p no:xdist: Offload parallelizes across sandboxes, so
+# pytest runs serially within each.
+[framework]
+type = "pytest"
+command = "uv run --project sculptor pytest"
+paths = ["sculptor/sculptor/"]
+run_args = "-p no:xdist"
+
+# Same selection as `just test-unit-backend`.
+[groups.unit]
+# One retry: a cold/wedged sandbox or a load-flaky test fails its batch and
+# re-runs once (usually on a healthy sandbox), keeping the run green through
+# transient infra hiccups. impatiently_requeue_batches stays off, so this adds
+# resilience without speculative duplicate execution.
+retry_count = 1
+filters = "-m 'not integration and not acceptance and not real_claude and not real_pi'"
+
+# Rebuild the cached base image when any of these change.
+[checkpoint]
+build_inputs = [
+    ".devcontainer/Dockerfile",
+    ".dockerignore",
+    "offload-unit.toml",
+    "scripts/finalize-base-image.sh",
+    "pyproject.toml",
+    "sculptor/pyproject.toml",
+    "imbue_core/pyproject.toml",
+    "sculptor/frontend/package.json",
+    "uv.lock",
+]
+
+[history]
+record_history = "flag"
+
+# Separate output dir so unit results don't clobber the integration run.
+[report]
+output_dir = "test-results-unit"
+junit = true
+junit_file = "junit-unit.xml"
+# Collect only the merged JUnit; download no per-sandbox artifacts. failure_only
+# means any globs added later are fetched for failed batches only.
+download_globs = []
+download_globs_failure_only = true

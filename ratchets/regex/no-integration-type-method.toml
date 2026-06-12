@@ -1,0 +1,9 @@
+[rule]
+id = "no-integration-type-method"
+description = "Disallow Playwright .type() in integration tests; use .fill() instead"
+severity = "warning"
+
+[match]
+pattern = "\\.type\\("
+languages = ["python"]
+include = ["sculptor/tests/integration/**/*.py"]

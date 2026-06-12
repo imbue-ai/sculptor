@@ -1,0 +1,77 @@
+{
+  "type": "object",
+  "properties": {
+    "overall_correctness": {
+      "type": "string",
+      "enum": ["patch is correct", "patch is incorrect"],
+      "description": "Whether the patch is correct or contains issues."
+    },
+    "overall_explanation": {
+      "type": "string",
+      "description": "Reasoning for the correctness verdict (2-3 sentences)."
+    },
+    "overall_confidence_score": {
+      "type": "number",
+      "description": "Confidence in the overall verdict (0.0 to 1.0).",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "findings": {
+      "type": "array",
+      "description": "List of code review findings. Empty array if no issues found.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Short title summarizing the issue (max 80 characters)."
+          },
+          "body": {
+            "type": "string",
+            "description": "Detailed explanation of the issue and suggested fix. Use markdown."
+          },
+          "confidence_score": {
+            "type": "number",
+            "description": "How confident you are this is a real issue (0.0 to 1.0).",
+            "minimum": 0.0,
+            "maximum": 1.0
+          },
+          "code_location": {
+            "type": "object",
+            "description": "Exact file and line range for this finding.",
+            "properties": {
+              "relative_file_path": {
+                "type": "string",
+                "description": "Path to the file relative to the repository root."
+              },
+              "line_range": {
+                "type": "object",
+                "description": "Line range in the new version of the file.",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "description": "First line number (1-indexed).",
+                    "minimum": 1
+                  },
+                  "end": {
+                    "type": "integer",
+                    "description": "Last line number (1-indexed, inclusive).",
+                    "minimum": 1
+                  }
+                },
+                "required": ["start", "end"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["relative_file_path", "line_range"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["title", "body", "confidence_score", "code_location"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["overall_correctness", "overall_explanation", "overall_confidence_score", "findings"],
+  "additionalProperties": false
+}

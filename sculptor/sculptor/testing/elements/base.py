@@ -1,0 +1,335 @@
+import logging
+
+from playwright.sync_api import Locator
+from playwright.sync_api import Page
+from playwright.sync_api import expect
+from tenacity import retry
+from tenacity import retry_if_exception_type
+from tenacity import stop_after_attempt
+from tenacity import wait_fixed
+
+from sculptor.constants import ElementIDs
+
+logger = logging.getLogger(__name__)
+
+
+def wait_for_tiptap_ready(page: Page, *, timeout_ms: int = 10_000) -> None:
+    """Best-effort wait for the Tiptap editor to initialize on the chat input.
+
+    After page reloads (e.g. ``_reset_browser_state``), the contenteditable DOM
+    element can be visible and clickable before the React fiber tree has the
+    Tiptap editor prop attached.  This function polls for the editor to appear,
+    giving it a head start before ``type_into_tiptap`` runs.
+
+    This is non-fatal: if the editor isn't ready within ``timeout_ms``, we log
+    and return.  The ``type_into_tiptap`` function has its own 5 s retry loop
+    as a fallback.
+    """
+    chat_input = page.get_by_test_id(ElementIDs.CHAT_INPUT)
+    if chat_input.count() == 0:
+        return
+    try:
+        chat_input.evaluate(
+            f"""(el) => new Promise((resolve, reject) => {{
+                const deadline = Date.now() + {timeout_ms};
+                const findEditor = (el) => {{ {_FIND_TIPTAP_EDITOR_JS} }};
+                const poll = () => {{
+                    try {{
+                        findEditor(el);
+                        resolve();
+                    }} catch (e) {{
+                        if (Date.now() < deadline) {{
+                            requestAnimationFrame(poll);
+                        }} else {{
+                            reject(e);
+                        }}
+                    }}
+                }};
+                poll();
+            }})"""
+        )
+    except Exception as exc:
+        logger.debug("wait_for_tiptap_ready timed out after %dms: %s", timeout_ms, exc)
+
+
+class PlaywrightIntegrationTestElement(Locator):
+    """
+    Represents an element on the page. This subclasses Locator for tooltips/type inference, but all calls are
+    caught by __getattr__ and rerouted the self._locator, which is the real object. Internal locator methods or instance
+    vars should never reach the actual Locator class being extended here.
+    """
+
+    def __init__(self, locator: Locator, page: Page) -> None:
+        # Playwright page object stored for when HTML outside this element need to be accessed (e.g. dropdowns)
+        self._page = page
+        self._locator = locator
+
+    def __getattr__(self, attr):
+        return getattr(self._locator, attr)
+
+
+# The JS snippet shared by type_into_tiptap and clear_tiptap that walks the
+# React fiber tree to find the TipTap editor instance on a contenteditable element.
+_FIND_TIPTAP_EDITOR_JS = """
+    let node = el;
+    while (node) {
+        const key = Object.keys(node).find(k => k.startsWith('__reactFiber$'));
+        if (key) {
+            let fiber = node[key];
+            while (fiber) {
+                const editor = fiber.memoizedProps?.editor;
+                if (editor?.commands) {
+                    return editor;
+                }
+                fiber = fiber.return;
+            }
+        }
+        node = node.parentElement;
+    }
+    throw new Error('Could not find Tiptap editor instance');
+""".strip()
+
+
+# NOTE: This is an exception to our rule to not use page.evaluate().
+# Normally we prefer Playwright's built-in locator methods, but Tiptap/ProseMirror
+# editors don't work with fill() (bypasses editor state) or type() for long strings
+# (times out at ~150 chars/sec).  Using ProseMirror's transaction API is the
+# only reliable way to set text in these editors regardless of length or content.
+def type_into_tiptap(page: Page, locator: Locator, text: str) -> None:
+    """Insert text into a Tiptap editor element.
+
+    Uses ProseMirror's ``tr.insertText()`` via ``page.evaluate()`` to insert
+    plain text directly into the editor's internal state.  This avoids the
+    limitations of Playwright's built-in methods for contenteditable elements:
+
+    - ``type()`` simulates individual keystrokes (~150 chars/sec), timing out
+      for long strings like FakeClaude JSON commands.
+    - ``fill()`` sets the DOM directly but bypasses ProseMirror's transaction
+      system, so the editor overwrites the value on its next render.
+    - ``insertContent(string)`` parses the string as HTML, so angle brackets
+      in the text (e.g. ``<div>``) create DOM elements instead of literal text.
+    - Clipboard paste (Cmd-V) goes through Tiptap's markdown parser, which
+      mangles backticks, and also interferes with the user's system clipboard.
+    """
+    locator.click()
+    # After a page reload the React fiber tree may not have the Tiptap editor
+    # prop attached yet even though the DOM element is visible and clickable.
+    # Poll with requestAnimationFrame (once per frame, ~16 ms) for up to 5 s
+    # before giving up.  On Fly runners after shared-instance recreation,
+    # the editor can take >2 s to initialize.
+    locator.evaluate(
+        f"""(el, text) => new Promise((resolve, reject) => {{
+            const deadline = Date.now() + 5000;
+            const findEditor = (el) => {{ {_FIND_TIPTAP_EDITOR_JS} }};
+            const tryInsert = () => {{
+                try {{
+                    const editor = findEditor(el);
+                    const {{ tr }} = editor.state;
+                    tr.insertText(text);
+                    editor.view.dispatch(tr);
+                    resolve();
+                }} catch (e) {{
+                    if (Date.now() < deadline) {{
+                        requestAnimationFrame(tryInsert);
+                    }} else {{
+                        reject(e);
+                    }}
+                }}
+            }};
+            tryInsert();
+        }})""",
+        text,
+    )
+
+
+def insert_mention_into_tiptap(locator: Locator, mention_id: str, suggestion_char: str) -> None:
+    """Insert a mention node into a TipTap editor element.
+
+    Uses TipTap's ``insertContent()`` API to insert a mention node directly,
+    bypassing the autocomplete UI.  This is useful for testing how mention
+    nodes are serialized and stored without depending on the suggestion
+    popover's keyboard interactions.
+    """
+    locator.evaluate(
+        f"""(el, args) => {{
+            const findEditor = (el) => {{ {_FIND_TIPTAP_EDITOR_JS} }};
+            const editor = findEditor(el);
+            editor.commands.focus("end");
+            editor.commands.insertContent({{
+                type: 'mention',
+                attrs: {{ id: args.id, mentionSuggestionChar: args.char }},
+            }});
+        }}""",
+        {"id": mention_id, "char": suggestion_char},
+    )
+
+
+def clear_tiptap(locator: Locator) -> None:
+    """Clear all content from a TipTap editor element.
+
+    Uses TipTap's ``clearContent()`` API via ``page.evaluate()`` to reset the
+    editor. Useful before ``type_into_tiptap`` when existing content must be
+    replaced rather than appended to.
+    """
+    locator.evaluate(
+        f"""(el) => {{
+            const findEditor = (el) => {{ {_FIND_TIPTAP_EDITOR_JS} }};
+            findEditor(el).commands.clearContent();
+        }}""",
+    )
+
+
+def set_tiptap_markdown(locator: Locator, markdown: str) -> None:
+    """Replace the editor content with markdown source.
+
+    Drives Tiptap's ``setContent`` with ``contentType: 'markdown'``, which is
+    the same path used when restoring a draft from localStorage or pasting
+    markdown text. This is the canonical way to load structured markdown
+    (e.g. nested lists, code blocks) into the editor in a test, because
+    ``type_into_tiptap`` uses ``tr.insertText`` and bypasses the markdown
+    parser entirely.
+    """
+    locator.evaluate(
+        f"""(el, md) => {{
+            const findEditor = (el) => {{ {_FIND_TIPTAP_EDITOR_JS} }};
+            const editor = findEditor(el);
+            editor.commands.setContent(md, {{ contentType: 'markdown' }});
+        }}""",
+        markdown,
+    )
+
+
+def type_paragraphs_into_tiptap(locator: Locator, paragraphs: list[str]) -> None:
+    """Insert multiple paragraphs separated by real paragraph breaks.
+
+    Unlike ``type_into_tiptap`` (which uses ``tr.insertText`` and creates hard
+    breaks for ``\\n``), this helper uses ``editor.commands.enter()`` between
+    paragraphs.  This creates actual ProseMirror paragraph nodes — including
+    empty paragraphs for blank strings — matching what happens when a user
+    presses Enter in the editor.
+    """
+    locator.click()
+    # Build JS that inserts each paragraph with enter() between them
+    js_parts = []
+    for para in paragraphs:
+        if para:
+            js_parts.append(f"editor.commands.insertContent({_js_string(para)});")
+        js_parts.append("editor.commands.enter();")
+    # Remove the trailing enter() — we don't want a trailing paragraph break
+    if js_parts:
+        js_parts.pop()
+    js_body = "\n            ".join(js_parts)
+    locator.evaluate(
+        f"""(el) => {{
+            const findEditor = (el) => {{ {_FIND_TIPTAP_EDITOR_JS} }};
+            const editor = findEditor(el);
+            {js_body}
+        }}""",
+    )
+
+
+def _js_string(s: str) -> str:
+    """Escape a Python string for safe embedding in JS source."""
+    return "'" + s.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+
+# NOTE: These are exceptions to our rule against using .type() in tests.
+# Some UI behaviors (mention popups, slash command menus, debounce) are
+# triggered by the keyDown/keyUp event sequence that only .type() produces;
+# .fill() and insertContent() bypass keyboard events entirely.
+
+
+def type_trigger_char(locator: Locator, char: str) -> None:
+    """Type a single character into an input to trigger a UI popup.
+
+    Some UI elements (e.g. TipTap ``@`` mention suggestions, ``/`` slash
+    command menus) are activated by typing specific trigger characters through
+    the keyboard event pipeline.  Playwright's ``fill()`` bypasses keyboard
+    events entirely, so ``.type()`` is required.
+
+    The locator is focused automatically before typing.
+    """
+    locator.type(char)
+
+
+def type_with_delay(locator: Locator, text: str, delay: int) -> None:
+    """Type text character by character with a delay between keystrokes.
+
+    Used to test behaviors that depend on timing between individual keystrokes,
+    such as debounce logic in search inputs.  Playwright's ``fill()`` sets the
+    value instantly, bypassing the debounce entirely.
+    """
+    locator.type(text, delay=delay)
+
+
+# NOTE: This is an exception to our rule against using .type() in tests.
+# TipTap's ordered list input rule triggers on "1. " being typed through
+# keyboard events — .fill() and insertText() bypass this entirely.
+def type_ordered_list_then_text(page: Page, locator: Locator, items: list[str], trailing_text: str) -> None:
+    """Type an ordered list followed by text using real keyboard input.
+
+    Types ``1. <first item>`` to trigger TipTap's ordered list input rule,
+    then continues with Enter-separated items.  Two Enters exit the list,
+    then types the trailing text.  This matches the real user interaction.
+    """
+    locator.click()
+    page.keyboard.type(f"1. {items[0]}")
+    for item in items[1:]:
+        page.keyboard.press("Enter")
+        page.keyboard.type(item)
+    # Exit the list: Enter creates empty item, Enter again exits
+    page.keyboard.press("Enter")
+    page.keyboard.press("Enter")
+    page.keyboard.type(trailing_text)
+
+
+def tiptap_has_placeholder(locator: Locator, placeholder_text: str) -> bool:
+    """Check whether any paragraph in a TipTap editor displays the given placeholder.
+
+    The Placeholder extension sets a ``data-placeholder`` attribute on empty
+    nodes.  This helper inspects the DOM directly via ``locator.evaluate()``
+    so that tests don't need raw CSS-selector locators.
+    """
+    return locator.evaluate(
+        """(el, text) => {
+            const ps = el.querySelectorAll('p[data-placeholder]');
+            return Array.from(ps).some(p => p.getAttribute('data-placeholder') === text);
+        }""",
+        placeholder_text,
+    )
+
+
+# NOTE: This is an exception to our rule to not use page.evaluate().
+# There is no Playwright API to wait for a single animation frame.
+# page.wait_for_timeout(N) is the alternative, but requires guessing a
+# millisecond value that is either too large (slow tests) or too small (flaky).
+# requestAnimationFrame guarantees exactly one render cycle (~16 ms).
+def wait_for_one_frame(page: Page) -> None:
+    """Wait for one browser animation frame to allow React to re-render.
+
+    Use after programmatically updating editor content (e.g. via
+    ``type_into_tiptap``) when the test needs a React component to have
+    re-rendered with the new Jotai atom value before the next interaction.
+    """
+    page.evaluate("() => new Promise(resolve => requestAnimationFrame(resolve))")
+
+
+@retry(
+    retry=retry_if_exception_type(AssertionError),
+    stop=stop_after_attempt(5),
+    wait=wait_fixed(0.25),
+    reraise=True,
+)
+def dismiss_with_escape(dialog: Locator) -> None:
+    """Press Escape on a Radix dialog and retry until it closes.
+
+    Radix's ``DismissableLayer`` attaches its Escape keydown listener in a
+    ``useEffect``, so an Escape that lands before that effect runs is dropped.
+    Retry until the dialog closes.
+
+    The 2 s per-attempt timeout is intentional: combined with the 5-attempt
+    retry budget (~11 s total) it replaces a single 30 s ``expect`` wait
+    rather than tightening it.
+    """
+    dialog.press("Escape")
+    expect(dialog).not_to_be_visible(timeout=2_000)

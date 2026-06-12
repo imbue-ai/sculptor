@@ -1,0 +1,30 @@
+.hoverActions {
+  opacity: 0%;
+  transition: opacity var(--duration-fast);
+}
+
+.queuedMessageBar {
+  background-color: var(--accent-1);
+  border: 2px solid var(--accent-6);
+  border-bottom: none;
+  border-radius: var(--radius-4) var(--radius-4) 0 0;
+  color: var(--gray-12);
+  font-size: var(--font-size-2);
+  margin: 0 auto;
+  overflow-wrap: break-word;
+  padding: var(--space-3) var(--space-3);
+  width: calc(min(80%, var(--main-content-width)));
+  word-wrap: break-word;
+
+  &:hover .hoverActions {
+    opacity: 100%;
+  }
+}
+
+.messageContent {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

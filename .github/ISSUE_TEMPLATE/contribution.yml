@@ -1,0 +1,40 @@
+name: Contribution Proposal
+description: Propose a change, fix, or feature (start here before any PR)
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Before you start:** read [CONTRIBUTING.md](https://github.com/imbue-ai/sculptor/blob/main/CONTRIBUTING.md).
+
+        Open an issue before writing code — it's the best way to avoid wasted effort. Issues are open to everyone, but opening a PR is gated: you can only open one after a maintainer replies `lgtm` here.
+  - type: textarea
+    id: what
+    attributes:
+      label: What do you want to change?
+      description: Be specific and concise.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why?
+      description: What problem does this solve, and why does it belong in Sculptor?
+    validations:
+      required: true
+  - type: textarea
+    id: how
+    attributes:
+      label: How? (optional)
+      description: A brief technical approach, if you have one in mind.
+    validations:
+      required: false
+  - type: dropdown
+    id: implement
+    attributes:
+      label: Do you want to implement this yourself?
+      options:
+        - "No — just raising it"
+        - "Yes — if a maintainer approves it"
+    validations:
+      required: false

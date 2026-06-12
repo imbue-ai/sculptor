@@ -1,0 +1,151 @@
+@use "scrollbar" as *;
+
+// Shared base styles for suggestion list popovers (MentionList, SkillList).
+// Content-specific styles (icons, badges, fonts) live in each list's own module.
+
+.suggestionList {
+  background: var(--accent-1);
+  border-radius: var(--radius-3);
+  box-shadow: var(--shadow-2);
+  box-sizing: border-box;
+  color: var(--accent-12);
+  display: flex;
+  flex-direction: column;
+  max-height: min(45vh, 600px); // stylelint-disable-line sculptor/no-hardcoded-values
+  min-width: 300px; // stylelint-disable-line sculptor/no-hardcoded-values
+  overflow: hidden;
+  padding: var(--space-1) 0 var(--space-1) var(--space-1);
+  position: relative;
+  width: 100%;
+
+  // Must float above modals and dialogs.
+  // The popover is appended to document.body so this z-index competes
+  // directly with Radix Dialog portals.
+  z-index: var(--z-popover);
+}
+
+// Bump the floor when the popover carries a right-hand detail pane so the
+// list column keeps a usable width after the detail reservation. The
+// vertical floor stays compact — the popover should hug whatever rows the
+// caller gave it instead of reserving an empty rectangle below them.
+.suggestionListSplit {
+  min-height: 110px; // stylelint-disable-line sculptor/no-hardcoded-values
+  min-width: 480px; // stylelint-disable-line sculptor/no-hardcoded-values
+}
+
+// Dedicated scroll container so the footer can sit outside the scroll area
+// and never overlap items when the list is scrolled to the bottom.
+.scrollArea {
+  flex: 1 1 auto;
+  min-height: 0;
+  // `overflow-y: auto` alone silently promotes `overflow-x` to auto (CSS spec),
+  // so the hidden `beforeList` sizer's nowrap content triggered a stray
+  // horizontal scrollbar at the bottom. Lock x-overflow to hidden — item
+  // descriptions already handle truncation via `text-overflow: ellipsis`.
+  overflow: hidden auto;
+
+  @include thin-scrollbar($autohide: false);
+}
+
+// Two-pane layout for lists that render a detail view beside their items
+// (currently the skill picker). The left pane hosts the scrollable list;
+// the right pane hosts caller-provided detail content keyed on the active
+// row.
+.twoPane {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: row;
+  min-height: 0;
+}
+
+.leftPane {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rightPane {
+  border-left: 1px solid var(--accent-4);
+  // Detail content sizes itself in isolation: its intrinsic height does NOT
+  // bubble up to the .twoPane row. Without this, a tall description would
+  // make the right pane the taller flex child and pull the whole popover up
+  // with it. `contain: size` lets the right pane stretch to the row's
+  // cross-axis (driven by the left list) and scroll its own overflow.
+  contain: size;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  // Cancel the container's vertical padding so the border-left runs edge to
+  // edge of the popover (clipped by the rounded corners), instead of
+  // stopping short with a visible gap above and below.
+  margin-block: calc(-1 * var(--space-1));
+  min-width: 0;
+  overflow: hidden auto;
+  // Shrink with the popover when the chat input is narrow: clamp keeps
+  // the detail pane between a usable floor (220px) and the prior fixed
+  // width (360px), with 40% of the popover as the responsive midpoint.
+  // Detail descriptions wrap more on narrow chats but the list column
+  // gets back the space it needs.
+  width: clamp(220px, 40%, 360px); // stylelint-disable-line sculptor/no-hardcoded-values
+
+  @include thin-scrollbar($autohide: false);
+}
+
+.item {
+  align-items: center;
+  background-color: transparent;
+  border: none;
+  border-radius: var(--radius-2);
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-1);
+  // Cap the row width so hover/selected backgrounds leave a gap on the right
+  // that matches the container's left padding. The scroll area itself spans
+  // edge-to-edge so the scrollbar stays pinned to the popover's right edge.
+  max-width: calc(100% - var(--space-1));
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2);
+  text-align: left;
+  width: 100%;
+
+  &:hover,
+  &.selected {
+    background-color: var(--accent-3);
+  }
+}
+
+// Non-selectable row for section headers. Kept separate from `.item` so the
+// shorthand `padding: var(--space-1)` on `.item` doesn't compete with the
+// asymmetric header padding below. The top padding separates the header from
+// the previous section's last item; `.sectionHeaderFirstRow` zeroes it out
+// for the header at the very top of the list.
+.sectionHeaderRow {
+  align-items: flex-end;
+  box-sizing: border-box;
+  cursor: default;
+  display: flex;
+  max-width: calc(100% - var(--space-1));
+  padding: var(--space-3) var(--space-1) var(--space-2) var(--space-2);
+  width: 100%;
+}
+
+.sectionHeaderFirstRow {
+  padding-top: 0;
+}
+
+.footer {
+  // Sibling of the scroll area — not sticky — so it never covers items.
+  // Negative left/bottom margins cancel the container's padding so the
+  // footer spans edge to edge and sits flush with the container's
+  // rounded bottom. The container has no right padding, so no right
+  // margin is needed.
+  background: var(--accent-1);
+  border-top: 1px solid var(--accent-4);
+  color: var(--accent-10);
+  flex-shrink: 0;
+  font-size: var(--font-size-1);
+  margin: var(--space-1) 0 calc(var(--space-1) * -1) calc(var(--space-1) * -1);
+  padding: var(--space-1) var(--space-2);
+}

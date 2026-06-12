@@ -1,0 +1,403 @@
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { posthog } from "posthog-js";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
+
+import { useImbueLocation } from "~/common/NavigateUtils.ts";
+import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
+import { effectiveOpenTabIdsAtom, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
+import {
+  chatPanelMountedAtom,
+  panelRegistryAtom,
+  terminalPanelMountedAtom,
+  zenModeActiveAtom,
+} from "~/components/panels/atoms.ts";
+
+import {
+  commandPaletteInitialPageAtom,
+  commandPaletteOpenAtom,
+  commandPalettePagesAtom,
+  commandPalettePendingAtom,
+  commandPaletteSearchAtom,
+} from "./atoms.ts";
+import { agentActionsTargetAtom, workspaceActionsTargetAtom } from "./contextActions/atoms.ts";
+import { isValidPageId, popPageStack, pushPageStack } from "./pages.ts";
+import { useCommandRegistry } from "./registryContext.tsx";
+import type { Command, DynamicProvider, PageId, PaletteContext } from "./types.ts";
+
+/**
+ * Hard cap for how long a command's `perform` can hold the palette in
+ * `pending` state. After this, we release pending and let the user close
+ * the palette; the underlying perform may still complete in the background.
+ * Most commands finish in <100ms and async ones
+ * (like `updateField` for experimental flags) typically finish in <2s.
+ */
+const COMMAND_TIMEOUT_MS = 30_000;
+
+/**
+ * Build the palette context. Re-runs whenever the React Router location
+ * changes (`useImbueLocation` re-renders consumers on every navigation),
+ * the zen-mode atom changes, the chat panel mounts/unmounts, or the page
+ * stack changes. Each ctx field is keyed on a primitive so the returned
+ * object is reference-stable across unrelated renders.
+ */
+export const usePaletteContext = (): PaletteContext => {
+  const loc = useImbueLocation();
+  const isZen = useAtomValue(zenModeActiveAtom);
+  // Reactive read: `chatPanelMountedAtom` is flipped by the chat panel
+  // component on mount/unmount, so this updates without poking the DOM.
+  const hasChatPanel = useAtomValue(chatPanelMountedAtom);
+  const hasTerminalPanel = useAtomValue(terminalPanelMountedAtom);
+  const pages = useAtomValue(commandPalettePagesAtom);
+  const page = pages.length === 0 ? null : (pages[pages.length - 1] ?? null);
+
+  // Route-derived ids (and workspace/agent flags) come from React Router via
+  // `useImbueLocation`, not from regexing `window.location.hash`.
+  const isWorkspace = loc.isWorkspaceRoute;
+  const activeWorkspaceId = loc.workspaceId;
+  const activeAgentId = loc.agentId;
+
+  return useMemo(
+    () => ({
+      route: {
+        isHome: loc.isHomeRoute,
+        isWorkspace,
+        isSettings: loc.isSettingsRoute,
+        isAddWorkspace: loc.isAddWorkspaceRoute,
+        isAgent: loc.isAgentRoute,
+      },
+      activeWorkspaceId,
+      activeAgentId,
+      hasChatPanel,
+      hasTerminalPanel,
+      isZenMode: isZen,
+      page,
+    }),
+    [
+      loc.isHomeRoute,
+      loc.isSettingsRoute,
+      loc.isAddWorkspaceRoute,
+      loc.isAgentRoute,
+      isWorkspace,
+      activeWorkspaceId,
+      activeAgentId,
+      hasChatPanel,
+      hasTerminalPanel,
+      isZen,
+      page,
+    ],
+  );
+};
+
+/** UI controls for the palette. Stable identities. */
+export const useCommandPalette = (): {
+  isOpen: boolean;
+  open: () => void;
+  /**
+   * Open the palette and land directly on a sub-page (e.g.
+   * `openTo("workspaces.switch")` from the Cmd+P keybinding). The
+   * sub-page is delivered via `commandPaletteInitialPageAtom` so the
+   * open-side of the reset effect doesn't clobber the page stack.
+   */
+  openTo: (pageId: PageId) => void;
+  close: () => void;
+  toggle: () => void;
+  pushPage: (pageId: PageId) => void;
+  popPage: () => void;
+} => {
+  const [isOpen, setIsOpen] = useAtom(commandPaletteOpenAtom);
+  const setSearch = useSetAtom(commandPaletteSearchAtom);
+  const setPages = useSetAtom(commandPalettePagesAtom);
+  const setInitialPage = useSetAtom(commandPaletteInitialPageAtom);
+
+  // open/close just flip `isOpen`. The reset of search / page stack /
+  // context-action targets is owned exclusively by `useResetOnOpenChange`
+  // (mounted inside `<CommandPalette>`), which fires on both the rising
+  // and falling edges. That keeps a single writer to those atoms and
+  // ensures raw `setIsOpen(...)` callers (tests, deep links) get the
+  // same reset behavior.
+  const open = useCallback(() => {
+    setIsOpen(true);
+  }, [setIsOpen]);
+
+  const openTo = useCallback(
+    (pageId: PageId) => {
+      if (!isValidPageId(pageId)) {
+        console.error(`[command-palette] openTo: unknown page id "${pageId}" — opening at root`);
+        setIsOpen(true);
+        return;
+      }
+      // Stash the initial page BEFORE flipping isOpen so the reset
+      // effect can read it on the same commit.
+      setInitialPage(pageId);
+      setIsOpen(true);
+    },
+    [setInitialPage, setIsOpen],
+  );
+
+  const close = useCallback(() => {
+    setIsOpen(false);
+  }, [setIsOpen]);
+
+  const toggle = useCallback(() => {
+    setIsOpen((prev) => !prev);
+  }, [setIsOpen]);
+
+  const pushPage = useCallback(
+    (pageId: PageId) => {
+      setSearch("");
+      setPages((prev) => pushPageStack(prev, pageId));
+    },
+    [setPages, setSearch],
+  );
+
+  const popPage = useCallback(() => {
+    setSearch("");
+    setPages((prev) => popPageStack(prev));
+  }, [setPages, setSearch]);
+
+  return { isOpen, open, openTo, close, toggle, pushPage, popPage };
+};
+
+/**
+ * Register an array of commands for the lifetime of the calling component.
+ * The effect re-runs whenever the `commands` array identity changes —
+ * callers should memoize the array (or build it from `useMemo`) so we
+ * don't churn the registry on every render.
+ */
+export const useRegisterCommands = (commands: ReadonlyArray<Command>): void => {
+  const registry = useCommandRegistry();
+  useEffect(() => {
+    return registry.registerMany(commands);
+  }, [registry, commands]);
+};
+
+export const useRegisterDynamicCommands = (provider: DynamicProvider): void => {
+  const registry = useCommandRegistry();
+  useEffect(() => {
+    const unregister = registry.registerProvider(provider);
+    return unregister;
+  }, [registry, provider]);
+};
+
+/**
+ * Subscribe to registry mutations so the palette re-renders when dynamic
+ * registrations land mid-session. Returns the registry size (a stand-in
+ * snapshot) — what we actually care about is that the value changes when
+ * the registry mutates, so that downstream `useMemo` recomputes.
+ */
+const useRegistrySize = (): number => {
+  const registry = useCommandRegistry();
+  return useSyncExternalStore(
+    (cb) => registry.subscribe(cb),
+    () => registry.size(),
+    () => registry.size(),
+  );
+};
+
+/**
+ * The list of visible commands for the current ctx, with `when` and
+ * `onPage` already applied. Sorting + grouping is done in the component.
+ *
+ * Subscribes to the workspace and task atoms so that dynamic providers
+ * which read those atoms via `getDefaultStore()` re-evaluate when their
+ * inputs change. Without this, opening the palette and then navigating
+ * (or having a workspace added in the background) would leave the list
+ * stale.
+ *
+ * Short-circuits when the palette is closed so we don't pay the
+ * `commandRegistry.list()` cost on every render.
+ */
+export const useVisibleCommands = (ctx: PaletteContext): Array<Command> => {
+  const registry = useCommandRegistry();
+  const isOpen = useAtomValue(commandPaletteOpenAtom);
+  const search = useAtomValue(commandPaletteSearchAtom);
+  const size = useRegistrySize();
+  // Subscriptions to atoms that dynamic providers read imperatively
+  // (`runtime.store.get(atom)` inside `produce()`). Listing them here
+  // forces the visible-set memo to recompute when any of them changes,
+  // which in turn re-invokes every provider's `produce`. Without these
+  // subscriptions, providers see stale data after the user edits state
+  // outside the palette (e.g. closing a tab while the palette is open
+  // would leave "Close others" stale until the palette reopens).
+  //
+  // INVARIANT: any atom a dynamic provider or its action runtime reads
+  // through `runtime.store.get(...)` MUST appear here. The static
+  // builtin commands don't need this — their `when` predicates already
+  // re-evaluate on every `ctx` change inside `registry.list()`.
+  const workspaces = useAtomValue(workspacesArrayAtom);
+  const tasks = useAtomValue(tasksArrayAtom);
+  const openTabIds = useAtomValue(effectiveOpenTabIdsAtom);
+  const panelRegistry = useAtomValue(panelRegistryAtom);
+  const hasQuery = search.trim().length > 0;
+  return useMemo(() => {
+    if (!isOpen) return [];
+    // Tripwire reads — referenced so React tracks them as deps without
+    // ESLint flagging them as unused. The actual data is consumed by
+    // dynamic providers via `runtime.store.get(...)`.
+    void size;
+    void workspaces;
+    void tasks;
+    void openTabIds;
+    void panelRegistry;
+    // While the user is typing at the root, surface page-scoped commands
+    // too so fuzzy search can land them on sub-page items directly.
+    return registry.list(ctx, { includeAllPages: hasQuery });
+  }, [registry, isOpen, ctx, hasQuery, size, workspaces, tasks, openTabIds, panelRegistry]);
+};
+
+/**
+ * Run a command:
+ *  - mark pending while async
+ *  - close palette unless keepOpen / Cmd+Enter requested
+ *  - on error, log and keep palette open
+ */
+export const useRunCommand = (): ((cmd: Command, opts?: { keepOpen?: boolean }) => Promise<void>) => {
+  const ctx = usePaletteContext();
+  const { close, pushPage } = useCommandPalette();
+  const setPending = useSetAtom(commandPalettePendingAtom);
+
+  return useCallback(
+    async (cmd: Command, opts?: { keepOpen?: boolean }) => {
+      const start = performance.now();
+      const shouldKeepOpen = opts?.keepOpen ?? cmd.keepOpen ?? false;
+      const isPageOpener = cmd.pageId != null;
+
+      // H9: Multiple commands in flight can race on `pendingCommandIdAtom`.
+      // Only set pending if no other command is in flight, and only clear
+      // pending if the in-flight command is OURS (so a faster sibling's
+      // finally doesn't clear our spinner).
+      setPending((prev) => prev ?? cmd.id);
+      let didThrow = false;
+      let didTimeOut = false;
+      // Hoisted so a synchronous throw before the Promise.race still
+      // clears the timer in `finally` — otherwise the timeout fires
+      // 30s later on a settled race (no-op visible behavior, but a
+      // stray timer holds a reference until then).
+      let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+      try {
+        if (cmd.pageId) {
+          pushPage(cmd.pageId);
+        }
+        const performPromise = Promise.resolve(cmd.perform({ ctx, keepOpen: shouldKeepOpen, pushPage }));
+        let timeoutResolve: (value: "timeout") => void;
+        const timeoutPromise = new Promise<"timeout">((resolve) => {
+          timeoutResolve = resolve;
+        });
+        timeoutHandle = setTimeout(() => timeoutResolve("timeout"), COMMAND_TIMEOUT_MS);
+        const result = await Promise.race([performPromise.then(() => "ok" as const), timeoutPromise]);
+        if (result === "timeout") {
+          didTimeOut = true;
+          console.warn(
+            `[command-palette] "${cmd.id}" did not complete within ${COMMAND_TIMEOUT_MS}ms; releasing pending state. The command may still complete in the background.`,
+          );
+          // Surface as console.warn until a global toast hook lands; the
+          // timeout is non-fatal — the perform may still complete in the
+          // background.
+        }
+      } catch (err) {
+        didThrow = true;
+        console.error(`[command-palette] "${cmd.id}" threw`, err);
+      } finally {
+        if (timeoutHandle != null) clearTimeout(timeoutHandle);
+        setPending((prev) => (prev === cmd.id ? null : prev));
+      }
+      const elapsed = performance.now() - start;
+      console.debug(`[command-palette] ran "${cmd.id}" in ${elapsed.toFixed(1)}ms`);
+
+      // Telemetry: emit a product-analytics event for actual command runs.
+      // Page-opener commands (those that just push a sub-page) are excluded
+      // because they're navigation, not "the user ran a command" — emitting
+      // for every breadcrumb push would flood downstream dashboards with
+      // low-signal events. The `console.debug` above is developer-facing
+      // and intentionally separate from this telemetry call.
+      //
+      // Property names use snake_case to match PostHog conventions and the
+      // existing register() shape in `~/common/Telemetry.ts`. Only the
+      // command id, group, page, elapsed, and boolean flags are emitted —
+      // no PII (no titles, no search query, no workspace/agent ids).
+      if (!isPageOpener) {
+        posthog.capture("command_palette.command_run", {
+          command_id: cmd.id,
+          group: cmd.group,
+          page: ctx.page,
+          keep_open: shouldKeepOpen,
+          elapsed_ms: Math.round(elapsed),
+          timed_out: didTimeOut,
+          threw: didThrow,
+        });
+      }
+
+      if (!shouldKeepOpen && !isPageOpener) {
+        close();
+      }
+      // keepOpen path: focus restoration is owned by `CommandPalette.tsx`,
+      // which watches `commandPalettePendingAtom` and pulls focus back to
+      // its own input ref after the perform settles. Keeping the focus
+      // logic next to the input ref (rather than querying the DOM here)
+      // also lets us drop the `document.querySelector` lookup that this
+      // hook previously did.
+    },
+    [ctx, close, pushPage, setPending],
+  );
+};
+
+/**
+ * Single source of truth for resetting palette state on open/close.
+ * Fires on BOTH edges of `commandPaletteOpenAtom`:
+ *  - rising edge (false -> true): wipe search, page stack, and context
+ *    action targets so the palette opens to a clean state. Catches
+ *    `open()`, `toggle()`, and any raw `setIsOpen(true)` (tests, future
+ *    deep-link flows).
+ *  - falling edge (true -> false): same reset, so the next open also
+ *    starts clean even if some other code path closes the palette by
+ *    flipping the atom directly.
+ *
+ * Uses a ref to detect actual transitions so we don't run the reset on
+ * every render of the host component.
+ *
+ * This is the ONLY writer to these atoms for open/close lifecycle. The
+ * `open()`/`close()` callbacks on `useCommandPalette` are intentionally
+ * just `setIsOpen(true|false)`; the reset rides along via this effect.
+ */
+export const useResetOnOpenChange = (): void => {
+  const isOpen = useAtomValue(commandPaletteOpenAtom);
+  const initialPage = useAtomValue(commandPaletteInitialPageAtom);
+  const setSearch = useSetAtom(commandPaletteSearchAtom);
+  const setPages = useSetAtom(commandPalettePagesAtom);
+  const setInitialPage = useSetAtom(commandPaletteInitialPageAtom);
+  const setWorkspaceActionsTarget = useSetAtom(workspaceActionsTargetAtom);
+  const setAgentActionsTarget = useSetAtom(agentActionsTargetAtom);
+  const prevOpenRef = useRef(false);
+  // Layout effect (not plain effect) so the reset commits BEFORE paint.
+  // A caller that batches `setSearch("x"); setIsOpen(true)` would
+  // otherwise flash the stale search text for one frame before this
+  // effect cleared it.
+  useLayoutEffect(() => {
+    const didChange = isOpen !== prevOpenRef.current;
+    prevOpenRef.current = isOpen;
+    if (didChange) {
+      setSearch("");
+      // On the rising edge: if a caller stashed an initial page (via
+      // `openTo`), seed the page stack with it instead of resetting
+      // to []. Always clear the atom so the next open starts fresh.
+      // Re-validate on consume (defense-in-depth: `openTo` already
+      // checks, but a future direct `setInitialPage(...)` writer must
+      // not be able to push an invalid PageId into the stack).
+      if (isOpen && initialPage != null) {
+        if (isValidPageId(initialPage)) {
+          setPages([initialPage]);
+        } else {
+          console.error(
+            `[command-palette] commandPaletteInitialPageAtom holds invalid page id "${initialPage}" — opening at root`,
+          );
+          setPages([]);
+        }
+        setInitialPage(null);
+      } else {
+        setPages([]);
+      }
+      setWorkspaceActionsTarget(null);
+      setAgentActionsTarget(null);
+    }
+  }, [isOpen, initialPage, setSearch, setPages, setInitialPage, setWorkspaceActionsTarget, setAgentActionsTarget]);
+};

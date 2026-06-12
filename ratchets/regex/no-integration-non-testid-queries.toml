@@ -1,0 +1,9 @@
+[rule]
+id = "no-integration-non-testid-queries"
+description = "Disallow get_by_text/get_by_role/query_selector in integration tests; find elements by data-testid"
+severity = "warning"
+
+[match]
+pattern = "\\.get_by_text\\(|\\.get_by_role\\(|\\.query_selector\\("
+languages = ["python"]
+include = ["sculptor/tests/integration/**/*.py"]

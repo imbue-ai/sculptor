@@ -1,0 +1,9 @@
+[rule]
+id = "no-integration-page-goto"
+description = "Disallow .goto() URL navigation in integration tests; navigate via UI"
+severity = "warning"
+
+[match]
+pattern = "\\.goto\\("
+languages = ["python"]
+include = ["sculptor/tests/integration/**/*.py"]

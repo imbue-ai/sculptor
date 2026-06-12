@@ -1,0 +1,45 @@
+.recentArea {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+  width: 100%;
+
+  --ws-name-color: var(--gray-12);
+  --ws-branch-color: var(--gray-9);
+  --ws-time-color: var(--gray-9);
+  --ws-dot-opacity: 1;
+  --ws-search-bg: var(--gray-3);
+  --ws-search-icon-color: var(--gray-10);
+  --ws-search-hint-color: var(--gray-9);
+  --ws-search-placeholder-color: var(--gray-9);
+  --ws-transition-delay: 0s;
+}
+
+.workspaceList {
+  flex: 1;
+  min-height: 80px;
+}
+
+.noResults {
+  color: var(--gray-8);
+  font-size: var(--font-size-1-5);
+  padding: var(--space-6) 0;
+  text-align: center;
+}
+
+.showMoreButton {
+  all: unset;
+  box-sizing: border-box;
+  color: var(--gray-9);
+  cursor: pointer;
+  font-size: var(--font-size-1);
+  padding: var(--space-3);
+  text-align: center;
+  width: 100%;
+
+  &:hover {
+    color: var(--gray-11);
+  }
+}

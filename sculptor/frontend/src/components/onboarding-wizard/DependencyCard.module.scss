@@ -1,0 +1,188 @@
+@use "scrollbar" as *;
+
+.row {
+  border: 1px solid var(--accent-6);
+  border-radius: var(--radius-3);
+
+  &:hover {
+    border-color: var(--accent-8);
+  }
+}
+
+.rowInstalled {
+  border: 1px solid var(--accent-6);
+  border-radius: var(--radius-3);
+
+  &:hover {
+    border-color: var(--accent-8);
+  }
+}
+
+.rowError {
+  border: 1px solid var(--red-6);
+  border-radius: var(--radius-3);
+}
+
+.rowWarning {
+  border: 1px solid var(--orange-6);
+  border-radius: var(--radius-3);
+}
+
+/* Main row layout */
+.mainRow {
+  padding: var(--space-2) var(--space-3);
+}
+
+.mainRowClickable {
+  cursor: pointer;
+  padding: var(--space-2) var(--space-3);
+}
+
+/* Icons */
+.iconInstalled {
+  color: var(--green-11);
+  flex-shrink: 0;
+}
+
+.iconError {
+  color: var(--red-11);
+  flex-shrink: 0;
+}
+
+.iconWarning {
+  color: var(--orange-11);
+  flex-shrink: 0;
+}
+
+/* Text */
+.label {
+  color: var(--accent-11);
+}
+
+.cliName {
+  flex-shrink: 0;
+}
+
+.statusText {
+  color: var(--accent-11);
+}
+
+.optionalTag {
+  color: var(--accent-8);
+  font-style: italic;
+}
+
+.chevron {
+  color: var(--accent-8);
+  flex-shrink: 0;
+}
+
+/* Install popover */
+.brewCommand {
+  display: block;
+  font-family: var(--mono-font-family);
+  padding: var(--space-1) var(--space-2);
+  user-select: all;
+}
+
+.installLink {
+  color: var(--accent-10);
+  cursor: pointer;
+  text-decoration: underline;
+
+  &:hover {
+    color: var(--accent-11);
+  }
+}
+
+/* Expanded details panel */
+.details {
+  border-top: 1px solid var(--accent-4);
+  padding: var(--space-2) var(--space-3);
+}
+
+.detailLabel {
+  color: var(--accent-9);
+  flex-shrink: 0;
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-medium);
+  min-width: 48px;
+}
+
+.detailValue {
+  background: var(--accent-3);
+  border-radius: var(--radius-2);
+  color: var(--accent-12);
+  font-family: var(--mono-font-family);
+  font-size: var(--font-size-1);
+  padding: 2px var(--space-2);
+}
+
+/* The Path value can be a long absolute path. Keep it on a single line but
+   make it horizontally scrollable so it isn't cut off, and pair it with a
+   title tooltip showing the full path on hover (SCU-1271). min-width: 0 lets
+   it shrink within the flex row so the overflow can take effect. The scrollbar
+   is hidden rather than thin: a reserved scrollbar gutter would add height only
+   at the bottom and push the text out of vertical-center alignment with the
+   "Path" label and "override" link. */
+.pathValue {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+
+  @include hidden-scrollbar;
+}
+
+.overrideLink {
+  color: var(--accent-10);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: var(--font-size-1);
+  text-decoration: underline;
+
+  &:hover {
+    color: var(--accent-11);
+  }
+}
+
+.overrideInput {
+  background: var(--accent-3);
+  border: 1px solid var(--accent-6);
+  border-radius: var(--radius-3);
+  color: var(--accent-12);
+  flex: 1;
+  font-family: var(--mono-font-family);
+  font-size: var(--font-size-2);
+  outline: none;
+  padding: var(--space-1) var(--space-2);
+
+  &:focus {
+    border-color: var(--accent-8);
+  }
+
+  &::placeholder {
+    color: var(--accent-8);
+  }
+}
+
+.overrideInputError {
+  border-color: var(--red-9);
+}
+
+.overrideErrorText {
+  color: var(--red-11);
+  font-size: var(--font-size-1);
+}
+
+.circleProgress {
+  flex-shrink: 0;
+
+  circle:last-child {
+    transition: stroke-dashoffset var(--duration-slow) ease;
+  }
+}
+
+.modeControlRow {
+  padding-top: var(--space-1);
+}

@@ -1,0 +1,141 @@
+@use "scrollbar" as *;
+
+.editorWrapper {
+  background: var(--accent-1);
+  border: 2px solid var(--accent-6);
+  border-radius: var(--radius-4);
+
+  &:focus-within {
+    border-color: var(--accent-8);
+  }
+}
+
+// 500px caps growth on tall panels. When the editor sits in a height-
+// constrained flex column (min-height: 0 chain), flex-shrink reduces the
+// effective cap to the available panel height.
+.scrollArea {
+  height: auto;
+  max-height: 500px;
+  min-height: 0;
+  overflow-y: auto;
+
+  @include thin-scrollbar;
+}
+
+.disabled {
+  background: var(--gray-3);
+  border-color: var(--gray-6);
+  cursor: not-allowed;
+  opacity: 60%;
+
+  &:focus-within {
+    border-color: var(--gray-6);
+  }
+
+  .editor {
+    color: var(--gray-9);
+  }
+}
+
+// stylelint-disable-next-line no-descending-specificity -- scoped inside .disabled above
+.editor {
+  color: var(--accent-12);
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-2);
+  font-style: normal;
+  font-weight: var(--font-weight-regular);
+  min-height: 36px;
+  padding-block: var(--space-3) var(--space-1);
+  padding-inline: var(--space-4);
+
+  &.viewer {
+    min-height: inherit; // Inherit height from parent container
+    padding-block: var(--space-2);
+    padding-inline: inherit; // Inherit padding from parent container
+  }
+
+  &:focus {
+    outline: none;
+  }
+
+  pre {
+    background-color: var(--code-background-color);
+    border: var(--code-border);
+    padding: var(--space-2);
+
+    code {
+      background: none;
+      border: none;
+      color: inherit;
+      padding: 0;
+    }
+  }
+
+  p.placeholder:first-child::before {
+    color: var(--accent-7);
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+  }
+
+  .mention {
+    background-color: var(--accent-3);
+    border-radius: var(--radius-1);
+    box-decoration-break: clone;
+    color: var(--accent-12);
+    font-family: var(--default-font-family);
+    font-size: var(--font-size-1-5);
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
+    padding: 2px;
+  }
+
+  .skill {
+    background-color: var(--accent-3);
+    border-radius: var(--radius-1);
+    box-decoration-break: clone;
+    color: var(--accent-12);
+    font-family: var(--mono-font-family);
+    font-size: var(--font-size-1-5);
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
+    line-height: 21px;
+    padding: 2px;
+  }
+
+  p {
+    margin-block: 2px;
+  }
+
+  h1,
+  h2,
+  h3 {
+    margin-block: var(--space-1) 2px;
+  }
+
+  ul,
+  ol {
+    margin-block: 2px;
+    padding-inline-start: var(--space-5);
+  }
+
+  li p {
+    margin-block: 0;
+  }
+
+  blockquote {
+    border-left: 3px solid var(--accent-6);
+    margin-block: 2px;
+    margin-inline: 0;
+    padding-left: var(--space-3);
+  }
+
+  .tightList li p {
+    margin: 0;
+  }
+}
+
+.footer {
+  padding: 0 var(--space-2);
+}

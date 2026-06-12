@@ -1,0 +1,52 @@
+.line {
+  align-items: center;
+  display: flex;
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  line-height: 1.5;
+  padding: var(--space-1) var(--space-2);
+}
+
+.bar {
+  flex-shrink: 0;
+  height: 100%;
+  margin-right: var(--space-2);
+  min-height: 18px;
+  width: 4px;
+}
+
+.text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deletion {
+  background-color: var(--red-a3);
+
+  .bar {
+    background: repeating-linear-gradient(
+      -45deg,
+      var(--red-9),
+      var(--red-9) 2px,
+      transparent 2px,
+      transparent 4px
+    );
+  }
+
+  .text {
+    color: var(--red-11);
+  }
+}
+
+.addition {
+  background-color: var(--green-a3);
+
+  .bar {
+    background-color: var(--green-9);
+  }
+
+  .text {
+    color: var(--green-11);
+  }
+}

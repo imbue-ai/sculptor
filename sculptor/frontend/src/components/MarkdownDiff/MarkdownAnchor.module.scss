@@ -1,0 +1,20 @@
+// Per-link-kind affordances applied by `MarkdownAnchor`. The component
+// stamps `data-link-kind` on every rendered `<a>` so consumer stylesheets
+// (e.g. `ReadOnlyPreview.module.scss`) can hook in too — these rules
+// cover the intrinsic anchor styling that travels with the component.
+
+.icon {
+  display: inline-block;
+  margin-left: 0.2em;
+  vertical-align: -0.15em;
+}
+
+// Fragment (`#anchor`) links land here. The dashed underline signals "this
+// anchor doesn't take you anywhere yet"; the tooltip (set on the element
+// via `title`) explains why (heading-id generation isn't wired yet —
+// tracked in SCU-767).
+.dashedUnderline {
+  text-decoration: underline dashed;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}

@@ -1,0 +1,16 @@
+# serializer version: 1
+# name: test__sentry_event_rate_limiter_annotations
+  dict({
+    'application': dict({
+      'total_sent': 4,
+      'total_throttled': 6,
+      'total_tracked': 2,
+    }),
+    'instance': dict({
+      'throttled_since_last_report': 6,
+      'total_sent': 3,
+      'total_throttled': 6,
+    }),
+    'reason_to_allow': 'timeout_elapsed',
+  })
+# ---

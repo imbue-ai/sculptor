@@ -1,0 +1,25 @@
+.track {
+  cursor: pointer;
+  flex-shrink: 0;
+  height: var(--space-1);
+  position: relative;
+}
+
+.thumb {
+  // Match Radix ScrollArea thumb styling
+  background-color: var(--gray-a8);
+  border-radius: max(var(--radius-1), var(--radius-full));
+  cursor: grab;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  transition: background-color var(--duration-fast);
+
+  &:hover {
+    background-color: var(--gray-a9);
+  }
+
+  &:active {
+    cursor: grabbing;
+  }
+}

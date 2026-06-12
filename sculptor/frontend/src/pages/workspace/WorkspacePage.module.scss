@@ -1,0 +1,17 @@
+.container {
+  height: 100%;
+  position: relative;
+  width: 100%;
+
+  --artifact-base-bg: var(--gray-2);
+  --artifact-darker-bg: var(--gray-3);
+  --artifact-lighter-bg: var(--gray-1);
+  --artifact-border-color: var(--gray-4);
+}
+
+.centerPanel {
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}

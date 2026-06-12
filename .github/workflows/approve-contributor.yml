@@ -1,0 +1,126 @@
+name: Approve Contributor
+
+# When a maintainer comments `lgtm` on an issue, open a PR that adds the issue
+# author to .github/APPROVED_CONTRIBUTORS (the PR allowlist). The bot never
+# writes to main directly — it opens a PR on a meta/clear-* branch. Because the
+# allowlist lives under .github/ (owned by @imbue-ai/sculptor-maintainers in
+# CODEOWNERS) and main's ruleset requires code-owner review, a maintainer must
+# approve and merge the PR before the contributor is actually cleared.
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  approve:
+    # Only act on comments on issues, not on PRs.
+    if: ${{ !github.event.issue.pull_request }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Open approval PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const APPROVED_FILE = '.github/APPROVED_CONTRIBUTORS';
+            const { owner, repo } = context.repo;
+            const issueAuthor = context.payload.issue.user.login;
+            const issueNumber = context.issue.number;
+            const commenter = context.payload.comment.user.login;
+            const commentBody = (context.payload.comment.body || '').trim();
+            const defaultBranch = context.payload.repository.default_branch;
+
+            if (!/\blgtm\b/i.test(commentBody)) {
+              console.log('Comment does not contain lgtm');
+              return;
+            }
+
+            // Only maintainers can clear contributors.
+            try {
+              const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner, repo, username: commenter,
+              });
+              if (!['admin', 'maintain', 'write'].includes(data.permission)) {
+                console.log(`${commenter} lacks write access`);
+                return;
+              }
+            } catch {
+              console.log(`${commenter} is not a collaborator`);
+              return;
+            }
+
+            const parseUsers = (text) =>
+              new Set(
+                text
+                  .split('\n')
+                  .map((l) => l.trim())
+                  .filter((l) => l && !l.startsWith('#'))
+                  .map((l) => l.split(/\s+/)[0].toLowerCase())
+              );
+
+            // Already on the allowlist in main? Nothing to do.
+            const baseFile = await github.rest.repos.getContent({
+              owner, repo, path: APPROVED_FILE, ref: defaultBranch,
+            });
+            const baseText = Buffer.from(baseFile.data.content, 'base64').toString('utf8');
+            if (parseUsers(baseText).has(issueAuthor.toLowerCase())) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: issueNumber,
+                body: `@${issueAuthor} is already cleared to open PRs.`,
+              });
+              return;
+            }
+
+            const branch = `meta/clear-${issueAuthor.toLowerCase()}`;
+
+            // Branch off the current tip of main.
+            const baseRef = await github.rest.git.getRef({ owner, repo, ref: `heads/${defaultBranch}` });
+            try {
+              await github.rest.git.createRef({
+                owner, repo, ref: `refs/heads/${branch}`, sha: baseRef.data.object.sha,
+              });
+              console.log(`Created ${branch}`);
+            } catch (e) {
+              if (e.status === 422) console.log(`${branch} already exists; reusing`);
+              else throw e;
+            }
+
+            // Append the username on the branch (skip if it's already there).
+            const headFile = await github.rest.repos.getContent({ owner, repo, path: APPROVED_FILE, ref: branch });
+            const headText = Buffer.from(headFile.data.content, 'base64').toString('utf8');
+            if (!parseUsers(headText).has(issueAuthor.toLowerCase())) {
+              const newText = headText.replace(/\n*$/, '\n') + `${issueAuthor}\n`;
+              await github.rest.repos.createOrUpdateFileContents({
+                owner, repo, path: APPROVED_FILE, branch,
+                message: `chore: clear ${issueAuthor} for PRs`,
+                content: Buffer.from(newText, 'utf8').toString('base64'),
+                sha: headFile.data.sha,
+              });
+              console.log(`Appended ${issueAuthor} on ${branch}`);
+            }
+
+            // Open the PR, or reuse an existing one for this branch.
+            const open = await github.rest.pulls.list({ owner, repo, head: `${owner}:${branch}`, state: 'open' });
+            let prUrl;
+            if (open.data.length > 0) {
+              prUrl = open.data[0].html_url;
+            } else {
+              const pr = await github.rest.pulls.create({
+                owner, repo, base: defaultBranch, head: branch,
+                title: `Clear @${issueAuthor} to open pull requests`,
+                body: [
+                  `Approved by @${commenter} in #${issueNumber}.`,
+                  'Merging this adds the contributor to the PR allowlist so their pull requests stop being auto-closed. Requires a @imbue-ai/sculptor-maintainers review (CODEOWNERS) before it can merge.',
+                  'Opened automatically by the approve-contributor workflow.',
+                ].join('\n\n'),
+              });
+              prUrl = pr.data.html_url;
+            }
+
+            await github.rest.issues.createComment({
+              owner, repo, issue_number: issueNumber,
+              body: `Thanks @${commenter}! Opened ${prUrl} to clear @${issueAuthor} for PRs. Once a maintainer merges it, their pull requests won't be auto-closed.`,
+            });

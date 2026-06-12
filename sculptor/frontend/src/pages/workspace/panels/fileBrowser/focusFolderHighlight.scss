@@ -1,0 +1,10 @@
+:global(.promptNavigatorHighlight) {
+  box-shadow: 0 0 0 2px var(--accent-7);
+  transition: box-shadow var(--duration-slow) ease;
+}
+
+:global(.promptNavigatorHighlightFadeOut) {
+  box-shadow: 0 0 0 2px transparent;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- no matching token for 1.5s duration
+  transition: box-shadow 1.5s ease;
+}

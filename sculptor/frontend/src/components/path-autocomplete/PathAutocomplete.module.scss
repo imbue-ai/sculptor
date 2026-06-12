@@ -1,0 +1,110 @@
+.root {
+  min-width: 0;
+  position: relative;
+  width: 100%;
+}
+
+.input {
+  background: var(--color-surface);
+  border: 1px solid var(--gray-6);
+  border-radius: var(--radius-2);
+  box-sizing: border-box;
+  color: var(--gray-12);
+  font-family: var(--mono-font-family);
+  font-size: var(--font-size-2);
+  height: 32px;
+  outline: none;
+  padding: 0 var(--space-3);
+  width: 100%;
+
+  &:focus {
+    border-color: var(--accent-8);
+    box-shadow: 0 0 0 1px var(--accent-8);
+  }
+
+  &::placeholder {
+    color: var(--gray-8);
+  }
+}
+
+.list {
+  background: var(--color-panel-solid);
+  border: 1px solid var(--gray-6);
+  border-radius: var(--radius-2);
+  box-shadow: var(--shadow-overlay);
+  left: 0;
+  outline: none;
+  overflow: hidden;
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--space-1));
+  z-index: var(--z-dropdown);
+}
+
+.item {
+  align-items: center;
+  border-radius: var(--radius-1);
+  cursor: pointer;
+  display: flex;
+  font-family: var(--mono-font-family);
+  font-size: var(--font-size-2);
+  gap: var(--space-2);
+  margin: var(--space-1);
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  transition: background-color var(--duration-fast);
+  white-space: nowrap;
+
+  &[data-selected="true"] {
+    background-color: var(--accent-3);
+  }
+}
+
+.itemPath {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.itemPathDim {
+  color: var(--gray-8);
+  direction: rtl;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  unicode-bidi: plaintext;
+  white-space: nowrap;
+}
+
+.itemPathMatch {
+  color: var(--gray-12);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.itemIcon {
+  color: var(--accent-9);
+  flex-shrink: 0;
+}
+
+.empty {
+  color: var(--gray-8);
+  font-size: var(--font-size-2);
+  padding: var(--space-3);
+  text-align: center;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-3);
+}
+
+.hint {
+  border-top: 1px solid var(--gray-4);
+  color: var(--gray-8);
+  font-size: var(--font-size-1);
+  justify-content: flex-end;
+  padding: var(--space-1) var(--space-2);
+}

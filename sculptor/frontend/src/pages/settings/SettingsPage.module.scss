@@ -1,0 +1,120 @@
+@use "scrollbar" as *;
+
+.container {
+  background: var(--gray-2);
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.contentScroll {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+
+  @include thin-scrollbar;
+}
+
+.sidebar {
+  flex-shrink: 0;
+  width: 300px;
+}
+
+.mobileNav {
+  display: none;
+}
+
+.contentArea {
+  padding-bottom: var(--space-9);
+  padding-top: var(--space-8);
+}
+
+@container settings-page (max-width: 825px) {
+  .sidebar {
+    display: none;
+  }
+
+  .mobileNav {
+    display: flex;
+  }
+
+  .contentArea {
+    padding-top: var(--space-4);
+  }
+}
+
+.navItem {
+  border-radius: var(--radius-3);
+  color: var(--gray-11);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--gray-4);
+    color: var(--gray-12);
+  }
+
+  &.active {
+    background: var(--accent-3);
+    color: var(--accent-12);
+    font-weight: var(--font-weight-medium);
+  }
+}
+
+.navSeparator {
+  background-color: var(--gray-4);
+}
+
+.settingControl {
+  max-width: 250px;
+  min-width: min(200px, 100%);
+}
+
+.telemetrySelect {
+  .rt-SelectTrigger { // stylelint-disable-line selector-class-pattern -- Radix UI class name
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.telemetryContent {
+  padding: 10px;
+  width: 420px;
+}
+
+.telemetryItem {
+  height: auto;
+  padding: 10px 25px;
+  white-space: normal;
+  word-wrap: normal;
+}
+
+.telemetryBody {
+  min-width: 0;
+}
+
+.anthropicIcon {
+  align-items: center;
+  background: var(--amber-5);
+  border-radius: var(--radius-4);
+  color: var(--amber-11);
+  display: flex;
+  height: 48px;
+  justify-content: center;
+  width: 48px;
+}
+
+.themeToggle {
+  // stylelint-disable-next-line selector-class-pattern -- Radix UI class name
+  :global(.rt-SegmentedControlItem[data-state="off"]) {
+    color: var(--gray-11);
+  }
+}
+
+.connectedIndicator {
+  background: var(--green-9);
+  border-radius: 50%;
+  height: 8px;
+  width: 8px;
+}

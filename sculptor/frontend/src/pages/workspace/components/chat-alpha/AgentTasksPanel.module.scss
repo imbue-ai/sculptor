@@ -1,0 +1,180 @@
+@use "scrollbar" as *;
+
+.todoListContainer {
+  --item-pad-x: 22px;
+  --icon-size: 18px;
+  --icon-gap: 12px;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.taskList {
+  flex: 1;
+  min-height: 0;
+  // List rows already wrap text via `overflow-wrap: break-word`, so no
+  // horizontal scroll is ever needed. `overflow-y: auto` alone would let
+  // browsers treat overflow-x as auto and surface a spurious horizontal
+  // scrollbar when sub-pixel rounding nudges a row past the column.
+  overflow: hidden auto;
+  padding-bottom: var(--space-3);
+
+  @include thin-scrollbar;
+}
+
+.todoItem {
+  align-items: flex-start;
+  display: flex;
+  font-size: var(--font-size-1-5);
+  gap: var(--icon-gap);
+  padding: 9px var(--item-pad-x) 9px var(--item-pad-x);
+
+  &:hover {
+    background-color: var(--gray-3);
+  }
+
+  &.inProgress {
+    background-color: var(--accent-2);
+    position: relative;
+
+    &:hover {
+      background-color: var(--accent-3);
+    }
+
+    &::before {
+      background-color: var(--accent-9);
+      border-radius: 0 2px 2px 0; // stylelint-disable-line sculptor/no-hardcoded-values
+      bottom: var(--space-1);
+      content: '';
+      left: 0;
+      position: absolute;
+      top: var(--space-1);
+      width: 3px;
+    }
+  }
+
+  &.completed {
+    opacity: 50%;
+
+    &:hover {
+      opacity: 75%;
+    }
+  }
+}
+
+.iconColumn {
+  align-items: flex-start;
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  min-width: var(--icon-size);
+  padding-top: 2px;
+}
+
+.todoText {
+  flex: 1;
+  line-height: 1.5;
+  min-width: 0;
+  overflow-wrap: break-word;
+
+  &.completedText {
+    color: var(--accent-8);
+    text-decoration: line-through;
+  }
+}
+
+.emptyState {
+  color: var(--gray-8);
+  height: 100%;
+  padding: var(--space-5) var(--space-4);
+}
+
+.toggleButtonRow {
+  padding: var(--space-1) var(--item-pad-x);
+}
+
+.bodyColumns {
+  flex: 1;
+  min-height: 0;
+}
+
+.listColumn {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.graphColumn {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 240px;
+  overflow: auto;
+  padding: var(--space-2);
+
+  @include thin-scrollbar(both);
+
+  // Suppress the default light-square corner where the horizontal and vertical
+  // scrollbars meet — the rest of thin-scrollbar already paints transparent
+  // tracks, so the corner should match.
+  &::-webkit-scrollbar-corner {
+    background-color: transparent;
+  }
+}
+
+// When the dependency graph is on, the popover body becomes a horizontal
+// flex row. The list rows are narrow; give the graph everything past the
+// list's natural width instead of splitting 50/50.
+[data-graph-open] .listColumn {
+  flex: 0 0 260px;
+}
+
+.rowBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.waitingBadge {
+  align-self: flex-start;
+}
+
+.rowWrapper {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  display: block;
+  text-align: left;
+  width: 100%;
+
+  &:focus-visible {
+    outline: 2px solid var(--accent-9);
+    outline-offset: -2px;
+  }
+}
+
+.rowDetail {
+  background-color: var(--gray-2);
+  border-left: 2px solid var(--gray-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-left: calc(var(--item-pad-x) + var(--icon-size) + var(--icon-gap));
+  margin-right: var(--item-pad-x);
+  padding: var(--space-2);
+}
+
+.detailDescription {
+  color: var(--gray-12);
+  line-height: 1.5;
+}
+
+.detailActiveForm {
+  font-style: italic;
+}
+
+.detailIdLink {
+  color: var(--accent-9);
+}

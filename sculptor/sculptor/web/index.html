@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple FastAPI Form</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        input[type="text"], select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        #result {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+<h1>Sculptor</h1>
+
+<form id="myForm">
+    <div class="form-group">
+        <label for="goal">Start a new task:</label>
+        <textarea id="goal" style="width: 100%" name="goal" required></textarea>
+    </div>
+
+    <div class="form-group">
+        <label for="agentModule">Select Option:</label>
+        <select id="agentModule" name="agentModule">
+            <option value="sculptor.agents.claude_code_text.agent">Claude (text)</option>
+            <option value="sculptor.agents.claude_code_html.agent">Claude (html)</option>
+        </select>
+    </div>
+
+    <button type="submit">Submit</button>
+</form>
+
+<div id="result"></div>
+
+<script>
+  document.getElementById('myForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+
+    const data = {
+      goal: document.getElementById('goal').value,
+      agentModule: document.getElementById('agentModule').value
+    };
+
+    fetch('/api/v1/task', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data)
+    })
+      .then(response => response.json())
+      .then(data => {
+        const resultDiv = document.getElementById('result');
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = '<h3>Response from server:</h3>' +
+          '<p><strong>Goal:</strong> ' + data.goal + '</p>' +
+          '<p><strong>Agent ID:</strong> ' + data.agentModule + '</p>' +
+          '<p><strong>Message:</strong> ' + data.message + '</p>';
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while submitting the form');
+      });
+  });
+</script>
+</body>
+</html>

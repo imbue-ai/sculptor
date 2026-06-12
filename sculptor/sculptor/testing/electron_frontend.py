@@ -1,0 +1,210 @@
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+from filelock import FileLock
+from loguru import logger
+from playwright.sync_api import BrowserContext
+from playwright.sync_api import Error as PlaywrightError
+from playwright.sync_api import Page
+from playwright.sync_api import Playwright
+from tenacity import retry
+from tenacity import retry_if_exception_type
+from tenacity import stop_after_delay
+from tenacity import wait_fixed
+
+from sculptor.testing.frontend_utils import configure_page
+from sculptor.testing.port_manager import PortManager
+from sculptor.testing.server_utils import get_v1_frontend_path
+from sculptor.testing.subprocess_utils import Forwarder
+
+ELECTRON_READY_MESSAGE = "Launched Electron app"
+
+
+def _is_known_harmless_electron_error(line: str) -> bool:
+    harmless_substrings = [
+        "Keychain lookup for suffixed key failed:",
+        "Failed to connect to the bus:",
+        "Could not bind NETLINK socket",
+        "Failed to read /proc/sys/fs/inotify/max_user_watches",
+        "X connection error received.",
+    ]
+    return any(substring in line for substring in harmless_substrings)
+
+
+class ElectronFrontend:
+    def __init__(
+        self,
+        playwright: Playwright,
+        backend_port: int,
+        port_manager: PortManager,
+        timeout_ms: int,
+        custom_backend_cmd: str | None = None,
+        extra_env: dict[str, str] | None = None,
+    ) -> None:
+        self.playwright = playwright
+        self.backend_port = backend_port
+        self.port_manager = port_manager
+        self.timeout_ms = timeout_ms
+        self.custom_backend_cmd = custom_backend_cmd
+        self.extra_env = extra_env or {}
+        self._electron_proc: subprocess.Popen | None = None
+        self._forwarder: Forwarder | None = None
+        self._user_data_dir: str | None = None
+        self._browser_context: BrowserContext | None = None
+        self._page: Page | None = None
+
+    def __enter__(self) -> tuple[BrowserContext, Page]:
+        cdp_port = self.port_manager.get_free_port()
+        frontend_port = self.port_manager.get_free_port()
+        self._user_data_dir = tempfile.mkdtemp(prefix="sculptor_electron_")
+
+        cmd: tuple[str, ...] = (
+            "npm",
+            "run",
+            "electron:start",
+            "--",
+            "--",
+            f"--remote-debugging-port={cdp_port}",
+        )
+
+        if os.getuid() == 0:
+            cmd = cmd + ("--no-sandbox",)
+
+        if sys.platform == "linux" and "DISPLAY" not in os.environ and "WAYLAND_DISPLAY" not in os.environ:
+            cmd = ("xvfb-run", "-a", "-e", "/tmp/xvfb-error.log", "-s", "-screen 0 1600x1000x16") + cmd
+
+        electron_env: dict[str, str] = {
+            "SCULPTOR_FRONTEND_PORT": str(frontend_port),
+            "SCULPTOR_USER_DATA_DIR": self._user_data_dir,
+            "SCULPTOR_ICON_LABEL": "pytest",
+        }
+        # In custom command mode, Electron spawns the backend itself via the
+        # custom command — so we do NOT set SCULPTOR_API_PORT (the command
+        # controls which port the backend listens on).  Instead we pass the
+        # command string so Electron enters custom-command mode.
+        if self.custom_backend_cmd:
+            electron_env["SCULPTOR_CUSTOM_BACKEND_CMD"] = self.custom_backend_cmd
+        else:
+            electron_env["SCULPTOR_API_PORT"] = str(self.backend_port)
+        full_env = {**os.environ, **self.extra_env, **electron_env}
+
+        frontend_dir = get_v1_frontend_path()
+        lock_path = Path("/tmp/sculptor_electron_forge.lock")
+
+        launched = False
+        file_lock = FileLock(str(lock_path), timeout=300)
+        t_lock = time.monotonic()
+        file_lock.acquire()
+        lock_wait = time.monotonic() - t_lock
+        if lock_wait > 1.0:
+            logger.info("[timing] Electron forge lock wait: {:.2f}s", lock_wait)
+        try:
+            t_proc = time.monotonic()
+            self._electron_proc = subprocess.Popen(
+                cmd,
+                cwd=frontend_dir,
+                env=full_env,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                preexec_fn=lambda: os.setpgid(0, 0),
+            )
+            assert self._electron_proc.stdout is not None
+            for line in self._electron_proc.stdout:
+                logger.info("[Electron stdout] {}", line.rstrip())
+                if ELECTRON_READY_MESSAGE in line:
+                    launched = True
+                    self._forwarder = Forwarder(
+                        self._electron_proc,
+                        prefix="[Electron stdout] ",
+                        known_harmless_func=_is_known_harmless_electron_error,
+                    )
+                    self._forwarder.start()
+                    break
+        finally:
+            file_lock.release()
+        logger.info(
+            "[timing] Electron process launch (xvfb + Vite + Electron ready): {:.2f}s", time.monotonic() - t_proc
+        )
+
+        if not launched:
+            self._kill_electron()
+            raise RuntimeError("Electron frontend failed to start. Check logs above.")
+
+        t_cdp = time.monotonic()
+        try:
+            retry_connect = retry(
+                stop=stop_after_delay(120),
+                wait=wait_fixed(1),
+                retry=retry_if_exception_type(PlaywrightError),
+                reraise=True,
+            )(lambda: self.playwright.chromium.connect_over_cdp(f"http://localhost:{cdp_port}"))
+            browser = retry_connect()
+
+            assert len(browser.contexts) == 1
+            context = browser.contexts[0]
+            pages = [p for p in context.pages if not p.url.startswith("devtools://")]
+            assert len(pages) == 1, f"Expected exactly one non-devtools page, got {pages}"
+            page = pages[0]
+            configure_page(page, timeout_ms=self.timeout_ms)
+        except Exception:
+            self._kill_electron()
+            raise
+        logger.info("[timing] CDP connect + page acquisition: {:.2f}s", time.monotonic() - t_cdp)
+
+        self._browser_context = context
+        self._page = page
+
+        return (context, page)
+
+    def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
+        self._kill_electron()
+        if self._user_data_dir is not None:
+            shutil.rmtree(self._user_data_dir, ignore_errors=True)
+
+    def _kill_electron(self) -> None:
+        if self._forwarder is not None:
+            self._forwarder.stop()
+
+        if self._electron_proc is None:
+            return
+
+        try:
+            pgid = os.getpgid(self._electron_proc.pid)
+
+            # Send SIGTERM first so xvfb-run's cleanup trap can remove the
+            # X server lock file and socket.  SIGKILL would bypass the trap
+            # and leave /tmp/.X{N}-lock behind, breaking subsequent starts.
+            try:
+                os.killpg(pgid, signal.SIGTERM)
+            except (ProcessLookupError, OSError):
+                pass
+
+            try:
+                self._electron_proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                # Process didn't exit gracefully — force-kill as last resort.
+                try:
+                    os.killpg(pgid, signal.SIGKILL)
+                except (ProcessLookupError, OSError):
+                    pass
+        except (ProcessLookupError, OSError):
+            pass
+
+        try:
+            if self._electron_proc.stdout:
+                self._electron_proc.stdout.close()
+        except Exception:
+            pass
+
+        try:
+            self._electron_proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass

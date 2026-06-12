@@ -1,0 +1,53 @@
+@use "scrollbar" as *;
+
+.scrollArea {
+  flex: 1;
+  overflow: auto;
+
+  @include thin-scrollbar;
+}
+
+.imageContainer {
+  align-items: center;
+  background-color: var(--gray-a2);
+  border-radius: var(--radius-2);
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  min-height: 200px;
+  overflow: hidden;
+}
+
+.image {
+  max-height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+  transform-origin: center center;
+  user-select: none;
+}
+
+.fileIcon {
+  color: var(--gray-8);
+}
+
+.metadataTable {
+  border-collapse: collapse;
+  margin: 0 auto;
+
+  td {
+    padding: var(--space-1) var(--space-3);
+  }
+}
+
+.metadataLabel {
+  color: var(--gray-11);
+  font-size: var(--font-size-1);
+  text-align: left;
+}
+
+.metadataValue {
+  color: var(--gray-12);
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  text-align: right;
+}

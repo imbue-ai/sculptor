@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+#
+# Sculptor clean-history guard (pre-push)
+# =======================================
+# Blocks pushes that would introduce foreign pre-epoch history into the
+# clean-history public Sculptor repo (`imbue-ai/sculptor`).
+#
+# Two design choices make this safe to install globally and free of hardcoded
+# epoch SHAs:
+#   * Scope by remote URL. The hook only enforces on pushes whose remote matches
+#     GUARDED_REMOTES_REGEX below (repo identity, NOT an epoch). Every push to
+#     any other repo or remote is untouched.
+#   * Derive the allowed root(s) from the remote. The rule is simply: a push may
+#     not introduce a root commit the target remote does not already have. The
+#     "epoch" is whatever root the clean repo already starts from, read live.
+#
+# Install once per machine (global):
+#     mkdir -p ~/.config/git/hooks
+#     cp .githooks/pre-push ~/.config/git/hooks/pre-push
+#     chmod +x ~/.config/git/hooks/pre-push
+#     git config --global core.hooksPath ~/.config/git/hooks
+# Or per clone:
+#     git config core.hooksPath .githooks
+#
+# Bypass (only for the one intentional clean-history cutover): git push --no-verify
+#
+# Args:  $1 = remote name, $2 = remote URL
+# Stdin: <local ref> <local oid> <remote ref> <remote oid>   (one line per ref)
+
+set -u
+
+remote_name="${1:-}"
+remote_url="${2:-}"
+
+# Clean-history repos to guard. Edit to add more; this is repo identity, not an epoch.
+GUARDED_REMOTES_REGEX='github\.com[:/]imbue-ai/sculptor(\.git)?/?$'
+
+url="$remote_url"
+[ -n "$url" ] || url="$(git remote get-url "$remote_name" 2>/dev/null || true)"
+
+# Not a guarded repo? Do nothing.
+printf '%s\n' "$url" | grep -Eq "$GUARDED_REMOTES_REGEX" || exit 0
+
+zero='0000000000000000000000000000000000000000'
+status=0
+
+while read -r local_ref local_oid _ _; do
+    [ "$local_oid" = "$zero" ] && continue   # ref deletion: nothing to scan
+
+    # Root commits this push would introduce that the remote does not already have.
+    # Empty  => the branch descends from the remote's existing (epoch) history.
+    # Non-empty => it carries a foreign root, i.e. history from another repo.
+    new_roots="$(git rev-list --max-parents=0 "$local_oid" --not --remotes="$remote_name" 2>/dev/null || true)"
+    [ -n "$new_roots" ] || continue
+
+    known_roots="$(git rev-list --max-parents=0 --remotes="$remote_name" 2>/dev/null || true)"
+    if [ -z "$known_roots" ]; then
+        # No root known for this remote locally. If the remote is genuinely empty
+        # this is the legitimate first (epoch-seeding) push -> allow. If it has
+        # history we simply have not fetched, we cannot verify -> fail closed.
+        if [ -n "$(git ls-remote --heads "$remote_name" 2>/dev/null || true)" ]; then
+            printf '%s\n' "clean-history guard: refusing to push '$local_ref' to '$remote_name'." >&2
+            printf '%s\n' "  The remote has history but no local tracking refs, so its epoch cannot be" >&2
+            printf '%s\n' "  verified. Run:  git fetch $remote_name   then push again." >&2
+            status=1
+        fi
+        continue
+    fi
+
+    printf '%s\n' "clean-history guard: refusing to push '$local_ref' to '$remote_name'." >&2
+    printf '%s\n' "  This push introduces root commit(s) the clean repo does not have:" >&2
+    printf '%s\n' "$new_roots" | sed 's/^/    /' >&2
+    printf '%s\n' "  That is foreign (pre-epoch) history. Allowed root(s) on this remote:" >&2
+    printf '%s\n' "$known_roots" | sed 's/^/    /' >&2
+    printf '%s\n' "  If this is the intentional clean-history cutover, re-run with: git push --no-verify" >&2
+    status=1
+done
+
+exit "$status"

@@ -1,0 +1,104 @@
+name: PR Gate
+
+# Auto-closes new PRs from contributors who haven't been cleared to open them
+# (via a maintainer `lgtm` on an issue), per CONTRIBUTING.md. Issues are NOT
+# gated — only PRs. Maintainers (write/maintain/admin, which includes the
+# @imbue-ai/sculptor-maintainers team) are always exempt, so this is a no-op
+# while the repo is private.
+#
+# Uses pull_request_target so it can comment/close on PRs from forks. It does NOT
+# check out or run any PR code, so untrusted code never executes here. Keep it
+# that way — see README.md in this directory (rule 1) before adding a checkout.
+
+on:
+  pull_request_target:
+    types: [opened]
+
+jobs:
+  check-contributor:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Check PR author
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const APPROVED_FILE = '.github/APPROVED_CONTRIBUTORS';
+            const prAuthor = context.payload.pull_request.user.login;
+            const prNumber = context.payload.pull_request.number;
+            const defaultBranch = context.payload.repository.default_branch;
+
+            if (prAuthor.endsWith('[bot]') || prAuthor === 'dependabot[bot]') {
+              console.log(`Skipping bot: ${prAuthor}`);
+              return;
+            }
+
+            async function getPermission(username) {
+              try {
+                const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  username,
+                });
+                return data.permission;
+              } catch {
+                return null;
+              }
+            }
+
+            function parseApprovedUsers(content) {
+              const users = new Set();
+              for (const rawLine of content.split('\n')) {
+                const line = rawLine.trim();
+                if (!line || line.startsWith('#')) continue;
+                users.add(line.split(/\s+/)[0].toLowerCase());
+              }
+              return users;
+            }
+
+            // Maintainers are always exempt.
+            const permission = await getPermission(prAuthor);
+            if (['admin', 'maintain', 'write'].includes(permission)) {
+              console.log(`${prAuthor} is a collaborator (${permission})`);
+              return;
+            }
+
+            // Cleared external contributors are exempt.
+            let approvedContent = '';
+            try {
+              const { data } = await github.rest.repos.getContent({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                path: APPROVED_FILE,
+                ref: defaultBranch,
+              });
+              approvedContent = Buffer.from(data.content, 'base64').toString('utf8');
+            } catch {
+              console.log(`No ${APPROVED_FILE} found; treating as empty`);
+            }
+            if (parseApprovedUsers(approvedContent).has(prAuthor.toLowerCase())) {
+              console.log(`${prAuthor} is cleared for PRs`);
+              return;
+            }
+
+            const base = `https://github.com/${context.repo.owner}/${context.repo.repo}`;
+            const message = [
+              "We auto-close PRs from contributors we haven't cleared yet, see [CONTRIBUTING.md](" + base + '/blob/' + defaultBranch + '/CONTRIBUTING.md).',
+              '',
+              'We recommend [opening an issue](' + base + '/issues/new/choose) first. If we want it and you want to build it, a maintainer will reply `lgtm` on your issue — that clears you to open PRs from then on.',
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: message,
+            });
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+              state: 'closed',
+            });

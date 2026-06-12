@@ -1,0 +1,12 @@
+# GitHub handles cleared to open pull requests.
+#
+# Issues are open to everyone — this list only affects PRs.
+#
+# Maintainers (the @imbue-ai/sculptor-maintainers team, plus anyone with
+# write/maintain/admin access) can always open PRs and do NOT need to be listed
+# here.
+#
+# When a maintainer replies `lgtm` on an issue, the approve-contributor workflow
+# opens a PR adding that issue's author below; a maintainer reviews and merges
+# it (this path is owned by @imbue-ai/sculptor-maintainers in CODEOWNERS). You
+# normally won't edit this by hand. One GitHub username per line.

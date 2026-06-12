@@ -1,0 +1,46 @@
+.bar {
+  background-color: var(--color-surface);
+  border-bottom: 1px solid var(--gray-a5);
+}
+
+.icon {
+  color: var(--gray-9);
+  flex-shrink: 0;
+}
+
+.inputWrapper {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+.input {
+  background: transparent;
+  border: 1px solid var(--gray-a5);
+  border-radius: var(--radius-1);
+  box-sizing: border-box;
+  color: var(--gray-12);
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  outline: none;
+  padding: var(--space-1) 70px var(--space-1) var(--space-2);
+  width: 100%;
+
+  &::placeholder {
+    color: var(--gray-8);
+  }
+
+  &:focus {
+    border-color: var(--accent-8);
+  }
+}
+
+.counter {
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  position: absolute;
+  right: var(--space-2);
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}

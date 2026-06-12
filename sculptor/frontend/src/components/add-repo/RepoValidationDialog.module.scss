@@ -1,0 +1,20 @@
+.messageBox {
+  background-color: var(--accent-2);
+  border-radius: var(--radius-2);
+  padding: var(--space-3);
+}
+
+.warningIcon {
+  color: var(--amber-9);
+  flex-shrink: 0;
+}
+
+.successIcon {
+  color: var(--green-9);
+  flex-shrink: 0;
+}
+
+.errorIcon {
+  color: var(--tomato-9);
+  flex-shrink: 0;
+}

@@ -1,0 +1,36 @@
+@use "scrollbar" as *;
+
+.logo {
+  fill: var(--gray-5);
+  width: 80px;
+}
+
+.container {
+  background: var(--gray-3);
+}
+
+.errorScroll {
+  height: 100%;
+  overflow-y: auto;
+
+  @include thin-scrollbar;
+}
+
+.text {
+  color: var(--gray-11);
+  font-size: var(--font-size-5);
+  font-weight: var(--font-weight-regular);
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+.errorBox {
+  background-color: var(--gray-4);
+  border: 1px solid var(--gray-7);
+  border-radius: var(--radius-3);
+}
+
+.errorText {
+  white-space: pre-wrap;
+  word-break: break-all;
+}

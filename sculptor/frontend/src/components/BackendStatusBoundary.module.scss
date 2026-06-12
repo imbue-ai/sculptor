@@ -1,0 +1,20 @@
+.background {
+  background: var(--accent-3);
+}
+
+.betaLabel {
+  align-self: flex-start;
+  color: var(--accent-7);
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-bold);
+  margin-top: 0;
+  padding-left: var(--space-2);
+}
+
+.statusLabel {
+  color: var(--accent-7);
+}
+
+.shutdownLabel {
+  color: var(--accent-7);
+}

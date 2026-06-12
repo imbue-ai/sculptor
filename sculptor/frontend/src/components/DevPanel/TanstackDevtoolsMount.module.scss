@@ -1,0 +1,174 @@
+.container {
+  background: var(--color-panel-solid);
+  border: 1px solid var(--gray-a6);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: fixed;
+  // Stay above app chrome but below the devtools' own portal'd dropdowns
+  // (the gear-icon settings menu uses z-index: 99999 on document.body).
+  z-index: var(--z-tooltip);
+}
+
+.floating {
+  border-radius: var(--radius-3);
+  box-shadow: var(--shadow-5);
+  left: 0;
+  top: 0;
+}
+
+.docked {
+  border-bottom: 0;
+  border-left: 0;
+  border-radius: 0;
+  border-right: 0;
+  bottom: 0;
+  box-shadow: var(--shadow-4);
+  left: 0;
+  right: 0;
+}
+
+.header {
+  align-items: center;
+  background: var(--gray-3);
+  border-bottom: 1px solid var(--gray-a6);
+  color: var(--gray-11);
+  cursor: move;
+  display: flex;
+  flex-shrink: 0;
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-medium);
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+  user-select: none;
+}
+
+.docked .header {
+  cursor: default;
+}
+
+.headerTitle {
+  flex: 1;
+}
+
+.dragging {
+  cursor: grabbing;
+
+  .header {
+    cursor: grabbing;
+  }
+}
+
+.panel {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+
+  // The TanStack panel's "TANSTACK" logo is wired as its only close button.
+  // It's non-obvious and surprising, so disable it — closing is handled by
+  // the switch in the version popover.
+  :global(button[aria-label="Close Tanstack query devtools"]) {
+    cursor: default;
+    pointer-events: none;
+  }
+}
+
+// Resize handles ----------------------------------------------------------
+// Edge handles are 6px wide bars along each side; corner handles are 12px
+// squares overlaid on top so they win the pointer.
+
+$edge: 6px;
+$corner: 12px;
+
+.resizeHandle {
+  position: absolute;
+  user-select: none;
+}
+
+.edgeN {
+  cursor: ns-resize;
+  height: $edge;
+  left: 0;
+  right: 0;
+  top: -$edge * 0.5;
+}
+
+.edgeS {
+  bottom: -$edge * 0.5;
+  cursor: ns-resize;
+  height: $edge;
+  left: 0;
+  right: 0;
+}
+
+.edgeE {
+  bottom: 0;
+  cursor: ew-resize;
+  right: -$edge * 0.5;
+  top: 0;
+  width: $edge;
+}
+
+.edgeW {
+  bottom: 0;
+  cursor: ew-resize;
+  left: -$edge * 0.5;
+  top: 0;
+  width: $edge;
+}
+
+.edgeNW {
+  cursor: nwse-resize;
+  height: $corner;
+  left: -$edge * 0.5;
+  top: -$edge * 0.5;
+  width: $corner;
+}
+
+.edgeNE {
+  cursor: nesw-resize;
+  height: $corner;
+  right: -$edge * 0.5;
+  top: -$edge * 0.5;
+  width: $corner;
+}
+
+.edgeSW {
+  bottom: -$edge * 0.5;
+  cursor: nesw-resize;
+  height: $corner;
+  left: -$edge * 0.5;
+  width: $corner;
+}
+
+.edgeSE {
+  background:
+    linear-gradient(
+      135deg,
+      transparent 0%,
+      transparent 50%,
+      var(--gray-a8) 50%,
+      var(--gray-a8) 60%,
+      transparent 60%,
+      transparent 70%,
+      var(--gray-a8) 70%,
+      var(--gray-a8) 80%,
+      transparent 80%
+    );
+  bottom: 0;
+  cursor: nwse-resize;
+  height: $corner + 2px;
+  right: 0;
+  width: $corner + 2px;
+}
+
+// In docked mode the top edge gets a visible affordance so users can find
+// the resize gutter.
+.dockResize {
+  background: var(--gray-a6);
+  transition: background-color var(--duration-fast) ease;
+
+  &:hover {
+    background: var(--gray-a9);
+  }
+}

@@ -1,0 +1,25 @@
+.panelRoot {
+  height: 100%;
+  min-height: 0;
+}
+
+.editorWrapper {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+
+  // stylelint-disable-next-line selector-class-pattern -- third-party TipTap/ProseMirror class
+  :global(.ProseMirror) {
+    padding-inline: var(--space-3);
+  }
+}
+
+// The Editor's default scroll area caps at 500px (sized for the chat input
+// where it grows with content). In the notes panel the editor instead
+// fills the available panel height and scrolls internally when notes
+// exceed that height.
+.scrollArea {
+  flex: 1;
+  max-height: none;
+}

@@ -1,0 +1,84 @@
+.pill {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--gray-11);
+  cursor: pointer;
+  display: inline-flex;
+  flex-shrink: 0;
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+  max-width: 240px;
+  outline: none;
+  overflow: hidden;
+  padding: 0;
+  text-decoration: none;
+  transition: color var(--duration-fast) ease;
+  white-space: nowrap;
+}
+
+.pill:hover {
+  background: var(--gray-a3);
+  border-radius: var(--radius-1);
+  box-shadow: 0 0 0 var(--space-1) var(--gray-a3);
+  color: var(--gray-12);
+}
+
+.pillOpen,
+.pillOpen:hover {
+  background: var(--accent-a3);
+  border-radius: var(--radius-1);
+  box-shadow: 0 0 0 var(--space-1) var(--accent-a3);
+  color: var(--accent-11);
+}
+
+.pillIcon {
+  color: var(--gray-9);
+  flex-shrink: 0;
+  height: 12px;
+  width: 12px;
+}
+
+.pillOpen .pillIcon {
+  color: var(--accent-11);
+}
+
+.pillError {
+  color: var(--red-11);
+}
+
+.pillError .pillIcon {
+  color: var(--red-11);
+}
+
+@keyframes statusDotPulse {
+  0%,
+  100% {
+    opacity: 30%;
+  }
+
+  50% {
+    opacity: 100%;
+  }
+}
+
+// Pulsing status dot shown on Bash pills while a command is executing.
+// Once the command finishes the icon takes its place. Margins make the
+// flex-item box width match `.pillIcon` (12px) so the label position stays
+// identical across the swap, preventing layout shift.
+.statusDot {
+  align-self: center;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+  height: 6px;
+  margin: 0 3px;
+  width: 6px;
+}
+
+.statusDotPulsing {
+  animation: statusDotPulse 1s ease-in-out infinite;
+  background: var(--accent-11);
+}

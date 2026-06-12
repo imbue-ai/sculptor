@@ -1,0 +1,182 @@
+.swatchGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  padding-top: var(--space-2);
+  width: 100%;
+}
+
+.swatch {
+  background: none;
+  border: 1px solid var(--gray-6);
+  border-radius: max(var(--radius-3), var(--radius-full));
+  cursor: pointer;
+  height: var(--space-6);
+  opacity: 40%;
+  padding: 0;
+  position: relative;
+  transition:
+    transform var(--duration-fast) var(--ease-default),
+    opacity var(--duration-fast) var(--ease-default);
+  width: var(--space-6);
+
+  &:hover {
+    transform: scale(1.2);
+    z-index: var(--z-above);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent-9);
+    outline-offset: 2px;
+    z-index: var(--z-above);
+  }
+}
+
+.swatchSelected {
+  opacity: 100%;
+  outline: 2px solid var(--gray-12);
+  outline-offset: 2px;
+  z-index: var(--z-above);
+}
+
+.colorSection {
+  border-bottom: 1px solid var(--gray-4);
+
+  &:hover .swatch {
+    opacity: 100%;
+  }
+}
+
+.radiusGrid {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+}
+
+.radiusPreview {
+  background-color: var(--accent-9);
+  border: 1px solid var(--gray-6);
+  cursor: pointer;
+  height: var(--space-6);
+  padding: 0;
+  position: relative;
+  transition: transform var(--duration-fast) var(--ease-default);
+  width: var(--space-6);
+
+  &:hover {
+    transform: scale(1.2);
+    z-index: var(--z-above);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent-9);
+    outline-offset: 2px;
+    z-index: var(--z-above);
+  }
+}
+
+.radiusPreviewSelected {
+  outline: 2px solid var(--gray-12);
+  outline-offset: 2px;
+  z-index: var(--z-above);
+}
+
+.selectedLabel {
+  color: var(--gray-11);
+  font-size: var(--font-size-2);
+  white-space: nowrap;
+}
+
+.hexInputRow {
+  align-items: center;
+  display: flex;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+}
+
+.hexInputGroup {
+  align-items: center;
+  display: flex;
+  gap: var(--space-1);
+}
+
+.hexModeLabel {
+  color: var(--gray-10);
+  font-size: var(--font-size-1);
+  min-width: 32px;
+}
+
+.hexInputWrapper {
+  align-items: center;
+  background-color: var(--gray-2);
+  border: 1px solid var(--gray-6);
+  border-radius: var(--radius-2);
+  display: flex;
+  transition: border-color var(--duration-fast) var(--ease-default);
+
+  &:focus-within {
+    border-color: var(--accent-8);
+  }
+}
+
+.hexInputWrapperDisabled {
+  background-color: var(--gray-3);
+  cursor: not-allowed;
+}
+
+.hexPrefix {
+  color: var(--gray-9);
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  padding-left: var(--space-2);
+  pointer-events: none;
+  user-select: none;
+}
+
+.hexInput {
+  background: transparent;
+  border: none;
+  color: var(--gray-12);
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  outline: none;
+  padding: var(--space-1) var(--space-2) var(--space-1) 0;
+  width: 64px;
+
+  &:disabled {
+    color: var(--gray-11);
+    cursor: not-allowed;
+  }
+}
+
+.hexInputInvalid {
+  color: var(--red-9);
+}
+
+.hexPreviewSwatch {
+  border: 1px solid var(--gray-6);
+  border-radius: var(--radius-1);
+  flex-shrink: 0;
+  height: 16px;
+  width: 16px;
+}
+
+.hexToggleLabel {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: var(--space-1);
+}
+
+.appearanceToggle {
+  // stylelint-disable-next-line selector-class-pattern -- Radix UI class name
+  :global(.rt-SegmentedControlItem[data-state="off"]) {
+    color: var(--gray-11);
+  }
+}
+
+.hexToggleLabelText {
+  color: var(--gray-10);
+  font-size: var(--font-size-1);
+  white-space: nowrap;
+}

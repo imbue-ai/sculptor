@@ -1,0 +1,123 @@
+@use "scrollbar" as *;
+
+.terminalPanel {
+  --terminal-panel-bg: var(--gray-2);
+
+  background-color: var(--terminal-panel-bg);
+}
+
+.terminalTabBar {
+  background: var(--terminal-panel-bg);
+  border-bottom: none;
+  flex-shrink: 0;
+}
+
+.unreadDot {
+  --inner-color: var(--green-9);
+  --outer-color: var(--green-a4);
+}
+
+.addTerminalButton {
+  align-items: center;
+  background: none;
+  border: none;
+  border-radius: var(--radius-2);
+  color: var(--gray-9);
+  cursor: pointer;
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  padding: var(--space-1);
+
+  &:hover {
+    background: var(--gray-a3);
+    color: var(--gray-12);
+  }
+}
+
+.terminalContainer {
+  background-color: var(--terminal-panel-bg);
+  box-sizing: border-box;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.terminalInstanceVisible {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.terminalInstanceHidden {
+  display: none;
+}
+
+.xtermWrapper {
+  background-color: var(--terminal-panel-bg);
+  display: flex;
+  flex: 1;
+  min-height: 0; // Allow shrinking in flexbox
+  overflow: hidden;
+  padding: var(--space-2) var(--space-3) 0;
+
+  /* stylelint-disable selector-class-pattern -- xterm library class names */
+  // Make xterm fill the container
+  :global(.xterm) {
+    height: 100%;
+    width: 100%;
+  }
+
+  :global(.xterm-viewport) {
+    background-color: var(--terminal-panel-bg) !important;
+    overflow-y: auto !important;
+
+    // Hide native scrollbar — xterm uses an overlay scrollbar instead
+    @include hidden-scrollbar;
+  }
+
+  // Style xterm's overlay scrollbar to match Radix ScrollArea
+  :global(.xterm-scrollable-element > .scrollbar.vertical) {
+    right: var(--space-1);
+    width: 4px !important;
+
+    :global(.slider) {
+      background: var(--gray-a8) !important;
+      border-radius: var(--radius-full) !important;
+      left: 0 !important;
+      width: 4px !important;
+
+      &:hover {
+        background: var(--gray-a9) !important;
+      }
+    }
+  }
+  /* stylelint-enable selector-class-pattern */
+}
+
+.infoBarWrapper {
+  background-color: var(--terminal-panel-bg);
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: var(--space-3) var(--space-4);
+  padding-right: calc(var(--space-4) + 20px);
+}
+
+.infoBar {
+  align-items: center;
+  background-color: var(--artifact-base-bg);
+  border: 1px solid var(--artifact-border-color);
+  border-radius: var(--radius-4);
+  box-sizing: border-box;
+  color: var(--accent-11);
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+
+  button {
+    background-color: var(--artifact-darker-bg);
+    color: var(--accent-11);
+  }
+}

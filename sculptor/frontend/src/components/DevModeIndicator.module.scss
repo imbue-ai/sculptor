@@ -1,0 +1,63 @@
+.root {
+  align-items: center;
+  display: inline-flex;
+  font-family: var(--mono-font-family);
+  font-size: var(--font-size-1);
+  gap: var(--space-2);
+  line-height: 1;
+  max-width: 100%;
+  // Allow children to shrink below their intrinsic size so ellipsis kicks in
+  // when the bottom-bar's center column is narrower than the full text.
+  min-width: 0;
+}
+
+.icon {
+  // Sized to fill the bottom-bar content height (matches the side-toggle
+  // IconButton size="1"). The image itself is already recolored on a canvas
+  // using the same algorithm as devIcon.ts, so no CSS filter is needed.
+  display: block;
+  flex-shrink: 0;
+  height: var(--space-5);
+  width: var(--space-5);
+}
+
+.label {
+  color: var(--accent-9);
+  flex-shrink: 0;
+  font-weight: var(--font-weight-bold);
+}
+
+.detail {
+  color: var(--gray-10);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// Below ~800px viewport the center column is too narrow to show secondary
+// text legibly — collapse to icon + label only. The full detail remains
+// available in the tooltip.
+@media (width <= 800px) {
+  .detail {
+    display: none;
+  }
+}
+
+.tooltipContent {
+  align-items: flex-start;
+  display: inline-flex;
+  gap: var(--space-3);
+}
+
+.tooltipIcon {
+  display: block;
+  flex-shrink: 0;
+  height: 64px;
+  width: 64px;
+}
+
+.tooltipText {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}

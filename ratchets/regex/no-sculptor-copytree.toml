@@ -1,0 +1,9 @@
+[rule]
+id = "no-sculptor-copytree"
+description = "Disallow copytree() calls in sculptor's Python tree; use copy_dir() which handles socket files"
+severity = "error"
+
+[match]
+pattern = "copytree([(,])"
+languages = ["python"]
+include = ["sculptor/**/*.py"]

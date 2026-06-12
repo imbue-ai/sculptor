@@ -1,0 +1,62 @@
+@use "scrollbar" as *;
+
+.overlay {
+  background-color: rgba(0, 0, 0, 40%);
+  inset: 0;
+  position: fixed;
+  z-index: var(--z-modal);
+}
+
+.dialogContainer {
+  background: var(--gold-1);
+  border-radius: var(--radius-5) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 15%), 0 2px 8px rgba(0, 0, 0, 8%);
+
+  display: flex;
+  flex-direction: column;
+  left: 50%;
+  max-height: 80vh;
+  overflow: hidden;
+  position: fixed;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(420px, 90vw);
+  z-index: var(--z-modal);
+}
+
+.panel {
+  border: 1px solid var(--gold-5);
+  border-radius: var(--radius-5);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.body {
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-5);
+
+  @include thin-scrollbar($autohide: false);
+}
+
+.sectionTitle {
+  color: var(--gold-11);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.shortcutRow {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-1) 0;
+}
+
+.shortcutLabel {
+  color: var(--neutral-12);
+  font-size: var(--font-size-2);
+}

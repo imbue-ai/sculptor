@@ -1,0 +1,91 @@
+@use "scrollbar" as *;
+
+.content {
+  max-height: var(--radix-popover-content-available-height);
+  max-width: min(420px, var(--radix-popover-content-available-width));
+  min-width: 320px;
+  overflow-y: auto;
+  width: max-content;
+
+  @include thin-scrollbar($autohide: false);
+}
+
+.diagnosticsWrapper {
+  position: relative;
+}
+
+.diagnosticsScrollArea {
+  max-height: 400px;
+  overflow-y: auto;
+
+  @include thin-scrollbar($autohide: false);
+}
+
+.diagnosticsBox {
+  background: var(--accent-3);
+  border-radius: var(--radius-2);
+  padding: var(--space-2);
+}
+
+.diagnosticValue {
+  font-family: var(--mono-font-family);
+  overflow-wrap: break-word;
+  text-align: right;
+  word-break: break-all;
+}
+
+.diagnosticsFooter {
+  background: var(--accent-3);
+  border-radius: 0 0 var(--radius-2) var(--radius-2);
+  margin-top: calc(-1 * var(--space-1));
+  padding: var(--space-1) var(--space-2);
+}
+
+.diagnosticsCopyButton {
+  color: var(--gray-11);
+  opacity: 0%;
+  transition: opacity var(--duration-fast) var(--ease-out);
+
+  .diagnosticsWrapper:hover & {
+    opacity: 100%;
+  }
+}
+
+.collapseButton {
+  color: var(--gray-11);
+}
+
+.expandButton {
+  color: var(--gray-11);
+}
+
+.idValue {
+  font-family: var(--mono-font-family);
+  overflow-wrap: break-word;
+  word-break: break-all;
+}
+
+.screenshotButton {
+  min-width: 120px;
+}
+
+.submitButton {
+  min-width: 150px;
+}
+
+.closeButton {
+  color: var(--gray-11);
+
+  &:hover {
+    background-color: var(--gray-a3);
+  }
+}
+
+.copyButton {
+  color: var(--gray-11);
+  flex-shrink: 0;
+
+  &:hover {
+    background-color: var(--gray-a3);
+  }
+}

@@ -1,0 +1,24 @@
+.queuedMessageCard {
+  background-color: var(--accent-3);
+  border: 1px solid var(--accent-6);
+  border-radius: var(--radius-2);
+  color: var(--accent-11);
+  font-size: var(--font-size-2);
+  line-height: 1.5em;
+  max-height: 6em; // 4 lines with 1.5em line-height
+  overflow: hidden;
+  overflow-wrap: break-word;
+  padding: var(--space-2) var(--space-3);
+  position: relative;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.copyButton {
+  flex-shrink: 0;
+  opacity: 70%;
+
+  &:hover {
+    opacity: 100%;
+  }
+}

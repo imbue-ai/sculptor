@@ -1,0 +1,232 @@
+@use "scrollbar" as *;
+
+.scrollArea {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-3);
+
+  @include thin-scrollbar;
+}
+
+/* Graph column --------------------------------------------------------------- */
+
+.graphColumn {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  position: relative;
+  width: 20px;
+}
+
+.graphLineTop,
+.graphLineBottom {
+  background-color: var(--gray-7);
+  width: 2px;
+}
+
+.graphLineTop {
+  /* Fixed height aligns the dot center with the first row of commit text.
+     commitInfo padding-top (space-1 = 4px) + half line-height (~10px) - half dot (4px) = 10px */
+  flex: 0 0 10px;
+}
+
+.graphLineBottom {
+  flex: 1;
+}
+
+.graphLineHidden {
+  visibility: hidden;
+}
+
+.graphDot {
+  background-color: var(--gray-8);
+  border-radius: 50%;
+  flex-shrink: 0;
+  height: 8px;
+  width: 8px;
+}
+
+.graphDotHead {
+  background-color: var(--green-9);
+}
+
+.graphDotUncommitted {
+  background-color: transparent;
+  border: 2px solid var(--amber-9);
+  border-radius: 50%;
+  flex-shrink: 0;
+  height: 8px;
+  width: 8px;
+}
+
+/* Commit entry --------------------------------------------------------------- */
+
+.commitEntry {
+  display: flex;
+  flex-direction: column;
+}
+
+.commitInfo {
+  cursor: pointer;
+  overflow: hidden;
+  padding: var(--space-1) var(--space-2);
+
+  &:hover {
+    background-color: var(--gray-a3);
+    border-radius: var(--radius-2);
+  }
+}
+
+.commitMessage {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commitMeta {
+  color: var(--gray-9);
+  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commitHash {
+  color: var(--gray-8);
+  font-family: var(--font-mono);
+}
+
+.commitAdditions {
+  color: var(--green-9);
+  font-family: var(--font-mono);
+}
+
+.commitDeletions {
+  color: var(--red-9);
+  font-family: var(--font-mono);
+}
+
+/* Commit hover popover ------------------------------------------------------ */
+
+.popoverContent {
+  background: var(--color-panel-solid);
+  border-radius: var(--radius-4);
+  box-shadow: var(--shadow-2);
+  color: var(--gray-12);
+  max-width: 360px;
+  min-width: 240px;
+  overflow: hidden;
+  padding: var(--space-3);
+  z-index: var(--z-dropdown);
+}
+
+.popoverMessage {
+  word-break: break-word;
+}
+
+.popoverMeta {
+  border-top: 1px solid var(--gray-a5);
+  padding-top: var(--space-2);
+}
+
+.popoverHash {
+  color: var(--gray-11);
+  font-family: var(--font-mono);
+}
+
+/* Commit files --------------------------------------------------------------- */
+
+.commitFiles {
+  padding-left: 20px;
+  position: relative;
+}
+
+.commitFilesGraphLine {
+  bottom: 0;
+  left: 0;
+  position: absolute;
+  top: 0;
+  width: 20px;
+
+  &::after {
+    background-color: var(--gray-7);
+    content: "";
+    display: block;
+    height: 100%;
+    margin: 0 auto;
+    width: 2px;
+  }
+}
+
+.commitFilesGraphSpacer {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 20px;
+}
+
+/* Merge spur ---------------------------------------------------------------- */
+
+.mergeSpurRow {
+  align-items: flex-end;
+  display: flex;
+  height: 24px;
+}
+
+.mergeSpurSvg {
+  flex-shrink: 0;
+  height: 24px;
+  width: 48px;
+}
+
+.mergeSpurLabel {
+  color: var(--gray-8);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-1);
+  padding-bottom: 1px;
+  white-space: nowrap;
+}
+
+/* Side branch (nested under merge commits) ---------------------------------- */
+
+.sideBranch {
+  display: flex;
+  flex-direction: column;
+}
+
+
+/* Terminus ------------------------------------------------------------------- */
+
+.terminus {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.terminusGraph {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 20px;
+}
+
+.terminusLine {
+  background-color: var(--gray-7);
+  height: var(--space-2);
+  width: 2px;
+}
+
+.terminusDot {
+  background-color: var(--gray-7);
+  border-radius: 50%;
+  flex-shrink: 0;
+  height: 8px;
+  width: 8px;
+}
+
+.terminusLabel {
+  /* Align text with the dot row */
+  padding-top: var(--space-1);
+}

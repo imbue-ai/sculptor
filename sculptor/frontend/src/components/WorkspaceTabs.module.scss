@@ -1,0 +1,13 @@
+.tabBar {
+  align-self: stretch;
+  background: none;
+  border-bottom: none;
+  flex: 1;
+  height: 100%;
+  min-width: 0;
+}
+
+.addButton {
+  app-region: no-drag;
+  flex-shrink: 0;
+}

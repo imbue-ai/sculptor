@@ -1,0 +1,217 @@
+@use "scrollbar" as *;
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 100%;
+  }
+
+  50% {
+    opacity: 0%;
+  }
+}
+
+.trigger {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.block {
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-1);
+  box-sizing: border-box;
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  overflow: hidden;
+  transition: color var(--duration-fast) var(--ease-default);
+}
+
+.header {
+  align-items: center;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: flex;
+  gap: var(--space-2);
+  height: 28px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  transition: color var(--duration-fast) var(--ease-default);
+  user-select: none;
+}
+
+.headerNoToggle {
+  cursor: default;
+}
+
+.prompt {
+  color: var(--gray-8);
+  flex-shrink: 0;
+  font-weight: var(--font-weight-regular);
+}
+
+.command {
+  color: var(--gray-11);
+  flex: 1;
+  font-weight: var(--font-weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary {
+  color: var(--gray-8);
+  flex-shrink: 0;
+  font-size: var(--font-size-1);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.blockOpen {
+  background: var(--gray-a3);
+}
+
+.blockOpen .prompt,
+.block:hover .prompt {
+  color: var(--gray-9);
+}
+
+.blockOpen .command,
+.block:hover .command {
+  color: var(--gray-12);
+}
+
+.blockOpen .summary,
+.block:hover .summary {
+  color: var(--gray-9);
+}
+
+.badge {
+  align-items: center;
+  border-radius: var(--radius-1);
+  display: inline-flex;
+  flex-shrink: 0;
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-medium);
+  gap: var(--space-1);
+  margin-left: auto;
+  min-width: 0;
+  padding: 1px 6px;
+}
+
+.badgeIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 12px;
+  width: 12px;
+}
+
+.badgeIcon svg {
+  height: 100%;
+  width: 100%;
+}
+
+.badgeSuccess {
+  background: transparent;
+  color: var(--green-11);
+}
+
+.badgeError {
+  background: var(--red-a2);
+  color: var(--red-11);
+}
+
+.badgeRunning {
+  background: var(--accent-a3);
+  color: var(--accent-11);
+}
+
+/* -- Popover -- */
+
+.popoverContent {
+  animation: none !important;
+  border-radius: var(--radius-1) !important;
+  max-height: 380px !important;
+}
+
+.popover {
+  display: flex;
+  flex-direction: column;
+  max-height: 380px;
+  overflow: hidden;
+  position: relative;
+}
+
+.popoverSection {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.popoverSection:first-child {
+  max-height: 190px;
+  overflow: hidden;
+}
+
+.popoverSection + .popoverSection {
+  border-top: 1px solid var(--gray-a4);
+}
+
+.popoverCommand {
+  color: var(--gray-12);
+  display: block;
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  line-height: 1.5;
+  max-height: 190px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-3);
+  padding-right: var(--space-6);
+  white-space: pre-wrap;
+  word-break: break-all;
+
+  @include thin-scrollbar;
+}
+
+.popoverSummary {
+  color: var(--gray-9);
+  font-size: var(--font-size-1);
+  margin-top: var(--space-1);
+}
+
+.popoverBody {
+  color: var(--gray-12);
+  flex: 1;
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  line-height: 1.5;
+  max-height: 300px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-3);
+  padding-right: var(--space-6);
+  white-space: pre-wrap;
+  word-break: break-all;
+
+  @include thin-scrollbar;
+}
+
+.streamCursor {
+  animation: blink 1s step-end infinite;
+  background: var(--accent-11);
+  display: inline-block;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  width: 2px;
+}

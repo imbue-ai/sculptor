@@ -1,0 +1,19 @@
+.trigger.trigger {
+  --select-trigger-ghost-padding-x: var(--space-3);
+  --select-trigger-ghost-padding-y: var(--space-1);
+
+  border-radius: var(--radius-2);
+  box-shadow: none;
+  color: var(--accent-11);
+  font-size: var(--font-size-1);
+  font-style: normal;
+  font-weight: var(--font-weight-medium);
+
+  /* Override ghost variant negative margins that cause overlap with adjacent elements */
+  margin-left: 0;
+  margin-right: 0;
+
+  /* Limit the width to prevent overflow and pushing other buttons */
+  max-width: 200px;
+  overflow: hidden;
+}

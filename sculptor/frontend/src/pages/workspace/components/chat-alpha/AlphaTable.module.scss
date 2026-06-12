@@ -1,0 +1,113 @@
+@use "scrollbar" as *;
+
+.tableOuter {
+  margin-bottom: 1.5em;
+  margin-top: 1.5em;
+  position: relative;
+}
+
+.tableWrapper {
+  --fade-left: 0;
+  --fade-right: 0;
+
+  max-width: 100%;
+}
+
+.tableWrapper.scroll {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black var(--fade-left),
+    black calc(100% - var(--fade-right)),
+    transparent
+  );
+  overflow-x: auto;
+
+  @include thin-scrollbar(horizontal, var(--scrollbar-size-thin));
+}
+
+.tableWrapper.wrap {
+  overflow-x: hidden;
+}
+
+.table {
+  border-collapse: collapse;
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  min-width: 100%;
+
+  thead {
+    border-bottom: 1px solid var(--gray-5);
+  }
+
+  th,
+  td {
+    min-width: 80px;
+    padding: 0.6em 1em 0.6em 0;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  th {
+    color: var(--gray-12);
+    font-weight: var(--font-weight-bold);
+  }
+
+  tbody tr:not(:last-child) {
+    border-bottom: 1px solid var(--gray-5);
+  }
+
+  td {
+    color: var(--gray-12);
+  }
+}
+
+.tableWrapper.scroll .table {
+  th,
+  td {
+    white-space: nowrap;
+  }
+}
+
+.tableWrapper.wrap .table {
+  th,
+  td {
+    overflow-wrap: break-word;
+    white-space: normal;
+    word-break: break-word;
+  }
+}
+
+.controls {
+  align-items: center;
+  background-color: var(--gray-2);
+  border-radius: var(--radius-2);
+  display: flex;
+  gap: var(--space-2);
+  opacity: 0%;
+  padding: 2px;
+  position: absolute;
+  right: var(--space-1);
+  top: var(--space-1);
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.controlButton {
+  cursor: pointer;
+  opacity: 50%;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.controlButton:hover {
+  opacity: 100%;
+}
+
+.controlButton.activeControl {
+  background-color: var(--accent-a4);
+  color: var(--accent-11);
+  opacity: 100%;
+}
+
+.tableOuter:hover .controls {
+  opacity: 100%;
+}

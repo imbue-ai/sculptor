@@ -1,0 +1,20 @@
+.splitWrapper {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.horizontalResizeHandle {
+  background-color: var(--gray-a5);
+  transition: background-color var(--duration-normal);
+  width: 1px;
+
+  &:hover {
+    background-color: var(--gray-a7);
+  }
+
+  &[data-resize-handle-active] {
+    background-color: var(--accent-9);
+  }
+}

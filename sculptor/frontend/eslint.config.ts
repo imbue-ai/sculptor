@@ -1,0 +1,236 @@
+// Note, some linting rules conforming to the style guide at https://mkosir.github.io/typescript-style-guide/
+import js from "@eslint/js";
+import stylisticPlugin from "@stylistic/eslint-plugin";
+import typescriptPlugin from "@typescript-eslint/eslint-plugin";
+import tsParser from "@typescript-eslint/parser";
+import prettierConfig from "eslint-config-prettier/flat";
+import cssPlugin from "eslint-plugin-css";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const importPlugin = require("eslint-plugin-import");
+import prettierPluginConfig from "eslint-plugin-prettier/recommended";
+import reactPlugin from "eslint-plugin-react";
+import reactHooksPlugin from "eslint-plugin-react-hooks";
+import reactRefreshPlugin from "eslint-plugin-react-refresh";
+import simpleImportSortPlugin from "eslint-plugin-simple-import-sort";
+import storybookPlugin from "eslint-plugin-storybook";
+import globals from "globals";
+import tseslint from "typescript-eslint";
+
+// Default export is expected by eslint:
+// eslint-disable-next-line import/no-default-export
+export default tseslint.config(
+  // Global ignores must come first
+  {
+    ignores: [
+      ".prettierrc.cjs",
+      ".storybook",
+      "babel.config.ts",
+      "coverage/**",
+      "dist",
+      "eslint.config.ts",
+      "jest.config.ts",
+      "jest.setup.ts",
+      "postcss.config.js",
+      "scripts/**",
+      "src/api/**",
+      "**/build/**",
+      "src/**/generated-*.ts",
+      "src/**/generated-*.tsx",
+      "src/quarantine/**",
+      "src/views/tasks_deprecated/**",
+      "tailwind.config.js",
+      "vite.config.ts",
+      "out/**",
+      "storybook-static/**",
+    ],
+  },
+  // NOTE: turns off all rules that may conflict with prettier
+  // https://github.com/prettier/eslint-config-prettier
+  prettierConfig,
+  // Run prettier as an eslint rule: https://github.com/prettier/eslint-plugin-prettier
+  prettierPluginConfig,
+  js.configs.recommended,
+  tseslint.configs.recommended,
+
+  reactPlugin.configs.flat.recommended,
+  reactPlugin.configs.flat["jsx-runtime"],
+  reactHooksPlugin.configs["recommended-latest"],
+  reactRefreshPlugin.configs.vite,
+  importPlugin.configs.typescript,
+  cssPlugin.configs["flat/recommended"],
+  storybookPlugin.configs["flat/recommended"],
+
+  // Merging this into customConfig results in the following:
+  //
+  // Warning: React version not specified in eslint-plugin-react settings. See https://github.com/jsx-eslint/eslint-plugin-react#configuration .
+  {
+    settings: {
+      react: {
+        version: "detect",
+      },
+    },
+  },
+  {
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: "latest",
+        sourceType: "module",
+        project: ["./tsconfig.json", "./tsconfig.node.json"],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      globals: {
+        ...globals.browser,
+        ...globals.es2020,
+        ...globals.node,
+      },
+    },
+    plugins: {
+      "@stylistic": stylisticPlugin,
+      "@typescript-eslint": typescriptPlugin,
+      import: importPlugin,
+      css: cssPlugin,
+      "simple-import-sort": simpleImportSortPlugin,
+    },
+    rules: {
+      /*
+        Rules copied from https://mkosir.github.io/typescript-style-guide/ on 2025-06-04,
+        with adaptions noted.
+
+        If the style guide has updated,
+        look for "📏" in the page and update the following.
+      */
+      // From the section "Types":
+      "@typescript-eslint/switch-exhaustiveness-check": "error",
+      "@typescript-eslint/ban-ts-comment": ["error", { "ts-expect-error": "allow-with-description" }],
+      "@typescript-eslint/consistent-type-definitions": ["error", "type"],
+      "@typescript-eslint/array-type": [
+        "error",
+        {
+          default: "generic",
+          // This is extra from us
+          readonly: "generic",
+        },
+      ],
+      "@typescript-eslint/consistent-type-imports": "error",
+
+      // From the section "Functions":
+      // This is only recommended in the open-source style guide,
+      // but our style guide enforces this.
+      "@typescript-eslint/explicit-function-return-type": "error",
+
+      // From the section "Variables":
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "TSEnumDeclaration",
+          message: "Replace enum with a literal type or a const assertion.",
+        },
+      ],
+
+      // From the section "Naming":
+      /* Imports: https://github.com/import-js/eslint-plugin-import?tab=readme-ov-file#rules */
+      "import/no-default-export": "error",
+      // The open-source style guide defines boolean, typeAlias
+      "@typescript-eslint/naming-convention": [
+        "error",
+        {
+          selector: "variable",
+          types: ["boolean"],
+          format: ["PascalCase"],
+          prefix: ["is", "does", "are", "should", "has", "can", "did", "will"],
+        },
+        {
+          selector: "typeAlias",
+          format: ["PascalCase"],
+        },
+        {
+          // Generic type parameter must start with letter T, followed by any uppercase letter.
+          selector: "typeParameter",
+          format: ["PascalCase"],
+          custom: { regex: "^T[A-Z]?", match: true },
+        },
+        // This is extra from us
+        {
+          selector: "variable",
+          types: ["function"],
+          format: ["camelCase", "PascalCase"],
+        },
+        // maybe CONSTANT_CASE for as const top-level
+        // excluding https://mkosir.github.io/typescript-style-guide/#generics as idk if I want to enforce that
+
+        //  we'll do the opposite - acronym should be uppercase like in python
+        // https://mkosir.github.io/typescript-style-guide/#abbreviations--acronyms
+      ],
+      "react/jsx-handler-names": [
+        "error",
+        {
+          eventHandlerPrefix: "handle",
+          eventHandlerPropPrefix: "on",
+        },
+      ],
+      "react/hook-use-state": "error",
+
+      // We use TypeScript for type checking, so no need for prop-types.
+      "react/prop-types": "off",
+
+      // We don't use vitest,
+      // so we don't include the rules from the "Test" section.
+
+      "no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+
+      /* Eslint stylistic: https://eslint.style/packages/default */
+      "@stylistic/padding-line-between-statements": [
+        "error",
+        { blankLine: "always", prev: "block", next: "block" },
+        { blankLine: "always", prev: "block-like", next: "block-like" },
+      ],
+
+      /* Typescript Eslint: https://typescript-eslint.io/rules/ */
+      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+
+      // Types
+      "@typescript-eslint/no-explicit-any": "error",
+      // not sure about this - seems close to an explicit runtime assertion intended to be caught higher up
+      // "@typescript-eslint/no-non-null-assertion": "error",
+
+      // Functions
+      // only use 1 object param
+      // "max-params": "off",
+      // "@typescript-eslint/max-params": ["warn", { max: 1 }],
+
+      // Variables
+      "@typescript-eslint/prefer-as-const": "error",
+
+      "@typescript-eslint/no-restricted-types": [
+        "error",
+        {
+          types: {
+            "React.FC": "Define the component props and return type explicitly.",
+          },
+        },
+      ],
+
+      /* React: https://github.com/jsx-eslint/eslint-plugin-react?tab=readme-ov-file#list-of-supported-rules */
+      "react/function-component-definition": [
+        "error",
+        {
+          namedComponents: "arrow-function",
+          unnamedComponents: "arrow-function",
+        },
+      ],
+      "react/display-name": "off",
+      "react/jsx-curly-brace-presence": [
+        "error",
+        {
+          props: "never",
+          children: "never",
+        },
+      ],
+
+      // configure simple-import-sort plugin
+      "simple-import-sort/imports": "error",
+      "simple-import-sort/exports": "error",
+    },
+  },
+);

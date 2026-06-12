@@ -1,0 +1,28 @@
+/*
+ * Shared "text shimmer" loading effect.
+ *
+ * Modulates the alpha of the rendered glyphs themselves via `mask-image`
+ * (rather than an overlay), so the underlying text colors are preserved.
+ * The mask is 4× the element width with a dim band flanked by opaque pause
+ * regions. Use via CSS-modules `composes`:
+ *
+ *   .myRefreshing {
+ *     composes: shimmer from "../../styles/shimmer.module.css";
+ *   }
+ */
+
+@keyframes textShimmer {
+  0% {
+    mask-position: 0 0;
+  }
+
+  100% {
+    mask-position: -400% 0;
+  }
+}
+
+.shimmer {
+  animation: textShimmer 5s linear infinite;
+  mask-image: linear-gradient(90deg, rgb(0, 0, 0) 0%, rgb(0, 0, 0) 25%, rgb(0, 0, 0, 50%) 75%, rgb(0, 0, 0) 100%);
+  mask-size: 400% 100%;
+}

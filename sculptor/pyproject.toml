@@ -1,0 +1,138 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sculptor"
+
+# Non-release branches (including main) must always use a .dev suffix (e.g. 0.10.0.dev0).
+# Release branches set the concrete version (e.g. 0.10.0 or 0.10.0rc1).
+version = "0.35.0.dev0"
+
+readme = "README.md"
+license = { text = "MIT" }
+dependencies = [
+    # Please add dev dependencies to dependency-groups.dev, not here.
+    # Please keep these sorted alphabetically.
+    "alembic>=1.16.1",
+    "anthropic>=0.38.0",
+    "beautifulsoup4>=4.12.2",
+    "boto3>=1.35.0",
+    "coolname>=2.2.0",
+    "dockerfile-parse>=2.0.1",
+    "email-validator",
+    "fastapi",
+    "filelock>=3.8.0",
+    "humanfriendly>=10.0",
+    "json5>=0.9.0",
+    "loguru",
+    "psutil>=5.9.0",
+    "python-multipart",
+    "python-slugify>=8.0.0",
+    "pydantic-settings",
+    "pyyaml>=6.0",
+    "pyjwt[crypto]",
+    "requests>=2.28.0",
+    "splinter>=0.19.0",
+    "sqlalchemy",
+    "tomlkit>=0.13.0",
+    "typeid-python",
+    "typer",
+    "uvicorn>=0.34.3",
+    "viztracer>=1.0.0",
+    "watchdog>=6.0.0",
+    "websockets>=15.0.1",
+
+    # There's a gap and then last of all, because of the non-standard way we import it, we have
+    "imbue-core",
+
+    # Once again, sort your import dependency!
+]
+requires-python = ">=3.11"
+
+[tool.uv.sources]
+imbue-core = { workspace = true }
+sculpt = { workspace = true }
+
+[tool.setuptools.packages.find]
+exclude = [
+    "keys",
+
+    # Exclude any testing packages from being included in our code.
+    "tests",
+    "tests.*",
+    "*.tests",
+    "*.tests.*",
+    "testing",
+    "testing.*",
+    "*.testing",
+    "*.testing.*",
+    "sculptor.testing",
+    "sculptor.testing.*",
+]
+
+# The next two stanzas ensure that these non-python files are included inside the sculptor wheel.
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+sculptor = [
+    "services/environment_service/providers/docker/imbue_addons/*",
+    "services/environment_service/providers/docker/default_devcontainer/*",
+    "cli/ssh_config/*",
+]
+# Sadly, the build system will not complain if the above are misspelled.
+
+[dependency-groups]
+dev = [
+    # The source-built `sculpt` CLI. sculptor does not import it (agents shell out
+    # to the `sculpt` binary), but declaring it as a dev dependency guarantees the
+    # dev venv always contains `.venv/bin/sculpt` built from source — so it is in
+    # every `uv run --project sculptor` resolution and can never be pruned as an
+    # extraneous package, which is what let agents silently fall back to the stale
+    # packaged CLI (SCU-1360). Excluded from production via `uv sync --no-dev`.
+    "sculpt",
+    "boto3-stubs>=1.40.49",
+    "filelock>=3.18.0",
+    "moto[s3]",
+    "pillow>=11.0.0",
+    "playwright==1.53.0",
+    "pyre-check",
+    "pytest-cov>=6.2.1",
+    "pytest-metadata==3.1.1",
+    "pytest-performancetotal==0.2.11",
+    "pytest-playwright==0.7.0",
+    "pytest-repeat>=0.9.3",
+    "pytest-split>=0.9.0",
+    "pytest-timeout",
+    "pytest-xdist>=3.8.0",
+    "pytest>=8.4.1",
+    "selenium>=4.0.0",
+    "syrupy",
+    "tabulate>=0.9.0",
+    "ty>=0.0.4",
+    "websocket-client>=1.5.1",
+]
+
+[project.optional-dependencies]
+packaging = [
+    # When we run pyinstaller, we want to exclude dev dependencies for a smaller executable
+    # but pyinstaller itself needs to be available so it can't be a dev dependency.
+    "pyinstaller>=6.15.0",
+]
+
+[project.scripts]
+sculptor_npm_run = "sculptor.scripts.npm_run:app"
+sculptor = "sculptor.cli.main:main"
+sculptor_eslint_preprocess = "sculptor.scripts.eslint_preprocess:main"
+builder = "builder.cli:app"  # Utilities for building and releasing Sculptor
+
+
+[tool.ty.rules]
+possibly-missing-attribute = "ignore"
+
+[tool.ty.src]
+exclude = [
+        "tests/"  # NOTE: We've disabled typechecking for tests for now they descend to base mockery, which is harder to
+                  # typecheck effectively.
+]

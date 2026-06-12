@@ -1,0 +1,171 @@
+name: offload
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Offload runs cost real Modal time, so let runs finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  # HCP Vault address + namespace. Mirrors the values in scripts/export-vault-env.
+  VAULT_ADDR: https://vault-cluster-public-vault-df29b16f.9b573ab7.z1.hashicorp.cloud:8200
+  VAULT_NAMESPACE: admin
+
+jobs:
+  offload-integration-tests:
+    name: offload integration tests
+    # SECURITY: never run on the self-hosted offload-runner for PRs from forks.
+    # A forked PR would execute untrusted code on our own runner, which can reach
+    # Vault, the cloud metadata endpoint, and our network. (Forks get no
+    # secrets/OIDC from GitHub, but the self-hosted host itself is the prize.)
+    # Runs only for pushes to main and same-repo branch PRs.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: offload-runner
+    timeout-minutes: 60
+    permissions:
+      # offload's image-cache push to refs/notes/offload-images uses
+      # GITHUB_TOKEN via the credentials actions/checkout sets up.
+      contents: write
+      # Required so scripts/export-vault-env can request the OIDC token
+      # GitHub injects via ACTIONS_ID_TOKEN_REQUEST_* env vars.
+      id-token: write
+      # Required by the report-flaky-aware-tests composite action to POST a
+      # check-run + emit per-failure annotations.
+      checks: write
+    env:
+      JUST_VERBOSE: "1"
+      # See checks.yml for why this lives at job env, not runner.temp.
+      SCIENCE_FILESYSTEM_ROOT: /tmp/science
+      VAULT_AUTH_ROLE: sculptor_test_gh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history needed for offload's checkpoint resolution.
+          fetch-depth: 0
+
+      # Use a consistent bot identity for the git-note commits offload writes.
+      - name: Configure git identity for offload note writes
+        run: |
+          git config user.email "dev@imbue.com"
+          git config user.name "imbue-dev"
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends rsync jq unzip ca-certificates
+
+      - name: Install Vault CLI
+        # Matches the GitLab pipeline's pinned version + sha. Installing
+        # directly to /usr/local/bin avoids the LOCAL_BIN/PATH dance the
+        # GitLab YAML needed for its caching layout.
+        run: |
+          VAULT_VERSION=1.19.0
+          VAULT_SHA256=9df904271319452bbb37825cfe50726383037550cc04b7c2d0ab09e2f08f82a1
+          curl -fsSL "https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_linux_amd64.zip" -o /tmp/vault.zip
+          echo "${VAULT_SHA256}  /tmp/vault.zip" | sha256sum -c -
+          # -o overwrites without prompting (vault zip ships a LICENSE.txt
+          # that collides with one already on the runner; otherwise unzip
+          # tries to ask interactively and exits non-zero).
+          sudo unzip -o /tmp/vault.zip -d /usr/local/bin
+          rm /tmp/vault.zip
+          vault --version
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Setup just
+        uses: extractions/setup-just@v2
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache offload binary
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/offload
+          key: cargo-offload-0.9.7-${{ runner.os }}
+
+      - name: Install offload
+        run: |
+          if ! command -v offload >/dev/null || ! offload --version | grep -q '0.9.7'; then
+            cargo install offload@0.9.7 --force
+          fi
+          offload --version
+
+      - name: Fetch offload image-cache git notes
+        # Broader than strictly necessary (we only need refs/notes/offload-images)
+        # but harmless.
+        run: git fetch origin 'refs/notes/*:refs/notes/*' || true
+
+      - name: Sync Python deps
+        run: uv sync --frozen
+
+      - name: Run offload integration tests
+        id: tests
+        run: |
+          # Only Modal credentials are needed: the integration groups filter out
+          # the real_claude / real_pi tests, so the harness runs with a placeholder
+          # API key (see offload.toml) and never reads a host ANTHROPIC_API_KEY.
+          eval "$(./scripts/export-vault-env \
+            shared/modal/MODAL_TOKEN_ID \
+            shared/modal/MODAL_TOKEN_SECRET)"
+          ulimit -n 8192
+
+          OFFLOAD_EXIT=0
+          just test-offload --ci || OFFLOAD_EXIT=$?
+
+          # Reap leaked Modal python3 workers so they don't linger on the
+          # runner host between jobs. See SCU-1376 for the underlying issue.
+          pkill -TERM -f 'python3.*modal' 2>/dev/null || true
+          sleep 3
+          pkill -KILL -f 'python3.*modal' 2>/dev/null || true
+
+          # offload exits 2 for "some tests failed"; preserve that so the
+          # rest of the pipeline still uploads artifacts and parses JUnit
+          # (matches the GitLab recipe).
+          if [ "$OFFLOAD_EXIT" -ne 0 ] && [ "$OFFLOAD_EXIT" -ne 2 ]; then
+            exit "$OFFLOAD_EXIT"
+          fi
+
+      - name: Surface failed + flaky test names
+        # The script always exits 0; safe to run unconditionally.
+        if: always()
+        run: python3 scripts/ci/print_offload_failed_tests.py
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-offload
+          path: test-results/
+          # Offload's per-sandbox flaky_tests_*.txt manifests live under
+          # hidden .test_output/ dirs; opt them in.
+          include-hidden-files: true
+          retention-days: 30
+          if-no-files-found: ignore
+
+      # Posts a single PR check-run that distinguishes flaky-recovered
+      # (neutral / yellow) from real failures (failure / red), and attaches
+      # per-failure annotations to the workflow run via
+      # mikepenz/action-junit-report in annotate-only mode.
+      - name: Report test results (flake-aware)
+        if: always()
+        uses: ./.github/actions/report-flaky-aware-tests
+        with:
+          check-name: offload integration tests
+          junit-path: test-results/junit-integration.xml
+          tests-outcome: ${{ steps.tests.outcome }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}

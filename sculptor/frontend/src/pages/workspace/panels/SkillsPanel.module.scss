@@ -1,0 +1,100 @@
+@use "scrollbar" as *;
+
+.panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.scrollArea {
+  flex: 1;
+  overflow: hidden auto;
+
+  @include thin-scrollbar;
+}
+
+.filterActive {
+  color: var(--accent-11);
+}
+
+.emptyState {
+  align-items: center;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+}
+
+.emptyStateHint {
+  max-width: 280px; // stylelint-disable-line sculptor/no-hardcoded-values
+}
+
+// Type-section header. Compact, muted, all-caps so it reads as chrome and
+// not as a list row. The first header has slightly less top padding so it
+// doesn't add a chunky gap directly beneath the panel header. Clicking
+// (or Enter/Space when focused) toggles the section's collapse state.
+.groupHeader {
+  align-items: center;
+  border-radius: var(--radius-2);
+  color: var(--gray-9);
+  cursor: pointer;
+  display: flex;
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-medium);
+  gap: var(--space-1);
+  letter-spacing: 0.05em;
+  padding: var(--space-4) var(--space-1) var(--space-1);
+  text-transform: uppercase;
+  transition: color var(--duration-fast) ease;
+  user-select: none;
+
+  &:hover {
+    color: var(--gray-12);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent-8); // stylelint-disable-line sculptor/no-hardcoded-values
+    outline-offset: -2px; // stylelint-disable-line sculptor/no-hardcoded-values
+  }
+
+  &:first-child {
+    padding-top: var(--space-2);
+  }
+}
+
+// Single shared popover for the skills list. The inline `transform`
+// translates this layer to the chip's left edge / vertical center; the
+// `translate` shorthand below then anchors the popover to the LEFT of that
+// point (so the popover sits to the left of the chip column) and centers it
+// vertically on the chip. `padding-right` keeps a visual gap between the
+// popover and the chip while extending the hit zone all the way to the
+// chip's left edge — so a slow diagonal traverse from chip to popover never
+// passes through "no man's land" that would trigger the close timer.
+.popoverHitArea {
+  left: 0;
+  padding-right: var(--space-2);
+  position: fixed;
+  top: 0;
+  translate: -100% -50%;
+  will-change: transform;
+  z-index: var(--z-tooltip);
+}
+
+.popoverAnimated {
+  transition: transform var(--duration-fast) ease-out;
+}
+
+.popover {
+  background: var(--color-panel-solid);
+  border-radius: var(--radius-3);
+  box-shadow: var(--shadow-2);
+  color: var(--gray-12);
+  // Cap height to viewport (minus the y-clamp's edge margin on each side)
+  // and scroll inside so a very long description never overflows the screen.
+  max-height: calc(100vh - 16px); // stylelint-disable-line sculptor/no-hardcoded-values
+  max-width: 300px; // stylelint-disable-line sculptor/no-hardcoded-values
+  min-width: 180px; // stylelint-disable-line sculptor/no-hardcoded-values
+  overflow: hidden auto;
+
+  @include thin-scrollbar;
+}

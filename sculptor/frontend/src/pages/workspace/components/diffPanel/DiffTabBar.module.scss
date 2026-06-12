@@ -1,0 +1,18 @@
+.controls {
+  border-left: 1px solid var(--gray-a5);
+  padding: 0 var(--space-2);
+}
+
+.windowControls {
+  border-left: 1px solid var(--gray-a5);
+  padding: 0 var(--space-2);
+}
+
+.tabContextMenu {
+  margin-top: var(--space-2);
+}
+
+.activeControl {
+  background-color: var(--accent-a4);
+  color: var(--accent-11);
+}

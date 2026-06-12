@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Git pre-commit hook that delegates to just commands
+#
+# Install with: just install-hooks
+# Or manually: ln -sf ../../scripts/git-hooks/pre-commit .git/hooks/pre-commit
+
+set -euo pipefail
+
+# Get the repo root
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+echo "Running pre-commit checks via just..."
+
+# Run all checks (format, lint, typecheck, file hygiene, yaml, shellcheck, uv-lock, ratchets)
+just check
+
+# Also check for large staged files (not in just check since it only applies to staged files)
+just check-large-files
+
+echo "Pre-commit checks passed!"

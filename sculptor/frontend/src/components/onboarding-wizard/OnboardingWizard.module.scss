@@ -1,0 +1,146 @@
+.wizardContainer {
+  background-color: var(--accent-3);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.contentArea {
+  align-items: center;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--space-6);
+}
+
+.stepContent {
+  max-width: 360px;
+  width: 100%;
+}
+
+.logo {
+  height: 25px;
+  width: 30px;
+}
+
+.titleText {
+  color: var(--accent-11);
+  font-size: var(--font-size-6);
+  font-weight: var(--font-weight-bold);
+}
+
+.primaryText {
+  color: var(--accent-11);
+  font-size: var(--font-size-5);
+  font-weight: var(--font-weight-medium);
+}
+
+.secondaryText {
+  color: var(--accent-10);
+  font-size: var(--font-size-3);
+  font-weight: var(--font-weight-regular);
+  line-height: 24px;
+}
+
+.circleIcon {
+  color: var(--accent-11);
+  height: 24px;
+  width: 24px;
+}
+
+.termsText {
+  color: var(--accent-11);
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: underline;
+}
+
+.linkText {
+  color: var(--accent-10);
+  font-size: var(--font-size-3);
+  font-weight: var(--font-weight-regular);
+  text-decoration: underline;
+}
+
+.tosAndPrivacy {
+    gap: var(--space-2);
+    padding-top: var(--space-3);
+}
+
+.researchPreviewClassic {
+    bottom: var(--space-7);
+}
+
+.emailInput {
+  font-family: var(--default-font-family);
+}
+
+.primaryButton {
+  background: var(--button-primary-bg);
+  border-radius: var(--radius-3);
+  color: white;
+  width: 100%;
+
+  &:hover:not(:disabled) {
+    background: var(--button-primary-bg-hover);
+  }
+
+  &:disabled { // stylelint-disable-line no-descending-specificity
+    opacity: 60%;
+    position: relative;
+  }
+}
+
+
+.recheckLink {
+  color: var(--accent-10);
+  cursor: pointer;
+  text-decoration: underline;
+
+  &:hover {
+    color: var(--accent-11);
+  }
+}
+
+// A link-styled (ghost) button so the control is keyboard-focusable and
+// carries button semantics for assistive tech.
+.skipLink {
+  align-self: center;
+  background: none;
+  color: var(--accent-10);
+  cursor: pointer;
+  margin-top: var(--space-2);
+  text-decoration: underline;
+
+  &:hover {
+    background: none;
+    color: var(--accent-11);
+  }
+}
+
+.error {
+  margin-top: var(--space-1);
+}
+
+.completeDependencyCard {
+  background-color: var(--green-3);
+  border: 2px solid var(--green-6);
+  border-radius: var(--radius-5);
+}
+
+
+.telemetryCheck {
+  align-items: center;
+  display: flex;
+  height: 22px;
+  justify-content: center;
+  width: 22px;
+}
+
+.telemetrySettings {
+  > * {
+    font-size: var(--font-size-3);
+    min-width: 280px;
+  }
+}

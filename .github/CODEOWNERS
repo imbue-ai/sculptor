@@ -1,0 +1,14 @@
+# Code owners for the Sculptor CI / release setup.
+#
+# Changes under .github/ — especially the signing and release pipeline in
+# workflows/ — can expose signing secrets if tampered with, so they require
+# review from a Sculptor maintainer.
+#
+# NOTE: This file only auto-requests reviewers. To actually *block* merges
+# until a code owner approves, enable branch protection on the default branch
+# with "Require review from Code Owners".
+#
+# Team must have write access to this repo or it is silently ignored as an
+# owner. @imbue-ai/sculptor-maintainers currently has push/maintain here.
+
+/.github/   @imbue-ai/sculptor-maintainers

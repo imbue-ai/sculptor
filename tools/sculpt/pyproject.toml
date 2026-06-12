@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sculpt"
+version = "0.1.0"
+readme = "README.md"
+description = "CLI client for the Sculptor API"
+license = { text = "MIT" }
+dependencies = [
+    # Dependencies for the generated API client
+    "attrs>=21.3.0",
+    "httpx>=0.20.0",
+    "python-dateutil>=2.8.0",
+    # Models
+    "pydantic>=2.0.0",
+    # CLI framework
+    "typer>=0.9.0",
+    # WebSocket client
+    "websockets>=13.0",
+]
+requires-python = ">=3.11"
+
+[project.optional-dependencies]
+packaging = [
+    "pyinstaller>=6.15.0",
+]
+
+[project.scripts]
+sculpt = "sculpt.main:app"
+
+[dependency-groups]
+dev = [
+    "openapi-python-client>=0.26.2",
+    "pytest>=8.0.0",
+
+    "respx>=0.21.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests as integration tests (require sculptor package)",
+]

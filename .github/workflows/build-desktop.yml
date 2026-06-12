@@ -1,0 +1,650 @@
+# Builds the Sculptor desktop app for Linux x64, Linux arm64, and macOS arm64
+# and snapshots artifacts to the BUILD S3 bucket. On `sculptor-v*` tag pushes
+# the build leg assumes slim_sculptor_release_from_tag_gh via the `release`
+# Environment and four downstream jobs (notify / release / release-dev /
+# notify-failed) fan out to Slack, S3, and `gh release create`. On main
+# pushes the dev path uses slim_sculptor_dev_build_gh and publishes to
+# slim-dev/.
+#
+# DELIBERATELY COMBINED: build and release jobs live in one workflow file
+# rather than the split build-desktop.yml + release-desktop.yml the spec
+# anticipates. The split is deferred to a follow-up phase — workflow_run
+# chaining always runs default-branch YAML, which makes iterating on the
+# split painful.
+#
+# REAL RELEASES FIRE FROM imbue-ai/sculptor ONLY. Every other repo (forks,
+# ad-hoc copies) gets --dry-run on the publish step and skips gh release
+# create via the same repo identity check. This is a whitelist: new repos
+# copying this workflow file inherit the safe default.
+
+name: build-desktop
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - 'sculptor-v*'
+
+# Builds are expensive; let runs finish rather than cancel mid-flight.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  # The electron/vite build intermittently OOMs the default ~2GB Node heap on
+  # the macOS runner; give it headroom.
+  NODE_OPTIONS: --max-old-space-size=4096
+  VAULT_ADDR: https://vault-cluster-public-vault-df29b16f.9b573ab7.z1.hashicorp.cloud:8200
+  VAULT_NAMESPACE: admin
+
+jobs:
+  # One timestamp shared by every build leg, so all platforms stamp the same
+  # .dev version (the builder derives the date from CI_PIPELINE_CREATED_AT).
+  setup:
+    name: setup (pipeline metadata)
+    runs-on: ubuntu-latest
+    outputs:
+      pipeline_created_at: ${{ steps.meta.outputs.pipeline_created_at }}
+    steps:
+      - id: meta
+        run: echo "pipeline_created_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+  # Fail fast (seconds, before any 30-60 min build leg) if pyproject.toml's
+  # version is inconsistent with the build context: on a sculptor-v* tag the
+  # version must be a matching release (rc/stable, never .dev); on a non-tag
+  # build it must be a .dev version (create-version-file --annotate-dev needs
+  # one). Logic + tests live in the builder (verify-release-tag) next to
+  # create-version-file, whose assumptions this enforces.
+  verify-version:
+    name: verify version (tag/dev consistency)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Setup just
+        uses: extractions/setup-just@v2
+
+      - name: Sync Python deps
+        run: uv sync --frozen
+
+      - name: Verify tag/version consistency
+        # The tag goes through env, NEVER ${{ }}-interpolated into `run:` —
+        # ref_name is named by whoever pushes the ref, and git refnames may
+        # contain shell metacharacters ($, ;, |, ...), so inlining it would be
+        # script injection. The recipe quote()s the value on its own shell line,
+        # which also keeps an empty tag (main / dispatch builds) intact as an
+        # empty argument instead of a dropped token — the old `--tag ""` form
+        # lost the token to the recipe's unquoted {{ args }} and died with
+        # "Option '--tag' requires an argument" (exit 2) on every main push.
+        env:
+          BUILD_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: just verify-release-tag "$BUILD_TAG"
+
+  build:
+    name: build ${{ matrix.name }}
+    needs: [setup, verify-version]
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 120
+    permissions:
+      # OIDC token for Vault (signing certs + AWS).
+      id-token: write
+      contents: read
+    # The build binds a GitHub Environment so it can mint the matching Vault
+    # role — the dev and release roles are both bound on an `environment`
+    # claim (SCU-1407):
+    #   sculptor-v* tag push  -> release           (release role)
+    #   workflow_dispatch     -> dev-build-manual  (dev role; maintainer-gated)
+    #   main push (default)   -> dev-release       (dev role; automatic)
+    # Enforcement is the consuming repo's Environment config (deployment-branch
+    # policy / required reviewers), NOT this YAML. On the org's PRIVATE repos
+    # required-reviewers is unavailable (SCU-1423; the public imbue-ai/sculptor
+    # is unaffected), so on those repos `release` does NOT pause here — the Slack
+    # await-approval job is the interim gate, and `dev-build-manual` is likewise
+    # unenforced until the plan/Environment lands.
+    environment: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/sculptor-v')) && 'release' || (github.event_name == 'workflow_dispatch' && 'dev-build-manual') || 'dev-release' }}
+    # linux-arm64 is non-blocking — arm64 runner preemption shouldn't block a
+    # release — mirroring the non-blocking linux-arm64 packaged test. A failed
+    # arm64 build reports success for `needs`, so the downstream release jobs
+    # still proceed when x64 + macOS succeed.
+    continue-on-error: ${{ matrix.allow-failure }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-x64,   runs-on: ubuntu-latest,    os: linux,  arch: x64,   allow-failure: false }
+          - { name: linux-arm64, runs-on: ubuntu-24.04-arm, os: linux,  arch: arm64, allow-failure: true }
+          - { name: macos-arm64, runs-on: macos-14,         os: darwin, arch: arm64, allow-failure: false }
+    env:
+      # Tag pushes mint the release role (env-claim-bound); everything else
+      # uses the dev role.
+      VAULT_AUTH_ROLE: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/sculptor-v')) && 'slim_sculptor_release_from_tag_gh' || 'slim_sculptor_dev_build_gh' }}
+      # get_filesystem_root() defaults to /mnt/private on Linux, which the
+      # runners lack; point it at a writable path.
+      SCIENCE_FILESYSTEM_ROOT: /tmp/science
+      # The builder (sculptor/builder/cli.py) reads these CI_* vars.
+      CI_PIPELINE_ID: ${{ github.run_id }}        # DEV S3-path isolation
+      CI_PIPELINE_IID: ${{ github.run_number }}   # 6-digit .dev counter
+      CI_PIPELINE_CREATED_AT: ${{ needs.setup.outputs.pipeline_created_at }}
+      CI_JOB_ID: ${{ github.run_id }}
+      CI_COMMIT_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+      CI_COMMIT_BRANCH: ${{ github.ref_type == 'branch' && github.ref_name || '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # dev_git_sha() and version derivation need full history.
+          fetch-depth: 0
+
+      - name: Configure git user
+        run: |
+          git config --global user.email "ci@sculptor.dev"
+          git config --global user.name "Sculptor CI"
+
+      - name: Install Linux build dependencies
+        if: matrix.os == 'linux'
+        # Electron, node-gyp, and AppImage-maker dependencies.
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            build-essential pkg-config python3 python3-pip \
+            libsecret-1-dev libx11-dev libxkbfile-dev \
+            binutils squashfs-tools zsync zip jq unzip ca-certificates gnupg lsb-release
+
+      - name: Install Vault CLI (Linux)
+        if: matrix.os == 'linux'
+        # apt resolves the right binary for both x64 and arm64 runners.
+        run: |
+          curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --batch --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq vault
+          vault --version
+
+      - name: Install Vault CLI (macOS)
+        if: matrix.os == 'darwin'
+        run: |
+          brew install hashicorp/tap/vault
+          vault --version
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.13.1
+
+      - name: Setup just
+        uses: extractions/setup-just@v2
+
+      - name: Install nvm (macOS)
+        if: matrix.os == 'darwin'
+        # The frontend recipes source $NVM_DIR/nvm.sh (justfile nvm_use); the
+        # macos-14 runner has no nvm. The recipe runs `nvm install 20.13.1`.
+        run: |
+          export NVM_DIR="$HOME/.nvm"
+          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+
+      - name: Sync Python deps
+        run: uv sync --frozen
+
+      - name: Import macOS signing certificate
+        if: matrix.os == 'darwin'
+        # Import the signing identity into the runner keychain; it persists for
+        # the build step. Also export the notarization key identifiers, which
+        # forge.config.ts reads from the environment during the build step.
+        run: |
+          set -euo pipefail
+          eval "$(./scripts/export-vault-env restricted/sculptor-release/{CERTS_TAR_GZ,APPLE_API_KEY_ID,APPLE_API_ISSUER})"
+          printf %s "$CERTS_TAR_GZ" | base64 -d | tar -xz -C /tmp -f -
+          bash /tmp/certs/import_cert.sh.v8
+          cp "/tmp/certs/AuthKey_${APPLE_API_KEY_ID}.p8" ./sculptor/frontend/config/apple_api_key.p8
+          {
+            echo "APPLE_API_KEY_ID=$APPLE_API_KEY_ID"
+            echo "APPLE_API_ISSUER=$APPLE_API_ISSUER"
+          } >> "$GITHUB_ENV"
+
+      - name: Build desktop artifacts
+        # snapshot-build-artifacts uploads to S3, so AWS creds are needed (x64 too).
+        run: |
+          set -euo pipefail
+          eval "$(./scripts/export-vault-env shared/aws/AWS_ACCESS_KEY_ID shared/aws/AWS_SECRET_ACCESS_KEY)"
+
+          # A tag build keeps the pyproject version; otherwise stamp a .dev version.
+          if [ -z "${CI_COMMIT_TAG:-}" ]; then
+            just create-version-file --annotate-dev
+          else
+            just create-version-file
+          fi
+          # The macOS DMG maker (appdmg/hdiutil) intermittently fails to detach
+          # the Sculptor volume; retry, clearing any stale mount between tries.
+          n=0
+          until just refresh pkg; do
+            n=$((n + 1))
+            if [ "$n" -ge 3 ]; then echo "refresh pkg failed after $n attempts"; exit 1; fi
+            echo "refresh pkg failed; retry $n after clearing any stale volume..."
+            hdiutil detach /Volumes/Sculptor 2>/dev/null || true
+            sleep 5
+          done
+          just generate-autoupdate-manifest ${{ matrix.os }} ${{ matrix.arch }}
+          just snapshot-build-artifacts ${{ matrix.os }} ${{ matrix.arch }}
+
+          echo "Build complete!"
+
+      - name: Upload build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.name }}
+          path: dist/
+          retention-days: 1
+          if-no-files-found: warn
+
+  # Ports .gitlab-ci-sculptor-desktop-packaged-tests.yml: runs the integration
+  # suite against the *built* desktop artifacts. Linux uses packaged-electron
+  # mode (extracts the AppImage, real Electron under xvfb-run); macOS uses
+  # packaged-backend mode (mounts the DMG, runs sculptor_backend + headless
+  # Chromium). See sculptor/builder/test-sculptor-desktop-packaged.sh.
+  packaged-tests:
+    name: packaged tests ${{ matrix.name }}
+    needs: build
+    # GitHub `needs:` is job-to-job, not matrix-leg-to-leg, so this can't be
+    # wired so that packaged-tests[x64] depends on build[x64] specifically.
+    # The real per-platform dependency is enforced by ARTIFACT EXISTENCE: each
+    # leg downloads its own dist-${{ matrix.name }} build artifact, so a leg
+    # whose build leg failed fails at the download step (and arm64 is
+    # non-blocking anyway). That keeps the 1:1 build-leg -> test-leg mapping
+    # without a per-leg `needs`.
+    #
+    # `!cancelled()` lets the tests run even if some build leg failed (e.g.
+    # arm64 preemption) so one flaky leg doesn't block the others. The
+    # `result != 'skipped'` guard stops the tests from spinning up at all when
+    # the whole build job was *skipped* (e.g. verify-version rejected the tag) —
+    # otherwise they'd fail at download and spuriously trip notify-build-failed.
+    if: ${{ !cancelled() && needs.build.result != 'skipped' }}
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: ${{ matrix.job-timeout }}
+    # The linux-arm64 packaged test is non-blocking.
+    continue-on-error: ${{ matrix.allow-failure }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-x64,   runs-on: ubuntu-latest,    os: linux,  arch: x64,   allow-failure: false, pytest-timeout: 900,  job-timeout: 30 }
+          # arm64 runs ~2x slower than x64; give it a large budget. Its result
+          # is non-blocking, so an over-budget run does not gate the workflow.
+          - { name: linux-arm64, runs-on: ubuntu-24.04-arm, os: linux,  arch: arm64, allow-failure: true,  pytest-timeout: 3000, job-timeout: 75 }
+          - { name: macos-arm64, runs-on: macos-14,         os: darwin, arch: arm64, allow-failure: false, pytest-timeout: 1200, job-timeout: 45 }
+    env:
+      # The packaged backend uses get_filesystem_root(); override off /mnt/private.
+      SCIENCE_FILESYSTEM_ROOT: /tmp/science
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ matrix.name }}
+          path: dist/
+
+      - name: Configure git user
+        run: |
+          git config --global user.email "ci@sculptor.dev"
+          git config --global user.name "Sculptor CI"
+
+      - name: Install Linux test dependencies
+        if: matrix.os == 'linux'
+        # Electron runtime libs + xvfb. The harness auto-wraps the app in
+        # `xvfb-run` when no DISPLAY is set (PackagedElectronFrontend), so we
+        # only need xvfb present, not a manually-started display. Package names
+        # differ between 22.04 and 24.04 (t64 suffix), so fall back.
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            xvfb libnss3 libatk-bridge2.0-0 libdrm2 libgbm1 \
+            git curl gcc python3-dev python3-pip
+          sudo apt-get install -y -qq libgtk-3-0t64 || sudo apt-get install -y -qq libgtk-3-0
+          sudo apt-get install -y -qq libasound2t64 || sudo apt-get install -y -qq libasound2
+
+      - name: Enable unprivileged user namespaces (Linux)
+        if: matrix.os == 'linux'
+        # ubuntu-24.04 ships kernel.apparmor_restrict_unprivileged_userns=1,
+        # which blocks Electron's namespace sandbox. The packaged harness only
+        # passes --no-sandbox when running as root (it is not, here), so
+        # re-enable userns so the sandbox can initialize. No-op (|| true) on
+        # kernels without the knob. The runner is ephemeral, so this does not
+        # persist beyond the job.
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Install macOS test dependencies
+        if: matrix.os == 'darwin'
+        # gtimeout (coreutils) backs the test script's bash timeout wrapper.
+        run: brew install coreutils
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Setup just
+        uses: extractions/setup-just@v2
+
+      - name: Sync Python deps
+        run: uv sync --frozen
+
+      - name: Install Playwright Chromium
+        # macOS packaged-backend launches headless Chromium via Playwright;
+        # Linux packaged-electron connects to Electron over CDP. Install for
+        # both (and --with-deps pulls system libs).
+        run: uv run --project sculptor -m playwright install --with-deps chromium
+
+      - name: Run packaged tests
+        env:
+          PACKAGED_TEST_TIMEOUT_SECONDS: ${{ matrix.pytest-timeout }}
+        run: |
+          cd sculptor
+          bash builder/test-sculptor-desktop-packaged.sh ${{ matrix.os }} ${{ matrix.arch }}
+
+      - name: Copy fixture logs
+        if: always()
+        run: cp -r /tmp/sculptor_test_logs sculptor/fixture_logs 2>/dev/null || true
+
+      - name: Upload packaged test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: packaged-test-results-${{ matrix.name }}
+          path: |
+            sculptor/packaged_tests_junit.xml
+            sculptor/packaged_tests.log
+            sculptor/fixture_logs/
+            sculptor/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Publish packaged test report
+        if: always()
+        uses: mikepenz/action-junit-report@v4
+        with:
+          report_paths: sculptor/packaged_tests_junit.xml
+          check_name: packaged tests ${{ matrix.name }}
+          fail_on_failure: false
+          require_tests: false
+
+  # ---------------------------------------------------------------------------
+  # Release flow — ports .gitlab-ci-release-sculptor-desktop.yml.
+  # Every tag release job requires build AND packaged-tests to succeed — the
+  # blocking legs only; the linux-arm64 packaged test is non-blocking
+  # (continue-on-error), so it reports success and never gates the release.
+  # The release jobs run `publish-build-artifacts --dry-run` in the practice
+  # repo; `gh release create` is guarded by github.repository ==
+  # 'imbue-ai/sculptor' and skipped here.
+  #
+  # There is no separate "build ready" Slack ping: the await-approval request
+  # message is the heads-up that everything is green and awaiting approval, and
+  # the "released" message confirms the final publish.
+  # ---------------------------------------------------------------------------
+
+  # Stopgap manual gate while GitHub Environment required-reviewers is
+  # unavailable on the org's private-repo plan (SCU-1423). A maintainer must
+  # reply `approve` in the Slack thread before release-desktop publishes.
+  # OFF by default so dry-run / practice tag runs aren't blocked — flip the
+  # repo variable ENABLE_RELEASE_APPROVAL to 'true' once the Slack secrets are
+  # provisioned in Vault. When required-reviewers becomes available, delete
+  # this job; release-desktop already declares `environment: release`.
+  await-approval:
+    name: await release approval (Slack)
+    # Both build and the blocking packaged tests must succeed before we ask a
+    # maintainer to approve — no point pinging until everything's green.
+    needs: [build, packaged-tests]
+    if: ${{ vars.ENABLE_RELEASE_APPROVAL == 'true' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/sculptor-v') }}
+    runs-on: ubuntu-latest
+    # Must exceed the script's --timeout-minutes so it can post the red cross
+    # and exit cleanly before the runner is killed.
+    timeout-minutes: 70
+    permissions:
+      id-token: write
+      contents: read
+    environment: release
+    env:
+      VAULT_AUTH_ROLE: slim_sculptor_release_from_tag_gh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Vault CLI
+        run: |
+          curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --batch --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq vault
+
+      - name: Await maintainer approval in Slack
+        # TODO(SCU-1423): provision these Vault secrets before flipping
+        # ENABLE_RELEASE_APPROVAL on:
+        #   sculptor-release/SLACK_RELEASE_BOT_TOKEN  (xoxb-; chat:write + a
+        #                                       *:history scope; bot in channel)
+        #   sculptor-release/SLACK_CHANNEL_ID  (target channel id)
+        #   sculptor-release/SLACK_APPROVERS   (comma-separated workspace U… ids)
+        # export-vault-env names each var after the path's last component, so
+        # these land as SLACK_RELEASE_BOT_TOKEN / SLACK_CHANNEL_ID /
+        # SLACK_APPROVERS.
+        run: |
+          set -euo pipefail
+          eval "$(./scripts/export-vault-env sculptor-release/SLACK_RELEASE_BOT_TOKEN sculptor-release/SLACK_CHANNEL_ID sculptor-release/SLACK_APPROVERS)"
+          python3 scripts/await_release_approval.py --timeout-minutes 60
+
+  release-desktop:
+    name: release desktop (S3 publish + gh release)
+    needs: [build, packaged-tests, await-approval]
+    # build AND packaged-tests must genuinely succeed. Approval is gate-tolerant:
+    # proceeds when the gate passed OR is disabled (skipped); only a real
+    # reject / timeout (await-approval failure) blocks publish. !cancelled()
+    # forces evaluation even though await-approval may be skipped.
+    if: ${{ !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/sculptor-v') && needs.build.result == 'success' && needs.packaged-tests.result == 'success' && needs.await-approval.result != 'failure' }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+    environment: release
+    env:
+      VAULT_AUTH_ROLE: slim_sculptor_release_from_tag_gh
+      # Whitelist: only the production repo publishes for real; every
+      # other repo (forks, ad-hoc copies) inherits --dry-run.
+      # NB: the truthy branch must be non-empty, so this is written as
+      # "NOT-whitelisted && '--dry-run' || ''". The natural-reading form
+      # `whitelisted && '' || '--dry-run'` is broken in GitHub Actions: when the
+      # condition is true, `&& ''` yields an empty string, which is falsy, so the
+      # `|| '--dry-run'` fallback always wins — every repo would get --dry-run.
+      PUBLISH_DRY_RUN: ${{ github.repository != 'imbue-ai/sculptor' && '--dry-run' || '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history so version derivation / tag listing works.
+          fetch-depth: 0
+
+      - name: Configure git user
+        run: |
+          git config --global user.email "ci@sculptor.dev"
+          git config --global user.name "Sculptor CI"
+
+      - name: Install Vault CLI
+        run: |
+          curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --batch --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq vault
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Setup just
+        uses: extractions/setup-just@v2
+
+      - name: Sync Python deps
+        run: uv sync --frozen
+
+      - name: Publish artifacts to releases bucket
+        # PUBLISH_DRY_RUN expands to '' on imbue-ai/sculptor (real S3 copy)
+        # and to --dry-run everywhere else (prints destinations only).
+        # The operator eyeballs the printed list against expected
+        # slim/ / slim-rc/ / slim-dev/ patterns. The output is tee'd to a
+        # workspace file so the downstream release step can parse versioned
+        # URLs out of it — a file dodges the 1 MB step-output cap and the
+        # heredoc-delimiter collision risk.
+        run: |
+          set -euo pipefail
+          eval "$(./scripts/export-vault-env shared/aws/AWS_ACCESS_KEY_ID shared/aws/AWS_SECRET_ACCESS_KEY)"
+          just publish-build-artifacts ${PUBLISH_DRY_RUN} 2>&1 | tee "${GITHUB_WORKSPACE}/publish_output.log"
+
+      - name: Notify Slack — released
+        run: |
+          set -euo pipefail
+          eval "$(./scripts/export-vault-env sculptor-release/SLACK_WEBHOOK_URL)"
+          ./scripts/ci/notify_slack_release.sh released
+
+      - name: Create GitHub Release
+        if: github.repository == 'imbue-ai/sculptor'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Mechanical port of `glab release create` (REQ-REL-4). gh takes
+        # local files as positional args, not external links — we embed
+        # the immutable S3 URLs printed by publish-build-artifacts into
+        # the release notes instead.
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#sculptor-v}"
+          PIPELINE_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          # Dedupe by filename (publish prints from multiple buckets); keep
+          # the last URL per name (the stable bucket is printed last).
+          # `|| true`: a dry-run publish prints no https URLs, so grep would exit
+          # non-zero and abort the step under `set -o pipefail`. Tolerate an empty
+          # match and create the release with whatever notes we have.
+          ASSETS_MD="$(grep -E '^\s+https://' "${GITHUB_WORKSPACE}/publish_output.log" \
+            | sed 's/^ *//' \
+            | awk '{n=split($0,a,"/"); name=a[n]; map[name]=$0} END {for (k in map) print "- [" k "](" map[k] ")"}' || true)"
+          NOTES=$(printf 'Sculptor %s — [pipeline](%s)\n\n## Assets\n%s\n' \
+            "$VERSION" "$PIPELINE_URL" "$ASSETS_MD")
+          PRERELEASE=""
+          if printf '%s' "$VERSION" | grep -qE 'rc[0-9]'; then PRERELEASE="--prerelease"; fi
+          gh release create "$GITHUB_REF_NAME" $PRERELEASE --notes "$NOTES"
+
+  release-dev-desktop:
+    name: release dev desktop (S3 dev publish)
+    # Dev releases gate on packaged-tests too (matches GitLab) — a green build
+    # alone isn't enough to publish a dev artifact.
+    needs: [setup, build, packaged-tests]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    # Runs only on main push (see the `if:` above), so it mints the dev role
+    # through the automatic `dev-release` Environment, matching the build leg.
+    environment: dev-release
+    env:
+      VAULT_AUTH_ROLE: slim_sculptor_dev_build_gh
+      # Whitelist: only the production repo publishes for real; every
+      # other repo (forks, ad-hoc copies) inherits --dry-run.
+      # NB: the truthy branch must be non-empty, so this is written as
+      # "NOT-whitelisted && '--dry-run' || ''". The natural-reading form
+      # `whitelisted && '' || '--dry-run'` is broken in GitHub Actions: when the
+      # condition is true, `&& ''` yields an empty string, which is falsy, so the
+      # `|| '--dry-run'` fallback always wins — every repo would get --dry-run.
+      PUBLISH_DRY_RUN: ${{ github.repository != 'imbue-ai/sculptor' && '--dry-run' || '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history so create-version-file produces the same .dev
+          # stamp the build legs used.
+          fetch-depth: 0
+
+      - name: Configure git user
+        run: |
+          git config --global user.email "ci@sculptor.dev"
+          git config --global user.name "Sculptor CI"
+
+      - name: Install Vault CLI
+        run: |
+          curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --batch --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq vault
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Setup just
+        uses: extractions/setup-just@v2
+
+      - name: Sync Python deps
+        run: uv sync --frozen
+
+      - name: Publish dev artifacts
+        # PUBLISH_DRY_RUN expands to '' on imbue-ai/sculptor and to --dry-run
+        # elsewhere. --bypass-checks because create-version-file --annotate-dev
+        # writes the timestamped version into pyproject.toml, dirtying the tree.
+        env:
+          CI_PIPELINE_ID: ${{ github.run_id }}
+          CI_PIPELINE_IID: ${{ github.run_number }}
+          CI_PIPELINE_CREATED_AT: ${{ needs.setup.outputs.pipeline_created_at }}
+        run: |
+          set -euo pipefail
+          eval "$(./scripts/export-vault-env shared/aws/AWS_ACCESS_KEY_ID shared/aws/AWS_SECRET_ACCESS_KEY)"
+          just create-version-file --annotate-dev
+          just publish-build-artifacts ${PUBLISH_DRY_RUN} --bypass-checks
+
+      - name: Notify Slack — dev released
+        run: |
+          set -euo pipefail
+          eval "$(./scripts/export-vault-env sculptor-release/SLACK_WEBHOOK_URL)"
+          ./scripts/ci/notify_slack_release.sh dev-released
+
+  notify-build-failed:
+    name: notify slack — build failed
+    # Fires when the build OR the blocking packaged tests fail. The non-blocking
+    # linux-arm64 leg reports success (continue-on-error), so an arm64-only
+    # failure does not trigger this.
+    needs: [build, packaged-tests]
+    if: failure() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/sculptor-v')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    environment: release
+    env:
+      VAULT_AUTH_ROLE: slim_sculptor_release_from_tag_gh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Vault CLI
+        run: |
+          curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --batch --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq vault
+
+      - name: Notify Slack — build failed
+        run: |
+          set -euo pipefail
+          eval "$(./scripts/export-vault-env sculptor-release/SLACK_WEBHOOK_URL)"
+          ./scripts/ci/notify_slack_release.sh build-failed

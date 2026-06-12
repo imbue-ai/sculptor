@@ -1,0 +1,56 @@
+.rowWrapper {
+  border-bottom: 2px solid transparent;
+  // Always-present border slots so the layout never shifts when drop indicators appear.
+  border-top: 2px solid transparent;
+
+  &.dropBefore {
+    border-top-color: var(--accent-9);
+  }
+
+  &.dropAfter {
+    border-bottom-color: var(--accent-9);
+  }
+}
+
+.actionRow {
+  border-radius: var(--radius-2);
+  transition: background-color var(--duration-normal), opacity var(--duration-fast);
+
+  &:hover {
+    background-color: var(--accent-2);
+  }
+
+  &.dragging {
+    opacity: 35%;
+    pointer-events: none;
+  }
+}
+
+.dragHandle {
+  align-items: center;
+  color: var(--gray-9);
+  cursor: grab;
+  display: flex;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.actionInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.promptPreview {
+  color: var(--gray-11);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actionButtons {
+  align-items: center;
+  color: var(--accent-9);
+  display: flex;
+}

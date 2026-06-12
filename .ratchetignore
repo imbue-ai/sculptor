@@ -1,0 +1,13 @@
+**/notebook/**
+**/quarantine/**
+**/test_data/**
+**/agent_docs/**
+# Agent worktrees nested under .claude/worktrees/ are isolated git working
+# trees the AI workflow uses for parallel-agent isolation. Each duplicates
+# the entire source tree, which inflates every ratchet count by Nx where
+# N = active worktrees. Excluded here so ratchets only count the main tree.
+.claude/worktrees/**
+
+# test excludes
+imbue_core/imbue_core/ratchets/ratchet_rules.py
+imbue_core/imbue_core/ratchets/test_ratchet_excludes.py

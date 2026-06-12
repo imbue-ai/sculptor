@@ -1,0 +1,44 @@
+.dialogContent {
+  max-width: 90vw;
+  padding: var(--space-4);
+  width: fit-content;
+}
+
+.image {
+  border-radius: var(--radius-2);
+  max-height: 80vh;
+  max-width: 85vw;
+  min-width: 200px;
+  object-fit: contain;
+}
+
+.fileName {
+  color: var(--gray-11);
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-1-5);
+}
+
+.navButton {
+  background: var(--lightbox-nav-bg);
+  box-sizing: border-box;
+  color: var(--lightbox-nav-color);
+  cursor: pointer;
+  height: var(--space-7);
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  width: var(--space-7);
+  z-index: var(--z-popover);
+
+  &:hover {
+    background: var(--lightbox-nav-bg-hover);
+  }
+}
+
+.navPrevious {
+  left: 6vw;
+}
+
+.navNext {
+  right: 6vw;
+}

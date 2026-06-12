@@ -1,0 +1,38 @@
+.container {
+  align-items: center;
+  border-bottom: 1px solid var(--gray-a5);
+  box-sizing: border-box;
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-2);
+  height: 41px;
+  padding: 0 var(--space-3);
+}
+
+.icon {
+  color: var(--gray-a11);
+  flex-shrink: 0;
+}
+
+.input {
+  background: transparent;
+  border: none;
+  color: var(--gray-12);
+  flex: 1;
+  font-size: var(--font-size-1-5);
+  line-height: 1;
+  // Inputs default to a min-width derived from `size`; without this the
+  // input refuses to shrink below ~150px and pushes the count + close
+  // button off a narrow panel.
+  min-width: 0;
+  outline: none;
+  padding: 0;
+
+  &::placeholder {
+    color: var(--gray-9);
+  }
+}
+
+.closeButton {
+  flex-shrink: 0;
+}

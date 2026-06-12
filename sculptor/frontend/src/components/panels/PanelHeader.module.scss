@@ -1,0 +1,11 @@
+.header {
+  align-items: center;
+  border-bottom: 1px solid var(--gray-a5);
+  box-sizing: border-box;
+  display: flex;
+  flex-shrink: 0;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- matches the compact tab bar height
+  height: 41px;
+  justify-content: space-between;
+  padding-inline: var(--space-3);
+}

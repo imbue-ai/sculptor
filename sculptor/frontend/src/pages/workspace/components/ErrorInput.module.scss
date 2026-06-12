@@ -1,0 +1,7 @@
+.statusBox {
+  background: var(--accent-3);
+  border: 1px solid var(--accent-5);
+  border-radius: var(--radius-4);
+  max-width: 80%;
+  width: calc(min(80%, var(--main-content-width)));
+}

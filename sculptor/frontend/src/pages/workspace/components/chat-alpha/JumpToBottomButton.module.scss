@@ -1,0 +1,53 @@
+.wrapper {
+  pointer-events: none;
+  transition: opacity var(--duration-fast) var(--ease-default);
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+
+.visible {
+  opacity: 100%;
+  pointer-events: auto;
+}
+
+.hidden {
+  opacity: 0%;
+}
+
+.button {
+  background: var(--gray-1);
+  border: 1px solid var(--gray-4);
+  border-radius: var(--radius-2);
+  box-shadow: var(--shadow-sm);
+  color: var(--gray-11);
+  cursor: pointer;
+  font-weight: var(--font-weight-semibold);
+  gap: var(--space-2);
+  padding-left: var(--space-3);
+  transition: background var(--duration-fast) var(--ease-default);
+
+  &:hover {
+    background: var(--gray-3);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent-9);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+
+.activityLabel {
+  color: var(--accent-11);
+  font-size: var(--font-size-1);
+}
+
+.icon {
+  height: 12px;
+  width: 12px;
+}

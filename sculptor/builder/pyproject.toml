@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sculptor-builder"
+version = "0.0.0" # Fixed version for all time.
+readme = "README.md"
+dependencies = [
+    "sculptor",  # We can call sculptor from here.
+    "imbue_core",  # Ditto imbue_core
+]
+requires-python = ">=3.11"
+
+[tool.setuptools]
+packages = ["builder"]
+package-dir = {"builder" = "."} # Flatten this out because we don't need build/build

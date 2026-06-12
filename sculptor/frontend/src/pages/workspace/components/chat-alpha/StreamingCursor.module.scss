@@ -1,0 +1,20 @@
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 100%;
+  }
+
+  50% {
+    opacity: 0%;
+  }
+}
+
+.streamingCursor {
+  animation: blink 1s step-end infinite;
+  background: var(--accent-11);
+  display: inline-block;
+  height: 1.05em;
+  padding-top: 2px;
+  vertical-align: text-top;
+  width: 0.6em;
+}

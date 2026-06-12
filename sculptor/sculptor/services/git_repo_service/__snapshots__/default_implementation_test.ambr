@@ -1,0 +1,12 @@
+# serializer version: 1
+# name: TestExportCurrentRepoState.test_exports_changed_and_untracked_files
+  dict({
+    'directories': list([
+      '.git',
+    ]),
+    'files': dict({
+      'tracked_changes.patch': '<file contents omitted>',
+      'untracked_files.tar': '<file contents omitted>',
+    }),
+  })
+# ---

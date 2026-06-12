@@ -1,0 +1,231 @@
+@use "scrollbar" as *;
+
+.scrollContainer {
+  flex: 1;
+  min-height: 0;
+  outline: none;
+  overflow: hidden auto;
+  // Disable browser scroll anchoring: virtualized rows are absolutely
+  // positioned, so when the tree restructures the anchor row's translateY
+  // changes and the browser bumps scrollTop to compensate, hiding rows
+  // newly inserted at the top.
+  overflow-anchor: none;
+
+  @include thin-scrollbar;
+}
+
+.row {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: var(--space-1);
+  height: 28px;
+  padding: 0 var(--space-2) 0 0;
+  transition: background-color var(--duration-fast);
+  user-select: none;
+
+  &:hover {
+    background-color: var(--gray-3);
+  }
+}
+
+.focused {
+  background-color: var(--gray-3);
+}
+
+.activeFile {
+  background-color: var(--accent-3);
+
+  &:hover {
+    background-color: var(--accent-4);
+  }
+}
+
+.deleted {
+  opacity: 50%;
+}
+
+.iconArea {
+  align-items: center;
+  color: var(--gray-11);
+  display: flex;
+  flex-shrink: 0;
+  height: 14px;
+  width: 14px;
+}
+
+.chevron {
+  transition: transform var(--duration-fast);
+}
+
+.expanded {
+  transform: rotate(90deg);
+}
+
+.folderIcon {
+  color: var(--gray-11);
+  flex-shrink: 0;
+}
+
+.fileIcon {
+  color: var(--gray-9);
+  flex-shrink: 0;
+}
+
+.name {
+  color: var(--gray-12);
+  font-size: var(--font-size-1-5);
+  line-height: 28px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  .deleted & {
+    text-decoration: line-through;
+  }
+}
+
+.groupHeader {
+  color: var(--gray-9);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-medium);
+  overflow-wrap: anywhere;
+  padding: var(--space-2) var(--space-3) var(--space-1);
+  user-select: none;
+}
+
+.flatFileName {
+  color: var(--gray-12);
+  flex: 1;
+  font-size: var(--font-size-1-5);
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.extension {
+  color: var(--gray-9);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.lineStats {
+  display: flex;
+  flex-shrink: 0;
+  font-family: var(--mono-font-family);
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+}
+
+.lineStatsAdded {
+  color: var(--green-11);
+}
+
+.lineStatsRemoved {
+  color: var(--red-11);
+}
+
+.changesToolbar {
+  align-items: center;
+  border-bottom: 1px solid var(--gray-a4);
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+}
+
+.toolbarSpacer {
+  flex: 1;
+}
+
+.viewToggle {
+  align-items: center;
+  all: unset;
+  border-radius: var(--radius-1);
+  color: var(--gray-9);
+  cursor: pointer;
+  display: flex;
+  padding: var(--space-1);
+  transition: background-color var(--duration-fast), color var(--duration-fast);
+
+  &:hover {
+    background-color: var(--gray-3);
+    color: var(--gray-11);
+  }
+}
+
+.viewToggleActive {
+  color: var(--gray-12);
+}
+
+.flatListRow {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: var(--space-2);
+  height: 28px;
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+  transition: background-color var(--duration-fast);
+  user-select: none;
+
+  &:hover {
+    background-color: var(--gray-3);
+  }
+}
+
+.flatListName {
+  color: var(--gray-12);
+  font-size: var(--font-size-1-5);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  .deleted & {
+    text-decoration: line-through;
+  }
+}
+
+.flatListDir {
+  color: var(--gray-8);
+  font-size: var(--font-size-1);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusLetter {
+  flex-shrink: 0;
+  font-family: var(--mono-font-family);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-medium);
+}
+
+.warning {
+  color: var(--amber-11);
+  display: flex;
+  flex-shrink: 0;
+}
+
+.discardButton {
+  display: none;
+  flex-shrink: 0;
+
+  .row:hover &,
+  .flatListRow:hover & {
+    display: inline-flex;
+  }
+}
+
+.badge {
+  background-color: var(--gray-a4);
+  border-radius: var(--radius-4);
+  color: var(--gray-11);
+  flex-shrink: 0;
+  font-size: var(--font-size-1);
+  line-height: 1;
+  margin-left: var(--space-1);
+  padding: 2px 5px;
+}

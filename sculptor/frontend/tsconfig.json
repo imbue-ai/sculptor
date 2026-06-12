@@ -1,0 +1,41 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "paths": { "~/*": ["./src/*"] },
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "incremental": true,
+    "tsBuildInfoFile": "./node_modules/.cache/tsc/tsbuildinfo",
+    "jsx": "react-jsx",
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true,
+    "allowSyntheticDefaultImports": true,
+    /* Testing specific */
+    "esModuleInterop": true,
+    "types": ["jest", "node", "@testing-library/jest-dom"]
+  },
+  "include": [
+    "src",
+    "src/globals.d.ts",
+    "src/generated-types.d.ts",
+    "eslint.config.ts",
+    "jest.config.ts",
+    "jest.setup.ts",
+    "openapi-ts.config.ts",
+    "vitest.config.ts",
+    "vitest.setup.ts",
+    "vitest.workspace.ts"
+  ],
+  "exclude": ["src/pages/tasks_deprecated/**/*", "src/quarantine/**/*", "src/electron/main.ts", "babel.config.ts"]
+}

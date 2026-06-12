@@ -1,0 +1,25 @@
+.splitHandle {
+  bottom: 0;
+  cursor: col-resize;
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  width: 9px;
+  z-index: var(--z-above);
+
+  &::after {
+    background-color: var(--gray-a5);
+    content: "";
+    height: 100%;
+    left: 50%;
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
+    transition: background-color var(--duration-normal);
+    width: 1px;
+  }
+
+  &:hover::after {
+    background-color: var(--accent-9);
+  }
+}

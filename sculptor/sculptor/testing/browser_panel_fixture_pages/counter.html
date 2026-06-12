@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Browser panel fixture - counter</title>
+  </head>
+  <body>
+    <h1>Counter</h1>
+    <button id="increment" data-testid="browser-panel-fixture-increment">+</button>
+    <span id="counter" data-testid="browser-panel-fixture-counter">0</span>
+    <script>
+      document.getElementById("increment").addEventListener("click", () => {
+        const c = document.getElementById("counter");
+        c.textContent = String(Number(c.textContent) + 1);
+      });
+    </script>
+  </body>
+</html>

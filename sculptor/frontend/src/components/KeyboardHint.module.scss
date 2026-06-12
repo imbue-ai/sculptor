@@ -1,0 +1,13 @@
+.hint {
+  align-items: center;
+  color: var(--gray-9);
+  display: flex;
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+}
+
+.kbd {
+  color: var(--gray-10);
+  font-family: inherit;
+  font-size: var(--font-size-1);
+}

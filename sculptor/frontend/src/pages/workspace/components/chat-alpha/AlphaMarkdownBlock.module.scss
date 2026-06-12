@@ -1,0 +1,201 @@
+.markdownBlock {
+  --chat-line-height: calc(var(--line-height-2) + 1px);
+
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-2);
+  line-height: var(--chat-line-height);
+  overflow-wrap: break-word;
+  word-break: break-word;
+
+  // First child should not have top margin
+  > :first-child {
+    margin-top: 0;
+  }
+
+  // Last child should not have bottom margin
+  > :last-child {
+    margin-bottom: 0;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-size: inherit;
+    font-weight: var(--font-weight-bold);
+    margin-bottom: 0;
+    position: relative;
+
+  }
+
+  h1 {
+    margin-top: 3em;
+  }
+
+  h2 {
+    margin-top: 2em;
+  }
+
+  h3 {
+    margin-top: 1.7em;
+  }
+
+  h4,
+  h5,
+  h6 {
+    margin-top: 1.4em;
+  }
+
+  strong {
+    font-weight: var(--font-weight-bold);
+  }
+
+  em {
+    font-style: italic;
+  }
+
+  del {
+    color: var(--gray-11);
+    text-decoration-color: var(--gray-12);
+  }
+
+  p {
+    margin: 1em 0;
+  }
+
+  // Links
+  a {
+    color: var(--blue-11);
+    text-decoration: underline;
+    text-decoration-color: var(--blue-9);
+    text-underline-offset: 2px;
+
+    &:hover {
+      color: var(--blue-12);
+      text-decoration-color: var(--blue-11);
+    }
+  }
+
+  // Lists
+  ul,
+  ol {
+    margin: 0.5em 0;
+    padding-left: 1.5em;
+  }
+
+  li {
+    margin: 0.25em 0;
+
+    > ul,
+    > ol {
+      margin: 0.25em 0;
+    }
+  }
+
+  // Task lists (GFM checkboxes) — class names come from remark-gfm
+  /* stylelint-disable selector-class-pattern */
+  :global(.contains-task-list) {
+    list-style: none;
+    padding-left: 0.25em;
+  }
+
+  // Nested task lists indent further so the hierarchy is legible; the
+  // top-level list stays tight (0.25em) to keep its checkboxes near the
+  // left margin.
+  :global(.task-list-item) :global(.contains-task-list) {
+    padding-left: 1.25em;
+  }
+
+  // NOTE: do NOT use `display: flex` here. A task-list `<li>` can contain
+  // block children — a nested `<ul>`/`<ol>` of sub-tasks, or a `<p>` wrapper
+  // in a loose list. Flex would lay those out as horizontal siblings of the
+  // checkbox, pushing nested lists to the right of their parent instead of
+  // stacking them below. Keep the item a normal block and align the checkbox
+  // inline with the text.
+  :global(.task-list-item) {
+    list-style: none;
+
+    // Descendant (not child) selector: in a tight list the checkbox is a
+    // direct child of the `<li>`, but in a loose list it sits inside the
+    // item's `<p>` — both need the same custom styling.
+    input[type="checkbox"] {
+      appearance: none;
+      border: 1px solid var(--gray-8);
+      border-radius: var(--radius-1);
+      cursor: default;
+      height: 0.85em;
+      // Center within the line box: `vertical-align: middle` aligns to the
+      // x-height midpoint, which sits visibly below the line's true center.
+      // Top-align instead and push down by half the leftover line height —
+      // margin-top + height equals the line height, so the line box doesn't
+      // grow, and wrapped text keeps the checkbox centered on its first line.
+      margin: calc((var(--chat-line-height) - 0.85em) / 2) 0.4em 0 0;
+      position: relative;
+      vertical-align: top;
+      width: 0.85em;
+
+      &:checked {
+        background-color: var(--accent-9);
+        border-color: var(--accent-9);
+
+        &::after {
+          color: var(--gray-1);
+          content: "✓";
+          font-size: 0.65em;
+          left: 50%;
+          position: absolute;
+          top: 50%;
+          transform: translate(-50%, -50%);
+        }
+      }
+    }
+  }
+  /* stylelint-enable selector-class-pattern */
+
+  // Inline code
+  .inlineCode {
+    background-color: var(--gray-4);
+    border: 1px solid var(--gray-5);
+    border-radius: var(--radius-1);
+    color: var(--accent-12);
+    font-family: var(--code-font-family);
+    font-size: var(--font-size-1);
+    padding: 0.05em 0.2em;
+  }
+
+  // Clickable file path links (plain text — not inside backticks)
+  .filePathLink {
+    color: var(--accent-12);
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: var(--accent-9);
+    text-underline-offset: 2px;
+
+    &:hover {
+      text-decoration-color: var(--accent-11);
+    }
+  }
+
+  // Backtick file paths — darken background, no underline
+  .filePathCodeLink {
+    cursor: pointer;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: none;
+    }
+
+    &:hover > code {
+      background-color: var(--accent-6);
+    }
+  }
+
+  // Horizontal rules
+  hr {
+    border: none;
+    border-top: 1px solid var(--gray-5);
+    margin: 1.5em 0;
+  }
+}

@@ -1,0 +1,12 @@
+// `.graphContainer` is just a layout wrapper now — the scroll lives on the
+// parent `.graphColumn` so that the horizontal scrollbar sits at the bottom
+// of the popover body, not at the bottom of the SVG itself.
+.graphContainer {
+  display: block;
+}
+
+.graphSvg {
+  cursor: default;
+  display: block;
+  font-family: var(--default-font-family);
+}

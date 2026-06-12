@@ -1,0 +1,22 @@
+.container {
+  padding: var(--space-9) 0;
+  text-align: center;
+}
+
+.icon {
+  color: var(--gray-7);
+  margin-bottom: var(--space-3);
+}
+
+.heading {
+  color: var(--gray-8);
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-medium);
+  margin-bottom: var(--space-2);
+}
+
+.description {
+  color: var(--gray-7);
+  font-size: var(--font-size-1-5);
+  max-width: 360px;
+}

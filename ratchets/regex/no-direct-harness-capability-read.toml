@@ -1,0 +1,10 @@
+[rule]
+id = "no-direct-harness-capability-read"
+description = "Disallow direct `.harnessCapabilities.<field>` reads outside the tasks.ts atom families; route capability reads through the narrow taskSupports<X> atoms/hooks so a mistyped field name cannot silently fail a gate open. The generated twin carries an index signature (its backing pydantic SerializableModel uses extra=\"allow\"), so member access on an unknown key type-checks — hence a lint rule rather than a compile-time check."
+severity = "error"
+
+[match]
+pattern = "\\.harnessCapabilities\\."
+languages = ["typescript"]
+include = ["sculptor/frontend/src/**/*.ts", "sculptor/frontend/src/**/*.tsx"]
+exclude = ["sculptor/frontend/src/common/state/atoms/tasks.ts", "sculptor/frontend/src/api/**"]

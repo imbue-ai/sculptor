@@ -1,0 +1,5 @@
+{
+  "name": "sculptor-workflow",
+  "description": "Sculptor's opinionated engineering workflow: spec, mock, architect, plan, build, review, fix-bug, setup-repo",
+  "version": "1.0.0"
+}

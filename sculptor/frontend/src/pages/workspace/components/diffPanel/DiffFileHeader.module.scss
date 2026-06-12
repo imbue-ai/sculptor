@@ -1,0 +1,54 @@
+.header {
+  border-bottom: 1px solid var(--gray-a5);
+  box-sizing: border-box;
+  height: 41px;
+}
+
+.breadcrumb {
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.dirPath {
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- enough room for the ellipsis character
+  min-width: 2ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.separator {
+  color: var(--gray-7);
+  padding: 0 1px;
+}
+
+.segment {
+  color: var(--gray-9);
+}
+
+.fileName {
+  color: var(--gray-12);
+  flex-shrink: 0;
+  font-weight: var(--font-weight-medium);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.lineStats {
+  display: flex;
+  flex-shrink: 0;
+  font-family: var(--mono-font-family);
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+}
+
+.lineStatsAdded {
+  color: var(--green-11);
+}
+
+.lineStatsRemoved {
+  color: var(--red-11);
+}

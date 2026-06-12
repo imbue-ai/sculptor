@@ -1,0 +1,137 @@
+@use "~/styles/scrollbar" as *;
+
+.popup {
+  background: var(--color-panel-solid);
+  border: 1px solid var(--gray-a5);
+  border-radius: var(--radius-4);
+  bottom: var(--space-4);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  height: 280px;
+  overflow: hidden;
+  position: fixed;
+  right: var(--space-4);
+  width: 360px;
+  z-index: var(--z-popover);
+
+  // The popup container takes focus on open so Esc / Tab work, but the
+  // user didn't tab to it — suppress the browser's default focus ring so
+  // it doesn't read as an interactive control.
+  &:focus,
+  &:focus-visible {
+    outline: none;
+  }
+}
+
+.dragHandle {
+  align-items: center;
+  border-bottom: 1px solid var(--gray-a4);
+  cursor: grab;
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: space-between;
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+  user-select: none;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.dragLabel {
+  color: var(--gray-11);
+  font-size: var(--font-size-1);
+}
+
+.closeButton {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-2);
+  color: var(--gray-11);
+  cursor: pointer;
+  display: inline-flex;
+  height: 20px;
+  justify-content: center;
+  padding: 0;
+  width: 20px;
+
+  &:hover {
+    background: var(--gray-a3);
+    color: var(--gray-12);
+  }
+}
+
+.body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-2);
+  overflow-y: auto;
+  padding: var(--space-3);
+
+  @include thin-scrollbar;
+}
+
+.questionRow {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.questionBubble {
+  background: var(--gray-a3);
+  border-radius: var(--radius-3);
+  color: var(--gray-12);
+  font-size: var(--font-size-2);
+  line-height: var(--line-height-2);
+  max-width: 85%;
+  padding: var(--space-2) var(--space-3);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.answerRow {
+  align-items: flex-start;
+  display: flex;
+  gap: var(--space-2);
+}
+
+.avatarDot {
+  background: var(--violet-9);
+  border-radius: 50%;
+  flex: 0 0 auto;
+  height: var(--space-2);
+  margin-top: var(--space-2);
+  width: var(--space-2);
+}
+
+.answerBubble {
+  color: var(--gray-12);
+  flex: 1 1 auto;
+  font-size: var(--font-size-2);
+  line-height: var(--line-height-2);
+  min-width: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.errorBubble {
+  color: var(--red-11);
+}
+
+.streamingCursor {
+  animation: blink 1s steps(1) infinite;
+  background: var(--violet-9);
+  display: inline-block;
+  height: 14px;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  width: 6px;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0%;
+  }
+}

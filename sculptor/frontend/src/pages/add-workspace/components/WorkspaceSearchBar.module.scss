@@ -1,0 +1,35 @@
+.container {
+  margin-bottom: var(--space-3);
+  position: relative;
+}
+
+.input {
+  background: var(--ws-search-bg);
+  border: none;
+  border-radius: var(--radius-3);
+  box-sizing: border-box;
+  color: var(--gray-12);
+  font-size: var(--font-size-1-5);
+  height: 36px;
+  outline: none;
+  // Left padding aligns placeholder text with workspace names:
+  // row padding (--space-3 = 12px) + dot width (16px) + gap (--space-2 = 8px) = 36px
+  padding: 0 var(--space-3) 0 calc(var(--space-3) + 16px + var(--space-2));
+  transition: background-color var(--duration-slow) var(--ease-in-out) var(--ws-transition-delay);
+  width: 100%;
+
+  &::placeholder {
+    color: var(--ws-search-placeholder-color);
+    transition: color var(--duration-slow) var(--ease-in-out) var(--ws-transition-delay);
+  }
+}
+
+.searchIcon {
+  color: var(--ws-search-icon-color);
+  left: var(--space-3);
+  pointer-events: none;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  transition: color var(--duration-slow) var(--ease-in-out) var(--ws-transition-delay);
+}

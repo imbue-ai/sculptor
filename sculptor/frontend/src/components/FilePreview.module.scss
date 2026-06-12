@@ -1,0 +1,130 @@
+.previewWrapper {
+  flex-shrink: 0;
+  position: relative;
+}
+
+@mixin previewContainer {
+  align-items: center;
+  border: 1px solid var(--gray-6);
+  border-radius: var(--radius-2);
+  display: flex;
+  height: 30px;
+  justify-content: center;
+  overflow: hidden;
+  width: 50px;
+}
+
+.previewContainer {
+  @include previewContainer;
+}
+
+.previewContainerFailed {
+  @include previewContainer;
+  background-color: var(--red-3);
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.previewError {
+  cursor: help;
+  height: 100%;
+  width: 100%;
+}
+
+.preview {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  width: 100%;
+}
+
+.removeButton {
+  align-items: center;
+  background: var(--gray-12);
+  border-radius: 50%;
+  color: var(--gray-1);
+  cursor: pointer;
+  display: flex;
+  height: 16px;
+  justify-content: center;
+  opacity: 0%;
+  padding: 0;
+  position: absolute;
+  right: -6px;
+  top: -6px;
+  transition: opacity var(--duration-fast);
+  width: 16px;
+  z-index: 1;
+}
+
+.previewWrapper:hover .removeButton {
+  opacity: 100%;
+}
+
+// Inline display mode styles
+.inlineWrapper {
+  flex-shrink: 0;
+}
+
+.inlineMedia {
+  border: 1px solid transparent;
+  border-radius: var(--radius-3);
+  display: block;
+  height: 110px;
+  max-width: 240px;
+  object-fit: cover;
+  transition: border-color var(--duration-fast);
+  width: auto;
+}
+
+.inlineMedia:hover {
+  border-color: var(--accent-7);
+}
+
+.inlineSkeleton {
+  border-radius: var(--radius-3);
+  height: 110px;
+  width: 200px;
+}
+
+.inlineError {
+  background-color: var(--red-3);
+  border: 2px solid var(--red-6);
+  border-radius: var(--radius-3);
+  color: var(--red-11);
+  cursor: help;
+  height: 110px;
+  padding: var(--space-2);
+  width: 140px;
+}
+
+// Full-width display mode styles (used for assistant message images)
+.fullMedia {
+  border-radius: var(--radius-3);
+  display: block;
+  max-width: 100%;
+  width: auto;
+}
+
+.fullMedia:hover {
+  cursor: pointer;
+}
+
+.fullSkeleton {
+  border-radius: var(--radius-3);
+  height: 200px;
+  width: 100%;
+}
+
+.fullError {
+  background-color: var(--red-3);
+  border: 2px solid var(--red-6);
+  border-radius: var(--radius-3);
+  color: var(--red-11);
+  cursor: help;
+  padding: var(--space-3);
+  width: 100%;
+}

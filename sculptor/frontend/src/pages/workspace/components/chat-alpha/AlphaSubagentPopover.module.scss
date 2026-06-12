@@ -1,0 +1,53 @@
+@use "scrollbar" as *;
+
+.popover {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  max-height: inherit;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+
+  @include thin-scrollbar;
+}
+
+.section {
+  border-bottom: 1px solid var(--gray-a4);
+  padding: var(--space-3);
+}
+
+.section:last-child {
+  border-bottom: none;
+}
+
+.sectionLabel {
+  color: var(--gray-a10);
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.1em;
+  margin-bottom: var(--space-1);
+  text-transform: uppercase;
+}
+
+.prompt {
+  font-size: var(--font-size-1);
+  line-height: var(--line-height-2);
+}
+
+.pillsArea {
+  padding: var(--space-1) 0;
+}
+
+.response {
+  font-size: var(--font-size-1);
+  line-height: var(--line-height-2);
+}
