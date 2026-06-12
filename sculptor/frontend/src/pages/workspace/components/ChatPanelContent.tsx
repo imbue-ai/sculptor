@@ -6,8 +6,10 @@ import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { debugViewAtomFamily } from "~/common/state/atoms/alphaScroll.ts";
 import { closeBtwPopupIfNotForAgentAtom, isBtwPopupOpenAtom } from "~/common/state/atoms/btwPopup.ts";
 import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
+import { useTaskSupportsChatInterface } from "~/common/state/hooks/useTaskHelpers.ts";
 import { chatPanelMountedAtom } from "~/components/panels/atoms.ts";
 
+import { AgentTerminalPanel } from "./AgentTerminalPanel.tsx";
 import { BtwPopup } from "./BtwPopup";
 import { AlphaChatInterface } from "./chat-alpha/AlphaChatInterface.tsx";
 import { DebugChatView } from "./chat-alpha/DebugChatView.tsx";
@@ -19,7 +21,39 @@ type ChatPanelContentProps = {
   editorRef?: React.MutableRefObject<TipTapEditor | null>;
 };
 
-export const ChatPanelContent = ({ appendTextRef, insertSkillRef, editorRef }: ChatPanelContentProps): ReactElement => {
+/**
+ * The main-panel switch (REQ-UI-1/2): terminal agents get a full-pane
+ * terminal in the space the chat interface occupies for chat agents,
+ * driven by the `supports_chat_interface` capability.
+ *
+ * The switch lives outside `ChatPanelInner` because `useChatData` must not
+ * run for terminal agents — it registers `chatActionsAtom` closures, which
+ * is exactly what keeps Commit / Create PR / custom actions disabled for
+ * them (the load-bearing gate; see architecture §9).
+ */
+export const ChatPanelContent = ({
+  appendTextRef,
+  insertSkillRef,
+  editorRef,
+}: ChatPanelContentProps): ReactElement | null => {
+  const { agentID: taskID } = useWorkspacePageParams();
+  const isChatInterfaceSupported = useTaskSupportsChatInterface(taskID ?? "");
+
+  if (isChatInterfaceSupported === false) {
+    return <AgentTerminalPanel taskId={taskID ?? ""} />;
+  }
+
+  // While capabilities are loading, render nothing rather than the chat —
+  // mounting useChatData for a terminal agent would register chat actions,
+  // and a chat→terminal swap flashes. This deliberately differs from
+  // useCapabilityGate's `?? true` affordance default.
+  if (isChatInterfaceSupported === undefined) {
+    return null;
+  }
+  return <ChatPanelInner appendTextRef={appendTextRef} insertSkillRef={insertSkillRef} editorRef={editorRef} />;
+};
+
+const ChatPanelInner = ({ appendTextRef, insertSkillRef, editorRef }: ChatPanelContentProps): ReactElement => {
   const { workspaceID, agentID: taskID } = useWorkspacePageParams();
   const isDebugView = useAtomValue(debugViewAtomFamily(taskID ?? ""));
   const closeBtwPopupIfNotForAgent = useSetAtom(closeBtwPopupIfNotForAgentAtom);

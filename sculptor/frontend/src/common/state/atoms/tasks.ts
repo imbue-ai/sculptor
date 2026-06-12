@@ -155,3 +155,7 @@ export const taskSupportsSessionResumeAtomFamily = atomFamily<string, Atom<boole
 export const taskSupportsToolUseRenderingAtomFamily = atomFamily<string, Atom<boolean | undefined>>((taskId) =>
   atom((get) => get(taskAtomFamily(taskId))?.harnessCapabilities.supportsToolUseRendering),
 );
+
+export const taskSupportsChatInterfaceAtomFamily = atomFamily<string, Atom<boolean | undefined>>((taskId) =>
+  atom((get) => get(taskAtomFamily(taskId))?.harnessCapabilities.supportsChatInterface),
+);

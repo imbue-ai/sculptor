@@ -299,8 +299,10 @@ export const shouldClearActiveTerminal = (
 // ---------------------------------------------------------------------------
 
 type UseTerminalArgs = {
-  workspaceID: string;
-  terminalIndex: number;
+  /** The backend WebSocket path for this terminal's PTY, e.g.
+   * `/api/v1/workspaces/{id}/terminal/{index}/ws` (workspace terminals) or
+   * `/api/v1/agents/{id}/terminal/ws` (terminal agents). */
+  terminalPath: string;
   isVisible: boolean;
   onOutput?: () => void;
 };
@@ -309,12 +311,7 @@ type UseTerminalResult = {
   terminalContainerRef: React.RefObject<HTMLDivElement>;
 };
 
-export const useTerminal = ({
-  workspaceID,
-  terminalIndex,
-  isVisible,
-  onOutput,
-}: UseTerminalArgs): UseTerminalResult => {
+export const useTerminal = ({ terminalPath, isVisible, onOutput }: UseTerminalArgs): UseTerminalResult => {
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -330,8 +327,6 @@ export const useTerminal = ({
   const grayColor = useThemeGrayColor();
   const accentColor = useThemeAccentColor();
   const [isXtermReady, setIsXtermReady] = useState<boolean>(false);
-
-  const terminalPath = `/api/v1/workspaces/${workspaceID}/terminal/${terminalIndex}/ws`;
 
   // Compute the terminal panel background from the Radix color scale in JS.
   // This avoids reading CSS custom properties via getComputedStyle, which can
