@@ -142,7 +142,7 @@ def test_claude_code_terminal_agent(sculptor_instance_: SculptorInstance) -> Non
     expect(registered_item).to_be_visible()
     registered_item.click()
 
-    claude_tab = agent_tab_bar.get_agent_tab_by_name("Claude Code 1").first
+    claude_tab = agent_tab_bar.get_agent_tab_by_name("Claude CLI 1").first
     expect(claude_tab).to_be_visible()
     expect(get_agent_terminal_panel(page)).to_be_visible()
     expect(get_agent_terminal_textarea(page)).to_be_attached()
@@ -153,7 +153,7 @@ def test_claude_code_terminal_agent(sculptor_instance_: SculptorInstance) -> Non
     deadline = time.monotonic() + 90.0
     session_id: str | None = None
     while time.monotonic() < deadline:
-        session_id = _read_terminal_session_id(sculptor_instance_.sculptor_folder, "Claude Code 1")
+        session_id = _read_terminal_session_id(sculptor_instance_.sculptor_folder, "Claude CLI 1")
         if session_id:
             break
         page.wait_for_timeout(1_000)
