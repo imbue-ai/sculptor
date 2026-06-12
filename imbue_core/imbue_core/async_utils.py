@@ -29,6 +29,7 @@ def sync(func: Callable[P, Awaitable[R]]) -> Callable[P, R]:
     @functools.wraps(func)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         loop = _get_or_create_event_loop()
+        # pyrefly: ignore [bad-argument-type]
         return asyncio.run_coroutine_threadsafe(func(*args, **kwargs), loop).result()
 
     return wrapper
@@ -54,7 +55,6 @@ def sync_generator(func: Callable[P, AsyncGenerator[R, None]]) -> Callable[P, Ge
 
 
 @contextmanager
-# pyre-ignore[24]: pyre doesn't understand AbstractAsyncContextManager
 def sync_contextmanager(async_context_manager: AbstractAsyncContextManager[S]) -> Generator[S, None, None]:
     sync_aenter = sync(async_context_manager.__aenter__)
     sync_aexit = sync(async_context_manager.__aexit__)
@@ -83,9 +83,8 @@ def _get_or_create_event_loop() -> asyncio.AbstractEventLoop:
             return _LOOP
         _LOOP = asyncio.new_event_loop()
         asyncio.set_event_loop(_LOOP)
-        # pyre-ignore[16]: we have _LOOP_LOCK, so _LOOP is still not None
         threading.Thread(target=_LOOP.run_forever, daemon=True, name="async_loop").start()
-    return _LOOP  # pyre-ignore[7]: we just made _LOOP, so it's not None unless it got destroyed just now
+    return _LOOP
 
 
 _NOT_FOUND = object()

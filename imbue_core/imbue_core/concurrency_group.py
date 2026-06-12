@@ -509,6 +509,7 @@ class ConcurrencyGroup(MutableModel, AbstractContextManager):
         with start_finish_context(progress_handle.track_subprocess()) as subprocess_handle:
             subprocess_handle.report_command(command)
             if on_output is not None:
+                # pyrefly: ignore [bad-argument-type]
                 on_output_with_progress_tracking = sequence_callbacks(subprocess_handle.report_output_line, on_output)
             else:
                 on_output_with_progress_tracking = subprocess_handle.report_output_line
@@ -529,6 +530,7 @@ class ConcurrencyGroup(MutableModel, AbstractContextManager):
             if is_checked_after:
                 process.check()
 
+            # pyrefly: ignore [bad-argument-type]
             subprocess_handle.report_return_code(process.returncode)
 
             return FinishedProcess(

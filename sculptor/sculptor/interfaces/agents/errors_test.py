@@ -18,4 +18,5 @@ def test_serialization():
         )
     except AgentClientError as e:
         serialized_exception = SerializedException.build(e)
+        # pyrefly: ignore [missing-attribute]
         assert serialized_exception.construct_instance().exit_code == AGENT_EXIT_CODE_FROM_SIGINT

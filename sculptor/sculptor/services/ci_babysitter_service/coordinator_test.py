@@ -213,7 +213,7 @@ class _StubGitRepo(ReadOnlyGitRepo):
 
 
 # Set abstract methods on stub classes that may have inherited abstracts we
-# haven't enumerated. The explicit stubs above satisfy pyre; this hides any
+# haven't enumerated. The explicit stubs above satisfy the type checker; this hides any
 # parent-class abstracts at runtime that we don't actually need.
 for _stub_cls in (_StubTransaction, _StubDataModelService, _StubTaskService, _StubGitRepo):
     _stub_cls.__abstractmethods__ = frozenset()
@@ -229,10 +229,11 @@ class _StubGitRepoService(GitRepoService):
 
 
 # WorkspaceService has many abstracts; tests don't call any. Build a stub
-# class dynamically so pyre sees ``_make_workspace_service`` as returning a
+# class dynamically so the type checker sees ``_make_workspace_service`` as returning a
 # real ``WorkspaceService`` without an abstract-instantiation error.
 def _make_workspace_service(concurrency_group: ConcurrencyGroup) -> WorkspaceService:
     cls = type("_StubWorkspaceService", (WorkspaceService,), {})
+    # pyrefly: ignore [missing-attribute]
     cls.__abstractmethods__ = frozenset()
     return cast(WorkspaceService, cls(concurrency_group=concurrency_group))
 

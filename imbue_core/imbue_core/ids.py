@@ -6,7 +6,6 @@ from pydantic_core import core_schema
 
 
 class NonEmptyStr(str):
-    # pyre-fixme[11]: pyre seems to have some trouble with Self in some specific cases, including type[Self]
     def __new__(cls: type[Self], *args: Any, **kwargs: Any) -> Self:
         value = str.__new__(cls, *args, **kwargs)
         if len(value) == 0:

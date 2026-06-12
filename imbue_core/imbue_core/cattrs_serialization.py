@@ -35,7 +35,7 @@ from cattrs._compat import is_generic
 from cattrs.gen import make_dict_unstructure_fn
 from cattrs.gen import override
 from httpx import URL
-from humps import camelize  # pyre-ignore[21]: pyre doesn't understand this import
+from humps import camelize
 from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 
@@ -205,7 +205,6 @@ def _camelize_keys_which_represent_python_names(data: Any) -> Any:
         if TYPE_KEY not in data or issubclass(_type_from_string(data[TYPE_KEY]), Mapping):
             return {key: _camelize_keys_which_represent_python_names(value) for key, value in data.items()}
         else:
-            # pyre-ignore[16]: pyre doesn't understand the import of camelize
             return {camelize(key): _camelize_keys_which_represent_python_names(value) for key, value in data.items()}
     elif isinstance(data, list):
         return [_camelize_keys_which_represent_python_names(item) for item in data]
@@ -453,7 +452,6 @@ def flag_to_ignore_type_key_hooks(t: type) -> type:
     GivenTypeFlaggedToAvoidTypeKeyLogic.__name__ = t.__name__
     GivenTypeFlaggedToAvoidTypeKeyLogic.__qualname__ = t.__qualname__
 
-    # pyre-fixme[16]: pyre doesn't understand dynamically created classes
     return GivenTypeFlaggedToAvoidTypeKeyLogic
 
 
@@ -583,6 +581,7 @@ def _deserialize_using_type_marker(
     elif _safe_issubclass(type_of_obj, BaseModel):
         assert isinstance(obj, dict)
         obj.pop(TYPE_KEY, None)
+        # pyrefly: ignore [missing-attribute]
         return cast(T, type_of_obj.model_validate(obj))
     elif not attr.has(type_of_obj):
         # This happens when there is a primitive object which is annotated as Serializable.

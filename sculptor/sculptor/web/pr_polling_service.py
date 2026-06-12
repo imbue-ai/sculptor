@@ -524,7 +524,7 @@ class PrPollingService(Service):
         with self._worker_sleep_lock:
             if not self._worker_sleep_until:
                 return
-            sleepiest_index = max(self._worker_sleep_until, key=self._worker_sleep_until.get)
+            sleepiest_index = max(self._worker_sleep_until, key=lambda index: self._worker_sleep_until[index])
             if scheduled_time >= self._worker_sleep_until[sleepiest_index]:
                 return
         self._worker_events[sleepiest_index].set()

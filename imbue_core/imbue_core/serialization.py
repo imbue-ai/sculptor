@@ -22,7 +22,7 @@ class SerializedException(SerializableModel):
     """A serializable dataclass that represents an exception"""
 
     exception: str
-    args: "tuple[SerializedException | JsonTypeAlias, ...]"  # pyre-ignore[11]: pyre doesn't like TypeAliasType
+    args: "tuple[SerializedException | JsonTypeAlias, ...]"
     traceback_dict: JsonTypeAlias
     was_logged_by_log_exception: bool = False
 
@@ -36,7 +36,7 @@ class SerializedException(SerializableModel):
                     f"You probably want to convert_to_serialized_exception in your except clause: {exception=}",
                 )
             )
-        return SerializedException(  # pyre-fixme[28]: pyre doesn't understand pydantic
+        return SerializedException(
             exception=get_fully_qualified_name_for_error(exception),
             args=tuple(_convert_serialized_exception_args(x, traceback) for x in exception.args),
             traceback_dict=FixedTraceback.from_tb(traceback).as_dict(),
@@ -48,6 +48,7 @@ class SerializedException(SerializableModel):
         traceback_dict = self.traceback_dict
         if traceback_dict is None:
             return None
+        # pyrefly: ignore [bad-argument-type]
         return FixedTraceback.from_dict(traceback_dict)
 
     @cached_property
@@ -89,15 +90,17 @@ class SerializedException(SerializableModel):
         if self.traceback is None:
             traceback_str = ""
         else:
-            # pyre-ignore[6]: pyre doesn't know that FixedTraceback is a traceback (since it's not a TracebackType)
+            # pyrefly: ignore [bad-argument-type]
             traceback_str = "".join(format_tb(self.traceback))
         return f"Traceback (most recent call last):\n{traceback_str}\n{self.exception}: {self.args}"
 
 
 def _convert_serialized_exception_args(error: Serializable, traceback: TracebackType | None = None) -> JsonTypeAlias:
     if isinstance(error, BaseException):
+        # pyrefly: ignore [bad-return]
         return SerializedException.build(error, traceback=traceback)
     elif isinstance(error, (list, tuple)):
+        # pyrefly: ignore [bad-return]
         return tuple(_convert_serialized_exception_args(x, traceback) for x in error)
     elif isinstance(error, (str, int, float, bool, dict, type(None))):
         return error

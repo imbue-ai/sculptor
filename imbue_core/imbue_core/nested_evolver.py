@@ -101,7 +101,6 @@ class _FrozenDictValue:
 
 
 class _Evolver(Generic[_T]):
-    # pyre-ignore[13]: pyre is confused by the trickery here
     _value: _RegularValue | _AttrValue | _TupleValue | _FrozenDictValue | _PydanticModelValue
 
     def __init__(self, initial_value: _T) -> None:

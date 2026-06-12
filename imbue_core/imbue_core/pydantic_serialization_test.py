@@ -15,7 +15,7 @@ class TestObject(SerializableModel):
 
 
 def test_simple() -> None:
-    # pyre-ignore[6]: pyre is confused by the snake --> camel case conversion, so using a TypedDict doesn't work, so just ignore
+    # pyrefly: ignore [missing-argument]
     obj = TestObject(**dict(name="Filiz", languageCode="tr-TR", innerData={"snake_key": "value", "camelKey": "value"}))
     assert model_dump(obj) == snapshot(
         {
@@ -27,7 +27,7 @@ def test_simple() -> None:
 
 
 def test_to_camel() -> None:
-    # pyre-ignore[6]: pyre is confused by the snake --> camel case conversion, so using a TypedDict doesn't work, so just ignore
+    # pyrefly: ignore [missing-argument]
     obj = TestObject(**dict(name="Filiz", languageCode="tr-TR", innerData={"snake_key": "value", "camelKey": "value"}))
     assert model_dump(obj, is_camel_case=True) == snapshot(
         {
@@ -39,7 +39,7 @@ def test_to_camel() -> None:
 
 
 def test_reversible() -> None:
-    # pyre-ignore[6]: pyre is confused by the snake --> camel case conversion, so using a TypedDict doesn't work, so just ignore
+    # pyrefly: ignore [missing-argument]
     obj = TestObject(**dict(name="Filiz", languageCode="tr-TR", innerData={"snake_key": "value", "camelKey": "value"}))
     assert TestObject.model_validate(model_dump(obj)) == obj
 

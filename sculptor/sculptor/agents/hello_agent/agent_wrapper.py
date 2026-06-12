@@ -33,7 +33,8 @@ class HelloAgent(DefaultAgentWrapper):
     _input_agent_messages: Queue[ChatInputUserMessage] = PrivateAttr(default_factory=Queue)
     _shutdown_event: Event = PrivateAttr(default_factory=Event)
 
-    def push_message(self, message: ChatInputUserMessage | StopAgentUserMessage) -> None:  # pyre-fixme[14]
+    # pyrefly: ignore [bad-override]
+    def push_message(self, message: ChatInputUserMessage | StopAgentUserMessage) -> None:
         match message:
             case ChatInputUserMessage():
                 logger.info("Received user input message: {}", message)
@@ -53,7 +54,8 @@ class HelloAgent(DefaultAgentWrapper):
             self._exit_code = AGENT_EXIT_CODE_SHUTDOWN_DUE_TO_EXCEPTION
         return super().poll()
 
-    def wait(self, timeout: float) -> int | None:  # pyre-fixme[15]: overrides Agent.wait which returns int
+    # pyrefly: ignore [bad-override]
+    def wait(self, timeout: float) -> int | None:
         if self._exception is not None:
             if self._process is not None:
                 self._process.terminate()

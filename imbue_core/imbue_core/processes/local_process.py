@@ -221,7 +221,7 @@ class RunningProcess:
         if thread.is_alive():
             stdout = self.read_stdout()
             stderr = self.read_stderr()
-            # pyre-fixme[6]: presumably timeout must not be None to escape thread.join with the thread still alive, but pyre doesn't know this
+            # pyrefly: ignore [bad-argument-type]
             raise TimeoutExpired(self._command, timeout, stdout, stderr)
         result = self.poll()
         if result is None:
@@ -386,7 +386,7 @@ class RunningProcess:
             self._stdout_lines.append(line)
         else:
             self._stderr_lines.append(line)
-        # pyre-fixme[16]: pyre thinks _output_queue can be None
+        # pyrefly: ignore [missing-attribute]
         self._output_queue.put((line, is_stdout))
 
     def _set_stdin_pipe(self, pipe: IO[bytes]) -> None:
@@ -467,6 +467,7 @@ def run_background(
     shutdown_event: MutableEvent | None = None,
     shutdown_timeout_sec: float = 30.0,
     env: Mapping[str, str] | None = None,
+    # pyrefly: ignore [bad-function-definition]
     process_class: type[ProcessClassType] = RunningProcess,
     process_class_kwargs: Mapping[str, object] | None = None,
     log_command: bool = True,

@@ -606,8 +606,10 @@ def _get_is_killed_request(message: Message) -> int:
     if isinstance(message, RequestStoppedAgentMessage):
         causal_error = message.error.construct_instance()
         # sigterm and signint
-        if isinstance(causal_error, AgentClientError) and causal_error.exit_code in (
-            SIGTERM_EXIT_CODES | SIGINT_EXIT_CODES
+        if (
+            isinstance(causal_error, AgentClientError)
+            and causal_error.exit_code is not None
+            and causal_error.exit_code in (SIGTERM_EXIT_CODES | SIGINT_EXIT_CODES)
         ):
             return causal_error.exit_code
     return 0

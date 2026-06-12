@@ -1,0 +1,30 @@
+# Pyrefly type checker configuration (https://pyrefly.org/en/docs/configuration/).
+# Replaces the old Pyre setup (.pyre_configuration): same source roots and
+# exclusions, but no watchman daemon and much faster cold checks.
+
+project_includes = [
+    "sculptor/**",
+    "imbue_core/**",
+]
+
+# Mirrors the old Pyre `exclude` + `ignore_all_errors` lists: build artifacts,
+# vendored code, and the test/quarantine trees we intentionally don't typecheck.
+project_excludes = [
+    "**/_vendor/**",
+    "**/build/lib/**",
+    "sculptor/frontend/**",
+    "sculptor/dist/**",
+    "sculptor/tests/**",
+    "sculptor/sculptor/testing/**",
+    "sculptor/sculptor/quarantine/**",
+    "sculptor/agent_docs/**",
+    "imbue_core/imbue_core/test_data/**",
+]
+
+# Import roots: `sculptor/sculptor/...` -> `sculptor.x`, `imbue_core/imbue_core/...` -> `imbue_core.x`.
+search_path = [
+    "sculptor",
+    "imbue_core",
+]
+
+python_version = "3.11"

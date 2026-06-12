@@ -19,7 +19,8 @@ class IncorrectErrorsLoggedDuringTesting(Exception):
 def check_logged_errors(check_func: Callable[[list[str]], None]) -> Iterator[None]:
     """Context manager that monkey patches logger._log to accumulate error messages instead of logging them.
     Then it runs the check function on the accumulated errors."""
-    original_log_func = logger._log  # pyre-fixme[16]: pyre doesn't know that _log exists
+    # pyrefly: ignore [missing-attribute]
+    original_log_func = logger._log
     accumulated_errors: list[str] = []
 
     error_level_names = (
@@ -29,6 +30,7 @@ def check_logged_errors(check_func: Callable[[list[str]], None]) -> Iterator[Non
         ExceptionPriority.HIGH_PRIORITY.value,
     )
 
+    # pyrefly: ignore [missing-attribute]
     logger._log = (
         lambda level, flag, options, message, args, kwargs: (
             accumulated_errors.append(message) is None
@@ -42,6 +44,7 @@ def check_logged_errors(check_func: Callable[[list[str]], None]) -> Iterator[Non
     try:
         yield
     finally:
+        # pyrefly: ignore [missing-attribute]
         logger._log = original_log_func
         check_func(accumulated_errors)
 
@@ -126,7 +129,8 @@ def test_log_exception_with_priority() -> None:
 @pytest.fixture
 def explode_on_error() -> Generator[None, None, None]:
     """Fixture to explode on error."""
-    original_log_func = logger._log  # pyre-fixme[16]: pyre doesn't know that _log exists
+    # pyrefly: ignore [missing-attribute]
+    original_log_func = logger._log
     accumulated_errors: list[str] = []
 
     def _log_wrapper(level: str, flag: int, options: tuple[int, ...], message: str, args: tuple, kwargs: dict) -> Any:
@@ -136,6 +140,7 @@ def explode_on_error() -> Generator[None, None, None]:
         new_options[1] = 1
         return original_log_func(level, flag, tuple(new_options), message, args, kwargs)
 
+    # pyrefly: ignore [missing-attribute]
     logger._log = _log_wrapper
 
     try:
@@ -146,6 +151,7 @@ def explode_on_error() -> Generator[None, None, None]:
         if len(accumulated_errors) > 0:
             raise IncorrectErrorsLoggedDuringTesting(f"Errors logged during testing: {accumulated_errors}")
     finally:
+        # pyrefly: ignore [missing-attribute]
         logger._log = original_log_func
 
 

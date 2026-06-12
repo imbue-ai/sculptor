@@ -495,7 +495,7 @@ class SculptorInstance:
         if call_report is not None and call_report.failed:
             logger.warning("Test {} failed — tearing down shared instance for recreation", request.node.nodeid)
             self._teardown()
-            request.config._sculptor_instance = None  # pyre-ignore[16]
+            request.config._sculptor_instance = None
 
     def hard_kill(self) -> None:
         """SIGKILL the backend process tree with no graceful shutdown.

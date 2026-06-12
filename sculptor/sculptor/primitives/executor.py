@@ -24,6 +24,7 @@ class ObservableThreadPoolExecutor(thread_executor_module.ThreadPoolExecutor):
         # When the executor gets lost, the weakref callback will wake up
         # the worker threads.
         def weakref_cb(_, q=self._work_queue):
+            # pyrefly: ignore [bad-argument-type]
             q.put(None)
 
         num_threads = len(self._threads)
@@ -35,5 +36,7 @@ class ObservableThreadPoolExecutor(thread_executor_module.ThreadPoolExecutor):
                 args=(weakref.ref(self, weakref_cb), self._work_queue, self._initializer, self._initargs),
             )
             self._concurrency_group.start_thread(t)
+            # pyrefly: ignore [missing-attribute]
             self._threads.add(t)
+            # pyrefly: ignore [unsupported-operation]
             thread_executor_module._threads_queues[t] = self._work_queue

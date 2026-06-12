@@ -105,7 +105,7 @@ def log_runtime(function_name: str) -> Generator[TimingAttributes, None, None]:
 
 
 # when we upgrade to python 3.12 we can make this function generic.
-def log_runtime_decorator(label: str | None = None) -> Callable[[Callable[P, T]], Callable[P, T]]:  # pyre-fixme[34]
+def log_runtime_decorator(label: str | None = None) -> Callable[[Callable[P, T]], Callable[P, T]]:
     """
     Decorator version of log_runtime context manager.
 

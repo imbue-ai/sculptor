@@ -7,7 +7,6 @@
 - [just](https://github.com/casey/just): `brew install just`
 - [uv](https://github.com/astral-sh/uv): `brew install uv`
 - [nvm](https://github.com/nvm-sh/nvm)
-- [watchman](https://facebook.github.io/watchman/) (for pyre): `brew install watchman`
 
 ## Building
 
@@ -57,7 +56,7 @@ just test-integration
 ```bash
 just format     # Auto-fix formatting (ruff, eslint)
 just lint       # Lint Python and JS/TS
-just typecheck  # Type check Python (pyre) and JS/TS (tsc)
+just typecheck  # Type check Python (pyrefly) and JS/TS (tsc)
 just ratchets   # Run ratchet checks (needs `just install-ratchets`)
 just check      # Run all checks, see <repo>/justfile
 ```

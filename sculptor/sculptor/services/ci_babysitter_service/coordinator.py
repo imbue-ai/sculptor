@@ -333,7 +333,8 @@ class CIBabysitterCoordinator(Service):
         transaction: DataModelTransaction,
     ) -> LLMModel:
         try:
-            project_tasks = transaction.get_tasks_for_project(  # pyre-ignore[16]
+            # pyrefly: ignore [missing-attribute]
+            project_tasks = transaction.get_tasks_for_project(
                 project_id=project_id,
                 input_data_classes=(AgentTaskInputsV2,),
             )

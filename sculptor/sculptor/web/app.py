@@ -401,8 +401,8 @@ is_integration_testing = os.environ.get("TESTING__INTEGRATION_ENABLED", "false")
 
 # Add CORS middleware to allow requests from file:// origins and localhost
 APP.add_middleware(
-    # pyre doesn't understand the typing here
-    CORSMiddleware,  # pyre-ignore[6]
+    # the type checker doesn't understand the typing here
+    CORSMiddleware,
     allow_origins=[
         f"http://localhost:{frontend_port}",  # Vite dev server
         f"http://127.0.0.1:{frontend_port}",  # Vite dev server
@@ -432,7 +432,6 @@ async def irrecoverable_exception_handler(request: Request, exception: Exception
 
 
 # Add GZip middleware for compression
-# pyre-ignore[6]:
 # The signature for middleware classes defined by Starlette (_MiddlewareFactory.__call__) is wrong.
 APP.add_middleware(GZipMiddleware, minimum_size=1000)
 
@@ -1313,7 +1312,8 @@ def workspace_read_file(
             raise HTTPException(status_code=404, detail=f"Workspace {workspace_id} not found")
 
         # Find any task in this workspace to get the environment
-        tasks = transaction.get_tasks_for_project(workspace.project_id)  # pyre-fixme[16]
+        # pyrefly: ignore [missing-attribute]
+        tasks = transaction.get_tasks_for_project(workspace.project_id)
         workspace_task = None
         for task in tasks:
             if (
@@ -1585,7 +1585,8 @@ def _get_tasks_for_workspace(
     transaction: DataModelTransaction,
 ) -> list[Task]:
     """Get all tasks belonging to a workspace."""
-    all_tasks = transaction.get_tasks_for_project(workspace.project_id)  # pyre-fixme[16]
+    # pyrefly: ignore [missing-attribute]
+    all_tasks = transaction.get_tasks_for_project(workspace.project_id)
     return [
         t
         for t in all_tasks
@@ -1704,7 +1705,8 @@ def create_workspace_agent(
         is_first_agent = (
             not settings.TESTING.INTEGRATION_ENABLED
             and len(workspace_tasks) == 0
-            and len(transaction.get_all_tasks()) == 0  # pyre-fixme[16]
+            # pyrefly: ignore [missing-attribute]
+            and len(transaction.get_all_tasks()) == 0
         )
 
         agent_config = _agent_config_for_workspace(workspace)
@@ -1773,7 +1775,8 @@ def resolve_agent_by_prefix(
     """Resolve a TaskID prefix to a unique full agent id for the authenticated user."""
     services = get_services_from_request_or_websocket(request)
     with user_session.open_transaction(services) as transaction:
-        tasks = transaction.get_tasks_for_user(user_session.user_reference)  # pyre-fixme[16]
+        # pyrefly: ignore [missing-attribute]
+        tasks = transaction.get_tasks_for_user(user_session.user_reference)
     matches = [
         t.object_id
         for t in tasks
@@ -1922,7 +1925,8 @@ def rename_workspace_agent(
         assert isinstance(task.current_state, AgentTaskStateV2)
         updated_state = task.current_state.evolve(task.current_state.ref().title, rename_request.title)
         updated_task = task.evolve(task.ref().current_state, updated_state)
-        transaction.upsert_task(updated_task)  # pyre-fixme[16]
+        # pyrefly: ignore [missing-attribute]
+        transaction.upsert_task(updated_task)
 
         task_view = create_initial_task_view(updated_task, settings)
         assert isinstance(task_view, CodingAgentTaskView)
@@ -3427,7 +3431,7 @@ def get_health_check(request: Request) -> HealthCheckResponse:
     user_config = get_user_config_instance()
     free_gb = (_get_disk_bytes_free(services.settings) or 1_000_000_000_000) / (1024 * 1024 * 1024)
 
-    # pyre-fixme[16]: CompleteServiceCollection.data_model_service is TaskDataModelService at runtime
+    # pyrefly: ignore [missing-attribute]
     with services.data_model_service.open_task_transaction() as transaction:
         active_task_count = len(transaction.get_active_tasks())
 
@@ -3813,9 +3817,9 @@ def _ws_type_streaming_update() -> StreamingUpdate:
     raise HTTPException(status_code=501, detail="This endpoint exists only for OpenAPI schema generation")
 
 
-# we generate UserConfigField at runtime so pyre doesn't like it as an annotation
+# we generate UserConfigField at runtime so the type checker doesn't like it as an annotation
 @router.get("/_types/user_config_field")
-def _type_user_config_field() -> UserConfigField:  # pyre-ignore[11]
+def _type_user_config_field() -> UserConfigField:
     """Include UserConfigField enum in schema"""
     raise HTTPException(status_code=501, detail="This endpoint exists only for OpenAPI schema generation")
 
@@ -3828,8 +3832,8 @@ def _element_tags() -> ElementIDs:
 
 APP.include_router(router)
 
-# pyre doesn't understand the typing here
-APP.add_middleware(SessionTokenMiddleware, settings_factory=get_settings)  # pyre-ignore[6]
+# the type checker doesn't understand the typing here
+APP.add_middleware(SessionTokenMiddleware, settings_factory=get_settings)
 
 
 # TODO (PROD-2161): either we can remove this or leave it for debugging, it might fail depending on what we change with the build process

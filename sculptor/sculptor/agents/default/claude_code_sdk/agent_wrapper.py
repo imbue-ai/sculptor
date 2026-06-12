@@ -30,6 +30,7 @@ class ClaudeCodeSDKAgent(DefaultAgentWrapper):
     # because the registry (`harness_registry.create_agent_for_run`) owns
     # construction — so the concrete harness module never imports this
     # agent module, and no import cycle exists.
+    # pyrefly: ignore [bad-override-mutable-attribute]
     harness: ClaudeCodeHarness
     config: ClaudeCodeSDKAgentConfig
     project: Project

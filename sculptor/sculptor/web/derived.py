@@ -115,12 +115,12 @@ class LimitedBaseTaskView(SerializableModel, Generic[TaskInputType, TaskStateTyp
 
     @property
     def task_input(self) -> TaskInputType:
-        # pyre-fixme[7]: self.task.input_data is a union type, but the return value is a type variable, which could be a fixed variant. Maybe make the Task type generic in its input_data type.
+        # pyrefly: ignore [bad-return]
         return self.task.input_data
 
     @property
     def task_state(self) -> TaskStateType | None:
-        # pyre-fixme[7]: self.task.current_state is a union type, but the return value is a type variable, which could be a fixed variant. Maybe make the Task type generic in its current_state type.
+        # pyrefly: ignore [bad-return]
         return self.task.current_state
 
     @computed_field
@@ -757,7 +757,7 @@ def create_initial_task_view(
     task: Task,
     settings: SculptorSettings,
 ) -> TaskViewTypes:
-    # Matching on task.input_data directly makes Pyre fail the exhaustiveness check
+    # Matching on task.input_data directly makes the type checker fail the exhaustiveness check
     input_data = task.input_data
     task_view_class: type[TaskViewTypes]
     match input_data:

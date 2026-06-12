@@ -50,12 +50,14 @@ def inject_exception_and_log(
     from loguru import logger
 
     # inject received exception stack trace into logger error message
-    options = (exc,) + logger._options[1:]  # pyre-fixme[16]: pyre doesn't know that _options exists
+    # pyrefly: ignore [missing-attribute]
+    options = (exc,) + logger._options[1:]
     if priority is not None:
         level = priority.value
     else:
         level = "ERROR"
-    logger._log(level, False, options, message, args, kwargs)  # pyre-fixme[16]: pyre doesn't know that _log exists
+    # pyrefly: ignore [missing-attribute]
+    logger._log(level, False, options, message, args, kwargs)
 
 
 def log_exception(

@@ -460,6 +460,7 @@ def test_triggers_work_after_migration() -> None:
             # Build column values from the model's field definitions
             field_values: dict[str, Any] = {}
             for field_name, field in model_cls.model_fields.items():
+                # pyrefly: ignore [bad-argument-type]
                 field_values[field_name] = _generate_synthetic_value(field_name, field.annotation)
 
             # Insert a row into the snapshots table
@@ -1467,7 +1468,7 @@ def test_update_project_fields_rejects_bad_inputs(
     # These runtime tests exercise the defense-in-depth belt inside
     # ``_update_model_fields`` for callers that might bypass static typing
     # (e.g. dynamic dict unpacking from untyped sources).  We drive the
-    # internal helper directly so no pyre-ignore is needed.
+    # internal helper directly so no type suppression is needed.
     with service.open_transaction(RequestID()) as transaction:
         assert isinstance(transaction, SQLTransaction)
         with pytest.raises(ValueError, match="at least one field"):
@@ -1544,7 +1545,9 @@ def test_update_project_fields_writes_exactly_one_snapshot_row(
             text("SELECT COUNT(*) FROM project WHERE object_id = :oid"), {"oid": str(project.object_id)}
         ).scalar()
 
+    # pyrefly: ignore [unsupported-operation]
     assert after_rows == before_rows + 1, (
+        # pyrefly: ignore [unsupported-operation]
         f"Expected exactly one new snapshot row; got delta={after_rows - before_rows}"
     )
 
@@ -1637,6 +1640,7 @@ def test_update_project_fields_stress_disjoint_concurrent_writers(
             barrier.wait(timeout=10)
             for i in range(iterations):
                 with service.open_transaction(RequestID()) as transaction:
+                    # pyrefly: ignore [bad-argument-type]
                     transaction.update_project_fields(project.object_id, **{field_name: f"{field_name}_iter_{i}"})
         except BaseException as e:
             with errors_lock:
@@ -1948,7 +1952,9 @@ def test_update_workspace_fields_writes_exactly_one_snapshot_row(
             text("SELECT COUNT(*) FROM workspace WHERE object_id = :oid"), {"oid": str(workspace_id)}
         ).scalar()
 
+    # pyrefly: ignore [unsupported-operation]
     assert after_rows == before_rows + 1, (
+        # pyrefly: ignore [unsupported-operation]
         f"Expected exactly one new snapshot row; got delta={after_rows - before_rows}"
     )
 

@@ -50,23 +50,18 @@ class FrozenDict(dict[T, TV], FrozenMapping[T, TV]):
     def __delitem__(self, __name: T) -> NoReturn:
         raise self._mutation_error("__delitem__")
 
-    # pyre-fixme[14]: pyre thinks this is an inconsistent override and i don't feel like fixing it because the function ignores its arguments
     def update(self, __m: "SupportsKeysAndGetItem[T, TV] | Iterable[tuple[T, TV]]" = (), **kwargs: TV) -> NoReturn:
         raise self._mutation_error("update")
 
-    # pyre-fixme[14]: pyre thinks this is an inconsistent override and i don't feel like fixing it because the function ignores its arguments
     def setdefault(self, *args: Any, **kwargs: Any) -> NoReturn:
         raise self._mutation_error("setdefault")
 
-    # pyre-fixme[14]: pyre thinks this is an inconsistent override and i don't feel like fixing it because the function ignores its arguments
     def pop(self, *args: Any, **kwargs: Any) -> NoReturn:
         raise self._mutation_error("pop")
 
-    # pyre-ignore[15]: pyre doesn't like overriding the return type with NoReturn
     def popitem(self) -> NoReturn:
         raise self._mutation_error("popitem")
 
-    # pyre-ignore[15]: pyre doesn't like overriding the return type with NoReturn
     def clear(self) -> NoReturn:
         raise self._mutation_error("clear")
 

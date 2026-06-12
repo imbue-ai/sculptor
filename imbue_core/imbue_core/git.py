@@ -231,7 +231,6 @@ class LocalGitRepo:
 
         async with self._open_file(relative_path, cwd=cwd, mode=mode, mkdir_if_missing=mkdir_if_missing) as f:
             logger.trace("writing to file {} in cwd {} with mode {}", relative_path, cwd, mode)
-            # pyre-fixme[6]: content can be bytes
             await f.write(content)
 
     async def delete_file(self, relative_path: AnyPath, cwd: AnyPath | None = None) -> None:

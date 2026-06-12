@@ -141,6 +141,7 @@ def _sanitize_for_toml(data: dict) -> dict:
         if value is None:
             result[key] = ""
         elif isinstance(value, dict):
+            # pyrefly: ignore [unsupported-operation]
             result[key] = _sanitize_for_toml(value)
         else:
             result[key] = value
