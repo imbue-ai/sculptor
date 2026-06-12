@@ -7,7 +7,7 @@ name = "sculptor"
 
 # Non-release branches (including main) must always use a .dev suffix (e.g. 0.10.0.dev0).
 # Release branches set the concrete version (e.g. 0.10.0 or 0.10.0rc1).
-version = "0.35.0.dev0"
+version = "0.36.0.dev0"
 
 readme = "README.md"
 license = { text = "MIT" }
