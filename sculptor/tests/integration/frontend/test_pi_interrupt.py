@@ -40,14 +40,11 @@ def test_pi_interrupt_during_turn_then_continue(sculptor_instance_: SculptorInst
         )
         chat_panel = task_page.get_chat_panel()
 
-        # Wait for the turn to be busy, then Stop it.
         expect(chat_panel.get_thinking_indicator()).to_be_visible(timeout=15000)
         stop_button = chat_panel.get_stop_button()
         expect(stop_button).to_be_visible()
         stop_button.click()
 
-        # The interrupted turn resolves: the Stopped marker shows and the agent
-        # is no longer busy.
         expect(chat_panel.get_messages().last).to_contain_text("Stopped", timeout=15000)
         expect(chat_panel.get_thinking_indicator()).not_to_be_visible(timeout=15000)
 

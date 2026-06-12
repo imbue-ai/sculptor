@@ -209,11 +209,10 @@ def test_skills_panel_empty_under_pi(sculptor_instance_: SculptorInstance, harne
 
 
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
-@user_story("to stop an in-flight turn from the Stop button in every harness, now including pi")
+@user_story("to stop an in-flight turn from the Stop button in every harness, including pi")
 def test_stop_button_gated_on_interruption(sculptor_instance_: SculptorInstance, harness: HarnessTestConfig) -> None:
-    """While the agent is busy, BOTH Claude and pi now show the live Stop button
-    (the disabled-with-tooltip placeholder is absent for both), and pressing it
-    ends the in-flight turn — pi gained interruption via its `abort` command."""
+    """While the agent is busy, both Claude and pi show the live Stop button (no
+    disabled-with-tooltip placeholder), and pressing it ends the in-flight turn."""
     page = sculptor_instance_.page
     release_path = Path(tempfile.gettempdir()) / f"pi_cap_stop_{uuid.uuid4().hex}"
     try:
@@ -235,13 +234,12 @@ def test_stop_button_gated_on_interruption(sculptor_instance_: SculptorInstance,
 
 
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
-@user_story("to interrupt-and-send a queued message in every harness, now including pi")
+@user_story("to interrupt-and-send a queued message in every harness, including pi")
 def test_queued_interrupt_gated_on_interruption(
     sculptor_instance_: SculptorInstance, harness: HarnessTestConfig
 ) -> None:
     """A message queued while the agent is busy shows an interrupt-and-send
-    button — now live for BOTH Claude and pi (the disabled-with-tooltip
-    placeholder is absent for both)."""
+    button — live for both Claude and pi (no disabled-with-tooltip placeholder)."""
     page = sculptor_instance_.page
     # Queuing only happens with always-interrupt-and-send OFF; disable it
     # defensively in case a sibling test left it on the shared instance.
@@ -259,8 +257,8 @@ def test_queued_interrupt_gated_on_interruption(
         # Queue a second message while the agent is blocked on the sentinel.
         send_chat_message(chat_panel=chat_panel, message="queued while running")
         expect(chat_panel.get_queued_message_bar()).to_have_count(1)
-        # pi now supports interruption: the live interrupt-and-send button
-        # renders for both harnesses; the gated-off placeholder for neither.
+        # The live interrupt-and-send button renders for both harnesses; the
+        # gated-off placeholder for neither.
         expect(page.get_by_test_id(ElementIDs.QUEUED_MESSAGE_SEND_BUTTON)).to_be_visible()
         expect(page.get_by_test_id(ElementIDs.CAPABILITY_DISABLED_QUEUED_INTERRUPT)).to_have_count(0)
     finally:

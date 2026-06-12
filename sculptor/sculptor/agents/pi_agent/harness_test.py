@@ -6,13 +6,8 @@ from sculptor.interfaces.environments.agent_execution_environment import Depende
 
 
 def test_pi_harness_capabilities() -> None:
-    # Pi is degraded, but four capabilities are true: file references (pi
-    # resolves @-mention paths through its own file-reading loop the same way
-    # Claude does), tool-use rendering (pi's tool-execution lane is adapted onto
-    # Sculptor's ToolUseBlock / ToolResultBlock contract), session resume (pi
-    # persists a per-task JSONL session that a relaunched process resumes — see
-    # agent_wrapper.PiAgent), and interruption (pi's `abort` command halts a
-    # turn — see agent_wrapper._request_interrupt).
+    # Pi is a degraded harness: a capability is true only where Sculptor has a
+    # pi-side mechanism for it (see PiHarness.capabilities for the per-flag why).
     assert PI_HARNESS.capabilities() == HarnessCapabilities(
         supports_interactive_backchannel=False,
         supports_skills=False,

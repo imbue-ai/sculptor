@@ -504,8 +504,7 @@ def _run_turn(
         if abort_event.is_set():
             raise _TurnAborted()
     except _TurnAborted:
-        # The user message reached pi, so record the (partial) turn for resume,
-        # then stop — no happy-path end.
+        # Record the (partial) turn for resume, like a completed one.
         _emit_aborted_agent_end(builder.full_text)
         state.record_turn(prompt_text)
         return
@@ -558,7 +557,6 @@ def _run_rpc_loop(system_prompt: str, session_dir: Path | None, session_id: str)
             elif event_type in ("prompt", "get_state"):
                 # In-order: queued so get_state observes preceding turns' state.
                 command_queue.put(payload)
-            # Other command types are ignored.
         stdin_closed.set()
 
     reader = threading.Thread(target=_read_stdin, name="fake_pi-stdin-reader", daemon=True)

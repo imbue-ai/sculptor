@@ -1040,9 +1040,6 @@ def test_push_message_enqueues_chat_input_returns_true() -> None:
 
 # The capability-correlated control messages pi cannot handle; each must be
 # dead-lettered (one logged error) and return unhandled.
-# ResumeAgentResponseRunnerMessage and InterruptProcessUserMessage are NOT here —
-# both are handled now (session resume, and pi's `abort` command via
-# supports_interruption; see the resume and interrupt tests below).
 _DEAD_LETTER_MESSAGES: list[Message] = [
     ClearContextUserMessage(),
     UserQuestionAnswerMessage(
