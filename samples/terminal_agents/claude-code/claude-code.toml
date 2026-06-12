@@ -1,0 +1,14 @@
+# Registration for running the Claude Code TUI as a Sculptor terminal agent.
+# Copy this file AND claude-code-hooks.json into ~/.sculptor/terminal_agents/
+# (see README.md). The registration id is this file's name ("claude-code");
+# renaming the file changes the id.
+
+display_name = "Claude Code"
+# --settings points at the hooks fragment copied next to this file. The hooks
+# report busy/idle/waiting/files-changed and the session id to Sculptor via
+# the `sculpt signal` CLI (already on PATH inside agent terminals).
+launch_command = "claude --settings ~/.sculptor/terminal_agents/claude-code-hooks.json"
+# {session_id} is replaced with the session id the SessionStart hook reported,
+# so a Sculptor restart resumes the same conversation.
+resume_command_template = "claude --settings ~/.sculptor/terminal_agents/claude-code-hooks.json --resume {session_id}"
+accepts_automated_prompts = true

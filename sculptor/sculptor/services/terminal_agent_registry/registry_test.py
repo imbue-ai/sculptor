@@ -93,3 +93,22 @@ def test_get_registration_finds_by_id(registrations_dir: Path) -> None:
     assert found is not None
     assert found.display_name == "Foo"
     assert get_registration("missing") is None
+
+
+def test_bundled_claude_code_sample_round_trips_through_loader(registrations_dir: Path) -> None:
+    # THE regression test for "we changed the registration schema and broke
+    # the shipped example": the sample TOML must always load verbatim.
+    sample = Path(__file__).parents[4] / "samples" / "terminal_agents" / "claude-code" / "claude-code.toml"
+    assert sample.is_file(), f"bundled sample missing at {sample}"
+    (registrations_dir / "claude-code.toml").write_text(sample.read_text())
+
+    registrations = load_registrations()
+
+    assert len(registrations) == 1
+    registration = registrations[0]
+    assert registration.registration_id == "claude-code"
+    assert registration.display_name == "Claude Code"
+    assert "claude" in registration.launch_command
+    assert registration.resume_command_template is not None
+    assert "{session_id}" in registration.resume_command_template
+    assert registration.accepts_automated_prompts is True
