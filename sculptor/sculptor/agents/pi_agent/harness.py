@@ -62,6 +62,8 @@ class PiHarness(Harness):
 
     def capabilities(self) -> HarnessCapabilities:
         return HarnessCapabilities(
+            # Pi's chat is degraded but real — its main panel is the chat interface.
+            supports_chat_interface=True,
             supports_interactive_backchannel=False,
             # Pi reads the workspace's Claude-visible skills via repeatable
             # --skill flags (agent_wrapper._build_skill_launch_args), enumerates

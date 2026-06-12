@@ -26,6 +26,7 @@ from sculptor.interfaces.agents.agent import HelloAgentConfig
 from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
 from sculptor.interfaces.agents.agent import RequestStoppedAgentMessage
 from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
+from sculptor.interfaces.agents.agent import TerminalAgentConfig
 from sculptor.interfaces.agents.harness import HarnessCapabilities
 from sculptor.interfaces.agents.tasks import TaskState
 from sculptor.primitives.ids import AgentMessageID
@@ -454,6 +455,7 @@ def _make_hello_task() -> Task:
 def test_harness_capabilities_for_claude_task_advertises_all_true() -> None:
     view = _make_task_view(_make_task())
     assert view.harness_capabilities == HarnessCapabilities(
+        supports_chat_interface=True,
         supports_interactive_backchannel=True,
         supports_skills=True,
         supports_sub_agents=True,
@@ -470,9 +472,52 @@ def test_harness_capabilities_for_claude_task_advertises_all_true() -> None:
     )
 
 
+def _make_terminal_task(*, outcome: TaskState = TaskState.RUNNING) -> Task:
+    return Task(
+        object_id=TaskID(),
+        user_reference=UserReference("test-user"),
+        organization_reference=OrganizationReference("test-org"),
+        project_id=ProjectID(),
+        input_data=AgentTaskInputsV2(
+            agent_config=TerminalAgentConfig(),
+            git_hash="abc123",
+            system_prompt=None,
+        ),
+        current_state=AgentTaskStateV2(workspace_id=WorkspaceID()),
+        outcome=outcome,
+    )
+
+
+def test_terminal_task_status_is_building_before_environment() -> None:
+    # Unlike chat tasks, a prompt-less terminal task with no environment is
+    # still building — the "no user message → READY" special case must not apply.
+    view = _make_task_view(_make_terminal_task())
+    assert view.status == TaskStatus.BUILDING
+
+
+def test_terminal_task_status_is_ready_after_environment() -> None:
+    view = _make_task_view(_make_terminal_task())
+    view.add_message(
+        EnvironmentAcquiredRunnerMessage.model_construct(
+            message_id=AgentMessageID(),
+            environment=None,
+        )
+    )
+    assert view.status == TaskStatus.READY
+
+
+def test_terminal_task_status_outcome_short_circuits_unchanged() -> None:
+    assert _make_task_view(_make_terminal_task(outcome=TaskState.QUEUED)).status == TaskStatus.BUILDING
+    assert _make_task_view(_make_terminal_task(outcome=TaskState.FAILED)).status == TaskStatus.ERROR
+    assert _make_task_view(_make_terminal_task(outcome=TaskState.DELETED)).status == TaskStatus.READY
+
+
 def test_harness_capabilities_for_hello_task_are_all_false() -> None:
     view = _make_task_view(_make_hello_task())
+    # Hello is a chat agent (its main panel is the chat interface); every
+    # per-affordance capability is false.
     assert view.harness_capabilities == HarnessCapabilities(
+        supports_chat_interface=True,
         supports_interactive_backchannel=False,
         supports_skills=False,
         supports_sub_agents=False,

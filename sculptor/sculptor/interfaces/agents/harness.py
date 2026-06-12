@@ -68,8 +68,13 @@ class HarnessCapabilities(SerializableModel):
     `supports_context_reset` and `supports_compaction` are distinct: context
     reset is the `/clear` path that discards the session; compaction summarizes
     the session in place at a threshold. They gate different surfaces.
+
+    `supports_chat_interface` is the coarse main-panel switch (chat interface
+    vs terminal panel) per terminal-agents architecture §2, distinct from the
+    per-affordance bools below it.
     """
 
+    supports_chat_interface: bool
     supports_interactive_backchannel: bool
     supports_skills: bool
     supports_sub_agents: bool
@@ -119,6 +124,7 @@ class Harness(BaseModel, abc.ABC):
         truthfully.
         """
         return HarnessCapabilities(
+            supports_chat_interface=False,
             supports_interactive_backchannel=False,
             supports_skills=False,
             supports_sub_agents=False,

@@ -9,6 +9,7 @@ def test_pi_harness_capabilities() -> None:
     # Pi is a degraded harness: a capability is true only where Sculptor has a
     # pi-side mechanism for it (see PiHarness.capabilities for the per-flag why).
     assert PI_HARNESS.capabilities() == HarnessCapabilities(
+        supports_chat_interface=True,
         supports_interactive_backchannel=False,
         supports_skills=True,
         supports_sub_agents=False,
