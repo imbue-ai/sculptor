@@ -359,8 +359,10 @@ export const closeWorkspaceTabAtom = atom(null, (get, set, tabId: string): void 
   // Closing supersedes any prior open intent.
   set(clearPendingOpenAtom, [tabId]);
   set(markPendingCloseAtom, [tabId]);
-  // Free cached data for the closed tab; it refetches on re-open.
-  removeWorkspaceQueriesCache(tabId);
+  // Cached query data is intentionally KEPT on close: closing is reversible,
+  // and re-opening should render instantly from cache. The queryClient's
+  // gcTime is the eviction policy; deletion (optimisticDeleteWorkspaceAtom)
+  // still frees the cache eagerly.
   workspaceSetupStatusAtomFamily.remove(tabId);
   updateWorkspaceApi({ path: { workspace_id: tabId }, body: { isOpen: false } }).catch(() => {
     set(clearPendingCloseAtom, [tabId]);
@@ -421,7 +423,6 @@ export const closeAllWorkspaceTabsAtom = atom(null, (get, set): void => {
   set(clearPendingOpenAtom, openIds);
   set(markPendingCloseAtom, openIds);
   for (const id of openIds) {
-    removeWorkspaceQueriesCache(id);
     workspaceSetupStatusAtomFamily.remove(id);
   }
   batchUpdateOpenState({ body: { workspaceIds: [...openIds], isOpen: false } }).catch(() => {
@@ -443,7 +444,6 @@ export const closeOtherWorkspaceTabsAtom = atom(null, (get, set, keepWorkspaceId
   set(clearPendingOpenAtom, toClose);
   set(markPendingCloseAtom, toClose);
   for (const id of toClose) {
-    removeWorkspaceQueriesCache(id);
     workspaceSetupStatusAtomFamily.remove(id);
   }
   batchUpdateOpenState({ body: { workspaceIds: toClose, isOpen: false } }).catch(() => {

@@ -66,6 +66,17 @@ export const useWorkspaceDiff = (workspaceId: string | null): UseWorkspaceDiffRe
 };
 
 /**
+ * Warm the diff cache for a workspace without subscribing. A no-op when fresh
+ * data is already cached (`prefetchQuery` respects `staleTime`). Used by the
+ * open-tab/hover prefetch (`useWorkspacePrefetch`).
+ */
+export const prefetchWorkspaceDiff = (workspaceId: string, targetBranch: string | null): Promise<void> =>
+  queryClient.prefetchQuery({
+    queryKey: workspaceDiffQueryKey(workspaceId, targetBranch).key,
+    queryFn: ({ signal }) => fetchDiff(workspaceId, signal),
+  });
+
+/**
  * Force a fresh diff fetch from the backend, bypassing any backend-side cache.
  *
  * Goes through `queryClient.fetchQuery` (rather than a manual fetch +

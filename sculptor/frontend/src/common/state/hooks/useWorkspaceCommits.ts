@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { CommitHistoryResponse } from "../../../api";
 import { getWorkspaceCommits } from "../../../api";
 import type { BackendQueryKeyResult, BackendQueryResult } from "../../queryClient.ts";
-import { SCULPTOR_QUERY_KEY_PREFIX } from "../../queryClient.ts";
+import { queryClient, SCULPTOR_QUERY_KEY_PREFIX } from "../../queryClient.ts";
 import { useWorkspace } from "./useWorkspace";
 
 const workspaceCommitsQueryKey = (workspaceId: string | null, targetBranch: string | null): BackendQueryKeyResult => ({
@@ -18,6 +18,18 @@ const fetchCommits = async (workspaceId: string, signal: AbortSignal): Promise<C
   });
   return data ?? null;
 };
+
+/**
+ * Warm the commit-history cache for a workspace without subscribing. A no-op
+ * when fresh data is already cached. Used by the open-tab/hover prefetch
+ * (`useWorkspacePrefetch`); callers must pass the workspace's real
+ * `targetBranch` so the warmed key matches the one `useWorkspaceCommits` reads.
+ */
+export const prefetchWorkspaceCommits = (workspaceId: string, targetBranch: string | null): Promise<void> =>
+  queryClient.prefetchQuery({
+    queryKey: workspaceCommitsQueryKey(workspaceId, targetBranch).key,
+    queryFn: ({ signal }) => fetchCommits(workspaceId, signal),
+  });
 
 /**
  * Subscribe to the workspace's commit history. The query is keyed on

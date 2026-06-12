@@ -15,6 +15,7 @@ import {
 } from "../common/state/atoms/toasts.ts";
 import { useProject } from "../common/state/hooks/useProjects.ts";
 import { useUnifiedStream } from "../common/state/hooks/useUnifiedStream";
+import { usePrefetchOpenWorkspaces } from "../common/state/hooks/useWorkspacePrefetch.ts";
 import { AutoUpdateToasts } from "../components/AutoUpdateToasts.tsx";
 import { CommandPalette } from "../components/CommandPalette";
 import { CommandRegistrations } from "../components/CommandPalette/CommandRegistrations.tsx";
@@ -94,6 +95,9 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
   usePageLayoutKeyboardShortcuts();
   useAutoUpdateListener();
   useSyncActiveTabFromRoute();
+  // Warm every open tab's git caches in the background so switching tabs
+  // renders from cache instead of fetching on click.
+  usePrefetchOpenWorkspaces();
 
   const hasBackendStopped = backendStatus.status === "unresponsive";
   const hasHealthWarningOnBackend = backendStatus.status === "warning";

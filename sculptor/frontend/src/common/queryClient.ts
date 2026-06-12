@@ -17,6 +17,11 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: Infinity,
+      // Keep unobserved caches warm well past the 5-minute default so
+      // returning to a workspace tab after a while still renders instantly.
+      // Freshness is push-driven (WS invalidation), so a long gcTime serves
+      // correct data — the cost is memory, bounded by the open-tab count.
+      gcTime: 30 * 60 * 1000,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
       retry: 1,
