@@ -115,13 +115,13 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
         <div style={isZenModeActive ? { display: "none" } : undefined}>
           <WorkspaceNavSidebar />
         </div>
-        {/* WorkspaceTabs is kept mounted but hidden: it owns the tab-cycle
-            keybindings (Cmd+[, Cmd+]), close-workspace shortcut, command-palette
-            tab actions, and the workspace delete dialog. The nav sidebar
-            replaces only its visual tab strip. */}
-        <div style={{ display: "none" }} aria-hidden>
-          <WorkspaceTabs />
-        </div>
+        {/* WorkspaceTabs is kept mounted without its tab strip: it owns the
+            tab-cycle keybindings (Cmd+[, Cmd+]), close-workspace shortcut,
+            command-palette tab actions, the workspace peek overlay, and the
+            workspace delete dialog. The nav sidebar replaces only its visual
+            tab strip. Rendering it hidden would leave stale tab test ids in
+            the DOM that the integration harness resolves to. */}
+        <WorkspaceTabs renderTabBar={false} />
         <Flex direction="column" flexGrow="1" minWidth="0" overflow="hidden">
           {/* In zen mode, render a draggable region so the top window edge
               remains draggable. */}

@@ -49,7 +49,18 @@ import { WorkspacePeekOverlay } from "~/pages/workspace/components/WorkspacePeek
 
 import styles from "./WorkspaceTabs.module.scss";
 
-export const WorkspaceTabs = (): ReactElement => {
+type WorkspaceTabsProps = {
+  /**
+   * When false, the visual tab strip is not rendered — only the non-visual
+   * responsibilities remain: tab-cycle / close-workspace keybindings,
+   * command-palette actions, the workspace peek overlay, and the workspace
+   * delete-confirmation dialog. Used by PageLayout now that the vertical
+   * nav sidebar has replaced the horizontal tab bar (REQ-NAV-1).
+   */
+  renderTabBar?: boolean;
+};
+
+export const WorkspaceTabs = ({ renderTabBar = true }: WorkspaceTabsProps): ReactElement => {
   const dangerColor = useThemeDangerColor();
   const workspaces = useAtomValue(workspacesArrayAtom);
   const tasks = useAtomValue(tasksArrayAtom);
@@ -546,32 +557,34 @@ export const WorkspaceTabs = (): ReactElement => {
 
   return (
     <>
-      <TabBar
-        tabs={tabs}
-        openTabIds={openTabIds}
-        activeTabId={activeTabId}
-        onActivate={handleActivate}
-        onClose={handleClose}
-        onReorder={handleReorder}
-        onDoubleClick={handleDoubleClick}
-        tabBarClassName={styles.tabBar}
-        // Always render the X — closing the last tab navigates the user
-        // to the AddWorkspace page (handled in useWorkspaceTabActions).
-        alwaysCloseable={true}
-        contextMenuContent={contextMenuContent}
-      >
-        <IconButton
-          variant="ghost"
-          size="1"
-          color="gray"
-          className={styles.addButton}
-          onClick={() => navigateToAddWorkspace()}
-          aria-label="Add workspace"
-          data-testid={ElementIds.ADD_WORKSPACE_BUTTON}
+      {renderTabBar && (
+        <TabBar
+          tabs={tabs}
+          openTabIds={openTabIds}
+          activeTabId={activeTabId}
+          onActivate={handleActivate}
+          onClose={handleClose}
+          onReorder={handleReorder}
+          onDoubleClick={handleDoubleClick}
+          tabBarClassName={styles.tabBar}
+          // Always render the X — closing the last tab navigates the user
+          // to the AddWorkspace page (handled in useWorkspaceTabActions).
+          alwaysCloseable={true}
+          contextMenuContent={contextMenuContent}
         >
-          <PlusIcon size={14} />
-        </IconButton>
-      </TabBar>
+          <IconButton
+            variant="ghost"
+            size="1"
+            color="gray"
+            className={styles.addButton}
+            onClick={() => navigateToAddWorkspace()}
+            aria-label="Add workspace"
+            data-testid={ElementIds.ADD_WORKSPACE_BUTTON}
+          >
+            <PlusIcon size={14} />
+          </IconButton>
+        </TabBar>
+      )}
       <WorkspacePeekOverlay onNavigate={handleWorkspacePeekNavigate} />
       <DeleteConfirmationDialog
         isOpen={deleteTarget !== null}

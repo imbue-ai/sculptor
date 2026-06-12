@@ -1,19 +1,36 @@
-import { IconButton, Text, Tooltip } from "@radix-ui/themes";
-import { useAtomValue, useSetAtom } from "jotai";
+import { ContextMenu, IconButton, Text, Tooltip } from "@radix-ui/themes";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import type { LucideIcon } from "lucide-react";
 import { ChevronDown, ChevronRight, CircleHelp, Home, PanelLeftClose, Plus, Search, Settings } from "lucide-react";
 import type { ReactElement } from "react";
 import { useCallback, useMemo } from "react";
 
 import type { Workspace } from "~/api";
+import { ElementIds, updateWorkspace } from "~/api";
 import { useImbueLocation, useImbueNavigate } from "~/common/NavigateUtils.ts";
 import { projectsArrayAtom } from "~/common/state/atoms/projects.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
-import { agentIdsByWorkspaceAtom, ensurePseudoTabAtom, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
+import {
+  agentIdsByWorkspaceAtom,
+  effectiveOpenTabIdsAtom,
+  ensurePseudoTabAtom,
+  workspacesArrayAtom,
+} from "~/common/state/atoms/workspaces.ts";
 import { useHelpDialog } from "~/common/state/hooks/useHelpDialog.ts";
+import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import { useCommandPalette } from "~/components/CommandPalette";
+import {
+  renamingWorkspaceIdAtom,
+  workspaceDeleteTargetAtom,
+} from "~/components/CommandPalette/contextActions/atoms.ts";
+import { type OpenInRuntime, WorkspaceContextMenuContent } from "~/components/CommandPalette/contextActions/menu.tsx";
+import type { WorkspaceActionRuntime } from "~/components/CommandPalette/contextActions/types.ts";
+import { useGitAndOpenInRuntime } from "~/components/CommandPalette/contextActions/useGitAndOpenInRuntime.ts";
+import { buildWorkspaceActions } from "~/components/CommandPalette/contextActions/workspaceActions.ts";
+import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { collapsedRepoGroupsAtom, navSidebarCollapsedAtom } from "~/components/nav/navAtoms.ts";
 import { computeWorkspaceDotStatus, EMPTY_WORKSPACE_DOT_STATUS, WorkspaceStatusDots } from "~/components/statusDot";
+import { useWorkspaceTabActions } from "~/components/useWorkspaceTabActions.ts";
 import { HOME_TAB_ID, SETTINGS_TAB_ID } from "~/components/workspaceTabIds.ts";
 import { getTitleBarLeftPadding } from "~/electron/utils.ts";
 
@@ -69,6 +86,61 @@ export const WorkspaceNavSidebar = (): ReactElement | null => {
   const { toggle: toggleCommandPalette } = useCommandPalette();
   const { showHelpDialog } = useHelpDialog();
   const { workspaceId: activeWorkspaceId, isHomeRoute, isSettingsRoute } = useImbueLocation();
+
+  // Right-click context menu on workspace rows — same action registry as the
+  // old tab strip and Cmd+K → Workspace actions. The delete-confirmation
+  // dialog itself is rendered by the headless WorkspaceTabs in PageLayout,
+  // driven by the shared workspaceDeleteTargetAtom.
+  const dangerColor = useThemeDangerColor();
+  const effectiveOpenTabIds = useAtomValue(effectiveOpenTabIdsAtom);
+  const { handleClose, handleCloseOthers, handleCloseAll } = useWorkspaceTabActions();
+  const [renamingWorkspaceId, setRenamingWorkspaceId] = useAtom(renamingWorkspaceIdAtom);
+  const setDeleteTarget = useSetAtom(workspaceDeleteTargetAtom);
+  const gitAndOpenIn = useGitAndOpenInRuntime();
+  const workspaceActionRuntime = useMemo<WorkspaceActionRuntime>(
+    () => ({
+      beginRename: (ws): void => setRenamingWorkspaceId(ws.objectId),
+      closeWorkspace: (ws): void => handleClose(ws.objectId),
+      closeOtherWorkspaces: (ws): void => handleCloseOthers(ws.objectId),
+      closeAllWorkspaces: (): void => handleCloseAll(),
+      beginDelete: (ws): void => setDeleteTarget({ id: ws.objectId, name: ws.description ?? "" }),
+      canCloseOthers: (): boolean => effectiveOpenTabIds.length > 1,
+      ...gitAndOpenIn,
+    }),
+    [
+      setRenamingWorkspaceId,
+      handleClose,
+      handleCloseOthers,
+      handleCloseAll,
+      setDeleteTarget,
+      effectiveOpenTabIds.length,
+      gitAndOpenIn,
+    ],
+  );
+  const workspaceActions = useMemo(() => buildWorkspaceActions(workspaceActionRuntime), [workspaceActionRuntime]);
+  const openInRuntime = useMemo<OpenInRuntime>(
+    () => ({
+      openInApp: gitAndOpenIn.openInApp,
+      canOpenInOS: gitAndOpenIn.canOpenInOS,
+      isMacUi: gitAndOpenIn.isMacUi,
+    }),
+    [gitAndOpenIn],
+  );
+
+  const handleRenameCommit = useCallback(
+    async (workspaceId: string, newName: string): Promise<void> => {
+      setRenamingWorkspaceId(null);
+      try {
+        await updateWorkspace({
+          path: { workspace_id: workspaceId },
+          body: { description: newName },
+        });
+      } catch (error) {
+        console.error("Failed to rename workspace:", error);
+      }
+    },
+    [setRenamingWorkspaceId],
+  );
 
   const workspaceStatuses = useMemo(() => {
     const statusMap = new Map<string, ReturnType<typeof computeWorkspaceDotStatus>>();
@@ -157,7 +229,7 @@ export const WorkspaceNavSidebar = (): ReactElement | null => {
           icon={Plus}
           label="New Workspace"
           onClick={() => navigateToAddWorkspace()}
-          testId="nav-new-workspace"
+          testId={ElementIds.ADD_WORKSPACE_BUTTON}
         />
       </nav>
 
@@ -195,19 +267,40 @@ export const WorkspaceNavSidebar = (): ReactElement | null => {
               {!isRepoCollapsed &&
                 group.workspaces.map((ws) => {
                   const status = workspaceStatuses.get(ws.objectId) ?? EMPTY_WORKSPACE_DOT_STATUS;
+                  const isRenaming = renamingWorkspaceId === ws.objectId;
                   return (
-                    <button
-                      type="button"
-                      key={ws.objectId}
-                      className={`${styles.workspaceRow} ${ws.objectId === activeWorkspaceId ? styles.workspaceRowActive : ""}`}
-                      onClick={() => handleWorkspaceClick(ws.objectId)}
-                      data-testid={`nav-workspace-${ws.objectId}`}
-                    >
-                      <span className={styles.workspaceDot}>
-                        <WorkspaceStatusDots status={status} />
-                      </span>
-                      <span className={styles.workspaceName}>{ws.description ?? "Untitled"}</span>
-                    </button>
+                    <ContextMenu.Root key={ws.objectId}>
+                      <ContextMenu.Trigger>
+                        <button
+                          type="button"
+                          className={`${styles.workspaceRow} ${ws.objectId === activeWorkspaceId ? styles.workspaceRowActive : ""}`}
+                          onClick={() => handleWorkspaceClick(ws.objectId)}
+                          data-testid={ElementIds.WORKSPACE_TAB}
+                          data-workspace-tab=""
+                          data-has-unread={String(status.hasUnread)}
+                        >
+                          <span className={styles.workspaceDot}>
+                            <WorkspaceStatusDots status={status} />
+                          </span>
+                          {isRenaming ? (
+                            <InlineRenameInput
+                              value={ws.description ?? ""}
+                              onCommit={(newName) => void handleRenameCommit(ws.objectId, newName)}
+                              onCancel={() => setRenamingWorkspaceId(null)}
+                              isEditing={true}
+                            />
+                          ) : (
+                            <span className={styles.workspaceName}>{ws.description ?? "Untitled"}</span>
+                          )}
+                        </button>
+                      </ContextMenu.Trigger>
+                      <WorkspaceContextMenuContent
+                        actions={workspaceActions}
+                        workspace={ws}
+                        destructiveColor={dangerColor}
+                        openInRuntime={openInRuntime}
+                      />
+                    </ContextMenu.Root>
                   );
                 })}
             </div>
