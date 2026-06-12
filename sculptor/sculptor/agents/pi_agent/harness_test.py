@@ -1,5 +1,7 @@
-"""Tests for `PiHarness`'s identity and capability set."""
+"""Tests for `PiHarness`'s identity, capability set, and gated methods."""
 
+from sculptor.agents.pi_agent.backchannel import ASK_USER_QUESTION_TOOL_NAME
+from sculptor.agents.pi_agent.backchannel import EXIT_PLAN_MODE_TOOL_NAME
 from sculptor.agents.pi_agent.harness import PI_HARNESS
 from sculptor.interfaces.agents.harness import HarnessCapabilities
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
@@ -9,7 +11,7 @@ def test_pi_harness_capabilities() -> None:
     # Pi is a degraded harness: a capability is true only where Sculptor has a
     # pi-side mechanism for it (see PiHarness.capabilities for the per-flag why).
     assert PI_HARNESS.capabilities() == HarnessCapabilities(
-        supports_interactive_backchannel=False,
+        supports_interactive_backchannel=True,
         supports_skills=True,
         supports_sub_agents=False,
         supports_image_input=True,
@@ -23,6 +25,25 @@ def test_pi_harness_capabilities() -> None:
         supports_interruption=True,
         supports_file_references=True,
     )
+
+
+def test_pi_harness_gated_methods_recognize_backchannel_tools() -> None:
+    assert PI_HARNESS.is_ask_user_question_tool(ASK_USER_QUESTION_TOOL_NAME) is True
+    assert PI_HARNESS.is_ask_user_question_tool("read") is False
+    assert PI_HARNESS.is_exit_plan_mode_tool(EXIT_PLAN_MODE_TOOL_NAME) is True
+    assert PI_HARNESS.is_exit_plan_mode_tool("write") is False
+
+
+def test_pi_harness_validates_ask_user_question_input() -> None:
+    # The AUQ tool's input is valid when it carries a non-empty question string.
+    assert (
+        PI_HARNESS.is_valid_ask_user_question_input(ASK_USER_QUESTION_TOOL_NAME, {"question": "Tea or coffee?"})
+        is True
+    )
+    assert PI_HARNESS.is_valid_ask_user_question_input(ASK_USER_QUESTION_TOOL_NAME, {}) is False
+    assert PI_HARNESS.is_valid_ask_user_question_input(ASK_USER_QUESTION_TOOL_NAME, {"question": ""}) is False
+    # Non-AUQ tools always pass (mirrors the Claude harness convention).
+    assert PI_HARNESS.is_valid_ask_user_question_input("read", {"path": "x"}) is True
 
 
 def test_pi_harness_identity() -> None:

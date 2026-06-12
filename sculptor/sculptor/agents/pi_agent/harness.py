@@ -1,7 +1,6 @@
 """The pi harness — non-Claude implementor of `Harness`.
 
-Pi ships as a degraded harness: no AskUserQuestion, no plan mode, no
-sub-agents. It DOES render tool calls
+Pi is no longer a fully degraded harness. It renders tool calls
 (`supports_tool_use_rendering=True`): pi's tool-execution lane is adapted onto
 Sculptor's harness-agnostic tool blocks (see `agent_wrapper` / `tool_rendering`).
 Session resume IS supported — pi persists a per-task JSONL session
@@ -11,8 +10,13 @@ workspace's skill directories via `--skill` flags and follows an invoked skill
 (see `agent_wrapper._build_skill_launch_args` / `_rewrite_skill_invocation`).
 It also carries file references, image input, and file attachments (delivered
 by prompt assembly), and compacts context — `compaction_start/end` events drive
-the StatusPill "Compacting" chrome. The `capabilities()` override is the
-truthful declaration that consumers gate on.
+the StatusPill "Compacting" chrome. And it gains an interactive backchannel
+(ask-user-question + plan mode) from the Sculptor-pinned `sculptor_backchannel`
+extension (see `backchannel.py` and `extensions/sculptor_backchannel.ts`), so
+`supports_interactive_backchannel` is `True` and the gated methods recognize
+that extension's tool names. Still `False`: sub-agents, context reset, fast
+mode, and background tasks. The `capabilities()` override is the truthful
+declaration that consumers gate on.
 
 Agent construction is owned by the registry
 (`harness_registry.create_agent_for_run`), not this module, so the pi
@@ -21,6 +25,8 @@ agent module can hold a `PiHarness` reference without an import cycle.
 
 from __future__ import annotations
 
+from sculptor.agents.pi_agent.backchannel import ASK_USER_QUESTION_TOOL_NAME
+from sculptor.agents.pi_agent.backchannel import EXIT_PLAN_MODE_TOOL_NAME
 from sculptor.interfaces.agents.harness import Harness
 from sculptor.interfaces.agents.harness import HarnessCapabilities
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
@@ -62,7 +68,9 @@ class PiHarness(Harness):
 
     def capabilities(self) -> HarnessCapabilities:
         return HarnessCapabilities(
-            supports_interactive_backchannel=False,
+            # Delivered via the pinned `sculptor_backchannel` extension (AUQ +
+            # plan mode); the gated methods below recognize its tool names.
+            supports_interactive_backchannel=True,
             # Pi reads the workspace's Claude-visible skills via repeatable
             # --skill flags (agent_wrapper._build_skill_launch_args), enumerates
             # them through its own skills layer, and follows a picked skill
@@ -106,6 +114,28 @@ class PiHarness(Harness):
             # the same as Claude — true.
             supports_file_references=True,
         )
+
+    def is_ask_user_question_tool(self, tool_name: str) -> bool:
+        return tool_name == ASK_USER_QUESTION_TOOL_NAME
+
+    def is_exit_plan_mode_tool(self, tool_name: str) -> bool:
+        return tool_name == EXIT_PLAN_MODE_TOOL_NAME
+
+    def is_valid_ask_user_question_input(self, tool_name: str, tool_input: dict) -> bool:
+        # Mirrors the Claude harness: non-AUQ tools always pass; the AUQ tool's
+        # input is valid when it carries a non-empty `question` string (the
+        # backchannel extension's `ask_user_question` schema — `backchannel.py`).
+        if tool_name != ASK_USER_QUESTION_TOOL_NAME:
+            return True
+        question = tool_input.get("question")
+        return isinstance(question, str) and bool(question)
+
+    # NOTE (divergence, REQ-CAP-ALL-3): pi presents the plan inline as assistant
+    # text rather than writing a `.claude/plans/` file, so there is no plan-file
+    # path to surface — `get_plan_file_path_from_tool_use` /
+    # `extract_recent_plan_file_path` keep the base `None`, and the plan-approval
+    # question carries no click-to-reopen link. The plan/approve/exit flow itself
+    # behaves as on Claude.
 
 
 PI_HARNESS: PiHarness = PiHarness()

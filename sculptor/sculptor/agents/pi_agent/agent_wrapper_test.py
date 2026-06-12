@@ -3,8 +3,8 @@
 The tests stub the pi subprocess with a `MagicMock` `RunningProcess` so
 the full RPC pump can be exercised without a real binary. Coverage
 mirrors pi's three-channel envelope: command-ACK `response`
-events, `extension_ui_request` discards, and the `AgentSessionEvent`
-session-stream.
+events, the `extension_ui_request` backchannel lane (ask-user-question +
+plan-mode dialogs), and the `AgentSessionEvent` session-stream.
 """
 
 from __future__ import annotations
@@ -27,18 +27,25 @@ from sculptor.agents.pi_agent.agent_wrapper import PI_SESSION_ID_STATE_FILE
 from sculptor.agents.pi_agent.agent_wrapper import PiAgent
 from sculptor.agents.pi_agent.agent_wrapper import _render_synthesized_skill
 from sculptor.agents.pi_agent.agent_wrapper import _rewrite_skill_invocation
+from sculptor.agents.pi_agent.backchannel import DISMISSED_ANSWER_VALUE
+from sculptor.agents.pi_agent.backchannel import PLAN_APPROVAL_DIALOG_TITLE
+from sculptor.agents.pi_agent.backchannel import PLAN_APPROVAL_HEADER
 from sculptor.agents.pi_agent.harness import PI_HARNESS
 from sculptor.agents.pi_agent.output_processor import AgentMessage
 from sculptor.agents.pi_agent.output_processor import ParsedUnknownEvent
 from sculptor.agents.pi_agent.output_processor import extract_tool_call_blocks
 from sculptor.agents.pi_agent.output_processor import parse_rpc_message
 from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
+from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingDoneAgentMessage
 from sculptor.interfaces.agents.agent import ClearContextUserMessage
 from sculptor.interfaces.agents.agent import InterruptProcessUserMessage
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import PiAgentConfig
+from sculptor.interfaces.agents.agent import PlanModeAgentMessage
+from sculptor.interfaces.agents.agent import RequestSkippedAgentMessage
+from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
 from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
 from sculptor.interfaces.agents.agent import StopAgentUserMessage
@@ -54,6 +61,7 @@ from sculptor.state.chat_state import GenericToolContent
 from sculptor.state.chat_state import TextBlock
 from sculptor.state.chat_state import ToolResultBlock
 from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.chat_state import make_plan_approval_question
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import Message
 from sculptor.state.messages import ResponseBlockAgentMessage
@@ -981,25 +989,100 @@ def test_errored_file_change_tool_execution_end_does_not_refresh_diff() -> None:
     on_diff_needed.assert_not_called()
 
 
-def test_extension_ui_request_is_discarded() -> None:
-    agent = _make_agent()
-    agent._process = _make_process(
-        [
-            _event({"type": "extension_ui_request", "id": "ui-1", "method": "select", "options": []}),
-            _event({"type": "agent_end", "messages": [], "willRetry": False}),
-        ]
-    )
-    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
-
-
-def test_extension_error_is_logged_and_non_terminal() -> None:
+def test_extension_ui_select_request_emits_ask_user_question() -> None:
+    """A backchannel `select` dialog becomes an AskUserQuestion and holds the turn."""
     agent = _make_agent()
     agent._process = _make_process(
         [
             _event(
                 {
+                    "type": "extension_ui_request",
+                    "id": "ui-1",
+                    "method": "select",
+                    "title": "Tea or coffee?",
+                    "options": ["tea", "coffee"],
+                }
+            ),
+            _event({"type": "agent_end", "messages": [], "willRetry": False}),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+    emitted = _drain(agent._output_messages)
+    questions = [m for m in emitted if isinstance(m, AskUserQuestionAgentMessage)]
+    assert len(questions) == 1
+    data = questions[0].question_data
+    assert data.tool_use_id == "ui-1"
+    assert len(data.questions) == 1
+    assert data.questions[0].question == "Tea or coffee?"
+    assert [opt.label for opt in data.questions[0].options] == ["tea", "coffee"]
+
+
+def test_extension_ui_input_request_emits_free_form_question() -> None:
+    """An `input` dialog (no options) becomes a free-form AskUserQuestion."""
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event({"type": "extension_ui_request", "id": "ui-2", "method": "input", "title": "Your name?"}),
+            _event({"type": "agent_end", "messages": [], "willRetry": False}),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+    questions = [m for m in _drain(agent._output_messages) if isinstance(m, AskUserQuestionAgentMessage)]
+    assert len(questions) == 1
+    assert questions[0].question_data.questions[0].question == "Your name?"
+    assert questions[0].question_data.questions[0].options == []
+
+
+def test_plan_approval_select_request_emits_plan_approval_question() -> None:
+    """The plan-approval sentinel title maps to the canonical plan-approval question."""
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event(
+                {
+                    "type": "extension_ui_request",
+                    "id": "plan-1",
+                    "method": "select",
+                    "title": PLAN_APPROVAL_DIALOG_TITLE,
+                    "options": ["Approve plan"],
+                }
+            ),
+            _event({"type": "agent_end", "messages": [], "willRetry": False}),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+    questions = [m for m in _drain(agent._output_messages) if isinstance(m, AskUserQuestionAgentMessage)]
+    assert len(questions) == 1
+    # Same canonical question Claude's ExitPlanMode synthesizes — header drives
+    # the frontend's "Waiting for plan approval".
+    assert questions[0].question_data.questions[0].header == PLAN_APPROVAL_HEADER
+
+
+def test_extension_ui_fire_and_forget_method_is_ignored() -> None:
+    """Non-dialog methods (notify/setStatus/…) need no response and emit nothing."""
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event({"type": "extension_ui_request", "id": "n-1", "method": "notify", "message": "hi"}),
+            _event({"type": "agent_end", "messages": [], "willRetry": False}),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+    assert not _drain(agent._output_messages)
+
+
+def test_extension_error_from_foreign_extension_is_logged_and_non_terminal() -> None:
+    agent = _make_agent()
+    # No extension whose path matches _loaded_extension_paths (empty) → foreign.
+    agent._process = _make_process(
+        [
+            _event(
+                {
                     "type": "extension_error",
-                    "extensionPath": "/ext",
+                    "extensionPath": "/some/foreign/ext",
                     "event": "some-callback",
                     "error": "ext threw",
                 }
@@ -1009,6 +1092,167 @@ def test_extension_error_is_logged_and_non_terminal() -> None:
     )
     # Must not raise; must reach agent_end.
     agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+
+def test_extension_error_from_our_extension_fails_loud() -> None:
+    """Fail-loud posture: an error from the pinned backchannel extension fails the turn."""
+    agent = _make_agent()
+    agent._loaded_extension_paths = ("/state/sculptor_backchannel.ts",)
+    agent._process = _make_process(
+        [
+            _event(
+                {
+                    "type": "extension_error",
+                    "extensionPath": "/state/sculptor_backchannel.ts",
+                    "event": "tool_execute",
+                    "error": "backchannel boom",
+                }
+            ),
+        ]
+    )
+    with pytest.raises(PiCrashError, match="backchannel boom"):
+        agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+
+# --- Backchannel answer delivery & plan mode -------------------------------
+
+
+def _answer(
+    answers: dict[str, str],
+    tool_use_id: str,
+    question_data: AskUserQuestionData | None = None,
+) -> UserQuestionAnswerMessage:
+    return UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers=answers,
+        question_data=question_data or AskUserQuestionData(questions=[], tool_use_id=tool_use_id),
+        tool_use_id=tool_use_id,
+    )
+
+
+def _written_payloads(process: MagicMock) -> list[dict[str, Any]]:
+    return [json.loads(call.args[0].rstrip("\n")) for call in process.write_stdin.call_args_list]
+
+
+def test_push_message_handles_question_answer_returns_true() -> None:
+    """A question answer is handled by the backchannel, not dead-lettered."""
+    agent = _make_agent()
+    agent._process = MagicMock()
+    with expect_exact_logged_errors([]):
+        assert agent._push_message(_answer({"q": "a"}, "t1")) is True
+
+
+def test_deliver_answer_writes_extension_ui_response_and_starts_request() -> None:
+    agent = _make_agent()
+    process = MagicMock()
+    agent._process = process
+    agent._pending_ui_request_id = "ui-1"
+    answer = _answer({"Tea or coffee?": "coffee"}, "ui-1")
+    agent._deliver_question_answer(answer)
+
+    # The answer's own request is started immediately; its success is deferred.
+    started = [m for m in _drain(agent._output_messages) if isinstance(m, RequestStartedAgentMessage)]
+    assert [m.request_id for m in started] == [answer.message_id]
+    assert agent._pending_answer_request_ids == [answer.message_id]
+    assert agent._pending_ui_request_id is None
+    # The matching extension_ui_response carries the selected value.
+    assert _written_payloads(process) == [{"type": "extension_ui_response", "id": "ui-1", "value": "coffee"}]
+
+
+def test_deliver_answer_with_no_pending_dialog_skips() -> None:
+    agent = _make_agent()
+    process = MagicMock()
+    agent._process = process
+    answer = _answer({"q": "a"}, "stale")
+    agent._deliver_question_answer(answer)
+
+    skipped = [m for m in _drain(agent._output_messages) if isinstance(m, RequestSkippedAgentMessage)]
+    assert [m.request_id for m in skipped] == [answer.message_id]
+    assert process.write_stdin.call_count == 0
+
+
+def test_deliver_dismissed_answer_sends_cancellation() -> None:
+    agent = _make_agent()
+    process = MagicMock()
+    agent._process = process
+    agent._pending_ui_request_id = "ui-9"
+    agent._deliver_question_answer(_answer({"Pick one": DISMISSED_ANSWER_VALUE}, "ui-9"))
+    assert _written_payloads(process) == [{"type": "extension_ui_response", "id": "ui-9", "cancelled": True}]
+
+
+def test_deliver_plan_approval_clears_plan_mode() -> None:
+    agent = _make_agent()
+    process = MagicMock()
+    agent._process = process
+    agent._is_in_plan_mode = True
+    agent._pending_ui_request_id = "plan-1"
+    question_data = make_plan_approval_question(tool_use_id="plan-1")
+    answer = _answer({question_data.questions[0].question: "Approve plan"}, "plan-1", question_data=question_data)
+    agent._deliver_question_answer(answer)
+
+    emitted = _drain(agent._output_messages)
+    plan_msgs = [m for m in emitted if isinstance(m, PlanModeAgentMessage)]
+    assert len(plan_msgs) == 1 and plan_msgs[0].is_in_plan_mode is False
+    assert agent._is_in_plan_mode is False
+    assert _written_payloads(process) == [{"type": "extension_ui_response", "id": "plan-1", "value": "Approve plan"}]
+
+
+def test_deliver_plan_revision_keeps_plan_mode() -> None:
+    """A revision (free-form, not the approve label) does not exit plan mode."""
+    agent = _make_agent()
+    process = MagicMock()
+    agent._process = process
+    agent._is_in_plan_mode = True
+    agent._pending_ui_request_id = "plan-2"
+    question_data = make_plan_approval_question(tool_use_id="plan-2")
+    answer = _answer(
+        {question_data.questions[0].question: "Please add a rollback step"}, "plan-2", question_data=question_data
+    )
+    agent._deliver_question_answer(answer)
+
+    emitted = _drain(agent._output_messages)
+    assert not [m for m in emitted if isinstance(m, PlanModeAgentMessage)]
+    assert agent._is_in_plan_mode is True
+    assert _written_payloads(process) == [
+        {"type": "extension_ui_response", "id": "plan-2", "value": "Please add a rollback step"}
+    ]
+
+
+def test_finalize_pending_answers_emits_deferred_success() -> None:
+    agent = _make_agent()
+    request_id = AgentMessageID()
+    agent._pending_answer_request_ids = [request_id]
+    agent._finalize_pending_answers(interrupted=False)
+
+    successes = [m for m in _drain(agent._output_messages) if isinstance(m, RequestSuccessAgentMessage)]
+    assert [(m.request_id, m.interrupted) for m in successes] == [(request_id, False)]
+    assert agent._pending_answer_request_ids == []
+
+
+def test_finalize_pending_answers_marks_interrupted_on_failure() -> None:
+    agent = _make_agent()
+    request_id = AgentMessageID()
+    agent._pending_answer_request_ids = [request_id]
+    agent._finalize_pending_answers(interrupted=True)
+    successes = [m for m in _drain(agent._output_messages) if isinstance(m, RequestSuccessAgentMessage)]
+    assert [(m.request_id, m.interrupted) for m in successes] == [(request_id, True)]
+
+
+def test_plan_mode_tracking_and_prompt_preamble() -> None:
+    agent = _make_agent()
+    # Entering plan mode prepends the preamble to the prompt text.
+    enter = ChatInputUserMessage(text="add a feature", enter_plan_mode=True)
+    agent._update_plan_mode_from_message(enter)
+    assert agent._is_in_plan_mode is True
+    prompt = agent._build_prompt_text(enter)
+    assert prompt.endswith("add a feature")
+    assert "PLAN MODE" in prompt and "exit_plan_mode" in prompt
+
+    # Leaving plan mode drops the preamble.
+    leave = ChatInputUserMessage(text="never mind", exit_plan_mode=True)
+    agent._update_plan_mode_from_message(leave)
+    assert agent._is_in_plan_mode is False
+    assert agent._build_prompt_text(leave) == "never mind"
 
 
 def test_consume_ignores_non_json_and_unknown_event_types() -> None:
@@ -1044,12 +1288,6 @@ def test_push_message_enqueues_chat_input_returns_true() -> None:
 # dead-lettered (one logged error) and return unhandled.
 _DEAD_LETTER_MESSAGES: list[Message] = [
     ClearContextUserMessage(),
-    UserQuestionAnswerMessage(
-        message_id=AgentMessageID(),
-        answers={"q": "a"},
-        question_data=AskUserQuestionData(questions=[], tool_use_id="t1"),
-        tool_use_id="t1",
-    ),
 ]
 
 
@@ -1138,8 +1376,13 @@ def test_start_fresh_session_mints_and_persists_id_with_session_flags() -> None:
     assert command[command.index("--session-dir") + 1] == str(Path("/fake/state") / PI_SESSION_DIR_NAME)
     assert "--session-id" in command
     assert command[command.index("--session-id") + 1] == "sess-fresh-1"
-    # The minted id is persisted up front so a crash during the first turn still leaves a resumable id.
-    env.write_file.assert_called_once_with(str(Path("/fake/state") / PI_SESSION_ID_STATE_FILE), "sess-fresh-1")
+    # The pinned backchannel extension also ships: discovery off, our `-e` set on.
+    assert "--no-extensions" in command
+    assert "-e" in command
+    # The minted id is persisted up front so a crash during the first turn still leaves a
+    # resumable id (write_file is also called once to materialize the extension into the env).
+    session_id_path = str(Path("/fake/state") / PI_SESSION_ID_STATE_FILE)
+    assert any(c.args == (session_id_path, "sess-fresh-1") for c in env.write_file.call_args_list)
 
 
 def test_start_resume_reuses_persisted_id_and_verifies_without_rewriting() -> None:
@@ -1149,8 +1392,11 @@ def test_start_resume_reuses_persisted_id_and_verifies_without_rewriting() -> No
         agent.start(secrets={})
     command = _launched_command(env)
     assert command[command.index("--session-id") + 1] == "resume-7"
-    # Resume must NOT re-persist (the id is unchanged) and MUST verify the resume.
-    env.write_file.assert_not_called()
+    # Resume must NOT re-persist the session id (it is unchanged) and MUST verify the
+    # resume. write_file may still be called to materialize the pinned extension into
+    # the env — only the session-id path must be untouched.
+    session_id_path = str(Path("/fake/state") / PI_SESSION_ID_STATE_FILE)
+    assert all(c.args[0] != session_id_path for c in env.write_file.call_args_list)
     mock_verify.assert_called_once_with("resume-7")
 
 

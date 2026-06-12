@@ -1,14 +1,15 @@
 """Per-capability UI gating, parametrized over Claude and pi.
 
 Each test parametrizes the ``harness`` fixture across the two harnesses and
-asserts that a Claude-only affordance renders under Claude and is suppressed
-under pi. Tests that depend on backend interactions FakePi can't produce
-(e.g. an AskUserQuestion block, which requires the harness's interactive
-backchannel) are out of scope here — pi cannot emit them at all.
+asserts that a capability-gated affordance renders when the harness supports
+it and is suppressed when it does not. Most affordances here are still
+Claude-only under FakePi; the interactive-backchannel surfaces (plan-mode
+toggle) now render under pi too, since pi gained that capability via the
+pinned backchannel extension.
 
-The Claude branch of each test serves as the meaningful "this affordance
-renders under Claude" baseline; the pi branch is the "this affordance is
-suppressed by the harness gate" claim.
+The end-to-end backchannel flow itself (ask-user-question round-trip,
+plan-mode enter/approve) is exercised in ``test_pi_backchannel.py``; this
+file covers only the per-capability gate state.
 """
 
 import io
@@ -92,23 +93,16 @@ def _start_busy_workspace_for_harness(
 
 
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
-@user_story("to disable the plan-mode toggle with a tooltip in harnesses without an interactive backchannel")
-def test_plan_mode_toggle_gated_on_interactive_backchannel(
+@user_story("to use the plan-mode toggle on every harness that supports the interactive backchannel")
+def test_plan_mode_toggle_enabled_on_interactive_backchannel(
     sculptor_instance_: SculptorInstance, harness: HarnessTestConfig
 ) -> None:
+    # Both Claude and pi now support the interactive backchannel (pi via the
+    # pinned backchannel extension), so the live plan-mode toggle renders and
+    # the disabled-with-tooltip placeholder never appears — for either harness.
     _create_workspace_for_harness(sculptor_instance_, harness, "Plan Mode Toggle Gate")
-    toggle = sculptor_instance_.page.get_by_test_id(ElementIDs.PLAN_MODE_TOGGLE)
-    disabled = sculptor_instance_.page.get_by_test_id(ElementIDs.CAPABILITY_DISABLED_PLAN_MODE)
-    if harness.workspace_harness == HarnessName.CLAUDE:
-        # Claude supports the interactive backchannel: the live toggle renders
-        # and the disabled placeholder never appears.
-        expect(toggle).to_be_visible()
-        expect(disabled).to_have_count(0)
-    else:
-        # Pi lacks it: the live toggle is replaced by the disabled-with-tooltip
-        # placeholder (visible, ElementID-bearing) — not hidden.
-        expect(toggle).to_have_count(0)
-        expect(disabled).to_be_visible()
+    expect(sculptor_instance_.page.get_by_test_id(ElementIDs.PLAN_MODE_TOGGLE)).to_be_visible()
+    expect(sculptor_instance_.page.get_by_test_id(ElementIDs.CAPABILITY_DISABLED_PLAN_MODE)).to_have_count(0)
 
 
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
