@@ -75,7 +75,14 @@ def _build_seed_prompt(label: str) -> str:
     chat_text = f"{label} workspace chat content. {body}"
     committed_file = f"{label.lower()}_module.py"
     committed_content = "\n".join(f"def {label.lower()}_function_{index}(): ...." for index in range(60))
-    uncommitted_file = f"{label.lower()}_scratch.txt"
+    uncommitted_file = f"{label.lower()}_scratch.md"
+    # A few hundred lines so the uncommitted diff is comparable to a real
+    # spec/doc diff — big enough that Pierre's mount + highlighting cost is
+    # visible in the capture rather than fitting inside one frame.
+    uncommitted_content = f"# {label} uncommitted change\n\n" + "\n".join(
+        f"- {label.lower()} change line {index:03d} with some **markdown** content to highlight"
+        for index in range(300)
+    )
     steps = [
         {"command": "text", "args": {"text": chat_text}},
         {"command": "write_file", "args": {"file_path": committed_file, "content": committed_content}},
@@ -83,7 +90,7 @@ def _build_seed_prompt(label: str) -> str:
         # IN_PLACE repo, so `git add -A` here would swallow the other
         # workspace's uncommitted seed file.
         {"command": "bash", "args": {"command": f"git add {committed_file} && git commit -m '{label} seed commit'"}},
-        {"command": "write_file", "args": {"file_path": uncommitted_file, "content": f"{label} uncommitted change\n"}},
+        {"command": "write_file", "args": {"file_path": uncommitted_file, "content": uncommitted_content}},
         {"command": "text", "args": {"text": f"{label} second message. {body}"}},
         {"command": "text", "args": {"text": f"{label}-DONE"}},
     ]
@@ -194,6 +201,33 @@ def _wait_for_workspace_url(page: Page, workspace_id: str, timeout_seconds: floa
             return
         time.sleep(0.1)
     raise TimeoutError(f"URL never reached workspace {workspace_id} (hash={page.evaluate('window.location.hash')})")
+
+
+def _configure_panels_changes_vs_files(
+    page: Page, seeded: dict[str, dict], row_index_by_label: dict[str, int]
+) -> None:
+    """Set up the user-reported jarring scenario: each workspace has a
+    DIFFERENT active panel in the left section, and one has an open file diff.
+
+    ALPHA: Changes panel active with alpha_scratch.md's diff open.
+    BRAVO: Files panel active.
+    Switching between them then swaps the whole section body, the diff
+    master-detail split, and the diff content itself.
+    """
+    rows = page.get_by_test_id("WORKSPACE_TAB")
+
+    rows.nth(row_index_by_label["ALPHA"]).click()
+    _wait_for_workspace_url(page, seeded["ALPHA"]["workspaceId"])
+    page.get_by_test_id("panel-tab-changes").click()
+    time.sleep(0.5)
+    page.locator('[data-testid="CHANGES_PANEL"]').get_by_text("alpha_scratch.md").first.click()
+    time.sleep(2.0)  # let the diff render fully (file lines fetch + highlight)
+
+    rows.nth(row_index_by_label["BRAVO"]).click()
+    _wait_for_workspace_url(page, seeded["BRAVO"]["workspaceId"])
+    page.get_by_test_id("panel-tab-files").click()
+    time.sleep(1.5)
+    logger.info("Panel setup complete: ALPHA=Changes+diff, BRAVO=Files")
 
 
 def _capture_switch(
@@ -331,6 +365,13 @@ def main() -> None:
     parser.add_argument("--jpeg-quality", type=int, default=80)
     parser.add_argument("--viewport", default="1400x900", help="WIDTHxHEIGHT")
     parser.add_argument("--headed", action="store_true", help="Run a headed browser (fidelity checks)")
+    parser.add_argument(
+        "--panel-setup",
+        choices=["none", "changes-vs-files"],
+        default="none",
+        help="Optional per-workspace panel configuration before capturing "
+        "(changes-vs-files: ALPHA on the Changes panel with an open diff, BRAVO on Files)",
+    )
     args = parser.parse_args()
 
     width, height = (int(part) for part in args.viewport.split("x"))
@@ -352,6 +393,8 @@ def main() -> None:
         _complete_onboarding_if_needed(page)
         seeded = _seed_workspaces(page)
         row_index_by_label = _resolve_sidebar_rows(page, seeded)
+        if args.panel_setup == "changes-vs-files":
+            _configure_panels_changes_vs_files(page, seeded, row_index_by_label)
 
         recorder = ScreencastRecorder(page, jpeg_quality=args.jpeg_quality, max_width=width, max_height=height)
         timelines: list[dict] = []
