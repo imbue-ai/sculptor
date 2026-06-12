@@ -250,6 +250,13 @@ def _complete_onboarding_if_needed(page: Page) -> None:
     except Exception:
         logger.info("No onboarding Continue button — assuming onboarding is already complete")
         return
+    # The button stays disabled until the backend's background dependency
+    # install (Claude CLI) finishes — wait for it to become enabled.
+    deadline = time.monotonic() + 180
+    while not continue_button.is_enabled():
+        if time.monotonic() > deadline:
+            raise TimeoutError("onboarding Continue button never became enabled")
+        time.sleep(1)
     continue_button.click()
     continue_button.wait_for(state="hidden", timeout=30_000)
     logger.info("Onboarding completed")
