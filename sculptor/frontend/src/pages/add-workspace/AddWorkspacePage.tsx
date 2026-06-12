@@ -6,14 +6,13 @@ import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 
-import type { LlmModel } from "../../api";
+import type { AgentTypeName, LlmModel } from "../../api";
 import {
   createWorkspaceAgent,
   createWorkspaceV2,
   ElementIds,
   getActiveProjects,
   getMostRecentlyUsedProject,
-  HarnessName,
   WorkspaceInitializationStrategy,
 } from "../../api";
 import { HTTPException } from "../../common/Errors.ts";
@@ -67,8 +66,9 @@ export const AddWorkspacePage = (): ReactElement => {
 
   // Form state. Worktree is the default mode; clone and in-place are opt-in.
   const [mode, setMode] = useState<WorkspaceInitializationStrategy>(WorkspaceInitializationStrategy.WORKTREE);
-  // DELIBERATE-TEMPORARY: workspace-bound harness selection.
-  const [harness, setHarness] = useState<HarnessName>(HarnessName.CLAUDE);
+  // The type of the workspace's first agent (agent type is per-agent, not
+  // per-workspace). Registered terminal agents join in phase 4.
+  const [agentType, setAgentType] = useState<AgentTypeName>("claude");
   const [workspaceNameDraft, setWorkspaceNameDraft] = useDraftTabName(draftId);
   const workspaceName = workspaceNameDraft ?? "";
   const setWorkspaceName = useCallback(
@@ -213,7 +213,6 @@ export const AddWorkspacePage = (): ReactElement => {
           sourceBranch: mode === WorkspaceInitializationStrategy.IN_PLACE ? undefined : sourceBranch,
           description: workspaceName.trim() || "Untitled workspace",
           requestedBranchName,
-          harness,
         },
       });
 
@@ -229,11 +228,14 @@ export const AddWorkspacePage = (): ReactElement => {
       convertNewWorkspaceToTab({ draftId, workspaceId });
       setWorkspaceNameDraft(null);
 
-      // Create first agent (no prompt in the simplified form)
+      // Create first agent (no prompt in the simplified form). Terminal
+      // agents have no model concept, so the default-model preference only
+      // applies to chat types. (registrationId joins in phase 4.)
       const agentResponse = await createWorkspaceAgent({
         path: { workspace_id: workspaceId },
         body: {
-          model: defaultModelPreference as LlmModel,
+          model: agentType === "terminal" ? undefined : (defaultModelPreference as LlmModel),
+          agentType,
         },
       });
 
@@ -245,6 +247,7 @@ export const AddWorkspacePage = (): ReactElement => {
         workspace_id: workspaceId,
         agent_id: agentResponse.data.id,
         mode,
+        agent_type: agentType,
         has_workspace_name: workspaceName.trim().length > 0,
         // Branch names are user-entered text (they can encode feature/ticket/
         // customer names), so record only whether one was chosen.
@@ -283,7 +286,7 @@ export const AddWorkspacePage = (): ReactElement => {
     selectedProjectId,
     draftId,
     mode,
-    harness,
+    agentType,
     sourceBranch,
     workspaceName,
     effectiveBranchName,
@@ -395,33 +398,37 @@ export const AddWorkspacePage = (): ReactElement => {
               </Button>
             )}
 
-            {/* Harness selector — gated behind the experimental multi-harness flag.
-                When off, the picker is hidden and `harness` stays Claude, so new
-                workspaces use Claude exactly as they did before multi-harness shipped.
-                DELIBERATE-TEMPORARY: workspace-bound harness selection. */}
-            {isMultiHarnessEnabled && (
-              <Select.Root size="1" value={harness} onValueChange={(value) => setHarness(value as HarnessName)}>
-                <Select.Trigger
-                  variant="ghost"
-                  className={styles.compactSelector}
-                  data-testid={ElementIds.HARNESS_SELECTOR}
-                >
-                  <Flex align="center" gap="1">
-                    <BotIcon size={12} />
-                    <Text className={styles.selectorLabel}>harness</Text>
-                    {harness === HarnessName.PI ? "pi (experimental)" : "Claude"}
-                  </Flex>
-                </Select.Trigger>
-                <Select.Content position="popper" side="bottom" sideOffset={5}>
-                  <Select.Item value={HarnessName.CLAUDE} data-testid={ElementIds.HARNESS_OPTION_CLAUDE}>
-                    Claude
-                  </Select.Item>
-                  <Select.Item value={HarnessName.PI} data-testid={ElementIds.HARNESS_OPTION_PI}>
+            {/* First-agent type selector — the same per-agent choice as the
+                tab bar's + menu. Only the pi option is gated behind the
+                experimental multi-harness flag; Claude and Terminal are
+                available to everyone. Registered terminal agents join in
+                phase 4. */}
+            <Select.Root size="1" value={agentType} onValueChange={(value) => setAgentType(value as AgentTypeName)}>
+              <Select.Trigger
+                variant="ghost"
+                className={styles.compactSelector}
+                data-testid={ElementIds.ADD_WORKSPACE_AGENT_TYPE_SELECT}
+              >
+                <Flex align="center" gap="1">
+                  <BotIcon size={12} />
+                  <Text className={styles.selectorLabel}>agent</Text>
+                  {agentType === "pi" ? "pi (experimental)" : agentType === "terminal" ? "Terminal" : "Claude"}
+                </Flex>
+              </Select.Trigger>
+              <Select.Content position="popper" side="bottom" sideOffset={5}>
+                <Select.Item value="claude" data-testid={ElementIds.AGENT_TYPE_OPTION_CLAUDE}>
+                  Claude
+                </Select.Item>
+                {isMultiHarnessEnabled && (
+                  <Select.Item value="pi" data-testid={ElementIds.AGENT_TYPE_OPTION_PI}>
                     pi (experimental)
                   </Select.Item>
-                </Select.Content>
-              </Select.Root>
-            )}
+                )}
+                <Select.Item value="terminal" data-testid={ElementIds.AGENT_TYPE_OPTION_TERMINAL}>
+                  Terminal
+                </Select.Item>
+              </Select.Content>
+            </Select.Root>
 
             {/* Mode selector — shown when any experimental workspace mode is enabled */}
             {isModeSelectorVisible && (

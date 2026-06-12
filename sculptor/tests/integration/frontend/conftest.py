@@ -1,7 +1,6 @@
 import pytest
 
 from sculptor.foundation.pydantic_serialization import FrozenModel
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.testing.auto_update_mock import mock_electron_api as mock_electron_api  # noqa: F401
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
 from sculptor.testing.elements.task_starter import FAKE_PI_MODEL_NAME
@@ -17,22 +16,22 @@ def sculptor_launch_mode(request: pytest.FixtureRequest) -> str:
 class HarnessTestConfig(FrozenModel):
     """The per-harness inputs needed by an integration test.
 
-    Tests that parametrize over both harnesses read ``workspace_harness``
-    to pick the value persisted on workspace creation, and ``model_name``
-    for the chat-panel model picker.
+    Tests that parametrize over both harnesses read ``first_agent_type``
+    to pick the agent type chosen in the new-workspace flow, and
+    ``model_name`` for the chat-panel model picker.
     """
 
-    workspace_harness: HarnessName
+    first_agent_type: str
     model_name: str
 
 
 _HARNESS_CONFIGS: dict[str, HarnessTestConfig] = {
     "claude": HarnessTestConfig(
-        workspace_harness=HarnessName.CLAUDE,
+        first_agent_type="claude",
         model_name=FAKE_CLAUDE_MODEL_NAME,
     ),
     "pi": HarnessTestConfig(
-        workspace_harness=HarnessName.PI,
+        first_agent_type="pi",
         model_name=FAKE_PI_MODEL_NAME,
     ),
 }
