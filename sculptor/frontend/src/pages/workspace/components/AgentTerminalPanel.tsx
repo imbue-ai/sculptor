@@ -12,7 +12,7 @@ type AgentTerminalPanelProps = {
 
 /**
  * Full-pane terminal for a terminal agent — occupies the space the chat
- * interface occupies for chat agents (REQ-UI-1).
+ * interface occupies for chat agents.
  *
  * Only mounted for the active agent tab: hidden-tab persistence comes from
  * the backend-owned PTY (the WebSocket reconnects with the replay buffer),

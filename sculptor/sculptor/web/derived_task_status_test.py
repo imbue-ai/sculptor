@@ -567,7 +567,7 @@ def test_terminal_status_follows_latest_signal_since_run_start() -> None:
 
 def test_terminal_status_resets_at_each_run_start() -> None:
     # A pre-re-run WAITING must NOT survive the next run's anchor
-    # (architecture §5 stale-status risk).
+    # (stale-status risk).
     view = _make_task_view(_make_terminal_task())
     view.add_message(_env_acquired())
     view.add_message(_signal(TerminalStatusSignal.WAITING))

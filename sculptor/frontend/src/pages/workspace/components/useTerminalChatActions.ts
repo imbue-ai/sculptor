@@ -14,9 +14,8 @@ import { useTaskAcceptsAutomatedPrompts, useTaskStatus } from "~/common/state/ho
  * When the agent's registration opted in (`acceptsAutomatedPrompts`),
  * `sendMessage` routes the prompt through the terminal-input endpoint so it
  * arrives as typed input; otherwise nothing is registered and every consumer
- * stays disabled exactly as the phase-1 default left it. Consumers are
- * untouched — the routing decision lives entirely in which hook registered
- * the actions (REQ-UI-2).
+ * stays disabled by default. Consumers are untouched — the routing decision
+ * lives entirely in which hook registered the actions.
  */
 export const useTerminalChatActions = (taskId: string): void => {
   const doesAcceptAutomatedPrompts = useTaskAcceptsAutomatedPrompts(taskId);

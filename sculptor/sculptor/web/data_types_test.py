@@ -8,7 +8,7 @@ from sculptor.web.data_types import StartTaskRequest
 
 
 def test_create_workspace_request_has_no_harness_field() -> None:
-    # Agent type is per-agent (REQ-TYPE-3); the workspace carries no harness.
+    # Agent type is per-agent; the workspace carries no harness.
     request = CreateWorkspaceRequestV2(
         project_id="proj-1",
         initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,

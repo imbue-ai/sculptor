@@ -70,8 +70,7 @@ class HarnessCapabilities(SerializableModel):
     the session in place at a threshold. They gate different surfaces.
 
     `supports_chat_interface` is the coarse main-panel switch (chat interface
-    vs terminal panel) per terminal-agents architecture §2, distinct from the
-    per-affordance bools below it.
+    vs terminal panel), distinct from the per-affordance bools below it.
     """
 
     supports_chat_interface: bool

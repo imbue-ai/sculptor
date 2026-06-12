@@ -37,7 +37,7 @@ class TaskInterface(StrEnum):
 
 
 class AgentTypeName(StrEnum):
-    """The per-agent type chosen at creation time (REQ-TYPE-1).
+    """The per-agent type chosen at creation time.
 
     `REGISTERED` requires a `registration_id` alongside it.
     """
@@ -190,7 +190,7 @@ class ListTerminalAgentRegistrationsResponse(SerializableModel):
 
 
 class SignalEventRequest(RequestModel):
-    """A terminal-agent signal (REQ-SIG-1/4).
+    """A terminal-agent signal.
 
     `event` is a plain string so unknown events validate and reach the
     handler (forward compatibility — a closed enum would 422 on additive
@@ -202,7 +202,7 @@ class SignalEventRequest(RequestModel):
 
 
 class TerminalInputRequest(RequestModel):
-    """An automated prompt for a registered terminal agent (architecture §9).
+    """An automated prompt for a registered terminal agent.
 
     Smallest viable surface for v1: text plus whether to submit it — no
     arbitrary key injection.
