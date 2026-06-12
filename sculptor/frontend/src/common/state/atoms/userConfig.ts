@@ -206,6 +206,11 @@ export const isRichMarkdownRenderingEnabledAtom = atom<boolean>(
 // regardless.
 export const isMultiHarnessEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableMultiHarness ?? false);
 
+// Frontend plugin system (experimental — off by default). Gates plugin
+// loading at boot and the Plugins settings section. Plugins load once per
+// page load, so toggling takes effect after an app reload.
+export const isFrontendPluginsEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableFrontendPlugins ?? false);
+
 // Agent defaults
 export const isDefaultFastModeAtom = atom<boolean>((get) => get(userConfigAtom)?.defaultFastMode ?? false);
 
