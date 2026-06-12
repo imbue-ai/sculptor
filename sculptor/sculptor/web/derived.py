@@ -40,6 +40,8 @@ from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessa
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageAgentMessage
 from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
+from sculptor.interfaces.agents.agent import TerminalAgentSignalRunnerMessage
+from sculptor.interfaces.agents.agent import TerminalStatusSignal
 from sculptor.interfaces.agents.agent import UpdatedArtifactAgentMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
 from sculptor.interfaces.agents.agent import is_terminal_agent_config
@@ -426,13 +428,27 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
             return task_from_outcome
 
         if is_terminal_agent_config(self.task_input.agent_config):
-            # Terminal agents have no chat: pre-environment means "still
-            # building" (no "no user message → READY" special case applies),
-            # and none of the chat-derived logic below can run.
-            if not any(isinstance(m, EnvironmentAcquiredRunnerMessage) for m in self._messages):
+            # Terminal agents have no chat: status comes from the latest
+            # signal posted since the most recent run start (architecture §5).
+            # EnvironmentAcquiredRunnerMessage is the run-start anchor — both
+            # it and the signals are ephemeral, so status reflects the live
+            # program, resets on every (re)start, and a relaunched program's
+            # hooks re-drive it. No signals this run → calm neutral READY
+            # (REQ-TERM-2); signals never drive the unread dot (REQ-SIG-5).
+            latest_signal: TerminalStatusSignal | None = None
+            for msg in reversed(self._messages):
+                if latest_signal is None and isinstance(msg, TerminalAgentSignalRunnerMessage):
+                    latest_signal = msg.signal
+                if isinstance(msg, EnvironmentAcquiredRunnerMessage):
+                    break
+            else:
+                # No run-start anchor at all: still acquiring the environment
+                # (no "no user message → READY" special case applies).
                 return TaskStatus.BUILDING
-            # Neutral status; the signal-aware mapping lands with the
-            # terminal status driver (phase 3).
+            if latest_signal == TerminalStatusSignal.BUSY:
+                return TaskStatus.RUNNING
+            if latest_signal == TerminalStatusSignal.WAITING:
+                return TaskStatus.WAITING
             return TaskStatus.READY
 
         # Check if environment has been acquired via message

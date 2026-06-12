@@ -27,6 +27,8 @@ from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
 from sculptor.interfaces.agents.agent import RequestStoppedAgentMessage
 from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
 from sculptor.interfaces.agents.agent import TerminalAgentConfig
+from sculptor.interfaces.agents.agent import TerminalAgentSignalRunnerMessage
+from sculptor.interfaces.agents.agent import TerminalStatusSignal
 from sculptor.interfaces.agents.harness import HarnessCapabilities
 from sculptor.interfaces.agents.tasks import TaskState
 from sculptor.primitives.ids import AgentMessageID
@@ -532,3 +534,64 @@ def test_harness_capabilities_for_hello_task_are_all_false() -> None:
         supports_interruption=False,
         supports_file_references=False,
     )
+
+
+def _env_acquired() -> EnvironmentAcquiredRunnerMessage:
+    return EnvironmentAcquiredRunnerMessage.model_construct(
+        message_id=AgentMessageID(),
+        environment=None,
+    )
+
+
+def _signal(signal: TerminalStatusSignal) -> TerminalAgentSignalRunnerMessage:
+    return TerminalAgentSignalRunnerMessage(signal=signal)
+
+
+def test_terminal_status_follows_latest_signal_since_run_start() -> None:
+    view = _make_task_view(_make_terminal_task())
+    view.add_message(_env_acquired())
+
+    view.add_message(_signal(TerminalStatusSignal.BUSY))
+    assert view.status == TaskStatus.RUNNING
+
+    view.add_message(_signal(TerminalStatusSignal.WAITING))
+    assert view.status == TaskStatus.WAITING
+
+    # Latest wins.
+    view.add_message(_signal(TerminalStatusSignal.BUSY))
+    assert view.status == TaskStatus.RUNNING
+
+    view.add_message(_signal(TerminalStatusSignal.IDLE))
+    assert view.status == TaskStatus.READY
+
+
+def test_terminal_status_resets_at_each_run_start() -> None:
+    # A pre-re-run WAITING must NOT survive the next run's anchor
+    # (architecture §5 stale-status risk).
+    view = _make_task_view(_make_terminal_task())
+    view.add_message(_env_acquired())
+    view.add_message(_signal(TerminalStatusSignal.WAITING))
+    assert view.status == TaskStatus.WAITING
+
+    view.add_message(_env_acquired())
+    assert view.status == TaskStatus.READY
+
+    view.add_message(_signal(TerminalStatusSignal.BUSY))
+    assert view.status == TaskStatus.RUNNING
+
+
+def test_terminal_status_neutral_after_restart_until_signals_re_drive() -> None:
+    # Signals are ephemeral: after a backend restart a fresh view only sees
+    # persistent messages, so status is BUILDING pre-anchor and neutral READY
+    # once the new run acquires its environment.
+    view = _make_task_view(_make_terminal_task())
+    assert view.status == TaskStatus.BUILDING
+    view.add_message(_env_acquired())
+    assert view.status == TaskStatus.READY
+
+
+def test_terminal_status_outcome_short_circuit_beats_signals() -> None:
+    view = _make_task_view(_make_terminal_task(outcome=TaskState.FAILED))
+    view.add_message(_env_acquired())
+    view.add_message(_signal(TerminalStatusSignal.BUSY))
+    assert view.status == TaskStatus.ERROR
