@@ -757,10 +757,8 @@ def create_initial_task_view(
     task: Task,
     settings: SculptorSettings,
 ) -> TaskViewTypes:
-    # Matching on task.input_data directly makes the type checker fail the exhaustiveness check
-    input_data = task.input_data
     task_view_class: type[TaskViewTypes]
-    match input_data:
+    match task.input_data:
         case AgentTaskInputsV2():
             task_view_class = CodingAgentTaskView
         case NoOpTaskInputsV1():

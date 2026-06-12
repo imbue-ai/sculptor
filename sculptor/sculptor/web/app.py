@@ -401,7 +401,6 @@ is_integration_testing = os.environ.get("TESTING__INTEGRATION_ENABLED", "false")
 
 # Add CORS middleware to allow requests from file:// origins and localhost
 APP.add_middleware(
-    # the type checker doesn't understand the typing here
     CORSMiddleware,
     allow_origins=[
         f"http://localhost:{frontend_port}",  # Vite dev server
@@ -3817,7 +3816,6 @@ def _ws_type_streaming_update() -> StreamingUpdate:
     raise HTTPException(status_code=501, detail="This endpoint exists only for OpenAPI schema generation")
 
 
-# we generate UserConfigField at runtime so the type checker doesn't like it as an annotation
 @router.get("/_types/user_config_field")
 def _type_user_config_field() -> UserConfigField:
     """Include UserConfigField enum in schema"""
@@ -3832,7 +3830,6 @@ def _element_tags() -> ElementIDs:
 
 APP.include_router(router)
 
-# the type checker doesn't understand the typing here
 APP.add_middleware(SessionTokenMiddleware, settings_factory=get_settings)
 
 
