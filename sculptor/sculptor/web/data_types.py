@@ -16,7 +16,6 @@ from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.foundation.pydantic_serialization import build_discriminator
 from sculptor.foundation.upper_case_str_enum import UpperCaseStrEnum
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.interfaces.agents.artifacts import DiffArtifact
 from sculptor.interfaces.agents.artifacts import TaskListArtifact
 from sculptor.primitives.ids import ProjectID
@@ -39,8 +38,7 @@ class TaskInterface(StrEnum):
 class AgentTypeName(StrEnum):
     """The per-agent type chosen at creation time (REQ-TYPE-1).
 
-    `REGISTERED` requires a `registration_id` alongside it. Distinct from the
-    DELIBERATE-TEMPORARY workspace-bound `HarnessName`, which phase 2 deletes.
+    `REGISTERED` requires a `registration_id` alongside it.
     """
 
     CLAUDE = "claude"
@@ -134,6 +132,8 @@ class StartTaskRequest(RequestModel):
     fast_mode: bool = False
     effort: EffortLevel = EffortLevel.EXTRA_HIGH
     sent_via: str | None = None
+    # Prompt-ful creation is always a chat agent; terminal types are rejected (422).
+    agent_type: AgentTypeName = AgentTypeName.CLAUDE
 
 
 class CreateWorkspaceRequestV2(RequestModel):
@@ -148,8 +148,6 @@ class CreateWorkspaceRequestV2(RequestModel):
     # Diff/merge target branch. When None, the backend resolves a sensible default
     # from the repo (origin's default branch, else local main/master).
     target_branch: str | None = None
-    # DELIBERATE-TEMPORARY: workspace-bound harness selection.
-    harness: HarnessName = HarnessName.CLAUDE
 
 
 class UpdateWorkspaceRequest(RequestModel):
@@ -244,7 +242,6 @@ class RecentWorkspaceResponse(SerializableModel):
     agent_count: int
     is_open: bool
     last_activity_at: datetime.datetime
-    harness: HarnessName = HarnessName.CLAUDE
 
 
 class ListWorkspacesResponse(SerializableModel):

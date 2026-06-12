@@ -12,7 +12,6 @@ from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.foundation.pydantic_serialization import build_discriminator
 from sculptor.foundation.serialization import SerializedException
 from sculptor.interfaces.agents.agent import AgentConfigTypes
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import PersistentMessageTypes
 from sculptor.interfaces.agents.tasks import TaskState
@@ -113,8 +112,6 @@ class Workspace(DatabaseModel):
     diff_updated_at: datetime.datetime | None = None
     # User-supplied or auto-generated branch name. Required for WORKTREE workspaces (validated at the API layer); optional for CLONE; null for IN_PLACE.
     requested_branch_name: str | None = None
-    # DELIBERATE-TEMPORARY: workspace-bound harness selection.
-    harness: HarnessName = HarnessName.CLAUDE
 
 
 # Runtime tables

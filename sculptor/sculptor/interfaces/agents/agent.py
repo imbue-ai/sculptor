@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import abc
 import datetime
-from enum import StrEnum
 from typing import Annotated
 from typing import Mapping
 
@@ -496,9 +495,3 @@ TERMINAL_AGENT_CONFIG_TYPES = (TerminalAgentConfig, RegisteredTerminalAgentConfi
 
 def is_terminal_agent_config(config: AgentConfigTypes) -> bool:
     return isinstance(config, TERMINAL_AGENT_CONFIG_TYPES)
-
-
-# DELIBERATE-TEMPORARY: workspace-bound harness selection.
-class HarnessName(StrEnum):
-    CLAUDE = "claude"
-    PI = "pi"

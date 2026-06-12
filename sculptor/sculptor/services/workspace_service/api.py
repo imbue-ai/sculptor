@@ -13,7 +13,6 @@ from sculptor.foundation.errors import ExpectedError
 from sculptor.foundation.event_utils import ReadOnlyEvent
 from sculptor.foundation.progress_tracking.progress_tracking import RootProgressHandle
 from sculptor.foundation.pydantic_serialization import FrozenModel
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.interfaces.agents.artifacts import DiffArtifact
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.primitives.ids import TaskID
@@ -117,7 +116,6 @@ class WorkspaceService(Service, ABC):
         description: str | None,
         transaction: DataModelTransaction,
         target_branch: str | None = None,
-        harness: HarnessName = HarnessName.CLAUDE,
     ) -> Workspace:
         """
         Create a new workspace for a project.
@@ -132,7 +130,6 @@ class WorkspaceService(Service, ABC):
             transaction: Database transaction for atomicity.
             target_branch: Diff/merge target branch. When None, a default is resolved
                 from the repo (origin's default branch, else local main/master).
-            harness: Which agent harness this workspace uses (claude or pi).
 
         Returns:
             The created Workspace.

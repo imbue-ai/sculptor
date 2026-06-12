@@ -61,8 +61,8 @@ def enable_entity_mentions(page: Page) -> None:
 def enable_multi_harness(page: Page) -> None:
     """Enable the experimental multi-harness flag.
 
-    Gates the new-workspace harness picker; off by default, so any test that
-    drives the picker (or asserts it is visible) must enable it first.
+    Gates the pi option in the agent-type pickers; off by default, so any
+    test that selects pi (or asserts the option is visible) must enable it first.
     """
     _set_user_config_flag(page, "enableMultiHarness", True)
 

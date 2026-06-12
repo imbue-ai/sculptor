@@ -46,8 +46,8 @@ class PlaywrightTaskStarterElement(PlaywrightFilePreviewAndUploadMixin, Playwrig
 
 FAKE_CLAUDE_MODEL_NAME = "Fake Claude"
 FAKE_CLAUDE_2_MODEL_NAME = "Fake Claude 2"
-# Tag for the harness-parametrized integration fixture; harness selection still
-# flows through workspace.harness, not the model name.
+# Tag for the harness-parametrized integration fixture; pi selection flows
+# through the per-agent type chosen at creation, not the model name.
 FAKE_PI_MODEL_NAME = "Fake Pi"
 
 

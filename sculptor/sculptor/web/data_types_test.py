@@ -1,38 +1,21 @@
 """Unit tests for sculptor.web.data_types."""
 
-import pytest
-from pydantic import ValidationError
-
+from imbue_core.sculptor.state.messages import LLMModel
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
-from sculptor.interfaces.agents.agent import HarnessName
+from sculptor.web.data_types import AgentTypeName
 from sculptor.web.data_types import CreateWorkspaceRequestV2
+from sculptor.web.data_types import StartTaskRequest
 
 
-def test_create_workspace_request_defaults_harness_to_claude() -> None:
+def test_create_workspace_request_has_no_harness_field() -> None:
+    # Agent type is per-agent (REQ-TYPE-3); the workspace carries no harness.
     request = CreateWorkspaceRequestV2(
         project_id="proj-1",
         initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
     )
-    assert request.harness == HarnessName.CLAUDE
+    assert "harness" not in type(request).model_fields
 
 
-def test_create_workspace_request_accepts_pi_harness() -> None:
-    request = CreateWorkspaceRequestV2.model_validate(
-        {
-            "project_id": "proj-1",
-            "initialization_strategy": WorkspaceInitializationStrategy.IN_PLACE.value,
-            "harness": "pi",
-        }
-    )
-    assert request.harness == HarnessName.PI
-
-
-def test_create_workspace_request_rejects_unknown_harness() -> None:
-    with pytest.raises(ValidationError):
-        CreateWorkspaceRequestV2.model_validate(
-            {
-                "project_id": "proj-1",
-                "initialization_strategy": WorkspaceInitializationStrategy.IN_PLACE.value,
-                "harness": "definitely-not-a-real-harness",
-            }
-        )
+def test_start_task_request_defaults_agent_type_to_claude() -> None:
+    request = StartTaskRequest(prompt="hello", model=LLMModel.CLAUDE_4_SONNET)
+    assert request.agent_type == AgentTypeName.CLAUDE

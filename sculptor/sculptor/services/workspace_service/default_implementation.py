@@ -24,7 +24,6 @@ from sculptor.foundation.progress_tracking.progress_tracking import RootProgress
 from sculptor.foundation.progress_tracking.progress_tracking import start_finish_context
 from sculptor.foundation.time_utils import get_current_time
 from sculptor.interfaces.agents.agent import EnvironmentTypes
-from sculptor.interfaces.agents.agent import HarnessName
 
 # These artifact types are general-purpose data structures that happen to live under
 # interfaces/agents/. They are used by agents, workspace service, and the web layer.
@@ -369,7 +368,6 @@ class DefaultWorkspaceService(WorkspaceService):
         description: str | None,
         transaction: DataModelTransaction,
         target_branch: str | None = None,
-        harness: HarnessName = HarnessName.CLAUDE,
     ) -> Workspace:
         """Create a new workspace for a project."""
         # Generate workspace description if not provided
@@ -411,7 +409,6 @@ class DefaultWorkspaceService(WorkspaceService):
             source_git_hash=source_git_hash,
             target_branch=target_branch,
             setup_status=initial_setup_status,
-            harness=harness,
         )
 
         logger.debug(
