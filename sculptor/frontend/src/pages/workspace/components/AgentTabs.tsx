@@ -1,11 +1,12 @@
-import { ContextMenu, IconButton } from "@radix-ui/themes";
+import { ContextMenu, DropdownMenu, Flex, IconButton } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { PlusIcon } from "lucide-react";
+import { ChevronDownIcon, PlusIcon } from "lucide-react";
 import { posthog } from "posthog-js";
 import type { ReactElement, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  type AgentTypeName,
   createWorkspaceAgent,
   ElementIds,
   getWorkspaceAgentDiagnostics,
@@ -18,9 +19,10 @@ import { keybindingsMapAtom } from "~/common/keybindings/atoms.ts";
 import { useImbueNavigate, useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { isDismissibleOverlayOpen } from "~/common/overlayUtils.ts";
 import { shouldHandleKeybinding } from "~/common/ShortcutUtils.ts";
-import { agentTabOrderAtom } from "~/common/state/atoms/agentTabs.ts";
+import { agentTabOrderAtom, lastUsedAgentTypeAtom } from "~/common/state/atoms/agentTabs.ts";
 import { debugViewAtomFamily } from "~/common/state/atoms/alphaScroll.ts";
 import { pendingAgentTitlesAtom, tasksArrayAtom, updateTasksAtom } from "~/common/state/atoms/tasks.ts";
+import { isMultiHarnessEnabledAtom } from "~/common/state/atoms/userConfig.ts";
 import { useOptimisticTaskDelete } from "~/common/state/hooks/useOptimisticTaskDelete.ts";
 import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
 import { buildAgentActions } from "~/components/CommandPalette/contextActions/agentActions.ts";
@@ -37,6 +39,13 @@ import type { TabDefinition } from "~/components/tabs/types";
 import styles from "./AgentTabs.module.scss";
 
 const NO_SESSION_TOOLTIP = "No active session — send a prompt first";
+
+const AGENT_TYPE_LABELS: Record<AgentTypeName, string> = {
+  claude: "Claude",
+  pi: "pi",
+  terminal: "Terminal",
+  registered: "Claude", // a stored registered type falls back to Claude until phase 4
+};
 
 /**
  * Fetches diagnostics on mount (when the sub-menu opens) and disables
@@ -210,32 +219,64 @@ export const AgentTabs = (): ReactElement | null => {
     [workspaceID, updateTasks, setRenamingAgentId, setPendingTitles, clearPendingTitle],
   );
 
-  const handleCreateAgent = useCallback(async (): Promise<void> => {
-    if (isCreating) return;
-    setIsCreating(true);
-    try {
-      // Inherit the model from the currently viewed agent so the new agent
-      // starts with the same model selection.
-      const currentAgent = agentID ? workspaceAgents.find((a) => a.id === agentID) : undefined;
-      const model = currentAgent?.model as LlmModel | undefined;
-      const response = await createWorkspaceAgent({
-        path: { workspace_id: workspaceID },
-        body: { model },
-      });
-      if (response.data) {
-        posthog.capture("agent.added", {
-          workspace_id: workspaceID,
-          agent_id: response.data.id,
-          model: model ?? null,
-        });
-        navigateToAgent(workspaceID, response.data.id);
+  const [lastUsedAgentType, setLastUsedAgentType] = useAtom(lastUsedAgentTypeAtom);
+  const isMultiHarnessEnabled = useAtomValue(isMultiHarnessEnabledAtom);
+  // A stored "pi" is unusable once multi-harness is turned off — fall back to Claude.
+  const defaultAgentType: AgentTypeName =
+    lastUsedAgentType === "pi" && !isMultiHarnessEnabled ? "claude" : lastUsedAgentType;
+
+  const handleCreateAgent = useCallback(
+    async (requestedType?: AgentTypeName): Promise<void> => {
+      if (isCreating) return;
+      setIsCreating(true);
+      try {
+        // Explicit menu choice wins (and becomes the new default); a plain
+        // click / keybinding / Cmd+K creates the last-used type.
+        const agentType = requestedType ?? defaultAgentType;
+        if (requestedType !== undefined) {
+          setLastUsedAgentType(requestedType);
+        }
+        // Inherit the model from the currently viewed agent so the new agent
+        // starts with the same model selection. Terminal agents never read it.
+        const currentAgent = agentID ? workspaceAgents.find((a) => a.id === agentID) : undefined;
+        const model = currentAgent?.model as LlmModel | undefined;
+        let response;
+        try {
+          response = await createWorkspaceAgent({
+            path: { workspace_id: workspaceID },
+            body: { model, agentType },
+          });
+        } catch (error) {
+          // A stored type can become unavailable (e.g. a registered agent
+          // whose registration was deleted) — retry once as Claude.
+          if (requestedType === undefined && agentType !== "claude") {
+            setLastUsedAgentType("claude");
+            response = await createWorkspaceAgent({
+              path: { workspace_id: workspaceID },
+              body: { model, agentType: "claude" },
+            });
+          } else {
+            throw error;
+          }
+        }
+
+        if (response.data) {
+          posthog.capture("agent.added", {
+            workspace_id: workspaceID,
+            agent_id: response.data.id,
+            model: model ?? null,
+            agent_type: agentType,
+          });
+          navigateToAgent(workspaceID, response.data.id);
+        }
+      } catch (error) {
+        console.error("Failed to create agent:", error);
+      } finally {
+        setIsCreating(false);
       }
-    } catch (error) {
-      console.error("Failed to create agent:", error);
-    } finally {
-      setIsCreating(false);
-    }
-  }, [workspaceID, isCreating, navigateToAgent, agentID, workspaceAgents]);
+    },
+    [workspaceID, isCreating, navigateToAgent, agentID, workspaceAgents, defaultAgentType, setLastUsedAgentType],
+  );
 
   useKeybindingHandler("new_agent", () => {
     void handleCreateAgent();
@@ -435,18 +476,59 @@ export const AgentTabs = (): ReactElement | null => {
         alwaysCloseable
         contextMenuContent={contextMenuContent}
       >
-        <IconButton
-          variant="ghost"
-          size="1"
-          color="gray"
-          className={styles.addButton}
-          onClick={() => void handleCreateAgent()}
-          disabled={isCreating}
-          aria-label="Add agent"
-          data-testid={ElementIds.ADD_AGENT_BUTTON}
-        >
-          <PlusIcon size={14} />
-        </IconButton>
+        <Flex gap="2" align="center" className={styles.addButtonGroup}>
+          <IconButton
+            variant="ghost"
+            size="1"
+            color="gray"
+            className={styles.addButton}
+            onClick={() => void handleCreateAgent()}
+            disabled={isCreating}
+            aria-label="Add agent"
+            title={`New ${AGENT_TYPE_LABELS[defaultAgentType]} agent`}
+            data-testid={ElementIds.ADD_AGENT_BUTTON}
+          >
+            <PlusIcon size={14} />
+          </IconButton>
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              <IconButton
+                variant="ghost"
+                size="1"
+                color="gray"
+                className={styles.addButtonChevron}
+                disabled={isCreating}
+                aria-label="Choose agent type"
+                data-testid={ElementIds.ADD_AGENT_CHEVRON_BUTTON}
+              >
+                <ChevronDownIcon size={12} />
+              </IconButton>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content data-testid={ElementIds.AGENT_TYPE_MENU}>
+              <DropdownMenu.Item
+                data-testid={ElementIds.AGENT_TYPE_MENU_ITEM_CLAUDE}
+                onSelect={() => void handleCreateAgent("claude")}
+              >
+                Claude
+              </DropdownMenu.Item>
+              {isMultiHarnessEnabled && (
+                <DropdownMenu.Item
+                  data-testid={ElementIds.AGENT_TYPE_MENU_ITEM_PI}
+                  onSelect={() => void handleCreateAgent("pi")}
+                >
+                  pi
+                </DropdownMenu.Item>
+              )}
+              <DropdownMenu.Item
+                data-testid={ElementIds.AGENT_TYPE_MENU_ITEM_TERMINAL}
+                onSelect={() => void handleCreateAgent("terminal")}
+              >
+                Terminal
+              </DropdownMenu.Item>
+              {/* registered terminal agents appended in task 4.1 */}
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+        </Flex>
       </TabBar>
       <DeleteConfirmationDialog
         isOpen={deleteTarget !== null}
