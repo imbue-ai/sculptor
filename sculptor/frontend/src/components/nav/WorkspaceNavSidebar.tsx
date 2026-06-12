@@ -30,6 +30,7 @@ import {
 import { useHelpDialog } from "~/common/state/hooks/useHelpDialog.ts";
 import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
+import { prefetchWorkspaceDataAtom } from "~/common/state/hooks/useWorkspacePrefetch.ts";
 import { useCommandPalette } from "~/components/CommandPalette";
 import {
   renamingWorkspaceIdAtom,
@@ -201,6 +202,17 @@ export const WorkspaceNavSidebar = (): ReactElement | null => {
     [agentIdsByWorkspace, navigateToAgent, navigateToWorkspace],
   );
 
+  // Hovering a row warms that workspace's git caches so a follow-up click
+  // renders from cache. Open tabs are already prefetched on hydration
+  // (usePrefetchOpenWorkspaces); this mostly helps closed workspaces.
+  const prefetchWorkspaceData = useSetAtom(prefetchWorkspaceDataAtom);
+  const handleWorkspaceHover = useCallback(
+    (workspaceId: string): void => {
+      prefetchWorkspaceData(workspaceId);
+    },
+    [prefetchWorkspaceData],
+  );
+
   const handleOpenHome = useCallback((): void => {
     ensurePseudoTab(HOME_TAB_ID);
     navigateToHome();
@@ -329,6 +341,7 @@ export const WorkspaceNavSidebar = (): ReactElement | null => {
                               type="button"
                               className={styles.workspaceRowButton}
                               onClick={() => handleWorkspaceClick(ws.objectId)}
+                              onPointerEnter={() => handleWorkspaceHover(ws.objectId)}
                               data-testid={ElementIds.WORKSPACE_TAB}
                               data-has-unread={String(status.hasUnread)}
                             >
