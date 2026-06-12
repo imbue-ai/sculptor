@@ -19,7 +19,14 @@ import { keybindingsMapAtom } from "~/common/keybindings/atoms.ts";
 import { useImbueNavigate, useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { isDismissibleOverlayOpen } from "~/common/overlayUtils.ts";
 import { shouldHandleKeybinding } from "~/common/ShortcutUtils.ts";
-import { agentTabOrderAtom, lastUsedAgentTypeAtom, type StoredAgentType } from "~/common/state/atoms/agentTabs.ts";
+import {
+  agentTabOrderAtom,
+  encodeRegisteredAgentType,
+  lastUsedAgentTypeAtom,
+  parseStoredAgentType,
+  REGISTERED_AGENT_TYPE_PREFIX,
+  type StoredAgentType,
+} from "~/common/state/atoms/agentTabs.ts";
 import { debugViewAtomFamily } from "~/common/state/atoms/alphaScroll.ts";
 import { pendingAgentTitlesAtom, tasksArrayAtom, updateTasksAtom } from "~/common/state/atoms/tasks.ts";
 import { isMultiHarnessEnabledAtom } from "~/common/state/atoms/userConfig.ts";
@@ -41,11 +48,10 @@ import styles from "./AgentTabs.module.scss";
 
 const NO_SESSION_TOOLTIP = "No active session — send a prompt first";
 
-const AGENT_TYPE_LABELS: Record<AgentTypeName, string> = {
+const AGENT_TYPE_LABELS: Record<Exclude<AgentTypeName, "registered">, string> = {
   claude: "Claude",
   pi: "pi",
   terminal: "Terminal",
-  registered: "Claude", // a stored registered type falls back to Claude until phase 4
 };
 
 /**
@@ -242,14 +248,11 @@ export const AgentTabs = (): ReactElement | null => {
           registrationId = requestedRegistrationId;
           setLastUsedAgentType(
             requestedType === "registered" && requestedRegistrationId !== undefined
-              ? `registered:${requestedRegistrationId}`
+              ? encodeRegisteredAgentType(requestedRegistrationId)
               : requestedType,
           );
-        } else if (defaultAgentType.startsWith("registered:")) {
-          agentType = "registered";
-          registrationId = defaultAgentType.slice("registered:".length);
         } else {
-          agentType = defaultAgentType as AgentTypeName;
+          ({ agentType, registrationId } = parseStoredAgentType(defaultAgentType));
         }
         // Inherit the model from the currently viewed agent so the new agent
         // starts with the same model selection. Terminal agents never read it.
@@ -501,9 +504,9 @@ export const AgentTabs = (): ReactElement | null => {
             disabled={isCreating}
             aria-label="Add agent"
             title={
-              defaultAgentType.startsWith("registered:")
+              defaultAgentType.startsWith(REGISTERED_AGENT_TYPE_PREFIX)
                 ? "New agent"
-                : `New ${AGENT_TYPE_LABELS[defaultAgentType as AgentTypeName]} agent`
+                : `New ${AGENT_TYPE_LABELS[defaultAgentType as Exclude<AgentTypeName, "registered">]} agent`
             }
             data-testid={ElementIds.ADD_AGENT_BUTTON}
           >
@@ -512,7 +515,7 @@ export const AgentTabs = (): ReactElement | null => {
           <DropdownMenu.Root
             onOpenChange={(open) => {
               // Re-read the registrations directory on every open so the
-              // menu tracks the filesystem without a restart (REQ-REG-3).
+              // menu tracks the filesystem without a restart.
               if (open) refreshRegistrations();
             }}
           >
