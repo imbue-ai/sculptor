@@ -26,6 +26,7 @@ from imbue_core.concurrency_group import ConcurrencyExceptionGroup
 from imbue_core.concurrency_group import ConcurrencyGroup
 from imbue_core.event_utils import ReadOnlyEvent
 from imbue_core.progress_tracking.progress_tracking import RootProgressHandle
+from sculptor.common.plugin import get_plugins_base_dir
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
@@ -37,6 +38,7 @@ from sculptor.interfaces.agents.agent import EnvironmentReleasedRunnerMessage
 from sculptor.interfaces.agents.agent import EnvironmentTypes
 from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.services.data_model_service.data_types import DataModelTransaction
+from sculptor.services.dependency_management_service import Dependency
 from sculptor.services.task_service.data_types import ServiceCollectionForTask
 from sculptor.services.task_service.errors import UserPausedTaskError
 from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
@@ -157,6 +159,7 @@ def run_terminal_agent_task_v1(
                         settings=settings,
                         shutdown_event=shutdown_event,
                         on_started=on_started,
+                        claude_binary_path=environment.get_tool_binary_path(Dependency.CLAUDE),
                     )
                 finally:
                     with services.data_model_service.open_task_transaction() as transaction:
@@ -184,6 +187,7 @@ def _run_terminal_agent_in_environment(
     settings: SculptorSettings,
     shutdown_event: ReadOnlyEvent,
     on_started: Callable[[], None] | None,
+    claude_binary_path: str | None = None,
 ) -> None:
     """Spawn the agent PTY and idle until shutdown, ticking the diff refresher.
 
@@ -195,11 +199,20 @@ def _run_terminal_agent_in_environment(
     # SCULPT_AGENT_ID so `sculpt signal …` can identify this agent. The pty
     # scrubs inherited SCULPT_*/SCULPTOR_* vars and re-applies extra_env (PATH
     # is prepended), so everything must go through extra_env.
+    #
+    # SCULPT_PLUGINS_DIR and SCULPT_CLAUDE_BIN exist for registration launch
+    # commands (shell-expanded at launch): install-relative paths move on app
+    # updates — and on every AppImage launch — so a registration file cannot
+    # bake them in.
     extra_env: dict[str, str] = {
         "SCULPT_API_PORT": str(settings.BACKEND_PORT),
         "SCULPT_WORKSPACE_ID": str(task_state.workspace_id),
         "SCULPT_PROJECT_ID": str(project.object_id),
         "SCULPT_AGENT_ID": str(task.object_id),
+        "SCULPT_PLUGINS_DIR": str(get_plugins_base_dir()),
+        # Managed binary when resolvable; bare `claude` (PATH) as fallback so
+        # the command still works for users who manage their own install.
+        "SCULPT_CLAUDE_BIN": claude_binary_path or "claude",
         "PATH": str(get_sculpt_bin_dir()),
     }
     register_agent_terminal_config(
