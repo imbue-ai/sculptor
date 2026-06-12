@@ -1,10 +1,9 @@
-"""Integration tests for plain Terminal agents (terminal-agents phase 1).
+"""Integration tests for plain Terminal agents.
 
-A Terminal agent's main panel is a PTY terminal instead of a chat
-(REQ-UI-1/2), the shell runs in the workspace code directory (REQ-TERM-1),
-file changes made in the shell reach the Changes panel via the periodic
-diff refresh (REQ-TERM-3), the PTY survives tab switches (REQ-LIFE-1), and
-the tab behaves like any other agent tab (REQ-UI-3, REQ-TERM-2).
+A Terminal agent's main panel is a PTY terminal instead of a chat, the shell
+runs in the workspace code directory, file changes made in the shell reach
+the Changes panel via the periodic diff refresh, the PTY survives tab
+switches, and the tab behaves like any other agent tab.
 """
 
 import re
@@ -15,6 +14,7 @@ from playwright.sync_api import expect
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
 from sculptor.testing.elements.file_tree import get_changes_tree
+from sculptor.testing.elements.terminal import get_agent_terminal_panel
 from sculptor.testing.elements.terminal import get_agent_terminal_textarea
 from sculptor.testing.elements.terminal import run_command_in_agent_terminal
 from sculptor.testing.elements.terminal import wait_for_xterm_substring
@@ -54,7 +54,7 @@ def test_terminal_agent_basic(sculptor_instance_: SculptorInstance) -> None:
     expect(terminal_tab).to_be_visible()
 
     # The terminal occupies the chat space: panel present, chat input absent.
-    expect(page.get_by_test_id(ElementIDs.AGENT_TERMINAL_PANEL)).to_be_visible()
+    expect(get_agent_terminal_panel(page)).to_be_visible()
     expect(page.get_by_test_id(ElementIDs.CHAT_INPUT)).to_have_count(0)
 
     # Shell round trip in the workspace code directory.
@@ -71,23 +71,23 @@ def test_terminal_agent_basic(sculptor_instance_: SculptorInstance) -> None:
     expect(changes_tree.get_tree_rows().filter(has_text="a_new_file.txt")).to_be_visible(timeout=15_000)
 
     # While idle the tab's status dot is neutral (read/unread) — terminal
-    # agents never derive running/waiting from chat state (REQ-TERM-2).
+    # agents never derive running/waiting from chat state.
     expect(terminal_tab).to_have_attribute("data-dot-status", re.compile(r"^(read|unread)$"))
 
     # Tab switching: the Claude tab still has its chat; switching back to the
     # terminal reconnects with the scrollback replay (the PTY survived the
-    # WebSocket disconnect — REQ-LIFE-1).
+    # WebSocket disconnect).
     agent_tabs.first.click()
     expect(page.get_by_test_id(ElementIDs.CHAT_INPUT)).to_be_visible()
-    expect(page.get_by_test_id(ElementIDs.AGENT_TERMINAL_PANEL)).to_have_count(0)
+    expect(get_agent_terminal_panel(page)).to_have_count(0)
     terminal_tab.click()
-    expect(page.get_by_test_id(ElementIDs.AGENT_TERMINAL_PANEL)).to_be_visible()
+    expect(get_agent_terminal_panel(page)).to_be_visible()
     wait_for_xterm_substring(page, "hello-sculptor")
 
 
 @user_story("to manage terminal agent tabs like any other agent tab")
 def test_terminal_agent_tab_rename_and_delete(sculptor_instance_: SculptorInstance) -> None:
-    """Terminal agent tabs rename and delete exactly like chat-agent tabs (REQ-UI-3)."""
+    """Terminal agent tabs rename and delete exactly like chat-agent tabs."""
     page = sculptor_instance_.page
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Terminal Tab WS")
     agent_tab_bar = PlaywrightAgentTabBarElement(page)

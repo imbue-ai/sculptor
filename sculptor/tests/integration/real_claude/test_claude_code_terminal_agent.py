@@ -1,7 +1,7 @@
 """Real-Claude e2e for the bundled Claude Code terminal-agent sample.
 
-Installs the shipped sample (REQ-CLAUDE-1) into the test instance's sculptor
-folder — with the hooks path rewritten to that folder — creates the
+Installs the shipped sample into the test instance's sculptor folder — with
+the hooks path rewritten to that folder — creates the
 registered agent, drives one trivial TUI turn, and asserts the hooks
 reported state: session id persisted (SessionStart), busy during the turn
 (UserPromptSubmit), idle after (Stop).
@@ -20,8 +20,8 @@ from pathlib import Path
 import pytest
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
+from sculptor.testing.elements.terminal import get_agent_terminal_panel
 from sculptor.testing.elements.terminal import get_agent_terminal_textarea
 from sculptor.testing.elements.terminal import get_xterm_buffer_text
 from sculptor.testing.elements.terminal import type_into_agent_terminal
@@ -144,7 +144,7 @@ def test_claude_code_terminal_agent(sculptor_instance_: SculptorInstance) -> Non
 
     claude_tab = agent_tab_bar.get_agent_tab_by_name("Claude Code 1").first
     expect(claude_tab).to_be_visible()
-    expect(page.get_by_test_id(ElementIDs.AGENT_TERMINAL_PANEL)).to_be_visible()
+    expect(get_agent_terminal_panel(page)).to_be_visible()
     expect(get_agent_terminal_textarea(page)).to_be_attached()
 
     _dismiss_startup_dialogs(page)

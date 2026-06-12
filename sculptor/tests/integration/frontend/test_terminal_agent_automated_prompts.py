@@ -12,9 +12,9 @@ import re
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.terminal import get_agent_terminal_panel
 from sculptor.testing.elements.terminal import wait_for_xterm_substring
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -71,11 +71,11 @@ def test_prompt_features_route_to_capable_terminal_agent(sculptor_instance_: Scu
 
         prompts_tab = agent_tab_bar.get_agent_tab_by_name("Fake Prompts 1").first
         expect(prompts_tab).to_be_visible()
-        expect(page.get_by_test_id(ElementIDs.AGENT_TERMINAL_PANEL)).to_be_visible()
+        expect(get_agent_terminal_panel(page)).to_be_visible()
         wait_for_xterm_substring(page, "FAKE-PROMPTS-BANNER")
         # The idle signal landed in the backend: the program is at its prompt.
         wait_for_xterm_substring(page, "IDLE-DONE")
-        expect(prompts_tab).to_have_attribute("data-dot-status", _NEUTRAL_DOT, timeout=15_000)
+        expect(prompts_tab).to_have_attribute("data-dot-status", _NEUTRAL_DOT)
 
         task_page.activate_changes_panel(scope="uncommitted")
         commit_button = task_page.get_commit_button()
@@ -87,7 +87,7 @@ def test_prompt_features_route_to_capable_terminal_agent(sculptor_instance_: Scu
         wait_for_xterm_substring(page, "RECEIVED:Stage every changed")
 
         # The program signalled busy after the prompt — the button disables.
-        expect(prompts_tab).to_have_attribute("data-dot-status", "running", timeout=15_000)
+        expect(prompts_tab).to_have_attribute("data-dot-status", "running")
         expect(commit_button).to_be_disabled()
 
         # A registered agent WITHOUT the opt-in: disabled even when idle.
@@ -98,7 +98,7 @@ def test_prompt_features_route_to_capable_terminal_agent(sculptor_instance_: Scu
         no_opt_in_tab = agent_tab_bar.get_agent_tab_by_name("No Prompt 1").first
         expect(no_opt_in_tab).to_be_visible()
         wait_for_xterm_substring(page, "NOPROMPT-DONE")
-        expect(no_opt_in_tab).to_have_attribute("data-dot-status", _NEUTRAL_DOT, timeout=15_000)
+        expect(no_opt_in_tab).to_have_attribute("data-dot-status", _NEUTRAL_DOT)
         expect(commit_button).to_be_disabled()
 
         # A plain terminal: disabled (phase-1 regression check).
@@ -106,7 +106,7 @@ def test_prompt_features_route_to_capable_terminal_agent(sculptor_instance_: Scu
         agent_tab_bar.get_agent_type_menu_item_terminal().click()
         terminal_tab = agent_tab_bar.get_agent_tab_by_name("Terminal 1").first
         expect(terminal_tab).to_be_visible()
-        expect(page.get_by_test_id(ElementIDs.AGENT_TERMINAL_PANEL)).to_be_visible()
+        expect(get_agent_terminal_panel(page)).to_be_visible()
         expect(commit_button).to_be_disabled()
 
         # Back on the chat agent the button sends a chat message as before.

@@ -2,18 +2,17 @@
 
 A fake registered program (an inline shell snippet that drives the REAL
 `sculpt signal` CLI) is registered via TOML; creating the agent must run it
-as a shell job in the agent's terminal (REQ-REG-2): the launch command is
-written exactly once after the shell's first output, its signals drive the
-tab dot, and quitting it lands at a usable shell prompt with no relaunch
-(REQ-LIFE-5).
+as a shell job in the agent's terminal: the launch command is written
+exactly once after the shell's first output, its signals drive the tab dot,
+and quitting it lands at a usable shell prompt with no relaunch.
 """
 
 import re
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
+from sculptor.testing.elements.terminal import get_agent_terminal_panel
 from sculptor.testing.elements.terminal import get_agent_terminal_textarea
 from sculptor.testing.elements.terminal import get_xterm_buffer_text
 from sculptor.testing.elements.terminal import run_command_in_agent_terminal
@@ -50,15 +49,15 @@ def test_registered_terminal_agent_launches_program(sculptor_instance_: Sculptor
 
         terminal_tab = agent_tab_bar.get_agent_tab_by_name("Fake TUI 1").first
         expect(terminal_tab).to_be_visible()
-        expect(page.get_by_test_id(ElementIDs.AGENT_TERMINAL_PANEL)).to_be_visible()
+        expect(get_agent_terminal_panel(page)).to_be_visible()
         expect(get_agent_terminal_textarea(page)).to_be_attached()
 
         # The launch command ran (the readiness wait didn't swallow it).
         wait_for_xterm_substring(page, "FAKE-TUI-BANNER")
 
         # The program's own signals drive the dot: busy → spinner, idle → neutral.
-        expect(terminal_tab).to_have_attribute("data-dot-status", "running", timeout=15_000)
-        expect(terminal_tab).to_have_attribute("data-dot-status", re.compile(r"^(read|unread)$"), timeout=20_000)
+        expect(terminal_tab).to_have_attribute("data-dot-status", "running")
+        expect(terminal_tab).to_have_attribute("data-dot-status", re.compile(r"^(read|unread)$"))
 
         # Quit the program (it reads one line of stdin) — this lands at a
         # usable shell prompt in the same terminal, with no relaunch.
@@ -89,8 +88,7 @@ def test_registered_terminal_agent_resumes_after_restart(
     sculptor_instance_factory_: SculptorInstanceFactory,
 ) -> None:
     """After a restart the handler relaunches via the rendered resume command
-    (REQ-LIFE-3) — the reported session id flows TOML → signal → state →
-    resume template."""
+    — the reported session id flows TOML → signal → state → resume template."""
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
         start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Resume WS")
@@ -108,7 +106,7 @@ def test_registered_terminal_agent_resumes_after_restart(
         registered_item = agent_tab_bar.get_agent_type_menu_item_registered("fake-resume")
         expect(registered_item).to_be_visible()
         registered_item.click()
-        expect(page.get_by_test_id(ElementIDs.AGENT_TERMINAL_PANEL)).to_be_visible()
+        expect(get_agent_terminal_panel(page)).to_be_visible()
 
         wait_for_xterm_substring(page, "FIRST-RUN-BANNER")
         # The session id reached the backend (the sculpt call returned).
@@ -125,7 +123,7 @@ def test_registered_terminal_agent_resumes_after_restart(
         resume_tab = agent_tab_bar.get_agent_tab_by_name("Fake Resume 1").first
         expect(resume_tab).to_be_visible()
         resume_tab.click()
-        expect(page.get_by_test_id(ElementIDs.AGENT_TERMINAL_PANEL)).to_be_visible()
+        expect(get_agent_terminal_panel(page)).to_be_visible()
 
         # The relaunch used the rendered resume command with the quoted id.
         wait_for_xterm_substring(page, "RESUMED-WITH fake-session-42")
@@ -135,15 +133,15 @@ def test_registered_terminal_agent_resumes_after_restart(
 def test_plain_terminal_agent_gets_fresh_shell_after_restart(
     sculptor_instance_factory_: SculptorInstanceFactory,
 ) -> None:
-    """Plain terminals relaunch as a bare fresh shell (REQ-LIFE-4) — no
-    command replayed, pre-restart scrollback gone (expected per spec)."""
+    """Plain terminals relaunch as a bare fresh shell — no command replayed,
+    pre-restart scrollback gone (expected per spec)."""
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
         start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Fresh Shell WS")
         agent_tab_bar = PlaywrightAgentTabBarElement(page)
         agent_tab_bar.open_agent_type_menu()
         agent_tab_bar.get_agent_type_menu_item_terminal().click()
-        expect(page.get_by_test_id(ElementIDs.AGENT_TERMINAL_PANEL)).to_be_visible()
+        expect(get_agent_terminal_panel(page)).to_be_visible()
         expect(get_agent_terminal_textarea(page)).to_be_attached()
         page.wait_for_timeout(3_000)
         run_command_in_agent_terminal(page, "echo marker-before-restart")
@@ -160,7 +158,7 @@ def test_plain_terminal_agent_gets_fresh_shell_after_restart(
         terminal_tab = agent_tab_bar.get_agent_tab_by_name("Terminal 1").first
         expect(terminal_tab).to_be_visible()
         terminal_tab.click()
-        expect(page.get_by_test_id(ElementIDs.AGENT_TERMINAL_PANEL)).to_be_visible()
+        expect(get_agent_terminal_panel(page)).to_be_visible()
         expect(get_agent_terminal_textarea(page)).to_be_attached()
         page.wait_for_timeout(3_000)
 
