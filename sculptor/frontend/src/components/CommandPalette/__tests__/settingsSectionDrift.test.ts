@@ -1,9 +1,11 @@
 import { getDefaultStore } from "jotai";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SETTINGS_SECTIONS } from "~/pages/settings/sections.ts";
+import type { UserConfig } from "~/api";
+import { SETTINGS_SECTIONS, SettingsSection } from "~/pages/settings/sections.ts";
 
 import { DEFAULT_THEME_BUILDER_SETTINGS, themeBuilderSettingsAtom } from "../../../common/state/atoms/themeBuilder.ts";
+import { userConfigAtom } from "../../../common/state/atoms/userConfig.ts";
 import { buildSettingsCommands } from "../builtinCommands/settings.ts";
 import type { CommandRuntime } from "../runtime.ts";
 
@@ -49,6 +51,12 @@ const makeRuntime = (): CommandRuntime =>
   }) as unknown as CommandRuntime;
 
 describe("Settings section drift", () => {
+  // The Plugins section is gated on the experimental frontend-plugins flag
+  // at both consumers; turn it on so the parity checks cover every section.
+  beforeEach(() => {
+    getDefaultStore().set(userConfigAtom, { enableFrontendPlugins: true } as unknown as UserConfig);
+  });
+
   it("every section in SETTINGS_SECTIONS has a corresponding palette command", () => {
     getDefaultStore().set(themeBuilderSettingsAtom, { ...DEFAULT_THEME_BUILDER_SETTINGS });
     const cmds = buildSettingsCommands(makeRuntime());
@@ -73,6 +81,12 @@ describe("Settings section drift", () => {
       const cmd = cmds.find((c) => c.id === `settings.page.${section.id.toLowerCase()}`);
       expect(cmd?.title).toBe(section.displayName);
     }
+  });
+
+  it("excludes the Plugins section when the frontend-plugins flag is off", () => {
+    getDefaultStore().set(userConfigAtom, null);
+    const cmds = buildSettingsCommands(makeRuntime());
+    expect(cmds.some((c) => c.id === `settings.page.${SettingsSection.PLUGINS.toLowerCase()}`)).toBe(false);
   });
 
   it("palette command performs runtime.navigate.toSettings with the section id", () => {
