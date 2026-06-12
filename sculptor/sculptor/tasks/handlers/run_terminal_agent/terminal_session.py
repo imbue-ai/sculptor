@@ -16,9 +16,13 @@ shell self-exit.
 from __future__ import annotations
 
 import dataclasses
+import os
+import shlex
+import signal
 import threading
 from pathlib import Path
 
+import psutil
 from loguru import logger
 
 from imbue_core.agents.data_types.ids import TaskID
@@ -135,6 +139,56 @@ def stop_agent_terminal(task_id: TaskID) -> None:
     manager = unregister_terminal_manager(make_agent_terminal_id(task_id))
     if manager is not None:
         manager.stop()
+
+
+def render_resume_command(template: str, session_id: str) -> str:
+    """Render a registration's resume template with the reported session id.
+
+    `str.replace`, NOT `.format` — a template containing other braces must
+    not crash (the loader already validates this; belt-and-suspenders).
+    `shlex.quote` even though the API-validated charset
+    ([A-Za-z0-9._-]{1,128}) can't currently contain shell metacharacters —
+    two independent layers per architecture §4.
+    """
+    return template.replace("{session_id}", shlex.quote(session_id))
+
+
+_REAP_SIGHUP_WAIT_SECONDS = 1.0
+
+
+def reap_stale_shell(pid: int) -> None:
+    """Kill a crash-surviving shell from a previous run, if it is provably ours.
+
+    Guard order matters — a recycled pid must never be signalled:
+    1. the pid exists;
+    2. it is a session leader (our shells come from pty.fork(), so
+       pgid == pid; a recycled pid is almost never one);
+    3. it predates this backend process (a shell we spawned in a previous
+       run cannot be younger than the current backend).
+    Then SIGHUP the process group (closing-the-terminal semantics), with a
+    SIGKILL fallback after a short wait.
+    """
+    try:
+        if not psutil.pid_exists(pid):
+            return
+        if os.getpgid(pid) != pid:
+            logger.debug("Not reaping pid {}: not a session leader (recycled pid?)", pid)
+            return
+        process = psutil.Process(pid)
+        if process.create_time() >= psutil.Process().create_time():
+            logger.debug("Not reaping pid {}: younger than this backend (recycled pid?)", pid)
+            return
+        logger.info("Reaping stale terminal-agent shell {} from a previous run", pid)
+        os.killpg(pid, signal.SIGHUP)
+        try:
+            process.wait(timeout=_REAP_SIGHUP_WAIT_SECONDS)
+        except psutil.TimeoutExpired:
+            os.killpg(pid, signal.SIGKILL)
+    except (ProcessLookupError, psutil.NoSuchProcess):
+        logger.debug("Stale shell {} disappeared during reaping", pid)
+    except PermissionError:
+        # macOS raises this for foreign processes — treat as "not ours".
+        logger.debug("No permission to inspect/signal pid {}; skipping reap", pid)
 
 
 def write_launch_command(manager: LocalTerminalManager, command: str, timeout_seconds: float = 5.0) -> None:

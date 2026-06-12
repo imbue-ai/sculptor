@@ -426,6 +426,12 @@ class LocalTerminalManager(TerminalManager):
             self._unregister_from_registry()
             self._close_pty_process()
 
+    @property
+    def shell_pid(self) -> int | None:
+        """The pid of this terminal's shell, or None when not running."""
+        pty_process = self._pty_process
+        return pty_process.shell_pid if pty_process is not None else None
+
     def write(self, data: bytes) -> None:
         """Write data to the terminal.
 
