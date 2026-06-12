@@ -201,6 +201,17 @@ class SignalEventRequest(RequestModel):
     session_id: str | None = None
 
 
+class TerminalInputRequest(RequestModel):
+    """An automated prompt for a registered terminal agent (architecture §9).
+
+    Smallest viable surface for v1: text plus whether to submit it — no
+    arbitrary key injection.
+    """
+
+    text: str
+    submit: bool = True
+
+
 class WorkspaceResponse(SerializableModel):
     object_id: WorkspaceID
     project_id: ProjectID

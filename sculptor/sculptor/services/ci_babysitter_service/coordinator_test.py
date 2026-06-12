@@ -163,6 +163,9 @@ class _StubTaskService(TaskService):
     def get_saved_messages_for_task(self, task_id: TaskID, transaction: DataModelTransaction) -> Any:
         return _stub(task_id, transaction)
 
+    def get_live_messages_for_task(self, task_id: TaskID) -> Any:
+        return _stub(task_id)
+
     @contextmanager
     def subscribe_to_all_tasks_for_user(self, user_reference: Any) -> Generator[Any, None, None]:
         del user_reference
