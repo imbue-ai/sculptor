@@ -80,6 +80,11 @@ sculptor = [
     "services/environment_service/providers/docker/imbue_addons/*",
     "services/environment_service/providers/docker/default_devcontainer/*",
     "cli/ssh_config/*",
+    # Sculptor-pinned pi extensions, loaded into pi via `-e` at launch. They are
+    # `.ts` source (pi runs them through jiti, no build step) and must ship in
+    # the wheel so PiAgent.start can resolve them in an installed build, not just
+    # a repo checkout.
+    "agents/pi_agent/extensions/*",
 ]
 # Sadly, the build system will not complain if the above are misspelled.
 
