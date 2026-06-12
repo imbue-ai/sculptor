@@ -253,6 +253,10 @@ class UserConfig(SerializableModel):
         default=False,
         description="When enabled, the new-workspace form offers the harness picker so workspaces can be created with the experimental pi harness. Off by default; when off, new workspaces always use Claude. Gates only the creation entry point — an existing pi workspace still runs pi regardless.",
     )
+    enable_frontend_plugins: bool = Field(
+        default=False,
+        description="When enabled, the frontend plugin system loads runtime plugins and shows the Plugins settings section. Off by default; toggling requires an app reload to take effect.",
+    )
     default_fast_mode: bool = Field(
         default=False,
         description="When enabled, new agents default to fast mode",
