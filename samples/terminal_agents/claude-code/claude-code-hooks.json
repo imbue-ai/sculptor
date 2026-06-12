@@ -37,6 +37,18 @@
     ],
     "Notification": [
       {
+        "matcher": "permission_prompt|worker_permission_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sculpt signal waiting || true"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "AskUserQuestion|ExitPlanMode",
         "hooks": [
           {
             "type": "command",
@@ -52,6 +64,15 @@
           {
             "type": "command",
             "command": "sculpt signal files-changed || true"
+          }
+        ]
+      },
+      {
+        "matcher": "AskUserQuestion|ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sculpt signal busy || true"
           }
         ]
       }
