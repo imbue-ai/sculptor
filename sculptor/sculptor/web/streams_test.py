@@ -62,6 +62,7 @@ def test_convert_to_user_update_collects_models_and_overwrites_duplicates() -> N
 
 def test_convert_to_user_update_raises_for_unexpected_models() -> None:
     with pytest.raises(AssertionError):
+        # deliberately passes the wrong type to exercise the runtime assertion
         # pyrefly: ignore [bad-argument-type]
         _convert_to_user_update(["unexpected model"])
 

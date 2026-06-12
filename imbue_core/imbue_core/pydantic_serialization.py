@@ -26,6 +26,7 @@ class EvolvableModel:
 
         assert isinstance(attribute, _Evolver)
         dest_evolver: _Evolver[T] = cast(_Evolver[T], attribute)
+        # the evolver's attribute-reference trick is invisible to the type system (V is really T here)
         # pyrefly: ignore [bad-argument-type]
         dest_evolver.assign(new_value)
 

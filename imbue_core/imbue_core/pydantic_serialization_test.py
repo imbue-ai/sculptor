@@ -15,8 +15,9 @@ class TestObject(SerializableModel):
 
 
 def test_simple() -> None:
-    # pyrefly: ignore [missing-argument]
-    obj = TestObject(**dict(name="Filiz", languageCode="tr-TR", innerData={"snake_key": "value", "camelKey": "value"}))
+    obj = TestObject.model_validate(
+        dict(name="Filiz", languageCode="tr-TR", innerData={"snake_key": "value", "camelKey": "value"})
+    )
     assert model_dump(obj) == snapshot(
         {
             "name": "Filiz",
@@ -27,8 +28,9 @@ def test_simple() -> None:
 
 
 def test_to_camel() -> None:
-    # pyrefly: ignore [missing-argument]
-    obj = TestObject(**dict(name="Filiz", languageCode="tr-TR", innerData={"snake_key": "value", "camelKey": "value"}))
+    obj = TestObject.model_validate(
+        dict(name="Filiz", languageCode="tr-TR", innerData={"snake_key": "value", "camelKey": "value"})
+    )
     assert model_dump(obj, is_camel_case=True) == snapshot(
         {
             "name": "Filiz",
@@ -39,8 +41,9 @@ def test_to_camel() -> None:
 
 
 def test_reversible() -> None:
-    # pyrefly: ignore [missing-argument]
-    obj = TestObject(**dict(name="Filiz", languageCode="tr-TR", innerData={"snake_key": "value", "camelKey": "value"}))
+    obj = TestObject.model_validate(
+        dict(name="Filiz", languageCode="tr-TR", innerData={"snake_key": "value", "camelKey": "value"})
+    )
     assert TestObject.model_validate(model_dump(obj)) == obj
 
 

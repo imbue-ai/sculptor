@@ -509,8 +509,9 @@ class ConcurrencyGroup(MutableModel, AbstractContextManager):
         with start_finish_context(progress_handle.track_subprocess()) as subprocess_handle:
             subprocess_handle.report_command(command)
             if on_output is not None:
-                # pyrefly: ignore [bad-argument-type]
-                on_output_with_progress_tracking = sequence_callbacks(subprocess_handle.report_output_line, on_output)
+                # annotate so the ParamSpec solves to a positional-only signature, matching on_output
+                report_output_line: Callable[[str, bool], None] = subprocess_handle.report_output_line
+                on_output_with_progress_tracking = sequence_callbacks(report_output_line, on_output)
             else:
                 on_output_with_progress_tracking = subprocess_handle.report_output_line
             process = self.run_process_in_background(
@@ -526,16 +527,15 @@ class ConcurrencyGroup(MutableModel, AbstractContextManager):
                 is_checked_by_group=False,
                 log_command=log_command,
             )
-            result = process.wait()
+            returncode = process.wait()
             if is_checked_after:
                 process.check()
 
-            # pyrefly: ignore [bad-argument-type]
-            subprocess_handle.report_return_code(process.returncode)
+            subprocess_handle.report_return_code(returncode)
 
             return FinishedProcess(
                 command=tuple(process.command),
-                returncode=process.returncode,
+                returncode=returncode,
                 stdout=process.read_stdout(),
                 stderr=process.read_stderr(),
                 is_timed_out=process.get_timed_out(),

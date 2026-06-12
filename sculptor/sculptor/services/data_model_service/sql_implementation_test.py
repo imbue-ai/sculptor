@@ -460,7 +460,7 @@ def test_triggers_work_after_migration() -> None:
             # Build column values from the model's field definitions
             field_values: dict[str, Any] = {}
             for field_name, field in model_cls.model_fields.items():
-                # pyrefly: ignore [bad-argument-type]
+                assert field.annotation is not None
                 field_values[field_name] = _generate_synthetic_value(field_name, field.annotation)
 
             # Insert a row into the snapshots table
@@ -1640,6 +1640,7 @@ def test_update_project_fields_stress_disjoint_concurrent_writers(
             barrier.wait(timeout=10)
             for i in range(iterations):
                 with service.open_transaction(RequestID()) as transaction:
+                    # dynamic per-thread field names can't be statically typed against the TypedDict kwargs
                     # pyrefly: ignore [bad-argument-type]
                     transaction.update_project_fields(project.object_id, **{field_name: f"{field_name}_iter_{i}"})
         except BaseException as e:

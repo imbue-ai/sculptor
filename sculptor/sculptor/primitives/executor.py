@@ -24,6 +24,7 @@ class ObservableThreadPoolExecutor(thread_executor_module.ThreadPoolExecutor):
         # When the executor gets lost, the weakref callback will wake up
         # the worker threads.
         def weakref_cb(_, q=self._work_queue):
+            # None is the shutdown sentinel in CPython's own ThreadPoolExecutor; typeshed types the queue too narrowly
             # pyrefly: ignore [bad-argument-type]
             q.put(None)
 

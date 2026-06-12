@@ -21,7 +21,7 @@ R = TypeVar("R")
 S = TypeVar("S")
 
 
-def sync(func: Callable[P, Awaitable[R]]) -> Callable[P, R]:
+def sync(func: Callable[P, Coroutine[Any, Any, R]]) -> Callable[P, R]:
     """Decorator that runs an async function synchronously by dispatching to
     an event loop running in a separate thread.
     """
@@ -29,7 +29,6 @@ def sync(func: Callable[P, Awaitable[R]]) -> Callable[P, R]:
     @functools.wraps(func)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         loop = _get_or_create_event_loop()
-        # pyrefly: ignore [bad-argument-type]
         return asyncio.run_coroutine_threadsafe(func(*args, **kwargs), loop).result()
 
     return wrapper

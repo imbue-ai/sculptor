@@ -48,7 +48,7 @@ class SerializedException(SerializableModel):
         traceback_dict = self.traceback_dict
         if traceback_dict is None:
             return None
-        # pyrefly: ignore [bad-argument-type]
+        assert isinstance(traceback_dict, dict), f"corrupt traceback_dict: {type(traceback_dict).__name__}"
         return FixedTraceback.from_dict(traceback_dict)
 
     @cached_property
@@ -90,6 +90,7 @@ class SerializedException(SerializableModel):
         if self.traceback is None:
             traceback_str = ""
         else:
+            # FixedTraceback deliberately duck-types stdlib TracebackType, which format_tb's stubs can't know
             # pyrefly: ignore [bad-argument-type]
             traceback_str = "".join(format_tb(self.traceback))
         return f"Traceback (most recent call last):\n{traceback_str}\n{self.exception}: {self.args}"

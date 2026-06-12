@@ -136,6 +136,7 @@ def test_run_blocking_with_compound_event() -> None:
             ["sleep", "10"],
             timeout=15.0,
             # RemoteRunningProcess lets shutdown_event be a ReadOnlyEvent, including CompoundEvent, but RunningProcess only allows MutableEvent
+            # exercises the read-only CompoundEvent path; the MutableEvent annotation exists for terminate()
             # pyrefly: ignore [bad-argument-type]
             shutdown_event=compound_event,
             shutdown_timeout_sec=2.0,
