@@ -29,17 +29,15 @@ _FAKE_GITHUB_REMOTE = "https://github.com/test-org/test-repo.git"
 
 # Fake gh CLI that always returns an open PR for "pr list" queries.
 # The backend issues a single `gh pr list --state=all` query and dispatches on
-# each row's "state" field, so the PR object must carry "state": "OPEN".
+# each row's "state" field, so the PR object must carry "state": "OPEN". For an
+# open PR it then issues a single combined `gh pr view --json
+# statusCheckRollup,reviews,reviewThreads` detail call.
 _FAKE_GH_OPEN_PR_SCRIPT = """\
 #!/bin/bash
 if [[ "$*" == *"pr list"* ]]; then
     echo '[{"number": 42, "title": "Test PR", "url": "https://github.com/test/repo/pull/42", "baseRefName": "main", "state": "OPEN"}]'
-elif [[ "$*" == *"statusCheckRollup"* ]]; then
-    echo '{"statusCheckRollup": []}'
-elif [[ "$*" == *"reviews"* ]]; then
-    echo '{"reviews": []}'
-elif [[ "$*" == *"reviewThreads"* ]]; then
-    echo '{"reviewThreads": []}'
+elif [[ "$*" == *"pr view"* ]]; then
+    echo '{"statusCheckRollup": [], "reviews": [], "reviewThreads": []}'
 fi
 """
 
@@ -66,12 +64,8 @@ case "$MODE" in
     open_pr)
         if [[ "$*" == *"pr list"* ]]; then
             echo '[{{"number": 42, "title": "Test PR", "url": "https://github.com/test/repo/pull/42", "baseRefName": "main", "state": "OPEN"}}]'
-        elif [[ "$*" == *"statusCheckRollup"* ]]; then
-            echo '{{"statusCheckRollup": []}}'
-        elif [[ "$*" == *"reviews"* ]]; then
-            echo '{{"reviews": []}}'
-        elif [[ "$*" == *"reviewThreads"* ]]; then
-            echo '{{"reviewThreads": []}}'
+        elif [[ "$*" == *"pr view"* ]]; then
+            echo '{{"statusCheckRollup": [], "reviews": [], "reviewThreads": []}}'
         fi
         ;;
 esac

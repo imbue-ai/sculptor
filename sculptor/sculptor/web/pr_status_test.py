@@ -7,9 +7,9 @@ from sculptor.primitives.ids import WorkspaceID
 from sculptor.web.pr_status import fetch_pr_status
 
 
-def _make_finished(stdout: str, returncode: int = 0) -> FinishedProcess:
+def _make_finished(stdout: str, returncode: int = 0, stderr: str = "") -> FinishedProcess:
     return FinishedProcess(
-        stdout=stdout, stderr="", returncode=returncode, command=("gh",), is_output_already_logged=False
+        stdout=stdout, stderr=stderr, returncode=returncode, command=("gh",), is_output_already_logged=False
     )
 
 
@@ -47,21 +47,17 @@ def _patch_cli(side_effect):  # noqa: ANN001
 def _pr_list_handler(prs: list[dict]):  # noqa: ANN001
     """Build a cli_handler for the single `gh pr list --state=all` call.
 
-    The backend now issues exactly one `gh pr list` query (across all states)
-    and then, for an open PR, follows up with per-PR detail calls
-    (statusCheckRollup / reviews / reviewThreads). This handler returns ``prs``
-    for the list call and empty results for the detail calls.
+    The backend issues exactly one `gh pr list` query (across all states) and
+    then, for an open PR, a single combined `gh pr view` detail call that
+    bundles statusCheckRollup / reviews / reviewThreads. This handler returns
+    ``prs`` for the list call and an empty combined object for the detail call.
     """
 
     def handler(cmd, _working_dir):  # noqa: ANN001
         if "list" in cmd:
             return _make_finished(json.dumps(prs))
-        if "statusCheckRollup" in str(cmd):
-            return _make_finished(json.dumps({"statusCheckRollup": []}))
-        if "reviews" in str(cmd):
-            return _make_finished(json.dumps({"reviews": []}))
-        if "reviewThreads" in str(cmd):
-            return _make_finished(json.dumps({"reviewThreads": []}))
+        if "view" in cmd:
+            return _make_finished(json.dumps({"statusCheckRollup": [], "reviews": [], "reviewThreads": []}))
         return _make_finished("[]")
 
     return handler
@@ -194,3 +190,100 @@ def test_merged_takes_precedence_over_closed() -> None:
 
     assert result.pr_state == "merged"
     assert result.pr_iid == 820
+
+
+# ---------------------------------------------------------------------------
+# Open PR detail is fetched in a single combined `gh pr view` call
+# ---------------------------------------------------------------------------
+
+
+def test_open_pr_details_fetched_in_single_view_call() -> None:
+    view_calls: list[list] = []
+
+    def handler(cmd, _working_dir):  # noqa: ANN001
+        if "list" in cmd:
+            return _make_finished(json.dumps([_open_pr(42)]))
+        if "view" in cmd:
+            view_calls.append(cmd)
+            return _make_finished(
+                json.dumps(
+                    {
+                        "statusCheckRollup": [{"status": "COMPLETED", "conclusion": "SUCCESS"}],
+                        "reviews": [{"state": "APPROVED", "author": {"login": "alice"}}],
+                        "reviewThreads": [
+                            {
+                                "isResolved": False,
+                                "comments": [{"author": {"login": "bob"}, "path": "a.py", "line": 3, "body": "fix"}],
+                            }
+                        ],
+                    }
+                )
+            )
+        return _make_finished("[]")
+
+    with _patch_cli(handler):
+        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+
+    assert result.pr_state == "open"
+    assert result.pipeline_status == "passed"
+    assert [a.name for a in result.approvals] == ["alice"]
+    assert len(result.unresolved_comments) == 1
+    # Exactly one `gh pr view`, and it bundles all three JSON fields in one call.
+    assert len(view_calls) == 1
+    assert view_calls[0][-1] == "statusCheckRollup,reviews,reviewThreads"
+
+
+# ---------------------------------------------------------------------------
+# A non-rate-limit failure on the detail call still reports the open PR
+# ---------------------------------------------------------------------------
+
+
+def test_open_pr_detail_failure_degrades_gracefully() -> None:
+    def handler(cmd, _working_dir):  # noqa: ANN001
+        if "list" in cmd:
+            return _make_finished(json.dumps([_open_pr(60)]))
+        if "view" in cmd:
+            return _make_finished("", returncode=1, stderr="HTTP 500 Internal Server Error")
+        return _make_finished("[]")
+
+    with _patch_cli(handler):
+        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+
+    assert result.pr_state == "open"
+    assert result.pr_iid == 60
+    assert result.pipeline_status is None
+    assert result.error_category is None
+
+
+# ---------------------------------------------------------------------------
+# Rate-limit errors surface as a rate_limited category (list and detail calls)
+# ---------------------------------------------------------------------------
+
+
+def test_rate_limit_on_list_surfaces_error() -> None:
+    def handler(cmd, _working_dir):  # noqa: ANN001
+        if "list" in cmd:
+            return _make_finished("", returncode=1, stderr="API rate limit exceeded")
+        return _make_finished("[]")
+
+    with _patch_cli(handler):
+        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+
+    assert result.pr_state == "none"
+    assert result.error_category == "rate_limited"
+    assert result.error_provider == "github"
+
+
+def test_rate_limit_on_detail_surfaces_error() -> None:
+    def handler(cmd, _working_dir):  # noqa: ANN001
+        if "list" in cmd:
+            return _make_finished(json.dumps([_open_pr(70)]))
+        if "view" in cmd:
+            return _make_finished("", returncode=1, stderr="HTTP 403: API rate limit exceeded for user")
+        return _make_finished("[]")
+
+    with _patch_cli(handler):
+        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+
+    assert result.error_category == "rate_limited"
+    assert result.error_provider == "github"

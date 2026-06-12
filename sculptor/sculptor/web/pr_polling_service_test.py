@@ -11,9 +11,14 @@ from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import PrStatusInfo
 from sculptor.web.derived import WorkspaceBranchInfo
 from sculptor.web.pr_polling_service import PrPollingService
+from sculptor.web.pr_polling_service import _CooldownDeferred
 from sculptor.web.pr_polling_service import _DISABLED_RECHECK_SECONDS
+from sculptor.web.pr_polling_service import _GLOBAL_MIN_POLL_SPACING_SECONDS
+from sculptor.web.pr_polling_service import _HostThrottle
 from sculptor.web.pr_polling_service import _MIN_POLL_INTERVAL_SECONDS
 from sculptor.web.pr_polling_service import _PollJob
+from sculptor.web.pr_polling_service import _RATE_LIMIT_COOLDOWN_SECONDS
+from sculptor.web.pr_polling_service import _TERMINAL_STATE_MULTIPLIER
 from sculptor.web.pr_polling_service import _WorkspacePollState
 from sculptor.web.pr_polling_service import _compute_poll_delay
 from sculptor.web.streams import _notify_pr_polling_service
@@ -45,6 +50,7 @@ def _make_service() -> PrPollingService:
     svc._worker_sleep_lock = threading.Lock()
     svc._gh_available = None
     svc._glab_available = None
+    svc._throttle = _HostThrottle(_GLOBAL_MIN_POLL_SPACING_SECONDS)
     object.__setattr__(svc, "_data_model_service", MagicMock())
     object.__setattr__(svc, "_workspace_service", MagicMock())
     return svc
@@ -372,24 +378,42 @@ def _make_user_config(
 
 def test_compute_poll_delay_open_uses_base_interval() -> None:
     config = _make_user_config(pr_poll_interval_seconds=45)
-    assert _compute_poll_delay(config, is_open=True) == 45.0
+    assert _compute_poll_delay(config, is_open=True, pr_state="open") == 45.0
 
 
 def test_compute_poll_delay_closed_multiplies_base() -> None:
     config = _make_user_config(pr_poll_interval_seconds=20, pr_poll_closed_multiplier=10)
-    assert _compute_poll_delay(config, is_open=False) == 200.0
+    assert _compute_poll_delay(config, is_open=False, pr_state="open") == 200.0
 
 
 def test_compute_poll_delay_floors_base_at_minimum() -> None:
     """Even with a sub-minimum interval, never schedule polls closer than the floor."""
     config = _make_user_config(pr_poll_interval_seconds=1)
-    assert _compute_poll_delay(config, is_open=True) == _MIN_POLL_INTERVAL_SECONDS
+    assert _compute_poll_delay(config, is_open=True, pr_state="open") == _MIN_POLL_INTERVAL_SECONDS
 
 
 def test_compute_poll_delay_multiplier_floors_at_one() -> None:
     """A zero or negative multiplier shouldn't make closed polls more frequent than open."""
     config = _make_user_config(pr_poll_interval_seconds=20, pr_poll_closed_multiplier=0)
-    assert _compute_poll_delay(config, is_open=False) == 20.0
+    assert _compute_poll_delay(config, is_open=False, pr_state="open") == 20.0
+
+
+def test_compute_poll_delay_terminal_state_backs_off_when_open() -> None:
+    """A merged/closed PR can't change, so an open workspace still polls it rarely."""
+    config = _make_user_config(pr_poll_interval_seconds=30)
+    expected = 30.0 * _TERMINAL_STATE_MULTIPLIER
+    assert _compute_poll_delay(config, is_open=True, pr_state="merged") == expected
+    assert _compute_poll_delay(config, is_open=True, pr_state="closed") == expected
+
+
+def test_compute_poll_delay_terminal_state_takes_largest_multiplier() -> None:
+    """Closed workspace + terminal PR uses whichever multiplier is larger."""
+    # Closed multiplier (2) would give 60; terminal multiplier wins.
+    config = _make_user_config(pr_poll_interval_seconds=30, pr_poll_closed_multiplier=2)
+    assert _compute_poll_delay(config, is_open=False, pr_state="merged") == 30.0 * _TERMINAL_STATE_MULTIPLIER
+    # A huge closed multiplier beats the terminal multiplier.
+    config2 = _make_user_config(pr_poll_interval_seconds=30, pr_poll_closed_multiplier=100)
+    assert _compute_poll_delay(config2, is_open=False, pr_state="merged") == 30.0 * 100
 
 
 # ---------------------------------------------------------------------------
@@ -535,3 +559,119 @@ def test_poll_dynamic_config_re_read_per_cycle() -> None:
         rescheduled = svc._job_queue.get_nowait()
         delay_b = rescheduled.scheduled_time - time.monotonic()
         assert 119 <= delay_b <= 121
+
+
+# ---------------------------------------------------------------------------
+# Global throttle: spacing + per-provider cooldown
+# ---------------------------------------------------------------------------
+
+
+def test_host_throttle_reserve_slot_spaces_starts() -> None:
+    """Consecutive reservations are spaced at least min_interval apart."""
+    throttle = _HostThrottle(min_interval=2.0)
+    # First reservation is due immediately.
+    assert throttle.reserve_slot() == 0.0
+    # The next two are pushed out by min_interval each (no real time elapsed).
+    second = throttle.reserve_slot()
+    third = throttle.reserve_slot()
+    assert 1.9 <= second <= 2.0
+    assert 3.9 <= third <= 4.0
+
+
+def test_host_throttle_cooldown_remaining_tracks_window() -> None:
+    throttle = _HostThrottle(min_interval=1.0)
+    assert throttle.cooldown_remaining("github") == 0.0
+    throttle.enter_cooldown("github", 30.0)
+    assert 29.0 <= throttle.cooldown_remaining("github") <= 30.0
+    # Cooldown is per-provider.
+    assert throttle.cooldown_remaining("gitlab") == 0.0
+
+
+def test_host_throttle_enter_cooldown_never_shortens() -> None:
+    throttle = _HostThrottle(min_interval=1.0)
+    throttle.enter_cooldown("github", 60.0)
+    # A shorter cooldown must not clobber the longer one already in effect.
+    throttle.enter_cooldown("github", 5.0)
+    assert throttle.cooldown_remaining("github") > 50.0
+
+
+def test_respect_throttle_defers_when_provider_in_cooldown() -> None:
+    """When a provider is cooling down, no slot is reserved and a deferral is returned."""
+    svc = _make_service()
+    svc._throttle.enter_cooldown("github", 45.0)
+
+    result = svc._respect_throttle("github")
+
+    assert isinstance(result, _CooldownDeferred)
+    assert 44.0 <= result.retry_after <= 45.0
+
+
+def test_respect_throttle_allows_when_not_in_cooldown() -> None:
+    svc = _make_service()
+    # First call is due immediately, so it returns None (proceed) without sleeping.
+    assert svc._respect_throttle("github") is None
+
+
+def test_note_rate_limit_starts_cooldown_only_for_rate_limited() -> None:
+    svc = _make_service()
+    workspace_id = WorkspaceID()
+
+    ok = PrStatusInfo(workspace_id=workspace_id, pr_state="open")
+    svc._note_rate_limit(ok, "github")
+    assert svc._throttle.cooldown_remaining("github") == 0.0
+
+    limited = PrStatusInfo(
+        workspace_id=workspace_id, pr_state="none", error_category="rate_limited", error_provider="github"
+    )
+    svc._note_rate_limit(limited, "github")
+    assert svc._throttle.cooldown_remaining("github") > 0.0
+
+
+def test_cooldown_deferred_result_does_not_overwrite_cache() -> None:
+    """A deferred poll leaves the last-known status in place and re-enqueues after the cooldown."""
+    svc = _make_service()
+    workspace_id = WorkspaceID()
+    _add_workspace_poll_state(svc, workspace_id)
+    state = svc._workspace_poll_state[workspace_id]
+    svc._pending.add(workspace_id)
+
+    last_known = PrStatusInfo(workspace_id=workspace_id, pr_state="open", pr_iid=7)
+    svc._cache[workspace_id] = last_known
+
+    config = _make_user_config()
+    deferred = _CooldownDeferred(retry_after=40.0)
+
+    with patch("sculptor.web.pr_polling_service.get_user_config_instance", return_value=config):
+        with patch.object(PrPollingService, "_execute_poll", return_value=deferred):
+            svc._poll_and_handle_result(_PollJob(0.0, workspace_id), state)
+
+    # Cache is untouched, and the workspace is re-enqueued after the cooldown.
+    assert svc._cache[workspace_id] == last_known
+    rescheduled = svc._job_queue.get_nowait()
+    delay = rescheduled.scheduled_time - time.monotonic()
+    assert 39 <= delay <= 41
+
+
+def test_rate_limited_result_re_enqueues_after_cooldown() -> None:
+    """A rate-limited result waits out the host cooldown instead of the base interval."""
+    svc = _make_service()
+    workspace_id = WorkspaceID()
+    _add_workspace_poll_state(svc, workspace_id)
+    state = svc._workspace_poll_state[workspace_id]
+    svc._pending.add(workspace_id)
+
+    # Simulate the cooldown the poll would have set via _note_rate_limit.
+    svc._throttle.enter_cooldown("github", _RATE_LIMIT_COOLDOWN_SECONDS)
+    limited = PrStatusInfo(
+        workspace_id=workspace_id, pr_state="none", error_category="rate_limited", error_provider="github"
+    )
+    config = _make_user_config(pr_poll_interval_seconds=30)
+
+    with patch("sculptor.web.pr_polling_service.get_user_config_instance", return_value=config):
+        with patch.object(PrPollingService, "_execute_poll", return_value=limited):
+            svc._poll_and_handle_result(_PollJob(0.0, workspace_id), state)
+
+    rescheduled = svc._job_queue.get_nowait()
+    delay = rescheduled.scheduled_time - time.monotonic()
+    # Re-enqueued at ~the remaining cooldown (60s), not the 30s base interval.
+    assert _RATE_LIMIT_COOLDOWN_SECONDS - 2 <= delay <= _RATE_LIMIT_COOLDOWN_SECONDS

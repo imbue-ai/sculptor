@@ -81,9 +81,9 @@ class PrStatusInfo(SerializableModel):
     pipeline_updated_at: str | None = None
     approvals: list[PrApproval] = Field(default_factory=list)
     unresolved_comments: list[PrComment] = Field(default_factory=list)
-    error_category: Literal["cli_missing", "not_authenticated", "no_access", "network_error", "transient"] | None = (
-        None
-    )
+    error_category: (
+        Literal["cli_missing", "not_authenticated", "no_access", "network_error", "rate_limited", "transient"] | None
+    ) = None
     error_provider: Literal["gitlab", "github"] | None = None
     error_message: str | None = None
     mismatched_pr_iid: int | None = None
