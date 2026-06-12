@@ -31,7 +31,6 @@ from pathlib import Path
 from playwright.sync_api import Route
 from playwright.sync_api import expect
 
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.services.dependency_management_service import DEPENDENCIES_DIR_NAME
 from sculptor.services.dependency_management_service import PI_VERSION_RANGE
 from sculptor.services.dependency_management_service import _VERSION_DIR_PREFIX
@@ -229,7 +228,7 @@ def test_pi_workspace_surfaces_structured_failure_when_pi_unavailable(
             sculptor_page=instance.page,
             workspace_name="Pi Not Ready",
             model_name=None,
-            harness=HarnessName.PI,
+            agent_type="pi",
         )
         chat_panel = task_page.get_chat_panel()
 

@@ -1597,9 +1597,14 @@ def _agent_config_for_request(
     if agent_type == AgentTypeName.REGISTERED:
         # Registration resolution lands with the registration loader (phase 4).
         raise HTTPException(status_code=422, detail="registered terminal agents are not available yet")
-    # DELIBERATE-TEMPORARY: claude/pi still defer to the workspace-bound
-    # harness shim so phase 1 leaves pi-workspace behavior unchanged; phase 2
-    # deletes the shim and makes these explicit per-type configs.
+    # An explicit pi choice is honored regardless of the workspace — the
+    # new-workspace flow no longer persists a workspace harness.
+    if agent_type == AgentTypeName.PI:
+        return PiAgentConfig()
+    # DELIBERATE-TEMPORARY: claude still defers to the workspace-bound harness
+    # shim so pre-existing pi workspaces keep their pi default; the shim is
+    # deleted (and this becomes an explicit ClaudeCodeSDKAgentConfig) when
+    # Workspace.harness is dropped.
     return _agent_config_for_workspace(workspace)
 
 
