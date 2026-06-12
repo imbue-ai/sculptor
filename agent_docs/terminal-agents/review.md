@@ -174,11 +174,11 @@ hook registers `chatActionsAtom`) with the same user-visible result.
 
 ### Test coverage
 
-**LOW** — `test_terminal_agent_signals.py:52,55,58,66` and
-`test_terminal_agent_basic.py:71` still pass `timeout=15_000` to assertions
-that gate on a real PTY→HTTP→WS→React round-trip. The timeout-cleanup commit
-(`371ef2caa1`) removed these from the other feature test files but missed these
-five; per `no_lowered_timeouts` they should use the 30s default.
+**LOW — RESOLVED (`2f52ea0505`)** — `test_terminal_agent_signals.py:52,55,58,66`
+and `test_terminal_agent_basic.py:71` passed `timeout=15_000` to assertions
+that gate on a real PTY→HTTP→WS→React round-trip; the timeout-cleanup commit
+(`371ef2caa1`) had missed these five. All five now use the 30s default; both
+files re-run green (3 passed).
 
 **LOW (informational)** — fixed `page.wait_for_timeout(3_000)` PTY-readiness
 waits before typing (`test_terminal_agent_basic.py:39`,
@@ -312,8 +312,8 @@ across feature + regression files).
 
 Remaining items, all LOW and none blocking:
 
-1. Restore default timeouts on the five remaining `timeout=15_000` assertions
-   (`test_terminal_agent_signals.py`, `test_terminal_agent_basic.py:71`).
+1. ~~Restore default timeouts on the five remaining `timeout=15_000` assertions~~
+   — resolved in `2f52ea0505`.
 2. Return the standard `BackendQueryResult` bundle from
    `useTerminalAgentRegistrations`.
 3. Optional: a POM helper for the repeated `CHAT_INPUT`-absent assertion.
