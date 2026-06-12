@@ -191,6 +191,9 @@ class AgentTaskStateV2(BaseTaskState):
     # signalled (validated to [A-Za-z0-9._-]{1,128}), used to resume the
     # program after a backend restart.
     terminal_session_id: str | None = None
+    # Terminal agents only: the shell pid of the handler's last PTY spawn,
+    # used to reap a crash-surviving shell before relaunching.
+    terminal_shell_pid: int | None = None
 
 
 class NoOpTaskStateV1(BaseTaskState):

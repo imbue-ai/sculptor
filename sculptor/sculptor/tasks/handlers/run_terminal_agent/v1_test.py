@@ -133,6 +133,7 @@ def test_terminal_handler_spawns_pty_and_pauses_on_shutdown(
     """The loop spawns the agent PTY, then shutdown re-queues and cleans up."""
     workspace_id = WorkspaceID()
     task_state = AgentTaskStateV2(workspace_id=workspace_id)
+    _set_task_state(terminal_task, task_state, services)
     shutdown_event = threading.Event()
     terminal_id = make_agent_terminal_id(terminal_task.object_id)
     seen_managers: list[Any] = []
@@ -253,10 +254,27 @@ def test_run_task_dispatches_terminal_config_to_terminal_handler(
 
 def test_launch_command_for_start_selects_per_config() -> None:
     state = AgentTaskStateV2(workspace_id=WorkspaceID())
+    state_with_session = AgentTaskStateV2(workspace_id=WorkspaceID(), terminal_session_id="sess-42")
     plain = AgentTaskInputsV2(agent_config=TerminalAgentConfig(), git_hash="x")
+    # Plain terminals always get a bare shell — also after restart (REQ-LIFE-4).
     assert launch_command_for_start(plain, state) is None
+    assert launch_command_for_start(plain, state_with_session) is None
 
     registered = AgentTaskInputsV2(
+        agent_config=RegisteredTerminalAgentConfig(
+            registration_id="claude-code",
+            display_name="Claude Code",
+            launch_command="claude",
+            resume_command_template="claude --resume {session_id}",
+        ),
+        git_hash="x",
+    )
+    # No session reported yet → plain launch.
+    assert launch_command_for_start(registered, state) == "claude"
+    # Session + template → rendered resume command (REQ-LIFE-3).
+    assert launch_command_for_start(registered, state_with_session) == "claude --resume sess-42"
+
+    registered_no_template = AgentTaskInputsV2(
         agent_config=RegisteredTerminalAgentConfig(
             registration_id="claude-code",
             display_name="Claude Code",
@@ -264,7 +282,8 @@ def test_launch_command_for_start_selects_per_config() -> None:
         ),
         git_hash="x",
     )
-    assert launch_command_for_start(registered, state) == "claude"
+    # Session but no template → plain launch.
+    assert launch_command_for_start(registered_no_template, state_with_session) == "claude"
 
 
 def test_registered_config_launch_command_is_written_on_spawn(
@@ -294,6 +313,7 @@ def test_registered_config_launch_command_is_written_on_spawn(
         services.task_service.create_task(user_session_task, transaction)
 
     task_state = AgentTaskStateV2(workspace_id=WorkspaceID())
+    _set_task_state(user_session_task, task_state, services)
     shutdown_event = threading.Event()
     written_commands: list[str] = []
 
@@ -320,3 +340,60 @@ def test_registered_config_launch_command_is_written_on_spawn(
             )
 
     assert written_commands == ["echo registered-launch-marker"]
+
+
+def test_handler_persists_shell_pid_and_reaps_stale_pid(
+    terminal_task: Task,
+    services: ServiceCollectionForTask,
+    project: Project,
+    environment: LocalEnvironment,
+    test_settings: SculptorSettings,
+    test_root_concurrency_group: ConcurrencyGroup,
+) -> None:
+    """The handler reaps a recorded stale pid before spawning and records the
+    new spawn's shell pid on the task state."""
+    stale_pid = 4_000_000  # nonexistent — reap must be a no-op but still clear it
+    task_state = AgentTaskStateV2(workspace_id=WorkspaceID(), terminal_shell_pid=stale_pid)
+    _set_task_state(terminal_task, task_state, services)
+
+    shutdown_event = threading.Event()
+    reaped: list[int] = []
+
+    def fake_reap(pid: int) -> None:
+        reaped.append(pid)
+
+    terminal_id = make_agent_terminal_id(terminal_task.object_id)
+
+    def watch_then_shutdown() -> None:
+        deadline = time.monotonic() + 15.0
+        while time.monotonic() < deadline:
+            if get_terminal_manager(terminal_id) is not None:
+                break
+            time.sleep(0.05)
+        shutdown_event.set()
+
+    watcher = threading.Thread(target=watch_then_shutdown, daemon=True)
+    watcher.start()
+    with patch("sculptor.tasks.handlers.run_terminal_agent.v1.reap_stale_shell", side_effect=fake_reap):
+        with pytest.raises(UserPausedTaskError):
+            _run_terminal_agent_in_environment(
+                task=terminal_task,
+                task_state=task_state,
+                project=project,
+                underlying_env=environment,
+                environment_concurrency_group=test_root_concurrency_group,
+                services=services,
+                settings=test_settings,
+                shutdown_event=shutdown_event,
+                on_started=None,
+            )
+    watcher.join(timeout=5.0)
+
+    assert reaped == [stale_pid]
+    # The new spawn's shell pid was recorded (and the stale one cleared first).
+    with services.data_model_service.open_task_transaction() as transaction:
+        task_row = transaction.get_task(terminal_task.object_id)
+    assert task_row is not None
+    final_state = AgentTaskStateV2.model_validate(task_row.current_state)
+    assert final_state.terminal_shell_pid is not None
+    assert final_state.terminal_shell_pid != stale_pid

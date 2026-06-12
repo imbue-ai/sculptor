@@ -31,6 +31,7 @@ from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Project
 from sculptor.database.models import Task
+from sculptor.database.models import TaskID
 from sculptor.interfaces.agents.agent import EnvironmentAcquiredRunnerMessage
 from sculptor.interfaces.agents.agent import EnvironmentReleasedRunnerMessage
 from sculptor.interfaces.agents.agent import EnvironmentTypes
@@ -46,7 +47,9 @@ from sculptor.tasks.handlers.run_agent.v1 import _on_exception
 from sculptor.tasks.handlers.run_terminal_agent.diff_refresh import PeriodicDiffRefresher
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import AgentTerminalConfig
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import create_agent_terminal
+from sculptor.tasks.handlers.run_terminal_agent.terminal_session import reap_stale_shell
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import register_agent_terminal_config
+from sculptor.tasks.handlers.run_terminal_agent.terminal_session import render_resume_command
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import stop_agent_terminal
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import unregister_agent_terminal_config
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import write_launch_command
@@ -60,15 +63,31 @@ _DIFF_REFRESH_INTERVAL_SECONDS: float = 3.0
 def launch_command_for_start(task_data: AgentTaskInputsV2, task_state: AgentTaskStateV2) -> str | None:
     """The command to write into the freshly spawned shell, or None for a bare shell.
 
-    Plain terminal agents get nothing; registered ones get their stamped
-    launch command. (The session-id resume variant swaps the command string
-    here, not the mechanism.)
+    Plain terminal agents get nothing (a restart yields a fresh shell,
+    REQ-LIFE-4). Registered ones resume their previous session when the
+    program reported a session id and the registration has a resume template
+    (REQ-LIFE-3); otherwise the plain launch command.
     """
-    del task_state
     config = task_data.agent_config
-    if isinstance(config, RegisteredTerminalAgentConfig):
-        return config.launch_command
-    return None
+    if not isinstance(config, RegisteredTerminalAgentConfig):
+        return None
+    if task_state.terminal_session_id is not None and config.resume_command_template is not None:
+        return render_resume_command(config.resume_command_template, task_state.terminal_session_id)
+    return config.launch_command
+
+
+def _persist_terminal_shell_pid(task_id: TaskID, pid: int | None, services: ServiceCollectionForTask) -> None:
+    """Record (or clear) the handler's PTY shell pid on the task state.
+
+    Re-reads the row and evolves only this field so concurrent state writers
+    (renames, session-id signals) are not clobbered.
+    """
+    with services.data_model_service.open_task_transaction() as transaction:
+        task_row = transaction.get_task(task_id)
+        assert task_row is not None
+        db_state = AgentTaskStateV2.model_validate(task_row.current_state)
+        updated_state = db_state.evolve(db_state.ref().terminal_shell_pid, pid)
+        transaction.upsert_task(task_row.evolve(task_row.ref().current_state, updated_state.model_dump()))
 
 
 def run_terminal_agent_task_v1(
@@ -198,6 +217,13 @@ def _run_terminal_agent_in_environment(
         ),
     )
     try:
+        # Reap any crash-surviving shell from the previous run BEFORE spawning
+        # (a stale program could otherwise race the resumed one on the same
+        # session — architecture §3), then forget the pid.
+        if task_state.terminal_shell_pid is not None:
+            reap_stale_shell(task_state.terminal_shell_pid)
+            _persist_terminal_shell_pid(task.object_id, None, services)
+
         # Eager spawn. A failure is non-fatal: the WS route retries on demand
         # (with a BARE shell — the launch command is written only here, so a
         # program/shell exit never auto-relaunches, REQ-LIFE-5).
@@ -205,6 +231,11 @@ def _run_terminal_agent_in_environment(
         if manager is None:
             logger.info("Failed to eagerly start terminal for agent {}; will retry on demand", task.object_id)
         else:
+            # Only the handler's own spawn (the one that runs programs)
+            # records the pid; WS-route respawns are bare shells with the
+            # same leak profile as workspace terminals.
+            if manager.shell_pid is not None:
+                _persist_terminal_shell_pid(task.object_id, manager.shell_pid, services)
             input_data = task.input_data
             assert isinstance(input_data, AgentTaskInputsV2)
             launch_command = launch_command_for_start(input_data, task_state)
