@@ -80,6 +80,7 @@ from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessa
 from sculptor.interfaces.agents.agent import PiAgentConfig
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageUserMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
+from sculptor.interfaces.agents.agent import is_terminal_agent_config
 from sculptor.interfaces.agents.artifacts import ArtifactType
 from sculptor.interfaces.agents.artifacts import DiffArtifact
 from sculptor.interfaces.agents.artifacts import TaskListArtifact
@@ -140,6 +141,8 @@ from sculptor.startup_checks import check_is_user_email_field_valid
 from sculptor.startup_checks import check_sculptor_directory_writable
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
+from sculptor.tasks.handlers.run_terminal_agent.terminal_session import create_agent_terminal
+from sculptor.tasks.handlers.run_terminal_agent.terminal_session import make_agent_terminal_id
 from sculptor.telemetry import telemetry
 from sculptor.utils import build as build_utils
 from sculptor.utils.build import get_install_path
@@ -3110,6 +3113,61 @@ async def workspace_terminal_websocket(
 
     await websocket.accept()
     await websocket.close(code=4404, reason=f"Terminal {index} not found for workspace {workspace_id}")
+
+
+@APP.websocket("/api/v1/agents/{agent_id}/terminal/ws")
+async def agent_terminal_websocket(
+    websocket: WebSocket,
+    agent_id: str,
+) -> None:
+    """WebSocket endpoint for a terminal agent's PTY, routed by agent (task) id.
+
+    Connects to the agent-scoped terminal manager spawned by the terminal task
+    handler. When the shell has self-exited (the manager unregistered itself)
+    or the eager spawn failed, a fresh login shell is created on demand — no
+    registered program is relaunched here (REQ-LIFE-5). Spawn rate is bounded
+    without extra machinery: one spawn attempt per client connection, and the
+    frontend backs off 2s between 4404 retries.
+    """
+    services = get_services_from_request_or_websocket(websocket)
+    try:
+        validated_task_id = validate_task_id(agent_id)
+    except HTTPException:
+        # Accept the WebSocket before closing so the client receives the 4404
+        # close code as a proper WebSocket close frame (see
+        # workspace_terminal_websocket for the full explanation).
+        await websocket.accept()
+        await websocket.close(code=4404, reason=f"Agent {agent_id} not found")
+        return
+    with services.data_model_service.open_transaction(RequestID()) as transaction:
+        task = services.task_service.get_task(validated_task_id, transaction)
+    if (
+        task is None
+        or task.is_deleted
+        or not isinstance(task.current_state, AgentTaskStateV2)
+        or not isinstance(task.input_data, AgentTaskInputsV2)
+        or not is_terminal_agent_config(task.input_data.agent_config)
+    ):
+        await websocket.accept()
+        await websocket.close(code=4404, reason=f"Terminal agent {agent_id} not found")
+        return
+
+    terminal_id = make_agent_terminal_id(validated_task_id)
+    terminal_manager = get_terminal_manager(terminal_id)
+
+    # On-demand creation: covers both an eager spawn that failed and a shell
+    # the user exited (the reader thread unregistered the manager). Returns
+    # None when no config is registered — the task handler isn't running
+    # (still QUEUED/BUILDING or being torn down) — so the client retries.
+    if terminal_manager is None:
+        terminal_manager = create_agent_terminal(validated_task_id)
+
+    if terminal_manager is not None:
+        await _connect_terminal_websocket(websocket, terminal_id)
+        return
+
+    await websocket.accept()
+    await websocket.close(code=4404, reason=f"Terminal not available for agent {agent_id}")
 
 
 async def _connect_terminal_websocket(websocket: WebSocket, terminal_id: str) -> None:
