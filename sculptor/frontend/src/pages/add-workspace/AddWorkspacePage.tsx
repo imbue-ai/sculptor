@@ -6,7 +6,7 @@ import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 
-import type { AgentTypeName, LlmModel } from "../../api";
+import type { LlmModel } from "../../api";
 import {
   createWorkspaceAgent,
   createWorkspaceV2,
@@ -17,6 +17,11 @@ import {
 } from "../../api";
 import { HTTPException } from "../../common/Errors.ts";
 import { useImbueNavigate } from "../../common/NavigateUtils.ts";
+import {
+  encodeRegisteredAgentType,
+  parseStoredAgentType,
+  type StoredAgentType,
+} from "../../common/state/atoms/agentTabs.ts";
 import { projectsArrayAtom, updateProjectsAtom } from "../../common/state/atoms/projects.ts";
 import {
   defaultModelAtom,
@@ -71,12 +76,7 @@ export const AddWorkspacePage = (): ReactElement => {
   // per-workspace). Registered terminal agents select as `registered:<id>`.
   const [agentTypeValue, setAgentTypeValue] = useState<string>("claude");
   const { registrations, refresh: refreshRegistrations } = useTerminalAgentRegistrations();
-  const agentType: AgentTypeName = agentTypeValue.startsWith("registered:")
-    ? "registered"
-    : (agentTypeValue as AgentTypeName);
-  const registrationId = agentTypeValue.startsWith("registered:")
-    ? agentTypeValue.slice("registered:".length)
-    : undefined;
+  const { agentType, registrationId } = parseStoredAgentType(agentTypeValue as StoredAgentType);
   const [workspaceNameDraft, setWorkspaceNameDraft] = useDraftTabName(draftId);
   const workspaceName = workspaceNameDraft ?? "";
   const setWorkspaceName = useCallback(
@@ -419,7 +419,7 @@ export const AddWorkspacePage = (): ReactElement => {
               onValueChange={setAgentTypeValue}
               onOpenChange={(open) => {
                 // Re-read the registrations directory on every open so the
-                // options track the filesystem without a restart (REQ-REG-3).
+                // options track the filesystem without a restart.
                 if (open) refreshRegistrations();
               }}
             >
@@ -455,7 +455,7 @@ export const AddWorkspacePage = (): ReactElement => {
                 {registrations.map((registration) => (
                   <Select.Item
                     key={registration.registrationId}
-                    value={`registered:${registration.registrationId}`}
+                    value={encodeRegisteredAgentType(registration.registrationId)}
                     data-testid={ElementIds.AGENT_TYPE_OPTION_REGISTERED}
                     data-registration-id={registration.registrationId}
                   >
