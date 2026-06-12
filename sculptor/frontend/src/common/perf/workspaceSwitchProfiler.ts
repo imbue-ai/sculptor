@@ -1,0 +1,210 @@
+/** Workspace-switch profiler.
+ *
+ * Records how long a workspace switch takes to reach each rendering/data
+ * milestone, so "tab switching feels slow" can be measured instead of
+ * eyeballed. A switch starts in `useImbueNavigate` (markSwitchStart) and
+ * milestones are reported from the layout/data code paths as they complete.
+ *
+ * Every milestone is a real `performance.mark()` with a `ws-switch.` prefix,
+ * so when tracing is enabled (see common/tracing.ts) the marks flow into the
+ * Perfetto trace with no extra wiring. The frame-capture tooling
+ * (sculptor/testing/frame_capture.py) correlates these marks with compositor
+ * frames via `performance.timeOrigin`.
+ *
+ * Enabled when any of:
+ *   - `window.__WS_SWITCH_PROFILER__ === true` (set by test/capture harnesses
+ *     via an init script, before app code runs)
+ *   - backend tracing is on (`window.__SCULPTOR_TRACING__.enabled`)
+ *   - dev builds, unless opted out via localStorage
+ *     `sculptor-ws-switch-profiler` = "0"
+ *
+ * When disabled every export is inert — the production cost is one boolean
+ * check per call, matching the bar set by `traceMark`.
+ */
+
+import { useEffect } from "react";
+
+export const WS_SWITCH_MILESTONES = [
+  // WorkspacePageContent rendered with the new workspace id.
+  "page-content-render",
+  // The new workspace's panel layout was loaded into the layout atoms.
+  "layout-restored",
+  // First frame painted after the layout restore (double-rAF approximation).
+  // Frames between `start` and this mark are the stale-content window.
+  "first-paint-after-restore",
+  // First data for the new workspace reached each consumer.
+  "chat-loaded",
+  "diff-loaded",
+  "files-loaded",
+] as const;
+
+export type WsSwitchMilestone = (typeof WS_SWITCH_MILESTONES)[number];
+
+export type WsSwitchTimingRecord = {
+  fromWorkspaceId: string | null;
+  toWorkspaceId: string;
+  /** Epoch milliseconds of the switch start, for correlation with external clocks. */
+  startedAtEpochMs: number;
+  /** `performance.now()` at the switch start. */
+  startedAtMs: number;
+  /** Milliseconds from start to each milestone. Missing = never reached. */
+  milestoneDeltasMs: Partial<Record<WsSwitchMilestone, number>>;
+  /** True when the record was closed by the timeout rather than completion. */
+  isTimedOut: boolean;
+};
+
+// A switch that hasn't produced all milestones after this long is finalized
+// as-is: data milestones legitimately never fire for empty workspaces.
+const FINALIZE_TIMEOUT_MS = 5000;
+
+// Cap on window.__WS_SWITCH_TIMINGS__ so a long session can't grow it unboundedly.
+const MAX_RETAINED_RECORDS = 50;
+
+let isEnabledCache: boolean | null = null;
+
+const isProfilerEnabled = (): boolean => {
+  if (isEnabledCache === null) {
+    let isDevOptedIn = false;
+    try {
+      isDevOptedIn = import.meta.env.DEV && localStorage.getItem("sculptor-ws-switch-profiler") !== "0";
+    } catch {
+      // localStorage unavailable — treat as opted out
+    }
+    isEnabledCache =
+      window.__WS_SWITCH_PROFILER__ === true || window.__SCULPTOR_TRACING__?.enabled === true || isDevOptedIn;
+  }
+  return isEnabledCache;
+};
+
+type PendingSwitch = {
+  record: WsSwitchTimingRecord;
+  timeoutId: ReturnType<typeof setTimeout>;
+};
+
+let pendingSwitch: PendingSwitch | null = null;
+
+const safeMark = (name: string): void => {
+  try {
+    performance.mark(name);
+  } catch (e) {
+    // `performance.mark` only throws DOMException in supported browsers;
+    // anything else is a programming bug and should surface.
+    if (!(e instanceof DOMException)) throw e;
+  }
+};
+
+const finalizePendingSwitch = (isTimedOut: boolean): void => {
+  if (pendingSwitch === null) return;
+  const { record, timeoutId } = pendingSwitch;
+  pendingSwitch = null;
+  clearTimeout(timeoutId);
+  record.isTimedOut = isTimedOut;
+
+  const timings = (window.__WS_SWITCH_TIMINGS__ ??= []);
+  timings.push(record);
+  if (timings.length > MAX_RETAINED_RECORDS) {
+    timings.splice(0, timings.length - MAX_RETAINED_RECORDS);
+  }
+
+  const deltas = record.milestoneDeltasMs;
+  const totalMs = Math.max(0, ...Object.values(deltas));
+  const summary = WS_SWITCH_MILESTONES.map(
+    (m) => `${m} ${deltas[m] !== undefined ? `${Math.round(deltas[m])}ms` : "—"}`,
+  ).join(", ");
+  console.log(
+    `[ws-switch] ${record.fromWorkspaceId ?? "(none)"} → ${record.toWorkspaceId}: ` +
+      `total ${Math.round(totalMs)}ms${isTimedOut ? " (timed out)" : ""} — ${summary}`,
+  );
+};
+
+const hasAllMilestones = (record: WsSwitchTimingRecord): boolean =>
+  WS_SWITCH_MILESTONES.every((m) => record.milestoneDeltasMs[m] !== undefined);
+
+/** Parse the active workspace id out of the hash-router URL, e.g.
+ * `#/ws/<id>/agent/<agentId>` → `<id>`. Null on non-workspace routes. */
+const workspaceIdFromLocation = (): string | null => {
+  const match = window.location.hash.match(/^#\/ws\/(?!new\b)([^/?]+)/);
+  return match ? match[1] : null;
+};
+
+/**
+ * Begin recording a workspace switch. Called from the navigation primitives
+ * (`useImbueNavigate`) right before the URL changes. No-ops when the target
+ * workspace is already active (e.g. switching agents within a workspace).
+ */
+export const markSwitchStart = (toWorkspaceId: string): void => {
+  if (!isProfilerEnabled()) return;
+  const fromWorkspaceId = workspaceIdFromLocation();
+  if (fromWorkspaceId === toWorkspaceId) return;
+
+  // A new switch starting before the previous one completed closes it as-is.
+  finalizePendingSwitch(true);
+  safeMark("ws-switch.start");
+  pendingSwitch = {
+    record: {
+      fromWorkspaceId,
+      toWorkspaceId,
+      startedAtEpochMs: Date.now(),
+      startedAtMs: performance.now(),
+      milestoneDeltasMs: {},
+      isTimedOut: false,
+    },
+    timeoutId: setTimeout(() => finalizePendingSwitch(true), FINALIZE_TIMEOUT_MS),
+  };
+};
+
+/**
+ * Record a milestone for the in-flight switch. First report wins; reports with
+ * no switch in flight are ignored (e.g. data landing during normal use).
+ *
+ * Reporting `layout-restored` also schedules `first-paint-after-restore` via a
+ * double `requestAnimationFrame` — an approximation of the first frame painted
+ * with the new layout.
+ */
+export const markSwitchMilestone = (milestone: WsSwitchMilestone): void => {
+  if (!isProfilerEnabled()) return;
+  if (pendingSwitch === null) return;
+  const { record } = pendingSwitch;
+  if (record.milestoneDeltasMs[milestone] !== undefined) return;
+
+  safeMark(`ws-switch.${milestone}`);
+  record.milestoneDeltasMs[milestone] = performance.now() - record.startedAtMs;
+
+  if (milestone === "layout-restored") {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => markSwitchMilestone("first-paint-after-restore"));
+    });
+  }
+
+  if (hasAllMilestones(record)) {
+    finalizePendingSwitch(false);
+  }
+};
+
+/**
+ * Variant of `markSwitchMilestone` for data milestones: only counts when the
+ * in-flight switch is heading to `workspaceId`, so data landing for some other
+ * (e.g. background) workspace doesn't end the measurement early.
+ */
+export const markSwitchDataMilestone = (milestone: WsSwitchMilestone, workspaceId: string): void => {
+  if (!isProfilerEnabled()) return;
+  if (pendingSwitch === null || pendingSwitch.record.toWorkspaceId !== workspaceId) return;
+  markSwitchMilestone(milestone);
+};
+
+/**
+ * Effect wrapper for data hooks: reports `milestone` once `hasData` first
+ * becomes true for `workspaceId`. Adds one inert effect per consumer when the
+ * profiler is disabled.
+ */
+export const useMarkSwitchDataMilestone = (
+  milestone: WsSwitchMilestone,
+  workspaceId: string | null,
+  hasData: boolean,
+): void => {
+  useEffect(() => {
+    if (workspaceId !== null && hasData) {
+      markSwitchDataMilestone(milestone, workspaceId);
+    }
+  }, [milestone, workspaceId, hasData]);
+};

@@ -1,6 +1,7 @@
 import { useAtomValue, useSetAtom } from "jotai";
 import { useEffect, useRef } from "react";
 
+import { markSwitchMilestone } from "~/common/perf/workspaceSwitchProfiler.ts";
 import {
   activePanelPerZoneAtom,
   activeWorkspaceIdAtom,
@@ -188,6 +189,7 @@ export const usePerWorkspacePanelLayout = (workspaceId: string, defaultLayout: D
         if (savedSizePercent !== undefined) setSectionSizePercent(savedSizePercent);
       }
       loadedWorkspaceIdRef.current = id;
+      markSwitchMilestone("layout-restored");
     };
 
     if (isInitialRef.current) {

@@ -1,9 +1,10 @@
 import { Flex } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import { useImbueNavigate, useWorkspacePageParams } from "../../common/NavigateUtils.ts";
+import { markSwitchMilestone } from "../../common/perf/workspaceSwitchProfiler.ts";
 import { tasksArrayAtom } from "../../common/state/atoms/tasks.ts";
 import {
   agentIdForWorkspaceAtomFamily,
@@ -24,6 +25,15 @@ import styles from "./WorkspacePage.module.scss";
 
 const WorkspacePageContent = ({ taskID }: { taskID: string }): ReactElement => {
   const { workspaceID } = useWorkspacePageParams();
+
+  // Profiling: record the first render with a new workspace id (the switch's
+  // first commit). Marked during render rather than in an effect so it lands
+  // before — not after — the paint it describes.
+  const profiledWorkspaceIdRef = useRef<string | null>(null);
+  if (profiledWorkspaceIdRef.current !== workspaceID) {
+    profiledWorkspaceIdRef.current = workspaceID;
+    markSwitchMilestone("page-content-render");
+  }
 
   // Sync artifacts for the currently viewed task only
   useArtifactSync(workspaceID, taskID);

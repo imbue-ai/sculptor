@@ -3,6 +3,7 @@ import { useEffect, useMemo } from "react";
 
 import type { AskUserQuestionData, ChatMessage, TaskStatus } from "~/api";
 import { LlmModel, sendWorkspaceAgentMessages } from "~/api";
+import { useMarkSwitchDataMilestone } from "~/common/perf/workspaceSwitchProfiler.ts";
 import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
 import { chatActionsAtom } from "~/common/state/atoms/chatActions.ts";
 import { useTaskChatMessages, useTaskDetailWithDefaults } from "~/common/state/hooks/useTaskDetail";
@@ -57,6 +58,8 @@ export const useChatData = ({ taskID, workspaceID, appendTextRef, insertSkillRef
     return rawChatMessages;
   }, [rawChatMessages, smoothInProgressChatMessage, inProgressChatMessage]);
   const isStreaming = smoothInProgressChatMessage !== null;
+
+  useMarkSwitchDataMilestone("chat-loaded", workspaceID, rawChatMessages.length > 0);
 
   const taskStatus = useTaskStatus(taskID);
   const taskModel = useTaskModel(taskID);

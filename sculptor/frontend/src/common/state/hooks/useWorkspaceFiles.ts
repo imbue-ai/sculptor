@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getWorkspaceFiles } from "../../../api";
 import { HTTPException } from "../../../common/Errors.ts";
 import type { FileListEntry } from "../../../pages/workspace/panels/fileBrowser/types.ts";
+import { useMarkSwitchDataMilestone } from "../../perf/workspaceSwitchProfiler.ts";
 import type { BackendQueryKeyResult, BackendQueryResult } from "../../queryClient.ts";
 import { queryClient, SCULPTOR_QUERY_KEY_PREFIX } from "../../queryClient.ts";
 
@@ -44,6 +45,8 @@ export const useWorkspaceFiles = (
     retry: (failureCount, error) => isTransientFileListFailure(error) && failureCount < TRANSIENT_FAILURE_RETRIES,
     retryDelay: TRANSIENT_FAILURE_RETRY_DELAY_MS,
   });
+
+  useMarkSwitchDataMilestone("files-loaded", workspaceId, query.data !== undefined);
 
   return {
     data: query.data,
