@@ -25,7 +25,6 @@ from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.pydantic_serialization import model_dump
 from sculptor.foundation.pydantic_utils import model_update
 from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.interfaces.agents.agent import HelloAgentConfig
 from sculptor.interfaces.agents.agent import PiAgentConfig
 from sculptor.interfaces.agents.agent import TerminalAgentConfig
@@ -969,31 +968,52 @@ def test_complete_onboarding_rejects_empty_email_without_welcome_step(
 # Agent-type creation path (terminal agents).
 
 
-def test_agent_config_for_request_resolves_each_type(
-    test_services: CompleteServiceCollection, test_project: Project
+def test_agent_config_for_request_resolves_each_type() -> None:
+    # Agent type comes only from the creation request (REQ-TYPE-3).
+    assert isinstance(_agent_config_for_request(AgentTypeName.TERMINAL, None), TerminalAgentConfig)
+    with pytest.raises(HTTPException) as exc_info:
+        _agent_config_for_request(AgentTypeName.REGISTERED, "some-registration")
+    assert exc_info.value.status_code == 422
+    assert isinstance(_agent_config_for_request(AgentTypeName.CLAUDE, None), ClaudeCodeSDKAgentConfig)
+    assert isinstance(_agent_config_for_request(AgentTypeName.PI, None), PiAgentConfig)
+
+
+def test_start_task_resolves_agent_type(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
 ) -> None:
+    """Prompt-ful creation honors a chat agent_type and rejects terminal types."""
+    response = client.post(
+        f"/api/v1/projects/{test_project.object_id}/tasks",
+        json=model_dump(
+            StartTaskRequest(
+                prompt="hello pi",
+                model=LLMModel.CLAUDE_4_SONNET,
+                agent_type=AgentTypeName.PI,
+            ),
+            is_camel_case=True,
+        ),
+    )
+    assert response.status_code == 200, response.text
+    task_id = TaskID(response.json()["id"])
     user_session = authenticate_anonymous(test_services, RequestID())
     with user_session.open_transaction(test_services) as transaction:
-        claude_workspace = _create_workspace(transaction, test_services, test_project, "claude ws")
-        pi_workspace = test_services.workspace_service.create_workspace(
-            project=test_project,
-            initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
-            source_branch=None,
-            requested_branch_name=None,
-            description="pi ws",
-            transaction=transaction,
-            harness=HarnessName.PI,
-        )
+        task = test_services.task_service.get_task(task_id, transaction)
+    assert task is not None
+    assert isinstance(task.input_data, AgentTaskInputsV2)
+    assert isinstance(task.input_data.agent_config, PiAgentConfig)
 
-    assert isinstance(_agent_config_for_request(AgentTypeName.TERMINAL, None, claude_workspace), TerminalAgentConfig)
-    with pytest.raises(HTTPException) as exc_info:
-        _agent_config_for_request(AgentTypeName.REGISTERED, "some-registration", claude_workspace)
-    assert exc_info.value.status_code == 422
-    # Chat types still defer to the workspace-bound harness shim (phase 1).
-    assert isinstance(
-        _agent_config_for_request(AgentTypeName.CLAUDE, None, claude_workspace), ClaudeCodeSDKAgentConfig
+    response = client.post(
+        f"/api/v1/projects/{test_project.object_id}/tasks",
+        json=model_dump(
+            StartTaskRequest(
+                prompt="hello terminal",
+                model=LLMModel.CLAUDE_4_SONNET,
+                agent_type=AgentTypeName.TERMINAL,
+            ),
+            is_camel_case=True,
+        ),
     )
-    assert isinstance(_agent_config_for_request(AgentTypeName.PI, None, pi_workspace), PiAgentConfig)
+    assert response.status_code == 422
 
 
 def _post_agent(client: TestClient, workspace: Workspace, body: dict) -> httpx.Response:

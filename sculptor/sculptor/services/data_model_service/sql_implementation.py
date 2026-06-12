@@ -325,7 +325,6 @@ class SQLTransaction(BaseDataModelTransaction):
                     w.is_deleted,
                     w.is_open,
                     w.created_at,
-                    w.harness,
                     p.name AS project_name,
                     COUNT(CASE
                         WHEN t.is_deleted = 0

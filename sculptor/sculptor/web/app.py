@@ -75,7 +75,6 @@ from sculptor.interfaces.agents.agent import AgentConfigTypes
 from sculptor.interfaces.agents.agent import AgentMessageID
 from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
 from sculptor.interfaces.agents.agent import ClearContextUserMessage
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.interfaces.agents.agent import InterruptProcessUserMessage
 from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessage
 from sculptor.interfaces.agents.agent import PiAgentConfig
@@ -538,7 +537,11 @@ def start_task(
                 workspace_tasks = _get_tasks_for_workspace(workspace, transaction)
                 task_name = _compute_next_agent_name(workspace_tasks)
 
-        agent_config = _agent_config_for_workspace(workspace)
+        # Prompt-ful creation is always a chat agent — terminal agents have no
+        # chat stream to deliver the prompt to.
+        if task_request.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED):
+            raise HTTPException(status_code=422, detail="terminal agents do not take an initial prompt")
+        agent_config = _agent_config_for_request(task_request.agent_type, None)
 
         with services.git_repo_service.open_local_user_git_repo_for_read(project) as repo:
             # Get the current commit hash to use as the starting point for diffs
@@ -685,7 +688,6 @@ def create_workspace_v2(
             description=workspace_request.description,
             transaction=transaction,
             target_branch=workspace_request.target_branch,
-            harness=workspace_request.harness,
         )
         update_most_recently_used_project(project_id=validated_project_id)
         logger.info("Created workspace {} for project {}", workspace.object_id, workspace_request.project_id)
@@ -870,7 +872,6 @@ def list_recent_workspaces(
             agent_count=row["agent_count"],
             is_open=row["is_open"],
             last_activity_at=row["last_activity_at"],
-            harness=row["harness"],
         )
         for row in workspace_dicts
     ]
@@ -1579,33 +1580,23 @@ def _get_workspace_or_404(
     return workspace
 
 
-# DELIBERATE-TEMPORARY: workspace-bound harness selection.
-def _agent_config_for_workspace(workspace: Workspace) -> ClaudeCodeSDKAgentConfig | PiAgentConfig:
-    if workspace.harness == HarnessName.PI:
-        return PiAgentConfig()
-    return ClaudeCodeSDKAgentConfig()
-
-
 def _agent_config_for_request(
     agent_type: AgentTypeName,
     registration_id: str | None,
-    workspace: Workspace,
 ) -> AgentConfigTypes:
-    """Resolve the requested agent type into a stamped `AgentConfigTypes`."""
+    """Resolve the requested agent type into a stamped `AgentConfigTypes`.
+
+    Agent type comes ONLY from the creation request (REQ-TYPE-3) — the
+    workspace-bound harness selection is gone.
+    """
     if agent_type == AgentTypeName.TERMINAL:
         return TerminalAgentConfig()
     if agent_type == AgentTypeName.REGISTERED:
         # Registration resolution lands with the registration loader (phase 4).
         raise HTTPException(status_code=422, detail="registered terminal agents are not available yet")
-    # An explicit pi choice is honored regardless of the workspace — the
-    # new-workspace flow no longer persists a workspace harness.
     if agent_type == AgentTypeName.PI:
         return PiAgentConfig()
-    # DELIBERATE-TEMPORARY: claude still defers to the workspace-bound harness
-    # shim so pre-existing pi workspaces keep their pi default; the shim is
-    # deleted (and this becomes an explicit ClaudeCodeSDKAgentConfig) when
-    # Workspace.harness is dropped.
-    return _agent_config_for_workspace(workspace)
+    return ClaudeCodeSDKAgentConfig()
 
 
 def _get_tasks_for_workspace(
@@ -1712,6 +1703,7 @@ def create_workspace_agent(
                 fast_mode=agent_request.fast_mode,
                 effort=agent_request.effort,
                 sent_via=agent_request.sent_via,
+                agent_type=agent_request.agent_type,
             )
             return start_task(
                 project_id=workspace.project_id,
@@ -1725,7 +1717,7 @@ def create_workspace_agent(
         _prevent_action_if_out_of_free_space(services)
 
         workspace_tasks = _get_tasks_for_workspace(workspace, transaction)
-        agent_config = _agent_config_for_request(agent_request.agent_type, agent_request.registration_id, workspace)
+        agent_config = _agent_config_for_request(agent_request.agent_type, agent_request.registration_id)
         name_prefix = "Terminal" if is_terminal_agent_config(agent_config) else "Agent"
         task_name = agent_request.name or _compute_next_agent_name(workspace_tasks, name_prefix)
         task_id = TaskID()
