@@ -546,16 +546,17 @@ def start_task(
                 )
                 logger.debug("Created workspace {} for task {}", workspace.object_id, task_id)
 
-            # Auto-assign "Agent N" name when no explicit name is provided
+            # Prompt-ful creation is always a chat agent — terminal agents have
+            # no chat stream to deliver the prompt to.
+            if task_request.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED):
+                raise HTTPException(status_code=422, detail="terminal agents do not take an initial prompt")
+            agent_config = _agent_config_for_request(task_request.agent_type, None)
+
+            # Auto-assign a type-derived name ("Claude N" / "Pi N") when no
+            # explicit name is provided.
             if not task_name:
                 workspace_tasks = _get_tasks_for_workspace(workspace, transaction)
-                task_name = _compute_next_agent_name(workspace_tasks)
-
-        # Prompt-ful creation is always a chat agent — terminal agents have no
-        # chat stream to deliver the prompt to.
-        if task_request.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED):
-            raise HTTPException(status_code=422, detail="terminal agents do not take an initial prompt")
-        agent_config = _agent_config_for_request(task_request.agent_type, None)
+                task_name = _compute_next_agent_name(workspace_tasks, _default_agent_name_prefix(agent_config))
 
         with services.git_repo_service.open_local_user_git_repo_for_read(project) as repo:
             # Get the current commit hash to use as the starting point for diffs
@@ -1663,11 +1664,29 @@ def _validate_agent_in_workspace(
     return task
 
 
-def _compute_next_agent_name(existing_tasks: list[Task], prefix: str = "Agent") -> str:
-    """Compute the next auto-generated agent name like 'Agent N' (or '<prefix> N').
+def _default_agent_name_prefix(agent_config: AgentConfigTypes) -> str:
+    """The default-name prefix for an agent's type ("Claude 1", "Pi 2", ...).
 
-    Reuses the lowest available number so that deleting "Agent 1" and creating
-    a new agent produces "Agent 1" again instead of an ever-increasing counter.
+    Registered terminal agents default-name from their registration's display
+    name; every other type names from the type itself so a tab is identifiable
+    before (or without) a generated title.
+    """
+    if isinstance(agent_config, RegisteredTerminalAgentConfig):
+        return agent_config.display_name
+    if isinstance(agent_config, TerminalAgentConfig):
+        return "Terminal"
+    if isinstance(agent_config, PiAgentConfig):
+        return "Pi"
+    if isinstance(agent_config, ClaudeCodeSDKAgentConfig):
+        return "Claude"
+    return "Agent"
+
+
+def _compute_next_agent_name(existing_tasks: list[Task], prefix: str = "Agent") -> str:
+    """Compute the next auto-generated agent name like 'Claude N' (or '<prefix> N').
+
+    Reuses the lowest available number so that deleting "Claude 1" and creating
+    a new agent produces "Claude 1" again instead of an ever-increasing counter.
     Numbering is independent per prefix ("Terminal N" for terminal agents).
     """
     pattern = re.compile(rf"^{re.escape(prefix)} (\d+)$")
@@ -1748,15 +1767,9 @@ def create_workspace_agent(
 
         workspace_tasks = _get_tasks_for_workspace(workspace, transaction)
         agent_config = _agent_config_for_request(agent_request.agent_type, agent_request.registration_id)
-        # Registered agents default-name from their display name; plain
-        # terminals are "Terminal N"; chat agents stay "Agent N".
-        if isinstance(agent_config, RegisteredTerminalAgentConfig):
-            name_prefix = agent_config.display_name
-        elif is_terminal_agent_config(agent_config):
-            name_prefix = "Terminal"
-        else:
-            name_prefix = "Agent"
-        task_name = agent_request.name or _compute_next_agent_name(workspace_tasks, name_prefix)
+        task_name = agent_request.name or _compute_next_agent_name(
+            workspace_tasks, _default_agent_name_prefix(agent_config)
+        )
         task_id = TaskID()
 
         # Check if this is the user's very first agent ever (including deleted ones).

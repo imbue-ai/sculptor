@@ -110,7 +110,7 @@ def test_prompt_features_route_to_capable_terminal_agent(sculptor_instance_: Scu
         expect(commit_button).to_be_disabled()
 
         # Back on the chat agent the button sends a chat message as before.
-        chat_tab = agent_tab_bar.get_agent_tab_by_name("Agent 1").first
+        chat_tab = agent_tab_bar.get_agent_tab_by_name("Claude 1").first
         expect(chat_tab).to_be_visible()
         chat_tab.click()
         expect(commit_button).to_be_enabled()

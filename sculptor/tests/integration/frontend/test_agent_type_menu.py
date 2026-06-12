@@ -32,14 +32,14 @@ def test_agent_type_menu_creates_terminal_agent_and_remembers_type(
     expect(agent_tabs).to_have_count(1)
 
     # Plain + click creates a Claude agent (initial last-used type): the new
-    # tab is "Agent 2" and the chat panel is present.
+    # tab is "Claude 2" and the chat panel is present.
     agent_tab_bar.get_add_agent_button().click()
     expect(agent_tabs).to_have_count(2)
-    expect(agent_tab_bar.get_agent_tab_by_name("Agent 2")).to_have_count(1)
+    expect(agent_tab_bar.get_agent_tab_by_name("Claude 2")).to_have_count(1)
     expect(task_page.get_chat_panel()).to_be_visible()
 
     # Chevron menu → Terminal creates "Terminal 1" (numbered independently
-    # from "Agent N") whose main panel is a terminal, not a chat.
+    # from "Claude N") whose main panel is a terminal, not a chat.
     agent_tab_bar.open_agent_type_menu()
     agent_tab_bar.get_agent_type_menu_item_terminal().click()
     expect(agent_tabs).to_have_count(3)
@@ -56,7 +56,7 @@ def test_agent_type_menu_creates_terminal_agent_and_remembers_type(
     agent_tab_bar.open_agent_type_menu()
     agent_tab_bar.get_agent_type_menu_item_claude().click()
     expect(agent_tabs).to_have_count(5)
-    expect(agent_tab_bar.get_agent_tab_by_name("Agent 3")).to_have_count(1)
+    expect(agent_tab_bar.get_agent_tab_by_name("Claude 3")).to_have_count(1)
 
 
 @user_story("to only see the pi agent type when multi-harness is enabled")
@@ -144,6 +144,8 @@ def test_bundled_claude_code_registration_installed_by_default(
     assert (registrations_dir / "claude-code-hooks.json").is_file()
 
     agent_tab_bar.open_agent_type_menu()
-    expect(agent_tab_bar.get_agent_type_menu_item_registered("claude-code")).to_be_visible()
+    claude_cli_item = agent_tab_bar.get_agent_type_menu_item_registered("claude-code")
+    expect(claude_cli_item).to_be_visible()
+    expect(claude_cli_item).to_contain_text("Claude CLI")
     page.keyboard.press("Escape")
     expect(agent_tab_bar.get_agent_type_menu()).not_to_be_visible()

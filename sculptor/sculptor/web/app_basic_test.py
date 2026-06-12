@@ -1041,10 +1041,10 @@ def test_create_terminal_agent_stamps_terminal_config_and_names_terminal_n(
     assert isinstance(task.input_data, AgentTaskInputsV2)
     assert task.input_data.agent_config.object_type == "TerminalAgentConfig"
 
-    # Numbering is independent per prefix: a chat agent is still "Agent 1".
+    # Numbering is independent per prefix: a chat agent is "Claude 1".
     chat = _post_agent(client, workspace, {})
     assert chat.status_code == 200, chat.text
-    assert chat.json()["title"] == "Agent 1"
+    assert chat.json()["title"] == "Claude 1"
 
     second = _post_agent(client, workspace, {"agentType": "terminal"})
     assert second.status_code == 200, second.text
