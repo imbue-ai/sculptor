@@ -15,21 +15,16 @@ DESCRIPTION = "Workspace tab switching"
 TARGET_COMPONENTS = [
     "WorkspacePage",
     "WorkspacePageContent",
-    "DockingLayout",
-    "LeftSidebar",
-    "LeftSidebarInner",
-    "RightSidebar",
-    "RightSidebarInner",
-    "ZoneContent",
-    "ZoneContentInner",
-    "DiffSplitContainer",
-    "DiffSplitContainerInner",
+    "CompactLayout",
+    "SplittableSectionInner",
+    "PanelSectionInner",
+    "SectionBodyInner",
+    "SectionTabBarInner",
     "AlphaChatInterface",
     "AlphaChatInterfaceInner",
     "ChatInput",
     "WorkspaceBanner",
-    "WorkspaceTabs",
-    "TopBar",
+    "WorkspaceNavSidebar",
 ]
 
 
@@ -75,9 +70,8 @@ def setup(page, base_url, workspace_id, task_id):
 
 
 def action(page):
-    # Find workspace tab buttons in the WorkspaceTabs area
-    # Try several selectors since the tab bar implementation may vary
-    tabs = page.locator('[data-testid="workspace-tab"]').all()
+    # Workspace rows in the nav sidebar (ElementIds.WORKSPACE_TAB)
+    tabs = page.locator('[data-testid="WORKSPACE_TAB"]').all()
 
     if len(tabs) < 2:
         # Fall back to any tab-like elements in the top bar

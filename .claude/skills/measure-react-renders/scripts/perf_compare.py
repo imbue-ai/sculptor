@@ -1,14 +1,19 @@
 """Compare React component render counts between two Sculptor frontend builds.
 
-Starts two backends (baseline and current), injects a React DevTools hook
-via Playwright to count fiber commits per component during a scenario,
-and prints a side-by-side comparison.
+Injects a React DevTools hook via Playwright to count fiber commits per
+component during a scenario.
 
-Run with the project venv:
+Two-tree mode (starts two backends, prints a side-by-side comparison):
     uv run --project sculptor python .claude/skills/measure-react-renders/scripts/perf_compare.py \
         --baseline-dir /tmp/sculptor_baseline \
         --current-dir "$(pwd)" \
         --scenario path/to/scenario.py
+
+Single-tree iteration loop (one build + one backend per run):
+    # once, save a baseline measurement:
+    ... perf_compare.py --current-dir "$(pwd)" --scenario s.py --save-json /tmp/base.json
+    # then after each change, compare against it:
+    ... perf_compare.py --current-dir "$(pwd)" --scenario s.py --against-json /tmp/base.json
 """
 
 import argparse
@@ -236,6 +241,33 @@ def print_comparison(baseline, current, target_components, description):
     print("=" * w)
 
 
+def print_single(result, target_components, description):
+    """Single-column table for one measurement (no baseline)."""
+    w = 60
+    print()
+    print("=" * w)
+    print(f"  {description}")
+    print("=" * w)
+    print(f"\n{'Component':<45} {'Renders':>10}")
+    print("-" * w)
+    print(f"{'Total fiber commits':<45} {result['commits']:>10}")
+    print("-" * w)
+    for name in target_components:
+        count = result["counts"].get(name, 0)
+        if count > 0:
+            print(f"{name:<45} {count:>10}")
+    others = sorted(
+        ((name, count) for name, count in result["counts"].items() if name not in target_components and count >= 10),
+        key=lambda item: -item[1],
+    )
+    if others:
+        print("-" * w)
+        print("Other components rendering >= 10 times:")
+        for name, count in others[:15]:
+            print(f"  {name:<43} {count:>10}")
+    print("=" * w)
+
+
 def load_scenario(path):
     spec = importlib.util.spec_from_file_location("scenario", path)
     mod = importlib.util.module_from_spec(spec)
@@ -243,58 +275,74 @@ def load_scenario(path):
     return mod
 
 
+def run_measurement(repo_dir, scenario, label):
+    """Start one backend for `repo_dir`, run the scenario, and tear down."""
+    port = free_port()
+    data_dir = tempfile.mkdtemp(prefix=f"perf_{label}_")
+    proc = start_backend(repo_dir, port, data_dir)
+    try:
+        print(f"Waiting for {label} backend (port {port})...")
+        if not wait_for_backend(port):
+            print(f"ERROR: {label} backend failed to start")
+            sys.exit(1)
+        workspace_id, task_id = setup_instance(port)
+        print(f"Measuring {label}...")
+        return measure_renders(port, workspace_id, task_id, scenario, label)
+    finally:
+        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        proc.wait()
+        subprocess.run(["rm", "-rf", data_dir], check=False)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Compare render performance between two frontend builds")
-    parser.add_argument("--baseline-dir", required=True, help="Path to baseline repo checkout")
+    parser.add_argument(
+        "--baseline-dir",
+        default=None,
+        help="Path to baseline repo checkout (omit for single-tree mode)",
+    )
     parser.add_argument("--current-dir", required=True, help="Path to current repo checkout")
     parser.add_argument("--scenario", required=True, help="Path to scenario Python file")
     parser.add_argument("--skip-build", action="store_true", help="Skip frontend builds (use existing dist/)")
+    parser.add_argument("--save-json", default=None, help="Write the current measurement to this JSON file")
+    parser.add_argument(
+        "--against-json",
+        default=None,
+        help="Compare against a measurement previously saved with --save-json (instead of --baseline-dir)",
+    )
     args = parser.parse_args()
+
+    if args.baseline_dir and args.against_json:
+        parser.error("--baseline-dir and --against-json are mutually exclusive")
 
     scenario = load_scenario(args.scenario)
 
     if not args.skip_build:
-        print("Building baseline frontend...")
-        build_frontend(args.baseline_dir)
+        if args.baseline_dir:
+            print("Building baseline frontend...")
+            build_frontend(args.baseline_dir)
         print("Building current frontend...")
         build_frontend(args.current_dir)
 
-    port_b = free_port()
-    port_c = free_port()
-    dir_b = tempfile.mkdtemp(prefix="perf_baseline_")
-    dir_c = tempfile.mkdtemp(prefix="perf_current_")
+    if args.baseline_dir:
+        baseline = run_measurement(args.baseline_dir, scenario, "baseline")
+    elif args.against_json:
+        with open(args.against_json) as f:
+            baseline = json.load(f)
+    else:
+        baseline = None
 
-    proc_b = start_backend(args.baseline_dir, port_b, dir_b)
-    proc_c = start_backend(args.current_dir, port_c, dir_c)
+    current = run_measurement(args.current_dir, scenario, "current")
 
-    try:
-        print(f"Waiting for baseline backend (port {port_b})...")
-        if not wait_for_backend(port_b):
-            print("ERROR: Baseline backend failed to start")
-            sys.exit(1)
+    if args.save_json:
+        with open(args.save_json, "w") as f:
+            json.dump(current, f, indent=2)
+        print(f"Saved measurement to {args.save_json}")
 
-        print(f"Waiting for current backend (port {port_c})...")
-        if not wait_for_backend(port_c):
-            print("ERROR: Current backend failed to start")
-            sys.exit(1)
-
-        ws_b, task_b = setup_instance(port_b)
-        ws_c, task_c = setup_instance(port_c)
-
-        print("Measuring baseline...")
-        baseline = measure_renders(port_b, ws_b, task_b, scenario, "baseline")
-
-        print("Measuring current...")
-        current = measure_renders(port_c, ws_c, task_c, scenario, "current")
-
+    if baseline is None:
+        print_single(current, scenario.TARGET_COMPONENTS, scenario.DESCRIPTION)
+    else:
         print_comparison(baseline, current, scenario.TARGET_COMPONENTS, scenario.DESCRIPTION)
-
-    finally:
-        os.killpg(os.getpgid(proc_b.pid), signal.SIGTERM)
-        os.killpg(os.getpgid(proc_c.pid), signal.SIGTERM)
-        proc_b.wait()
-        proc_c.wait()
-        subprocess.run(["rm", "-rf", dir_b, dir_c], check=False)
 
 
 if __name__ == "__main__":

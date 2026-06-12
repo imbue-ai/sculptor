@@ -9,6 +9,30 @@ argument-hint: <scenario-file>
 
 # Render Performance Comparison
 
+## Fast iteration loop (single tree, no baseline worktree)
+
+When iterating on a perf change in the current tree, skip the baseline
+worktree entirely: save a JSON measurement once, then compare each iteration
+against it (~one vite build + one backend boot per run).
+
+```bash
+# once, on the pre-change state (or simply your first run):
+uv run --project sculptor python .claude/skills/measure-react-renders/scripts/perf_compare.py \
+  --current-dir "$(pwd)" --scenario .claude/skills/measure-react-renders/scenarios/tab_switching.py \
+  --save-json /tmp/perf_baseline.json
+
+# after each change:
+uv run --project sculptor python .claude/skills/measure-react-renders/scripts/perf_compare.py \
+  --current-dir "$(pwd)" --scenario .claude/skills/measure-react-renders/scenarios/tab_switching.py \
+  --against-json /tmp/perf_baseline.json
+```
+
+With neither `--baseline-dir` nor `--against-json`, the run prints a
+single-column table (useful for a first look). Saved JSON baselines are only
+comparable on the same machine and scenario.
+
+For a definitive before/after across branches, use the two-tree mode below.
+
 ## Step 1: Create the baseline worktree
 
 ```bash
