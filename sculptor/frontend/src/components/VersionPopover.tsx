@@ -11,6 +11,7 @@ import { useDevPanel } from "~/common/state/hooks/useDevPanel.ts";
 import { useInstallUpdate } from "~/hooks/useInstallUpdate.ts";
 
 import { useReactGrab } from "./DevPanel/useReactGrab.ts";
+import { useReactScan } from "./DevPanel/useReactScan.ts";
 import { useTanstackDevtools } from "./DevPanel/useTanstackDevtools.ts";
 import { useTanstackEventLog } from "./DevPanel/useTanstackEventLog.ts";
 import styles from "./VersionPopover.module.scss";
@@ -38,6 +39,7 @@ export const VersionPopover = (): ReactElement => {
   const updateChannel = useAtomValue(updateChannelAtom);
   const { isDevPanelOpen, showDevPanel, hideDevPanel } = useDevPanel();
   const reactGrab = useReactGrab();
+  const reactScan = useReactScan();
   const tanstackDevtools = useTanstackDevtools();
   const tanstackEventLog = useTanstackEventLog();
   const { install, isInstalling } = useInstallUpdate();
@@ -149,6 +151,16 @@ export const VersionPopover = (): ReactElement => {
                 React Grab
               </Text>
               <Switch size="1" checked={reactGrab.isEnabled} onCheckedChange={reactGrab.handleCheckedChange} />
+            </Flex>
+            <Flex justify="between" align="center" gap="4">
+              <Text
+                size="1"
+                color="gray"
+                title="Highlights components as they re-render. Toggling reloads the app (dev builds only)."
+              >
+                React Scan
+              </Text>
+              <Switch size="1" checked={reactScan.isEnabled} onCheckedChange={reactScan.handleCheckedChange} />
             </Flex>
             <Flex justify="between" align="center" gap="4">
               <Text size="1" color="gray">
