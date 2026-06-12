@@ -1,0 +1,874 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Changes Panel — Redesign Variants</title>
+<style>
+  :root {
+    --gray-1: #111111;
+    --gray-2: #191919;
+    --gray-3: #222222;
+    --gray-4: #2a2a2a;
+    --gray-5: #313131;
+    --gray-6: #3a3a3a;
+    --gray-7: #484848;
+    --gray-8: #606060;
+    --gray-9: #6e6e6e;
+    --gray-11: #b4b4b4;
+    --gray-12: #eeeeee;
+    --gray-a3: rgba(255, 255, 255, 0.07);
+    --gray-a4: rgba(255, 255, 255, 0.10);
+    --gray-a5: rgba(255, 255, 255, 0.14);
+    --accent-9: #3e63dd;
+    --accent-11: #9eb1ff;
+    --accent-a3: rgba(99, 131, 255, 0.16);
+    --green: #3dd68c;
+    --red: #ff9592;
+    --amber: #ffca16;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: #0b0b0b;
+    color: var(--gray-12);
+    font: 14px/1.5 Inter, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    margin: 0;
+    padding: 48px 24px 140px;
+  }
+  svg.li {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex: none;
+  }
+  .section { max-width: 1080px; margin: 0 auto 72px; }
+  .page-head { max-width: 1080px; margin: 0 auto 56px; }
+  h1 { font-size: 24px; font-weight: 650; margin: 0 0 8px; }
+  h2 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+  .desc { color: var(--gray-11); max-width: 78ch; margin: 0 0 6px; }
+  .desc strong { color: var(--gray-12); font-weight: 600; }
+  ul.points { color: var(--gray-11); margin: 6px 0 20px; padding-left: 20px; }
+  ul.points li { margin: 2px 0; }
+  ul.points li::marker { color: var(--gray-8); }
+  .cap { color: var(--gray-9); font-size: 12px; margin-top: 10px; }
+
+  /* ---------- app frame chrome ---------- */
+  .frame {
+    display: flex;
+    height: 480px;
+    border: 1px solid var(--gray-4);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--gray-1);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+    position: relative;
+    margin-top: 16px;
+  }
+  .vnav {
+    width: 44px;
+    background: var(--gray-2);
+    border-right: 1px solid var(--gray-a3);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 0;
+    flex: none;
+  }
+  .vbtn {
+    width: 30px; height: 30px;
+    border-radius: 6px;
+    display: grid; place-items: center;
+    color: var(--gray-11);
+  }
+  .vbtn.on { background: var(--accent-a3); color: var(--accent-11); }
+  .vbtn.bottom { margin-top: auto; }
+
+  .panel {
+    width: 280px;
+    flex: none;
+    border-right: 1px solid var(--gray-a4);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    position: relative;
+  }
+
+  /* ---------- diff viewer (kept as-is across variants) ---------- */
+  .diff { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
+  .crumb {
+    height: 41px; flex: none;
+    border-bottom: 1px solid var(--gray-a5);
+    display: flex; align-items: center; gap: 5px;
+    padding: 0 12px;
+    font-family: var(--mono); font-size: 12px;
+  }
+  .crumb .dir { color: var(--gray-9); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .crumb .sep { color: var(--gray-7); }
+  .crumb .fname { color: var(--gray-12); font-weight: 600; flex: none; }
+  .crumb .stats { display: flex; gap: 5px; margin-left: 10px; flex: none; }
+  .crumb .add { color: var(--green); }
+  .crumb .del { color: var(--red); }
+  .crumb .more {
+    margin-left: auto;
+    width: 24px; height: 24px; border-radius: 5px;
+    display: grid; place-items: center;
+    color: var(--gray-11);
+    background: var(--gray-a3);
+  }
+  .diffbody { font-family: var(--mono); font-size: 12px; line-height: 20px; padding: 6px 0; overflow: hidden; flex: 1; }
+  .dline { display: flex; padding: 0 12px 0 0; color: var(--gray-11); }
+  .dline .ln { width: 40px; flex: none; color: var(--gray-7); text-align: right; padding-right: 14px; user-select: none; }
+  .dline.added { background: rgba(61, 214, 140, 0.07); color: #cde8da; }
+  .dline.added .ln { color: rgba(61, 214, 140, 0.55); }
+
+  /* ---------- segmented controls / buttons ---------- */
+  .seg { display: inline-flex; background: var(--gray-3); border-radius: 6px; padding: 2px; gap: 1px; }
+  .seg .si { padding: 4px 12px; font-size: 13px; color: var(--gray-11); border-radius: 4px; white-space: nowrap; }
+  .seg .si.on { background: var(--gray-6); color: var(--gray-12); box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+  .seg.sm .si { padding: 2px 9px; font-size: 12px; }
+  .btn-soft {
+    background: var(--gray-a3); color: var(--gray-12);
+    border-radius: 4px; font-size: 12px;
+    height: 24px; display: inline-flex; align-items: center; justify-content: center;
+    gap: 6px; padding: 0 12px; white-space: nowrap;
+  }
+  .iconbtn {
+    width: 26px; height: 26px; border-radius: 6px;
+    display: grid; place-items: center;
+    color: var(--gray-11);
+    position: relative;
+  }
+  .iconbtn.on { background: var(--accent-a3); color: var(--accent-11); }
+  .iconbtn.hovd { background: var(--gray-a3); }
+  .badge {
+    position: absolute; top: -3px; right: -3px;
+    background: var(--accent-9); color: #fff;
+    font-size: 9px; font-weight: 600; line-height: 1;
+    border-radius: 99px; padding: 2px 4px;
+  }
+
+  /* ---------- file tree ---------- */
+  .tree { flex: 1; min-height: 0; overflow: hidden; padding-top: 6px; }
+  .row {
+    height: 28px; display: flex; align-items: center; gap: 5px;
+    padding-right: 8px; font-size: 13px; cursor: default;
+  }
+  .row .ic { color: var(--gray-9); }
+  .row .fic { color: var(--gray-11); }
+  .row .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .name .ext { color: var(--gray-9); }
+  .row .dimname { color: #d6d6d6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .grow { flex: 1; min-width: 4px; }
+  .row .plus { color: var(--green); font-family: var(--mono); font-size: 11px; }
+  .row .minus { color: var(--red); font-family: var(--mono); font-size: 11px; }
+  .row .st { font-family: var(--mono); font-weight: 600; font-size: 11px; width: 10px; text-align: center; }
+  .row .st.m { color: var(--amber); }
+  .row .st.a { color: var(--green); }
+  .d0 { padding-left: 12px; }
+  .d1 { padding-left: 26px; }
+  .d2 { padding-left: 40px; }
+  /* current: square, full-bleed hover */
+  .sq .row.hov { background: var(--gray-3); }
+  /* proposed: sidebar-consistent rounded hover */
+  .rd .row { margin: 0 5px; border-radius: 6px; }
+  .rd .row.d0 { padding-left: 8px; }
+  .rd .row.d1 { padding-left: 22px; }
+  .rd .row.d2 { padding-left: 36px; }
+  .rd .row.hov { background: var(--gray-a3); }
+  .rd .row.act { background: var(--accent-a3); }
+  .rd .row.act .name, .rd .row.act .name .ext { color: var(--accent-11); }
+
+  .inchip {
+    margin-left: 6px; flex: none;
+    font-size: 10px; line-height: 1; padding: 3px 6px;
+    border-radius: 99px;
+    background: rgba(61, 214, 140, 0.10); color: var(--green);
+    border: 1px solid rgba(61, 214, 140, 0.30);
+    white-space: nowrap;
+  }
+  .inchip.warn { background: rgba(255, 202, 22, 0.10); color: var(--amber); border-color: rgba(255, 202, 22, 0.30); }
+
+  /* ---------- dropdown menus ---------- */
+  .menu {
+    width: 240px;
+    background: var(--gray-2);
+    border: 1px solid var(--gray-a4);
+    border-radius: 8px;
+    padding: 4px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+    font-size: 13px;
+    position: relative;
+  }
+  .menu.sm { width: 150px; }
+  .mi {
+    height: 28px; display: flex; align-items: center; gap: 9px;
+    padding: 0 8px; border-radius: 4px; color: var(--gray-12);
+    white-space: nowrap;
+  }
+  .mi .mic { color: var(--gray-11); display: flex; width: 14px; justify-content: center; }
+  .mi.dis { color: var(--gray-8); }
+  .mi.dis .mic { color: var(--gray-7); }
+  .mi .kbd { margin-left: auto; color: var(--gray-9); font-size: 11px; font-family: var(--mono); }
+  .mi .subarrow { margin-left: auto; color: var(--gray-9); display: flex; }
+  .mi.hov { background: var(--gray-3); }
+  .msep { height: 1px; background: var(--gray-a3); margin: 4px 8px; }
+  .mlabel {
+    font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--gray-9); padding: 7px 8px 3px; font-weight: 600;
+  }
+  .float-menu { position: absolute; top: 46px; right: 10px; z-index: 5; }
+  .submenu { position: absolute; right: calc(100% + 6px); width: 170px; }
+
+  /* ---------- annotation chips & tooltips ---------- */
+  .chip {
+    position: absolute; z-index: 8;
+    font-size: 11px; line-height: 1.2; padding: 4px 8px;
+    border-radius: 99px; white-space: nowrap;
+    background: rgba(255, 202, 22, 0.12); color: var(--amber);
+    border: 1px solid rgba(255, 202, 22, 0.35);
+  }
+  .chip.good {
+    background: rgba(61, 214, 140, 0.12); color: var(--green);
+    border-color: rgba(61, 214, 140, 0.35);
+  }
+  .tip {
+    position: absolute; z-index: 8;
+    background: #060606; border: 1px solid var(--gray-a4);
+    padding: 4px 8px; border-radius: 5px;
+    font-size: 11px; color: var(--gray-11);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+    white-space: nowrap;
+  }
+
+  /* ---------- variant-specific headers ---------- */
+  .hdr-cur { padding: 8px 10px; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid var(--gray-a3); }
+  .hdr-cur .r1 { display: flex; align-items: center; gap: 6px; }
+  .hdr-cur .r3 { display: flex; justify-content: center; }
+  .hdr-cur .r3 .btn-soft { min-width: 180px; }
+
+  .hdrA { display: flex; align-items: center; gap: 2px; padding: 5px 8px; border-bottom: 1px solid var(--gray-a3); }
+  .vsep { width: 1px; height: 16px; background: var(--gray-a4); margin: 0 7px; flex: none; }
+  .sbtn { padding: 3px 8px; border-radius: 5px; color: var(--gray-9); font-size: 12px; white-space: nowrap; }
+  .sbtn.on { color: var(--gray-12); background: var(--gray-a3); }
+
+  .hdrB { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-bottom: 1px solid var(--gray-a3); }
+  .viewdd {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 9px; border-radius: 6px;
+    font-size: 13px; font-weight: 500;
+    background: var(--gray-a3);
+  }
+  .viewdd .ic { color: var(--gray-9); }
+  .chipbtn {
+    font-size: 11px; padding: 3px 9px; border-radius: 99px;
+    border: 1px solid var(--gray-a4); color: var(--gray-11); white-space: nowrap;
+  }
+  .chipbtn.on { background: var(--accent-a3); color: var(--accent-11); border-color: transparent; }
+  .cfoot {
+    flex: none; height: 34px;
+    border-top: 1px solid var(--gray-a3);
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 12px;
+    color: var(--gray-11); font-size: 12px;
+  }
+  .cfoot:hover { background: var(--gray-a3); color: var(--gray-12); }
+
+  .hdrC { padding: 6px 8px; display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid var(--gray-a3); }
+  .hdrC .r { display: flex; align-items: center; gap: 6px; }
+
+  .hdrD1 { display: flex; align-items: center; gap: 6px; padding: 5px 8px 2px; }
+  .hdrD2 { display: flex; align-items: center; gap: 2px; padding: 2px 6px 6px; }
+  .cfootD { flex: none; border-top: 1px solid var(--gray-a3); padding: 6px 8px; }
+  .cfootD .btn-soft { width: 100%; }
+</style>
+</head>
+<body>
+
+<!-- ============ icon sprite ============ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></symbol>
+    <symbol id="i-filetext" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+    <symbol id="i-filediff" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 10.5v4"/><path d="M10 12.5h4"/><path d="M10 17h4"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+    <symbol id="i-folderopen" viewBox="0 0 24 24"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></symbol>
+    <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-chev-d" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+    <symbol id="i-split" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></symbol>
+    <symbol id="i-wrap" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M3 12h15a3 3 0 1 1 0 6h-4"/><path d="m16 16-2 2 2 2"/><path d="M3 18h7"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="14" height="14" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+    <symbol id="i-ext" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+    <symbol id="i-xc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-commit" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5"/><path d="M2.5 12h6"/><path d="M15.5 12h6"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+    <symbol id="i-term" viewBox="0 0 24 24"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M1 14h6"/><path d="M9 8h6"/><path d="M17 16h6"/></symbol>
+    <symbol id="i-cmd" viewBox="0 0 24 24"><path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"/></symbol>
+  </defs>
+</svg>
+
+<header class="page-head">
+  <h1>Changes Panel — Redesign Variants</h1>
+  <p class="desc">
+    Variant explorations for the workspace Changes panel (A–C, plus the combined
+    direction in D), addressing: the space taken by the
+    stacked segmented controls, the centered commit button, the cluttered ⋯ overflow menu,
+    and file-row hover consistency with the vertical nav sidebar. The diff viewer's
+    breadcrumb chrome is <strong>kept as-is</strong> in every variant.
+    All variants apply the sidebar-style row hover (rounded, inset, translucent) — frozen
+    on one row in each frame, with the selected file shown in the sidebar's active style.
+  </p>
+</header>
+
+<!-- ====================================================== -->
+<!-- CURRENT STATE                                          -->
+<!-- ====================================================== -->
+<section class="section">
+  <h2>Current state (reference)</h2>
+  <p class="desc">What ships today, annotated with the pain points.</p>
+  <div class="frame">
+    <div class="chip" style="top: 12px; left: 336px;">① 3 header rows ≈ 96px before content</div>
+    <div class="chip" style="top: 80px; left: 336px;">② centered, rarely clicked</div>
+    <div class="chip" style="top: 54px; right: 270px;">③ 12 items, 6 separator groups, “Close” vs “Close tab”</div>
+
+    <div class="vnav">
+      <div class="vbtn"><svg class="li" width="16" height="16"><use href="#i-chat"/></svg></div>
+      <div class="vbtn on"><svg class="li" width="16" height="16"><use href="#i-filediff"/></svg></div>
+      <div class="vbtn"><svg class="li" width="16" height="16"><use href="#i-term"/></svg></div>
+      <div class="vbtn"><svg class="li" width="16" height="16"><use href="#i-history"/></svg></div>
+      <div class="vbtn bottom"><svg class="li" width="16" height="16"><use href="#i-sliders"/></svg></div>
+    </div>
+
+    <div class="panel">
+      <div class="hdr-cur">
+        <div class="r1">
+          <div class="seg">
+            <div class="si">Files</div>
+            <div class="si on">Changes</div>
+            <div class="si">Commits</div>
+          </div>
+          <div class="iconbtn" style="margin-left:auto"><svg class="li" width="14" height="14"><use href="#i-plus"/></svg></div>
+        </div>
+        <div class="r1">
+          <div class="seg sm">
+            <div class="si on">All 7</div>
+            <div class="si">Uncommitted 3</div>
+          </div>
+        </div>
+        <div class="r3">
+          <div class="btn-soft">Commit 3 changes</div>
+        </div>
+      </div>
+      <div class="tree sq">
+        <div class="row d0"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">agent_docs/compact-workspace-layout</span></div>
+        <div class="row d1"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">spec<span class="ext">.md</span></span><span class="grow"></span><span class="plus">+293</span><span class="st a">A</span></div>
+        <div class="row d0"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">sculptor/frontend/src</span></div>
+        <div class="row d1"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">components/nav</span></div>
+        <div class="row d2"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">WorkspaceNavSidebar<span class="ext">.module.scss</span></span><span class="grow"></span><span class="plus">+46</span><span class="minus">-9</span><span class="st m">M</span></div>
+        <div class="row d2 hov"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">WorkspaceNavSidebar<span class="ext">.tsx</span></span><span class="inchip warn">④ square full-bleed hover</span><span class="grow"></span><span class="st m">M</span></div>
+        <div class="row d1"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">pages/workspace/components</span></div>
+        <div class="row d2"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">WorkspacePeekOverlay<span class="ext">.tsx</span></span><span class="grow"></span><span class="plus">+14</span><span class="minus">-6</span><span class="st m">M</span></div>
+        <div class="row d1"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">common</span></div>
+        <div class="row d2"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">NavigateUtils<span class="ext">.ts</span></span><span class="grow"></span><span class="plus">+12</span><span class="minus">-4</span><span class="st m">M</span></div>
+        <div class="row d0"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">sculptor/sculptor/testing</span></div>
+        <div class="row d1"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">manual_test_harness<span class="ext">.py</span></span><span class="grow"></span><span class="plus">+9</span><span class="minus">-2</span><span class="st m">M</span></div>
+      </div>
+    </div>
+
+    <div class="diff">
+      <div class="crumb">
+        <span class="dir">agent_docs/compact-workspace-layout</span><span class="sep">/</span><span class="fname">spec.md</span>
+        <span class="stats"><span class="add">+293</span><span class="del">-0</span></span>
+        <div class="more"><svg class="li" width="14" height="14"><use href="#i-more"/></svg></div>
+      </div>
+      <div class="diffbody">
+        <div class="dline added"><span class="ln">1</span># Compact Workspace Layout</div>
+        <div class="dline added"><span class="ln">2</span></div>
+        <div class="dline added"><span class="ln">3</span>## Overview</div>
+        <div class="dline added"><span class="ln">4</span></div>
+        <div class="dline added"><span class="ln">5</span>This is a functional prototype/spike of a</div>
+        <div class="dline added"><span class="ln">6</span>redesigned layout for the Sculptor workspace</div>
+        <div class="dline added"><span class="ln">7</span>page. The driving design goal is for the</div>
+        <div class="dline added"><span class="ln">8</span>workspace to feel **compact and clean** —</div>
+        <div class="dline added"><span class="ln">9</span>strip away the chrome (left sidebar, right</div>
+        <div class="dline added"><span class="ln">10</span>sidebar, bottom bar) and reduce the number</div>
+        <div class="dline added"><span class="ln">11</span>of always-visible icons.</div>
+        <div class="dline added"><span class="ln">12</span></div>
+        <div class="dline added"><span class="ln">13</span>The redesign covers several intertwined</div>
+        <div class="dline added"><span class="ln">14</span>changes:</div>
+        <div class="dline added"><span class="ln">15</span></div>
+        <div class="dline added"><span class="ln">16</span>- **Strip the chrome.** Remove the left</div>
+        <div class="dline added"><span class="ln">17</span>  sidebar, right sidebar, and bottom bar.</div>
+        <div class="dline added"><span class="ln">18</span>- **Vertical navigation sidebar** replaces</div>
+        <div class="dline added"><span class="ln">19</span>  the horizontal tab bar.</div>
+      </div>
+      <div class="float-menu">
+        <div class="menu">
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-search"/></svg></span>Find in file</div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-split"/></svg></span>Split view</div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-check"/></svg></span>Wrap lines</div>
+          <div class="msep"></div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-x"/></svg></span>Close</div>
+          <div class="msep"></div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-filetext"/></svg></span>View file</div>
+          <div class="msep"></div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-copy"/></svg></span>Copy file path</div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-copy"/></svg></span>Copy relative path</div>
+          <div class="msep"></div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-ext"/></svg></span>Open in default app</div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-folderopen"/></svg></span>Open containing folder</div>
+          <div class="msep"></div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-x"/></svg></span>Close tab</div>
+          <div class="mi dis"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-xc"/></svg></span>Close other tabs</div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-xc"/></svg></span>Close all</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="cap">Overflow menu shown open from the ⋯ button. One file row frozen in its hover state for comparison.</p>
+</section>
+
+<!-- ====================================================== -->
+<!-- VARIANT A                                              -->
+<!-- ====================================================== -->
+<section class="section">
+  <h2>Variant A — Single toolbar row</h2>
+  <p class="desc">The most compact direction: everything collapses into one 36px toolbar.</p>
+  <ul class="points">
+    <li>Files/Changes/Commits becomes three small icon tabs (active = accent pill, like the nav sidebar).</li>
+    <li>All/Uncommitted becomes a lightweight text toggle on the same row.</li>
+    <li>Commit becomes an icon button with a count badge, far right — tooltip carries the words for first-timers.</li>
+    <li>Menu: items keep their order but get <strong>labeled groups</strong>; the duplicate “Close” is removed (11 items).</li>
+  </ul>
+  <div class="frame">
+    <div class="chip good" style="top: 12px; left: 336px;">header = 1 row (~36px), saves ~60px</div>
+    <div class="chip good" style="top: 60px; right: 270px;">labeled groups replace guess-the-separator</div>
+
+    <div class="vnav">
+      <div class="vbtn"><svg class="li" width="16" height="16"><use href="#i-chat"/></svg></div>
+      <div class="vbtn on"><svg class="li" width="16" height="16"><use href="#i-filediff"/></svg></div>
+      <div class="vbtn"><svg class="li" width="16" height="16"><use href="#i-term"/></svg></div>
+      <div class="vbtn"><svg class="li" width="16" height="16"><use href="#i-history"/></svg></div>
+      <div class="vbtn bottom"><svg class="li" width="16" height="16"><use href="#i-sliders"/></svg></div>
+    </div>
+
+    <div class="panel">
+      <div class="hdrA">
+        <div class="iconbtn" title="Files"><svg class="li" width="15" height="15"><use href="#i-folder"/></svg></div>
+        <div class="iconbtn on" title="Changes"><svg class="li" width="15" height="15"><use href="#i-filediff"/></svg></div>
+        <div class="iconbtn" title="Commits"><svg class="li" width="15" height="15"><use href="#i-history"/></svg></div>
+        <div class="vsep"></div>
+        <div class="sbtn on">All 7</div>
+        <div class="sbtn">Uncommitted</div>
+        <div class="iconbtn hovd" style="margin-left:auto">
+          <svg class="li" width="15" height="15"><use href="#i-commit"/></svg>
+          <span class="badge">3</span>
+        </div>
+        <div class="iconbtn"><svg class="li" width="14" height="14"><use href="#i-plus"/></svg></div>
+      </div>
+      <div class="tip" style="top: 40px; right: 8px;">Commit 3 changes</div>
+      <div class="tree rd">
+        <div class="row d0"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">agent_docs/compact-workspace-layout</span></div>
+        <div class="row d1 act"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">spec<span class="ext">.md</span></span><span class="grow"></span><span class="plus">+293</span><span class="st a">A</span></div>
+        <div class="row d0"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">sculptor/frontend/src</span></div>
+        <div class="row d1"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">components/nav</span></div>
+        <div class="row d2"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">WorkspaceNavSidebar<span class="ext">.module.scss</span></span><span class="grow"></span><span class="plus">+46</span><span class="minus">-9</span><span class="st m">M</span></div>
+        <div class="row d2 hov"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">WorkspaceNavSidebar<span class="ext">.tsx</span></span><span class="inchip">sidebar-style hover</span><span class="grow"></span><span class="st m">M</span></div>
+        <div class="row d1"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">pages/workspace/components</span></div>
+        <div class="row d2"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">WorkspacePeekOverlay<span class="ext">.tsx</span></span><span class="grow"></span><span class="plus">+14</span><span class="minus">-6</span><span class="st m">M</span></div>
+        <div class="row d1"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">common</span></div>
+        <div class="row d2"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">NavigateUtils<span class="ext">.ts</span></span><span class="grow"></span><span class="plus">+12</span><span class="minus">-4</span><span class="st m">M</span></div>
+        <div class="row d0"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">sculptor/sculptor/testing</span></div>
+        <div class="row d1"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">manual_test_harness<span class="ext">.py</span></span><span class="grow"></span><span class="plus">+9</span><span class="minus">-2</span><span class="st m">M</span></div>
+      </div>
+    </div>
+
+    <div class="diff">
+      <div class="crumb">
+        <span class="dir">agent_docs/compact-workspace-layout</span><span class="sep">/</span><span class="fname">spec.md</span>
+        <span class="stats"><span class="add">+293</span><span class="del">-0</span></span>
+        <div class="more"><svg class="li" width="14" height="14"><use href="#i-more"/></svg></div>
+      </div>
+      <div class="diffbody">
+        <div class="dline added"><span class="ln">1</span># Compact Workspace Layout</div>
+        <div class="dline added"><span class="ln">2</span></div>
+        <div class="dline added"><span class="ln">3</span>## Overview</div>
+        <div class="dline added"><span class="ln">4</span></div>
+        <div class="dline added"><span class="ln">5</span>This is a functional prototype/spike of a</div>
+        <div class="dline added"><span class="ln">6</span>redesigned layout for the Sculptor workspace</div>
+        <div class="dline added"><span class="ln">7</span>page. The driving design goal is for the</div>
+        <div class="dline added"><span class="ln">8</span>workspace to feel **compact and clean** —</div>
+        <div class="dline added"><span class="ln">9</span>strip away the chrome (left sidebar, right</div>
+        <div class="dline added"><span class="ln">10</span>sidebar, bottom bar) and reduce the number</div>
+        <div class="dline added"><span class="ln">11</span>of always-visible icons.</div>
+        <div class="dline added"><span class="ln">12</span></div>
+        <div class="dline added"><span class="ln">13</span>The redesign covers several intertwined</div>
+        <div class="dline added"><span class="ln">14</span>changes:</div>
+        <div class="dline added"><span class="ln">15</span></div>
+        <div class="dline added"><span class="ln">16</span>- **Strip the chrome.** Remove the left</div>
+        <div class="dline added"><span class="ln">17</span>  sidebar, right sidebar, and bottom bar.</div>
+        <div class="dline added"><span class="ln">18</span>- **Vertical navigation sidebar** replaces</div>
+        <div class="dline added"><span class="ln">19</span>  the horizontal tab bar.</div>
+      </div>
+      <div class="float-menu">
+        <div class="menu">
+          <div class="mlabel">View</div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-search"/></svg></span>Find in file<span class="kbd">⌘F</span></div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-split"/></svg></span>Split view</div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-check"/></svg></span>Wrap lines</div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-filetext"/></svg></span>View file</div>
+          <div class="mlabel">Copy</div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-copy"/></svg></span>File path</div>
+          <div class="mi hov"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-copy"/></svg></span>Relative path</div>
+          <div class="mlabel">System</div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-ext"/></svg></span>Open in default app</div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-folderopen"/></svg></span>Open containing folder</div>
+          <div class="mlabel">Tabs</div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-x"/></svg></span>Close tab<span class="kbd">⌘W</span></div>
+          <div class="mi dis"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-xc"/></svg></span>Close other tabs</div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-xc"/></svg></span>Close all</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="cap">Commit icon's tooltip shown frozen below the toolbar. Selected file uses the sidebar's accent-active style.</p>
+</section>
+
+<!-- ====================================================== -->
+<!-- VARIANT B                                              -->
+<!-- ====================================================== -->
+<section class="section">
+  <h2>Variant B — View dropdown + commit footer</h2>
+  <p class="desc">The switcher gets out of the way entirely; commit anchors to a quiet footer.</p>
+  <ul class="points">
+    <li>Files/Changes/Commits collapses into a compact labeled dropdown (“Changes ⌄”), shown open here.</li>
+    <li>All/Uncommitted becomes two small filter chips on the same row.</li>
+    <li>Commit lives in a full-width footer bar — words stay visible for first-time users, regulars ignore it.</li>
+    <li>Menu: rarely-used paths fold into <strong>submenus</strong> (Copy path ›, Open in ›, Close ›) — 7 top-level items.</li>
+  </ul>
+  <div class="frame">
+    <div class="chip good" style="top: 12px; left: 336px;">switcher = 1 compact dropdown</div>
+    <div class="chip good" style="bottom: 44px; left: 336px;">discoverable, out of the way</div>
+    <div class="chip good" style="top: 60px; right: 270px;">7 top-level items, submenus for the long tail</div>
+
+    <div class="vnav">
+      <div class="vbtn"><svg class="li" width="16" height="16"><use href="#i-chat"/></svg></div>
+      <div class="vbtn on"><svg class="li" width="16" height="16"><use href="#i-filediff"/></svg></div>
+      <div class="vbtn"><svg class="li" width="16" height="16"><use href="#i-term"/></svg></div>
+      <div class="vbtn"><svg class="li" width="16" height="16"><use href="#i-history"/></svg></div>
+      <div class="vbtn bottom"><svg class="li" width="16" height="16"><use href="#i-sliders"/></svg></div>
+    </div>
+
+    <div class="panel">
+      <div class="hdrB">
+        <div class="viewdd">Changes <svg class="li ic" width="12" height="12"><use href="#i-chev-d"/></svg></div>
+        <span style="flex:1"></span>
+        <div class="chipbtn on">All 7</div>
+        <div class="chipbtn">Uncommitted</div>
+        <div class="iconbtn"><svg class="li" width="14" height="14"><use href="#i-plus"/></svg></div>
+      </div>
+      <div class="menu sm" style="position:absolute; top: 40px; left: 8px; z-index: 7;">
+        <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-folder"/></svg></span>Files</div>
+        <div class="mi hov"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-filediff"/></svg></span>Changes<span class="kbd"><svg class="li" width="12" height="12"><use href="#i-check"/></svg></span></div>
+        <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-history"/></svg></span>Commits</div>
+      </div>
+      <div class="tree rd">
+        <div class="row d0"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">agent_docs/compact-workspace-layout</span></div>
+        <div class="row d1 act"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">spec<span class="ext">.md</span></span><span class="grow"></span><span class="plus">+293</span><span class="st a">A</span></div>
+        <div class="row d0"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">sculptor/frontend/src</span></div>
+        <div class="row d1"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">components/nav</span></div>
+        <div class="row d2"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">WorkspaceNavSidebar<span class="ext">.module.scss</span></span><span class="grow"></span><span class="plus">+46</span><span class="minus">-9</span><span class="st m">M</span></div>
+        <div class="row d2 hov"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">WorkspaceNavSidebar<span class="ext">.tsx</span></span><span class="inchip">sidebar-style hover</span><span class="grow"></span><span class="st m">M</span></div>
+        <div class="row d1"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">pages/workspace/components</span></div>
+        <div class="row d2"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">WorkspacePeekOverlay<span class="ext">.tsx</span></span><span class="grow"></span><span class="plus">+14</span><span class="minus">-6</span><span class="st m">M</span></div>
+        <div class="row d1"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">common</span></div>
+        <div class="row d2"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">NavigateUtils<span class="ext">.ts</span></span><span class="grow"></span><span class="plus">+12</span><span class="minus">-4</span><span class="st m">M</span></div>
+        <div class="row d0"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">sculptor/sculptor/testing</span></div>
+        <div class="row d1"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">manual_test_harness<span class="ext">.py</span></span><span class="grow"></span><span class="plus">+9</span><span class="minus">-2</span><span class="st m">M</span></div>
+      </div>
+      <div class="cfoot">
+        <svg class="li" width="14" height="14"><use href="#i-commit"/></svg>
+        Commit 3 changes…
+      </div>
+    </div>
+
+    <div class="diff">
+      <div class="crumb">
+        <span class="dir">agent_docs/compact-workspace-layout</span><span class="sep">/</span><span class="fname">spec.md</span>
+        <span class="stats"><span class="add">+293</span><span class="del">-0</span></span>
+        <div class="more"><svg class="li" width="14" height="14"><use href="#i-more"/></svg></div>
+      </div>
+      <div class="diffbody">
+        <div class="dline added"><span class="ln">1</span># Compact Workspace Layout</div>
+        <div class="dline added"><span class="ln">2</span></div>
+        <div class="dline added"><span class="ln">3</span>## Overview</div>
+        <div class="dline added"><span class="ln">4</span></div>
+        <div class="dline added"><span class="ln">5</span>This is a functional prototype/spike of a</div>
+        <div class="dline added"><span class="ln">6</span>redesigned layout for the Sculptor workspace</div>
+        <div class="dline added"><span class="ln">7</span>page. The driving design goal is for the</div>
+        <div class="dline added"><span class="ln">8</span>workspace to feel **compact and clean** —</div>
+        <div class="dline added"><span class="ln">9</span>strip away the chrome (left sidebar, right</div>
+        <div class="dline added"><span class="ln">10</span>sidebar, bottom bar) and reduce the number</div>
+        <div class="dline added"><span class="ln">11</span>of always-visible icons.</div>
+        <div class="dline added"><span class="ln">12</span></div>
+        <div class="dline added"><span class="ln">13</span>The redesign covers several intertwined</div>
+        <div class="dline added"><span class="ln">14</span>changes:</div>
+        <div class="dline added"><span class="ln">15</span></div>
+        <div class="dline added"><span class="ln">16</span>- **Strip the chrome.** Remove the left</div>
+        <div class="dline added"><span class="ln">17</span>  sidebar, right sidebar, and bottom bar.</div>
+        <div class="dline added"><span class="ln">18</span>- **Vertical navigation sidebar** replaces</div>
+        <div class="dline added"><span class="ln">19</span>  the horizontal tab bar.</div>
+      </div>
+      <div class="float-menu">
+        <div class="menu">
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-search"/></svg></span>Find in file<span class="kbd">⌘F</span></div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-split"/></svg></span>Split view</div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-check"/></svg></span>Wrap lines</div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-filetext"/></svg></span>View file</div>
+          <div class="msep"></div>
+          <div class="mi hov"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-copy"/></svg></span>Copy path<span class="subarrow"><svg class="li" width="12" height="12"><use href="#i-chev-r"/></svg></span></div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-ext"/></svg></span>Open in<span class="subarrow"><svg class="li" width="12" height="12"><use href="#i-chev-r"/></svg></span></div>
+          <div class="msep"></div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-x"/></svg></span>Close<span class="subarrow"><svg class="li" width="12" height="12"><use href="#i-chev-r"/></svg></span></div>
+          <div class="menu submenu" style="top: 128px;">
+            <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-copy"/></svg></span>File path</div>
+            <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-copy"/></svg></span>Relative path</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="cap">View dropdown shown open at top-left of the panel; “Copy path” submenu shown open from the ⋯ menu.</p>
+</section>
+
+<!-- ====================================================== -->
+<!-- VARIANT C                                              -->
+<!-- ====================================================== -->
+<section class="section">
+  <h2>Variant C — Tighten, don’t rearrange</h2>
+  <p class="desc">The conservative direction: keep today’s structure, shrink and merge it.</p>
+  <ul class="points">
+    <li>Both segmented controls stay, but at a smaller size.</li>
+    <li>The commit button drops its dedicated centered row — it becomes a small right-aligned button sharing the scope row (2 slim rows ≈ 62px vs ~96px today).</li>
+    <li>Menu: <strong>ruthless trim</strong> to the items actually used — everything else moves to the command palette via a trailing “All actions… ⌘K”.</li>
+  </ul>
+  <div class="frame">
+    <div class="chip good" style="top: 12px; left: 336px;">same structure, 2 slim rows</div>
+    <div class="chip good" style="top: 48px; left: 336px;">commit inline, right-aligned</div>
+    <div class="chip good" style="top: 60px; right: 270px;">6 items + ⌘K escape hatch</div>
+
+    <div class="vnav">
+      <div class="vbtn"><svg class="li" width="16" height="16"><use href="#i-chat"/></svg></div>
+      <div class="vbtn on"><svg class="li" width="16" height="16"><use href="#i-filediff"/></svg></div>
+      <div class="vbtn"><svg class="li" width="16" height="16"><use href="#i-term"/></svg></div>
+      <div class="vbtn"><svg class="li" width="16" height="16"><use href="#i-history"/></svg></div>
+      <div class="vbtn bottom"><svg class="li" width="16" height="16"><use href="#i-sliders"/></svg></div>
+    </div>
+
+    <div class="panel">
+      <div class="hdrC">
+        <div class="r">
+          <div class="seg sm">
+            <div class="si">Files</div>
+            <div class="si on">Changes</div>
+            <div class="si">Commits</div>
+          </div>
+          <div class="iconbtn" style="margin-left:auto"><svg class="li" width="14" height="14"><use href="#i-plus"/></svg></div>
+        </div>
+        <div class="r">
+          <div class="seg sm">
+            <div class="si on">All 7</div>
+            <div class="si">Uncommitted</div>
+          </div>
+          <div class="btn-soft" style="margin-left:auto; height: 22px; padding: 0 10px;">
+            <svg class="li" width="12" height="12"><use href="#i-commit"/></svg>
+            Commit 3
+          </div>
+        </div>
+      </div>
+      <div class="tree rd">
+        <div class="row d0"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">agent_docs/compact-workspace-layout</span></div>
+        <div class="row d1 act"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">spec<span class="ext">.md</span></span><span class="grow"></span><span class="plus">+293</span><span class="st a">A</span></div>
+        <div class="row d0"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">sculptor/frontend/src</span></div>
+        <div class="row d1"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">components/nav</span></div>
+        <div class="row d2"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">WorkspaceNavSidebar<span class="ext">.module.scss</span></span><span class="grow"></span><span class="plus">+46</span><span class="minus">-9</span><span class="st m">M</span></div>
+        <div class="row d2 hov"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">WorkspaceNavSidebar<span class="ext">.tsx</span></span><span class="inchip">sidebar-style hover</span><span class="grow"></span><span class="st m">M</span></div>
+        <div class="row d1"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">pages/workspace/components</span></div>
+        <div class="row d2"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">WorkspacePeekOverlay<span class="ext">.tsx</span></span><span class="grow"></span><span class="plus">+14</span><span class="minus">-6</span><span class="st m">M</span></div>
+        <div class="row d1"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">common</span></div>
+        <div class="row d2"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">NavigateUtils<span class="ext">.ts</span></span><span class="grow"></span><span class="plus">+12</span><span class="minus">-4</span><span class="st m">M</span></div>
+        <div class="row d0"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">sculptor/sculptor/testing</span></div>
+        <div class="row d1"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">manual_test_harness<span class="ext">.py</span></span><span class="grow"></span><span class="plus">+9</span><span class="minus">-2</span><span class="st m">M</span></div>
+      </div>
+    </div>
+
+    <div class="diff">
+      <div class="crumb">
+        <span class="dir">agent_docs/compact-workspace-layout</span><span class="sep">/</span><span class="fname">spec.md</span>
+        <span class="stats"><span class="add">+293</span><span class="del">-0</span></span>
+        <div class="more"><svg class="li" width="14" height="14"><use href="#i-more"/></svg></div>
+      </div>
+      <div class="diffbody">
+        <div class="dline added"><span class="ln">1</span># Compact Workspace Layout</div>
+        <div class="dline added"><span class="ln">2</span></div>
+        <div class="dline added"><span class="ln">3</span>## Overview</div>
+        <div class="dline added"><span class="ln">4</span></div>
+        <div class="dline added"><span class="ln">5</span>This is a functional prototype/spike of a</div>
+        <div class="dline added"><span class="ln">6</span>redesigned layout for the Sculptor workspace</div>
+        <div class="dline added"><span class="ln">7</span>page. The driving design goal is for the</div>
+        <div class="dline added"><span class="ln">8</span>workspace to feel **compact and clean** —</div>
+        <div class="dline added"><span class="ln">9</span>strip away the chrome (left sidebar, right</div>
+        <div class="dline added"><span class="ln">10</span>sidebar, bottom bar) and reduce the number</div>
+        <div class="dline added"><span class="ln">11</span>of always-visible icons.</div>
+        <div class="dline added"><span class="ln">12</span></div>
+        <div class="dline added"><span class="ln">13</span>The redesign covers several intertwined</div>
+        <div class="dline added"><span class="ln">14</span>changes:</div>
+        <div class="dline added"><span class="ln">15</span></div>
+        <div class="dline added"><span class="ln">16</span>- **Strip the chrome.** Remove the left</div>
+        <div class="dline added"><span class="ln">17</span>  sidebar, right sidebar, and bottom bar.</div>
+        <div class="dline added"><span class="ln">18</span>- **Vertical navigation sidebar** replaces</div>
+        <div class="dline added"><span class="ln">19</span>  the horizontal tab bar.</div>
+      </div>
+      <div class="float-menu">
+        <div class="menu">
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-search"/></svg></span>Find in file<span class="kbd">⌘F</span></div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-split"/></svg></span>Split view</div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-check"/></svg></span>Wrap lines</div>
+          <div class="msep"></div>
+          <div class="mi hov"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-copy"/></svg></span>Copy relative path</div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-ext"/></svg></span>Open in default app</div>
+          <div class="msep"></div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-x"/></svg></span>Close tab<span class="kbd">⌘W</span></div>
+          <div class="msep"></div>
+          <div class="mi" style="color: var(--gray-11);"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-cmd"/></svg></span>All actions…<span class="kbd">⌘K</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="cap">Removed from the menu: “Close” (duplicate), “View file”, “Copy file path”, “Open containing folder”, “Close other tabs”, “Close all” — all reachable via ⌘K.</p>
+</section>
+
+<!-- ====================================================== -->
+<!-- VARIANT D — COMBINED (chosen direction)                -->
+<!-- ====================================================== -->
+<section class="section">
+  <h2>Variant D — Combined (chosen direction)</h2>
+  <p class="desc">The direction picked from iteration: the Files/Changes/Commits segmented control
+  <strong>stays</strong> on the panel section row (not a dropdown), A’s text-toggle scope picker sits on
+  its own row beneath it with no border under it, the commit action is a plain “Commit N changes”
+  button anchored to the panel footer (no icon), and the ⋯ menu uses B’s submenu treatment.</p>
+  <ul class="points">
+    <li>Row 1 — panel section row: Files | Changes | Commits segmented control, <strong>shrunk and left-aligned</strong> (not full width), + add-panel “+”.</li>
+    <li>Row 2 — scope picker, under the section row: selected gets a subtle box, unselected is plain text. No border below.</li>
+    <li>Footer — full-width button reading “Commit 3 changes”; words stay for first-time users.</li>
+    <li>⋯ menu — Variant B’s treatment: 7 top-level items, Copy path / Open in / Close fold into submenus.</li>
+  </ul>
+  <div class="frame">
+    <div class="chip good" style="top: 10px; left: 336px;">segmented control: smaller, left-aligned</div>
+    <div class="chip good" style="top: 48px; left: 336px;">scope row: A-style toggle, borderless</div>
+    <div class="chip good" style="bottom: 48px; left: 336px;">plain “Commit N changes” button in footer</div>
+    <div class="chip good" style="top: 60px; right: 270px;">B’s menu: submenus</div>
+
+    <div class="vnav">
+      <div class="vbtn"><svg class="li" width="16" height="16"><use href="#i-chat"/></svg></div>
+      <div class="vbtn on"><svg class="li" width="16" height="16"><use href="#i-filediff"/></svg></div>
+      <div class="vbtn"><svg class="li" width="16" height="16"><use href="#i-term"/></svg></div>
+      <div class="vbtn"><svg class="li" width="16" height="16"><use href="#i-history"/></svg></div>
+      <div class="vbtn bottom"><svg class="li" width="16" height="16"><use href="#i-sliders"/></svg></div>
+    </div>
+
+    <div class="panel">
+      <div class="hdrD1">
+        <div class="seg sm">
+          <div class="si">Files</div>
+          <div class="si on">Changes</div>
+          <div class="si">Commits</div>
+        </div>
+        <span style="flex:1"></span>
+        <div class="iconbtn"><svg class="li" width="14" height="14"><use href="#i-plus"/></svg></div>
+      </div>
+      <div class="hdrD2">
+        <div class="sbtn on">All 7</div>
+        <div class="sbtn">Uncommitted</div>
+      </div>
+      <div class="tree rd">
+        <div class="row d0"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">agent_docs/compact-workspace-layout</span></div>
+        <div class="row d1 act"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">spec<span class="ext">.md</span></span><span class="grow"></span><span class="plus">+293</span><span class="st a">A</span></div>
+        <div class="row d0"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">sculptor/frontend/src</span></div>
+        <div class="row d1"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">components/nav</span></div>
+        <div class="row d2"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">WorkspaceNavSidebar<span class="ext">.module.scss</span></span><span class="grow"></span><span class="plus">+46</span><span class="minus">-9</span><span class="st m">M</span></div>
+        <div class="row d2 hov"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">WorkspaceNavSidebar<span class="ext">.tsx</span></span><span class="inchip">sidebar-style hover</span><span class="grow"></span><span class="st m">M</span></div>
+        <div class="row d1"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">pages/workspace/components</span></div>
+        <div class="row d2"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">WorkspacePeekOverlay<span class="ext">.tsx</span></span><span class="grow"></span><span class="plus">+14</span><span class="minus">-6</span><span class="st m">M</span></div>
+        <div class="row d1"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">common</span></div>
+        <div class="row d2"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">NavigateUtils<span class="ext">.ts</span></span><span class="grow"></span><span class="plus">+12</span><span class="minus">-4</span><span class="st m">M</span></div>
+        <div class="row d0"><svg class="li fic" width="12" height="12"><use href="#i-chev-d"/></svg><svg class="li fic" width="13" height="13"><use href="#i-folder"/></svg><span class="dimname">sculptor/sculptor/testing</span></div>
+        <div class="row d1"><svg class="li ic" width="13" height="13"><use href="#i-file"/></svg><span class="name">manual_test_harness<span class="ext">.py</span></span><span class="grow"></span><span class="plus">+9</span><span class="minus">-2</span><span class="st m">M</span></div>
+      </div>
+      <div class="cfootD">
+        <div class="btn-soft">Commit 3 changes</div>
+      </div>
+    </div>
+
+    <div class="diff">
+      <div class="crumb">
+        <span class="dir">agent_docs/compact-workspace-layout</span><span class="sep">/</span><span class="fname">spec.md</span>
+        <span class="stats"><span class="add">+293</span><span class="del">-0</span></span>
+        <div class="more"><svg class="li" width="14" height="14"><use href="#i-more"/></svg></div>
+      </div>
+      <div class="diffbody">
+        <div class="dline added"><span class="ln">1</span># Compact Workspace Layout</div>
+        <div class="dline added"><span class="ln">2</span></div>
+        <div class="dline added"><span class="ln">3</span>## Overview</div>
+        <div class="dline added"><span class="ln">4</span></div>
+        <div class="dline added"><span class="ln">5</span>This is a functional prototype/spike of a</div>
+        <div class="dline added"><span class="ln">6</span>redesigned layout for the Sculptor workspace</div>
+        <div class="dline added"><span class="ln">7</span>page. The driving design goal is for the</div>
+        <div class="dline added"><span class="ln">8</span>workspace to feel **compact and clean** —</div>
+        <div class="dline added"><span class="ln">9</span>strip away the chrome (left sidebar, right</div>
+        <div class="dline added"><span class="ln">10</span>sidebar, bottom bar) and reduce the number</div>
+        <div class="dline added"><span class="ln">11</span>of always-visible icons.</div>
+        <div class="dline added"><span class="ln">12</span></div>
+        <div class="dline added"><span class="ln">13</span>The redesign covers several intertwined</div>
+        <div class="dline added"><span class="ln">14</span>changes:</div>
+        <div class="dline added"><span class="ln">15</span></div>
+        <div class="dline added"><span class="ln">16</span>- **Strip the chrome.** Remove the left</div>
+        <div class="dline added"><span class="ln">17</span>  sidebar, right sidebar, and bottom bar.</div>
+        <div class="dline added"><span class="ln">18</span>- **Vertical navigation sidebar** replaces</div>
+        <div class="dline added"><span class="ln">19</span>  the horizontal tab bar.</div>
+      </div>
+      <div class="float-menu">
+        <div class="menu">
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-search"/></svg></span>Find in file<span class="kbd">⌘F</span></div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-split"/></svg></span>Split view</div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-check"/></svg></span>Wrap lines</div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-filetext"/></svg></span>View file</div>
+          <div class="msep"></div>
+          <div class="mi hov"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-copy"/></svg></span>Copy path<span class="subarrow"><svg class="li" width="12" height="12"><use href="#i-chev-r"/></svg></span></div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-ext"/></svg></span>Open in<span class="subarrow"><svg class="li" width="12" height="12"><use href="#i-chev-r"/></svg></span></div>
+          <div class="msep"></div>
+          <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-x"/></svg></span>Close<span class="subarrow"><svg class="li" width="12" height="12"><use href="#i-chev-r"/></svg></span></div>
+          <div class="menu submenu" style="top: 128px;">
+            <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-copy"/></svg></span>File path</div>
+            <div class="mi"><span class="mic"><svg class="li" width="14" height="14"><use href="#i-copy"/></svg></span>Relative path</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="cap">⋯ menu uses Variant B’s submenu treatment; “Copy path” submenu shown open.</p>
+</section>
+
+</body>
+</html>
