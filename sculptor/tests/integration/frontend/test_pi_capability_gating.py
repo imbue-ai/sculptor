@@ -11,6 +11,7 @@ renders under Claude" baseline; the pi branch is the "this affordance is
 suppressed by the harness gate" claim.
 """
 
+import subprocess
 import tempfile
 import uuid
 from pathlib import Path
@@ -20,6 +21,7 @@ from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.interfaces.agents.agent import HarnessName
+from sculptor.testing.elements.base import type_trigger_char
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
 from sculptor.testing.fake_pi import install_fake_pi_binary
@@ -28,6 +30,7 @@ from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
+from sculptor.testing.utils import get_playwright_modifier_key
 from tests.integration.frontend.conftest import HarnessTestConfig  # noqa: F401
 
 # Mirror of the frontend's CAPABILITY_UNSUPPORTED_COPY (components/useCapabilityGate.ts).
@@ -197,15 +200,56 @@ def test_chat_remains_usable_when_uploads_gated(
     expect(sculptor_instance_.page.get_by_test_id(ElementIDs.FILE_UPLOAD)).to_be_attached()
 
 
+def _create_skill_in_directory(project_path: Path, skill_name: str, description: str) -> None:
+    """Commit a custom skill to the project's .claude/skills/ so the workspace
+    clone (and pi's --skill flags) include it."""
+    skill_dir = project_path / ".claude" / "skills" / skill_name
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    (skill_dir / "SKILL.md").write_text(f"---\nname: {skill_name}\ndescription: {description}\n---\nInstructions.\n")
+    subprocess.run(["git", "add", str(skill_dir)], cwd=project_path, check=True)
+    subprocess.run(["git", "commit", "-m", f"Add skill {skill_name}"], cwd=project_path, check=True)
+
+
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
-@user_story("to render the skills panel empty under harnesses without skills support")
-def test_skills_panel_empty_under_pi(sculptor_instance_: SculptorInstance, harness: HarnessTestConfig) -> None:
-    _create_workspace_for_harness(sculptor_instance_, harness, "Skills Panel Gate")
-    # SkillChip count is 0 under pi regardless of the panel's visibility.
-    # Under Claude the panel may or may not contain user-defined skills in
-    # this test repo, so the Claude branch is left unasserted.
-    if harness.workspace_harness == HarnessName.PI:
-        expect(sculptor_instance_.page.get_by_test_id(ElementIDs.SKILL_CHIP)).to_have_count(0)
+@user_story("to browse and pick the workspace's skills under any skills-supporting harness, including pi")
+def test_skills_panel_and_picker_list_skills(sculptor_instance_: SculptorInstance, harness: HarnessTestConfig) -> None:
+    """Pi reports supports_skills=True, so the skills panel and the slash picker
+    list the workspace's skills under pi exactly as under Claude (the picker is
+    harness-agnostic; PiAgent rewrites a picked /name into pi's /skill:<name>).
+
+    The gated-off (supports_skills=False) state is covered at the component
+    level by SkillsPanel.test.tsx, since no shipping harness reports False."""
+    skill_name = "skills-gate-custom"
+    _create_skill_in_directory(sculptor_instance_.project_path, skill_name, "Skill for the pi skills gate test")
+
+    task_page = _create_workspace_for_harness(sculptor_instance_, harness, "Skills Panel Gate")
+
+    # The side panel lists the seeded skill (this is the surface that reads the
+    # supports_skills flag) for both Claude and pi.
+    skills_panel = task_page.open_skills_panel()
+    expect(skills_panel.get_skill_chip(skill_name)).to_be_visible()
+
+    # The slash picker also surfaces it. The picker fetches the same
+    # discover_skills list for every harness; on slow CI the workspace clone's
+    # skills may not be discovered yet, so retry the trigger.
+    page = sculptor_instance_.page
+    chat_input = task_page.get_chat_panel().get_chat_input()
+    mention_list = page.get_by_test_id(ElementIDs.MENTION_LIST)
+    mod_key = get_playwright_modifier_key()
+    for attempt in range(5):
+        type_trigger_char(chat_input, "/")
+        chat_input.press_sequentially(skill_name)
+        try:
+            expect(mention_list).to_be_visible(timeout=10_000)
+            expect(mention_list).to_contain_text(skill_name, timeout=5_000)
+            break
+        except AssertionError:
+            if attempt == 4:
+                raise
+            page.keyboard.press("Escape")
+            page.keyboard.press(f"{mod_key}+a")
+            page.keyboard.press("Backspace")
+            page.wait_for_timeout(200)
 
 
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)

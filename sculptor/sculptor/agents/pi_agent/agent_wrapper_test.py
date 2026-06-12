@@ -24,6 +24,8 @@ import pytest
 from sculptor.agents.pi_agent.agent_wrapper import PI_SESSION_DIR_NAME
 from sculptor.agents.pi_agent.agent_wrapper import PI_SESSION_ID_STATE_FILE
 from sculptor.agents.pi_agent.agent_wrapper import PiAgent
+from sculptor.agents.pi_agent.agent_wrapper import _render_synthesized_skill
+from sculptor.agents.pi_agent.agent_wrapper import _rewrite_skill_invocation
 from sculptor.agents.pi_agent.harness import PI_HARNESS
 from sculptor.agents.pi_agent.output_processor import AgentMessage
 from sculptor.agents.pi_agent.output_processor import ParsedUnknownEvent
@@ -1239,8 +1241,6 @@ def _drain(queue: Queue) -> list:
     return out
 
 
-# --- Typed protocol module: parse + dispatch coverage ----------------------
-
 # Wire-shape fixtures for every documented event type (RPC §5/§7/§9), lifted
 # from the protocol doc's examples. Each must parse to a typed variant whose
 # discriminator matches.
@@ -1329,3 +1329,146 @@ def test_extract_tool_call_blocks_returns_only_tool_call_blocks() -> None:
     blocks = extract_tool_call_blocks(message)
     assert len(blocks) == 1
     assert blocks[0]["type"] == "toolCall"
+
+
+_DISCOVERED = frozenset({"fix-bug", "sculptor-workflow:review", "write-release-notes"})
+
+
+def test_rewrite_skill_invocation_rewrites_a_discovered_skill() -> None:
+    assert _rewrite_skill_invocation("/fix-bug", _DISCOVERED) == "/skill:fix-bug"
+
+
+def test_rewrite_skill_invocation_preserves_arguments() -> None:
+    assert _rewrite_skill_invocation("/fix-bug the login flow", _DISCOVERED) == "/skill:fix-bug the login flow"
+
+
+def test_rewrite_skill_invocation_strips_plugin_namespace() -> None:
+    # pi registers plugin skills un-namespaced, so the <plugin>: prefix the
+    # picker shows is dropped when rewriting to pi's shape.
+    assert _rewrite_skill_invocation("/sculptor-workflow:review", _DISCOVERED) == "/skill:review"
+
+
+def test_rewrite_skill_invocation_leaves_unknown_name_untouched() -> None:
+    assert _rewrite_skill_invocation("/not-a-skill", _DISCOVERED) == "/not-a-skill"
+
+
+def test_rewrite_skill_invocation_ignores_pseudo_skills() -> None:
+    # Pseudo-skills are handled frontend-side and never appear in the discovered
+    # set, so they are never rewritten even if one reaches the prompt.
+    for pseudo in ("/clear", "/copy", "/btw why is the sky blue"):
+        assert _rewrite_skill_invocation(pseudo, _DISCOVERED) == pseudo
+
+
+def test_rewrite_skill_invocation_leaves_plain_slash_text_untouched() -> None:
+    # A leading slash that is not a discovered skill name (e.g. a path) passes through.
+    assert _rewrite_skill_invocation("/usr/local/bin matters", _DISCOVERED) == "/usr/local/bin matters"
+
+
+def test_rewrite_skill_invocation_leaves_non_slash_text_untouched() -> None:
+    assert _rewrite_skill_invocation("fix-bug please", _DISCOVERED) == "fix-bug please"
+
+
+def test_rewrite_skill_invocation_handles_multiline_prompt() -> None:
+    assert _rewrite_skill_invocation("/fix-bug\nextra context", _DISCOVERED) == "/skill:fix-bug\nextra context"
+
+
+def test_rewrite_skill_invocation_empty_discovered_set_is_noop() -> None:
+    assert _rewrite_skill_invocation("/fix-bug", frozenset()) == "/fix-bug"
+
+
+def _agent_with_skill_dirs(
+    monkeypatch: pytest.MonkeyPatch,
+    working_dir: Path,
+    home_dir: Path,
+    state_dir: Path,
+    plugin_dirs: list[Path],
+) -> PiAgent:
+    env = MagicMock(spec=AgentExecutionEnvironment)
+    env.get_working_directory.return_value = working_dir
+    env.get_user_home_directory.return_value = home_dir
+    env.get_state_path.return_value = state_dir
+    # Patch where it's looked up: agent_wrapper imports get_plugin_dirs at module level.
+    monkeypatch.setattr("sculptor.agents.pi_agent.agent_wrapper.get_plugin_dirs", lambda: plugin_dirs)
+    return _make_agent(environment=env)
+
+
+def _write_skill(skills_dir: Path, name: str) -> None:
+    skill_md = skills_dir / name / "SKILL.md"
+    skill_md.parent.mkdir(parents=True, exist_ok=True)
+    skill_md.write_text(f"---\nname: {name}\ndescription: {name} skill\n---\nBody\n")
+
+
+def test_build_skill_launch_args_passes_existing_skill_dirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = tmp_path / "repo"
+    home = tmp_path / "home"
+    _write_skill(repo / ".claude" / "skills", "fix-bug")
+    _write_skill(home / ".claude" / "skills", "deploy")
+    agent = _agent_with_skill_dirs(monkeypatch, repo, home, tmp_path / "state", plugin_dirs=[])
+
+    args = agent._build_skill_launch_args()
+
+    # Repo skills dir precedes home skills dir (discovery order); the absent
+    # .claude/commands dirs are skipped quietly.
+    assert args == [
+        "--skill",
+        str(repo / ".claude" / "skills"),
+        "--skill",
+        str(home / ".claude" / "skills"),
+    ]
+
+
+def test_build_skill_launch_args_puts_plugin_skills_first(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = tmp_path / "repo"
+    home = tmp_path / "home"
+    plugin = tmp_path / "plugin"
+    _write_skill(plugin / "skills", "help")
+    _write_skill(repo / ".claude" / "skills", "fix-bug")
+    agent = _agent_with_skill_dirs(monkeypatch, repo, home, tmp_path / "state", plugin_dirs=[plugin])
+
+    args = agent._build_skill_launch_args()
+
+    assert args[:2] == ["--skill", str(plugin / "skills")]
+    assert args[2:] == ["--skill", str(repo / ".claude" / "skills")]
+
+
+def test_build_skill_launch_args_no_sources_is_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    agent = _agent_with_skill_dirs(
+        monkeypatch, tmp_path / "repo", tmp_path / "home", tmp_path / "state", plugin_dirs=[]
+    )
+    assert agent._build_skill_launch_args() == []
+
+
+def test_build_skill_launch_args_synthesizes_loose_commands(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = tmp_path / "repo"
+    home = tmp_path / "home"
+    state = tmp_path / "state"
+    commands_dir = repo / ".claude" / "commands"
+    commands_dir.mkdir(parents=True)
+    (commands_dir / "fix-style.md").write_text("---\ndescription: Fix style issues\n---\nDo the thing.\n")
+    (commands_dir / "no-frontmatter.md").write_text("Just a body.\n")
+    agent = _agent_with_skill_dirs(monkeypatch, repo, home, state, plugin_dirs=[])
+
+    args = agent._build_skill_launch_args()
+
+    # The synthesized wrapper dir is passed as a single --skill, under the state
+    # dir (not under .claude), so discover_skills never lists it a second time.
+    synthesized_root = state / "pi_skills"
+    assert args == ["--skill", str(synthesized_root)]
+    # Each loose command becomes a SKILL.md directory named after the file stem.
+    fix_style = (synthesized_root / "fix-style" / "SKILL.md").read_text()
+    assert "Do the thing." in fix_style
+    assert '"fix-style"' in fix_style
+    assert '"Fix style issues"' in fix_style
+    # A command with no frontmatter still loads — a description is synthesized
+    # (pi refuses a skill with none).
+    no_fm = (synthesized_root / "no-frontmatter" / "SKILL.md").read_text()
+    assert "Just a body." in no_fm
+    assert "no-frontmatter" in no_fm
+
+
+def test_render_synthesized_skill_escapes_frontmatter() -> None:
+    # Colons / newlines in the description must not break the YAML frontmatter.
+    rendered = _render_synthesized_skill("my-cmd", "Does X: then\nY", "Body text")
+    assert '\nname: "my-cmd"\n' in rendered
+    assert '\ndescription: "Does X: then Y"\n' in rendered
+    assert rendered.endswith("Body text")
