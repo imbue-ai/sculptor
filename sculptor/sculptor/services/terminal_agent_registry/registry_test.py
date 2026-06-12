@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from sculptor.services.terminal_agent_registry.bundled import get_bundled_claude_code_dir
 from sculptor.services.terminal_agent_registry import registry as registry_module
+from sculptor.services.terminal_agent_registry.bundled import get_bundled_claude_code_dir
 from sculptor.services.terminal_agent_registry.registry import get_registration
 from sculptor.services.terminal_agent_registry.registry import load_registrations
 
@@ -151,14 +151,10 @@ def test_bundled_claude_cli_hooks_only_signal_waiting_for_genuine_attention() ->
         )
 
     question_groups = [
-        group
-        for group in hooks["PreToolUse"]
-        if any("signal waiting" in hook["command"] for hook in group["hooks"])
+        group for group in hooks["PreToolUse"] if any("signal waiting" in hook["command"] for hook in group["hooks"])
     ]
     answered_groups = [
-        group
-        for group in hooks["PostToolUse"]
-        if any("signal busy" in hook["command"] for hook in group["hooks"])
+        group for group in hooks["PostToolUse"] if any("signal busy" in hook["command"] for hook in group["hooks"])
     ]
     for tool_name in ("AskUserQuestion", "ExitPlanMode"):
         assert any(re.search(group["matcher"], tool_name) for group in question_groups), (

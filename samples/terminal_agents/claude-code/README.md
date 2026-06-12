@@ -50,7 +50,13 @@ the TOML at the copied hooks file.)
   - `SessionStart` reports the session id (for resume) and `idle`;
   - `UserPromptSubmit` → `busy` (spinner on the tab);
   - `Stop` → `idle`;
-  - `Notification` → `waiting` (attention dot when Claude needs input);
+  - `PreToolUse` on `AskUserQuestion`/`ExitPlanMode` → `waiting` (attention
+    dot while a question or plan approval is on screen), and `PostToolUse`
+    on the same tools → `busy` once answered;
+  - `Notification`, filtered to permission prompts only → `waiting`. The
+    matcher is load-bearing: the TUI also fires an `idle_prompt`
+    notification after ~60s of idleness, which is not a question — an
+    unfiltered hook turns the attention dot on for it;
   - `PostToolUse` on file-editing tools → `files-changed` (refreshes the
     diff panel promptly).
   Every hook is fail-open (`|| true`) — a broken integration degrades to a
@@ -62,7 +68,8 @@ the TOML at the copied hooks file.)
 ## Version note
 
 Verified against Claude Code 2.x (hook events `SessionStart`,
-`UserPromptSubmit`, `Stop`, `Notification`, `PostToolUse`; flags
+`UserPromptSubmit`, `Stop`, `Notification` with `notification_type`
+matchers, `PreToolUse`, `PostToolUse`; flags
 `--settings`, `--resume`, `--dangerously-skip-permissions`, `--plugin-dir`;
 settings key `skipDangerousModePermissionPrompt`). Hook names occasionally
 evolve between CLI releases — if a hook stops firing, check `claude --help`

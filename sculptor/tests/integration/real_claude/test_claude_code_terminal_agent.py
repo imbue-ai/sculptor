@@ -165,3 +165,19 @@ def test_claude_code_terminal_agent(sculptor_instance_: SculptorInstance) -> Non
 
     expect(claude_tab).to_have_attribute("data-dot-status", "running", timeout=60_000)
     expect(claude_tab).to_have_attribute("data-dot-status", re.compile(r"^(read|unread)$"), timeout=180_000)
+
+    # A genuine question drives the attention dot: PreToolUse on
+    # AskUserQuestion signals waiting while the question UI is on screen.
+    # (The Notification hook deliberately does NOT cover questions — it is
+    # filtered to permission prompts so the TUI's ~60s idle_prompt reminder
+    # cannot fake the dot.)
+    type_into_agent_terminal(
+        page,
+        "Use the AskUserQuestion tool to ask me exactly one question with exactly two short options.",
+    )
+    expect(claude_tab).to_have_attribute("data-dot-status", "waiting", timeout=120_000)
+
+    # Enter accepts the highlighted option; the answered question flips the
+    # dot back (PostToolUse → busy) and the turn ends neutral.
+    type_into_agent_terminal(page, "", press_enter=True)
+    expect(claude_tab).to_have_attribute("data-dot-status", re.compile(r"^(read|unread)$"), timeout=180_000)
