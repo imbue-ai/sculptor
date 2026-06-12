@@ -2,7 +2,7 @@ import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 import { memo } from "react";
 
-import { activePanelIdInZoneAtom, panelRegistryAtom } from "~/components/panels/atoms.ts";
+import { activePanelComponentInZoneAtom } from "~/components/panels/atoms.ts";
 import { EmptyPanelLauncher } from "~/components/panels/EmptyPanelLauncher.tsx";
 import { isSplitHalfAtom } from "~/components/panels/sectionLayoutAtoms.ts";
 import type { ZoneId } from "~/components/panels/types.ts";
@@ -22,14 +22,13 @@ type SectionBodyProps = {
  * shortcuts and maximize-focused command query.
  */
 const SectionBodyInner = ({ zone }: SectionBodyProps): ReactElement => {
-  const registry = useAtomValue(panelRegistryAtom);
-  const activePanelId = useAtomValue(activePanelIdInZoneAtom(zone));
+  // Subscribes to the resolved component (stable identity per panel id), NOT
+  // the registry — registry rebuilds must not re-render heavy panel content.
+  const ActivePanelComponent = useAtomValue(activePanelComponentInZoneAtom(zone));
   // Whether this section is one half of a split (its primary zone is split).
   // Used to clarify, when the half is empty, that splitting moved the tab to
   // the other pane and this one can be filled.
   const isSplitHalf = useAtomValue(isSplitHalfAtom(zone));
-
-  const ActivePanelComponent = activePanelId ? registry.find((p) => p.id === activePanelId)?.component : undefined;
 
   return (
     <div className={styles.content} data-zone-id={zone} tabIndex={-1}>
