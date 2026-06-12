@@ -64,6 +64,7 @@ def _task_response_dict(
         "systemPrompt": None,
         "model": model,
         "harnessCapabilities": {
+            "supportsChatInterface": True,
             "supportsInteractiveBackchannel": True,
             "supportsSkills": True,
             "supportsSubAgents": True,

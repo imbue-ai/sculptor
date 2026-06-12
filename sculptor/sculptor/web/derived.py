@@ -42,6 +42,7 @@ from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
 from sculptor.interfaces.agents.agent import UpdatedArtifactAgentMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
+from sculptor.interfaces.agents.agent import is_terminal_agent_config
 from sculptor.interfaces.agents.artifacts import AgentTaskStatus
 from sculptor.interfaces.agents.artifacts import ArtifactType
 from sculptor.interfaces.agents.artifacts import TaskListArtifact
@@ -423,6 +424,16 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
         task_from_outcome = self._maybe_get_status_from_outcome()
         if task_from_outcome is not None:
             return task_from_outcome
+
+        if is_terminal_agent_config(self.task_input.agent_config):
+            # Terminal agents have no chat: pre-environment means "still
+            # building" (no "no user message → READY" special case applies),
+            # and none of the chat-derived logic below can run.
+            if not any(isinstance(m, EnvironmentAcquiredRunnerMessage) for m in self._messages):
+                return TaskStatus.BUILDING
+            # Neutral status; the signal-aware mapping lands with the
+            # terminal status driver (phase 3).
+            return TaskStatus.READY
 
         # Check if environment has been acquired via message
         has_environment = any(isinstance(m, EnvironmentAcquiredRunnerMessage) for m in self._messages)

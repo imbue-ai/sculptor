@@ -72,6 +72,7 @@ function makeTask(overrides: Partial<CodingAgentTaskView> & { id: string }): Cod
     systemPrompt: null,
     model: "CLAUDE-4-OPUS" as LlmModel,
     harnessCapabilities: {
+      supportsChatInterface: true,
       supportsInteractiveBackchannel: true,
       supportsSkills: true,
       supportsSubAgents: true,

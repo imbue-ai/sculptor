@@ -462,12 +462,40 @@ class PiAgentConfig(AgentConfig):
     object_type: str = "PiAgentConfig"
 
 
+class TerminalAgentConfig(AgentConfig):
+    object_type: str = "TerminalAgentConfig"
+
+
+class RegisteredTerminalAgentConfig(AgentConfig):
+    """A terminal agent that launches a registered program in its shell.
+
+    Launch parameters are stamped at creation from the registration so the
+    task stays self-describing even if the registration file later changes.
+    """
+
+    object_type: str = "RegisteredTerminalAgentConfig"
+    registration_id: str
+    display_name: str
+    launch_command: str
+    # May contain the literal placeholder `{session_id}`.
+    resume_command_template: str | None = None
+    accepts_automated_prompts: bool = False
+
+
 AgentConfigTypes = Annotated[
     Annotated[HelloAgentConfig, Tag("HelloAgentConfig")]
     | Annotated[ClaudeCodeSDKAgentConfig, Tag("ClaudeCodeSDKAgentConfig")]
-    | Annotated[PiAgentConfig, Tag("PiAgentConfig")],
+    | Annotated[PiAgentConfig, Tag("PiAgentConfig")]
+    | Annotated[TerminalAgentConfig, Tag("TerminalAgentConfig")]
+    | Annotated[RegisteredTerminalAgentConfig, Tag("RegisteredTerminalAgentConfig")],
     build_discriminator(),
 ]
+
+TERMINAL_AGENT_CONFIG_TYPES = (TerminalAgentConfig, RegisteredTerminalAgentConfig)
+
+
+def is_terminal_agent_config(config: AgentConfigTypes) -> bool:
+    return isinstance(config, TERMINAL_AGENT_CONFIG_TYPES)
 
 
 # DELIBERATE-TEMPORARY: workspace-bound harness selection.
