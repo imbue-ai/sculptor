@@ -399,9 +399,6 @@ def test_agent_end_with_aborted_message_raises_pi_crash_error() -> None:
         agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
 
 
-# --- Interruption (supports_interruption) ----------------------------------
-
-
 def _wait_until(predicate: Callable[[], bool], timeout: float = 5.0) -> None:
     """Poll ``predicate`` until true; used to synchronize the two-thread interrupt
     path deterministically (no fixed sleeps)."""
