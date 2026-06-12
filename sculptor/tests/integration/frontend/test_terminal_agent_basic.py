@@ -17,6 +17,7 @@ from sculptor.testing.elements.terminal import expect_chat_replaces_terminal_pan
 from sculptor.testing.elements.terminal import expect_terminal_panel_replaces_chat
 from sculptor.testing.elements.terminal import get_agent_terminal_panel
 from sculptor.testing.elements.terminal import get_agent_terminal_textarea
+from sculptor.testing.elements.terminal import get_xterm_buffer_text
 from sculptor.testing.elements.terminal import run_command_in_agent_terminal
 from sculptor.testing.elements.terminal import wait_for_xterm_substring
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -115,3 +116,46 @@ def test_terminal_agent_tab_rename_and_delete(sculptor_instance_: SculptorInstan
     expect(confirm_button).to_be_visible()
     confirm_button.click()
     expect(agent_tabs).to_have_count(1)
+
+
+@user_story("to see only an agent's own output in its terminal tab")
+def test_terminal_agent_tabs_do_not_leak_content(sculptor_instance_: SculptorInstance) -> None:
+    """Each terminal agent tab shows only its own PTY's content.
+
+    Two terminal agents in one workspace, a distinct marker echoed in each.
+    Switching directly terminal -> terminal (including the navigation that
+    creating the second agent performs) must not carry the previous tab's
+    scrollback into the next: the backend PTYs are isolated per agent, so
+    any cross-tab text is frontend mixing.
+    """
+    page = sculptor_instance_.page
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Terminal Leak WS")
+    agent_tab_bar = PlaywrightAgentTabBarElement(page)
+
+    _create_terminal_agent(agent_tab_bar)
+    first_tab = agent_tab_bar.get_agent_tab_by_name("Terminal 1").first
+    expect(first_tab).to_be_visible()
+    _wait_for_terminal_ready(page)
+    run_command_in_agent_terminal(page, "echo LEAK-CHECK-ALPHA")
+    wait_for_xterm_substring(page, "LEAK-CHECK-ALPHA")
+
+    # Creating the second agent navigates straight to its tab -- a direct
+    # terminal -> terminal switch.
+    _create_terminal_agent(agent_tab_bar)
+    second_tab = agent_tab_bar.get_agent_tab_by_name("Terminal 2").first
+    expect(second_tab).to_be_visible()
+    _wait_for_terminal_ready(page)
+    run_command_in_agent_terminal(page, "echo LEAK-CHECK-BRAVO")
+    wait_for_xterm_substring(page, "LEAK-CHECK-BRAVO")
+    assert "LEAK-CHECK-ALPHA" not in get_xterm_buffer_text(page), (
+        "Terminal 2 shows Terminal 1's output -- tab contents leaked across agents"
+    )
+
+    # Direct switch back: Terminal 1 replays its own scrollback only. The
+    # positive wait proves the replay landed before the negative check reads
+    # the buffer.
+    first_tab.click()
+    wait_for_xterm_substring(page, "LEAK-CHECK-ALPHA")
+    assert "LEAK-CHECK-BRAVO" not in get_xterm_buffer_text(page), (
+        "Terminal 1 shows Terminal 2's output -- tab contents leaked across agents"
+    )
