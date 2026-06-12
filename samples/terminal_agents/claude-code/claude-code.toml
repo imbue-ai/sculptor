@@ -4,7 +4,7 @@
 # delete (deleting it sticks — it is not re-installed). The registration id
 # is this file's name ("claude-code"); renaming the file changes the id.
 
-display_name = "Claude Code"
+display_name = "Claude CLI"
 
 # The launch command runs in the agent's login shell, so $SCULPT_* env vars
 # (injected by Sculptor into every terminal-agent shell) expand at launch:

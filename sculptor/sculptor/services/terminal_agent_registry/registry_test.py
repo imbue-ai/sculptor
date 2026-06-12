@@ -107,7 +107,7 @@ def test_bundled_claude_code_sample_round_trips_through_loader(registrations_dir
     assert len(registrations) == 1
     registration = registrations[0]
     assert registration.registration_id == "claude-code"
-    assert registration.display_name == "Claude Code"
+    assert registration.display_name == "Claude CLI"
     # Machine-specific paths come from shell-expanded env vars the
     # terminal-agent PTY injects — never baked-in absolutes.
     assert '"$SCULPT_CLAUDE_BIN"' in registration.launch_command
