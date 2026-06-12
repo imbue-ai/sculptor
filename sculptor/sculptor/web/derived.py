@@ -37,6 +37,7 @@ from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingDoneAgentMessage
 from sculptor.interfaces.agents.agent import EnvironmentAcquiredRunnerMessage
+from sculptor.interfaces.agents.agent import EnvironmentReleasedRunnerMessage
 from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessage
 from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageAgentMessage
@@ -110,6 +111,11 @@ def scan_terminal_signal_state(messages: Sequence[Message]) -> tuple[bool, Termi
     for msg in reversed(messages):
         if latest_signal is None and isinstance(msg, TerminalAgentSignalRunnerMessage):
             latest_signal = msg.signal
+        if isinstance(msg, EnvironmentReleasedRunnerMessage):
+            # The most recent run has ended (and its environment released)
+            # without a newer one acquiring yet — its signals are stale, so
+            # treat the agent as not-yet-running rather than reviving them.
+            return False, None
         if isinstance(msg, EnvironmentAcquiredRunnerMessage):
             return True, latest_signal
     return False, None
@@ -409,9 +415,9 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
     @computed_field
     @property
     def accepts_automated_prompts(self) -> bool:
-        # Stamped from the registration TOML at creation (architecture §9):
-        # only opted-in registered terminal agents can receive automated
-        # prompts through the terminal-input endpoint.
+        # Stamped from the registration TOML at creation: only opted-in
+        # registered terminal agents can receive automated prompts through
+        # the terminal-input endpoint.
         agent_config = self.task_input.agent_config
         return isinstance(agent_config, RegisteredTerminalAgentConfig) and agent_config.accepts_automated_prompts
 
@@ -461,11 +467,10 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
 
         if is_terminal_agent_config(self.task_input.agent_config):
             # Terminal agents have no chat: status comes from the latest
-            # signal posted since the most recent run start (architecture §5).
-            # No signals this run → calm neutral READY (REQ-TERM-2); signals
-            # never drive the unread dot (REQ-SIG-5). No run-start anchor at
-            # all → still acquiring the environment (no "no user message →
-            # READY" special case applies).
+            # signal posted since the most recent run start. No signals this
+            # run → calm neutral READY; signals never drive the unread dot.
+            # No run-start anchor at all → still acquiring the environment
+            # (no "no user message → READY" special case applies).
             run_started, latest_signal = scan_terminal_signal_state(self._messages)
             if not run_started:
                 return TaskStatus.BUILDING
