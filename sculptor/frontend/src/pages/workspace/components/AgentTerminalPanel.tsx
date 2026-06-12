@@ -4,6 +4,7 @@ import { ElementIds } from "~/api";
 
 import { useTerminal } from "../panels/useTerminal";
 import styles from "./AgentTerminalPanel.module.scss";
+import { useTerminalChatActions } from "./useTerminalChatActions.ts";
 
 type AgentTerminalPanelProps = {
   taskId: string;
@@ -19,6 +20,7 @@ type AgentTerminalPanelProps = {
  * agent-still-BUILDING window before the backend handler registers the PTY.
  */
 export const AgentTerminalPanel = ({ taskId }: AgentTerminalPanelProps): ReactElement => {
+  useTerminalChatActions(taskId);
   const { terminalContainerRef } = useTerminal({
     terminalPath: `/api/v1/agents/${taskId}/terminal/ws`,
     isVisible: true,

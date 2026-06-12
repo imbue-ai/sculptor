@@ -25,3 +25,8 @@ export type InfoToastData = {
 // Surfaced when an @-mention chip click cannot be fulfilled (target is hidden
 // from the file browser, lives outside the workspace, or no longer exists).
 export const mentionChipUnreachableToastAtom = atom<InfoToastData | null>(null);
+
+// Surfaced when the terminal-input endpoint rejects an automated prompt
+// (409): the program went busy — or its hooks are silent — between the
+// button click and the server-side write.
+export const terminalPromptRejectedToastAtom = atom<InfoToastData | null>(null);
