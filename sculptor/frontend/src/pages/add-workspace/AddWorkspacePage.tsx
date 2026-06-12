@@ -19,6 +19,7 @@ import { HTTPException } from "../../common/Errors.ts";
 import { useImbueNavigate } from "../../common/NavigateUtils.ts";
 import {
   encodeRegisteredAgentType,
+  lastUsedAgentTypeAtom,
   parseStoredAgentType,
   type StoredAgentType,
 } from "../../common/state/atoms/agentTabs.ts";
@@ -74,7 +75,15 @@ export const AddWorkspacePage = (): ReactElement => {
   const [mode, setMode] = useState<WorkspaceInitializationStrategy>(WorkspaceInitializationStrategy.WORKTREE);
   // The type of the workspace's first agent (agent type is per-agent, not
   // per-workspace). Registered terminal agents select as `registered:<id>`.
-  const [agentTypeValue, setAgentTypeValue] = useState<string>("claude");
+  // The form opens preset to the shared last-used type (the same MRU the tab
+  // bar's + button reads) — a deliberate mount-time snapshot the user can
+  // change freely; the MRU is written back only when a workspace is actually
+  // created. A stored "pi" is unusable when multi-harness is off.
+  const lastUsedAgentType = useAtomValue(lastUsedAgentTypeAtom);
+  const setLastUsedAgentType = useSetAtom(lastUsedAgentTypeAtom);
+  const [agentTypeValue, setAgentTypeValue] = useState<string>(
+    lastUsedAgentType === "pi" && !isMultiHarnessEnabled ? "claude" : lastUsedAgentType,
+  );
   const { registrations, refetch: refreshRegistrations } = useTerminalAgentRegistrations();
   const { agentType, registrationId } = parseStoredAgentType(agentTypeValue as StoredAgentType);
   const [workspaceNameDraft, setWorkspaceNameDraft] = useDraftTabName(draftId);
@@ -253,6 +262,10 @@ export const AddWorkspacePage = (): ReactElement => {
         throw new Error("Failed to create agent — no response data");
       }
 
+      // The agent was actually created with this type — record it as the
+      // shared MRU so the tab bar's plain + click creates the same type.
+      setLastUsedAgentType(agentTypeValue as StoredAgentType);
+
       posthog.capture("workspace.created", {
         workspace_id: workspaceId,
         agent_id: agentResponse.data.id,
@@ -298,6 +311,8 @@ export const AddWorkspacePage = (): ReactElement => {
     mode,
     agentType,
     registrationId,
+    agentTypeValue,
+    setLastUsedAgentType,
     sourceBranch,
     workspaceName,
     effectiveBranchName,
