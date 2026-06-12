@@ -55,6 +55,12 @@ const TEST_DEFAULT_LAYOUT: DefaultPanelLayout = {
 beforeEach(() => localStorage.clear());
 afterEach(() => localStorage.clear());
 
+// Layout atoms persist through debounced (200ms) storage writes; flush before
+// asserting on localStorage contents.
+const flushDebouncedStorage = async (): Promise<void> => {
+  await new Promise((resolve) => setTimeout(resolve, 250));
+};
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 const createDefaultStore = (): ReturnType<typeof createStore> => createPanelStore(TEST_PANELS);
@@ -169,7 +175,7 @@ describe("usePerWorkspacePanelLayout", () => {
   });
 
   describe("persistence to workspace-scoped keys", () => {
-    it("persists assignment and split changes to per-workspace localStorage", () => {
+    it("persists assignment and split changes to per-workspace localStorage", async () => {
       const store = createDefaultStore();
       renderPerWorkspaceHook("ws-1", store);
 
@@ -177,6 +183,7 @@ describe("usePerWorkspacePanelLayout", () => {
         store.set(zoneAssignmentsAtom, { "agent:a": "center" });
         store.set(sectionSplitAtom, { center: { axis: "horizontal", ratio: 0.3 } });
       });
+      await flushDebouncedStorage();
 
       expect(JSON.parse(localStorage.getItem("sculptor-zone-assignments-ws-ws-1")!)).toEqual({ "agent:a": "center" });
       expect(JSON.parse(localStorage.getItem("sculptor-section-split-ws-ws-1")!)).toEqual({
@@ -186,7 +193,7 @@ describe("usePerWorkspacePanelLayout", () => {
   });
 
   describe("section sizes shared vs unique", () => {
-    it("does NOT write a per-workspace size key when sizes are shared (default)", () => {
+    it("does NOT write a per-workspace size key when sizes are shared (default)", async () => {
       const store = createDefaultStore();
       store.set(sectionSizesSharedAtom, true);
       renderPerWorkspaceHook("ws-1", store);
@@ -194,11 +201,12 @@ describe("usePerWorkspacePanelLayout", () => {
       act(() => {
         store.set(sectionSizePercentAtom, { left: 33 });
       });
+      await flushDebouncedStorage();
 
       expect(localStorage.getItem("sculptor-section-size-percent-ws-ws-1")).toBeNull();
     });
 
-    it("persists and restores section sizes per workspace when sizes are unique", () => {
+    it("persists and restores section sizes per workspace when sizes are unique", async () => {
       const store = createDefaultStore();
       store.set(sectionSizesSharedAtom, false);
       const { rerender } = renderPerWorkspaceHook("ws-1", store);
@@ -206,6 +214,7 @@ describe("usePerWorkspacePanelLayout", () => {
       act(() => {
         store.set(sectionSizePercentAtom, { left: 33 });
       });
+      await flushDebouncedStorage();
       expect(JSON.parse(localStorage.getItem("sculptor-section-size-percent-ws-ws-1")!)).toEqual({ left: 33 });
 
       rerender({ workspaceId: "ws-2" });

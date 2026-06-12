@@ -4,6 +4,7 @@ import { atomFamily, atomWithStorage, createJSONStorage } from "jotai/utils";
 
 import type { Workspace } from "../../../api";
 import { batchUpdateOpenState, updateWorkspace as updateWorkspaceApi } from "../../../api";
+import { removeWorkspaceLayoutAtom } from "../../../components/panels/atoms.ts";
 import { ToastType } from "../../../components/Toast.tsx";
 import { invalidateWorkspaceGitQueries, removeWorkspaceQueriesCache } from "../../queryClient.ts";
 import { workspaceOpenCloseErrorToastAtom } from "./toasts";
@@ -633,6 +634,7 @@ export const optimisticDeleteWorkspaceAtom = atom(null, (get, set, workspaceId: 
   // Free cached data for the deleted workspace.
   removeWorkspaceQueriesCache(workspaceId);
   workspaceSetupStatusAtomFamily.remove(workspaceId);
+  set(removeWorkspaceLayoutAtom, workspaceId);
   // The workspace is going away — drop any lingering open/close intent.
   set(clearPendingCloseAtom, [workspaceId]);
   set(clearPendingOpenAtom, [workspaceId]);

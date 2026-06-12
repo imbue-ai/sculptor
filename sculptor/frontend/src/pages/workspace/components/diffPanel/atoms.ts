@@ -1,9 +1,13 @@
 import { atom } from "jotai";
 import { atomFamily, atomWithStorage } from "jotai/utils";
 
-import { atomWithDebouncedStorage } from "~/common/state/atoms/atomWithDebouncedStorage.ts";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
-import { expandedPanelIdAtom, zoneAssignmentsAtom } from "~/components/panels/atoms.ts";
+import {
+  expandedPanelIdAtom,
+  layoutScopeAtom,
+  scopedLayoutStorageFamily,
+  zoneAssignmentsAtom,
+} from "~/components/panels/atoms.ts";
 import { getUncommittedFileStatusMap } from "~/pages/workspace/panels/fileBrowser/atoms.ts";
 import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types.ts";
 
@@ -52,19 +56,27 @@ export const diffPanelStateAtomFamily = atomFamily((workspaceId: string) =>
 );
 
 /**
- * Whether the diff viewer column is visible.  Stored globally by default so
- * the panel behaves like the other docked panels (a single shared open/close
- * state across workspaces).  When the experimental "per-workspace panel
- * layout" flag is enabled, `usePerWorkspacePanelLayout` saves/restores this
- * value per workspace on switch — mirroring how zone visibility is handled.
+ * Whether the diff viewer column is visible. Layout-scoped (per-workspace,
+ * like zone visibility): each workspace keeps its own open/closed state, and
+ * switching workspaces resolves the right one atomically via the scope proxy.
  */
-export const diffPanelOpenAtom = atomWithDebouncedStorage<boolean>("sculptor-diffPanel-open", false, 200);
+const diffPanelOpenFamily = scopedLayoutStorageFamily<boolean>("sculptor-diffPanel-open", false);
+
+export const diffPanelOpenAtom = atom(
+  (get) => get(diffPanelOpenFamily(get(layoutScopeAtom))),
+  (get, set, update: boolean | ((prev: boolean) => boolean)) => set(diffPanelOpenFamily(get(layoutScopeAtom)), update),
+);
 
 /**
- * Diff/chat split ratio (0–100).  Global with optional per-workspace
- * override, parallelling `diffPanelOpenAtom`.
+ * Diff/chat split ratio (0–100). Layout-scoped, parallelling `diffPanelOpenAtom`.
  */
-export const diffPanelSplitRatioAtom = atomWithDebouncedStorage<number>("sculptor-diffPanel-splitRatio", 50, 200);
+const diffPanelSplitRatioFamily = scopedLayoutStorageFamily<number>("sculptor-diffPanel-splitRatio", 50);
+
+export const diffPanelSplitRatioAtom = atom(
+  (get) => get(diffPanelSplitRatioFamily(get(layoutScopeAtom))),
+  (get, set, update: number | ((prev: number) => number)) =>
+    set(diffPanelSplitRatioFamily(get(layoutScopeAtom)), update),
+);
 
 /** Global preference for how `.md` / `.markdown` files are shown in ReadOnlyPreview. */
 type MarkdownRenderMode = "raw" | "rendered";

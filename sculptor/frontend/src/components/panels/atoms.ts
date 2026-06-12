@@ -1,11 +1,12 @@
-import type { Atom } from "jotai";
+import type { Atom, WritableAtom } from "jotai";
 import { atom, createStore } from "jotai";
 import { atomFamily, atomWithStorage, selectAtom } from "jotai/utils";
+import type { AtomFamily } from "jotai/vanilla/utils/atomFamily";
 
 import { keybindingsMapAtom } from "~/common/keybindings/atoms.ts";
 import type { KeybindingId } from "~/common/keybindings/types.ts";
 import { atomWithDebouncedStorage } from "~/common/state/atoms/atomWithDebouncedStorage.ts";
-import type { LayoutSide, PanelDefinition, PanelId, ZoneId } from "~/components/panels/types.ts";
+import type { DefaultPanelLayout, LayoutSide, PanelDefinition, PanelId, ZoneId } from "~/components/panels/types.ts";
 import { LAYOUT_SIDES, SIDE_ZONE_MAP, ZONE_IDS } from "~/components/panels/types.ts";
 import { areArraysShallowEqual } from "~/components/panels/utils.ts";
 
@@ -15,37 +16,152 @@ import { areArraysShallowEqual } from "~/components/panels/utils.ts";
 // createPanelStore (tests / programmatic).
 export const panelRegistryAtom = atom<ReadonlyArray<PanelDefinition>>([]);
 
-// ── Primary atoms with localStorage persistence ──────────────────────
+// ── Layout scope (per-workspace persistence, REQ-PERSIST-1) ──────────
+// Every layout atom below is an atomFamily keyed by "layout scope": the
+// active workspace id, or a global scope when no workspace is active
+// (tests, non-workspace routes). The exported atoms are PROXIES that
+// resolve the active scope on every read/write, so switching workspaces
+// is a single `activeWorkspaceIdAtom` write — the entire layout flips
+// atomically with it, with no save/restore copying between workspaces.
+//
+// Each scope persists to its own localStorage key (`<base>-ws-<id>`, the
+// same keys the previous save/restore implementation used, so existing
+// saved layouts load unchanged; the global scope keeps the legacy
+// un-suffixed key).
+
+export const LAYOUT_SCOPE_GLOBAL = "__global__";
+
+// Tracks the currently active workspace ID for per-workspace panel layout.
+// Set by usePerWorkspacePanelLayout (via switchActiveWorkspaceAtom) on
+// mount/navigation; null when not viewing a workspace.
+export const activeWorkspaceIdAtom = atom<string | null>(null);
+
+export const layoutScopeAtom = atom<string>((get) => get(activeWorkspaceIdAtom) ?? LAYOUT_SCOPE_GLOBAL);
+
+const layoutStorageKey = (baseKey: string, scopeId: string): string =>
+  scopeId === LAYOUT_SCOPE_GLOBAL ? baseKey : `${baseKey}-ws-${scopeId}`;
+
+type ScopedLayoutAtom<T> = WritableAtom<T, [T | ((prev: T) => T)], void>;
+
 // Debounced: a single drag-and-drop move updates all four move-related
 // atoms in the same frame. Synchronous localStorage writes would stack up on
 // the drop frame and produce visible lag — debouncing keeps in-memory state
 // immediate and coalesces the JSON-serialized writes to localStorage.
+export const scopedLayoutStorageFamily = <T>(
+  baseKey: string,
+  initialValue: T,
+): AtomFamily<string, ScopedLayoutAtom<T>> =>
+  atomFamily((scopeId: string) => atomWithDebouncedStorage<T>(layoutStorageKey(baseKey, scopeId), initialValue, 200));
 
-export const zoneAssignmentsAtom = atomWithDebouncedStorage<Record<PanelId, ZoneId>>(
+const proxyForScope = <T>(family: (scopeId: string) => ScopedLayoutAtom<T>): ScopedLayoutAtom<T> =>
+  atom(
+    (get) => get(family(get(layoutScopeAtom))),
+    (get, set, update: T | ((prev: T) => T)) => set(family(get(layoutScopeAtom)), update),
+  );
+
+export const zoneAssignmentsFamily = scopedLayoutStorageFamily<Record<PanelId, ZoneId>>(
   "sculptor-zone-assignments",
   {},
-  200,
 );
 
-export const activePanelPerZoneAtom = atomWithDebouncedStorage<Partial<Record<ZoneId, PanelId>>>(
+export const activePanelPerZoneFamily = scopedLayoutStorageFamily<Partial<Record<ZoneId, PanelId>>>(
   "sculptor-active-panel-per-zone",
   {},
-  200,
 );
 
-export const zoneVisibilityAtom = atomWithDebouncedStorage<Partial<Record<ZoneId, boolean>>>(
+export const zoneVisibilityFamily = scopedLayoutStorageFamily<Partial<Record<ZoneId, boolean>>>(
   "sculptor-zone-visibility",
   {},
-  200,
 );
 
-export const zoneSizesAtom = atomWithDebouncedStorage<Partial<Record<ZoneId, number>>>("sculptor-zone-sizes", {}, 200);
+export const zoneSizesFamily = scopedLayoutStorageFamily<Partial<Record<ZoneId, number>>>("sculptor-zone-sizes", {});
 
-export const zoneOrderAtom = atomWithDebouncedStorage<Partial<Record<ZoneId, Array<PanelId>>>>(
+export const zoneOrderFamily = scopedLayoutStorageFamily<Partial<Record<ZoneId, Array<PanelId>>>>(
   "sculptor-zone-order",
   {},
-  200,
 );
+
+export const zoneAssignmentsAtom = proxyForScope(zoneAssignmentsFamily);
+
+export const activePanelPerZoneAtom = proxyForScope(activePanelPerZoneFamily);
+
+export const zoneVisibilityAtom = proxyForScope(zoneVisibilityFamily);
+
+export const zoneSizesAtom = proxyForScope(zoneSizesFamily);
+
+export const zoneOrderAtom = proxyForScope(zoneOrderFamily);
+
+/**
+ * Make `workspaceId` the active layout scope, seeding its layout from
+ * `defaultLayout` on first visit (REQ-DEFAULT-1). One write-atom call —
+ * a single store transaction — flips the whole layout: every scoped proxy
+ * above resolves to the new workspace's values in the same commit, so
+ * there is no window where the previous workspace's layout renders under
+ * the new workspace's URL. Dynamic panels (the active agent, the terminal)
+ * are placed afterward by `useWorkspaceLayoutBootstrap` in the same
+ * pre-paint flush.
+ */
+export const switchActiveWorkspaceAtom = atom(
+  null,
+  (get, set, params: { workspaceId: string; defaultLayout: DefaultPanelLayout }): void => {
+    const { workspaceId, defaultLayout } = params;
+    if (get(activeWorkspaceIdAtom) === workspaceId) return;
+
+    // First visit: no in-memory state and no persisted key. (The key check
+    // matters for the edge where a user deliberately emptied a workspace's
+    // layout — an empty record persisted under the key is still "visited".)
+    let hasVisited = Object.keys(get(zoneAssignmentsFamily(workspaceId))).length > 0;
+    if (!hasVisited) {
+      try {
+        hasVisited = localStorage.getItem(layoutStorageKey("sculptor-zone-assignments", workspaceId)) !== null;
+      } catch {
+        // localStorage unavailable — treat as unvisited
+      }
+    }
+
+    if (!hasVisited) {
+      set(zoneAssignmentsFamily(workspaceId), defaultLayout.zoneAssignments);
+      set(zoneOrderFamily(workspaceId), defaultLayout.zoneOrder ?? {});
+      set(activePanelPerZoneFamily(workspaceId), defaultLayout.activePanelPerZone);
+      set(zoneVisibilityFamily(workspaceId), defaultLayout.zoneVisibility);
+    }
+
+    set(activeWorkspaceIdAtom, workspaceId);
+  },
+);
+
+/**
+ * Drop a deleted workspace's layout state: the in-memory family entries and
+ * the persisted per-workspace keys (including those owned by
+ * sectionLayoutAtoms and the diff panel, listed here by base key so this
+ * module doesn't need upward imports to reach their families — their
+ * in-memory entries are negligible and die with the session).
+ */
+export const removeWorkspaceLayoutAtom = atom(null, (_get, _set, workspaceId: string): void => {
+  zoneAssignmentsFamily.remove(workspaceId);
+  activePanelPerZoneFamily.remove(workspaceId);
+  zoneVisibilityFamily.remove(workspaceId);
+  zoneSizesFamily.remove(workspaceId);
+  zoneOrderFamily.remove(workspaceId);
+  const baseKeys = [
+    "sculptor-zone-assignments",
+    "sculptor-active-panel-per-zone",
+    "sculptor-zone-visibility",
+    "sculptor-zone-sizes",
+    "sculptor-zone-order",
+    "sculptor-section-split",
+    "sculptor-section-size-percent",
+    "sculptor-diffPanel-open",
+    "sculptor-diffPanel-splitRatio",
+  ];
+  try {
+    for (const baseKey of baseKeys) {
+      localStorage.removeItem(layoutStorageKey(baseKey, workspaceId));
+    }
+  } catch {
+    // localStorage unavailable — nothing to clean
+  }
+});
 
 export const panelEnabledAtom = atomWithStorage<Record<PanelId, boolean>>("sculptor-panel-enabled", {}, undefined, {
   getOnInit: true,
@@ -77,10 +193,6 @@ export const didZenImplyFocusModeAtom = atomWithStorage<boolean>("sculptor-zen-m
 });
 
 // ── Non-persisted atoms ──────────────────────────────────────────────
-
-// Tracks the currently active workspace ID for per-workspace panel layout.
-// Set by WorkspacePageContent on mount/navigation; null when not viewing a workspace.
-export const activeWorkspaceIdAtom = atom<string | null>(null);
 
 // Modal state atom — NOT persisted (resets on reload)
 export const modalPanelIdAtom = atom<PanelId | null>(null);
@@ -134,9 +246,8 @@ export const panelShortcutsAtom = atom<Record<PanelId, string>>((get) => {
 // on every render (which causes infinite re-render loops in Jotai).
 
 const panelsInZoneAtomMap = new Map<ZoneId, Atom<ReadonlyArray<PanelId>>>(
-  ZONE_IDS.map((zoneId) => [
-    zoneId,
-    atom<ReadonlyArray<PanelId>>((get) => {
+  ZONE_IDS.map((zoneId) => {
+    const base = atom<ReadonlyArray<PanelId>>((get) => {
       const assignments = get(zoneAssignmentsAtom);
       const order = get(zoneOrderAtom);
       const registry = get(panelRegistryAtom);
@@ -162,8 +273,13 @@ const panelsInZoneAtomMap = new Map<ZoneId, Atom<ReadonlyArray<PanelId>>>(
       const ordered = zoneOrder.filter((id) => panelsInZone.includes(id));
       const unordered = panelsInZone.filter((id) => !zoneOrder.includes(id));
       return [...ordered, ...unordered];
-    }),
-  ]),
+    });
+    // The filter above rebuilds a new array on every registry/assignment
+    // identity change (e.g. the registry being re-set on a workspace switch
+    // tick) even when this zone's ids are unchanged — shallow-equal dedupe
+    // keeps the previous reference so subscribers don't re-render.
+    return [zoneId, selectAtom(base, (ids) => ids, areArraysShallowEqual)];
+  }),
 );
 
 export const panelsInZoneAtom = (zoneId: ZoneId): Atom<ReadonlyArray<PanelId>> => {
@@ -395,6 +511,25 @@ const activePanelIdInZoneAtomMap = new Map<ZoneId, Atom<PanelId | undefined>>(
 
 export const activePanelIdInZoneAtom = (zoneId: ZoneId): Atom<PanelId | undefined> => {
   return activePanelIdInZoneAtomMap.get(zoneId)!;
+};
+
+// The COMPONENT to render for a zone's active panel. Component identities are
+// cached per panel id (see dynamicPanels' module-level caches), so this value
+// is stable across registry rebuilds — subscribing to it (rather than the
+// whole registry) keeps panel bodies from re-rendering on registry ticks.
+const activePanelComponentInZoneAtomMap = new Map<ZoneId, Atom<PanelDefinition["component"] | undefined>>(
+  ZONE_IDS.map((zoneId) => [
+    zoneId,
+    atom<PanelDefinition["component"] | undefined>((get) => {
+      const activePanelId = get(activePanelIdInZoneAtomMap.get(zoneId)!);
+      if (!activePanelId) return undefined;
+      return get(panelRegistryAtom).find((p) => p.id === activePanelId)?.component;
+    }),
+  ]),
+);
+
+export const activePanelComponentInZoneAtom = (zoneId: ZoneId): Atom<PanelDefinition["component"] | undefined> => {
+  return activePanelComponentInZoneAtomMap.get(zoneId)!;
 };
 
 // Narrow per-zone focus flag: a focus change (adding/dropping a panel, or a

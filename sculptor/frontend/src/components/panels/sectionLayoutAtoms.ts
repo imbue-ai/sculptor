@@ -3,6 +3,7 @@ import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 
 import { atomWithDebouncedStorage } from "~/common/state/atoms/atomWithDebouncedStorage.ts";
+import { LAYOUT_SCOPE_GLOBAL, layoutScopeAtom, scopedLayoutStorageFamily } from "~/components/panels/atoms.ts";
 import type { ZoneId } from "~/components/panels/types.ts";
 import { toPrimaryZone, ZONE_IDS } from "~/components/panels/types.ts";
 
@@ -25,9 +26,10 @@ export const sectionSizesSharedAtom = atomWithStorage<boolean>("sculptor-section
   getOnInit: true,
 });
 
-// Section sizes are SHARED (global), stored as a percentage of the screen
-// (REQ-PERSIST-2). Visibility is per-workspace (handled elsewhere); only the
-// sizes are global so a comfortable split carries across workspaces.
+// Section sizes are SHARED (global) by default, stored as a percentage of the
+// screen (REQ-PERSIST-2). Visibility is per-workspace (handled elsewhere); only
+// the sizes are global so a comfortable split carries across workspaces. When
+// `sectionSizesSharedAtom` is off, sizes resolve per-workspace instead.
 export type SectionSizeKey = "left" | "right" | "bottom";
 
 export const DEFAULT_SECTION_PERCENT: Record<SectionSizeKey, number> = {
@@ -36,10 +38,24 @@ export const DEFAULT_SECTION_PERCENT: Record<SectionSizeKey, number> = {
   bottom: 30,
 };
 
-export const sectionSizePercentAtom = atomWithDebouncedStorage<Partial<Record<SectionSizeKey, number>>>(
+const sectionSizePercentFamily = scopedLayoutStorageFamily<Partial<Record<SectionSizeKey, number>>>(
   "sculptor-section-size-percent",
   {},
-  200,
+);
+
+const sectionSizeScopeAtom = atom<string>((get) =>
+  get(sectionSizesSharedAtom) ? LAYOUT_SCOPE_GLOBAL : get(layoutScopeAtom),
+);
+
+export const sectionSizePercentAtom = atom(
+  (get) => get(sectionSizePercentFamily(get(sectionSizeScopeAtom))),
+  (
+    get,
+    set,
+    update:
+      | Partial<Record<SectionSizeKey, number>>
+      | ((prev: Partial<Record<SectionSizeKey, number>>) => Partial<Record<SectionSizeKey, number>>),
+  ) => set(sectionSizePercentFamily(get(sectionSizeScopeAtom)), update),
 );
 
 // In-panel master-detail divider, as the detail (diff) pane's percentage of the
@@ -68,12 +84,22 @@ export type SectionSplit = {
 export const DEFAULT_SPLIT_RATIO = 0.5;
 
 // Split state keyed by the PRIMARY section zone. An entry means that section is
-// split; absence means it is whole. Global (shared across workspaces) and
-// persisted, like the section sizes above.
-export const sectionSplitAtom = atomWithDebouncedStorage<Partial<Record<ZoneId, SectionSplit>>>(
+// split; absence means it is whole. Per-workspace (layout-scoped) and persisted,
+// like the rest of the panel layout.
+const sectionSplitFamily = scopedLayoutStorageFamily<Partial<Record<ZoneId, SectionSplit>>>(
   "sculptor-section-split",
   {},
-  200,
+);
+
+export const sectionSplitAtom = atom(
+  (get) => get(sectionSplitFamily(get(layoutScopeAtom))),
+  (
+    get,
+    set,
+    update:
+      | Partial<Record<ZoneId, SectionSplit>>
+      | ((prev: Partial<Record<ZoneId, SectionSplit>>) => Partial<Record<ZoneId, SectionSplit>>),
+  ) => set(sectionSplitFamily(get(layoutScopeAtom)), update),
 );
 
 // ── Per-zone split slices ────────────────────────────────────────────
