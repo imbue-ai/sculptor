@@ -606,6 +606,7 @@ class ElementIDs(StrEnum):
     # Registered terminal agents get per-registration ids built from this
     # prefix (phase 4): f"{AGENT_TYPE_MENU_ITEM_REGISTERED_PREFIX}<registration_id>".
     AGENT_TYPE_MENU_ITEM_REGISTERED_PREFIX = "AGENT_TYPE_MENU_ITEM_REGISTERED_"
+    AGENT_TERMINAL_PANEL = "AGENT_TERMINAL_PANEL"
 
     # Tab shared components
     INLINE_RENAME_INPUT = "INLINE_RENAME_INPUT"

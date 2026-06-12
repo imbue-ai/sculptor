@@ -66,6 +66,31 @@ def type_with_global_keyboard(page: Page, text: str, *, delay_ms: int = 30) -> N
     page.keyboard.type(text, delay=delay_ms)
 
 
+def get_agent_terminal_textarea(page: Page) -> Locator:
+    """The agent terminal panel's xterm input textarea.
+
+    Scoped to ``AGENT_TERMINAL_PANEL`` because the workspace bottom terminal
+    panel can also be mounted (hidden), making the bare
+    ``.xterm-helper-textarea`` selector ambiguous.
+    """
+    return page.get_by_test_id(ElementIDs.AGENT_TERMINAL_PANEL).get_by_label("Terminal input")
+
+
+def run_command_in_agent_terminal(page: Page, command: str) -> None:
+    """Type ``command`` into a terminal agent's xterm and press Enter.
+
+    Mirrors ``run_command_in_active_terminal`` (including the no-op padding
+    that absorbs xterm.js's freshly-mounted-terminal keystroke drops) but
+    scoped to the agent terminal panel.
+    """
+    no_op = ": ; " * 8  # 32 chars of "no-op then sep" -- absorbs heavy drops
+    textarea = get_agent_terminal_textarea(page)
+    textarea.focus()
+    page.wait_for_timeout(200)
+    page.keyboard.type(no_op + command, delay=30)
+    textarea.press("Enter")
+
+
 def get_xterm_active_line(page: Page) -> str:
     """Read the current input line from the xterm buffer (the line the cursor is on)."""
     return page.evaluate(
