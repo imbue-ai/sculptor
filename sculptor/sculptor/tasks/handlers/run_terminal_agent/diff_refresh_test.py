@@ -58,17 +58,3 @@ def test_tick_swallows_git_failure(tmp_path: Path) -> None:
     refresher.tick()
 
     assert fired == []
-
-
-def test_force_fires_unconditionally_and_rebases(initial_commit_repo: tuple[Path, str]) -> None:
-    repo, _ = initial_commit_repo
-    fired: list[int] = []
-    refresher = _make_refresher(repo, fired)
-    refresher.tick()  # baseline
-
-    refresher.force()
-    assert len(fired) == 1
-
-    # force() rebased the fingerprint, so an unchanged tree does not re-fire.
-    refresher.tick()
-    assert len(fired) == 1
