@@ -21,11 +21,11 @@ import { WorkspacePluginContext } from "./WorkspaceContext.tsx";
 type JotaiStore = ReturnType<typeof createStore>;
 
 /**
- * Built-in plugin sources, always loaded regardless of the user's saved list
- * and not removable from the settings UI. Empty in the base scaffolding —
- * no plugin ships bundled yet; sources serve from `public/plugins/<id>/`.
+ * Built-in plugin sources, always loaded (when the frontend-plugins flag is
+ * on) regardless of the user's saved list, and not removable from the
+ * settings UI. Sources serve from `public/plugins/<id>/`.
  */
-const BUILTIN_SOURCES: ReadonlyArray<string> = [];
+const BUILTIN_SOURCES: ReadonlyArray<string> = ["/plugins/linear-issue"];
 
 /** SDK major version the host currently provides. */
 const HOST_SDK_VERSION = 1;
