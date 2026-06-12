@@ -18,6 +18,7 @@ from imbue_core.agents.data_types.ids import TaskID
 from imbue_core.concurrency_group import ConcurrencyGroup
 from imbue_core.event_utils import ReadOnlyEvent
 from imbue_core.sculptor.state.messages import Message
+from sculptor.common.plugin import get_plugins_base_dir
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
@@ -171,6 +172,11 @@ def test_terminal_handler_spawns_pty_and_pauses_on_shutdown(
     assert "SCULPT_WORKSPACE_ID" in seen_managers[0]._extra_env
     assert "SCULPT_PROJECT_ID" in seen_managers[0]._extra_env
     assert "PATH" in seen_managers[0]._extra_env
+    # Registration launch commands shell-expand these (install-relative paths
+    # cannot be baked into registration files).
+    assert seen_managers[0]._extra_env["SCULPT_PLUGINS_DIR"] == str(get_plugins_base_dir())
+    # No claude_binary_path passed above → the PATH fallback.
+    assert seen_managers[0]._extra_env["SCULPT_CLAUDE_BIN"] == "claude"
     # Cleanup: manager and config are gone after the loop exits.
     assert get_terminal_manager(terminal_id) is None
     assert get_agent_terminal_config(terminal_task.object_id) is None
