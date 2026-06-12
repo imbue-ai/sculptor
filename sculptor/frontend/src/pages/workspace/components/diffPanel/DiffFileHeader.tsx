@@ -1,5 +1,5 @@
 import { DropdownMenu, Flex, IconButton } from "@radix-ui/themes";
-import { MoreHorizontal, Search, SplitSquareHorizontal, X } from "lucide-react";
+import { MoreHorizontal, Search, SplitSquareHorizontal } from "lucide-react";
 import type { ReactElement } from "react";
 import { useMemo } from "react";
 
@@ -25,7 +25,6 @@ export type DiffViewOptions = {
   isRendered: boolean;
   isRenderToggleEnabled: boolean;
   onToggleRender: () => void;
-  onClose: () => void;
 };
 
 type DiffFileHeaderProps = {
@@ -116,7 +115,8 @@ export const DiffFileHeader = ({
   );
 };
 
-/** View controls (find, split/unified, wrap, render, close) for the "…" menu. */
+/** View controls (find, split/unified, wrap, render) for the "…" menu. Closing
+ * tabs lives in the shared "Close" submenu of the file actions below. */
 const DiffViewMenuItems = ({ isBinary, options }: { isBinary: boolean; options: DiffViewOptions }): ReactElement => (
   <>
     {!isBinary && (
@@ -144,9 +144,5 @@ const DiffViewMenuItems = ({ isBinary, options }: { isBinary: boolean; options: 
         Render markdown
       </DropdownMenu.CheckboxItem>
     )}
-    <DropdownMenu.Separator />
-    <DropdownMenu.Item onSelect={() => options.onClose()}>
-      <X size={14} /> Close
-    </DropdownMenu.Item>
   </>
 );

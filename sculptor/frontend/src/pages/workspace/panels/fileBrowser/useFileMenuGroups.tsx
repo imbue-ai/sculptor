@@ -18,7 +18,8 @@ import { expandFoldersAtom } from "./atoms.ts";
 import { openInOs } from "./hooks.ts";
 import type { FileContextMenuContext } from "./types.ts";
 
-export type MenuItem = {
+export type MenuAction = {
+  kind: "action";
   key: string;
   label: string;
   icon: ReactElement;
@@ -26,7 +27,17 @@ export type MenuItem = {
   handleSelect: () => void;
 };
 
-export type MenuGroup = Array<MenuItem>;
+export type MenuSubmenu = {
+  kind: "submenu";
+  key: string;
+  label: string;
+  icon: ReactElement;
+  items: Array<MenuAction>;
+};
+
+export type MenuEntry = MenuAction | MenuSubmenu;
+
+export type MenuGroup = Array<MenuEntry>;
 
 type UseFileMenuGroupsParams = {
   context: FileContextMenuContext;
@@ -115,6 +126,7 @@ export const useFileMenuGroups = ({
     const group1: MenuGroup = [];
     if (isFile && !isDiffSource && !isCombinedDiffSource) {
       group1.push({
+        kind: "action",
         key: "open-diff",
         label: "Open diff view",
         icon: <Eye size={14} />,
@@ -125,6 +137,7 @@ export const useFileMenuGroups = ({
 
     if (isFile && !isDeleted && !isCombinedDiffSource) {
       group1.push({
+        kind: "action",
         key: "view-file",
         label: "View file",
         icon: <FileText size={14} />,
@@ -134,51 +147,69 @@ export const useFileMenuGroups = ({
     }
     if (group1.length > 0) groups.push(group1);
 
-    // Group 2: Copy paths
+    // Group 2: the rarely-used path/OS actions fold into submenus so the
+    // top level stays short.
     const group2: MenuGroup = [
       {
-        key: "copy-path",
-        label: "Copy file path",
+        kind: "submenu",
+        key: "copy-path-menu",
+        label: "Copy path",
         icon: <Copy size={14} />,
-        disabled: false,
-        handleSelect: handleCopyFilePath,
-      },
-      {
-        key: "copy-rel-path",
-        label: "Copy relative path",
-        icon: <Copy size={14} />,
-        disabled: false,
-        handleSelect: handleCopyRelativePath,
+        items: [
+          {
+            kind: "action",
+            key: "copy-path",
+            label: "File path",
+            icon: <Copy size={14} />,
+            disabled: false,
+            handleSelect: handleCopyFilePath,
+          },
+          {
+            kind: "action",
+            key: "copy-rel-path",
+            label: "Relative path",
+            icon: <Copy size={14} />,
+            disabled: false,
+            handleSelect: handleCopyRelativePath,
+          },
+        ],
       },
     ];
+    // Hidden when the backend cannot access the host filesystem.
+    if (getBackendCapabilities().canOpenInOS) {
+      group2.push({
+        kind: "submenu",
+        key: "open-in-menu",
+        label: "Open in",
+        icon: <ExternalLink size={14} />,
+        items: [
+          {
+            kind: "action",
+            key: "open-default",
+            label: "Default app",
+            icon: <ExternalLink size={14} />,
+            disabled: isDeleted,
+            handleSelect: handleOpenInDefaultApp,
+          },
+          {
+            kind: "action",
+            key: "open-folder",
+            label: "Containing folder",
+            icon: <FolderOpen size={14} />,
+            disabled: isDeleted,
+            handleSelect: handleOpenContainingFolder,
+          },
+        ],
+      });
+    }
     groups.push(group2);
 
-    // Group 3: Open in OS (hidden when backend cannot access the host filesystem)
-    if (getBackendCapabilities().canOpenInOS) {
-      const group3: MenuGroup = [
-        {
-          key: "open-default",
-          label: "Open in default app",
-          icon: <ExternalLink size={14} />,
-          disabled: isDeleted,
-          handleSelect: handleOpenInDefaultApp,
-        },
-        {
-          key: "open-folder",
-          label: "Open containing folder",
-          icon: <FolderOpen size={14} />,
-          disabled: isDeleted,
-          handleSelect: handleOpenContainingFolder,
-        },
-      ];
-      groups.push(group3);
-    }
-
-    // Group 4: Folder actions
+    // Group 3: Folder actions
     if (context.isFolder) {
-      const group4: MenuGroup = [];
+      const group3: MenuGroup = [];
       if (!isExpanded) {
-        group4.push({
+        group3.push({
+          kind: "action",
           key: "expand-children",
           label: "Expand all children",
           icon: <ChevronsDown size={14} />,
@@ -186,7 +217,8 @@ export const useFileMenuGroups = ({
           handleSelect: handleExpandAllChildren,
         });
       } else {
-        group4.push({
+        group3.push({
+          kind: "action",
           key: "collapse-children",
           label: "Collapse all children",
           icon: <ChevronsUp size={14} />,
@@ -194,35 +226,46 @@ export const useFileMenuGroups = ({
           handleSelect: handleCollapseAllChildren,
         });
       }
-      groups.push(group4);
+      groups.push(group3);
     }
 
-    // Group 5: Tab actions (diff header and diff tabs)
+    // Group 4: Tab actions (diff header and diff tabs)
     if (isDiffSource) {
-      const group5: MenuGroup = [
+      const group4: MenuGroup = [
         {
-          key: "close-tab",
-          label: "Close tab",
+          kind: "submenu",
+          key: "close-menu",
+          label: "Close",
           icon: <X size={14} />,
-          disabled: false,
-          handleSelect: handleCloseTab,
-        },
-        {
-          key: "close-other-tabs",
-          label: "Close other tabs",
-          icon: <XCircle size={14} />,
-          disabled: diffPanelState.openTabs.length <= 1,
-          handleSelect: handleCloseOtherTabs,
-        },
-        {
-          key: "close-all-tabs",
-          label: "Close all",
-          icon: <XCircle size={14} />,
-          disabled: false,
-          handleSelect: handleCloseAllTabs,
+          items: [
+            {
+              kind: "action",
+              key: "close-tab",
+              label: "Close tab",
+              icon: <X size={14} />,
+              disabled: false,
+              handleSelect: handleCloseTab,
+            },
+            {
+              kind: "action",
+              key: "close-other-tabs",
+              label: "Close other tabs",
+              icon: <XCircle size={14} />,
+              disabled: diffPanelState.openTabs.length <= 1,
+              handleSelect: handleCloseOtherTabs,
+            },
+            {
+              kind: "action",
+              key: "close-all-tabs",
+              label: "Close all",
+              icon: <XCircle size={14} />,
+              disabled: false,
+              handleSelect: handleCloseAllTabs,
+            },
+          ],
         },
       ];
-      groups.push(group5);
+      groups.push(group4);
     }
 
     return groups;

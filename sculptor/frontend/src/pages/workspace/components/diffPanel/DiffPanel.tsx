@@ -1,5 +1,5 @@
 import { Box, Flex, Text } from "@radix-ui/themes";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useMemo, useRef, useState } from "react";
 
@@ -18,7 +18,7 @@ import { getLineCounts, parseDiff } from "~/components/DiffUtils.ts";
 import { IndeterminateProgress } from "~/components/IndeterminateProgress.tsx";
 import { determineFileStatus } from "~/pages/workspace/panels/fileBrowser/utils.ts";
 
-import { closeAllDiffTabsAtom, isMarkdownPath, markdownRenderModeAtom } from "./atoms.ts";
+import { isMarkdownPath, markdownRenderModeAtom } from "./atoms.ts";
 import { BinaryPreview } from "./BinaryPreview.tsx";
 import { CombinedDiffView } from "./CombinedDiffView.tsx";
 import { DeletedFileBanner } from "./DeletedFileBanner.tsx";
@@ -107,7 +107,6 @@ export const DiffPanel = ({ workspaceId, stateKey, singleFile = false }: DiffPan
   const appTheme = useAtomValue(appThemeAtom);
   // Expand mode is handled at the DockingLayout level; DiffPanel just renders normally.
   const { updateField } = useUserConfig();
-  const closeAllDiffTabs = useSetAtom(closeAllDiffTabsAtom);
   // Skip file line fetching for combined, file-view, and commit-diff tabs —
   // they don't need hunk expansion data.
   const shouldSkipFileLines = activeFileDiff.isCombined || activeFileDiff.isFileView || activeFileDiff.isCommitDiff;
@@ -253,7 +252,6 @@ export const DiffPanel = ({ workspaceId, stateKey, singleFile = false }: DiffPan
     isRendered: markdownMode === "rendered" && isRichMarkdownRenderingEnabled,
     isRenderToggleEnabled: isRichMarkdownRenderingEnabled,
     onToggleRender: handleToggleMarkdownRender,
-    onClose: () => closeAllDiffTabs({ workspaceId, stateKey }),
   };
 
   const renderContent = (): ReactElement => {

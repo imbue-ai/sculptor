@@ -39,17 +39,39 @@ export const FileContextMenu = ({
         {menuGroups.map((group, groupIndex) => (
           <span key={groupIndex}>
             {groupIndex > 0 && <ContextMenu.Separator />}
-            {group.map((item) => (
-              <ContextMenu.Item
-                key={item.key}
-                disabled={item.disabled}
-                onSelect={item.handleSelect}
-                data-testid={item.key}
-              >
-                {item.icon}
-                {item.label}
-              </ContextMenu.Item>
-            ))}
+            {group.map((entry) =>
+              entry.kind === "submenu" ? (
+                <ContextMenu.Sub key={entry.key}>
+                  <ContextMenu.SubTrigger data-testid={entry.key}>
+                    {entry.icon}
+                    {entry.label}
+                  </ContextMenu.SubTrigger>
+                  <ContextMenu.SubContent>
+                    {entry.items.map((item) => (
+                      <ContextMenu.Item
+                        key={item.key}
+                        disabled={item.disabled}
+                        onSelect={item.handleSelect}
+                        data-testid={item.key}
+                      >
+                        {item.icon}
+                        {item.label}
+                      </ContextMenu.Item>
+                    ))}
+                  </ContextMenu.SubContent>
+                </ContextMenu.Sub>
+              ) : (
+                <ContextMenu.Item
+                  key={entry.key}
+                  disabled={entry.disabled}
+                  onSelect={entry.handleSelect}
+                  data-testid={entry.key}
+                >
+                  {entry.icon}
+                  {entry.label}
+                </ContextMenu.Item>
+              ),
+            )}
           </span>
         ))}
       </ContextMenu.Content>
