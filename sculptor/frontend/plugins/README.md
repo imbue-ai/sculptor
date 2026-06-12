@@ -35,12 +35,12 @@ regardless of the flag, for plugin development.
 
 ## SDK surface plugins target (`@sculptor/plugin-sdk`)
 
-- `useWorkspaceTasks()`, `useTaskArtifact(taskId, type)` — read host task data.
+- `useWorkspaceTasks()` — the workspace's tasks (host task data).
 - `useWorkspaceId()`, `useWorkspaceBranch()` — workspace id / current branch.
 - `usePluginSetting(key)` — a persisted string setting scoped to the plugin
   (localStorage under `sculptor-plugin:<id>:<key>`), shared between the
   plugin's panel and its settings component.
-- `PanelHeader`, `ArtifactType`, and domain types.
+- `PanelHeader` and domain types.
 
 ## Caching fetched data (`@tanstack/react-query`)
 
@@ -70,7 +70,7 @@ request. Rules:
 ## Adding a plugin
 
 1. Create `plugins/<id>/` — a small Vite project with a `manifest.json`
-   (`id`, `name`, `version`, `entry`, `sdkVersion`, `peerDependencies`) and a
+   (`id`, `name`, `version`, `entry`, `sdkVersion`) and a
    build that externalises the shared deps and outputs
    `public/plugins/<id>/main.js`.
 2. Add `/plugins/<id>` to `BUILTIN_SOURCES` in `src/plugins/pluginManager.tsx`
@@ -79,9 +79,6 @@ request. Rules:
 
 ## What's mocked vs. real
 
-- `useTaskArtifact` is a hand-rolled fetch-on-mount that writes back to
-  the existing `taskDetailAtomFamily`. It will move to TanStack Query and
-  the public hook signature won't change.
 - The built-in plugin list is hardcoded; user sources are persisted to
   localStorage and managed from the Plugins settings.
 - The SDK package is published as a runtime stub via the import map; it
