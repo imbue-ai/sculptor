@@ -1,10 +1,10 @@
 """Integration tests for terminal-agent signals driving the tab status dot.
 
 Signals are posted from inside the agent's own terminal via the `sculpt
-signal` CLI (REQ-SIG-3), which reads SCULPT_AGENT_ID / SCULPT_API_PORT from
-the injected shell env and posts to the local HTTP event API (REQ-SIG-1/5).
-busy → spinner, waiting → attention dot, idle → calm neutral; files-changed
-refreshes the Changes panel (REQ-SIG-6).
+signal` CLI, which reads SCULPT_AGENT_ID / SCULPT_API_PORT from the injected
+shell env and posts to the local HTTP event API. busy → spinner, waiting →
+attention dot, idle → calm neutral; files-changed refreshes the Changes
+panel.
 """
 
 import re
@@ -12,9 +12,9 @@ import re
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
 from sculptor.testing.elements.file_tree import get_changes_tree
+from sculptor.testing.elements.terminal import get_agent_terminal_panel
 from sculptor.testing.elements.terminal import get_agent_terminal_textarea
 from sculptor.testing.elements.terminal import run_command_in_agent_terminal
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -41,7 +41,7 @@ def test_terminal_agent_signals_drive_tab_status_dot(sculptor_instance_: Sculpto
     agent_tab_bar.get_agent_type_menu_item_terminal().click()
     terminal_tab = agent_tab_bar.get_agent_tab_by_name("Terminal 1").first
     expect(terminal_tab).to_be_visible()
-    expect(page.get_by_test_id(ElementIDs.AGENT_TERMINAL_PANEL)).to_be_visible()
+    expect(get_agent_terminal_panel(page)).to_be_visible()
     expect(get_agent_terminal_textarea(page)).to_be_attached()
     page.wait_for_timeout(3_000)
 

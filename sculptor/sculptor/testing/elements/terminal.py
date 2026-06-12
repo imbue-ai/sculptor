@@ -66,6 +66,11 @@ def type_with_global_keyboard(page: Page, text: str, *, delay_ms: int = 30) -> N
     page.keyboard.type(text, delay=delay_ms)
 
 
+def get_agent_terminal_panel(page: Page) -> Locator:
+    """The terminal-agent main panel (it replaces the chat panel for terminal agents)."""
+    return page.get_by_test_id(ElementIDs.AGENT_TERMINAL_PANEL)
+
+
 def get_agent_terminal_textarea(page: Page) -> Locator:
     """The agent terminal panel's xterm input textarea.
 

@@ -1,14 +1,15 @@
 """Integration tests for the split `+` button and its agent-type menu.
 
-Covers REQ-TYPE-2/4/6: the chevron menu lists the agent types (pi gated
-behind multi-harness), selecting Terminal creates a "Terminal N" agent, and
-a plain `+` click creates the last-used type. Terminal-panel behavior is
-covered by the terminal-agent tests; here we only assert tab titles.
+The chevron menu lists the agent types (pi gated behind multi-harness),
+selecting Terminal creates a "Terminal N" agent, and a plain `+` click
+creates the last-used type. Terminal-panel behavior is covered by the
+terminal-agent tests; here we only assert tab titles.
 """
 
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
+from sculptor.testing.elements.terminal import get_agent_terminal_panel
 from sculptor.testing.elements.user_config import disable_multi_harness
 from sculptor.testing.elements.user_config import enable_multi_harness
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
@@ -44,7 +45,7 @@ def test_agent_type_menu_creates_terminal_agent_and_remembers_type(
     agent_tab_bar.get_agent_type_menu_item_terminal().click()
     expect(agent_tabs).to_have_count(3)
     expect(agent_tab_bar.get_agent_tab_by_name("Terminal 1")).to_have_count(1)
-    expect(page.get_by_test_id(ElementIDs.AGENT_TERMINAL_PANEL)).to_be_visible()
+    expect(get_agent_terminal_panel(page)).to_be_visible()
     expect(page.get_by_test_id(ElementIDs.CHAT_INPUT)).to_have_count(0)
 
     # Last-used type persisted: a plain + click now creates another Terminal.
@@ -93,8 +94,8 @@ def test_registered_terminal_agent_appears_in_menu_and_creates(
     sculptor_instance_: SculptorInstance,
 ) -> None:
     """Dropping a registration TOML makes it appear on the next menu open
-    (REQ-REG-3 — the backend re-reads the directory per request); creating
-    it names the tab from display_name and opens a terminal panel."""
+    (the backend re-reads the directory per request); creating it names the
+    tab from display_name and opens a terminal panel."""
     page = sculptor_instance_.page
     task_page = PlaywrightTaskPage(page=page)
     agent_tab_bar = task_page.get_agent_tab_bar()
@@ -122,7 +123,7 @@ def test_registered_terminal_agent_appears_in_menu_and_creates(
 
         # Created agent is named from display_name and shows a terminal panel.
         expect(agent_tab_bar.get_agent_tab_by_name("Fake Reg 1")).to_have_count(1)
-        expect(page.get_by_test_id(ElementIDs.AGENT_TERMINAL_PANEL)).to_be_visible()
+        expect(get_agent_terminal_panel(page)).to_be_visible()
         expect(page.get_by_test_id(ElementIDs.CHAT_INPUT)).to_have_count(0)
     finally:
         (registrations_dir / "fake-reg.toml").unlink(missing_ok=True)
