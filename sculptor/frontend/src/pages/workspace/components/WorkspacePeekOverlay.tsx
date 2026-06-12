@@ -1,4 +1,4 @@
-import { type ReactElement, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactElement, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import styles from "./WorkspacePeekOverlay.module.scss";
 import { WorkspacePeekPopover } from "./WorkspacePeekPopover";
@@ -7,6 +7,8 @@ const OPEN_DELAY_MS = 600;
 const CLOSE_DELAY_MS = 80;
 // After closing, re-entering a tab within this window reopens immediately.
 const REOPEN_GRACE_PERIOD_MS = 300;
+// Minimum gap between the popover and the viewport edges when clamping.
+const VIEWPORT_MARGIN_PX = 8;
 
 type OverlayPosition = {
   x: number;
@@ -59,8 +61,13 @@ export const WorkspacePeekOverlay = ({ onNavigate }: WorkspacePeekOverlayProps):
     if (dropdownContent) {
       const menuRect = dropdownContent.getBoundingClientRect();
       setPosition({ x: menuRect.right + 4, y: menuRect.top });
+      return;
+    }
+    const rect = tabElement.getBoundingClientRect();
+    if (tabElement.getAttribute("data-peek-side") === "right") {
+      // Sidebar rows open the peek beside the row rather than underneath it.
+      setPosition({ x: rect.right + 4, y: rect.top });
     } else {
-      const rect = tabElement.getBoundingClientRect();
       setPosition({ x: rect.left, y: rect.bottom + 4 });
     }
   }, []);
@@ -161,6 +168,27 @@ export const WorkspacePeekOverlay = ({ onNavigate }: WorkspacePeekOverlayProps):
   // Cleanup timers on unmount
   useEffect(() => clearTimers, [clearTimers]);
 
+  // Keep the popover inside the viewport. Sidebar rows near the bottom of the
+  // screen would otherwise push the (up to ~600px tall) popover off-screen.
+  // The popover loads its content asynchronously, so re-clamp on resize too.
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect((): (() => void) | undefined => {
+    const element = overlayRef.current;
+    if (!isVisible || element == null) return undefined;
+    // Compute from position.y + offsetHeight (not getBoundingClientRect) so an
+    // in-flight transform transition can't feed back a mid-animation position.
+    const clamp = (): void => {
+      const overflow = position.y + element.offsetHeight - (window.innerHeight - VIEWPORT_MARGIN_PX);
+      if (overflow > 0) {
+        setPosition((prev) => ({ ...prev, y: Math.max(VIEWPORT_MARGIN_PX, prev.y - overflow) }));
+      }
+    };
+    clamp();
+    const observer = new ResizeObserver(clamp);
+    observer.observe(element);
+    return (): void => observer.disconnect();
+  }, [isVisible, position]);
+
   const handlePopoverMouseEnter = useCallback((): void => {
     isOverPopoverRef.current = true;
     clearTimers();
@@ -175,6 +203,7 @@ export const WorkspacePeekOverlay = ({ onNavigate }: WorkspacePeekOverlayProps):
 
   return (
     <div
+      ref={overlayRef}
       className={`${styles.overlay} ${hasAnimated ? styles.animated : ""}`}
       style={{ transform: `translate(${position.x}px, ${position.y}px)` }}
       onMouseEnter={handlePopoverMouseEnter}
