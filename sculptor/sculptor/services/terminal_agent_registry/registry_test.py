@@ -163,3 +163,30 @@ def test_bundled_claude_cli_hooks_only_signal_waiting_for_genuine_attention() ->
         assert any(re.search(group["matcher"], tool_name) for group in answered_groups), (
             f"{tool_name} must signal busy once answered"
         )
+
+
+def test_bundled_claude_cli_hooks_report_session_id_on_first_prompt_not_startup() -> None:
+    """The session id must be reported only once a conversation exists.
+
+    Claude does not persist a resumable transcript for a session that never
+    received a message, so an id reported from SessionStart (TUI startup)
+    can point at nothing: a Sculptor restart then relaunches with
+    ``--resume <id>`` and the TUI dies with "No conversation found with
+    session ID". Reporting from UserPromptSubmit instead means a
+    message-less agent persists no id and restarts fall back to the plain
+    launch command (a fresh TUI in the same tab), while every prompt
+    re-reports the current id (e.g. fresh after /clear).
+    """
+    sample_dir = get_bundled_claude_code_dir()
+    assert sample_dir is not None, "bundled claude-code sample not found"
+    hooks = json.loads((sample_dir / "claude-code-hooks.json").read_text())["hooks"]
+
+    def commands_for(event_name: str) -> list[str]:
+        return [hook["command"] for group in hooks.get(event_name, ()) for hook in group["hooks"]]
+
+    assert not any("session-id" in command for command in commands_for("SessionStart")), (
+        "SessionStart fires before any message exists — an id reported there may not be resumable"
+    )
+    assert any("session-id" in command for command in commands_for("UserPromptSubmit")), (
+        "UserPromptSubmit must report the session id (first moment a resumable conversation exists)"
+    )
