@@ -14,30 +14,35 @@
   @include thin-scrollbar;
 }
 
+// Rows share the nav sidebar's pill treatment (WorkspaceNavSidebar.module.scss):
+// rounded, inset from the panel edges, translucent gray hover, and the active
+// file in the translucent accent.
 .row {
   align-items: center;
+  border-radius: var(--radius-2);
   cursor: pointer;
   display: flex;
   gap: var(--space-1);
   height: 28px;
+  margin: 0 var(--space-1);
   padding: 0 var(--space-2) 0 0;
   transition: background-color var(--duration-fast);
   user-select: none;
 
   &:hover {
-    background-color: var(--gray-3);
+    background-color: var(--gray-a3);
   }
 }
 
 .focused {
-  background-color: var(--gray-3);
+  background-color: var(--gray-a3);
 }
 
 .activeFile {
-  background-color: var(--accent-3);
+  background-color: var(--accent-a3);
 
   &:hover {
-    background-color: var(--accent-4);
+    background-color: var(--accent-a3);
   }
 }
 
@@ -83,6 +88,10 @@
   .deleted & {
     text-decoration: line-through;
   }
+
+  .activeFile & {
+    color: var(--accent-11);
+  }
 }
 
 .groupHeader {
@@ -104,6 +113,10 @@
 
 .extension {
   color: var(--gray-9);
+
+  .activeFile & {
+    color: var(--accent-11);
+  }
 }
 
 .spacer {
@@ -147,7 +160,9 @@
   cursor: pointer;
   display: flex;
   padding: var(--space-1);
-  transition: background-color var(--duration-fast), color var(--duration-fast);
+  transition:
+    background-color var(--duration-fast),
+    color var(--duration-fast);
 
   &:hover {
     background-color: var(--gray-3);
@@ -161,16 +176,18 @@
 
 .flatListRow {
   align-items: center;
+  border-radius: var(--radius-2);
   cursor: pointer;
   display: flex;
   gap: var(--space-2);
   height: 28px;
+  margin: 0 var(--space-1);
   padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
   transition: background-color var(--duration-fast);
   user-select: none;
 
   &:hover {
-    background-color: var(--gray-3);
+    background-color: var(--gray-a3);
   }
 }
 
