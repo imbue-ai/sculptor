@@ -25,6 +25,7 @@ from sculptor.database.models import Project
 from sculptor.database.models import Task
 from sculptor.interfaces.agents.agent import EnvironmentAcquiredRunnerMessage
 from sculptor.interfaces.agents.agent import EnvironmentReleasedRunnerMessage
+from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.interfaces.agents.agent import TerminalAgentConfig
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import OrganizationReference
@@ -47,6 +48,7 @@ from sculptor.tasks.api import run_task
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import get_agent_terminal_config
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import make_agent_terminal_id
 from sculptor.tasks.handlers.run_terminal_agent.v1 import _run_terminal_agent_in_environment
+from sculptor.tasks.handlers.run_terminal_agent.v1 import launch_command_for_start
 from sculptor.tasks.handlers.run_terminal_agent.v1 import run_terminal_agent_task_v1
 
 
@@ -247,3 +249,74 @@ def test_run_task_dispatches_terminal_config_to_terminal_handler(
         )
     terminal_handler.assert_called_once()
     chat_handler.assert_not_called()
+
+
+def test_launch_command_for_start_selects_per_config() -> None:
+    state = AgentTaskStateV2(workspace_id=WorkspaceID())
+    plain = AgentTaskInputsV2(agent_config=TerminalAgentConfig(), git_hash="x")
+    assert launch_command_for_start(plain, state) is None
+
+    registered = AgentTaskInputsV2(
+        agent_config=RegisteredTerminalAgentConfig(
+            registration_id="claude-code",
+            display_name="Claude Code",
+            launch_command="claude",
+        ),
+        git_hash="x",
+    )
+    assert launch_command_for_start(registered, state) == "claude"
+
+
+def test_registered_config_launch_command_is_written_on_spawn(
+    services: ServiceCollectionForTask,
+    project: Project,
+    environment: LocalEnvironment,
+    test_settings: SculptorSettings,
+    test_root_concurrency_group: ConcurrencyGroup,
+) -> None:
+    """A registered agent's handler writes the stamped launch command into the
+    shell exactly once; plain terminal agents write nothing."""
+    user_session_task = Task(
+        object_id=TaskID(),
+        organization_reference=project.organization_reference,
+        user_reference=UserReference("usr_123"),
+        project_id=project.object_id,
+        input_data=AgentTaskInputsV2(
+            agent_config=RegisteredTerminalAgentConfig(
+                registration_id="claude-code",
+                display_name="Claude Code",
+                launch_command="echo registered-launch-marker",
+            ),
+            git_hash="initialhash",
+        ),
+    )
+    with services.data_model_service.open_transaction(RequestID()) as transaction:
+        services.task_service.create_task(user_session_task, transaction)
+
+    task_state = AgentTaskStateV2(workspace_id=WorkspaceID())
+    shutdown_event = threading.Event()
+    written_commands: list[str] = []
+
+    def fake_write_launch_command(manager: Any, command: str, timeout_seconds: float = 5.0) -> None:
+        del manager, timeout_seconds
+        written_commands.append(command)
+        shutdown_event.set()
+
+    with patch(
+        "sculptor.tasks.handlers.run_terminal_agent.v1.write_launch_command",
+        side_effect=fake_write_launch_command,
+    ):
+        with pytest.raises(UserPausedTaskError):
+            _run_terminal_agent_in_environment(
+                task=user_session_task,
+                task_state=task_state,
+                project=project,
+                underlying_env=environment,
+                environment_concurrency_group=test_root_concurrency_group,
+                services=services,
+                settings=test_settings,
+                shutdown_event=shutdown_event,
+                on_started=None,
+            )
+
+    assert written_commands == ["echo registered-launch-marker"]

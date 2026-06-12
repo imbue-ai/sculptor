@@ -34,6 +34,7 @@ from sculptor.database.models import Task
 from sculptor.interfaces.agents.agent import EnvironmentAcquiredRunnerMessage
 from sculptor.interfaces.agents.agent import EnvironmentReleasedRunnerMessage
 from sculptor.interfaces.agents.agent import EnvironmentTypes
+from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.task_service.data_types import ServiceCollectionForTask
 from sculptor.services.task_service.errors import UserPausedTaskError
@@ -48,11 +49,26 @@ from sculptor.tasks.handlers.run_terminal_agent.terminal_session import create_a
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import register_agent_terminal_config
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import stop_agent_terminal
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import unregister_agent_terminal_config
+from sculptor.tasks.handlers.run_terminal_agent.terminal_session import write_launch_command
 from sculptor.utils.build import get_sculpt_bin_dir
 
 # it will take at most this much time to notice a shutdown request
 _POLL_SECONDS: float = 1.0
 _DIFF_REFRESH_INTERVAL_SECONDS: float = 3.0
+
+
+def launch_command_for_start(task_data: AgentTaskInputsV2, task_state: AgentTaskStateV2) -> str | None:
+    """The command to write into the freshly spawned shell, or None for a bare shell.
+
+    Plain terminal agents get nothing; registered ones get their stamped
+    launch command. (The session-id resume variant swaps the command string
+    here, not the mechanism.)
+    """
+    del task_state
+    config = task_data.agent_config
+    if isinstance(config, RegisteredTerminalAgentConfig):
+        return config.launch_command
+    return None
 
 
 def run_terminal_agent_task_v1(
@@ -182,9 +198,18 @@ def _run_terminal_agent_in_environment(
         ),
     )
     try:
-        # Eager spawn. A failure is non-fatal: the WS route retries on demand.
-        if create_agent_terminal(task.object_id) is None:
+        # Eager spawn. A failure is non-fatal: the WS route retries on demand
+        # (with a BARE shell — the launch command is written only here, so a
+        # program/shell exit never auto-relaunches, REQ-LIFE-5).
+        manager = create_agent_terminal(task.object_id)
+        if manager is None:
             logger.info("Failed to eagerly start terminal for agent {}; will retry on demand", task.object_id)
+        else:
+            input_data = task.input_data
+            assert isinstance(input_data, AgentTaskInputsV2)
+            launch_command = launch_command_for_start(input_data, task_state)
+            if launch_command is not None:
+                write_launch_command(manager, launch_command)
 
         if on_started is not None:
             on_started()

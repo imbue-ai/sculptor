@@ -33,7 +33,14 @@ const debouncedStorageWrite = (key: string, value: unknown, delayMs: number): vo
     value,
     timeout: setTimeout(() => {
       try {
-        localStorage.setItem(key, JSON.stringify(value));
+        // Storage can be gone by the time the debounce fires (jsdom test
+        // teardown); a missed best-effort write must not become an
+        // unhandled exception.
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem(key, JSON.stringify(value));
+        }
+      } catch {
+        // Quota exceeded or storage unavailable — best-effort, same as flush.
       } finally {
         pendingWrites.delete(key);
       }

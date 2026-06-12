@@ -6,6 +6,7 @@ flake under heavy pytest parallelism.
 """
 
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,7 @@ from sculptor.tasks.handlers.run_terminal_agent.terminal_session import make_age
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import register_agent_terminal_config
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import stop_agent_terminal
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import unregister_agent_terminal_config
+from sculptor.tasks.handlers.run_terminal_agent.terminal_session import write_launch_command
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX-only")
 
@@ -110,3 +112,57 @@ def test_stop_terminals_for_environment_stops_agent_terminal(tmp_path: Path) -> 
         finally:
             stop_agent_terminal(task_id)
             unregister_agent_terminal_config(task_id)
+
+
+class _FakeSilentManager:
+    """A manager whose shell never produces output (for the timeout fallback)."""
+
+    def __init__(self) -> None:
+        self.writes: list[bytes] = []
+        self.removed_callbacks: list[object] = []
+
+    def subscribe(self, callback: object) -> bytes:
+        del callback
+        return b""
+
+    def remove_output_callback(self, callback: object) -> None:
+        self.removed_callbacks.append(callback)
+
+    def write(self, data: bytes) -> None:
+        self.writes.append(data)
+
+
+def test_write_launch_command_waits_for_shell_output(tmp_path: Path) -> None:
+    task_id = TaskID()
+    with ConcurrencyGroup(name="launch-command-test") as group:
+        _register_config(task_id, "env-launch-test", tmp_path, group)
+        try:
+            manager = create_agent_terminal(task_id)
+            assert manager is not None
+
+            write_launch_command(manager, "echo launched-marker", timeout_seconds=10.0)
+
+            # The command executed in the shell: its output lands in the
+            # replay buffer (poll — shell echo is asynchronous).
+            buffered = b""
+            deadline = time.monotonic() + 10.0
+            while time.monotonic() < deadline:
+                buffered = manager.subscribe(lambda _data: None)
+                if b"launched-marker" in buffered:
+                    break
+                time.sleep(0.1)
+            else:
+                raise AssertionError(f"launch command output never appeared; buffer: {buffered!r}")
+        finally:
+            stop_agent_terminal(task_id)
+            unregister_agent_terminal_config(task_id)
+
+
+def test_write_launch_command_times_out_and_writes_anyway() -> None:
+    manager = _FakeSilentManager()
+
+    write_launch_command(manager, "claude", timeout_seconds=0.05)  # pyre-ignore[6]
+
+    assert manager.writes == [b"claude\n"]
+    # The readiness callback must not leak.
+    assert len(manager.removed_callbacks) == 1
