@@ -1,8 +1,8 @@
-import { SegmentedControl } from "@radix-ui/themes";
 import type { ReactElement } from "react";
 
 import { ElementIds } from "~/api";
 
+import styles from "./DiffScopePicker.module.scss";
 import type { DiffScope } from "./types.ts";
 
 type DiffScopePickerProps = {
@@ -25,21 +25,29 @@ export const DiffScopePicker = ({
 }: DiffScopePickerProps): ReactElement => {
   const effectiveScope = !hasTargetBranch && scope === "vs-target-branch" ? "uncommitted" : scope;
 
+  const optionClassName = (optionScope: DiffScope): string =>
+    `${styles.option} ${effectiveScope === optionScope ? styles.optionActive : ""}`;
+
   return (
-    <SegmentedControl.Root
-      size="1"
-      value={effectiveScope}
-      onValueChange={(value) => onScopeChange(value as DiffScope)}
-      data-testid={ElementIds.DIFF_SCOPE_PICKER}
-    >
+    <div className={styles.picker} data-testid={ElementIds.DIFF_SCOPE_PICKER}>
       {hasTargetBranch && (
-        <SegmentedControl.Item value="vs-target-branch" data-testid={ElementIds.DIFF_SCOPE_ALL}>
+        <button
+          type="button"
+          className={optionClassName("vs-target-branch")}
+          onClick={() => onScopeChange("vs-target-branch")}
+          data-testid={ElementIds.DIFF_SCOPE_ALL}
+        >
           {formatLabel("All", allCount)}
-        </SegmentedControl.Item>
+        </button>
       )}
-      <SegmentedControl.Item value="uncommitted" data-testid={ElementIds.DIFF_SCOPE_UNCOMMITTED}>
+      <button
+        type="button"
+        className={optionClassName("uncommitted")}
+        onClick={() => onScopeChange("uncommitted")}
+        data-testid={ElementIds.DIFF_SCOPE_UNCOMMITTED}
+      >
         {formatLabel("Uncommitted", uncommittedCount)}
-      </SegmentedControl.Item>
-    </SegmentedControl.Root>
+      </button>
+    </div>
   );
 };

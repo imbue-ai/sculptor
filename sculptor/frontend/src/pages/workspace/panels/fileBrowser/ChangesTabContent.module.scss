@@ -1,0 +1,5 @@
+// The commit action lives in a quiet footer below the tree: the wording stays
+// visible for first-time users without occupying the header.
+.commitFooter {
+  border-top: 1px solid var(--gray-a4);
+}

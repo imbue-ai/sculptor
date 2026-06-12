@@ -10,14 +10,17 @@ import { commitPromptAtom } from "~/common/state/atoms/userConfig.ts";
 import { CommitPromptDialog } from "./CommitPromptDialog.tsx";
 
 const COMMIT_BUTTON_STYLE: CSSProperties = { minWidth: 180 };
+const FULL_WIDTH_STYLE: CSSProperties = { width: "100%" };
 
 type CommitButtonProps = {
   changesCount: number;
   /** Called after the commit message is sent. */
   onCommit?: () => void;
+  /** Stretch to fill the row — used by the Changes panel footer. */
+  fullWidth?: boolean;
 };
 
-export const CommitButton = ({ changesCount, onCommit }: CommitButtonProps): ReactElement => {
+export const CommitButton = ({ changesCount, onCommit, fullWidth = false }: CommitButtonProps): ReactElement => {
   const chatActions = useAtomValue(chatActionsAtom);
   const commitPrompt = useAtomValue(commitPromptAtom);
   const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
@@ -39,7 +42,7 @@ export const CommitButton = ({ changesCount, onCommit }: CommitButtonProps): Rea
             color="gray"
             disabled={isDisabled}
             onClick={handleClick}
-            style={COMMIT_BUTTON_STYLE}
+            style={fullWidth ? FULL_WIDTH_STYLE : COMMIT_BUTTON_STYLE}
             data-testid={ElementIds.CHANGES_COMMIT_BUTTON}
           >
             Commit {changesCount} {changesCount === 1 ? "change" : "changes"}

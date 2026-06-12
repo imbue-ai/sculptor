@@ -1,0 +1,36 @@
+// Text-toggle scope picker: the selected option gets a subtle box while the
+// unselected one reads as plain text, so the control stays lightweight next to
+// the file tree it filters.
+.picker {
+  align-items: center;
+  display: flex;
+  gap: var(--space-1);
+}
+
+.option {
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-2);
+  color: var(--gray-a10);
+  cursor: pointer;
+  font-size: var(--font-size-1);
+  padding: var(--space-1) var(--space-2);
+  transition:
+    background-color var(--duration-fast),
+    color var(--duration-fast);
+  white-space: nowrap;
+
+  &:hover {
+    background: var(--gray-a2);
+    color: var(--gray-12);
+  }
+}
+
+.optionActive {
+  background: var(--gray-a3);
+  color: var(--gray-12);
+
+  &:hover {
+    background: var(--gray-a3);
+  }
+}

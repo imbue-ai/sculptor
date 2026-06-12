@@ -10,6 +10,7 @@ import { DiffScopePicker } from "~/pages/workspace/components/diffPanel/DiffScop
 import { DiscardDialog } from "../changesPanel/DiscardDialog.tsx";
 import { useDiscardFile } from "../changesPanel/useDiscardFile.ts";
 import { changesScopeAtomFamily } from "./atoms.ts";
+import styles from "./ChangesTabContent.module.scss";
 import { ChangesTreeView } from "./ChangesTreeView.tsx";
 import { CommitButton } from "./CommitButton.tsx";
 import { useFileStatusMap } from "./hooks.ts";
@@ -45,7 +46,7 @@ export const ChangesTabContent = ({ workspaceId, viewMode }: ChangesTabContentPr
 
   return (
     <Flex direction="column" flexGrow="1" height="100%" overflow="hidden" data-testid={ElementIds.CHANGES_PANEL}>
-      <Flex flexShrink="0" px="3" py="2" direction="column" gap="2">
+      <Flex flexShrink="0" px="2" py="1">
         <DiffScopePicker
           scope={scope}
           onScopeChange={setScope}
@@ -53,9 +54,6 @@ export const ChangesTabContent = ({ workspaceId, viewMode }: ChangesTabContentPr
           uncommittedCount={uncommittedStatusMap.size}
           allCount={allStatusMap.size}
         />
-        <Flex justify="center">
-          <CommitButton changesCount={uncommittedStatusMap.size} />
-        </Flex>
       </Flex>
       <ChangesTreeView
         workspaceId={workspaceId}
@@ -63,6 +61,9 @@ export const ChangesTabContent = ({ workspaceId, viewMode }: ChangesTabContentPr
         scope={scope}
         onDiscardFile={isUncommitted ? handleDiscardRequest : undefined}
       />
+      <Flex flexShrink="0" p="2" className={styles.commitFooter}>
+        <CommitButton changesCount={uncommittedStatusMap.size} fullWidth />
+      </Flex>
       <DiscardDialog
         open={discardTarget !== null}
         onOpenChange={(open) => {
