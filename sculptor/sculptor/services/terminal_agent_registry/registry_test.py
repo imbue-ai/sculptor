@@ -108,7 +108,13 @@ def test_bundled_claude_code_sample_round_trips_through_loader(registrations_dir
     registration = registrations[0]
     assert registration.registration_id == "claude-code"
     assert registration.display_name == "Claude Code"
-    assert "claude" in registration.launch_command
+    # Machine-specific paths come from shell-expanded env vars the
+    # terminal-agent PTY injects — never baked-in absolutes.
+    assert '"$SCULPT_CLAUDE_BIN"' in registration.launch_command
+    assert "$SCULPT_PLUGINS_DIR" in registration.launch_command
+    assert "--dangerously-skip-permissions" in registration.launch_command
     assert registration.resume_command_template is not None
     assert "{session_id}" in registration.resume_command_template
+    # A resumed session must come back with exactly the launch flags.
+    assert registration.resume_command_template == f"{registration.launch_command} --resume {{session_id}}"
     assert registration.accepts_automated_prompts is True
