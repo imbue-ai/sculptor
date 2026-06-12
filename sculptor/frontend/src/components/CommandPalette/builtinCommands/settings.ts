@@ -1,6 +1,7 @@
 import { PaletteIcon } from "lucide-react";
 
-import { SETTINGS_SECTIONS } from "~/pages/settings/sections.ts";
+import { isFrontendPluginsEnabledAtom } from "~/common/state/atoms/userConfig.ts";
+import { SETTINGS_SECTIONS, SettingsSection } from "~/pages/settings/sections.ts";
 
 import type { CommandRuntime } from "../runtime.ts";
 import type { Command } from "../types.ts";
@@ -58,6 +59,11 @@ export const buildSettingsCommands = (runtime: CommandRuntime): Array<Command> =
   ];
 
   for (const entry of SETTINGS_SECTIONS) {
+    // The Plugins section only surfaces once the experimental
+    // frontend-plugins flag is on — mirrors the Settings sidebar gating.
+    if (entry.id === SettingsSection.PLUGINS && !runtime.store.get(isFrontendPluginsEnabledAtom)) {
+      continue;
+    }
     // Page-scoped variant under the "settings.section" sub-page. Section
     // names are kept off the root palette to avoid flooding it; they
     // surface either by opening the sub-page, or via fuzzy search at the
