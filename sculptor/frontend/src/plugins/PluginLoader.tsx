@@ -3,7 +3,7 @@ import { useEffect } from "react";
 
 import { isFrontendPluginsEnabledAtom } from "~/common/state/atoms/userConfig.ts";
 
-import { bootstrapPlugins } from "./pluginManager.tsx";
+import { pluginManager } from "./pluginManager.tsx";
 
 /**
  * Mounts once at app root and kicks off plugin loading. All the work lives in
@@ -21,7 +21,7 @@ export const PluginLoader = (): null => {
   const isEnabled = useAtomValue(isFrontendPluginsEnabledAtom);
   useEffect(() => {
     if (!isEnabled) return;
-    bootstrapPlugins(store);
+    pluginManager.bootstrap(store);
   }, [isEnabled, store]);
   return null;
 };

@@ -6,7 +6,7 @@ import { type ComponentType, type ReactElement, useState } from "react";
 import { ElementIds } from "~/api";
 import { PluginContext } from "~/plugins/PluginContext.tsx";
 import { PluginErrorBoundary } from "~/plugins/PluginErrorBoundary.tsx";
-import { addPluginSource, reloadPluginSource, removePluginSource } from "~/plugins/pluginManager.tsx";
+import { pluginManager } from "~/plugins/pluginManager.tsx";
 import {
   pluginSettingsComponentsAtom,
   pluginSourcesAtom,
@@ -39,7 +39,7 @@ export const PluginsSettingsSection = (): ReactElement => {
     if (!source || isBusy) return;
     setIsBusy(true);
     try {
-      await addPluginSource(store, source);
+      await pluginManager.addSource(store, source);
       setDraft("");
     } finally {
       setIsBusy(false);
@@ -104,7 +104,7 @@ const SourceRow = ({ source, state, store, setIsBusy }: SourceRowProps): ReactEl
   const handleReload = async (): Promise<void> => {
     setIsBusy(true);
     try {
-      await reloadPluginSource(store, source);
+      await pluginManager.reloadSource(store, source);
     } finally {
       setIsBusy(false);
     }
@@ -184,7 +184,7 @@ const SourceRow = ({ source, state, store, setIsBusy }: SourceRowProps): ReactEl
                 variant="ghost"
                 size="1"
                 color="gray"
-                onClick={() => removePluginSource(store, source)}
+                onClick={() => pluginManager.removeSource(store, source)}
                 data-testid={ElementIds.SETTINGS_PLUGINS_SOURCE_REMOVE}
               >
                 <Trash2 size={14} />
