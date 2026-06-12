@@ -13,10 +13,15 @@ export type PluginManifest = {
   version: string;
   /** Path (relative to /plugins/) to the plugin's ESM entry. */
   entry: string;
-  /** Semver range of @sculptor/plugin-sdk the plugin was built against. */
+  /**
+   * Semver range of @sculptor/plugin-sdk the plugin was built against. The
+   * loader only enforces the major. Note there is deliberately no peer
+   * dependency declaration: shared libraries resolve to host singletons via
+   * the import map, and unenforced version ranges would be false confidence.
+   * Versioned peers can return once the runtime stubs are generated from the
+   * host's actual module namespaces.
+   */
   sdkVersion: string;
-  /** Peer dependencies that resolve to host singletons via the import map. */
-  peerDependencies?: Record<string, string>;
 };
 
 /**
