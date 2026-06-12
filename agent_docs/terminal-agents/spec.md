@@ -48,8 +48,8 @@ periodic refresh (`REQ-TERM-3`). Closing the window doesn't kill the shell
 
 ### Claude Code TUI as a registered terminal agent
 
-User enables the bundled Claude Code registration (`REQ-CLAUDE-1`), clicks
-`+`, and picks **Claude Code (terminal)**. A terminal opens with the `claude`
+The bundled Claude Code registration is installed out of the box
+(`REQ-CLAUDE-1`); the user clicks `+` and picks **Claude Code**. A terminal opens with the `claude`
 TUI already running in the workspace code directory — billed against their
 subscription, with every TUI feature available. Hooks installed by the
 registration report signals (`REQ-SIG-3`/`REQ-SIG-4`): while Claude works the
@@ -198,10 +198,17 @@ the terminal, status stays neutral, diffs refresh periodically
 
 ### Bundled Claude Code example (CLAUDE)
 
-- `REQ-CLAUDE-1`: Sculptor MUST ship a **bundled example registration** for
-  the Claude Code TUI that users can enable/copy (not always-present in the
-  menu). It demonstrates the full integration: hook config reporting
-  busy/idle/waiting/files-changed and session-id for resume.
+- `REQ-CLAUDE-1`: Sculptor MUST ship a registration for the Claude Code TUI
+  that is **installed out of the box** (auto-installed once into the
+  user-scope registrations directory, for both the packaged app and dev
+  instances) as an ordinary **user-owned** registration: the user can edit
+  or delete it, edits are never overwritten, and deletion sticks across
+  restarts. It doubles as the reference example for third-party
+  registrations and demonstrates the full integration: hook config reporting
+  busy/idle/waiting/files-changed and session-id for resume, launched with
+  the same plugins and permission mode as Sculptor's native Claude agents.
+  *(Amended: v1 originally shipped this as a copy-to-enable sample that was
+  absent from the menu by default.)*
 
 ## Non-Goals
 
@@ -215,8 +222,10 @@ the terminal, status stays neutral, diffs refresh periodically
   to be swappable later.
 - Signal vocabulary beyond busy/idle/waiting-on-input/files-changed/session-id
   (the API is extensible, but no further events ship in v1).
-- An always-on built-in Claude Code menu entry — the Claude Code TUI ships as
-  a bundled example registration the user enables/copies.
+- A non-removable built-in Claude Code menu entry — the bundled registration
+  is installed as user-owned files the user can edit or delete. *(Amended:
+  originally this non-goal also excluded installing it by default at all;
+  REQ-CLAUDE-1 now requires out-of-the-box installation.)*
 
 ## Open Questions
 

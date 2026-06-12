@@ -124,3 +124,26 @@ def test_registered_terminal_agent_appears_in_menu_and_creates(
         expect_terminal_panel_replaces_chat(page)
     finally:
         (registrations_dir / "fake-reg.toml").unlink(missing_ok=True)
+
+
+@user_story("to have the Claude Code terminal agent available out of the box")
+def test_bundled_claude_code_registration_installed_by_default(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """The backend installs the bundled Claude Code registration at startup,
+    so a fresh instance lists it in the agent-type menu with no setup. Menu
+    presence only — creating the agent would launch the real Claude TUI."""
+    page = sculptor_instance_.page
+    task_page = PlaywrightTaskPage(page=page)
+    agent_tab_bar = task_page.get_agent_tab_bar()
+
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Bundled Claude WS")
+
+    registrations_dir = sculptor_instance_.sculptor_folder / "terminal_agents"
+    assert (registrations_dir / "claude-code.toml").is_file()
+    assert (registrations_dir / "claude-code-hooks.json").is_file()
+
+    agent_tab_bar.open_agent_type_menu()
+    expect(agent_tab_bar.get_agent_type_menu_item_registered("claude-code")).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(agent_tab_bar.get_agent_type_menu()).not_to_be_visible()
