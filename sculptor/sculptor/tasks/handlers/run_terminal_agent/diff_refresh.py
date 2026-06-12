@@ -1,9 +1,9 @@
 """Periodic diff refresh for terminal agents.
 
 Sculptor cannot see what a terminal agent's shell does, so the task handler
-polls cheap git state and refreshes the workspace diff only when it changes
-(REQ-TERM-3). Encapsulated as a class so a file watcher can replace the
-polling without touching the handler loop.
+polls cheap git state and refreshes the workspace diff only when it changes.
+Encapsulated as a class so a file watcher can replace the polling without
+touching the handler loop.
 """
 
 from __future__ import annotations
@@ -57,12 +57,6 @@ class PeriodicDiffRefresher:
         if fingerprint != self._last_fingerprint:
             self._last_fingerprint = fingerprint
             self._on_change()
-
-    def force(self) -> None:
-        """Fire ``on_change`` now and rebase the fingerprint on current state."""
-        self._last_fingerprint = self._compute_fingerprint()
-        self._last_check_at = time.monotonic()
-        self._on_change()
 
     def _compute_fingerprint(self) -> str | None:
         """Hash of `git status --porcelain` + HEAD, or None on git failure.
