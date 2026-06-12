@@ -25,7 +25,7 @@ from sculptor.testing.elements.base import type_into_tiptap
 from sculptor.testing.elements.chat_panel import select_model_by_name
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
 from sculptor.testing.elements.user_config import enable_clone_workspaces
-from sculptor.testing.elements.user_config import enable_multi_harness
+from sculptor.testing.elements.user_config import enable_pi_agent
 from sculptor.testing.pages.settings_page import PlaywrightSettingsPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 
@@ -280,11 +280,11 @@ def start_task_and_wait_for_ready(
 
     if agent_type not in (None, "claude", "pi", "terminal"):
         raise ValueError(f"unsupported agent_type: {agent_type!r}; expected None, 'claude', 'pi', or 'terminal'")
-    # Only the pi *option* is gated behind the experimental multi-harness flag
+    # Only the pi *option* is gated behind the experimental pi-agent flag
     # (the agent-type select itself is always visible) — enable the flag
     # before navigating so the option is present.
     if agent_type == "pi":
-        enable_multi_harness(sculptor_page)
+        enable_pi_agent(sculptor_page)
 
     navigate_to_add_workspace_page(sculptor_page)
 

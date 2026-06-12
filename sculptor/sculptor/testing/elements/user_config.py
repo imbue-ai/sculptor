@@ -58,23 +58,23 @@ def enable_entity_mentions(page: Page) -> None:
     _set_user_config_flag(page, "enableEntityMentions", True)
 
 
-def enable_multi_harness(page: Page) -> None:
-    """Enable the experimental multi-harness flag.
+def enable_pi_agent(page: Page) -> None:
+    """Enable the experimental pi-agent flag.
 
     Gates the pi option in the agent-type pickers; off by default, so any
     test that selects pi (or asserts the option is visible) must enable it first.
     """
-    _set_user_config_flag(page, "enableMultiHarness", True)
+    _set_user_config_flag(page, "enablePiAgent", True)
 
 
-def disable_multi_harness(page: Page) -> None:
-    """Disable the experimental multi-harness flag (its default).
+def disable_pi_agent(page: Page) -> None:
+    """Disable the experimental pi-agent flag (its default).
 
-    `enable_multi_harness` (also called by `start_task_and_wait_for_ready`
+    `enable_pi_agent` (also called by `start_task_and_wait_for_ready`
     whenever a harness is selected) is sticky on the shared test instance, so a
     test that asserts the flag-off behavior must reset it defensively first.
     """
-    _set_user_config_flag(page, "enableMultiHarness", False)
+    _set_user_config_flag(page, "enablePiAgent", False)
 
 
 def enable_default_fast_mode(page: Page) -> None:
