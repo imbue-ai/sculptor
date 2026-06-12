@@ -238,12 +238,14 @@ class LocalTerminalManager(TerminalManager):
     def __init__(
         self,
         environment_id: str,
-        terminal_index: int,
+        *,
+        terminal_index: int = 0,
         workspace_path: Path,
         working_directory: Path,
         concurrency_group: ConcurrencyGroup,
         extra_env: dict[str, str] | None = None,
         env_var_override: bool = False,
+        terminal_id: str | None = None,
     ) -> None:
         """Initialize the local terminal manager.
 
@@ -256,9 +258,16 @@ class LocalTerminalManager(TerminalManager):
                 lifecycle management. Should outlive individual agent runs.
             extra_env: Additional environment variables to inject into the shell.
             env_var_override: When True, extra_env values override existing os.environ values.
+            terminal_id: Explicit registry id; defaults to the hash of
+                (environment_id, terminal_index). Agent-scoped terminals pass
+                their own id while keeping environment_id pointing at the
+                workspace environment so ``stop_terminals_for_environment``
+                still stops them at teardown.
         """
         self._environment_id = environment_id
-        self._terminal_id = make_terminal_id(environment_id, terminal_index)
+        self._terminal_id = (
+            terminal_id if terminal_id is not None else make_terminal_id(environment_id, terminal_index)
+        )
         self._working_directory = working_directory
         self._concurrency_group = concurrency_group
         self._extra_env = extra_env or {}

@@ -1,0 +1,137 @@
+"""Agent-scoped PTY sessions for terminal agents.
+
+A terminal agent owns one PTY, registered in the shared terminal-manager
+registry under ``agent:<task_id>`` — a readable, collision-free key beside
+the 16-hex-char workspace terminal ids. The manager is constructed with the
+workspace's *environment id*, so ``stop_terminals_for_environment`` remains
+the teardown backstop (architecture §3).
+
+The config registry mirrors ``register_environment_config`` in
+``local_terminal_manager.py``: the task handler registers an
+`AgentTerminalConfig` up front so the PTY can be (re)created on demand —
+eagerly by the handler, and again by the terminal WebSocket route after a
+shell self-exit.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+import threading
+from pathlib import Path
+
+from loguru import logger
+
+from imbue_core.agents.data_types.ids import TaskID
+from imbue_core.concurrency_group import ConcurrencyGroup
+from sculptor.services.workspace_service.environment_manager.env_file_parser import load_project_env_vars
+from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
+    LocalTerminalManager,
+)
+from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
+    get_terminal_manager,
+)
+from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
+    register_terminal_manager,
+)
+from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
+    unregister_terminal_manager,
+)
+
+
+def make_agent_terminal_id(task_id: TaskID) -> str:
+    """The registry key for a terminal agent's PTY."""
+    return f"agent:{task_id}"
+
+
+@dataclasses.dataclass(frozen=True)
+class AgentTerminalConfig:
+    """Everything needed to (re)create a terminal agent's PTY.
+
+    Project env vars are NOT cached here — they are re-read at terminal
+    creation time (matching `TerminalEnvironmentConfig`). ``extra_env`` holds
+    only the static SCULPT_* vars the task handler injects.
+    """
+
+    environment_id: str
+    workspace_path: Path
+    working_directory: Path
+    concurrency_group: ConcurrencyGroup
+    extra_env: dict[str, str]
+    env_var_override: bool
+    sculptor_folder: Path | None
+
+
+_agent_terminal_configs: dict[str, AgentTerminalConfig] = {}
+_configs_lock = threading.Lock()
+
+
+def register_agent_terminal_config(task_id: TaskID, config: AgentTerminalConfig) -> None:
+    with _configs_lock:
+        _agent_terminal_configs[str(task_id)] = config
+
+
+def get_agent_terminal_config(task_id: TaskID) -> AgentTerminalConfig | None:
+    with _configs_lock:
+        return _agent_terminal_configs.get(str(task_id))
+
+
+def unregister_agent_terminal_config(task_id: TaskID) -> None:
+    with _configs_lock:
+        _agent_terminal_configs.pop(str(task_id), None)
+
+
+def create_agent_terminal(task_id: TaskID) -> LocalTerminalManager | None:
+    """Create (or return the existing) PTY for a terminal agent.
+
+    Returns None if no config is registered or the PTY fails to start. The
+    manager is only registered after start() succeeds, so callers can assume
+    any manager in the registry has a live pty.
+    """
+    config = get_agent_terminal_config(task_id)
+    if config is None:
+        return None
+
+    terminal_id = make_agent_terminal_id(task_id)
+
+    existing = get_terminal_manager(terminal_id)
+    if existing is not None:
+        return existing
+
+    # Re-read project env vars from disk so a respawned shell sees changes the
+    # user made to ~/.sculptor/.env or .sculptor/.env after the agent started.
+    project_env = load_project_env_vars(config.working_directory, sculptor_folder=config.sculptor_folder)
+    terminal_extra_env = {**project_env, **config.extra_env}
+
+    manager = LocalTerminalManager(
+        environment_id=config.environment_id,
+        workspace_path=config.workspace_path,
+        working_directory=config.working_directory,
+        concurrency_group=config.concurrency_group,
+        extra_env=terminal_extra_env,
+        env_var_override=config.env_var_override,
+        terminal_id=terminal_id,
+    )
+
+    try:
+        manager.start()
+    except Exception as e:
+        # Recoverable: the caller returns None and the connection is retried.
+        logger.debug("Failed to start agent terminal for task {}: {}", task_id, e)
+        return None
+
+    winner = register_terminal_manager(terminal_id, manager)
+    if winner is not manager:
+        # Another thread won the race — stop our duplicate.
+        manager.stop()
+    return winner
+
+
+def stop_agent_terminal(task_id: TaskID) -> None:
+    """Stop and unregister the agent's PTY, if any.
+
+    Safe when the shell already self-exited (the reader thread unregistered
+    the manager) and safe to call twice.
+    """
+    manager = unregister_terminal_manager(make_agent_terminal_id(task_id))
+    if manager is not None:
+        manager.stop()
