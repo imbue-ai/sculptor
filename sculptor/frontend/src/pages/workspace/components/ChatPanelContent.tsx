@@ -40,7 +40,12 @@ export const ChatPanelContent = ({
   const isChatInterfaceSupported = useTaskSupportsChatInterface(taskID ?? "");
 
   if (isChatInterfaceSupported === false) {
-    return <AgentTerminalPanel taskId={taskID ?? ""} />;
+    // Keyed by task id: a direct terminal->terminal tab switch must remount
+    // the panel so each agent gets its own xterm instance. Without the key,
+    // React reuses the component and the previous agent's scrollback stays
+    // in the (single) xterm buffer when the WebSocket reconnects to the new
+    // agent's PTY — leaking one tab's content into another.
+    return <AgentTerminalPanel key={taskID} taskId={taskID ?? ""} />;
   }
 
   // While capabilities are loading, render nothing rather than the chat —
