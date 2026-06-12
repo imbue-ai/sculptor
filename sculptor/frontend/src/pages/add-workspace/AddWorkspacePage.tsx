@@ -75,7 +75,7 @@ export const AddWorkspacePage = (): ReactElement => {
   // The type of the workspace's first agent (agent type is per-agent, not
   // per-workspace). Registered terminal agents select as `registered:<id>`.
   const [agentTypeValue, setAgentTypeValue] = useState<string>("claude");
-  const { registrations, refresh: refreshRegistrations } = useTerminalAgentRegistrations();
+  const { registrations, refetch: refreshRegistrations } = useTerminalAgentRegistrations();
   const { agentType, registrationId } = parseStoredAgentType(agentTypeValue as StoredAgentType);
   const [workspaceNameDraft, setWorkspaceNameDraft] = useDraftTabName(draftId);
   const workspaceName = workspaceNameDraft ?? "";

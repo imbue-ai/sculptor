@@ -228,7 +228,7 @@ export const AgentTabs = (): ReactElement | null => {
 
   const [lastUsedAgentType, setLastUsedAgentType] = useAtom(lastUsedAgentTypeAtom);
   const isMultiHarnessEnabled = useAtomValue(isMultiHarnessEnabledAtom);
-  const { registrations, refresh: refreshRegistrations } = useTerminalAgentRegistrations();
+  const { registrations, refetch: refreshRegistrations } = useTerminalAgentRegistrations();
   // A stored "pi" is unusable once multi-harness is turned off — fall back to Claude.
   const defaultAgentType: StoredAgentType =
     lastUsedAgentType === "pi" && !isMultiHarnessEnabled ? "claude" : lastUsedAgentType;
