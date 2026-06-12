@@ -149,7 +149,19 @@ def test_claude_code_terminal_agent(sculptor_instance_: SculptorInstance) -> Non
 
     _dismiss_startup_dialogs(page)
 
-    # SessionStart hook: the session id reaches the backend state (resume key).
+    # Before any message exists, NO session id may be persisted: Claude has
+    # no resumable transcript for a message-less session, so an id captured
+    # at startup would make a post-restart `--resume` fail ("No conversation
+    # found with session ID"). A message-less agent must instead restart via
+    # the plain launch command.
+    assert _read_terminal_session_id(sculptor_instance_.sculptor_folder, "Claude CLI 1") is None, (
+        "session id persisted before any message — startup-captured ids are not resumable"
+    )
+
+    # One trivial turn: UserPromptSubmit → busy spinner + session id reported
+    # (the first moment a resumable conversation exists), Stop → idle/neutral.
+    type_into_agent_terminal(page, "Reply with exactly the word PONG and nothing else.")
+
     deadline = time.monotonic() + 90.0
     session_id: str | None = None
     while time.monotonic() < deadline:
@@ -158,10 +170,7 @@ def test_claude_code_terminal_agent(sculptor_instance_: SculptorInstance) -> Non
             break
         page.wait_for_timeout(1_000)
     failure_details = f"Hook diag: {_read_hook_diag(sculptor_instance_.sculptor_folder)}\nTerminal buffer:\n{get_xterm_buffer_text(page)}"
-    assert session_id, f"SessionStart hook never persisted a session id.\n{failure_details}"
-
-    # One trivial turn: UserPromptSubmit → busy spinner, Stop → idle/neutral.
-    type_into_agent_terminal(page, "Reply with exactly the word PONG and nothing else.")
+    assert session_id, f"UserPromptSubmit hook never persisted a session id.\n{failure_details}"
 
     expect(claude_tab).to_have_attribute("data-dot-status", "running", timeout=60_000)
     expect(claude_tab).to_have_attribute("data-dot-status", re.compile(r"^(read|unread)$"), timeout=180_000)

@@ -6,10 +6,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c \"import json,subprocess,sys; d=json.load(sys.stdin); sid=d.get('session_id'); subprocess.run(['sculpt','signal','session-id',sid]) if sid else None\" || true"
-          },
-          {
-            "type": "command",
             "command": "sculpt signal idle || true"
           }
         ]
@@ -21,6 +17,10 @@
           {
             "type": "command",
             "command": "sculpt signal busy || true"
+          },
+          {
+            "type": "command",
+            "command": "python3 -c \"import json,subprocess,sys; d=json.load(sys.stdin); sid=d.get('session_id'); subprocess.run(['sculpt','signal','session-id',sid]) if sid else None\" || true"
           }
         ]
       }

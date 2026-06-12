@@ -47,8 +47,12 @@ the TOML at the copied hooks file.)
 - `--settings` points at `claude-code-hooks.json`, whose hooks report state
   to Sculptor through the `sculpt signal` CLI (on PATH inside every agent
   terminal):
-  - `SessionStart` reports the session id (for resume) and `idle`;
-  - `UserPromptSubmit` → `busy` (spinner on the tab);
+  - `SessionStart` → `idle`;
+  - `UserPromptSubmit` → `busy` (spinner on the tab) and reports the
+    session id for restart resume. The id is deliberately NOT reported at
+    `SessionStart`: Claude only persists a resumable transcript once a
+    message exists, so an id captured at startup may be unresumable and
+    `--resume` would fail after a restart;
   - `Stop` → `idle`;
   - `PreToolUse` on `AskUserQuestion`/`ExitPlanMode` → `waiting` (attention
     dot while a question or plan approval is on screen), and `PostToolUse`
