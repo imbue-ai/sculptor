@@ -1,7 +1,7 @@
 import { useAtomValue, useSetAtom } from "jotai";
 import { useHydrateAtoms } from "jotai/utils";
 import type { ReactElement, ReactNode } from "react";
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 import {
   activePanelPerZoneAtom,
@@ -58,8 +58,12 @@ export const PanelRegistryProvider = ({
   const hasInitialized = useRef(false);
 
   // useHydrateAtoms only fires on the first render. Keep the registry in sync
-  // when the panels prop changes (e.g. an experimental panel is toggled on/off).
-  useEffect(() => {
+  // when the panels prop changes (e.g. an experimental panel is toggled on/off,
+  // or a workspace switch swaps the dynamic agent/terminal panels). A layout
+  // effect so the swap is committed before paint — paired with the pre-paint
+  // layout restore in usePerWorkspacePanelLayout, the first painted frame
+  // after a switch shows the new workspace's panels.
+  useLayoutEffect(() => {
     setPanelRegistry(panels);
   }, [panels, setPanelRegistry]);
 

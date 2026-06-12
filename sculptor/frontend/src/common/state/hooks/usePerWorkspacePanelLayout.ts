@@ -1,5 +1,5 @@
 import { useAtomValue, useSetAtom } from "jotai";
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 import { markSwitchMilestone } from "~/common/perf/workspaceSwitchProfiler.ts";
 import {
@@ -126,8 +126,9 @@ export const usePerWorkspacePanelLayout = (workspaceId: string, defaultLayout: D
   const defaultLayoutRef = useRef(defaultLayout);
   defaultLayoutRef.current = defaultLayout;
 
-  // Track the active workspace ID for atoms that need it.
-  useEffect(() => {
+  // Track the active workspace ID for atoms that need it. A layout effect so
+  // the flip happens pre-paint, in the same flush as the restore below.
+  useLayoutEffect(() => {
     setActiveWorkspaceId(workspaceId);
     return (): void => {
       setActiveWorkspaceId(null);
@@ -135,7 +136,13 @@ export const usePerWorkspacePanelLayout = (workspaceId: string, defaultLayout: D
   }, [workspaceId, setActiveWorkspaceId]);
 
   // Save / restore on first mount and on every workspace switch.
-  useEffect(() => {
+  //
+  // A LAYOUT effect, not a passive one: the atom writes here flush
+  // synchronously before the browser paints, so the first painted frame after
+  // a workspace switch already shows the new workspace's layout. With a
+  // passive effect the previous workspace's panels paint for a frame or two
+  // under the new URL (the "stale content flash").
+  useLayoutEffect(() => {
     const persist = (id: string): void => {
       const s = stateRef.current;
       saveToLocalStorage(ASSIGNMENTS_KEY_PREFIX + id, s.assignments);

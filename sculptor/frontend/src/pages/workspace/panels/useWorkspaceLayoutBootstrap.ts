@@ -1,5 +1,5 @@
-import { useAtomValue, useSetAtom } from "jotai";
-import { useEffect, useRef } from "react";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 import {
   activePanelPerZoneAtom,
@@ -35,6 +35,7 @@ export const useWorkspaceLayoutBootstrap = ({
   workspaceId: string;
   agentId: string | undefined;
 }): void => {
+  const store = useStore();
   const zoneAssignments = useAtomValue(zoneAssignmentsAtom);
   const setZoneAssignments = useSetAtom(zoneAssignmentsAtom);
   const setZoneOrder = useSetAtom(zoneOrderAtom);
@@ -61,10 +62,18 @@ export const useWorkspaceLayoutBootstrap = ({
   }, [defaultDiffState.activeTabPath, zoneAssignments, activatePanel, movePanel]);
 
   // Place / focus the active agent.
-  useEffect(() => {
+  //
+  // A LAYOUT effect that reads assignments from the store at effect time:
+  // during a workspace switch this runs in the same pre-paint flush as
+  // usePerWorkspacePanelLayout's restore (which is registered earlier in
+  // WorkspacePageContent, so its layout effect has already loaded the new
+  // workspace's layout into the atoms). The render-closure `zoneAssignments`
+  // would still hold the PREVIOUS workspace's values here, concluding the
+  // agent is unplaced and re-placing it — reordering tabs on every switch.
+  useLayoutEffect(() => {
     if (!agentId) return;
     const panelId = agentPanelId(agentId);
-    const currentZone = zoneAssignments[panelId];
+    const currentZone = store.get(zoneAssignmentsAtom)[panelId];
 
     if (currentZone) {
       // Already open somewhere — make it the active tab there and reveal it.
@@ -82,11 +91,12 @@ export const useWorkspaceLayoutBootstrap = ({
       setActive: true,
     });
     setZoneVisibility((prev) => (prev[CENTER_SECTION_ZONE] ? prev : { ...prev, [CENTER_SECTION_ZONE]: true }));
-  }, [agentId, zoneAssignments, setZoneAssignments, setZoneOrder, setActivePanelPerZone, setZoneVisibility]);
+  }, [agentId, zoneAssignments, store, setZoneAssignments, setZoneOrder, setActivePanelPerZone, setZoneVisibility]);
 
   // Seed the Bottom section with this workspace's terminal on first visit.
-  useEffect(() => {
-    const hasTerminal = Object.keys(zoneAssignments).some(
+  // Pre-paint + store-read for the same reasons as the agent effect above.
+  useLayoutEffect(() => {
+    const hasTerminal = Object.keys(store.get(zoneAssignmentsAtom)).some(
       (id) => parseTerminalPanelId(id)?.workspaceId === workspaceId,
     );
     if (hasTerminal) return;
