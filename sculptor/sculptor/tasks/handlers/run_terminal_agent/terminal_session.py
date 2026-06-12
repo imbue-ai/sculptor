@@ -135,3 +135,29 @@ def stop_agent_terminal(task_id: TaskID) -> None:
     manager = unregister_terminal_manager(make_agent_terminal_id(task_id))
     if manager is not None:
         manager.stop()
+
+
+def write_launch_command(manager: LocalTerminalManager, command: str, timeout_seconds: float = 5.0) -> None:
+    """Write a registered program's launch command into the shell, as if typed.
+
+    Waits for the shell's first output bytes (the prompt — or at least rc-file
+    noise — has printed) before writing, so the keystrokes aren't swallowed by
+    shell init (architecture §3 item 4). On timeout the command is written
+    anyway: the program runs as a shell job either way, and a slightly-late
+    write still works. The command comes from a user-authored registration —
+    the same trust level as the user typing into their own shell.
+    """
+    ready = threading.Event()
+
+    def on_output(_data: bytes) -> None:
+        ready.set()
+
+    # subscribe() atomically snapshots the buffer AND registers the callback,
+    # so output between "check" and "register" can't be missed.
+    snapshot = manager.subscribe(on_output)
+    try:
+        if not snapshot and not ready.wait(timeout_seconds):
+            logger.debug("Shell produced no output within {}s; writing launch command anyway", timeout_seconds)
+    finally:
+        manager.remove_output_callback(on_output)
+    manager.write((command + "\n").encode())
