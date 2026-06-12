@@ -133,22 +133,71 @@
 
 .workspaceRow {
   align-items: center;
-  background: transparent;
-  border: none;
   border-radius: var(--radius-2);
+  // The row is a div (unlike buttons, divs default to content-box), so the
+  // horizontal padding must be kept inside the 100% width.
+  box-sizing: border-box;
   color: var(--gray-12);
-  cursor: pointer;
   display: flex;
-  font-size: var(--font-size-2);
   gap: var(--space-2);
   min-height: 28px;
-  // Full width like the repo header; the content is indented via padding-left.
-  padding: 0 var(--space-2) 0 var(--space-4);
+  // Full width like the repo header; the content is indented past the repo
+  // name via padding-left so the hierarchy reads at a glance.
+  padding: 0 var(--space-2) 0 var(--space-5);
   width: 100%;
 
   &:hover {
     background: var(--gray-a3);
   }
+}
+
+// The clickable part of a workspace row (dot + name). Kept separate from the
+// row container so the hover action buttons aren't nested inside a button.
+.workspaceRowButton {
+  align-items: center;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-grow: 1;
+  font-size: var(--font-size-2);
+  gap: var(--space-2);
+  min-height: 28px;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+// Trailing action-icon cluster on repo headers and workspace rows. Radix
+// ghost icon buttons bleed negative margins on hover, so keep enough gap
+// that adjacent hover backgrounds don't overlap.
+.rowActions {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-2);
+}
+
+// Hover-revealed actions: hidden until their row is hovered, keyboard-focused,
+// or anchoring an open dropdown menu. Scoped under the row classes so this
+// out-specifies the Radix IconButton base display.
+.repoHeader .hoverReveal,
+.workspaceRow .hoverReveal {
+  display: none;
+}
+
+// The dropdown trigger's open state is read via [aria-expanded] — its
+// data-state is clobbered by the Tooltip that shares the same button via
+// asChild composition. The row's own [data-state] covers the right-click
+// context menu, whose trigger is the row itself.
+.repoHeader:hover .hoverReveal,
+.repoHeader:focus-within .hoverReveal,
+.workspaceRow:hover .hoverReveal,
+.workspaceRow:focus-within .hoverReveal,
+.workspaceRow[data-state="open"] .hoverReveal,
+.workspaceRow:has([aria-expanded="true"]) .hoverReveal {
+  display: flex;
 }
 
 .workspaceRowActive {

@@ -1,7 +1,18 @@
-import { ContextMenu, IconButton, Text, Tooltip } from "@radix-ui/themes";
+import { ContextMenu, DropdownMenu, IconButton, Text, Tooltip } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import type { LucideIcon } from "lucide-react";
-import { ChevronDown, ChevronRight, CircleHelp, Home, PanelLeftClose, Plus, Search, Settings } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  CircleHelp,
+  Home,
+  MoreHorizontal,
+  PanelLeftClose,
+  Plus,
+  Search,
+  Settings,
+  Trash2,
+} from "lucide-react";
 import type { ReactElement } from "react";
 import { useCallback, useMemo } from "react";
 
@@ -17,13 +28,18 @@ import {
   workspacesArrayAtom,
 } from "~/common/state/atoms/workspaces.ts";
 import { useHelpDialog } from "~/common/state/hooks/useHelpDialog.ts";
+import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import { useCommandPalette } from "~/components/CommandPalette";
 import {
   renamingWorkspaceIdAtom,
   workspaceDeleteTargetAtom,
 } from "~/components/CommandPalette/contextActions/atoms.ts";
-import { type OpenInRuntime, WorkspaceContextMenuContent } from "~/components/CommandPalette/contextActions/menu.tsx";
+import {
+  type OpenInRuntime,
+  WorkspaceContextMenuContent,
+  WorkspaceDropdownMenuContent,
+} from "~/components/CommandPalette/contextActions/menu.tsx";
 import type { WorkspaceActionRuntime } from "~/components/CommandPalette/contextActions/types.ts";
 import { useGitAndOpenInRuntime } from "~/components/CommandPalette/contextActions/useGitAndOpenInRuntime.ts";
 import { buildWorkspaceActions } from "~/components/CommandPalette/contextActions/workspaceActions.ts";
@@ -85,6 +101,7 @@ export const WorkspaceNavSidebar = (): ReactElement | null => {
     useImbueNavigate();
   const { toggle: toggleCommandPalette } = useCommandPalette();
   const { showHelpDialog } = useHelpDialog();
+  const openSettings = useOpenSettings();
   const { workspaceId: activeWorkspaceId, isHomeRoute, isSettingsRoute } = useImbueLocation();
 
   // Right-click context menu on workspace rows — same action registry as the
@@ -251,18 +268,33 @@ export const WorkspaceNavSidebar = (): ReactElement | null => {
                     {group.name}
                   </Text>
                 </button>
-                <Tooltip content="New workspace in this repo" side="right">
-                  <IconButton
-                    variant="ghost"
-                    size="1"
-                    color="gray"
-                    onClick={() => navigateToAddWorkspace()}
-                    aria-label="New workspace in this repo"
-                    data-testid={`nav-repo-add-${group.projectId}`}
-                  >
-                    <Plus size={13} />
-                  </IconButton>
-                </Tooltip>
+                <span className={styles.rowActions}>
+                  <Tooltip content="Repository settings" side="right">
+                    <IconButton
+                      variant="ghost"
+                      size="1"
+                      color="gray"
+                      className={styles.hoverReveal}
+                      onClick={() => openSettings("repositories", group.projectId)}
+                      aria-label="Repository settings"
+                      data-testid={`nav-repo-settings-${group.projectId}`}
+                    >
+                      <Settings size={13} />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip content="New workspace in this repo" side="right">
+                    <IconButton
+                      variant="ghost"
+                      size="1"
+                      color="gray"
+                      onClick={() => navigateToAddWorkspace()}
+                      aria-label="New workspace in this repo"
+                      data-testid={`nav-repo-add-${group.projectId}`}
+                    >
+                      <Plus size={13} />
+                    </IconButton>
+                  </Tooltip>
+                </span>
               </div>
               {!isRepoCollapsed &&
                 group.workspaces.map((ws) => {
@@ -271,28 +303,77 @@ export const WorkspaceNavSidebar = (): ReactElement | null => {
                   return (
                     <ContextMenu.Root key={ws.objectId}>
                       <ContextMenu.Trigger>
-                        <button
-                          type="button"
+                        {/* data-workspace-tab + data-tab-id make the row a
+                            hover target for the shared WorkspacePeekOverlay;
+                            data-peek-side opens the peek beside the row. */}
+                        <div
                           className={`${styles.workspaceRow} ${ws.objectId === activeWorkspaceId ? styles.workspaceRowActive : ""}`}
-                          onClick={() => handleWorkspaceClick(ws.objectId)}
-                          data-testid={ElementIds.WORKSPACE_TAB}
                           data-workspace-tab=""
-                          data-has-unread={String(status.hasUnread)}
+                          data-tab-id={ws.objectId}
+                          data-peek-side="right"
                         >
-                          <span className={styles.workspaceDot}>
-                            <WorkspaceStatusDots status={status} />
-                          </span>
                           {isRenaming ? (
-                            <InlineRenameInput
-                              value={ws.description ?? ""}
-                              onCommit={(newName) => void handleRenameCommit(ws.objectId, newName)}
-                              onCancel={() => setRenamingWorkspaceId(null)}
-                              isEditing={true}
-                            />
+                            <span className={styles.workspaceRowButton}>
+                              <span className={styles.workspaceDot}>
+                                <WorkspaceStatusDots status={status} />
+                              </span>
+                              <InlineRenameInput
+                                value={ws.description ?? ""}
+                                onCommit={(newName) => void handleRenameCommit(ws.objectId, newName)}
+                                onCancel={() => setRenamingWorkspaceId(null)}
+                                isEditing={true}
+                              />
+                            </span>
                           ) : (
-                            <span className={styles.workspaceName}>{ws.description ?? "Untitled"}</span>
+                            <button
+                              type="button"
+                              className={styles.workspaceRowButton}
+                              onClick={() => handleWorkspaceClick(ws.objectId)}
+                              data-testid={ElementIds.WORKSPACE_TAB}
+                              data-has-unread={String(status.hasUnread)}
+                            >
+                              <span className={styles.workspaceDot}>
+                                <WorkspaceStatusDots status={status} />
+                              </span>
+                              <span className={styles.workspaceName}>{ws.description ?? "Untitled"}</span>
+                            </button>
                           )}
-                        </button>
+                          <span className={`${styles.rowActions} ${styles.hoverReveal}`}>
+                            <DropdownMenu.Root>
+                              <Tooltip content="Workspace actions" side="bottom">
+                                <DropdownMenu.Trigger>
+                                  <IconButton
+                                    variant="ghost"
+                                    size="1"
+                                    color="gray"
+                                    aria-label="Workspace actions"
+                                    data-testid={`nav-workspace-menu-${ws.objectId}`}
+                                  >
+                                    <MoreHorizontal size={13} />
+                                  </IconButton>
+                                </DropdownMenu.Trigger>
+                              </Tooltip>
+                              <WorkspaceDropdownMenuContent
+                                actions={workspaceActions}
+                                workspace={ws}
+                                destructiveColor={dangerColor}
+                                openInRuntime={openInRuntime}
+                              />
+                            </DropdownMenu.Root>
+                            <Tooltip content="Delete workspace" side="bottom">
+                              <IconButton
+                                variant="ghost"
+                                size="1"
+                                color="gray"
+                                onClick={() => setDeleteTarget({ id: ws.objectId, name: ws.description ?? "" })}
+                                aria-label="Delete workspace"
+                                data-testid={`nav-workspace-delete-${ws.objectId}`}
+                              >
+                                <Trash2 size={13} />
+                              </IconButton>
+                            </Tooltip>
+                          </span>
+                        </div>
                       </ContextMenu.Trigger>
                       <WorkspaceContextMenuContent
                         actions={workspaceActions}
