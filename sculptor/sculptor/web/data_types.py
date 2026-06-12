@@ -182,6 +182,18 @@ class RenameAgentRequest(RequestModel):
     title: str
 
 
+class SignalEventRequest(RequestModel):
+    """A terminal-agent signal (REQ-SIG-1/4).
+
+    `event` is a plain string so unknown events validate and reach the
+    handler (forward compatibility — a closed enum would 422 on additive
+    evolution). `session_id` accompanies the `session-id` event only.
+    """
+
+    event: str
+    session_id: str | None = None
+
+
 class WorkspaceResponse(SerializableModel):
     object_id: WorkspaceID
     project_id: ProjectID
