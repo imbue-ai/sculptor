@@ -27,8 +27,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from imbue_core.sculptor.state.chat_state import DiffToolContent
-from imbue_core.sculptor.state.chat_state import GenericToolContent
+from sculptor.state.chat_state import DiffToolContent
+from sculptor.state.chat_state import GenericToolContent
 
 # Claude tool names whose results render as a file chip (a diff), not generic
 # text. The frontend's file chip is skipped unless it can derive a file path,

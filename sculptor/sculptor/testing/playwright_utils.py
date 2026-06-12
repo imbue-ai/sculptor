@@ -17,8 +17,8 @@ from tenacity import retry_if_exception_type
 from tenacity import stop_after_delay
 from tenacity import wait_fixed
 
-from imbue_core.async_monkey_patches import log_exception
 from sculptor.constants import ElementIDs
+from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.testing.elements.base import type_into_tiptap
 from sculptor.testing.elements.chat_panel import select_model_by_name

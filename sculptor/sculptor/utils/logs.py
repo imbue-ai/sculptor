@@ -11,16 +11,16 @@ from cachetools import LRUCache
 from loguru import logger
 from loguru._file_sink import FileSink
 
-from imbue_core.common import is_running_within_a_pytest_tree
 from sculptor.config.settings import TEST_LOG_PATH
+from sculptor.foundation.common import is_running_within_a_pytest_tree
 from sculptor.utils.build import is_dev_build
 
 if TYPE_CHECKING:
     from loguru import Message
 
-from imbue_core.log_utils import ensure_core_log_levels_configured
-from imbue_core.log_utils import fix_full_location
-from imbue_core.log_utils import format_task_id
+from sculptor.foundation.log_utils import ensure_core_log_levels_configured
+from sculptor.foundation.log_utils import fix_full_location
+from sculptor.foundation.log_utils import format_task_id
 
 FANCY_FORMAT = "{time:HH:mm:ss.SSS} |<level>{level: <7}</level>| <cyan>{extra[full_location]}</cyan><green>{extra[formatted_context]}</green>:{extra[route]} - <level>{message}</level>"
 

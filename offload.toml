@@ -58,7 +58,6 @@ build_inputs = [
     "scripts/finalize-base-image.sh",
     "pyproject.toml",
     "sculptor/pyproject.toml",
-    "imbue_core/pyproject.toml",
     "sculptor/frontend/package.json",
     "uv.lock",
 ]

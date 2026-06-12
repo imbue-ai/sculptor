@@ -24,13 +24,13 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from imbue_core.sculptor.state.chat_state import ContentBlock
-from imbue_core.sculptor.state.chat_state import ToolUseBlock
-from imbue_core.sculptor.state.chat_state import UserQuestion
 from sculptor.interfaces.agents.harness import Harness
 from sculptor.interfaces.agents.harness import HarnessCapabilities
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.services.dependency_management_service import Dependency
+from sculptor.state.chat_state import ContentBlock
+from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.chat_state import UserQuestion
 
 _MCP_ASK_USER_QUESTION_TOOL_NAME: str = "mcp__sculptor__ask_user_question"
 _ASK_USER_QUESTION_TOOL_NAMES: frozenset[str] = frozenset({"AskUserQuestion", _MCP_ASK_USER_QUESTION_TOOL_NAME})

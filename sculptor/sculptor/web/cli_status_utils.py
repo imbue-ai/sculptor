@@ -10,9 +10,9 @@ from typing import Literal
 
 from loguru import logger
 
-from imbue_core.processes.local_process import run_blocking
-from imbue_core.subprocess_utils import FinishedProcess
-from imbue_core.subprocess_utils import ProcessSetupError
+from sculptor.foundation.processes.local_process import run_blocking
+from sculptor.foundation.subprocess_utils import FinishedProcess
+from sculptor.foundation.subprocess_utils import ProcessSetupError
 
 CliErrorCategory = Literal["not_authenticated", "no_access", "network_error", "transient"]
 

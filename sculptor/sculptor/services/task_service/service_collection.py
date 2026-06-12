@@ -1,7 +1,7 @@
 from typing import cast
 
-from imbue_core.concurrency_group import ConcurrencyGroup
 from sculptor.config.settings import SculptorSettings
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.services.data_model_service.api import TaskDataModelService
 from sculptor.services.git_repo_service.service_collection import get_git_repo_service_collection
 from sculptor.services.task_service.data_types import TaskServiceCollection

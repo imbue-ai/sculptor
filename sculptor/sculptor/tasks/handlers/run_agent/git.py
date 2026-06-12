@@ -1,7 +1,7 @@
 from typing import Mapping
 from typing import Sequence
 
-from imbue_core.secrets_utils import Secret
+from sculptor.foundation.secrets_utils import Secret
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.services.git_repo_service.git_commands import git_retry
 from sculptor.services.git_repo_service.git_errors import GitCommandFailure

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from pydantic import AnyUrl
 
-from imbue_core.pydantic_serialization import MutableModel
+from sculptor.foundation.pydantic_serialization import MutableModel
 
 
 class ReadOnlyGitRepo(MutableModel, ABC):

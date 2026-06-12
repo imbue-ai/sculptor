@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 from playwright.sync_api import expect
 
-from imbue_core.common import get_temp_dir
-from imbue_core.test_utils import create_temp_dir
+from sculptor.foundation.common import get_temp_dir
+from sculptor.foundation.test_utils import create_temp_dir
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 

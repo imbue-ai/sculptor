@@ -17,11 +17,11 @@ from starlette.requests import Request
 from starlette.staticfiles import StaticFiles
 from starlette.websockets import WebSocket
 
-from imbue_core.common import is_live_debugging
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.itertools import only
-from imbue_core.subprocess_utils import terminate_isolated_process_groups
 from sculptor.config.settings import SculptorSettings
+from sculptor.foundation.common import is_live_debugging
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.itertools import only
+from sculptor.foundation.subprocess_utils import terminate_isolated_process_groups
 from sculptor.primitives.constants import ANONYMOUS_ORGANIZATION_REFERENCE
 from sculptor.primitives.ids import RequestID
 from sculptor.service_collections.service_collection import CompleteServiceCollection

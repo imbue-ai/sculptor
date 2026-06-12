@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import pytest
 
-from imbue_core.sculptor.state.chat_state import DiffToolContent
-from imbue_core.sculptor.state.chat_state import GenericToolContent
 from sculptor.agents.pi_agent.tool_rendering import build_tool_result_content
 from sculptor.agents.pi_agent.tool_rendering import extract_text_from_tool_payload
 from sculptor.agents.pi_agent.tool_rendering import map_pi_tool_call
+from sculptor.state.chat_state import DiffToolContent
+from sculptor.state.chat_state import GenericToolContent
 
 
 def test_map_read() -> None:

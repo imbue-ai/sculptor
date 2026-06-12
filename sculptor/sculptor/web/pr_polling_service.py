@@ -24,12 +24,12 @@ from queue import Queue
 from loguru import logger
 from pydantic import PrivateAttr
 
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.constants import ExceptionPriority
-from imbue_core.processes.local_process import run_blocking
-from imbue_core.sculptor.user_config import UserConfig
+from sculptor.config.user_config import UserConfig
 from sculptor.database.models import Workspace
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.constants import ExceptionPriority
+from sculptor.foundation.processes.local_process import run_blocking
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.primitives.service import Service

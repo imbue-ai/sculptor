@@ -5,9 +5,9 @@ from fastapi import Depends
 from fastapi.testclient import TestClient
 from loguru import logger
 
-from imbue_core.concurrency_group import ConcurrencyGroup
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import Project
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.primitives.ids import RequestID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.service_collections.service_collection import get_services

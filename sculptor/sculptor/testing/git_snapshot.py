@@ -4,8 +4,8 @@ from typing import Mapping
 
 import attr
 
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.frozen_utils import empty_mapping
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.frozen_utils import empty_mapping
 from sculptor.primitives.executor import ObservableThreadPoolExecutor
 from sculptor.testing.computing_environment import apply_patch_via_git
 from sculptor.testing.computing_environment import make_commit

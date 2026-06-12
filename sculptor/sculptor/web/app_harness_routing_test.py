@@ -5,13 +5,13 @@ value. The helper here is the single place every task-creation route
 consults, so a direct unit test covers all sites at once.
 """
 
-from imbue_core.agents.data_types.ids import ProjectID
 from sculptor.database.models import Workspace
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
 from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.interfaces.agents.agent import PiAgentConfig
 from sculptor.primitives.ids import OrganizationReference
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.web.app import _agent_config_for_workspace
 

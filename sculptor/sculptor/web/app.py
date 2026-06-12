@@ -43,30 +43,13 @@ from loguru import logger
 from pydantic import ValidationError
 from pydantic.alias_generators import to_camel
 
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.agents.data_types.ids import TypeIDPrefixMismatchError
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.constants import ExceptionPriority
-from imbue_core.event_utils import MutableEvent
-from imbue_core.git import is_path_in_git_repo
-from imbue_core.git import resolve_worktree_to_main_repo
-from imbue_core.log_utils import log_and_exit_program
-from imbue_core.processes.local_process import run_blocking
-from imbue_core.pydantic_serialization import SerializableModel
-from imbue_core.pydantic_serialization import model_dump
-from imbue_core.pydantic_utils import model_update
-from imbue_core.sculptor import telemetry
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import LLMModel
-from imbue_core.sculptor.user_config import UserConfig
-from imbue_core.sculptor.user_config import UserConfigField
-from imbue_core.serialization import SerializedException
-from imbue_core.subprocess_utils import ProcessSetupError
 from sculptor import version
 from sculptor.agents.default.claude_code_sdk.btw_process_manager import NoBtwSessionAvailable
 from sculptor.agents.harness_registry import get_harness_for_config
 from sculptor.common.plugin import get_plugin_dirs
 from sculptor.config.settings import SculptorSettings
+from sculptor.config.user_config import UserConfig
+from sculptor.config.user_config import UserConfigField
 from sculptor.constants import ElementIDs
 from sculptor.constants import SCULPTOR_EXIT_CODE_IRRECOVERABLE_ERROR
 from sculptor.database.models import AgentTaskInputsV2
@@ -76,6 +59,18 @@ from sculptor.database.models import Task
 from sculptor.database.models import TaskID
 from sculptor.database.models import Workspace
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.constants import ExceptionPriority
+from sculptor.foundation.event_utils import MutableEvent
+from sculptor.foundation.git import is_path_in_git_repo
+from sculptor.foundation.git import resolve_worktree_to_main_repo
+from sculptor.foundation.log_utils import log_and_exit_program
+from sculptor.foundation.processes.local_process import run_blocking
+from sculptor.foundation.pydantic_serialization import SerializableModel
+from sculptor.foundation.pydantic_serialization import model_dump
+from sculptor.foundation.pydantic_utils import model_update
+from sculptor.foundation.serialization import SerializedException
+from sculptor.foundation.subprocess_utils import ProcessSetupError
 from sculptor.interfaces.agents.agent import AgentMessageID
 from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
 from sculptor.interfaces.agents.agent import ClearContextUserMessage
@@ -92,7 +87,9 @@ from sculptor.interfaces.environments.agent_execution_environment import Depende
 from sculptor.interfaces.environments.base import ARTIFACTS_DIRECTORY
 from sculptor.interfaces.environments.base import STATE_DIRECTORY
 from sculptor.interfaces.environments.base import TASKS_SUBDIRECTORY
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
+from sculptor.primitives.ids import TypeIDPrefixMismatchError
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.primitives.ids import create_organization_id
 from sculptor.primitives.ids import create_user_id
@@ -141,6 +138,9 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 )
 from sculptor.startup_checks import check_is_user_email_field_valid
 from sculptor.startup_checks import check_sculptor_directory_writable
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import LLMModel
+from sculptor.telemetry import telemetry
 from sculptor.utils import build as build_utils
 from sculptor.utils.build import get_install_path
 from sculptor.utils.build import get_sculptor_folder

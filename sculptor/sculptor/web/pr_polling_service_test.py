@@ -5,7 +5,7 @@ from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
-from imbue_core.sculptor.user_config import UserConfig
+from sculptor.config.user_config import UserConfig
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import PrStatusInfo

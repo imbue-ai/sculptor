@@ -17,11 +17,11 @@ from playwright.sync_api import Playwright
 from playwright.sync_api import expect
 from pytest_playwright.pytest_playwright import ArtifactsRecorder
 
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.concurrency_group import ConcurrencyGroupState
-from imbue_core.sculptor.user_config import DependencyPaths
-from imbue_core.sculptor.user_config import UserConfig
+from sculptor.config.user_config import DependencyPaths
+from sculptor.config.user_config import UserConfig
 from sculptor.constants import ElementIDs
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.concurrency_group import ConcurrencyGroupState
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.dependency_stubs import apply_stubs_from_request

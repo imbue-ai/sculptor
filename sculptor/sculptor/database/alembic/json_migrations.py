@@ -6,7 +6,7 @@ This module contains functions for tracking and managing the evolution of JSON s
 import json
 from typing import Any
 
-from imbue_core.pydantic_serialization import SerializableModel
+from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.utils.type_utils import extract_leaf_types
 
 Schema = dict[str, dict[str, dict[str, Any]]]

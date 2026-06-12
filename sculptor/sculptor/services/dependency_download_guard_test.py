@@ -8,7 +8,7 @@ startup auto-provisioning is a no-op.
 
 import pytest
 
-from imbue_core.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.dependency_management_service import Dependency
 from sculptor.services.dependency_management_service import DependencyManagementService

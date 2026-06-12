@@ -16,7 +16,7 @@ from loguru import logger
 from playwright.sync_api import BrowserContext
 from playwright.sync_api import Page
 
-from imbue_core.git import get_git_repo_root
+from sculptor.foundation.git import get_git_repo_root
 from sculptor.testing.frontend_utils import configure_page
 from sculptor.testing.playwright_utils import navigate_to_frontend
 from sculptor.testing.subprocess_utils import Forwarder
