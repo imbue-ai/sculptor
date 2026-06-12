@@ -47,9 +47,20 @@
 // No divider line under a section's tab strip — the strip's own background plus
 // the layout gaps separate it from the content. This scoped selector (0-2-0)
 // overrides the shared `.tabBarCompact` border (0-1-0) for panel sections only,
-// leaving other compact strips (e.g. the diff tab bar) untouched.
+// leaving other compact strips (e.g. the diff tab bar) untouched. The strip is
+// also shorter than the 41px compact default so it reads as panel chrome rather
+// than a toolbar.
 .section .tabBar {
   border-bottom: none;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- tab pill (26px) + scroll padding (8px)
+  height: 34px;
+}
+
+// Tighter tab pills in section strips only (scoped via the data attribute the
+// SectionTabBar sets on its tabs), so the Files/Changes/Commits switcher hugs
+// the left edge instead of reading as a full-width control.
+.tabBar [data-section-tab] {
+  padding: var(--space-1) var(--space-2);
 }
 
 // Fills the remaining strip width so the "+" stays inline after the last tab
