@@ -52,7 +52,33 @@ def _create_second_task(page, base_url):
     return result
 
 
+def _complete_onboarding_if_needed(page):
+    """Click through the installation step that gates a fresh instance.
+
+    The Continue button stays disabled while the backend's background
+    dependency install (Claude CLI) is running, so wait for it to enable.
+    """
+    button = page.get_by_role("button", name="Continue")
+    try:
+        button.wait_for(state="visible", timeout=5_000)
+    except Exception:
+        return  # already past onboarding
+    for _ in range(120):
+        if button.is_enabled():
+            button.click()
+            try:
+                button.wait_for(state="hidden", timeout=10_000)
+            except Exception:
+                pass
+            return
+        time.sleep(1)
+    raise TimeoutError("onboarding Continue button never became enabled")
+
+
 def setup(page, base_url, workspace_id, task_id):
+    page.goto(f"{base_url}/#/ws/{workspace_id}/agent/{task_id}")
+    page.wait_for_load_state("networkidle")
+    _complete_onboarding_if_needed(page)
     page.goto(f"{base_url}/#/ws/{workspace_id}/agent/{task_id}")
     page.wait_for_load_state("networkidle")
     time.sleep(5)
@@ -67,6 +93,12 @@ def setup(page, base_url, workspace_id, task_id):
         page.goto(f"{base_url}/#/ws/{workspace_id}/agent/{task_id}")
         page.wait_for_load_state("networkidle")
         time.sleep(2)
+        # End on sidebar row 0 so action()'s click sequence performs the same
+        # number of real switches every run (sidebar order != creation order).
+        tabs = page.locator('[data-testid="WORKSPACE_TAB"]')
+        if tabs.count() >= 2:
+            tabs.nth(0).click()
+            time.sleep(2)
 
 
 def action(page):

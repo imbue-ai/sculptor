@@ -58,6 +58,17 @@ var hook = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
 // re-rendered from one that bailed out (e.g. via React.memo or unchanged
 // atom subscriptions).
 var PERFORMED_WORK = 1;
+// Resolve a component name through memo/forwardRef wrappers: the fiber's
+// `type` for those is an object whose displayName is usually unset — the
+// real function lives at `.type` (memo) or `.render` (forwardRef).
+function componentName(type) {
+    if (!type) return null;
+    if (typeof type === 'function') return type.displayName || type.name || null;
+    if (typeof type === 'object') {
+        return type.displayName || componentName(type.type) || componentName(type.render) || null;
+    }
+    return null;
+}
 hook.onCommitFiberRoot = function(id, root) {
     if (!root || !root.current) return;
     window.__COMMIT_COUNT__++;
@@ -65,7 +76,7 @@ hook.onCommitFiberRoot = function(id, root) {
         if (!fiber) return;
         var flags = fiber.flags !== undefined ? fiber.flags : (fiber.effectTag || 0);
         if (flags & PERFORMED_WORK) {
-            var name = fiber.type?.displayName || fiber.type?.name;
+            var name = componentName(fiber.type);
             if (name && typeof name === 'string' && name.length < 100) {
                 window.__RENDER_COUNTS__[name] =
                     (window.__RENDER_COUNTS__[name] || 0) + 1;
@@ -125,6 +136,43 @@ def start_backend(repo_dir, port, data_dir):
         stderr=log,
         preexec_fn=os.setsid,
     )
+
+
+def start_preview_server(repo_dir, frontend_port, api_port, data_dir):
+    """Serve the freshly built dist via `vite preview` (proxying API/WS to the
+    backend, same as the dev server).
+
+    Measuring against the backend's own static route is wrong: it prefers the
+    packaged `sculptor/frontend-dist` copy when one exists, which is minified —
+    component names would not survive into the measured page.
+    """
+    frontend_dir = Path(repo_dir) / "sculptor" / "frontend"
+    env = {
+        **os.environ,
+        "SCULPTOR_API_PORT": str(api_port),
+        "SCULPTOR_FRONTEND_PORT": str(frontend_port),
+    }
+    log = open(Path(data_dir) / "preview.log", "w")
+    return subprocess.Popen(
+        ["npx", "vite", "preview", "--port", str(frontend_port), "--strictPort", "--host", "127.0.0.1"],
+        cwd=frontend_dir,
+        env=env,
+        stdout=log,
+        stderr=log,
+        preexec_fn=os.setsid,
+    )
+
+
+def wait_for_preview(port, timeout=60):
+    for _ in range(timeout):
+        try:
+            resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/")
+            if resp.status == 200:
+                return True
+        except Exception:
+            pass
+        time.sleep(1)
+    return False
 
 
 def setup_instance(port):
@@ -276,21 +324,30 @@ def load_scenario(path):
 
 
 def run_measurement(repo_dir, scenario, label):
-    """Start one backend for `repo_dir`, run the scenario, and tear down."""
-    port = free_port()
+    """Start one backend + preview server for `repo_dir`, run the scenario, and tear down."""
+    api_port = free_port()
+    frontend_port = free_port()
     data_dir = tempfile.mkdtemp(prefix=f"perf_{label}_")
-    proc = start_backend(repo_dir, port, data_dir)
+    backend_proc = start_backend(repo_dir, api_port, data_dir)
+    preview_proc = start_preview_server(repo_dir, frontend_port, api_port, data_dir)
     try:
-        print(f"Waiting for {label} backend (port {port})...")
-        if not wait_for_backend(port):
+        print(f"Waiting for {label} backend (port {api_port})...")
+        if not wait_for_backend(api_port):
             print(f"ERROR: {label} backend failed to start")
             sys.exit(1)
-        workspace_id, task_id = setup_instance(port)
-        print(f"Measuring {label}...")
-        return measure_renders(port, workspace_id, task_id, scenario, label)
+        if not wait_for_preview(frontend_port):
+            print(f"ERROR: {label} preview server failed to start")
+            sys.exit(1)
+        workspace_id, task_id = setup_instance(api_port)
+        print(f"Measuring {label} (frontend port {frontend_port})...")
+        return measure_renders(frontend_port, workspace_id, task_id, scenario, label)
     finally:
-        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-        proc.wait()
+        for proc in (preview_proc, backend_proc):
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                proc.wait()
+            except ProcessLookupError:
+                pass
         subprocess.run(["rm", "-rf", data_dir], check=False)
 
 
