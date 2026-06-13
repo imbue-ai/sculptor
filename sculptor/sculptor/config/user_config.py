@@ -249,9 +249,9 @@ class UserConfig(SerializableModel):
         default=False,
         description="When enabled, .md and .markdown files in the read-only file preview can be shown as rendered markdown via the eye toggle. Off by default while we iterate on the renderer.",
     )
-    enable_multi_harness: bool = Field(
+    enable_pi_agent: bool = Field(
         default=False,
-        description="When enabled, the new-workspace form offers the harness picker so workspaces can be created with the experimental pi harness. Off by default; when off, new workspaces always use Claude. Gates only the creation entry point — an existing pi workspace still runs pi regardless.",
+        description="When enabled, the agent-type menus offer the experimental pi agent. Off by default. Gates only the creation entry point — an existing pi agent keeps running regardless.",
     )
     default_fast_mode: bool = Field(
         default=False,

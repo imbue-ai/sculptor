@@ -13,17 +13,23 @@ import {
   ElementIds,
   getActiveProjects,
   getMostRecentlyUsedProject,
-  HarnessName,
   WorkspaceInitializationStrategy,
 } from "../../api";
 import { HTTPException } from "../../common/Errors.ts";
 import { useImbueNavigate } from "../../common/NavigateUtils.ts";
+import {
+  AGENT_TYPE_LABELS,
+  encodeRegisteredAgentType,
+  lastUsedAgentTypeAtom,
+  parseStoredAgentType,
+  type StoredAgentType,
+} from "../../common/state/atoms/agentTabs.ts";
 import { projectsArrayAtom, updateProjectsAtom } from "../../common/state/atoms/projects.ts";
 import {
   defaultModelAtom,
   isCloneWorkspacesEnabledAtom,
   isInPlaceWorkspacesEnabledAtom,
-  isMultiHarnessEnabledAtom,
+  isPiAgentEnabledAtom,
 } from "../../common/state/atoms/userConfig.ts";
 import {
   clearDraftCreatingAtom,
@@ -32,6 +38,7 @@ import {
 } from "../../common/state/atoms/workspaces.ts";
 import { useDraftTabName } from "../../common/state/hooks/usePromptDraft.ts";
 import { useRepoInfo } from "../../common/state/hooks/useRepoInfo.ts";
+import { useTerminalAgentRegistrations } from "../../common/state/hooks/useTerminalAgentRegistrations.ts";
 import { BranchSelector } from "../../components/BranchSelector.tsx";
 import { RepoSelector } from "../../components/RepoSelector.tsx";
 import { Toast, type ToastContent, ToastType } from "../../components/Toast.tsx";
@@ -48,7 +55,7 @@ export const AddWorkspacePage = (): ReactElement => {
   const { navigateToAgent } = useImbueNavigate();
   const isInPlaceWorkspacesEnabled = useAtomValue(isInPlaceWorkspacesEnabledAtom);
   const isCloneWorkspacesEnabled = useAtomValue(isCloneWorkspacesEnabledAtom);
-  const isMultiHarnessEnabled = useAtomValue(isMultiHarnessEnabledAtom);
+  const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
   // Worktree mode is always the default; the selector only appears when an
   // opt-in mode (clone or in-place) has been enabled and the user has more
   // than one option to choose from.
@@ -67,8 +74,19 @@ export const AddWorkspacePage = (): ReactElement => {
 
   // Form state. Worktree is the default mode; clone and in-place are opt-in.
   const [mode, setMode] = useState<WorkspaceInitializationStrategy>(WorkspaceInitializationStrategy.WORKTREE);
-  // DELIBERATE-TEMPORARY: workspace-bound harness selection.
-  const [harness, setHarness] = useState<HarnessName>(HarnessName.CLAUDE);
+  // The type of the workspace's first agent (agent type is per-agent, not
+  // per-workspace). Registered terminal agents select as `registered:<id>`.
+  // The form opens preset to the shared last-used type (the same MRU the tab
+  // bar's + button reads) — a deliberate mount-time snapshot the user can
+  // change freely; the MRU is written back only when a workspace is actually
+  // created. A stored "pi" is unusable when pi-agent is off.
+  const lastUsedAgentType = useAtomValue(lastUsedAgentTypeAtom);
+  const setLastUsedAgentType = useSetAtom(lastUsedAgentTypeAtom);
+  const [agentTypeValue, setAgentTypeValue] = useState<string>(
+    lastUsedAgentType === "pi" && !isPiAgentEnabled ? "claude" : lastUsedAgentType,
+  );
+  const { registrations, refetch: refreshRegistrations } = useTerminalAgentRegistrations();
+  const { agentType, registrationId } = parseStoredAgentType(agentTypeValue as StoredAgentType);
   const [workspaceNameDraft, setWorkspaceNameDraft] = useDraftTabName(draftId);
   const workspaceName = workspaceNameDraft ?? "";
   const setWorkspaceName = useCallback(
@@ -213,7 +231,6 @@ export const AddWorkspacePage = (): ReactElement => {
           sourceBranch: mode === WorkspaceInitializationStrategy.IN_PLACE ? undefined : sourceBranch,
           description: workspaceName.trim() || "Untitled workspace",
           requestedBranchName,
-          harness,
         },
       });
 
@@ -229,11 +246,27 @@ export const AddWorkspacePage = (): ReactElement => {
       convertNewWorkspaceToTab({ draftId, workspaceId });
       setWorkspaceNameDraft(null);
 
-      // Create first agent (no prompt in the simplified form)
+      // If the remembered registered agent's registration is no longer present
+      // (deleted since it was picked), fall back to Claude rather than leaving
+      // the just-created workspace with a failed, agentless first-agent create.
+      const isMissingRegistration =
+        agentType === "registered" && !registrations.some((r) => r.registrationId === registrationId);
+      const effectiveAgentType = isMissingRegistration ? "claude" : agentType;
+      const effectiveRegistrationId = isMissingRegistration ? undefined : registrationId;
+      const effectiveAgentTypeValue: StoredAgentType = isMissingRegistration
+        ? "claude"
+        : (agentTypeValue as StoredAgentType);
+
+      // Create first agent (no prompt in the simplified form). Terminal
+      // agents (plain and registered) have no model concept, so the
+      // default-model preference only applies to chat types.
+      const isTerminalType = effectiveAgentType === "terminal" || effectiveAgentType === "registered";
       const agentResponse = await createWorkspaceAgent({
         path: { workspace_id: workspaceId },
         body: {
-          model: defaultModelPreference as LlmModel,
+          model: isTerminalType ? undefined : (defaultModelPreference as LlmModel),
+          agentType: effectiveAgentType,
+          registrationId: effectiveRegistrationId,
         },
       });
 
@@ -241,10 +274,15 @@ export const AddWorkspacePage = (): ReactElement => {
         throw new Error("Failed to create agent — no response data");
       }
 
+      // The agent was actually created with this type — record it as the
+      // shared MRU so the tab bar's plain + click creates the same type.
+      setLastUsedAgentType(effectiveAgentTypeValue);
+
       posthog.capture("workspace.created", {
         workspace_id: workspaceId,
         agent_id: agentResponse.data.id,
         mode,
+        agent_type: effectiveAgentType,
         has_workspace_name: workspaceName.trim().length > 0,
         // Branch names are user-entered text (they can encode feature/ticket/
         // customer names), so record only whether one was chosen.
@@ -283,7 +321,11 @@ export const AddWorkspacePage = (): ReactElement => {
     selectedProjectId,
     draftId,
     mode,
-    harness,
+    agentType,
+    registrationId,
+    registrations,
+    agentTypeValue,
+    setLastUsedAgentType,
     sourceBranch,
     workspaceName,
     effectiveBranchName,
@@ -395,33 +437,57 @@ export const AddWorkspacePage = (): ReactElement => {
               </Button>
             )}
 
-            {/* Harness selector — gated behind the experimental multi-harness flag.
-                When off, the picker is hidden and `harness` stays Claude, so new
-                workspaces use Claude exactly as they did before multi-harness shipped.
-                DELIBERATE-TEMPORARY: workspace-bound harness selection. */}
-            {isMultiHarnessEnabled && (
-              <Select.Root size="1" value={harness} onValueChange={(value) => setHarness(value as HarnessName)}>
-                <Select.Trigger
-                  variant="ghost"
-                  className={styles.compactSelector}
-                  data-testid={ElementIds.HARNESS_SELECTOR}
-                >
-                  <Flex align="center" gap="1">
-                    <BotIcon size={12} />
-                    <Text className={styles.selectorLabel}>harness</Text>
-                    {harness === HarnessName.PI ? "pi (experimental)" : "Claude"}
-                  </Flex>
-                </Select.Trigger>
-                <Select.Content position="popper" side="bottom" sideOffset={5}>
-                  <Select.Item value={HarnessName.CLAUDE} data-testid={ElementIds.HARNESS_OPTION_CLAUDE}>
-                    Claude
+            {/* First-agent type selector — the same per-agent choice as the
+                tab bar's + menu. Only the pi option is gated behind the
+                experimental pi-agent flag; Claude, Terminal, and any
+                registered terminal agents are available to everyone. */}
+            <Select.Root
+              size="1"
+              value={agentTypeValue}
+              onValueChange={setAgentTypeValue}
+              onOpenChange={(open) => {
+                // Re-read the registrations directory on every open so the
+                // options track the filesystem without a restart.
+                if (open) refreshRegistrations();
+              }}
+            >
+              <Select.Trigger
+                variant="ghost"
+                className={styles.compactSelector}
+                data-testid={ElementIds.ADD_WORKSPACE_AGENT_TYPE_SELECT}
+              >
+                <Flex align="center" gap="1">
+                  <BotIcon size={12} />
+                  <Text className={styles.selectorLabel}>agent</Text>
+                  {agentType === "registered"
+                    ? (registrations.find((r) => r.registrationId === registrationId)?.displayName ?? "Registered")
+                    : AGENT_TYPE_LABELS[agentType]}
+                </Flex>
+              </Select.Trigger>
+              <Select.Content position="popper" side="bottom" sideOffset={5}>
+                <Select.Item value="claude" data-testid={ElementIds.AGENT_TYPE_OPTION_CLAUDE}>
+                  {AGENT_TYPE_LABELS.claude}
+                </Select.Item>
+                {isPiAgentEnabled && (
+                  <Select.Item value="pi" data-testid={ElementIds.AGENT_TYPE_OPTION_PI}>
+                    {AGENT_TYPE_LABELS.pi}
                   </Select.Item>
-                  <Select.Item value={HarnessName.PI} data-testid={ElementIds.HARNESS_OPTION_PI}>
-                    pi (experimental)
+                )}
+                <Select.Item value="terminal" data-testid={ElementIds.AGENT_TYPE_OPTION_TERMINAL}>
+                  {AGENT_TYPE_LABELS.terminal}
+                </Select.Item>
+                {registrations.map((registration) => (
+                  <Select.Item
+                    key={registration.registrationId}
+                    value={encodeRegisteredAgentType(registration.registrationId)}
+                    data-testid={ElementIds.AGENT_TYPE_OPTION_REGISTERED}
+                    data-registration-id={registration.registrationId}
+                  >
+                    {registration.displayName}
                   </Select.Item>
-                </Select.Content>
-              </Select.Root>
-            )}
+                ))}
+              </Select.Content>
+            </Select.Root>
 
             {/* Mode selector — shown when any experimental workspace mode is enabled */}
             {isModeSelectorVisible && (

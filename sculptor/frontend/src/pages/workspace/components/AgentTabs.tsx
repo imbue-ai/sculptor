@@ -1,11 +1,12 @@
-import { ContextMenu, IconButton } from "@radix-ui/themes";
+import { ContextMenu, DropdownMenu, Flex, IconButton } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { PlusIcon } from "lucide-react";
+import { ChevronDownIcon, PlusIcon } from "lucide-react";
 import { posthog } from "posthog-js";
 import type { ReactElement, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  type AgentTypeName,
   createWorkspaceAgent,
   ElementIds,
   getWorkspaceAgentDiagnostics,
@@ -18,10 +19,20 @@ import { keybindingsMapAtom } from "~/common/keybindings/atoms.ts";
 import { useImbueNavigate, useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { isDismissibleOverlayOpen } from "~/common/overlayUtils.ts";
 import { shouldHandleKeybinding } from "~/common/ShortcutUtils.ts";
-import { agentTabOrderAtom } from "~/common/state/atoms/agentTabs.ts";
+import {
+  AGENT_TYPE_LABELS,
+  agentTabOrderAtom,
+  encodeRegisteredAgentType,
+  lastUsedAgentTypeAtom,
+  parseStoredAgentType,
+  REGISTERED_AGENT_TYPE_PREFIX,
+  type StoredAgentType,
+} from "~/common/state/atoms/agentTabs.ts";
 import { debugViewAtomFamily } from "~/common/state/atoms/alphaScroll.ts";
 import { pendingAgentTitlesAtom, tasksArrayAtom, updateTasksAtom } from "~/common/state/atoms/tasks.ts";
+import { isPiAgentEnabledAtom } from "~/common/state/atoms/userConfig.ts";
 import { useOptimisticTaskDelete } from "~/common/state/hooks/useOptimisticTaskDelete.ts";
+import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
 import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
 import { buildAgentActions } from "~/components/CommandPalette/contextActions/agentActions.ts";
 import { agentDeleteTargetAtom, renamingAgentIdAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
@@ -210,32 +221,78 @@ export const AgentTabs = (): ReactElement | null => {
     [workspaceID, updateTasks, setRenamingAgentId, setPendingTitles, clearPendingTitle],
   );
 
-  const handleCreateAgent = useCallback(async (): Promise<void> => {
-    if (isCreating) return;
-    setIsCreating(true);
-    try {
-      // Inherit the model from the currently viewed agent so the new agent
-      // starts with the same model selection.
-      const currentAgent = agentID ? workspaceAgents.find((a) => a.id === agentID) : undefined;
-      const model = currentAgent?.model as LlmModel | undefined;
-      const response = await createWorkspaceAgent({
-        path: { workspace_id: workspaceID },
-        body: { model },
-      });
-      if (response.data) {
-        posthog.capture("agent.added", {
-          workspace_id: workspaceID,
-          agent_id: response.data.id,
-          model: model ?? null,
-        });
-        navigateToAgent(workspaceID, response.data.id);
+  const [lastUsedAgentType, setLastUsedAgentType] = useAtom(lastUsedAgentTypeAtom);
+  const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
+  const { registrations, refetch: refreshRegistrations } = useTerminalAgentRegistrations();
+  // A stored "pi" is unusable once pi-agent is turned off — fall back to Claude.
+  const defaultAgentType: StoredAgentType =
+    lastUsedAgentType === "pi" && !isPiAgentEnabled ? "claude" : lastUsedAgentType;
+
+  const handleCreateAgent = useCallback(
+    async (requestedType?: AgentTypeName, requestedRegistrationId?: string): Promise<void> => {
+      if (isCreating) return;
+      setIsCreating(true);
+      try {
+        // Explicit menu choice wins (and becomes the new default); a plain
+        // click / keybinding / Cmd+K creates the last-used type. Registered
+        // agents are remembered as `registered:<id>`.
+        let agentType: AgentTypeName;
+        let registrationId: string | undefined;
+        if (requestedType !== undefined) {
+          agentType = requestedType;
+          registrationId = requestedRegistrationId;
+          setLastUsedAgentType(
+            requestedType === "registered" && requestedRegistrationId !== undefined
+              ? encodeRegisteredAgentType(requestedRegistrationId)
+              : requestedType,
+          );
+        } else {
+          ({ agentType, registrationId } = parseStoredAgentType(defaultAgentType));
+        }
+        // Inherit the model from the currently viewed agent so the new agent
+        // starts with the same model selection. Terminal agents never read it.
+        const currentAgent = agentID ? workspaceAgents.find((a) => a.id === agentID) : undefined;
+        const model = currentAgent?.model as LlmModel | undefined;
+        let response;
+        try {
+          response = await createWorkspaceAgent({
+            path: { workspace_id: workspaceID },
+            body: { model, agentType, registrationId },
+          });
+        } catch (error) {
+          // A remembered registered agent's registration can be deleted out
+          // from under the stored default — only that case retries as Claude.
+          // Other failures (e.g. a transient error creating a plain terminal
+          // or pi agent) propagate rather than silently substituting a
+          // different agent type than the user's default.
+          if (requestedType === undefined && agentType === "registered") {
+            setLastUsedAgentType("claude");
+            response = await createWorkspaceAgent({
+              path: { workspace_id: workspaceID },
+              body: { model, agentType: "claude" },
+            });
+          } else {
+            throw error;
+          }
+        }
+
+        if (response.data) {
+          posthog.capture("agent.added", {
+            workspace_id: workspaceID,
+            agent_id: response.data.id,
+            model: model ?? null,
+            agent_type: agentType,
+          });
+          navigateToAgent(workspaceID, response.data.id);
+        }
+      } catch (error) {
+        console.error("Failed to create agent:", error);
+      } finally {
+        setIsCreating(false);
       }
-    } catch (error) {
-      console.error("Failed to create agent:", error);
-    } finally {
-      setIsCreating(false);
-    }
-  }, [workspaceID, isCreating, navigateToAgent, agentID, workspaceAgents]);
+    },
+    [workspaceID, isCreating, navigateToAgent, agentID, workspaceAgents, defaultAgentType, setLastUsedAgentType],
+  );
 
   useKeybindingHandler("new_agent", () => {
     void handleCreateAgent();
@@ -435,18 +492,87 @@ export const AgentTabs = (): ReactElement | null => {
         alwaysCloseable
         contextMenuContent={contextMenuContent}
       >
-        <IconButton
-          variant="ghost"
-          size="1"
-          color="gray"
-          className={styles.addButton}
-          onClick={() => void handleCreateAgent()}
-          disabled={isCreating}
-          aria-label="Add agent"
-          data-testid={ElementIds.ADD_AGENT_BUTTON}
-        >
-          <PlusIcon size={14} />
-        </IconButton>
+        {/* gap="0" + neutralized ghost margins (see the SCSS): the two
+            segments must sit flush to read as one split button. */}
+        <Flex gap="0" align="center" className={styles.addButtonGroup}>
+          <IconButton
+            variant="ghost"
+            size="1"
+            color="gray"
+            className={styles.addButton}
+            onClick={() => void handleCreateAgent()}
+            disabled={isCreating}
+            aria-label="Add agent"
+            title={
+              defaultAgentType.startsWith(REGISTERED_AGENT_TYPE_PREFIX)
+                ? "New agent"
+                : `New ${AGENT_TYPE_LABELS[defaultAgentType as Exclude<AgentTypeName, "registered">]} agent`
+            }
+            data-testid={ElementIds.ADD_AGENT_BUTTON}
+          >
+            <PlusIcon size={14} />
+          </IconButton>
+          <DropdownMenu.Root
+            onOpenChange={(open) => {
+              // Re-read the registrations directory on every open so the
+              // menu tracks the filesystem without a restart.
+              if (open) refreshRegistrations();
+            }}
+          >
+            <DropdownMenu.Trigger>
+              <IconButton
+                variant="ghost"
+                size="1"
+                color="gray"
+                className={styles.addButtonChevron}
+                disabled={isCreating}
+                aria-label="Choose agent type"
+                data-testid={ElementIds.ADD_AGENT_CHEVRON_BUTTON}
+              >
+                <ChevronDownIcon size={12} />
+              </IconButton>
+            </DropdownMenu.Trigger>
+            {/* CheckboxItems mark the last-used type — the one a plain +
+                click creates. Selecting an item still creates an agent (the
+                check is an indicator, not a toggle). */}
+            <DropdownMenu.Content data-testid={ElementIds.AGENT_TYPE_MENU}>
+              <DropdownMenu.CheckboxItem
+                checked={defaultAgentType === "claude"}
+                data-testid={ElementIds.AGENT_TYPE_MENU_ITEM_CLAUDE}
+                onSelect={() => void handleCreateAgent("claude")}
+              >
+                {AGENT_TYPE_LABELS.claude}
+              </DropdownMenu.CheckboxItem>
+              {isPiAgentEnabled && (
+                <DropdownMenu.CheckboxItem
+                  checked={defaultAgentType === "pi"}
+                  data-testid={ElementIds.AGENT_TYPE_MENU_ITEM_PI}
+                  onSelect={() => void handleCreateAgent("pi")}
+                >
+                  {AGENT_TYPE_LABELS.pi}
+                </DropdownMenu.CheckboxItem>
+              )}
+              <DropdownMenu.CheckboxItem
+                checked={defaultAgentType === "terminal"}
+                data-testid={ElementIds.AGENT_TYPE_MENU_ITEM_TERMINAL}
+                onSelect={() => void handleCreateAgent("terminal")}
+              >
+                {AGENT_TYPE_LABELS.terminal}
+              </DropdownMenu.CheckboxItem>
+              {registrations.map((registration) => (
+                <DropdownMenu.CheckboxItem
+                  key={registration.registrationId}
+                  checked={defaultAgentType === encodeRegisteredAgentType(registration.registrationId)}
+                  data-testid={ElementIds.AGENT_TYPE_MENU_ITEM_REGISTERED}
+                  data-registration-id={registration.registrationId}
+                  onSelect={() => void handleCreateAgent("registered", registration.registrationId)}
+                >
+                  {registration.displayName}
+                </DropdownMenu.CheckboxItem>
+              ))}
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+        </Flex>
       </TabBar>
       <DeleteConfirmationDialog
         isOpen={deleteTarget !== null}

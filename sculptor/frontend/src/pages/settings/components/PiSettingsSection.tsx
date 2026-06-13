@@ -20,7 +20,7 @@ import { type ReactElement, useCallback, useMemo, useState } from "react";
 
 import { ElementIds, UserConfigField } from "../../../api";
 import { dependenciesStatusAtom } from "../../../common/state/atoms/dependenciesStatus";
-import { isMultiHarnessEnabledAtom, userConfigAtom } from "../../../common/state/atoms/userConfig";
+import { isPiAgentEnabledAtom, userConfigAtom } from "../../../common/state/atoms/userConfig";
 import { useManagedDependency } from "../../../common/useManagedDependency";
 import { SettingRow } from "./SettingRow.tsx";
 import { SettingsSectionLayout } from "./SettingsSection.tsx";
@@ -36,7 +36,7 @@ export const PiSettingsSection = ({
 }: PiSettingsSectionProps): ReactElement => {
   const dependenciesStatus = useAtomValue(dependenciesStatusAtom);
   const userConfig = useAtomValue(userConfigAtom);
-  const isMultiHarnessEnabled = useAtomValue(isMultiHarnessEnabledAtom);
+  const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
   const {
     info: pi,
     displayMode,
@@ -87,14 +87,14 @@ export const PiSettingsSection = ({
     " exactly, or Sculptor will refuse to run it.";
 
   return (
-    <SettingsSectionLayout description="Pi is an experimental second agent harness. Workspaces created with pi run pi as a subprocess and stream its responses; pi is pinned to a single version to keep the RPC schema known.">
-      {!isMultiHarnessEnabled && (
+    <SettingsSectionLayout>
+      {!isPiAgentEnabled && (
         <Callout.Root color="yellow" data-testid={ElementIds.PI_SETTINGS_DISABLED_BANNER}>
           <Callout.Icon>
             <InfoCircledIcon />
           </Callout.Icon>
           <Callout.Text>
-            You have not enabled the creation of new workspaces with the pi harness. Enable it in{" "}
+            You have not enabled the pi agent. Enable it in{" "}
             {onNavigateToExperimental ? (
               <Link
                 href="#"

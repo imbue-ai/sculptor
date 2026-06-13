@@ -1,0 +1,161 @@
+"""Integration tests for plain Terminal agents.
+
+A Terminal agent's main panel is a PTY terminal instead of a chat, the shell
+runs in the workspace code directory, file changes made in the shell reach
+the Changes panel via the periodic diff refresh, the PTY survives tab
+switches, and the tab behaves like any other agent tab.
+"""
+
+import re
+
+from playwright.sync_api import Page
+from playwright.sync_api import expect
+
+from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
+from sculptor.testing.elements.file_tree import get_changes_tree
+from sculptor.testing.elements.terminal import expect_chat_replaces_terminal_panel
+from sculptor.testing.elements.terminal import expect_terminal_panel_replaces_chat
+from sculptor.testing.elements.terminal import get_agent_terminal_panel
+from sculptor.testing.elements.terminal import get_agent_terminal_textarea
+from sculptor.testing.elements.terminal import get_xterm_buffer_text
+from sculptor.testing.elements.terminal import run_command_in_agent_terminal
+from sculptor.testing.elements.terminal import wait_for_xterm_substring
+from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
+from sculptor.testing.sculptor_instance import SculptorInstance
+from sculptor.testing.user_stories import user_story
+
+
+def _create_terminal_agent(agent_tab_bar: PlaywrightAgentTabBarElement) -> None:
+    agent_tab_bar.open_agent_type_menu()
+    agent_tab_bar.get_agent_type_menu_item_terminal().click()
+
+
+def _wait_for_terminal_ready(page: Page) -> None:
+    """Wait until the agent terminal's xterm is mounted and the shell is up.
+
+    The backend PTY may still be spawning when the panel mounts (the
+    WebSocket retries 4404 closes every 2s), so give the prompt a moment
+    after the textarea attaches.
+    """
+    expect(get_agent_terminal_textarea(page)).to_be_attached()
+    page.wait_for_timeout(3_000)
+
+
+@user_story("to use a plain terminal agent alongside chat agents")
+def test_terminal_agent_basic(sculptor_instance_: SculptorInstance) -> None:
+    """Create a Terminal agent, use the shell, see diffs refresh, switch tabs."""
+    page = sculptor_instance_.page
+    task_page = start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Terminal Agent WS")
+    agent_tab_bar = PlaywrightAgentTabBarElement(page)
+    agent_tabs = agent_tab_bar.get_agent_tabs()
+    expect(agent_tabs).to_have_count(1)
+
+    _create_terminal_agent(agent_tab_bar)
+    expect(agent_tabs).to_have_count(2)
+    terminal_tab = agent_tab_bar.get_agent_tab_by_name("Terminal 1").first
+    expect(terminal_tab).to_be_visible()
+
+    # The terminal occupies the chat space: panel present, chat input absent.
+    expect_terminal_panel_replaces_chat(page)
+
+    # Shell round trip in the workspace code directory.
+    _wait_for_terminal_ready(page)
+    run_command_in_agent_terminal(page, "echo hello-sculptor")
+    wait_for_xterm_substring(page, "hello-sculptor")
+
+    # A file created in the shell reaches the Changes panel via the periodic
+    # diff refresh — Sculptor cannot see the shell's commands, only git state.
+    run_command_in_agent_terminal(page, "touch a_new_file.txt")
+    task_page.activate_changes_panel()
+    changes_tree = get_changes_tree(page)
+    expect(changes_tree).to_be_visible()
+    expect(changes_tree.get_tree_rows().filter(has_text="a_new_file.txt")).to_be_visible()
+
+    # While idle the tab's status dot is neutral (read/unread) — terminal
+    # agents never derive running/waiting from chat state.
+    expect(terminal_tab).to_have_attribute("data-dot-status", re.compile(r"^(read|unread)$"))
+
+    # Tab switching: the Claude tab still has its chat; switching back to the
+    # terminal reconnects with the scrollback replay (the PTY survived the
+    # WebSocket disconnect).
+    agent_tabs.first.click()
+    expect_chat_replaces_terminal_panel(page)
+    terminal_tab.click()
+    expect(get_agent_terminal_panel(page)).to_be_visible()
+    wait_for_xterm_substring(page, "hello-sculptor")
+
+
+@user_story("to manage terminal agent tabs like any other agent tab")
+def test_terminal_agent_tab_rename_and_delete(sculptor_instance_: SculptorInstance) -> None:
+    """Terminal agent tabs rename and delete exactly like chat-agent tabs."""
+    page = sculptor_instance_.page
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Terminal Tab WS")
+    agent_tab_bar = PlaywrightAgentTabBarElement(page)
+    agent_tabs = agent_tab_bar.get_agent_tabs()
+
+    _create_terminal_agent(agent_tab_bar)
+    expect(agent_tabs).to_have_count(2)
+    terminal_tab = agent_tab_bar.get_agent_tab_by_name("Terminal 1").first
+    expect(terminal_tab).to_be_visible()
+
+    # Rename via the context menu.
+    agent_tab_bar.open_context_menu(terminal_tab)
+    agent_tab_bar.get_context_menu_rename_item().click()
+    rename_input = agent_tab_bar.get_inline_rename_input()
+    expect(rename_input).to_be_visible()
+    expect(rename_input).to_be_focused()
+    rename_input.fill("My Terminal")
+    rename_input.press("Enter")
+    expect(rename_input).not_to_be_visible()
+    expect(agent_tab_bar.get_agent_tab_by_name("My Terminal")).to_have_count(1)
+
+    # Delete via the context menu, with the standard confirmation.
+    agent_tab_bar.open_context_menu(agent_tab_bar.get_agent_tab_by_name("My Terminal").first)
+    agent_tab_bar.get_context_menu_delete_item().click()
+    confirm_button = agent_tab_bar.get_delete_confirmation_confirm_button()
+    expect(confirm_button).to_be_visible()
+    confirm_button.click()
+    expect(agent_tabs).to_have_count(1)
+
+
+@user_story("to see only an agent's own output in its terminal tab")
+def test_terminal_agent_tabs_do_not_leak_content(sculptor_instance_: SculptorInstance) -> None:
+    """Each terminal agent tab shows only its own PTY's content.
+
+    Two terminal agents in one workspace, a distinct marker echoed in each.
+    Switching directly terminal -> terminal (including the navigation that
+    creating the second agent performs) must not carry the previous tab's
+    scrollback into the next: the backend PTYs are isolated per agent, so
+    any cross-tab text is frontend mixing.
+    """
+    page = sculptor_instance_.page
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Terminal Leak WS")
+    agent_tab_bar = PlaywrightAgentTabBarElement(page)
+
+    _create_terminal_agent(agent_tab_bar)
+    first_tab = agent_tab_bar.get_agent_tab_by_name("Terminal 1").first
+    expect(first_tab).to_be_visible()
+    _wait_for_terminal_ready(page)
+    run_command_in_agent_terminal(page, "echo LEAK-CHECK-ALPHA")
+    wait_for_xterm_substring(page, "LEAK-CHECK-ALPHA")
+
+    # Creating the second agent navigates straight to its tab -- a direct
+    # terminal -> terminal switch.
+    _create_terminal_agent(agent_tab_bar)
+    second_tab = agent_tab_bar.get_agent_tab_by_name("Terminal 2").first
+    expect(second_tab).to_be_visible()
+    _wait_for_terminal_ready(page)
+    run_command_in_agent_terminal(page, "echo LEAK-CHECK-BRAVO")
+    wait_for_xterm_substring(page, "LEAK-CHECK-BRAVO")
+    assert "LEAK-CHECK-ALPHA" not in get_xterm_buffer_text(page), (
+        "Terminal 2 shows Terminal 1's output -- tab contents leaked across agents"
+    )
+
+    # Direct switch back: Terminal 1 replays its own scrollback only. The
+    # positive wait proves the replay landed before the negative check reads
+    # the buffer.
+    first_tab.click()
+    wait_for_xterm_substring(page, "LEAK-CHECK-ALPHA")
+    assert "LEAK-CHECK-BRAVO" not in get_xterm_buffer_text(page), (
+        "Terminal 1 shows Terminal 2's output -- tab contents leaked across agents"
+    )

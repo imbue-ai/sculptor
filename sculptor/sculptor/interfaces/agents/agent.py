@@ -205,6 +205,30 @@ class TaskStatusRunnerMessage(EphemeralRunnerMessage):
     outcome: TaskState
 
 
+class TerminalStatusSignal(StrEnum):
+    """Status vocabulary a terminal-agent integration may signal.
+
+    `files-changed` and `session-id` are events, not status — they never
+    become one of these values.
+    """
+
+    BUSY = "BUSY"
+    IDLE = "IDLE"
+    WAITING = "WAITING"
+
+
+class TerminalAgentSignalRunnerMessage(EphemeralRunnerMessage):
+    """A status signal posted by a terminal agent's integration.
+
+    Ephemeral on purpose: signals are run-scoped (they survive frontend
+    reloads via the in-memory replay but vanish on backend restart) and
+    never drive unread tracking.
+    """
+
+    object_type: str = "TerminalAgentSignalRunnerMessage"
+    signal: TerminalStatusSignal
+
+
 class ResumeAgentResponseRunnerMessage(PersistentRunnerMessage):
     object_type: str = "ResumeAgentResponseRunnerMessage"
     for_user_message_id: AgentMessageID
@@ -230,6 +254,7 @@ EphemeralRunnerMessageUnion = (
     Annotated[TaskStatusRunnerMessage, Tag("TaskStatusRunnerMessage")]
     | Annotated[EnvironmentAcquiredRunnerMessage, Tag("EnvironmentAcquiredRunnerMessage")]
     | Annotated[EnvironmentReleasedRunnerMessage, Tag("EnvironmentReleasedRunnerMessage")]
+    | Annotated[TerminalAgentSignalRunnerMessage, Tag("TerminalAgentSignalRunnerMessage")]
 )
 RunnerMessageUnion = PersistentRunnerMessageUnion | EphemeralRunnerMessageUnion
 
@@ -462,15 +487,37 @@ class PiAgentConfig(AgentConfig):
     object_type: str = "PiAgentConfig"
 
 
+class TerminalAgentConfig(AgentConfig):
+    object_type: str = "TerminalAgentConfig"
+
+
+class RegisteredTerminalAgentConfig(AgentConfig):
+    """A terminal agent that launches a registered program in its shell.
+
+    Launch parameters are stamped at creation from the registration so the
+    task stays self-describing even if the registration file later changes.
+    """
+
+    object_type: str = "RegisteredTerminalAgentConfig"
+    registration_id: str
+    display_name: str
+    launch_command: str
+    # May contain the literal placeholder `{session_id}`.
+    resume_command_template: str | None = None
+    accepts_automated_prompts: bool = False
+
+
 AgentConfigTypes = Annotated[
     Annotated[HelloAgentConfig, Tag("HelloAgentConfig")]
     | Annotated[ClaudeCodeSDKAgentConfig, Tag("ClaudeCodeSDKAgentConfig")]
-    | Annotated[PiAgentConfig, Tag("PiAgentConfig")],
+    | Annotated[PiAgentConfig, Tag("PiAgentConfig")]
+    | Annotated[TerminalAgentConfig, Tag("TerminalAgentConfig")]
+    | Annotated[RegisteredTerminalAgentConfig, Tag("RegisteredTerminalAgentConfig")],
     build_discriminator(),
 ]
 
+TERMINAL_AGENT_CONFIG_TYPES = (TerminalAgentConfig, RegisteredTerminalAgentConfig)
 
-# DELIBERATE-TEMPORARY: workspace-bound harness selection.
-class HarnessName(StrEnum):
-    CLAUDE = "claude"
-    PI = "pi"
+
+def is_terminal_agent_config(config: AgentConfigTypes) -> bool:
+    return isinstance(config, TERMINAL_AGENT_CONFIG_TYPES)

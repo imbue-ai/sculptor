@@ -17,7 +17,6 @@ from pathlib import Path
 import pytest
 from playwright.sync_api import expect
 
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
@@ -58,7 +57,7 @@ def test_real_pi_recalls_sentinel_across_restart(
             workspace_name="Real Pi Resume",
             prompt=prefixed(f"Remember this codeword: {_SENTINEL}. Reply with exactly OK and nothing else."),
             model_name=None,
-            harness=HarnessName.PI,
+            agent_type="pi",
         )
         chat_panel = task_page.get_chat_panel()
         wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2, timeout=RESPONSE_TIMEOUT_MS)

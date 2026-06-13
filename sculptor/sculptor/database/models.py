@@ -12,7 +12,6 @@ from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.foundation.pydantic_serialization import build_discriminator
 from sculptor.foundation.serialization import SerializedException
 from sculptor.interfaces.agents.agent import AgentConfigTypes
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import PersistentMessageTypes
 from sculptor.interfaces.agents.tasks import TaskState
@@ -113,8 +112,6 @@ class Workspace(DatabaseModel):
     diff_updated_at: datetime.datetime | None = None
     # User-supplied or auto-generated branch name. Required for WORKTREE workspaces (validated at the API layer); optional for CLONE; null for IN_PLACE.
     requested_branch_name: str | None = None
-    # DELIBERATE-TEMPORARY: workspace-bound harness selection.
-    harness: HarnessName = HarnessName.CLAUDE
 
 
 # Runtime tables
@@ -190,6 +187,13 @@ class AgentTaskStateV2(BaseTaskState):
     last_processed_message_id: AgentMessageID | None = None
     title: str | None = None
     workspace_id: WorkspaceID
+    # Terminal agents only: the session id the registered program last
+    # signalled (validated to [A-Za-z0-9._-]{1,128}), used to resume the
+    # program after a backend restart.
+    terminal_session_id: str | None = None
+    # Terminal agents only: the shell pid of the handler's last PTY spawn,
+    # used to reap a crash-surviving shell before relaunching.
+    terminal_shell_pid: int | None = None
 
 
 class NoOpTaskStateV1(BaseTaskState):

@@ -438,6 +438,10 @@ class SpawnedPtyProcess(RunningProcess):
         return self._helper.primary_fd
 
     @property
+    def shell_pid(self) -> int | None:
+        return self._helper.shell_pid if self._helper is not None else None
+
+    @property
     def is_checked(self) -> bool:
         return False
 

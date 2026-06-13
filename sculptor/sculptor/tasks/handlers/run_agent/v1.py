@@ -256,10 +256,10 @@ def run_agent_task_v1(
                         )
     # handle ConcurrencyExceptionGroup as a general exception
     except ConcurrencyExceptionGroup as e:
-        _on_exception(e, task_id, user_reference, services, shutdown_event)
+        on_exception(e, task_id, user_reference, services, shutdown_event)
     # all other exceptions should be handled and turned into task failures
     except Exception as e:
-        _on_exception(e, task_id, user_reference, services, shutdown_event)
+        on_exception(e, task_id, user_reference, services, shutdown_event)
     return None
 
 
@@ -650,7 +650,7 @@ def _send_user_input_message(
     return user_input_message_being_processed
 
 
-def _on_exception(
+def on_exception(
     e: Exception,
     task_id: TaskID,
     user_reference: UserReference,

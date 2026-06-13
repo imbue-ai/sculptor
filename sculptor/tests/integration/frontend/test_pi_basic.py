@@ -10,7 +10,6 @@ parity is the responsibility of test_pi_capability_gating.py.
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.fake_pi import install_fake_pi_binary
@@ -33,7 +32,7 @@ def test_pi_workspace_basic_response(
         # the test does not rely on a "Fake Pi" entry being registered in the
         # LLMModel enum.
         model_name=None,
-        harness=HarnessName.PI,
+        agent_type="pi",
     )
 
     chat_panel = task_page.get_chat_panel()
@@ -57,7 +56,7 @@ def test_pi_workspace_suppresses_claude_only_surfaces(
         sculptor_page=page,
         workspace_name="Pi Affordances",
         model_name=None,
-        harness=HarnessName.PI,
+        agent_type="pi",
     )
 
     chat_panel = task_page.get_chat_panel()
