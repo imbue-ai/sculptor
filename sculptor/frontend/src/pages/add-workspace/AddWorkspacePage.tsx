@@ -246,16 +246,27 @@ export const AddWorkspacePage = (): ReactElement => {
       convertNewWorkspaceToTab({ draftId, workspaceId });
       setWorkspaceNameDraft(null);
 
+      // If the remembered registered agent's registration is no longer present
+      // (deleted since it was picked), fall back to Claude rather than leaving
+      // the just-created workspace with a failed, agentless first-agent create.
+      const isMissingRegistration =
+        agentType === "registered" && !registrations.some((r) => r.registrationId === registrationId);
+      const effectiveAgentType = isMissingRegistration ? "claude" : agentType;
+      const effectiveRegistrationId = isMissingRegistration ? undefined : registrationId;
+      const effectiveAgentTypeValue: StoredAgentType = isMissingRegistration
+        ? "claude"
+        : (agentTypeValue as StoredAgentType);
+
       // Create first agent (no prompt in the simplified form). Terminal
       // agents (plain and registered) have no model concept, so the
       // default-model preference only applies to chat types.
-      const isTerminalType = agentType === "terminal" || agentType === "registered";
+      const isTerminalType = effectiveAgentType === "terminal" || effectiveAgentType === "registered";
       const agentResponse = await createWorkspaceAgent({
         path: { workspace_id: workspaceId },
         body: {
           model: isTerminalType ? undefined : (defaultModelPreference as LlmModel),
-          agentType,
-          registrationId,
+          agentType: effectiveAgentType,
+          registrationId: effectiveRegistrationId,
         },
       });
 
@@ -265,13 +276,13 @@ export const AddWorkspacePage = (): ReactElement => {
 
       // The agent was actually created with this type — record it as the
       // shared MRU so the tab bar's plain + click creates the same type.
-      setLastUsedAgentType(agentTypeValue as StoredAgentType);
+      setLastUsedAgentType(effectiveAgentTypeValue);
 
       posthog.capture("workspace.created", {
         workspace_id: workspaceId,
         agent_id: agentResponse.data.id,
         mode,
-        agent_type: agentType,
+        agent_type: effectiveAgentType,
         has_workspace_name: workspaceName.trim().length > 0,
         // Branch names are user-entered text (they can encode feature/ticket/
         // customer names), so record only whether one was chosen.
@@ -312,6 +323,7 @@ export const AddWorkspacePage = (): ReactElement => {
     mode,
     agentType,
     registrationId,
+    registrations,
     agentTypeValue,
     setLastUsedAgentType,
     sourceBranch,

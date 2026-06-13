@@ -260,9 +260,12 @@ export const AgentTabs = (): ReactElement | null => {
             body: { model, agentType, registrationId },
           });
         } catch (error) {
-          // A stored type can become unavailable (e.g. a registered agent
-          // whose registration was deleted) — retry once as Claude.
-          if (requestedType === undefined && agentType !== "claude") {
+          // A remembered registered agent's registration can be deleted out
+          // from under the stored default — only that case retries as Claude.
+          // Other failures (e.g. a transient error creating a plain terminal
+          // or pi agent) propagate rather than silently substituting a
+          // different agent type than the user's default.
+          if (requestedType === undefined && agentType === "registered") {
             setLastUsedAgentType("claude");
             response = await createWorkspaceAgent({
               path: { workspace_id: workspaceID },
