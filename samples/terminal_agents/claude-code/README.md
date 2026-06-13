@@ -49,7 +49,10 @@ the TOML at the copied hooks file.)
   terminal):
   - `SessionStart` → `idle`;
   - `UserPromptSubmit` → `busy` (spinner on the tab) and reports the
-    session id for restart resume. The id is deliberately NOT reported at
+    session id for restart resume. The hook extracts the id from the JSON
+    Claude pipes to its stdin with POSIX `sed` — no python3 or other host
+    tooling — anchored to the payload's leading `session_id` field so prompt
+    text can't spoof it. The id is deliberately NOT reported at
     `SessionStart`: Claude only persists a resumable transcript once a
     message exists, so an id captured at startup may be unresumable and
     `--resume` would fail after a restart;
