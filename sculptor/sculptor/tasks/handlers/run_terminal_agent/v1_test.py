@@ -13,24 +13,23 @@ from uuid import uuid4
 
 import pytest
 
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.event_utils import ReadOnlyEvent
-from imbue_core.sculptor.state.messages import Message
 from sculptor.common.plugin import get_plugins_base_dir
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Project
 from sculptor.database.models import Task
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.event_utils import ReadOnlyEvent
 from sculptor.interfaces.agents.agent import EnvironmentAcquiredRunnerMessage
 from sculptor.interfaces.agents.agent import EnvironmentReleasedRunnerMessage
 from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.interfaces.agents.agent import TerminalAgentConfig
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import OrganizationReference
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
+from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import UserReference
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
@@ -45,6 +44,7 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     get_terminal_manager,
 )
+from sculptor.state.messages import Message
 from sculptor.tasks.api import run_task
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import get_agent_terminal_config
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import make_agent_terminal_id

@@ -6,8 +6,6 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.sculptor.state.messages import Message
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Project
@@ -18,11 +16,13 @@ from sculptor.interfaces.agents.agent import TerminalAgentSignalRunnerMessage
 from sculptor.interfaces.agents.agent import TerminalStatusSignal
 from sculptor.interfaces.agents.tasks import TaskState
 from sculptor.primitives.ids import RequestID
+from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import UserReference
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.data_model_service.api import TaskDataModelService
 from sculptor.services.workspace_service.default_implementation import DefaultWorkspaceService
+from sculptor.state.messages import Message
 from sculptor.web.auth import authenticate_anonymous
 
 

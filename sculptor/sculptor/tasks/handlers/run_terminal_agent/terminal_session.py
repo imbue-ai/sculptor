@@ -25,8 +25,8 @@ from pathlib import Path
 import psutil
 from loguru import logger
 
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.primitives.ids import TaskID
 from sculptor.services.workspace_service.environment_manager.env_file_parser import load_project_env_vars
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     LocalTerminalManager,

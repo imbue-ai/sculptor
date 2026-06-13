@@ -15,8 +15,8 @@ from typing import Callable
 
 from loguru import logger
 
-from imbue_core.processes.local_process import run_blocking
-from imbue_core.subprocess_utils import ProcessError
+from sculptor.foundation.processes.local_process import run_blocking
+from sculptor.foundation.subprocess_utils import ProcessError
 
 _GIT_TIMEOUT_SECONDS = 5.0
 

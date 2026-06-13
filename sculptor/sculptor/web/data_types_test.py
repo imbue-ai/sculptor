@@ -1,7 +1,7 @@
 """Unit tests for sculptor.web.data_types."""
 
-from imbue_core.sculptor.state.messages import LLMModel
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.state.messages import LLMModel
 from sculptor.web.data_types import AgentTypeName
 from sculptor.web.data_types import CreateWorkspaceRequestV2
 from sculptor.web.data_types import StartTaskRequest
