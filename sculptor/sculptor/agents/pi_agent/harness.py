@@ -74,9 +74,10 @@ class PiHarness(Harness):
             # "pi can carry images", not per-model.
             supports_image_input=True,
             supports_fast_mode=False,
-            # Pi drops ClearContextUserMessage (see agent_wrapper._push_message),
-            # so the `/clear` context-reset path is unavailable — false.
-            supports_context_reset=False,
+            # Pi handles ClearContextUserMessage by sending `new_session` between
+            # turns (see agent_wrapper._handle_clear_context), which clears history
+            # in-process while preserving model / thinking level — true.
+            supports_context_reset=True,
             supports_compaction=False,
             supports_background_tasks=False,
             # Pi persists a per-task JSONL session and relaunches against it with

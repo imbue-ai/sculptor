@@ -71,6 +71,18 @@ class PiVersionMismatchError(AgentClientError):
         self.pinned_version = pinned_version
 
 
+class PiContextResetError(AgentClientError):
+    """Raised when pi's ``new_session`` (the ``/clear`` context-reset path) fails.
+
+    A failed reset (``success:false`` response, an extension's
+    ``session_before_switch`` veto returning ``data.cancelled:true``, or no
+    response within the budget) is a recoverable client error, NOT a crash: the
+    conversation is intact and the user can retry. Being an ``AgentClientError``
+    routes it through the wrapper's report-and-continue path, so the failed
+    request surfaces while the agent keeps running.
+    """
+
+
 class PiCrashError(AgentCrashed):
     """
     This error is raised when pi reports a structured error mid-turn or its subprocess exits unexpectedly.
