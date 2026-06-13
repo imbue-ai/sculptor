@@ -23,10 +23,13 @@ from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
 
-# Banner → busy → (long enough for the dot assertion) → idle → wait for one
-# line of stdin → exit marker. Runs as a job of the login shell.
+# Banner → busy → block on stdin (the busy state is sticky, held open until
+# the test releases it) → idle → block on stdin again → exit marker. Runs as a
+# job of the login shell. Gating busy→idle on a typed line instead of a
+# wall-clock `sleep` keeps the transient running-dot assertion from racing CI
+# latency.
 _FAKE_TUI_COMMAND = (
-    "echo FAKE-TUI-BANNER; sculpt signal busy; sleep 8; sculpt signal idle; read -r _line; echo fake-tui-exited"
+    "echo FAKE-TUI-BANNER; sculpt signal busy; read -r _line; sculpt signal idle; read -r _line; echo fake-tui-exited"
 )
 
 
@@ -55,11 +58,16 @@ def test_registered_terminal_agent_launches_program(sculptor_instance_: Sculptor
         # The launch command ran (the readiness wait didn't swallow it).
         wait_for_xterm_substring(page, "FAKE-TUI-BANNER")
 
-        # The program's own signals drive the dot: busy → spinner, idle → neutral.
+        # The program's own signals drive the dot. busy is sticky and held open
+        # until we release it, so the spinner is observable regardless of
+        # machine speed.
         expect(terminal_tab).to_have_attribute("data-dot-status", "running")
+
+        # Release the busy hold (first stdin line) → the program signals idle.
+        run_command_in_agent_terminal(page, "release")
         expect(terminal_tab).to_have_attribute("data-dot-status", re.compile(r"^(read|unread)$"))
 
-        # Quit the program (it reads one line of stdin) — this lands at a
+        # Quit the program (it reads a second line of stdin) — this lands at a
         # usable shell prompt in the same terminal, with no relaunch.
         run_command_in_agent_terminal(page, "q")
         wait_for_xterm_substring(page, "fake-tui-exited")
