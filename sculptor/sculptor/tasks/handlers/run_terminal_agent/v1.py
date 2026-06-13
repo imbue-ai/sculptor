@@ -22,10 +22,6 @@ from typing import cast
 
 from loguru import logger
 
-from imbue_core.concurrency_group import ConcurrencyExceptionGroup
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.event_utils import ReadOnlyEvent
-from imbue_core.progress_tracking.progress_tracking import RootProgressHandle
 from sculptor.common.plugin import get_plugins_base_dir
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskInputsV2
@@ -33,6 +29,10 @@ from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Project
 from sculptor.database.models import Task
 from sculptor.database.models import TaskID
+from sculptor.foundation.concurrency_group import ConcurrencyExceptionGroup
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.event_utils import ReadOnlyEvent
+from sculptor.foundation.progress_tracking.progress_tracking import RootProgressHandle
 from sculptor.interfaces.agents.agent import EnvironmentAcquiredRunnerMessage
 from sculptor.interfaces.agents.agent import EnvironmentReleasedRunnerMessage
 from sculptor.interfaces.agents.agent import EnvironmentTypes

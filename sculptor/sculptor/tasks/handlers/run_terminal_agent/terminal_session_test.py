@@ -15,8 +15,8 @@ from unittest.mock import patch
 import psutil
 import pytest
 
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.primitives.ids import TaskID
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     get_terminal_manager,
 )

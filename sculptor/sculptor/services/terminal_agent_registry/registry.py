@@ -18,7 +18,7 @@ from loguru import logger
 from pydantic import ValidationError
 from pydantic import model_validator
 
-from imbue_core.pydantic_serialization import SerializableModel
+from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.utils.build import get_sculptor_folder
 
 _REGISTRATIONS_DIR_NAME = "terminal_agents"
