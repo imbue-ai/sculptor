@@ -1,193 +1,205 @@
 # Terminal Agents — Review
 
-Final review pass over `origin/main...HEAD` (29 commits, 98 files, +6,879/−471)
-against `spec.md`, `architecture.md`, and the plan. This pass re-verified every
-requirement in code, re-ran the unit suites, ran the feature's Playwright
-integration suite (which the earlier in-branch review pass had not executed),
-and re-ran the `/code-review-checklist` skill on the current tip.
+Fresh review pass over `origin/main...HEAD` (55 commits, 114 files,
++7,686/−549) against `spec.md`, `architecture.md`, and the plan. This pass
+re-derived every requirement against current code, re-ran `just format` /
+`just check` / `just test-unit`, re-ran the feature's Playwright integration
+suite, and re-ran `/code-review-checklist` (fanned out across backend Python,
+frontend, tests, and commit/sample text).
+
+It supersedes an earlier in-branch review that concluded "ready to merge, all
+findings resolved." That pass covered an earlier tip (29 commits); **26 more
+commits have landed since** (split-button refactor, shared-MRU pickers,
+auto-naming, roomier terminal typography, the bundled-registration
+auto-install, session-id-on-first-prompt, the waiting-dot and tab-leak fixes).
+This pass re-verified the whole diff and surfaces a handful of findings the
+prior pass did not — most of them introduced by those newer commits.
 
 ## Summary
 
 - **The implementation meets the spec.** All 24 `REQ-*` requirements are
-  Covered (one with a benign, functionally-equivalent deviation — see
-  REQ-SIG-2). Every architecture decision is reflected in the diff: dedicated
-  task handler owning an agent-scoped PTY, run-scoped ephemeral signal
-  messages, capability-gated panel switch, TOML registration directory,
-  session-id validation + shell-quoting, stale-shell reaping, and the
-  server-side automated-prompt reverse channel.
-- **All test suites pass.** `just format` (no-op), `just check` (lint,
-  typecheck, ratchets), `just test-unit` (backend, frontend, imbue-core,
-  sculpt) all exit 0. The feature's Playwright suite: **13/13 passed**
-  (90.8s). The pi/conformance integration files this diff modified: **29/29
-  passed** (103.4s). The only thing not executed is the token-burning
-  `@real_claude` e2e (see Test Coverage).
-- **An earlier review pass on this branch already ran and was addressed.**
-  Its findings (comment scrub, TanStack migration, `BEGIN IMMEDIATE`
-  read-then-write hardening, dead-code removal, status reset on
-  environment-release) landed as commits `4ef9e9fc2e`, `27703313ca`,
-  `695bad31c3`, `295c0dfd4e`, `371ef2caa1`, `d2560dc99c`, `3ebcd95722`. This
-  pass verified each fix is in place.
-- **No blockers.** The remaining findings are LOW: five leftover
-  `timeout=15_000` assertions the timeout-cleanup commit missed, a registrations
-  hook that returns a custom shape instead of the standard `BackendQueryResult`
-  bundle, and some residual direct `get_by_test_id` use in test bodies.
+  Covered (two with benign, documented deviations — REQ-SIG-2 and REQ-TYPE-4).
+  Every architecture decision is reflected in the diff.
+- **All deterministic suites pass.** `just format` (no-op), `just check`
+  (lint, typecheck, ratchets, generate-api, generate-sculpt-client — tree
+  clean afterward, so generated TS/sculpt-client types are current), and
+  `just test-unit` (backend, frontend, imbue-core, sculpt) all exit 0. The
+  feature's Playwright suite: **16/16 passed (114.5s)**. The token-burning
+  `@real_claude` e2e was not re-run this pass (see Test Coverage).
+- **No CRITICAL or HIGH findings; nothing that strictly blocks merge.** Five
+  MEDIUM items were surfaced and have all been **fixed in this pass** (commits
+  `16026043bf`, `2108c3a257`, `b1f8bfb82e`, `f5d858279e` — see each finding
+  below). A sixth — the `enable_multi_harness` → `enable_pi_agent` config
+  rename — was reviewed and consciously **won't-fixed**: the flag is
+  experimental and no real users have it set, so an upgrade migration isn't
+  worth the added complexity.
+- **The amended REQ-CLAUDE-1 is correctly implemented.** The bundled Claude
+  Code registration is now **auto-installed out of the box** as a user-owned
+  registration (sentinel-guarded so deletion sticks and user edits are never
+  overwritten) — not the "copyable sample, absent from the menu" the prior
+  review and architecture §8 describe. Verified by code and the passing
+  `test_bundled_claude_code_registration_installed_by_default`.
 
 ## Requirements Coverage
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| REQ-TYPE-1 (per-agent type) | Covered | `interfaces/agents/agent.py:490-506` new config variants in `AgentConfigTypes`; `web/app.py:1592` `_agent_config_for_request` stamps per-agent at creation |
-| REQ-TYPE-2 (`+` menu lists all types) | Covered | `AgentTabs.tsx:507-566` menu (Claude/pi/Terminal/registrations); `web/app.py:3162` registrations listing route; `test_agent_type_menu.py` |
-| REQ-TYPE-3 (replace `Workspace.harness`) | Covered | Column dropped (`database/models.py`, migration `b3f1a9c2d6e5` + version test); `HarnessName`, `_agent_config_for_workspace`, request/response fields all deleted |
-| REQ-TYPE-4 (pi gated by `ENABLE_MULTI_HARNESS`) | Covered | `AgentTabs.tsx:541` and `AddWorkspacePage.tsx:442` render the pi entry conditionally; gating asserted in `test_agent_type_menu.py:65`, `test_add_workspace_agent_type.py:37` |
-| REQ-TYPE-5 (new-workspace flow choice) | Covered | `AddWorkspacePage.tsx:412-466` agent-type select replaces the harness picker; first agent still created with no prompt; `test_add_workspace_agent_type.py` |
-| REQ-TYPE-6 (split button, last-used type) | Covered | `AgentTabs.tsx:497-565` split `+`/chevron; `agentTabs.ts:33` `lastUsedAgentTypeAtom` (client-side, `registered:<id>` encoding); one-click flow asserted in `test_agent_type_menu.py:22` |
+| REQ-TYPE-1 (per-agent type, mixed workspace) | Covered | `web/data_types.py:39-48` (`AgentTypeName`); `web/app.py:1598-1630` `_agent_config_for_request` stamps config per task; `interfaces/agents/agent.py:519-523` config variants; `test_multi_agent_workspace.py` |
+| REQ-TYPE-2 (`+` menu lists all types) | Covered | `AgentTabs.tsx:535-569`; registrations route `web/app.py:3179`; `test_agent_type_menu.py` |
+| REQ-TYPE-3 (replace `Workspace.harness`) | Covered | Column dropped (migration `b3f1a9c2d6e5`, symmetric downgrade + version test); `HarnessName`, `_agent_config_for_workspace`, request/response shims grep-clean |
+| REQ-TYPE-4 (pi gated by flag) | Covered (deviation) | `AgentTabs.tsx:543-551`, `AddWorkspacePage.tsx:459-463`. Flag renamed `ENABLE_MULTI_HARNESS` → `enable_pi_agent`/`enablePiAgent` (commit `c406b95e2f`); functionally identical gate |
+| REQ-TYPE-5 (new-workspace flow choice) | Covered | `AddWorkspacePage.tsx:432-478` type select replaces harness picker; first agent still prompt-less (`:252-260`); old `test_workspace_harness_picker.py` deleted |
+| REQ-TYPE-6 (split button, last-used type) | Covered | `AgentTabs.tsx:494-572` split `+`/chevron; `agentTabs.ts:42-44` MRU atom (initial `claude`); `test_agent_type_menu.py`, `test_first_agent_type_defaults_to_shared_last_used` |
 | REQ-REG-1 (user-scope declarative config) | Covered | `services/terminal_agent_registry/registry.py` loads `<sculptor folder>/terminal_agents/*.toml`; no repo scope, no settings UI |
-| REQ-REG-2 (name + launch cmd; resume template) | Covered | `TerminalAgentRegistration` (registry.py:30) requires display_name + launch_command; optional `resume_command_template` (validated: `{session_id}` only, at most once) + `accepts_automated_prompts` |
-| REQ-REG-3 (re-read without restart) | Covered | Listing route re-reads the directory per request (`app.py:3162`); both pickers refetch on menu open; proven live in `test_registered_terminal_agent_appears_in_menu_and_creates` |
-| REQ-SIG-1 (local HTTP event API) | Covered | `POST /api/v1/agents/{agent_id}/signal` (`web/app.py:3188`); `terminal_signal_test.py` |
-| REQ-SIG-2 (inject env vars) | Covered (deviation) | `run_terminal_agent/v1.py:196-203` injects `SCULPT_API_PORT`/`SCULPT_AGENT_ID`/etc. via PTY `extra_env`. The auth token is **not** injected; the `sculpt` CLI self-fetches it from the auth-exempt loopback session-token endpoint. Same security posture (any loopback process can mint it), hooks need no credentials in env — functionally satisfies the requirement, deviates from architecture §4's "inject the token" letter. |
-| REQ-SIG-3 (`sculpt signal` subcommands) | Covered | `tools/sculpt/sculpt/commands/signal.py` (busy/idle/waiting/files-changed/session-id; `waiting` maps to wire `waiting-on-input`); `tools/sculpt/tests/unit/test_signal.py` |
-| REQ-SIG-4 (closed v1 vocab, ignore unknown) | Covered | `_TERMINAL_SIGNAL_STATUS_BY_EVENT` (`app.py:3173`); unknown events logged + 204; `SignalEventRequest.event` is a plain string so additive evolution validates |
-| REQ-SIG-5 (drive tab indicators) | Covered | `derived.py:468-481` busy→RUNNING (spinner), waiting→WAITING (attention dot); unread dot deliberately not driven (spec amendment per architecture §5); `derived_task_status_test.py`, `test_terminal_agent_signals.py` |
-| REQ-SIG-6 (files-changed → diff refresh) | Covered | `app.py` files-changed → `maybe_refresh_workspace_diff` (outside the transaction); `test_files_changed_refreshes_workspace_diff` + integration |
-| REQ-TERM-1 (terminal panel = shell in code dir) | Covered | `run_terminal_agent/v1.py` handler + `AgentTerminalPanel.tsx`; no chat UI, no parsing; `test_terminal_agent_basic.py` |
-| REQ-TERM-2 (neutral status w/o signals) | Covered | `scan_terminal_signal_state` (`derived.py:98`) → READY with no signals; broken-integration degradation asserted in `test_no_signals_this_run_is_rejected` + neutral-dot integration assertions |
-| REQ-TERM-3 (periodic diff refresh, swappable) | Covered | `diff_refresh.py` `PeriodicDiffRefresher` (3s interval, `git status`+HEAD fingerprint pre-check per plan Q&A, encapsulated class); `diff_refresh_test.py` |
-| REQ-LIFE-1 (PTY survives tab/window close) | Covered | PTY owned by the backend task, not the WS; reconnect-with-scrollback asserted in `test_terminal_agent_basic.py:80-85`; `agent_terminal_ws_test.py` |
-| REQ-LIFE-2 (terminate on archive/teardown) | Covered | Handler `finally` → `stop_agent_terminal` (`v1.py:263`); manager registered under the workspace environment id so `stop_terminals_for_environment` is the backstop (`test_stop_terminals_for_environment_stops_agent_terminal`) |
-| REQ-LIFE-3 (resume after restart via session id) | Covered | `launch_command_for_start` (`v1.py:67`) renders the resume template when session id + template exist; `render_resume_command` validates+quotes; restart leg of `test_registered_terminal_agent_resumes_after_restart` |
-| REQ-LIFE-4 (plain terminal → fresh shell) | Covered | Plain config returns no launch command; `test_plain_terminal_agent_gets_fresh_shell_after_restart` asserts fresh shell and no stale scrollback |
-| REQ-LIFE-5 (program runs in shell; exit → prompt) | Covered | `write_launch_command` types the command into the login shell as a job; no auto-relaunch on exit (WS respawn is a bare shell); `test_registered_terminal_agent_launches_program` exit-to-prompt leg |
-| REQ-UI-1 (terminal occupies chat space) | Covered | `ChatPanelContent.tsx:34-56` switches on `useTaskSupportsChatInterface`; no chat input/model picker for terminal agents |
-| REQ-UI-2 (capability-gate, not ad-hoc) | Covered | `supports_chat_interface` on `HarnessCapabilities` (`harness.py:76`, no default — every harness forced to declare); FE reads via capability atom/hook; no config-type conditionals in the frontend |
-| REQ-UI-3 (tab behaves like any other) | Covered | Rename/archive/delete agnostic to type (`test_terminal_agent_tab_rename_and_delete`); dots from the same `data-dot-status` path |
-| REQ-CLAUDE-1 (bundled Claude Code example) | Covered | `samples/terminal_agents/claude-code/` (TOML + hooks JSON + README), copyable, absent from the menu until installed; loader round-trip test pins the sample to the schema; `real_claude/test_claude_code_terminal_agent.py` |
+| REQ-REG-2 (name + launch cmd; resume template) | Covered | `TerminalAgentRegistration` (registry.py:30-60) requires display_name + launch_command; optional `resume_command_template` (validated: `{session_id}` only, ≤1) + `accepts_automated_prompts` |
+| REQ-REG-3 (re-read without restart) | Covered | Listing route re-reads dir per request (`app.py:3179-3190`); both pickers refetch on open (`staleTime: 0`); `test_registered_terminal_agent_appears_in_menu_and_creates` |
+| REQ-SIG-1 (local HTTP event API) | Covered | `POST /api/v1/agents/{agent_id}/signal` (`app.py:3205`); `terminal_signal_test.py` |
+| REQ-SIG-2 (inject env vars) | Covered (deviation) | `run_terminal_agent/v1.py:207-217` injects `SCULPT_API_PORT`/`SCULPT_AGENT_ID`/etc. The auth token is **not** injected as env; `sculpt` self-fetches it from the loopback-exempt `/api/v1/session-token` (`web/auth.py:107-118`). Functionally equivalent (arguably tighter — no credential in env). Architecture §4 says "inject the token"; worth one doc line |
+| REQ-SIG-3 (`sculpt signal` subcommands) | Covered | `tools/sculpt/sculpt/commands/signal.py:57-89` (busy/idle/waiting/files-changed/session-id; `waiting`→wire `waiting-on-input`); `tools/sculpt/tests/unit/test_signal.py` |
+| REQ-SIG-4 (closed v1 vocab, ignore unknown) | Covered | `app.py:3195-3199, 3261-3262` (unknown → `logger.info` + 204) |
+| REQ-SIG-5 (drive tab indicators) | Covered | `derived.py:477-481` busy→RUNNING (spinner), waiting→WAITING (attention dot); unread dot deliberately not driven (spec amendment); `derived_task_status_test.py`, `test_terminal_agent_signals.py` |
+| REQ-SIG-6 (files-changed → diff refresh) | Covered | `app.py:3246-3248, 3263-3264` → `maybe_refresh_workspace_diff` (outside the txn); integration-tested |
+| REQ-TERM-1 (terminal panel = shell in code dir) | Covered | `run_terminal_agent/v1.py` handler + `AgentTerminalPanel.tsx`; no chat UI/parsing; `test_terminal_agent_basic.py` |
+| REQ-TERM-2 (neutral status w/o signals) | Covered | `derived.py:481` (no signal → READY); fail-open hooks degrade to plain-terminal behavior |
+| REQ-TERM-3 (periodic diff refresh, swappable) | Covered | `diff_refresh.py` `PeriodicDiffRefresher` (3s; `git status`+HEAD fingerprint pre-check; encapsulated class); `diff_refresh_test.py` |
+| REQ-LIFE-1 (PTY survives tab/window close) | Covered | PTY owned by backend task, not the WS; `test_terminal_agent_basic.py`, `agent_terminal_ws_test.py` |
+| REQ-LIFE-2 (terminate on archive/teardown) | Covered | `v1.py:276-277` finally → `stop_agent_terminal`; manager registered under env id so `stop_terminals_for_environment` is the backstop (`local_terminal_manager.py:156-166`) |
+| REQ-LIFE-3 (resume after restart via session id) | Covered | `launch_command_for_start` (`v1.py:65-78`) renders the resume template when session id + template exist; `render_resume_command` validates+quotes; `test_registered_terminal_agent_resumes_after_restart` |
+| REQ-LIFE-4 (plain terminal → fresh shell) | Covered | Plain config returns no launch command; `test_plain_terminal_agent_gets_fresh_shell_after_restart` |
+| REQ-LIFE-5 (program in shell; exit → prompt) | Covered | `write_launch_command` types the command as a shell job; WS-respawn is a bare shell, no auto-relaunch; `test_registered_terminal_agent_launches_program` |
+| REQ-UI-1 (terminal occupies chat space) | Covered | `ChatPanelContent.tsx:42-49` switches on `useTaskSupportsChatInterface`; no chat input/model picker |
+| REQ-UI-2 (capability-gate, not ad-hoc) | Covered | `supports_chat_interface` on `HarnessCapabilities` (`harness.py:76`, no default → every harness declares); FE reads via capability atom/hook |
+| REQ-UI-3 (tab behaves like any other) | Covered | Rename/archive/delete type-agnostic; dots from the same `data-dot-status` path; `test_terminal_agent_tab_rename_and_delete` |
+| REQ-CLAUDE-1 (bundled Claude Code, **amended: installed out of the box**) | Covered | `terminal_agent_registry/bundled.py` auto-installs `samples/terminal_agents/claude-code/` into `<sculptor folder>/terminal_agents/` on first run (`web/app.py:407`), sentinel-guarded (`.claude-code.installed`), never overwrites user files, deletion sticks; `samples/.../{claude-code.toml,claude-code-hooks.json,README.md}`; `bundled_test.py`, `test_bundled_claude_code_registration_installed_by_default`, `real_claude/test_claude_code_terminal_agent.py` |
 
-Architecture decisions verified in the diff: dedicated handler instead of the
-chat loop (`tasks/api.py:40` dispatch); no `TerminalAgent`/`create_agent_for_run`
-extension (comment documents why at `harness_registry.py:98`); agent-scoped PTY
-key `agent:<task_id>` registered under the environment id; ephemeral
-`TerminalAgentSignalRunnerMessage` with `EnvironmentAcquiredRunnerMessage` as the
-run-start anchor (plus reset on `EnvironmentReleased`, an improvement found in
-the earlier pass); shell-self-exit keeps the task RUNNING with on-demand respawn;
-shell pid persisted and reaped with session-leader/age guards; CI babysitter
-inherits config type from the most recent chat agent (plan Q&A decision 2,
-`coordinator.py:355`); first-agent intro message skipped for terminal agents
-(`app.py:1763`). The one mechanism deviation from the architecture's §9 file
-list: Commit/PR/custom-action **consumers are untouched** — routing lives in
+Architecture decisions verified: dedicated handler instead of the chat loop
+(`tasks/api.py` dispatch); no `TerminalAgent`/`create_agent_for_run` extension
+(documented in `harness_registry.py`); agent-scoped PTY `agent:<task_id>`
+registered under the environment id; run-scoped **ephemeral**
+`TerminalAgentSignalRunnerMessage` anchored on `EnvironmentAcquiredRunnerMessage`
+and short-circuited by `EnvironmentReleasedRunnerMessage` (so a pre-restart
+`waiting` is never resurrected); shell-self-exit keeps the task RUNNING with
+on-demand respawn; shell pid persisted and reaped with session-leader/create-time
+guards; CI babysitter inherits its chat-agent config type from the most recent
+chat agent and skips terminal configs in model selection
+(`coordinator.py:355-393`); first-agent intro message skipped for terminal agents.
+
+**Two doc-currency deviations (not code defects):** architecture §8 still
+describes the bundled registration as a copyable sample absent from the menu
+(superseded by the amended REQ-CLAUDE-1 auto-install); architecture §9's
+consumer-file edits were superseded by a cleaner seam — routing is decided by
 which hook registers `chatActionsAtom` (`useChatData` for chat agents,
-`useTerminalChatActions` for opted-in terminal agents, nothing → disabled).
-This is cleaner than editing each consumer and delivers the same behavior.
+`useTerminalChatActions` for opted-in terminal agents, nothing → disabled
+buttons), so Commit/PR/custom-action consumers are untouched. Both deliver the
+specified behavior.
 
 ## User Scenarios
 
-- **Plain terminal in place of chat** — Delivered. Terminal agent opens a login
-  shell in the workspace code dir; neutral dot; file changes reach the Changes
-  panel via periodic refresh; PTY survives tab switches. Covered end-to-end by
-  `test_terminal_agent_basic.py` (passed).
-- **Claude Code TUI as a registered terminal agent** — Delivered. The bundled
-  sample's hooks report busy/idle/waiting/files-changed/session-id through
-  `sculpt signal`; dots driven accordingly. Covered deterministically by the
-  fake-program tests (passed) and by the real-TUI `@real_claude` e2e (not run
-  this pass — see Test Coverage).
+- **Plain terminal in place of chat** — Delivered. Login shell in the code
+  dir, neutral dot, periodic diff refresh, PTY survives tab switches. Covered
+  by `test_terminal_agent_basic.py` (passed).
+- **Claude Code TUI as a registered terminal agent** — Delivered, and now
+  installed out of the box. Hooks report busy/idle/waiting/files-changed/
+  session-id via `sculpt signal`; dots driven accordingly. Covered
+  deterministically by the fake-program tests (passed) and the real-TUI
+  `@real_claude` e2e (not re-run this pass — see Test Coverage).
 - **Resume after Sculptor restart** — Delivered. Session id persisted on
-  `AgentTaskStateV2.terminal_session_id` (validated charset), relaunch renders
-  the resume template (shell-quoted), surviving prior shell reaped first.
-  Covered by `test_registered_terminal_agent_resumes_after_restart` (passed).
-- **Quitting the TUI drops to a shell** — Delivered. The program runs as a
-  shell job; exit lands at a usable prompt, status returns to neutral, no
-  relaunch. Covered by `test_registered_terminal_agent_launches_program` (passed).
-- **Mixed workspace** — Delivered. Agent type is per-task config; diffs,
-  branch info, and the commit bar stay workspace-shared. Exercised implicitly
-  by every feature test (chat agent + terminal agents side by side).
+  `AgentTaskStateV2` (validated charset), relaunch renders the resume template
+  (shell-quoted), surviving prior shell reaped first. Covered by
+  `test_registered_terminal_agent_resumes_after_restart` (passed). Note: the
+  bundled hooks now report the session id on **first prompt** (UserPromptSubmit),
+  not TUI startup, so a restart before the user's first message lands a fresh
+  shell — intended, and asserted in the updated real-claude e2e.
+- **Quitting the TUI drops to a shell** — Delivered. Program runs as a shell
+  job; exit lands at a usable prompt; status neutral; no relaunch. Covered by
+  `test_registered_terminal_agent_launches_program` (passed).
+- **Mixed workspace** — Delivered. Agent type is per-task config; diffs/branch
+  info/commit bar stay workspace-shared. Exercised by every feature test.
 - **Registered agent without working hooks** — Delivered. No signals → neutral
-  status, periodic refresh still works; the terminal-input endpoint refuses
-  writes in that state (`test_no_signals_this_run_is_rejected`).
+  status, periodic refresh still works; terminal-input endpoint refuses writes
+  in that state.
 
 ## Test Coverage
 
-- **Tests added:** ~110 new test functions. Backend unit: `v1_test.py` (6),
-  `terminal_session_test.py` (11), `diff_refresh_test.py` (4),
-  `terminal_signal_test.py` (6), `terminal_input_test.py` (12),
-  `derived_task_status_test.py` (17), `agent_terminal_ws_test.py` (5),
-  `registry_test.py` (7), `terminal_agent/harness_test.py` (5),
-  `coordinator_test.py` (+4), `app_basic_test.py` (+10), migration version
-  test, `tools/sculpt/tests/unit/test_signal.py` (6). Integration
-  (Playwright): `test_terminal_agent_basic.py`, `test_terminal_agent_signals.py`,
-  `test_registered_terminal_agent.py`, `test_terminal_agent_automated_prompts.py`,
-  `test_agent_type_menu.py`, `test_add_workspace_agent_type.py`. Real-Claude
-  e2e: `real_claude/test_claude_code_terminal_agent.py`. Coverage maps 1:1 onto
-  the architecture's Testing Strategy section, including the restart-reset
-  status case, pre-environment BUILDING, session-id charset rejection, and the
-  bundled-sample loader round-trip.
+- **Tests added:** ~40 new/modified test files (~110 test functions). Backend
+  unit: `run_terminal_agent/{v1,terminal_session,diff_refresh}_test.py`,
+  `web/{terminal_signal,terminal_input,agent_terminal_ws,derived_task_status,
+  app_basic,data_types}_test.py`, `terminal_agent_registry/{registry,bundled}_test.py`,
+  `coordinator_test.py`, `terminal_agent/harness_test.py`, the migration version
+  test, `tools/sculpt/tests/unit/test_signal.py`. Integration (Playwright):
+  the six feature files plus ported pi/conformance updates. Real-claude e2e:
+  `real_claude/test_claude_code_terminal_agent.py`. The "Add failing test
+  for…" TDD pairs (session-id-before-message, waiting-signal mapping, tab-leak)
+  are correctly ordered and substantive.
 - **Test suite status:** `just format` no-op; `just check` **pass** (lint,
-  typecheck, ratchets); `just test-unit` **pass** (all four suites). Exit 0.
-- **Integration tests run (this pass, via the integration-test harness):**
-  the six feature files — **13 passed in 90.8s**; the four pre-existing files
-  this diff modified (`test_minimum_interface_conformance.py`,
-  `test_pi_basic.py`, `test_pi_capability_gating.py`,
-  `test_pi_managed_install.py`) — **29 passed in 103.4s**. Zero failures.
-- **Real-Claude e2e:** `real_claude/test_claude_code_terminal_agent.py` was run
-  once after the review fixes landed — **1 passed in 23.9s**. The bundled
-  sample's hooks work against the actual Claude Code TUI: session id persisted,
-  busy dot during the turn, neutral dot after. (`@real_claude` stays excluded
-  from CI by design; the deterministic fake-program tests cover the plumbing.)
-- **Skipped / xfail:** none introduced. The two `pytestmark = skipif(win32)`
-  guards on PTY test modules are correct (PTYs are POSIX-only).
+  typecheck, ratchets, generate-api, generate-sculpt-client — tree clean after);
+  `just test-unit` **pass** (all four suites). Exit 0.
+- **Integration tests run (this pass):** the six feature files —
+  **16 passed in 114.5s**, zero failures. Includes the bundled-install,
+  tab-leak, shared-MRU, and signal-dot tests.
+- **Real-Claude e2e:** `real_claude/test_claude_code_terminal_agent.py` was
+  **not** re-run this pass (it burns tokens and needs live Claude). The prior
+  pass ran it green, but the session-id-on-first-prompt change (`a0662293c2`)
+  and the POSIX-`sed` extraction (`3add040a8f`) both touched the bundled hooks
+  it exercises — those production `sed`/hook-event paths are only end-to-end
+  verified by this e2e. Worth one run before/at merge.
+- **Skipped / xfail:** none introduced. Only two `skipif(sys.platform ==
+  "win32")` PTY guards (POSIX-only) — correct.
 
 ## Code Review Findings
 
 `/code-review-checklist` run against `origin/main...HEAD` with the spec as the
-stated goal. An earlier in-branch review pass's findings were all addressed
-(commit map in the Summary); findings below are what remains on the current tip.
+stated goal, fanned out across backend Python, frontend, tests, and
+commit/sample text. No CRITICAL or HIGH findings.
 
 ### Correctness
 
-No issues found. Verified specifically: the two read-evolve-write
-`current_state` paths now open `BEGIN IMMEDIATE` transactions
-(`v1.py:85-97`, `app.py:3196`); `scan_terminal_signal_state` resets on both
-run-start and environment-released anchors so an ended run's signals are never
-revived (`derived.py:98-121`); `create_agent_terminal` registers the manager
-only after `start()` succeeds and stops the loser on a registration race;
-`write_launch_command` removes its output callback in a `finally`; the handler's
-`finally` always stops + unregisters the PTY, with environment-scoped teardown
-as the backstop.
+**MEDIUM — RESOLVED (`b1f8bfb82e`)** — `frontend/.../AgentTabs.tsx:262-274`
+(plain `+` click). The retry-as-Claude `catch` fired for **any** create
+failure of a stored non-Claude type, not just the "registration unavailable"
+case the comment described — so a transient failure while the stored type was
+`terminal` silently created a *Claude* agent and rewrote the MRU. The retry is
+now scoped to `agentType === "registered"`; other failures propagate.
 
-**LOW (informational)** — `terminal_session.py:166` (`reap_stale_shell`). The
-`create_time() >= backend.create_time()` guard rejects recycled pids but also
-skips a genuinely stale shell spawned by the *current* backend process (a
-re-run without a restart). Deliberate trade-off favoring pid-reuse safety;
-the docstring documents the guard order.
+**LOW (informational, safe)** — `web/app.py:537-553` (`start_task`,
+prompt-ful path). For a brand-new workspace with a terminal `agent_type`, the
+workspace is upserted before the 422 reject. Confirmed safe: the upsert and
+the raise share one transaction, so the workspace rolls back; `create_workspace`
+has no filesystem side effects at that point. Validate-after-create is slightly
+awkward but correct.
+
+Otherwise no correctness issues: run-scoped status reset balances on every
+path (incl. error paths); ephemeral signal/anchor messages land in the live
+buffer under the subscription lock; the manager register/unregister race has a
+winner + self-identity guard; `write_launch_command` snapshots its callback and
+removes it in `finally`; the handler `finally` always stops + unregisters the
+PTY with environment-teardown as the backstop.
 
 ### Consistency with stated goal
 
-**LOW (deviation, documented)** — REQ-SIG-2: the architecture said to inject
-the session token into the PTY env; the implementation injects identity/port
-and lets `sculpt` mint the token from the auth-exempt loopback endpoint.
-Functionally equivalent (the endpoint already hands the token to any loopback
-caller), and hooks carry no credentials in env. Worth one line in the
-architecture doc if it is kept current; not a code change.
-
-Otherwise the diff matches the spec with no unrequested scope creep. The §9
-consumer-file edits were superseded by a cleaner seam (routing decided by which
-hook registers `chatActionsAtom`) with the same user-visible result.
+Covered above (Requirements Coverage). Two documented deviations: REQ-SIG-2
+(token bootstrapped from the loopback endpoint rather than injected as env —
+functionally equivalent, arguably tighter) and REQ-TYPE-4 (flag renamed to
+`enable_pi_agent`). No unrequested scope creep. Architecture §8/§9 are stale
+relative to the amended spec and the cleaner `chatActionsAtom` seam,
+respectively — doc-currency, not code.
 
 ### Test coverage
 
-**LOW — RESOLVED (`2f52ea0505`)** — `test_terminal_agent_signals.py:52,55,58,66`
-and `test_terminal_agent_basic.py:71` passed `timeout=15_000` to assertions
-that gate on a real PTY→HTTP→WS→React round-trip; the timeout-cleanup commit
-(`371ef2caa1`) had missed these five. All five now use the 30s default; both
-files re-run green (3 passed).
+**MEDIUM (flake) — RESOLVED (`f5d858279e`)** —
+`tests/integration/frontend/test_registered_terminal_agent.py:28-30`
+(`_FAKE_TUI_COMMAND`). The fake program did `sculpt signal busy; sleep 8;
+sculpt signal idle`, and the test relied on that 8s wall-clock window to catch
+the transient `running` dot — the `no_wall_clock_in_fake_claude` anti-pattern
+(under CI load the first `expect()` poll could land after the sleep elapsed and
+never see `running`). The busy state is now held on a blocking stdin `read`
+(busy signals are sticky) and released by the test with a typed line, so the
+assertion no longer races machine speed. Re-run green (3 passed, 82.9s).
 
-**LOW (informational)** — fixed `page.wait_for_timeout(3_000)` PTY-readiness
-waits before typing (`test_terminal_agent_basic.py:39`,
-`test_terminal_agent_signals.py:46`, `test_registered_terminal_agent.py:146,163`).
-Sleep-then-*type* (not sleep-then-assert): the keystroke target has no
-observable ready signal, and every subsequent wait is a retrying
-`wait_for_xterm_substring`. Acceptable as written; a shell-ready sentinel would
-shave ~3s/test if it ever matters.
+Otherwise no issues: TDD pairs correctly ordered; error/edge paths well
+covered (4404 WS contract, every 409 hazard on terminal-input, unsafe
+session-id parametrization, unknown-event 204); the ported pi tests are a
+faithful mechanical port with no weakened assertions.
 
 ### Proof of work completeness
 
@@ -195,138 +207,204 @@ N/A — the stated goal is a spec, not an autonomous-workflow MR body.
 
 ### Dead code & leftover artifacts
 
-No issues found. The earlier pass's findings (unused
-`PeriodicDiffRefresher.force()`, unreachable `AGENT_TYPE_LABELS.registered`)
-are fixed on the tip; the `Workspace.harness` removal left no stragglers
-(grep-clean for `HarnessName`, old ElementIDs, SQL column).
+No issues found. The `enable_multi_harness`→`enable_pi_agent` and
+`isMultiHarnessEnabledAtom`→`isPiAgentEnabledAtom` renames are complete; the
+harness badge, harness ElementIDs, `HarnessName`, and `_agent_config_for_workspace`
+are fully removed with no danglers; no commented-out code, debug prints, or
+unowned TODO/FIXME in the diff.
 
 ### Comments
 
-No issues found. The earlier pass's 69 `REQ-*`/`architecture §N`/`phase N`
-comment references were scrubbed in `4ef9e9fc2e`; a fresh grep over the diff
-finds none in source. No real-people names; no narration comments.
+**MEDIUM — RESOLVED (`2108c3a257`)** —
+`frontend/src/common/state/atoms/userConfig.ts:203-206`. Stale comment: it
+still said the flag "gates only the new-workspace harness picker and the
+harness badge; the `workspace.harness` execution path is independent of this
+flag" — all three referents gone/renamed in this diff. Rewritten to say the
+flag gates only the pi option in the agent-type pickers.
+
+Otherwise no issues: no `agent_docs/`/`REQ-*`/`phase-N` references or real
+people's names in source comments; new comments explain *why* (guard-order
+rationale in `reap_stale_shell`, the `str.replace`-not-`.format` reasoning, the
+split-button SCSS, the `ChatPanelContent` switch).
 
 ### Error handling
 
-No issues found. `_compute_fingerprint` catches `(OSError, ProcessError)` with
-5s git timeouts and degrades to "skip this tick"; `reap_stale_shell` catches
-precise process exceptions; the registration loader skips+logs per-file errors
-so one bad TOML cannot break the menu; CLI subcommands exit 1 with the status
-on stderr. (Pre-existing broad `except Exception` in
-`coordinator.py:340` was refactored but not introduced by this diff.)
+No issues found. The broad `except Exception` around `manager.start()`
+(`terminal_session.py:121`) and the handler funnel (`v1.py:175`) are justified
+graceful-degradation paths that log with context (info/debug per the
+no-logger-warning ratchet) and mirror `run_agent_task_v1`. All external I/O
+(git in `diff_refresh.py`, psutil in `reap_stale_shell`, httpx in `signal.py`)
+has timeouts and scoped exception types; the registration loader skips+logs
+per-file errors so one bad TOML can't break the menu.
 
 ### Security & secrets
 
-No issues found. The two injection vectors are double-guarded: **session-id**
-is charset/length-validated at the route (`[A-Za-z0-9._-]{1,128}`) *and*
-`shlex.quote`d at resume-template rendering (which uses `str.replace`, never
-`.format`); **terminal input** requires opt-in registration + live-run
-IDLE/WAITING signal + live PTY, is bracketed-paste wrapped, and the prompt text
-is never logged (only its length). Chat-agent task ids return 404 (not 403) so
-the route doesn't leak task type. The agent terminal WS route is
-unauthenticated, matching the existing workspace terminal WS on the
-loopback-only server.
+**MEDIUM (docs) — RESOLVED (`16026043bf`)** —
+`samples/terminal_agents/claude-code/README.md`. Now that this registration
+**auto-installs**, an out-of-the-box "Claude CLI" agent launches `claude
+--dangerously-skip-permissions` with `skipDangerousModePermissionPrompt: true`.
+The README explained *what* the flags do but not the *premise* that makes
+bypassing permission prompts acceptable out of the box. The README now states
+that the agent runs inside the Sculptor-managed workspace environment with the
+**same permission posture Sculptor already uses for its native Claude agents**
+— so the bundled registration grants no privilege those agents don't already
+have — and points users at editing/deleting it for a different posture.
+
+Otherwise no issues. The two injection vectors are double-guarded:
+**session-id** is charset/length-validated at the route (`[A-Za-z0-9._-]{1,128}`,
+`fullmatch`) *and* `shlex.quote`d at resume-render (which uses `str.replace`,
+never `.format`), with the loader independently restricting the template
+placeholder; **terminal input** requires opt-in registration + a current-run
+IDLE/WAITING signal + a live PTY, is bracketed-paste-wrapped, and the prompt
+text is never logged. The bundled `sed` extraction reads the hook's stdin JSON
+anchored to the leading `session_id` field (prompt text cannot spoof it) and
+fails open. Signal/input/registration routes use the standard local
+session-token auth; agent calls are scoped by agent id in the path; chat-agent
+ids return 404 (don't leak task type).
+
+**LOW (informational)** — `web/app.py:3251`. `fullmatch` runs on an unbounded
+`SignalEventRequest.session_id` string (no `max_length` on the field). The
+`{1,128}` bound applies to the match, not the input length; a large body is
+walked before rejection. Immaterial behind the loopback bind + Starlette body
+limits; a `max_length` on the pydantic field would tidy it.
 
 ### Type safety
 
-No issues found. New public functions and pydantic models are annotated; the
-discriminated union extended correctly; `HarnessCapabilities` has no defaults so
-the new bool forced every constructor site (all five harnesses + mocks/stories
-updated). TS types and ElementIds regenerated (`just check` runs
-`generate-api`/`generate-sculpt-client`; tree clean afterward).
+No issues found. `HarnessCapabilities.supports_chat_interface` has no default,
+so every constructor site (all harnesses + the abstract base + mocks/stories)
+was forced to declare it. New public functions are annotated; structured data
+uses pydantic; the discriminated union was extended correctly. `tsc --noEmit`
+is clean and generated TS/`ElementIds`/sculpt-client are current (`just check`
+ran the generators and left the tree clean). The few casts in `AddWorkspacePage`
+/`AgentTabs` are each properly guarded.
 
 ### Backwards compatibility
 
-No issues found. Migration `b3f1a9c2d6e5` symmetrically drops `harness` from
+**MEDIUM — ACKNOWLEDGED, WON'T FIX (owner decision).**
+`imbue_core/imbue_core/sculptor/user_config.py:252` (`enable_multi_harness` →
+`enable_pi_agent`, commit `c406b95e2f`). `UserConfig` is persisted to a TOML
+file; `SerializableModel` allows extras but `model_post_init` clears them, and
+no alias bridges the old key, so a user who previously set
+`enable_multi_harness = true` would silently lose the opt-in on upgrade. The
+owner confirmed this is **not worth fixing**: the flag is experimental,
+off-by-default, and dark-launched — no real users have it set, so the upgrade
+migration is unnecessary complexity. Recorded here as a conscious trade-off,
+not an open action. (Were that to change, the one-line fix is
+`AliasChoices("enable_pi_agent", "enable_multi_harness")` or a `mode="before"`
+migration validator mirroring `_migrate_claude_binary_mode`.)
+
+Otherwise clean: migration `b3f1a9c2d6e5` symmetrically drops `harness` from
 `workspace`/`workspace_latest` with a downgrade re-adding it
-(`server_default="claude"`) and a row-survival version test. Existing tasks need
-no migration (config already per-task). Frontend↔backend contract shipped
-together (FE sends `agentType`/`registrationId`; `harness` fields removed both
-sides in the same commit).
+(`server_default="claude"`) and a row-survival version test; existing tasks
+need no migration (config already per-task); the FE↔BE contract ships together
+(`agentType`/`registrationId` added, `harness` removed both sides); new union
+members and the open signal vocabulary are forward-compatible reads.
 
 ### Frontend issues
 
-**LOW — RESOLVED (`e40dd5c8c1`)** — `useTerminalAgentRegistrations` returned
-`{ registrations, refresh }` instead of the standard `BackendQueryResult<T>`
-bundle (`use_tanstack_result_bundle`). It now returns the bundle intersected
-with the ergonomic `registrations` accessor, and both menu consumers use the
-bundle's `refetch`.
+**MEDIUM — RESOLVED (`b1f8bfb82e`)** —
+`frontend/.../AddWorkspacePage.tsx:252-260`. The new-workspace form had no
+equivalent of the tab bar's fallback: if the preselected MRU was a
+`registered:<id>` whose registration was deleted between MRU-write and
+form-open, the workspace was created first and then `createWorkspaceAgent`
+threw, leaving a **created-but-agentless workspace**. The form now pre-checks
+the stored `registrationId` against the current `registrations` list and falls
+back to Claude (effective type used for the create call, the posthog event, and
+the MRU write-back) so the just-created workspace stays usable.
 
-Everything else checks out: TanStack hook under the `["sculptor", …]` key
-prefix with `staleTime: 0` and explicit refetch-on-open (the documented pattern
-for non-pushed, non-workspace-scoped data); split-button `Flex` uses `gap="2"`
-per CLAUDE.md; `ChatPanelContent` renders `null` while capabilities are unknown
-(deliberate, commented — avoids registering chat actions for a terminal agent);
-`useTerminalChatActions` mirrors `useChatData`'s register/teardown contract,
-keeps the send closure stable across status flips, and surfaces 409s as a
-toast; `useTerminal`'s `terminalPath` generalization keeps the path in the WS
-effect deps; list keys use stable `registrationId`; the storage-teardown guard
-in `atomWithDebouncedStorage` is a justified best-effort catch.
+**LOW** — `frontend/.../useTerminal.ts:392-393, 472-477`. The mount-only
+xterm-init effect now reads two new reactive props (`fontSize`, `lineHeight`)
+but its `eslint-disable exhaustive-deps` exclusion comment only justifies
+omitting `getTheme`. No live bug (both are "fixed at mount", the sole caller
+passes literals, and the panel is `key`-remounted per task), but the exclusion
+comment should be extended to note these are intentionally read once.
+
+Everything else checks out: `useTerminalAgentRegistrations` returns the standard
+`BackendQueryResult<T>` bundle intersected with its `registrations` accessor
+(conforms to `use_tanstack_result_bundle` — refutes the prior pass's concern),
+keyed under the `["sculptor", …]` prefix with `staleTime: 0`; the split-button
+`gap="0"` is the documented Radix-margin exception (neutralized in SCSS); the
+new capability atoms are narrow derived atoms read via `useAtomValue`;
+`useTerminalChatActions` faithfully mirrors `useChatData`'s register/teardown;
+the `key={taskID}` remount is the correct, complete fix for the cross-tab
+scrollback leak; chat→terminal switch effect ordering is safe.
 
 ### Integration test issues
 
-**MEDIUM→LOW — RESOLVED (`6530a3ece7`)** — `use_pom_hierarchy`: the earlier
-pass's POM finding was partially addressed (shared `get_agent_terminal_panel` /
-`get_agent_terminal_textarea` helpers, `open_agent_type_menu` with
-Radix-teardown retry), but test bodies still reached for
-`page.get_by_test_id(ElementIDs.CHAT_INPUT)` (4×) and `ElementIDs.AGENT_TAB`
-(1×). Both directions of the panel switch are now POM helpers
-(`expect_terminal_panel_replaces_chat` / `expect_chat_replaces_terminal_panel`)
-and the tab lookup goes through the tab-bar page object.
-
-**LOW — RESOLVED (`2f52ea0505`)** — the five `timeout=15_000` assertions (see
-Test coverage).
-
-No `use_expect_not_assert` violations (the bare `assert`s read non-DOM state:
-SQLite, xterm buffer snapshots after a retrying wait); no `no_sleep_then_assert`
-violations; `_FAKE_TUI_COMMAND`'s `sleep 8` is latched (busy asserted before
-the sleep window matters) and commented; launch-mode markers correct
-(`@real_claude` alone on the token-burning test; everything else unmarked
-browser-mode).
+Covered under Test coverage (the `_FAKE_TUI_COMMAND` `sleep 8` flake, MEDIUM).
+Otherwise clean on current HEAD: no lowered timeouts (the prior pass's five
+`timeout=15_000` assertions are genuinely restored to default); panel-switch
+assertions and tab lookups go through POM helpers (`expect_terminal_panel_replaces_chat`
+/ the tab-bar page object); `wait_for_timeout` calls are sleep-then-*type* or
+sleep-then-*retrying-wait*, never sleep-then-assert; xterm-buffer absence
+asserts are bare only because `expect()` can't target the JS handle, and are
+gated behind a positive `wait_for_xterm_substring`; `@real_claude` is on the
+one token-burning test and nothing else; no layout-only tests.
 
 ### Style guide & ratchets
 
-No issues found. Named constants for every timeout/interval; imports at top;
-early-exit style; `just ratchets` passes (runs inside `just check`).
+No issues found by `just check` (ratchets pass). **LOW (cosmetic)** —
+`tools/sculpt/sculpt/commands/signal.py:42` (a 124-char ternary) and
+`registry.py:53` (a 121-char f-string) exceed the 119 line-length but are *not*
+lint failures (ruff's default `select` excludes E501 and `ruff format` won't
+break either). The `signal.py:42` ternary would read better split into
+`if/else`.
 
 ### Git hygiene
 
-No issues found. 26 implementation commits, one per plan task plus review-fix
-commits, each message explaining the why. The `Task N.N:` subjects and
-`REQ-*`/`§N` references in some bodies resolve against the spec/architecture
-committed in-repo under `agent_docs/terminal-agents/`, so they remain readable
-to an outside reader.
+No issues found. 55 commits, atomic, each body explaining the *why*; the TDD
+"Add failing test for…/Fix…" pairs are correctly ordered and scoped. Two
+cosmetic notes (non-blocking): co-author trailer style/casing varies across the
+range, and one fix commit bundles its own real-Claude e2e (appropriately
+atomic).
 
 ### Public-facing text (commit messages & PR/MR description)
 
-No issues found. No secrets, PII, internal hostnames, customer data, or candid
-internal commentary in any commit message in range. No MR body exists yet — when
-one is written, the same scrub rules apply.
+No issues found. No secrets, credentials, PII (beyond the normal author
+trailer), internal hostnames/infra names, customer data, exploit recipes, or
+candid internal commentary in any of the 55 commit messages. `REQ-*`/`§N`/
+`Task N.N` references in bodies resolve against the in-repo
+`agent_docs/terminal-agents/` artifacts. No MR/PR body exists yet — the same
+scrub rules apply when one is written, and per CLAUDE.md it must sign off as
+`(Sent by Claude)`.
 
 ## Overall Assessment
 
-**Ready to merge.** The feature is faithfully implemented to spec and
-architecture, the structural decisions all landed as designed, the earlier
-review pass's findings were fixed and verified, and every suite that can run
-deterministically is green (unit, lint/types/ratchets, 42 Playwright tests
-across feature + regression files).
+**Ready to merge.** The feature is faithfully implemented to the (amended) spec
+and architecture, the structural decisions all landed as designed, every
+deterministic suite is green (unit, lint/types/ratchets, 16 feature Playwright
+tests), and all five actionable MEDIUM findings from this pass were fixed and
+re-verified. There are no CRITICAL or HIGH findings.
 
-All review findings are resolved on this branch:
+Findings addressed in this pass:
 
-1. ~~Restore default timeouts on the five remaining `timeout=15_000` assertions~~
-   — resolved in `2f52ea0505`.
-2. ~~Return the standard `BackendQueryResult` bundle from
-   `useTerminalAgentRegistrations`~~ — resolved in `e40dd5c8c1`.
-3. ~~POM helpers for the repeated panel-switch assertions~~ — resolved in
-   `6530a3ece7`.
+1. **Bundled-registration README security premise** — RESOLVED `16026043bf`.
+2. **`_FAKE_TUI_COMMAND` `sleep 8` flake** — RESOLVED `f5d858279e` (test
+   re-run: 3 passed).
+3. **Stale `workspace.harness` comment** (`userConfig.ts`) — RESOLVED
+   `2108c3a257`.
+4. **Over-broad retry-as-Claude** (`AgentTabs.tsx`) and **missing registered
+   fallback in the new-workspace form** (`AddWorkspacePage.tsx`) — RESOLVED
+   `b1f8bfb82e`.
 
-The advisory item was also completed: the `@real_claude` e2e for the bundled
-Claude Code sample was run and **passed** (1 passed, 23.9s). After each fix the
-affected Playwright files were re-run green (3, then 11 tests) and
-`just format` / `just check` / `just test-unit` passed.
+After the fixes, `just format` / `just check` / `just test-unit` all pass
+(exit 0, no generated-file drift) and the `test_registered_terminal_agent.py`
+integration suite is green.
 
-Biggest residual risk: the bundled Claude Code hooks JSON is pinned to the
-hook-event names and CLI flags of Claude Code 2.x (the README documents this);
-a future CLI rename degrades gracefully to plain-terminal behavior by design,
-but the sample would silently lose its rich integration — the real-claude e2e
-is the canary for that.
+Consciously **won't-fixed** (owner decision): the `enable_multi_harness` →
+`enable_pi_agent` config-migration — experimental flag, no real users set it.
+
+Remaining LOW polish (optional, not addressed): the `useTerminal`
+eslint-disable comment, a `session_id` `max_length`, two over-length lines, and
+the doc-currency updates to architecture §4/§8.
+
+LOW polish (optional): the `useTerminal` eslint-disable comment, the
+`session_id` `max_length`, and the two over-length lines. Documentation: update
+architecture §8 (auto-install) and §4 (token bootstrap) to match the code, and
+run the `@real_claude` e2e once to re-verify the bundled hooks after the
+session-id-on-first-prompt / `sed` changes.
+
+Biggest residual risk: the bundled hooks JSON is pinned to Claude Code 2.x hook
+names and CLI flags; a future CLI rename degrades gracefully to plain-terminal
+behavior by design, but silently loses the rich integration — the
+`@real_claude` e2e is the canary for that.
