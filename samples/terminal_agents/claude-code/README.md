@@ -43,7 +43,15 @@ the TOML at the copied hooks file.)
     `sculptor-workflow`, `sculptor-experimental`).
 - It launches with `--dangerously-skip-permissions` (matching how Sculptor
   runs Claude for chat agents); the settings file skips the one-time
-  bypass-permissions disclaimer so the TUI lands directly at its prompt.
+  bypass-permissions disclaimer so the TUI lands directly at its prompt. This
+  is the **same permission posture Sculptor already uses for its native Claude
+  agents** — the agent runs inside the Sculptor-managed workspace environment
+  for that repo, not as a separately-elevated process — so installing this
+  registration out of the box grants it no privilege those agents don't
+  already have. (If you run Sculptor in a mode where the workspace is your
+  local checkout, the agent acts on that checkout without per-command prompts,
+  exactly as a native chat agent does; edit or delete this registration if you
+  want a different posture.)
 - `--settings` points at `claude-code-hooks.json`, whose hooks report state
   to Sculptor through the `sculpt signal` CLI (on PATH inside every agent
   terminal):
