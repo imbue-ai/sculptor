@@ -20,6 +20,7 @@ import { useImbueNavigate, useWorkspacePageParams } from "~/common/NavigateUtils
 import { isDismissibleOverlayOpen } from "~/common/overlayUtils.ts";
 import { shouldHandleKeybinding } from "~/common/ShortcutUtils.ts";
 import {
+  AGENT_TYPE_LABELS,
   agentTabOrderAtom,
   encodeRegisteredAgentType,
   lastUsedAgentTypeAtom,
@@ -47,12 +48,6 @@ import type { TabDefinition } from "~/components/tabs/types";
 import styles from "./AgentTabs.module.scss";
 
 const NO_SESSION_TOOLTIP = "No active session — send a prompt first";
-
-const AGENT_TYPE_LABELS: Record<Exclude<AgentTypeName, "registered">, string> = {
-  claude: "Claude",
-  pi: "pi",
-  terminal: "Terminal",
-};
 
 /**
  * Fetches diagnostics on mount (when the sub-menu opens) and disables
@@ -534,36 +529,43 @@ export const AgentTabs = (): ReactElement | null => {
                 <ChevronDownIcon size={12} />
               </IconButton>
             </DropdownMenu.Trigger>
+            {/* CheckboxItems mark the last-used type — the one a plain +
+                click creates. Selecting an item still creates an agent (the
+                check is an indicator, not a toggle). */}
             <DropdownMenu.Content data-testid={ElementIds.AGENT_TYPE_MENU}>
-              <DropdownMenu.Item
+              <DropdownMenu.CheckboxItem
+                checked={defaultAgentType === "claude"}
                 data-testid={ElementIds.AGENT_TYPE_MENU_ITEM_CLAUDE}
                 onSelect={() => void handleCreateAgent("claude")}
               >
-                Claude
-              </DropdownMenu.Item>
+                {AGENT_TYPE_LABELS.claude}
+              </DropdownMenu.CheckboxItem>
               {isPiAgentEnabled && (
-                <DropdownMenu.Item
+                <DropdownMenu.CheckboxItem
+                  checked={defaultAgentType === "pi"}
                   data-testid={ElementIds.AGENT_TYPE_MENU_ITEM_PI}
                   onSelect={() => void handleCreateAgent("pi")}
                 >
-                  pi
-                </DropdownMenu.Item>
+                  {AGENT_TYPE_LABELS.pi}
+                </DropdownMenu.CheckboxItem>
               )}
-              <DropdownMenu.Item
+              <DropdownMenu.CheckboxItem
+                checked={defaultAgentType === "terminal"}
                 data-testid={ElementIds.AGENT_TYPE_MENU_ITEM_TERMINAL}
                 onSelect={() => void handleCreateAgent("terminal")}
               >
-                Terminal
-              </DropdownMenu.Item>
+                {AGENT_TYPE_LABELS.terminal}
+              </DropdownMenu.CheckboxItem>
               {registrations.map((registration) => (
-                <DropdownMenu.Item
+                <DropdownMenu.CheckboxItem
                   key={registration.registrationId}
+                  checked={defaultAgentType === encodeRegisteredAgentType(registration.registrationId)}
                   data-testid={ElementIds.AGENT_TYPE_MENU_ITEM_REGISTERED}
                   data-registration-id={registration.registrationId}
                   onSelect={() => void handleCreateAgent("registered", registration.registrationId)}
                 >
                   {registration.displayName}
-                </DropdownMenu.Item>
+                </DropdownMenu.CheckboxItem>
               ))}
             </DropdownMenu.Content>
           </DropdownMenu.Root>
