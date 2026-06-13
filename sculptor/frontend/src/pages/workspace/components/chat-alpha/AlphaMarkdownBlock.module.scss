@@ -4,8 +4,12 @@
   font-family: var(--default-font-family);
   font-size: var(--font-size-2);
   line-height: var(--chat-line-height);
-  overflow-wrap: break-word;
-  word-break: break-word;
+  // `anywhere` (not `break-word`) so long unbreakable tokens — file paths,
+  // env-var names, multiple inline `code` spans on one line — also collapse
+  // the min-content width. `break-word` only breaks visually and leaves
+  // min-content at the longest token, which lets the content force the chat
+  // column wider than its container (horizontal overflow).
+  overflow-wrap: anywhere;
 
   // First child should not have top margin
   > :first-child {
