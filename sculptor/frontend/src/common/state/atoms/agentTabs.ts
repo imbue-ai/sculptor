@@ -15,6 +15,15 @@ export const agentTabOrderAtom = atomWithStorage<Record<string, Array<string>>>(
  * a plain click recreates the same registered agent. */
 export type StoredAgentType = AgentTypeName | `registered:${string}`;
 
+/** Display labels for the built-in agent types, shared by every picker (the
+ * tab bar's + menu, the new-workspace select) so the surfaces can't drift.
+ * Registered terminal agents label from their registration's display name. */
+export const AGENT_TYPE_LABELS: Record<Exclude<AgentTypeName, "registered">, string> = {
+  claude: "Claude",
+  pi: "pi",
+  terminal: "Terminal",
+};
+
 export const REGISTERED_AGENT_TYPE_PREFIX = "registered:";
 
 /** Encode a registration id into the stored `registered:<id>` form. */

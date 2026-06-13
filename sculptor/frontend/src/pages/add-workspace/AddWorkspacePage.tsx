@@ -18,6 +18,7 @@ import {
 import { HTTPException } from "../../common/Errors.ts";
 import { useImbueNavigate } from "../../common/NavigateUtils.ts";
 import {
+  AGENT_TYPE_LABELS,
   encodeRegisteredAgentType,
   lastUsedAgentTypeAtom,
   parseStoredAgentType,
@@ -448,24 +449,20 @@ export const AddWorkspacePage = (): ReactElement => {
                   <Text className={styles.selectorLabel}>agent</Text>
                   {agentType === "registered"
                     ? (registrations.find((r) => r.registrationId === registrationId)?.displayName ?? "Registered")
-                    : agentType === "pi"
-                      ? "pi (experimental)"
-                      : agentType === "terminal"
-                        ? "Terminal"
-                        : "Claude"}
+                    : AGENT_TYPE_LABELS[agentType]}
                 </Flex>
               </Select.Trigger>
               <Select.Content position="popper" side="bottom" sideOffset={5}>
                 <Select.Item value="claude" data-testid={ElementIds.AGENT_TYPE_OPTION_CLAUDE}>
-                  Claude
+                  {AGENT_TYPE_LABELS.claude}
                 </Select.Item>
                 {isPiAgentEnabled && (
                   <Select.Item value="pi" data-testid={ElementIds.AGENT_TYPE_OPTION_PI}>
-                    pi (experimental)
+                    {AGENT_TYPE_LABELS.pi}
                   </Select.Item>
                 )}
                 <Select.Item value="terminal" data-testid={ElementIds.AGENT_TYPE_OPTION_TERMINAL}>
-                  Terminal
+                  {AGENT_TYPE_LABELS.terminal}
                 </Select.Item>
                 {registrations.map((registration) => (
                   <Select.Item
