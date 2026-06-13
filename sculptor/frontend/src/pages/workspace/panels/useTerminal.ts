@@ -305,13 +305,25 @@ type UseTerminalArgs = {
   terminalPath: string;
   isVisible: boolean;
   onOutput?: () => void;
+  /** Font size in px (default 12). Fixed at mount. */
+  fontSize?: number;
+  /** Cell-height multiplier (default 1). Fixed at mount. xterm's
+   * customGlyphs rendering stretches box-drawing characters to the full
+   * cell, so TUI borders stay seamless at line heights above 1. */
+  lineHeight?: number;
 };
 
 type UseTerminalResult = {
   terminalContainerRef: React.RefObject<HTMLDivElement>;
 };
 
-export const useTerminal = ({ terminalPath, isVisible, onOutput }: UseTerminalArgs): UseTerminalResult => {
+export const useTerminal = ({
+  terminalPath,
+  isVisible,
+  onOutput,
+  fontSize = 12,
+  lineHeight = 1,
+}: UseTerminalArgs): UseTerminalResult => {
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -377,7 +389,8 @@ export const useTerminal = ({ terminalPath, isVisible, onOutput }: UseTerminalAr
 
       const xterm = new XTerm({
         cursorBlink: true,
-        fontSize: 12,
+        fontSize,
+        lineHeight,
         fontFamily: 'Menlo, Monaco, "Courier New", monospace',
         theme: getTheme(),
         allowProposedApi: true,
