@@ -1,24 +1,17 @@
 """Real pi integration test: compaction chrome truthfulness.
 
-HONEST SCOPING (REQ-TEST-1 divergence clause). The deterministic contract —
-a compaction shows the "Compacting" StatusPill while active and clears it
-after, across all reasons and the stuck-pill edges — is carried by the
-deterministic tiers:
-
-- unit: ``agent_wrapper_test`` (start→AutoCompacting; end→Done;
-  aborted/error end still clears; willRetry extends the turn; start-without-end
-  synthesizes a Done so the pill can't stick),
-- fake_pi integration: ``test_pi_capability_gating.test_compaction_chrome_truthful_under_pi``
-  (a scripted compaction held open shows then clears the pill under pi).
-
-A REAL threshold compaction can't be triggered cheaply or reliably (it depends
+A real threshold compaction can't be triggered cheaply or reliably (it depends
 on the upstream model filling the context window), and Sculptor exposes no
-manual ``/compact`` surface to force one (Claude has none either — parity bar).
-So this real-pi test mirrors the *chrome-truthfulness* contract at the altitude
-real pi can guarantee: a normal turn against real pi completes cleanly with no
-error, and the compaction chrome never gets stuck on "Compacting". If the turn
-happens to compact opportunistically, the same assertions still hold — the pill
-must have cycled back to clear by the time the turn finishes.
+manual ``/compact`` surface to force one. The deterministic contract — a
+compaction shows the "Compacting" StatusPill while active and clears it after,
+across all reasons and the stuck-pill edges — is covered at the unit tier
+(``agent_wrapper_test``) and the fake_pi integration tier
+(``test_pi_capability_gating.test_compaction_chrome_truthful_under_pi``).
+
+This real-pi test covers what real pi can guarantee: a normal turn completes
+cleanly with no error and the compaction chrome never gets stuck on
+"Compacting". If the turn happens to compact opportunistically, the same
+assertions still hold.
 """
 
 import pytest
@@ -44,6 +37,5 @@ def test_compaction_chrome_does_not_stick_after_real_turn(sculptor_instance_: Sc
     expect(chat_panel.get_error_block()).to_have_count(0)
     # Chrome truthfulness: whether or not pi compacted during the turn, the
     # "Compacting" StatusPill must not be stuck once the turn has finished
-    # (create_pi_workspace_and_send waits for the turn to complete). A stuck
-    # pill is the dangerous failure mode this capability must avoid.
+    # (create_pi_workspace_and_send waits for the turn to complete).
     expect(sculptor_instance_.page.get_by_test_id(ElementIDs.STATUS_PILL_LABEL)).to_have_count(0)

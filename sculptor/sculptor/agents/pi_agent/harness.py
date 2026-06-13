@@ -80,10 +80,9 @@ class PiHarness(Harness):
             supports_context_reset=False,
             # Pi emits compaction_start/end (agent_wrapper maps them onto the
             # AutoCompacting* message pair → StatusPill "Compacting"), and
-            # autoCompactionEnabled defaults true — the compaction chrome is
-            # truthful. The TokenPopover threshold row stays empty: pi exposes
-            # no numeric auto-compact threshold on the wire (recorded
-            # divergence, REQ-CAP-ALL-3).
+            # autoCompactionEnabled defaults true. The TokenPopover threshold row
+            # stays empty: pi exposes no numeric auto-compact threshold on the
+            # wire.
             supports_compaction=True,
             supports_background_tasks=False,
             # Pi persists a per-task JSONL session and relaunches against it with

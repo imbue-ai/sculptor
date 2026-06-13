@@ -1519,8 +1519,8 @@ def test_parse_rpc_message_returns_unknown_for_missing_or_malformed_shape() -> N
 
 # Events pi-basic does not consume: each must be discarded (no emitted message,
 # no PiCrashError), and the turn must still end at the following agent_end.
-# compaction_start/end are deliberately ABSENT — they now emit the
-# AutoCompacting* chrome pair (see the compaction tests above), not discarded.
+# compaction_start/end are deliberately ABSENT — they emit the AutoCompacting*
+# chrome pair (see the compaction tests above) rather than being discarded.
 _DISCARDED_EVENTS: list[dict[str, Any]] = [
     {"type": "turn_start"},
     {"type": "turn_end", "message": _assistant_msg("x"), "toolResults": []},

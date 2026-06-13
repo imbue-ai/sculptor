@@ -852,8 +852,7 @@ class PiAgent(DefaultAgentWrapper):
             # is_auto_compacting stuck True — derived.py scans messages in
             # reverse for the latest AutoCompacting*. Emit the Done so the
             # "Compacting" pill always clears, on every exit path (normal
-            # agent_end, process exit, raised error, shutdown). Emitting Done
-            # twice is harmless; never emitting it is the dangerous direction.
+            # agent_end, process exit, raised error, shutdown).
             if state.compaction_open:
                 self._output_messages.put(AutoCompactingDoneAgentMessage(message_id=AgentMessageID()))
 
@@ -1260,15 +1259,13 @@ class PiAgent(DefaultAgentWrapper):
         """Map pi's compaction_end onto clearing the Compacting chrome.
 
         ALWAYS emits AutoCompactingDoneAgentMessage so the pill never sticks,
-        including the aborted / error_message cases (a stuck "Compacting" pill
-        is worse than a cleared one). We do NOT raise here: a genuine failure is
-        surfaced only if pi itself ends the run in error (the agent_end /
-        message_end error paths handle that) — we don't invent a failure pi
-        didn't report. `willRetry:true` (overflow) means pi re-runs the prompt;
-        the turn extends via the normal agent_end boundary, so this is
-        non-terminal. pi's `result.summary` is not rendered (Claude shows no
-        equivalent). Idempotent: a Done with no preceding start (resumed
-        mid-stream) is harmless.
+        including the aborted / error_message cases. We do NOT raise here: a
+        genuine failure is surfaced only if pi itself ends the run in error (the
+        agent_end / message_end error paths handle that). `willRetry:true`
+        (overflow) means pi re-runs the prompt; the turn extends via the normal
+        agent_end boundary, so this is non-terminal. pi's `result.summary` is not
+        rendered (Claude shows no equivalent). Idempotent: a Done with no
+        preceding start (resumed mid-stream) is harmless.
         """
         state.compaction_open = False
         self._output_messages.put(AutoCompactingDoneAgentMessage(message_id=AgentMessageID()))
