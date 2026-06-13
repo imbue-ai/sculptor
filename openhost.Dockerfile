@@ -1,98 +1,101 @@
-# Dockerfile for running the Sculptor backend as an OpenHost app.
+# Dockerfile for running Sculptor as an OpenHost app, built from source.
 #
-# This is the headless, browser-less counterpart to
-# container/recipes/docker/Dockerfile: it serves the bundled web UI itself
-# (no Electron shell) and persists all state into the OpenHost app data dir.
+# Unlike a released-binary image, this builds the exact code on this branch: it
+# installs the backend with uv, regenerates the API client and builds the web
+# UI, then runs the backend from source — serving the bundled UI itself, with no
+# Electron shell. OpenHost builds with the repo root as the build context, from a
+# clean git clone (so gitignored artifacts like node_modules/.venv/frontend dist
+# are regenerated here, not copied in).
 #
-# OpenHost builds this with the repo root as the build context, so the COPY
-# lines below reference the existing recipe scripts at their real paths.
-#
-# The backend binary is auto-downloaded from the release server on first start
-# (see download-sculptor-backend.sh). Pin a version by setting SCULPTOR_VERSION;
-# the default is the latest release.
+# All persistent state lands in the OpenHost app data dir so it survives
+# rebuilds / "update and reload".
 
 FROM ubuntu:24.04
 
+ENV DEBIAN_FRONTEND=noninteractive
+
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        git \
-        curl \
-        ca-certificates && \
+        git curl ca-certificates xz-utils && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Claude CLI (Claude Code) to a system-wide path so it is accessible
-# when running as a non-root user via --user.
-RUN export HOME=/tmp && \
-    curl -fsSL https://claude.ai/install.sh | bash && \
-    mv /tmp/.local/bin/claude /usr/local/bin/claude
+# Node.js 22 — for the frontend build and the API-client codegen.
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
+    rm -rf /var/lib/apt/lists/*
 
-# Ubuntu 24.04 ships with an 'ubuntu' user (UID 1000, GID 1000). Rename it
-# to 'sculptor' and set up its home directory so the container feels like a
-# normal Linux environment.
+# uv — Python package/venv manager; it provisions the right Python for the project.
+RUN curl -fsSL https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
+# Copy into the venv instead of hardlinking the uv cache, so it stays
+# self-contained when run later under a different (rootless) UID.
+ENV UV_LINK_MODE=copy
+
+WORKDIR /app
+COPY . /app
+
+# Install the backend env first — the frontend's generate-api step shells out to
+# `uv run` to emit the OpenAPI schema, so the backend env must already exist.
+RUN cd /app/sculptor && uv sync
+
+# Regenerate the API client from the (just-built) backend, then build the web UI.
+RUN cd /app/sculptor/frontend && \
+    npm install --force && \
+    npm run generate-api && \
+    npm run build
+
+# --- Runtime setup ---------------------------------------------------------
+
+# Rename Ubuntu's stock 'ubuntu' user (UID 1000) to 'sculptor'; the entrypoint
+# remaps its UID to whatever rootless podman assigns at runtime. World-writable
+# /etc/passwd lets that remap happen as a non-root user. /app is made world
+# read/executable so the runtime UID can run the built venv and read the UI.
 RUN usermod -l sculptor -d /home/sculptor -m ubuntu && \
     groupmod -n sculptor ubuntu && \
-    mkdir -p /home/sculptor && chown sculptor:sculptor /home/sculptor
-
-# Writable data and home directories. chmod 777 because the runtime UID (from
-# rootless podman / --user) won't match the image UID (1000). Standard practice
-# for containers that support arbitrary UIDs.
-RUN mkdir -p /data && chmod 777 /data && \
-    chmod 777 /home/sculptor
-
-# /opt/sculptor holds the backend and sculpt CLI binaries, populated at runtime
-# by the download script. Make it writable so the download can land there.
-RUN mkdir -p /opt/sculptor && chmod 777 /opt/sculptor
-
-# Make /etc/passwd world-writable so the entrypoint can remap the sculptor
-# user's UID when started with an arbitrary UID/GID at runtime (rootless podman).
-RUN chmod 666 /etc/passwd
+    mkdir -p /home/sculptor && chmod 777 /home/sculptor && \
+    mkdir -p /data && chmod 777 /data && \
+    chmod 666 /etc/passwd && \
+    chmod -R a+rX /app
 
 ENV HOME=/home/sculptor
-
-# Expose the backend on all interfaces so the OpenHost router can proxy to it.
+# Serve on all interfaces so the OpenHost router can proxy to us.
 ENV SCULPTOR_BIND_HOST=0.0.0.0
 # Port the backend listens on. Keep in sync with `port` in openhost.toml.
 ENV SCULPTOR_API_PORT=5050
-
-# Persist all Sculptor state (database, workspaces, downloaded agent binaries,
-# user config) into the OpenHost persistent, backed-up app data dir. The app is
-# named "sculptor" in openhost.toml, so OpenHost mounts it at this path.
+# Persist DB, workspaces, downloaded agent binaries, and user config into the
+# OpenHost backed-up app data dir (the app is named "sculptor" in openhost.toml).
 ENV SCULPTOR_FOLDER=/data/app_data/sculptor
-# Persist Claude Code's OAuth credentials (written by the in-app authenticate
-# flow, which runs `claude auth login`) so you don't re-authenticate on rebuild.
+# Persist Claude Code's OAuth credentials (written by the in-app sign-in flow).
 ENV CLAUDE_CONFIG_DIR=/data/app_data/sculptor/claude
 
-# Add both binary directories to PATH so sculptor_backend and sculpt are
-# available as commands without full paths.
-ENV PATH="/opt/sculptor/sculptor_backend:/opt/sculptor/sculpt:${PATH}"
-
+# A minimal git repo for Sculptor to open as a project on first run.
 WORKDIR /workspace
+RUN git -c user.email="sculptor@container" -c user.name="Sculptor" init && \
+    git -c user.email="sculptor@container" -c user.name="Sculptor" commit --allow-empty -m "Initial commit" && \
+    chmod -R 777 /workspace && \
+    git config --system safe.directory '*'
 
-# Initialize a minimal git repo so Sculptor has a project to open on first run.
-RUN git -c user.email="sculptor@container" -c user.name="Sculptor" \
-    init && \
-    git -c user.email="sculptor@container" -c user.name="Sculptor" \
-    commit --allow-empty -m "Initial commit" && \
-    chmod -R 777 /workspace
-
-# Git safe.directory must live in a config file — git ignores safe.directory
-# from env vars and -c flags as a security measure. Write it to the system
-# config so it applies regardless of which UID ends up running.
-RUN git config --system safe.directory '*'
-
-# Reuse the existing container recipe scripts (COPY paths are relative to the
-# repo-root build context).
-COPY container/recipes/docker/download-sculptor-backend.sh /usr/local/bin/download-sculptor-backend.sh
-RUN chmod +x /usr/local/bin/download-sculptor-backend.sh
-
-# Entrypoint: remaps the sculptor UID/GID at runtime, then downloads the backend
-# binary if it isn't already present, then execs the command.
-COPY container/recipes/docker/entrypoint.sh /usr/local/bin/container-entrypoint.sh
-RUN chmod +x /usr/local/bin/container-entrypoint.sh
+# Minimal entrypoint: give the runtime UID a valid /etc/passwd entry (rootless
+# podman assigns an arbitrary UID), then exec the command. No binary download —
+# we run from the source built above. Written with printf to avoid heredoc
+# portability concerns across build backends.
+RUN printf '%s\n' \
+    '#!/bin/sh' \
+    'uid=$(id -u)' \
+    'if ! getent passwd "$uid" >/dev/null 2>&1; then' \
+    '  gid=$(id -g)' \
+    '  tmp=$(mktemp /tmp/passwd.XXXXXX)' \
+    '  sed "s/^sculptor:x:1000:1000:/sculptor:x:${uid}:${gid}:/" /etc/passwd > "$tmp"' \
+    '  cat "$tmp" > /etc/passwd' \
+    '  rm -f "$tmp"' \
+    'fi' \
+    'exec "$@"' \
+    > /usr/local/bin/openhost-entrypoint.sh && \
+    chmod +x /usr/local/bin/openhost-entrypoint.sh
 
 USER sculptor
-ENTRYPOINT ["/usr/local/bin/container-entrypoint.sh"]
-# Ensure the persistent state + Claude config dirs exist (they live on the
-# runtime-mounted volume), then launch the backend. No --no-serve-static: the
-# backend serves the bundled web UI itself since there is no Electron shell.
-CMD ["sh", "-c", "mkdir -p \"$SCULPTOR_FOLDER\" \"$CLAUDE_CONFIG_DIR\" && exec sculptor_backend --no-open-browser"]
+ENTRYPOINT ["/usr/local/bin/openhost-entrypoint.sh"]
+# Ensure the persistent dirs exist, then run the backend from the built venv.
+# No --no-serve-static: the backend serves the web UI built above (resolved via
+# the 'sculptor' package's editable install at /app/sculptor/frontend/dist).
+CMD ["sh", "-c", "mkdir -p \"$SCULPTOR_FOLDER\" \"$CLAUDE_CONFIG_DIR\" && exec /app/sculptor/.venv/bin/python -m sculptor.cli.main --no-open-browser /workspace"]

@@ -597,6 +597,33 @@ class AuthResult(SerializableModel):
     error: str | None = None
 
 
+class AuthStartResult(SerializableModel):
+    """Result of starting an interactive Claude authentication session.
+
+    Authentication is two steps so it works in headless/remote environments
+    (e.g. a container) where the browser-loopback flow can't reach the user's
+    browser: start returns the sign-in ``auth_url`` and leaves the CLI running,
+    waiting on stdin; the user signs in and pastes the resulting code back via
+    :class:`SubmitAuthCodeRequest`.
+
+    On a machine with a usable local browser the CLI completes the loopback flow
+    on its own and no code is needed — that case returns ``success=True`` with
+    ``needs_code=False``.
+    """
+
+    auth_url: str | None = None
+    needs_code: bool = False
+    success: bool = False
+    error: str | None = None
+
+
+class SubmitAuthCodeRequest(RequestModel):
+    """Submit the code the user pasted from the sign-in page to finish authentication."""
+
+    code: str
+    tool: str = "CLAUDE"
+
+
 class DependenciesStatus(SerializableModel):
     """Status of required dependencies with path/version info."""
 

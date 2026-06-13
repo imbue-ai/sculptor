@@ -3,7 +3,9 @@ import hashlib
 import os
 import re
 import shutil
+import signal
 import threading
+import time
 import uuid
 import webbrowser
 from collections.abc import Callable
@@ -11,6 +13,7 @@ from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from queue import Queue
+from subprocess import TimeoutExpired
 from typing import Any
 from typing import assert_never
 
@@ -21,10 +24,10 @@ from packaging.version import Version
 from pydantic import PrivateAttr
 
 from sculptor.foundation.concurrency_group import InvalidConcurrencyGroupStateError
-from sculptor.foundation.processes.local_process import run_streaming
+from sculptor.foundation.processes.local_process import RunningProcess
+from sculptor.foundation.processes.local_process import run_background
 from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.foundation.subprocess_utils import ProcessError
-from sculptor.foundation.subprocess_utils import ProcessTimeoutError
 from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.primitives.service import Service
@@ -37,6 +40,7 @@ from sculptor.services.managed_tools import get_managed_tools
 from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.utils.build import get_internal_folder
 from sculptor.web.data_types import AuthResult
+from sculptor.web.data_types import AuthStartResult
 from sculptor.web.data_types import BinaryMode
 from sculptor.web.data_types import DependenciesStatus
 from sculptor.web.data_types import DependencyInfo
@@ -190,45 +194,35 @@ def _version_from_dir_name(name: str) -> Version:
     return Version(name[len(_VERSION_DIR_PREFIX) :])
 
 
-class _AuthUrlTracker:
-    """Tracks the first auth URL seen in process output and opens it in the browser."""
-
-    def __init__(self) -> None:
-        self.auth_url: str | None = None
-
-    def on_line(self, line: str, is_stderr: bool) -> None:
-        if self.auth_url is not None:
-            return
-        url_match = re.search(r"(https://\S+)", line)
-        if url_match:
-            self.auth_url = url_match.group(1)
-            try:
-                webbrowser.open(self.auth_url)
-            except Exception:
-                pass
+# Regex for the sign-in URL the CLI prints to stdout/stderr.
+_AUTH_URL_RE = re.compile(r"(https://\S+)")
+# How long to wait for the CLI to emit its sign-in URL before giving up on start.
+_AUTH_URL_WAIT_SECONDS = 30.0
+# Overall cap on the spawned 'auth login' process (it idles waiting on stdin).
+_AUTH_PROCESS_TIMEOUT_SECONDS = 600.0
+# How long to wait for the CLI to finish after the user submits their code.
+_AUTH_COMPLETE_WAIT_SECONDS = 120.0
 
 
-def _do_auth_login(binary: str) -> AuthResult:
-    """Run 'binary auth login', open the browser for the auth URL, and wait for completion."""
-    tracker = _AuthUrlTracker()
-    try:
-        result = run_streaming(
-            [binary, "auth", "login"],
-            on_output=tracker.on_line,
-            is_checked=False,
-            timeout=300.0,
-        )
-        if result.returncode == 0:
-            return AuthResult(success=True, auth_url=tracker.auth_url)
-        return AuthResult(
-            success=False,
-            auth_url=tracker.auth_url,
-            error=result.stderr or f"Exit code {result.returncode}",
-        )
-    except ProcessTimeoutError:
-        return AuthResult(success=False, auth_url=tracker.auth_url, error="Authentication timed out after 5 minutes")
-    except Exception as e:
-        return AuthResult(success=False, auth_url=tracker.auth_url, error=str(e))
+def _await_auth_url(process: RunningProcess) -> str | None:
+    """Poll a running ``auth login`` process for the first sign-in URL it prints.
+
+    Returns the URL as soon as it appears. Returns ``None`` if the process exits
+    first (e.g. a local browser-loopback login that needs no pasted code, or an
+    early failure) or if the URL doesn't appear within ``_AUTH_URL_WAIT_SECONDS``.
+    """
+    deadline = time.monotonic() + _AUTH_URL_WAIT_SECONDS
+    while True:
+        match = _AUTH_URL_RE.search(process.read_stdout() + process.read_stderr())
+        if match:
+            return match.group(1)
+        if process.is_finished():
+            # Drain anything captured right before exit, then give up.
+            match = _AUTH_URL_RE.search(process.read_stdout() + process.read_stderr())
+            return match.group(1) if match else None
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(0.2)
 
 
 class DependencyManagementService(Service):
@@ -236,6 +230,10 @@ class DependencyManagementService(Service):
     # download thread for the entire duration of _download_verify_stage.
     _install_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
     _claude_auth_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
+    # The live 'auth login' process between start_auth_login() and
+    # submit_auth_code(), kept alive (idling on stdin) so the user's pasted code
+    # can be written to it. Guarded by _claude_auth_lock.
+    _auth_session: RunningProcess | None = PrivateAttr(default=None)
     # Guards _install_progress, _installing, _install_error, and
     # _progress_notifier_thread.
     # Acquired briefly, never held during I/O.
@@ -531,19 +529,107 @@ class DependencyManagementService(Service):
         except ProcessError:
             return False
 
-    def run_auth_login(self, tool: Dependency) -> AuthResult:
-        """Run authentication for a dependency and wait for the user to complete it.
+    def start_auth_login(self, tool: Dependency) -> AuthStartResult:
+        """Begin interactive authentication for a dependency.
+
+        Spawns ``<binary> auth login`` and reads its output until the sign-in URL
+        appears, then returns immediately with that URL — leaving the process
+        alive and waiting on stdin. The caller surfaces the URL to the user, who
+        signs in and pastes the resulting code back via :meth:`submit_auth_code`.
+
+        On a machine with a usable local browser the CLI completes a
+        localhost-loopback login on its own and needs no pasted code; that case
+        returns ``success=True`` with ``needs_code=False``.
 
         Currently only Claude supports authentication. Other tools return an error.
         """
         if tool != Dependency.CLAUDE:
-            return AuthResult(success=False, error=f"Authentication not supported for {tool.value}")
+            return AuthStartResult(error=f"Authentication not supported for {tool.value}")
         binary = self.resolve_binary_path(tool)
         if binary is None:
-            return AuthResult(success=False, error=f"{tool.value} CLI not installed")
+            return AuthStartResult(error=f"{tool.value} CLI not installed")
 
         with self._claude_auth_lock:
-            return _do_auth_login(binary)
+            # Abandon any prior in-flight session before starting a fresh one.
+            self._terminate_auth_session_locked()
+            process = run_background(
+                [binary, "auth", "login"],
+                open_stdin=True,
+                timeout=_AUTH_PROCESS_TIMEOUT_SECONDS,
+                isolate_process_group=True,
+            )
+            auth_url = _await_auth_url(process)
+
+            if auth_url is not None:
+                # Best-effort browser open for the local case; a no-op when headless.
+                try:
+                    webbrowser.open(auth_url)
+                except Exception:
+                    pass
+                if process.is_finished():
+                    # Loopback login already finished while we were reading the URL.
+                    success = process.returncode == 0
+                    self._terminate_auth_session_locked(process)
+                    if success:
+                        return AuthStartResult(auth_url=auth_url, success=True)
+                    error = (process.read_stderr() or process.read_stdout() or "Authentication failed").strip()
+                    return AuthStartResult(auth_url=auth_url, error=error)
+                self._auth_session = process
+                return AuthStartResult(auth_url=auth_url, needs_code=True)
+
+            # No URL surfaced: either a loopback login already completed, or it failed.
+            if process.is_finished() and process.returncode == 0:
+                self._terminate_auth_session_locked(process)
+                return AuthStartResult(success=True)
+            error = (process.read_stderr() or process.read_stdout() or "Authentication failed").strip()
+            self._terminate_auth_session_locked(process)
+            return AuthStartResult(error=error)
+
+    def submit_auth_code(self, tool: Dependency, code: str) -> AuthResult:
+        """Feed the code the user pasted from the sign-in page to the live auth session.
+
+        Writes the code to the waiting ``auth login`` process's stdin and waits
+        for it to finish. Returns success when the CLI exits cleanly.
+        """
+        if tool != Dependency.CLAUDE:
+            return AuthResult(success=False, error=f"Authentication not supported for {tool.value}")
+
+        with self._claude_auth_lock:
+            process = self._auth_session
+            if process is None or process.is_finished():
+                return AuthResult(success=False, error="No sign-in is in progress. Start sign-in again.")
+            try:
+                process.write_stdin(code.strip() + "\n")
+                returncode = process.wait(timeout=_AUTH_COMPLETE_WAIT_SECONDS)
+                if returncode == 0:
+                    return AuthResult(success=True)
+                error = (process.read_stderr() or process.read_stdout() or f"Exit code {returncode}").strip()
+                return AuthResult(success=False, error=error)
+            except TimeoutExpired:
+                return AuthResult(success=False, error="Authentication timed out")
+            except Exception as e:
+                return AuthResult(success=False, error=str(e))
+            finally:
+                self._terminate_auth_session_locked(process)
+
+    def _terminate_auth_session_locked(self, process: RunningProcess | None = None) -> None:
+        """Tear down an auth session and clear the stored handle.
+
+        Must be called while holding ``_claude_auth_lock``. With no argument it
+        tears down the currently-stored session; with an explicit process it
+        tears that one down and clears the stored handle only if it matches.
+        """
+        session = process if process is not None else self._auth_session
+        if session is not None and not session.is_finished():
+            try:
+                session.terminate(force_kill_seconds=2.0)
+            except Exception:
+                try:
+                    session.kill_now(signal.SIGKILL)
+                except Exception:
+                    pass
+        if process is None or process is self._auth_session:
+            self._auth_session = None
 
     def _get_status(self) -> DependenciesStatus:
         """Compute the current status of all dependencies (no side effects)."""

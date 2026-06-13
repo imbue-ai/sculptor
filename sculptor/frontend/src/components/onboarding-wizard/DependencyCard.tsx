@@ -48,6 +48,12 @@ type DependencyCardProps = {
   optional?: boolean;
   onApplyOverride?: (path: string) => Promise<void>;
   onAuthenticate?: () => void;
+  // Interactive sign-in (headless/remote): when authUrl is set, the card shows
+  // the link to open plus a field to paste the resulting code, submitted via
+  // onSubmitAuthCode. authError surfaces a failed start/submit.
+  authUrl?: string | null;
+  authError?: string | null;
+  onSubmitAuthCode?: (code: string) => Promise<void>;
   onModeSwitch?: (mode: string) => void;
   modeControls?: Array<{ label: string; mode: string }>;
   helpText?: string;
@@ -100,6 +106,9 @@ export const DependencyCard = ({
   optional = false,
   onApplyOverride,
   onAuthenticate,
+  authUrl = null,
+  authError = null,
+  onSubmitAuthCode,
   onModeSwitch,
   modeControls,
   helpText,
@@ -110,6 +119,19 @@ export const DependencyCard = ({
   const [overridePath, setOverridePath] = useState<string>("");
   const [overrideError, setOverrideError] = useState<string | undefined>(undefined);
   const [isApplying, setIsApplying] = useState<boolean>(false);
+  const [authCode, setAuthCode] = useState<string>("");
+  const [isSubmittingCode, setIsSubmittingCode] = useState<boolean>(false);
+
+  const handleSubmitCode = async (): Promise<void> => {
+    if (!authCode.trim() || !onSubmitAuthCode) return;
+    setIsSubmittingCode(true);
+    try {
+      await onSubmitAuthCode(authCode.trim());
+      setAuthCode("");
+    } finally {
+      setIsSubmittingCode(false);
+    }
+  };
 
   const canExpand = status.state !== "loading" && status.state !== "installing" && status.state !== "authenticating";
 
@@ -248,7 +270,7 @@ export const DependencyCard = ({
             </>
           )}
 
-          {status.state === "needs-auth" && onAuthenticate && (
+          {status.state === "needs-auth" && onAuthenticate && !authUrl && (
             <Button
               size="1"
               variant="soft"
@@ -286,6 +308,49 @@ export const DependencyCard = ({
             ))}
         </Flex>
       </Flex>
+
+      {(authUrl || authError) && (
+        <Flex direction="column" gap="2" className={styles.details} data-role="auth-panel">
+          {authUrl && (
+            <>
+              <Text size="1">Open the sign-in page, approve access, then paste the code shown back here.</Text>
+              <Link href={authUrl} target="_blank" size="2" className={styles.installLink} data-role="auth-url-link">
+                <Flex align="center" gap="1">
+                  Open sign-in page
+                  <ExternalLinkIcon size={12} />
+                </Flex>
+              </Link>
+              <Flex align="center" gap="2" style={{ flex: 1, minWidth: 0 }}>
+                <input
+                  className={styles.overrideInput}
+                  type="text"
+                  placeholder="Paste code here"
+                  value={authCode}
+                  onChange={(e) => setAuthCode(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSubmitCode();
+                  }}
+                  data-role="auth-code-input"
+                />
+                <Button
+                  size="1"
+                  variant="solid"
+                  onClick={handleSubmitCode}
+                  disabled={isSubmittingCode || !authCode.trim()}
+                  data-role="auth-code-submit"
+                >
+                  {isSubmittingCode ? <Spinner /> : "Submit"}
+                </Button>
+              </Flex>
+            </>
+          )}
+          {authError && (
+            <Text size="1" color="red" data-role="auth-error">
+              {authError}
+            </Text>
+          )}
+        </Flex>
+      )}
 
       {isExpanded && (
         <Flex direction="column" gap="2" className={styles.details}>
