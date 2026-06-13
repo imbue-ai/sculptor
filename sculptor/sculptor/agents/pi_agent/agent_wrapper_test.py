@@ -34,9 +34,11 @@ from sculptor.agents.pi_agent.output_processor import extract_tool_call_blocks
 from sculptor.agents.pi_agent.output_processor import parse_rpc_message
 from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
 from sculptor.interfaces.agents.agent import ClearContextUserMessage
+from sculptor.interfaces.agents.agent import ContextClearedMessage
 from sculptor.interfaces.agents.agent import InterruptProcessUserMessage
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import PiAgentConfig
+from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
 from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
 from sculptor.interfaces.agents.agent import StopAgentUserMessage
@@ -1040,8 +1042,11 @@ def test_push_message_enqueues_chat_input_returns_true() -> None:
 
 # The capability-correlated control messages pi cannot handle; each must be
 # dead-lettered (one logged error) and return unhandled.
+# ResumeAgentResponseRunnerMessage (session resume), InterruptProcessUserMessage
+# (interruption), and ClearContextUserMessage (context reset) are NOT here —
+# each is now handled (see test_push_message_resume_resolves_in_flight_request,
+# the interruption tests, and the test_clear_context_* tests).
 _DEAD_LETTER_MESSAGES: list[Message] = [
-    ClearContextUserMessage(),
     UserQuestionAnswerMessage(
         message_id=AgentMessageID(),
         answers={"q": "a"},
@@ -1090,6 +1095,149 @@ def test_push_message_resume_resolves_in_flight_request() -> None:
     assert isinstance(emitted, RequestSuccessAgentMessage)
     assert emitted.request_id == stuck_id
     assert emitted.interrupted is True
+
+
+def test_push_message_enqueues_clear_context_returns_true() -> None:
+    """A ClearContextUserMessage goes on the same FIFO as chat turns — handled, not dead-lettered."""
+    agent = _make_agent()
+    clear = ClearContextUserMessage(message_id=AgentMessageID())
+    with expect_exact_logged_errors([]):
+        handled = agent._push_message(clear)
+    assert handled is True
+    assert agent._input_agent_messages.get_nowait() is clear
+
+
+def _clear_env() -> MagicMock:
+    """A MagicMock environment whose state path supports the post-clear session-id write."""
+    env = MagicMock(spec=AgentExecutionEnvironment)
+    env.get_state_path.return_value = Path("/fake/state")
+    return env
+
+
+def test_clear_context_sends_new_session_persists_id_and_emits_cleared() -> None:
+    """A successful /clear sends new_session, persists the post-clear session id, emits ContextCleared + RequestSuccess."""
+    env = _clear_env()
+    agent = _make_agent(env)
+    agent._session_id = "old-session"
+    process = _make_process(
+        [
+            _event(
+                {
+                    "type": "response",
+                    "command": "new_session",
+                    "success": True,
+                    "id": "cmd-new",
+                    "data": {"cancelled": False},
+                }
+            ),
+            _event(
+                {
+                    "type": "response",
+                    "command": "get_state",
+                    "success": True,
+                    "id": "cmd-state",
+                    "data": {"sessionId": "new-session", "messageCount": 0},
+                }
+            ),
+        ]
+    )
+    agent._process = process
+    # generate_id is called for the new_session command id, then the get_state request id.
+    with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-new", "cmd-state"]):
+        agent._handle_clear_context(ClearContextUserMessage(message_id=AgentMessageID()))
+
+    # new_session was written to pi's stdin, id-correlated.
+    writes = [call.args[0] for call in process.write_stdin.call_args_list]
+    assert any('"type":"new_session"' in w and '"cmd-new"' in w for w in writes)
+    # The post-clear session id replaced the persisted one so a later resume targets it.
+    assert agent._session_id == "new-session"
+    env.write_file.assert_called_once_with(str(Path("/fake/state") / PI_SESSION_ID_STATE_FILE), "new-session")
+    # Emitted: ContextCleared (UX parity) + terminal RequestSuccess, no failure.
+    emitted = _drain(agent._output_messages)
+    assert any(isinstance(m, ContextClearedMessage) for m in emitted)
+    assert any(isinstance(m, RequestSuccessAgentMessage) for m in emitted)
+    assert not any(isinstance(m, RequestFailureAgentMessage) for m in emitted)
+
+
+def test_clear_context_failure_on_success_false_reports_without_crashing() -> None:
+    """new_session success:false → RequestFailure, no ContextCleared, no id rewrite, handler does not raise."""
+    env = _clear_env()
+    agent = _make_agent(env)
+    agent._process = _make_process(
+        [_event({"type": "response", "command": "new_session", "success": False, "id": "cmd-new", "error": "boom"})]
+    )
+    with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-new"]):
+        # Must NOT raise out of the handler — the AgentClientError path reports and continues.
+        agent._handle_clear_context(ClearContextUserMessage(message_id=AgentMessageID()))
+    emitted = _drain(agent._output_messages)
+    assert any(isinstance(m, RequestFailureAgentMessage) for m in emitted)
+    assert not any(isinstance(m, ContextClearedMessage) for m in emitted)
+    env.write_file.assert_not_called()
+
+
+def test_clear_context_failure_on_cancelled_veto() -> None:
+    """new_session success:true but data.cancelled:true (an extension veto) → failed reset."""
+    env = _clear_env()
+    agent = _make_agent(env)
+    agent._process = _make_process(
+        [
+            _event(
+                {
+                    "type": "response",
+                    "command": "new_session",
+                    "success": True,
+                    "id": "cmd-new",
+                    "data": {"cancelled": True},
+                }
+            )
+        ]
+    )
+    with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-new"]):
+        agent._handle_clear_context(ClearContextUserMessage(message_id=AgentMessageID()))
+    emitted = _drain(agent._output_messages)
+    assert any(isinstance(m, RequestFailureAgentMessage) for m in emitted)
+    assert not any(isinstance(m, ContextClearedMessage) for m in emitted)
+    env.write_file.assert_not_called()
+
+
+def test_clear_context_failure_on_no_response() -> None:
+    """No new_session ack (process exited / timeout) → failed reset, no crash."""
+    env = _clear_env()
+    agent = _make_agent(env)
+    # Empty queue + is_finished True ⇒ _consume_until_command_response returns None at once.
+    agent._process = _make_process([])
+    with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-new"]):
+        agent._handle_clear_context(ClearContextUserMessage(message_id=AgentMessageID()))
+    emitted = _drain(agent._output_messages)
+    assert any(isinstance(m, RequestFailureAgentMessage) for m in emitted)
+    assert not any(isinstance(m, ContextClearedMessage) for m in emitted)
+    env.write_file.assert_not_called()
+
+
+def test_clear_context_runs_after_an_in_flight_chat_turn() -> None:
+    """FIFO ordering: a /clear queued behind a chat turn runs after the turn ends.
+
+    Both go through `_input_agent_messages`, and `_process_message_queue` handles
+    one at a time, so the turn's `_consume_until_turn_end` completes before the
+    clear's `_handle_clear_context` is dispatched.
+    """
+    agent = _make_agent()
+    agent._process = MagicMock()
+    order: list[str] = []
+    with (
+        patch.object(agent, "_consume_until_turn_end", side_effect=lambda prompt_id="": order.append("turn")),
+        patch.object(agent, "_handle_clear_context", side_effect=lambda message: order.append("clear")),
+    ):
+        agent._input_agent_messages.put(ChatInputUserMessage(text="hi"))
+        agent._input_agent_messages.put(ClearContextUserMessage(message_id=AgentMessageID()))
+        worker = threading.Thread(target=agent._process_message_queue)
+        worker.start()
+        deadline = time.monotonic() + 5.0
+        while len(order) < 2 and time.monotonic() < deadline:
+            time.sleep(0.02)
+        agent._shutdown_event.set()
+        worker.join(timeout=5.0)
+    assert order == ["turn", "clear"]
 
 
 def _make_start_env(persisted_session_id: str | None = None) -> MagicMock:

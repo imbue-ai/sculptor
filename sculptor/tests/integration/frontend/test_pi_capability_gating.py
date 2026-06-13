@@ -337,24 +337,24 @@ def test_queued_interrupt_gated_on_interruption(
 
 
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
-@user_story("to refuse /clear in harnesses without context reset, visibly, instead of silently failing")
+@user_story("to reset context with /clear under any harness that supports it, instead of being refused")
 def test_clear_pseudo_skill_gated_on_context_reset(
     sculptor_instance_: SculptorInstance, harness: HarnessTestConfig
 ) -> None:
-    """Typing /clear under pi (no context-reset) is refused frontend-side with
-    the standard copy and never calls the clear endpoint; under Claude it is
-    accepted (no refusal copy)."""
+    """Both Claude and pi support context reset, so typing /clear is accepted
+    (no refusal copy) and the workspace stays usable. The frontend refusal branch
+    remains for a harness that does not advertise the capability (covered by the
+    CapabilityGate unit test). The reset round-trip itself is proven by
+    test_pi_basic.test_pi_clear_resets_conversation and the real_pi/real_claude
+    clear tests — here we only assert the gate no longer refuses."""
     page = sculptor_instance_.page
     task_page = _create_workspace_for_harness(sculptor_instance_, harness, "Clear Gate")
     send_chat_message(chat_panel=task_page.get_chat_panel(), message="/clear")
+    # Neither harness shows the refusal copy — both call the clear endpoint.
     refusal_toast = page.get_by_test_id(ElementIDs.TOAST).filter(has_text=_CAPABILITY_UNSUPPORTED_COPY)
-    if harness.workspace_harness == HarnessName.PI:
-        expect(refusal_toast).to_be_visible()
-        # The chat input stays usable — the workspace is intact, just the reset declined.
-        expect(page.get_by_test_id(ElementIDs.CHAT_INPUT)).to_be_visible()
-    else:
-        # Claude supports context reset: no refusal copy is shown.
-        expect(refusal_toast).to_have_count(0)
+    expect(refusal_toast).to_have_count(0)
+    # The workspace is intact — the chat input stays usable after the reset.
+    expect(page.get_by_test_id(ElementIDs.CHAT_INPUT)).to_be_visible()
 
 
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)

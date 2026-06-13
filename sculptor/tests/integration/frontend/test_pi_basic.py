@@ -46,6 +46,46 @@ def test_pi_workspace_basic_response(
     expect(chat_panel.get_assistant_messages().first).to_contain_text("FakePi")
 
 
+@user_story("to reset a pi conversation with /clear so the agent no longer recalls earlier turns")
+def test_pi_clear_resets_conversation(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """/clear under pi round-trips and genuinely restarts the conversation.
+
+    FakePi remembers prior user turns (the session-resume hook); the
+    ``fake_pi:recall`` directive surfaces them. After /clear sends ``new_session``,
+    that memory is gone — so recall finds the planted sentinel BEFORE the clear
+    and ``NO_PRIOR_CONTEXT`` AFTER it.
+    """
+    install_fake_pi_binary(sculptor_instance_.fake_bin_dir)
+    page = sculptor_instance_.page
+
+    task_page = start_task_and_wait_for_ready(
+        sculptor_page=page,
+        workspace_name="Pi Clear",
+        model_name=None,
+        harness=HarnessName.PI,
+    )
+    chat_panel = task_page.get_chat_panel()
+
+    # Turn 1: plant a sentinel (FakePi records the user turn).
+    send_chat_message(chat_panel, "SENTINEL-PINEAPPLE-4242 remember this")
+    wait_for_completed_message_count(chat_panel, expected_message_count=2)
+
+    # Turn 2: recall finds the planted sentinel — memory of prior turns works.
+    send_chat_message(chat_panel, "fake_pi:recall")
+    wait_for_completed_message_count(chat_panel, expected_message_count=4)
+    expect(chat_panel.get_assistant_messages().last).to_contain_text("SENTINEL-PINEAPPLE-4242")
+
+    # /clear via the pseudo-skill: the reset round-trips (Context Cleared summary renders).
+    send_chat_message(chat_panel, "/clear")
+    expect(chat_panel.get_context_summary_messages()).to_be_visible(timeout=60_000)
+
+    # Turn 3: after the reset, recall finds no prior context — the conversation restarted.
+    send_chat_message(chat_panel, "fake_pi:recall")
+    expect(chat_panel.get_assistant_messages().last).to_contain_text("NO_PRIOR_CONTEXT", timeout=60_000)
+
+
 @user_story("to see Claude-only affordances stay hidden in a pi workspace")
 def test_pi_workspace_suppresses_claude_only_surfaces(
     sculptor_instance_: SculptorInstance,

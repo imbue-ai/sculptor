@@ -14,7 +14,7 @@ def test_pi_harness_capabilities() -> None:
         supports_sub_agents=False,
         supports_image_input=True,
         supports_fast_mode=False,
-        supports_context_reset=False,
+        supports_context_reset=True,
         supports_compaction=False,
         supports_background_tasks=False,
         supports_session_resume=True,
