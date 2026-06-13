@@ -30,6 +30,10 @@ ENV PATH="/root/.local/bin:${PATH}"
 # Copy into the venv instead of hardlinking the uv cache, so it stays
 # self-contained when run later under a different (rootless) UID.
 ENV UV_LINK_MODE=copy
+# Install uv's managed Python under a world-readable path (default is
+# /root/.local/share/uv/python, which the non-root runtime UID can't traverse).
+# The venv's python symlinks here, so it must stay accessible at runtime.
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python
 
 WORKDIR /app
 COPY . /app
@@ -55,7 +59,7 @@ RUN usermod -l sculptor -d /home/sculptor -m ubuntu && \
     mkdir -p /home/sculptor && chmod 777 /home/sculptor && \
     mkdir -p /data && chmod 777 /data && \
     chmod 666 /etc/passwd && \
-    chmod -R a+rX /app
+    chmod -R a+rX /app /opt/uv-python
 
 ENV HOME=/home/sculptor
 # Serve on all interfaces so the OpenHost router can proxy to us.
@@ -96,6 +100,7 @@ RUN printf '%s\n' \
 USER sculptor
 ENTRYPOINT ["/usr/local/bin/openhost-entrypoint.sh"]
 # Ensure the persistent dirs exist, then run the backend from the built venv.
+# The venv lives at the uv *workspace* root (/app/.venv), not /app/sculptor.
 # No --no-serve-static: the backend serves the web UI built above (resolved via
 # the 'sculptor' package's editable install at /app/sculptor/frontend/dist).
-CMD ["sh", "-c", "mkdir -p \"$SCULPTOR_FOLDER\" \"$CLAUDE_CONFIG_DIR\" && exec /app/sculptor/.venv/bin/python -m sculptor.cli.main --no-open-browser /workspace"]
+CMD ["sh", "-c", "mkdir -p \"$SCULPTOR_FOLDER\" \"$CLAUDE_CONFIG_DIR\" && exec /app/.venv/bin/python -m sculptor.cli.main --no-open-browser /workspace"]
