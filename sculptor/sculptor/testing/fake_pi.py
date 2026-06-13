@@ -54,8 +54,11 @@ Sessions: FakePi persists a tiny JSON session keyed by ``--session-id`` inside
 ``--session-dir`` and reloads it on relaunch, so a ``fake_pi:recall`` directive
 reproduces pre-restart content — the hook the session-resume integration test
 asserts on. ``get_state`` reports the session id + message count (this is how
-``PiAgent`` verifies a resume). Real pi persists a JSONL transcript; FakePi only
-needs enough to prove resume continuity.
+``PiAgent`` verifies a resume). A ``new_session`` command resets that state to a
+fresh id with empty history (mirroring pi's ``/clear``), so a post-reset
+``recall`` finds nothing and ``get_state`` reports the new id with messageCount
+0 — the hook the context-reset integration test asserts on. Real pi persists a
+JSONL transcript; FakePi only needs enough to prove resume + reset continuity.
 
 Wire-protocol reference: the pi RPC protocol notes (pi 0.78.0).
 """
@@ -212,6 +215,21 @@ class _SessionState:
         self.message_count += 2
         self._save()
 
+    def start_new_session(self) -> None:
+        """Mirror pi's `new_session`: a fresh session id with empty history.
+
+        The prior session file is left on disk (pi keeps it); this state now
+        points at a NEW id + file, so a following `get_state` reports the new id
+        with messageCount 0, `recall` finds no prior context, and a later resume
+        of the new id finds it empty.
+        """
+        self.session_id = uuid.uuid4().hex
+        self.message_count = 0
+        self.user_messages = []
+        if self.session_file is not None:
+            self.session_file = self.session_file.parent / f"{self.session_id}.fakepi.json"
+            self._save()
+
     def _save(self) -> None:
         if self.session_file is None:
             return
@@ -272,12 +290,16 @@ def _user_message(text: str) -> dict:
     return {"role": "user", "content": [{"type": "text", "text": text}]}
 
 
-def _emit_response(command: str, success: bool, prompt_id: str | None, error: str | None = None) -> None:
+def _emit_response(
+    command: str, success: bool, prompt_id: str | None, error: str | None = None, data: dict | None = None
+) -> None:
     payload: dict = {"type": "response", "command": command, "success": success}
     if prompt_id:
         payload["id"] = prompt_id
     if error is not None:
         payload["error"] = error
+    if data is not None:
+        payload["data"] = data
     _emit(payload)
 
 
@@ -744,8 +766,9 @@ def _run_rpc_loop(system_prompt: str, session_dir: Path | None, session_id: str)
                 # Out-of-band: route to a blocked `ui_request` directive (see
                 # _handle_ui_request); the main loop never processes these.
                 _UI_RESPONSE_QUEUE.put(payload)
-            elif event_type in ("prompt", "get_state"):
-                # In-order: queued so get_state observes preceding turns' state.
+            elif event_type in ("prompt", "get_state", "new_session"):
+                # In-order: queued so get_state / new_session observe preceding
+                # turns' state (and the reset lands strictly between turns).
                 command_queue.put(payload)
         # Unblock any `ui_request` still waiting when stdin closes at shutdown.
         _UI_RESPONSE_QUEUE.put({"cancelled": True})
@@ -765,6 +788,13 @@ def _run_rpc_loop(system_prompt: str, session_dir: Path | None, session_id: str)
         command_id = payload.get("id") if isinstance(payload.get("id"), str) else None
         if payload.get("type") == "get_state":
             _emit_state(command_id, state)
+            continue
+        if payload.get("type") == "new_session":
+            # Mirror pi's `/clear`: reset to a fresh session with empty history,
+            # then ack. `data.cancelled` is always false here (no extensions to
+            # veto the switch); PiAgent reads the new id via a following get_state.
+            state.start_new_session()
+            _emit_response("new_session", success=True, prompt_id=command_id, data={"cancelled": False})
             continue
         # A fresh turn clears any abort that raced in between turns (mirrors
         # PiAgent clearing interrupt-pending when it sends the next prompt).
