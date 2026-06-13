@@ -1218,6 +1218,8 @@ def test_start_raises_pi_version_mismatch_when_out_of_range() -> None:
         agent.start(secrets={})
     assert exc_info.value.pinned_version == "0.78.0"
     assert exc_info.value.detected_version == "0.50.0"
+    # The message must point the user at the self-healing fix (managed install).
+    assert "Managed" in str(exc_info.value)
 
 
 def test_check_pi_version_reads_version_from_stderr_only_emission() -> None:
