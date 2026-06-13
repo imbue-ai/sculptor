@@ -20,7 +20,7 @@
           },
           {
             "type": "command",
-            "command": "python3 -c \"import json,subprocess,sys; d=json.load(sys.stdin); sid=d.get('session_id'); subprocess.run(['sculpt','signal','session-id',sid]) if sid else None\" || true"
+            "command": "sid=$(sed -n 's/^{[[:space:]]*\"session_id\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p'); [ -n \"$sid\" ] && sculpt signal session-id \"$sid\" || true"
           }
         ]
       }
