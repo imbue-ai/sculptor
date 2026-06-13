@@ -9,6 +9,7 @@ session-stream.
 
 from __future__ import annotations
 
+import base64
 import json
 import threading
 import time
@@ -1234,6 +1235,105 @@ def test_check_pi_version_reads_version_from_stderr_only_emission() -> None:
     detected = agent._check_pi_version("/bin/pi")
 
     assert detected == "0.78.0"
+
+
+# --- Prompt assembly: files + images on the prompt command -----------------
+
+
+def _make_agent_with_attachments_env(tmp_path: Path, image_bytes: bytes = b"") -> tuple[PiAgent, MagicMock, Path]:
+    """An agent whose environment records writes and serves ``image_bytes`` on read."""
+    attachments_dir = tmp_path / "attachments"
+    env = MagicMock(spec=AgentExecutionEnvironment)
+    env.get_attachments_path.return_value = attachments_dir
+    env.read_file.return_value = image_bytes
+    return _make_agent(env), env, attachments_dir
+
+
+def test_build_prompt_payload_text_only_has_no_images(tmp_path: Path) -> None:
+    agent, _env, _dir = _make_agent_with_attachments_env(tmp_path)
+    payload = agent._build_prompt_payload("p1", ChatInputUserMessage(text="hello"))
+    assert payload == {"type": "prompt", "id": "p1", "message": "hello"}
+    assert "images" not in payload
+
+
+def test_build_prompt_payload_image_rides_images_field(tmp_path: Path) -> None:
+    image_bytes = b"\x89PNG\r\n\x1a\nblue-pixels"
+    source = tmp_path / "blue.png"
+    source.write_bytes(image_bytes)
+    agent, env, attachments_dir = _make_agent_with_attachments_env(tmp_path, image_bytes=image_bytes)
+
+    payload = agent._build_prompt_payload("p1", ChatInputUserMessage(text="what color?", files=[str(source)]))
+
+    # The prompt text is unchanged — the image does not appear as a path too.
+    assert payload["message"] == "what color?"
+    assert payload["images"] == [
+        {"type": "image", "data": base64.b64encode(image_bytes).decode("ascii"), "mimeType": "image/png"}
+    ]
+    # Bytes are read back from the saved environment copy, not the upload dir.
+    env.read_file.assert_called_once_with(str(attachments_dir / "blue.png"), mode="rb")
+
+
+def test_build_prompt_payload_non_image_rides_prompt_text(tmp_path: Path) -> None:
+    source = tmp_path / "notes.txt"
+    source.write_bytes(b"sentinel-XYZ")
+    agent, _env, attachments_dir = _make_agent_with_attachments_env(tmp_path)
+
+    payload = agent._build_prompt_payload("p1", ChatInputUserMessage(text="read it", files=[str(source)]))
+
+    assert "images" not in payload
+    assert str(attachments_dir / "notes.txt") in payload["message"]
+    assert "The user has attached these files" in payload["message"]
+    assert payload["message"].endswith("read it")
+
+
+def test_build_prompt_payload_image_and_path_split_exclusively(tmp_path: Path) -> None:
+    image_bytes = b"\x89PNGdata"
+    img = tmp_path / "shot.png"
+    img.write_bytes(image_bytes)
+    doc = tmp_path / "doc.md"
+    doc.write_bytes(b"# heading")
+    agent, _env, attachments_dir = _make_agent_with_attachments_env(tmp_path, image_bytes=image_bytes)
+
+    payload = agent._build_prompt_payload("p1", ChatInputUserMessage(text="both", files=[str(img), str(doc)]))
+
+    # Image only in images[]; doc only in the prompt text — never both.
+    assert len(payload["images"]) == 1
+    assert payload["images"][0]["mimeType"] == "image/png"
+    assert str(attachments_dir / "doc.md") in payload["message"]
+    assert "shot.png" not in payload["message"]
+
+
+def test_build_prompt_payload_skips_missing_file(tmp_path: Path) -> None:
+    missing = tmp_path / "gone.txt"  # never created
+    agent, _env, _dir = _make_agent_with_attachments_env(tmp_path)
+    payload = agent._build_prompt_payload("p1", ChatInputUserMessage(text="hi", files=[str(missing)]))
+    # Nothing delivered; the turn proceeds with just the user text.
+    assert payload == {"type": "prompt", "id": "p1", "message": "hi"}
+
+
+def test_unprocessable_image_error_reaches_user_no_silent_drop() -> None:
+    """An image the model can't process fails loud through the standard failed-turn path.
+
+    Pi surfaces the API rejection as an assistant message with
+    stopReason="error"; PiAgent raises PiCrashError carrying that text so the
+    failure is visible to the user (REQ-CAP-IMAGE-INPUT's no-silent-drop bar)
+    rather than the image being silently dropped.
+    """
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event(
+                {
+                    "type": "message_end",
+                    "message": _assistant_msg("API error 400: Could not process image", stop_reason="error"),
+                }
+            ),
+        ]
+    )
+    with pytest.raises(PiCrashError) as exc_info:
+        agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+    assert "Could not process image" in str(exc_info.value)
 
 
 def _drain(queue: Queue) -> list:

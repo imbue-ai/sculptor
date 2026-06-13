@@ -11,23 +11,28 @@ renders under Claude" baseline; the pi branch is the "this affordance is
 suppressed by the harness gate" claim.
 """
 
+import io
 import subprocess
 import tempfile
 import uuid
 from pathlib import Path
 
 import pytest
+from PIL import Image
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.testing.elements.base import type_trigger_char
 from sculptor.testing.elements.chat_panel import send_chat_message
+from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
 from sculptor.testing.fake_pi import install_fake_pi_binary
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import navigate_to_settings_page
+from sculptor.testing.playwright_utils import send_message_via_api
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
+from sculptor.testing.playwright_utils import upload_file_via_api
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 from sculptor.testing.utils import get_playwright_modifier_key
@@ -130,6 +135,13 @@ def test_sub_agent_pill_render_path_gated(sculptor_instance_: SculptorInstance, 
     expect(sculptor_instance_.page.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_PILL)).to_have_count(0)
 
 
+def _png_bytes(color: tuple[int, int, int] = (0, 0, 255)) -> bytes:
+    """A small solid-color PNG, in memory."""
+    buffer = io.BytesIO()
+    Image.new("RGB", (8, 8), color).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
 @user_story("to see a scripted tool call render as a completed tool block under both harnesses")
 def test_tool_call_renders_under_both_harnesses(
@@ -187,17 +199,32 @@ def test_pi_write_and_edit_render_completed_file_chips(sculptor_instance_: Sculp
 
 
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
-@user_story("to keep the chat input usable when the file-upload path is gated off")
-def test_chat_remains_usable_when_uploads_gated(
-    sculptor_instance_: SculptorInstance, harness: HarnessTestConfig
-) -> None:
-    _create_workspace_for_harness(sculptor_instance_, harness, "File Upload Gate")
-    # FileUpload's hidden input is always in the DOM. The gate manifests as the
-    # `disabled` flag on the wrapping component, which forwards to the
-    # imperative handle (so paste / drop / +menu Images becomes a no-op).
-    # The chat input remains visible — only the upload paths are inert.
-    expect(sculptor_instance_.page.get_by_test_id(ElementIDs.CHAT_INPUT)).to_be_visible()
-    expect(sculptor_instance_.page.get_by_test_id(ElementIDs.FILE_UPLOAD)).to_be_attached()
+@user_story("to attach files in a pi workspace and have images and paths reach the agent")
+def test_uploads_usable_and_deliver_under_pi(sculptor_instance_: SculptorInstance, harness: HarnessTestConfig) -> None:
+    task_page = _create_workspace_for_harness(sculptor_instance_, harness, "File Upload Gate")
+    page = sculptor_instance_.page
+    # Both harnesses keep a usable chat input with the upload input in the DOM.
+    expect(page.get_by_test_id(ElementIDs.CHAT_INPUT)).to_be_visible()
+    expect(page.get_by_test_id(ElementIDs.FILE_UPLOAD)).to_be_attached()
+    if harness.workspace_harness != HarnessName.PI:
+        # Claude branch unchanged: the upload affordance has always been live.
+        return
+    # Flipped pi branch: attachments are no longer dropped. Deliver one image
+    # and one non-image file through the upload transport, then assert FakePi
+    # received the image on `images[]` (one image, image/png) and the text file
+    # as a path in the prompt text — the exclusive split prompt assembly does.
+    image_id = upload_file_via_api(page, name="pic.png", mime_type="image/png", content=_png_bytes())
+    text_id = upload_file_via_api(page, name="notes.txt", mime_type="text/plain", content=b"sentinel-99")
+    send_message_via_api(page, message="fake_pi:report_inputs", files=[image_id, text_id])
+
+    chat_panel = task_page.get_chat_panel()
+    wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2, timeout=30_000)
+    last = chat_panel.get_assistant_messages().last
+    expect(last).to_contain_text("images=1")
+    expect(last).to_contain_text("image/png")
+    # The non-image attachment rides the prompt text as a path (its upload id is
+    # preserved as the saved filename), not as a second image.
+    expect(last).to_contain_text(text_id)
 
 
 def _create_skill_in_directory(project_path: Path, skill_name: str, description: str) -> None:

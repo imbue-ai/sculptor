@@ -9,8 +9,9 @@ Session resume IS supported — pi persists a per-task JSONL session
 `agent_wrapper.PiAgent`). Skills ARE supported — pi is pointed at the
 workspace's skill directories via `--skill` flags and follows an invoked skill
 (see `agent_wrapper._build_skill_launch_args` / `_rewrite_skill_invocation`).
-The `capabilities()` override is the truthful declaration that consumers gate
-on.
+It also carries file references, image input, and file attachments (delivered
+by prompt assembly). The `capabilities()` override is the truthful declaration
+that consumers gate on.
 
 Agent construction is owned by the registry
 (`harness_registry.create_agent_for_run`), not this module, so the pi
@@ -67,7 +68,11 @@ class PiHarness(Harness):
             # rewritten to /skill:<name> (agent_wrapper._rewrite_skill_invocation).
             supports_skills=True,
             supports_sub_agents=False,
-            supports_image_input=False,
+            # Pi carries images on the `prompt` command's `images[]` field
+            # (base64 + mimeType); attached image files are delivered there by
+            # prompt assembly (agent_wrapper._build_prompt_payload). Harness-level
+            # "pi can carry images", not per-model.
+            supports_image_input=True,
             supports_fast_mode=False,
             # Pi drops ClearContextUserMessage (see agent_wrapper._push_message),
             # so the `/clear` context-reset path is unavailable — false.
@@ -82,7 +87,11 @@ class PiHarness(Harness):
             # ToolResultBlock contract (agent_wrapper + tool_rendering), so pi
             # tool calls render with name, input, in-progress state, and result.
             supports_tool_use_rendering=True,
-            supports_file_attachments=False,
+            # Non-image attachments are presented to pi as file paths in the
+            # prompt text (agent_wrapper._build_prompt_payload); pi reads their
+            # contents with its own `read` tool, the same loop that backs
+            # supports_file_references — true.
+            supports_file_attachments=True,
             # Pi handles InterruptProcessUserMessage via its `abort` command (see
             # agent_wrapper._request_interrupt), so the user-facing Stop button
             # halts a pi turn promptly and the session stays usable — true.

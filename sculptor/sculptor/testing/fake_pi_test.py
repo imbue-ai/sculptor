@@ -59,6 +59,16 @@ def _send_prompt(message: str, prompt_id: str = "p1") -> str:
     return json.dumps({"type": "prompt", "id": prompt_id, "message": message}) + "\n"
 
 
+def _send_prompt_with_images(message: str, images: list[dict], prompt_id: str = "p1") -> str:
+    return json.dumps({"type": "prompt", "id": prompt_id, "message": message, "images": images}) + "\n"
+
+
+def _last_assistant_text(events: list[dict]) -> str:
+    end = ParsedMessageEnd.model_validate(_by_type(events, "message_end")[-1])
+    assert end.message.role == "assistant"
+    return str(end.message.content[0]["text"])
+
+
 def _by_type(events: list[dict], event_type: str) -> list[dict]:
     return [e for e in events if e.get("type") == event_type]
 
@@ -299,6 +309,58 @@ def test_fake_pi_rpc_per_turn_directives_take_precedence_over_system_prompt() ->
     assert update.assistant_message_event.get("delta") == "from-turn"
 
 
+def test_fake_pi_report_inputs_echoes_image_count_and_mimetypes() -> None:
+    """report_inputs surfaces the received images[] so image delivery is assertable."""
+    images = [
+        {"type": "image", "data": "AAAA", "mimeType": "image/png"},
+        {"type": "image", "data": "BBBB", "mimeType": "image/gif"},
+    ]
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=_send_prompt_with_images("fake_pi:report_inputs", images),
+    )
+
+    assert result.returncode == 0
+    text = _last_assistant_text(_parse_jsonl(result.stdout))
+    assert "images=2" in text
+    assert "image/png" in text
+    assert "image/gif" in text
+
+
+def test_fake_pi_report_inputs_echoes_prompt_text_for_path_attachments() -> None:
+    """Non-image attachments ride the prompt text; report_inputs echoes it back."""
+    message = """<system-instructions>
+The user has attached these files. Read them before proceeding.
+/env/attachments/notes.txt
+</system-instructions>
+
+read it fake_pi:report_inputs"""
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=_send_prompt(message),
+    )
+
+    assert result.returncode == 0
+    text = _last_assistant_text(_parse_jsonl(result.stdout))
+    # No images this turn, but the attached path is delivered in the prompt text.
+    assert "images=0" in text
+    assert "/env/attachments/notes.txt" in text
+
+
+def test_fake_pi_accepts_images_field_on_happy_path_without_report_directive() -> None:
+    """A prompt carrying images[] but no report directive still runs the happy path."""
+    images = [{"type": "image", "data": "AAAA", "mimeType": "image/png"}]
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=_send_prompt_with_images('fake_pi:emit_text `{"text": "ok"}`', images),
+    )
+
+    assert result.returncode == 0
+    events = _parse_jsonl(result.stdout)
+    assert _first_update(events).assistant_message_event.get("delta") == "ok"
+    assert len(_by_type(events, "agent_end")) == 1
+
+
 def test_fake_pi_rpc_abort_with_no_turn_acks_and_exits_on_eof() -> None:
     """An abort with no turn in flight is acked; the process then exits on stdin
     EOF (it does NOT terminate on the abort itself — real pi stays alive)."""
@@ -405,12 +467,6 @@ def test_fake_pi_rpc_handles_multiple_turns_in_sequence() -> None:
     assert deltas == ["one", "two"]
     agent_ends = _by_type(events, "agent_end")
     assert len(agent_ends) == 2
-
-
-def _last_assistant_text(events: list[dict]) -> str:
-    end = ParsedMessageEnd.model_validate(_by_type(events, "message_end")[-1])
-    assert end.message.role == "assistant"
-    return end.message.content[0]["text"]
 
 
 def test_fake_pi_recall_resumes_prior_user_message_across_relaunch(tmp_path: Path) -> None:
