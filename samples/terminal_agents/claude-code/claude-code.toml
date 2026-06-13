@@ -19,12 +19,15 @@ display_name = "Claude CLI"
 # hooks report busy/idle/waiting/files-changed and the session id to
 # Sculptor via the `sculpt signal` CLI (already on PATH inside agent
 # terminals); the settings also skip the bypass-permissions disclaimer.
-launch_command = '"$SCULPT_CLAUDE_BIN" --dangerously-skip-permissions --settings ~/.sculptor/terminal_agents/claude-code-hooks.json --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-plugin" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-workflow" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-experimental"'
+# CLAUDE_CODE_NO_FLICKER=1 forces the TUI's fullscreen alt-screen renderer
+# (flicker-free, virtualized scrollback) instead of the classic main-screen
+# renderer.
+launch_command = 'env CLAUDE_CODE_NO_FLICKER=1 "$SCULPT_CLAUDE_BIN" --dangerously-skip-permissions --settings ~/.sculptor/terminal_agents/claude-code-hooks.json --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-plugin" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-workflow" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-experimental"'
 
-# Same flags as launch_command (a resumed session must come back with the
-# same hooks and plugins), plus --resume: {session_id} is replaced with the
-# session id the SessionStart hook reported, so a Sculptor restart resumes
-# the same conversation.
-resume_command_template = '"$SCULPT_CLAUDE_BIN" --dangerously-skip-permissions --settings ~/.sculptor/terminal_agents/claude-code-hooks.json --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-plugin" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-workflow" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-experimental" --resume {session_id}'
+# Same env and flags as launch_command (a resumed session must come back
+# with the same renderer, hooks, and plugins), plus --resume: {session_id}
+# is replaced with the session id the hooks reported on the first prompt,
+# so a Sculptor restart resumes the same conversation.
+resume_command_template = 'env CLAUDE_CODE_NO_FLICKER=1 "$SCULPT_CLAUDE_BIN" --dangerously-skip-permissions --settings ~/.sculptor/terminal_agents/claude-code-hooks.json --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-plugin" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-workflow" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-experimental" --resume {session_id}'
 
 accepts_automated_prompts = true
