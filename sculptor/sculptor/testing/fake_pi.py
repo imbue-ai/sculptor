@@ -310,6 +310,57 @@ def _emit_aborted_agent_end(text: str) -> None:
     )
 
 
+def _emit_compaction_start(reason: str) -> None:
+    _emit({"type": "compaction_start", "reason": reason})
+
+
+def _emit_compaction_end(reason: str, aborted: bool, will_retry: bool) -> None:
+    # `result` mirrors real pi's manual-compact result shape (feasibility §5);
+    # PiAgent does not read it (Claude renders no equivalent), but FakePi emits
+    # it for wire fidelity.
+    _emit(
+        {
+            "type": "compaction_end",
+            "reason": reason,
+            "aborted": aborted,
+            "willRetry": will_retry,
+            "result": {"summary": "", "firstKeptEntryId": "", "tokensBefore": 0, "details": {}},
+        }
+    )
+
+
+def _handle_compaction(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
+    """Emit a compaction_start/end pair mid-turn.
+
+    Mirrors real pi's compaction wire shape (feasibility §5): manual,
+    threshold, and overflow all reuse the same two events, differing only in
+    ``reason`` (and overflow's ``willRetry:true``). The pair drives Sculptor's
+    AutoCompacting* messages → the StatusPill "Compacting" chrome.
+
+    Optional ``wait_path`` blocks between start and end on a sentinel file (as
+    ``fake_pi:wait_for_file`` does) so an integration test can observe the
+    "Compacting" pill while compaction is held open, then release it and watch
+    the pill clear. The compaction events carry no text, so the surrounding
+    turn still falls back to the default response when no text directive runs.
+    """
+    reason = str(args.get("reason", "threshold"))
+    aborted = bool(args.get("aborted", False))
+    will_retry = bool(args.get("will_retry", False))
+    _emit_compaction_start(reason)
+    wait_path = args.get("wait_path")
+    if wait_path:
+        timeout_seconds = float(args.get("timeout_seconds", 120))
+        sentinel = Path(wait_path)
+        deadline = time.monotonic() + timeout_seconds
+        while not sentinel.exists():
+            if abort_event.is_set():
+                raise _TurnAborted()
+            if time.monotonic() >= deadline:
+                raise RuntimeError(f"fake_pi:compaction timed out after {timeout_seconds}s waiting for {sentinel}")
+            time.sleep(0.05)
+    _emit_compaction_end(reason, aborted=aborted, will_retry=will_retry)
+
+
 def _handle_emit_text(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
     text = args.get("text", "")
     accumulated = builder.full_text + text
@@ -466,6 +517,7 @@ _COMMAND_REGISTRY: dict[str, Callable[[dict, _TurnBuilder, Event, _SessionState]
     "wait_for_file": _handle_wait_for_file,
     "recall": _handle_recall,
     "report_inputs": _handle_report_inputs,
+    "compaction": _handle_compaction,
 }
 
 

@@ -87,6 +87,8 @@ from sculptor.common.plugin import get_plugin_dirs
 from sculptor.foundation.common import generate_id
 from sculptor.foundation.secrets_utils import Secret
 from sculptor.foundation.thread_utils import ObservableThread
+from sculptor.interfaces.agents.agent import AutoCompactingAgentMessage
+from sculptor.interfaces.agents.agent import AutoCompactingDoneAgentMessage
 from sculptor.interfaces.agents.agent import ClearContextUserMessage
 from sculptor.interfaces.agents.agent import InterruptProcessUserMessage
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
@@ -243,7 +245,14 @@ class _TurnState:
     the registry persists for the whole agent run (keyed by unique tool-call id).
     """
 
-    __slots__ = ("accumulated_text", "assistant_message_id", "first_message_id", "prompt_id", "tool_calls")
+    __slots__ = (
+        "accumulated_text",
+        "assistant_message_id",
+        "compaction_open",
+        "first_message_id",
+        "prompt_id",
+        "tool_calls",
+    )
 
     def __init__(self, prompt_id: str) -> None:
         self.prompt_id = prompt_id
@@ -251,6 +260,12 @@ class _TurnState:
         self.assistant_message_id = AssistantMessageID(generate_id())
         self.first_message_id = AgentMessageID()
         self.tool_calls: dict[str, _ToolCall] = {}
+        # True between a compaction_start and its matching compaction_end.
+        # Compaction spans assistant messages, so this is NOT reset in
+        # reset_accumulator. If the run exits while it is still open (process
+        # death or a raised error mid-compaction), _consume_until_turn_end
+        # emits the missing Done so is_auto_compacting cannot stick on True.
+        self.compaction_open = False
 
     def reset_accumulator(self) -> None:
         self.accumulated_text = ""
@@ -803,32 +818,43 @@ class PiAgent(DefaultAgentWrapper):
         out_queue = process.get_queue()
         state = _TurnState(prompt_id=prompt_id)
 
-        while not self._shutdown_event.is_set():
-            if process.is_finished() and out_queue.empty():
-                return
-            try:
-                line, is_stdout = out_queue.get(timeout=0.1)
-            except Empty:
-                continue
-            if not is_stdout:
-                continue
-            stripped = line.strip()
-            if not stripped:
-                continue
-            try:
-                event = json.loads(stripped)
-            except json.JSONDecodeError:
-                logger.debug("PiAgent ignoring non-JSON stdout line: {}", stripped)
-                continue
-            if not isinstance(event, dict):
-                logger.debug("PiAgent ignoring non-object stdout payload: {}", event)
-                continue
-            # Parse once at the boundary: the three lanes pi multiplexes
-            # (`response`, `extension_ui_request`, session events) become typed
-            # variants. Unrecognized / malformed payloads parse to
-            # ParsedUnknownEvent and are discarded (RPC §5.3 forward-compat).
-            if self._dispatch_event(parse_rpc_message(event), state):
-                return
+        try:
+            while not self._shutdown_event.is_set():
+                if process.is_finished() and out_queue.empty():
+                    return
+                try:
+                    line, is_stdout = out_queue.get(timeout=0.1)
+                except Empty:
+                    continue
+                if not is_stdout:
+                    continue
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                try:
+                    event = json.loads(stripped)
+                except json.JSONDecodeError:
+                    logger.debug("PiAgent ignoring non-JSON stdout line: {}", stripped)
+                    continue
+                if not isinstance(event, dict):
+                    logger.debug("PiAgent ignoring non-object stdout payload: {}", event)
+                    continue
+                # Parse once at the boundary: the three lanes pi multiplexes
+                # (`response`, `extension_ui_request`, session events) become typed
+                # variants. Unrecognized / malformed payloads parse to
+                # ParsedUnknownEvent and are discarded (RPC §5.3 forward-compat).
+                if self._dispatch_event(parse_rpc_message(event), state):
+                    return
+        finally:
+            # Stick-prevention: a compaction_start with no matching
+            # compaction_end (process died mid-compaction, or a PiCrashError
+            # raised before the end arrived) would otherwise leave
+            # is_auto_compacting stuck True — derived.py scans messages in
+            # reverse for the latest AutoCompacting*. Emit the Done so the
+            # "Compacting" pill always clears, on every exit path (normal
+            # agent_end, process exit, raised error, shutdown).
+            if state.compaction_open:
+                self._output_messages.put(AutoCompactingDoneAgentMessage(message_id=AgentMessageID()))
 
     def _handle_response_event(self, parsed: RpcResponse, state: _TurnState) -> None:
         """Process a top-level `response` envelope (correlated by `id`, RPC §5.1).
@@ -894,20 +920,24 @@ class PiAgent(DefaultAgentWrapper):
             case ParsedToolExecutionEnd():
                 self._handle_tool_execution_end(parsed, state)
                 return False
+            case ParsedCompactionStart():
+                self._handle_compaction_start(state)
+                return False
+            case ParsedCompactionEnd():
+                self._handle_compaction_end(state)
+                return False
             case (
                 ParsedTurnStart()
                 | ParsedTurnEnd()
                 | ParsedMessageStart()
                 | ParsedQueueUpdate()
-                | ParsedCompactionStart()
-                | ParsedCompactionEnd()
                 | ParsedAutoRetryStart()
                 | ParsedSessionInfoChanged()
                 | ParsedThinkingLevelChanged()
                 | ParsedUnknownEvent()
             ):
-                # Events this harness does not consume (turn/queue/compaction/
-                # retry/session notices) plus any unrecognized type.
+                # Events this harness does not consume (turn/queue/retry/session
+                # notices) plus any unrecognized type.
                 logger.debug("PiAgent ignoring unconsumed event: {}", type(parsed).__name__)
                 return False
             case _ as unreachable:
@@ -1211,6 +1241,34 @@ class PiAgent(DefaultAgentWrapper):
             text = parsed.final_error or state.accumulated_text or "pi exhausted retries"
             raise PiCrashError(text, exit_code=None, metadata=None)
         # Successful retry — a new agent run is about to begin; do not yield.
+
+    def _handle_compaction_start(self, state: _TurnState) -> None:
+        """Map pi's compaction_start onto the Compacting chrome.
+
+        Emits AutoCompactingAgentMessage so is_auto_compacting flips True and
+        the StatusPill shows "Compacting...". pi's `reason`
+        (manual/threshold/overflow) is deliberately not surfaced — Sculptor's
+        chrome is a single Compacting state with no per-reason distinction
+        (Claude parity). Arms the stick-prevention Done in
+        _consume_until_turn_end via `compaction_open`.
+        """
+        state.compaction_open = True
+        self._output_messages.put(AutoCompactingAgentMessage(message_id=AgentMessageID()))
+
+    def _handle_compaction_end(self, state: _TurnState) -> None:
+        """Map pi's compaction_end onto clearing the Compacting chrome.
+
+        ALWAYS emits AutoCompactingDoneAgentMessage so the pill never sticks,
+        including the aborted / error_message cases. We do NOT raise here: a
+        genuine failure is surfaced only if pi itself ends the run in error (the
+        agent_end / message_end error paths handle that). `willRetry:true`
+        (overflow) means pi re-runs the prompt; the turn extends via the normal
+        agent_end boundary, so this is non-terminal. pi's `result.summary` is not
+        rendered (Claude shows no equivalent). Idempotent: a Done with no
+        preceding start (resumed mid-stream) is harmless.
+        """
+        state.compaction_open = False
+        self._output_messages.put(AutoCompactingDoneAgentMessage(message_id=AgentMessageID()))
 
     def _handle_extension_error(self, parsed: ParsedExtensionError) -> None:
         # Non-terminal: extensions are not loaded in pi-basic but pi could

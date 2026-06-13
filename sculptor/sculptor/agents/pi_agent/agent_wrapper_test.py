@@ -33,6 +33,8 @@ from sculptor.agents.pi_agent.output_processor import ParsedUnknownEvent
 from sculptor.agents.pi_agent.output_processor import extract_tool_call_blocks
 from sculptor.agents.pi_agent.output_processor import parse_rpc_message
 from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
+from sculptor.interfaces.agents.agent import AutoCompactingAgentMessage
+from sculptor.interfaces.agents.agent import AutoCompactingDoneAgentMessage
 from sculptor.interfaces.agents.agent import ClearContextUserMessage
 from sculptor.interfaces.agents.agent import InterruptProcessUserMessage
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
@@ -1343,6 +1345,131 @@ def _drain(queue: Queue) -> list:
     return out
 
 
+# --- Compaction chrome (compaction_start/end → AutoCompacting* pair) --------
+
+
+def test_compaction_start_then_end_shows_then_clears_the_pill() -> None:
+    """A compaction_start→end pair emits AutoCompacting then Done (pill shows, then clears)."""
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event({"type": "compaction_start", "reason": "threshold"}),
+            _event({"type": "compaction_end", "reason": "threshold", "aborted": False, "willRetry": False}),
+            _event(_text_delta_update("done.", "done.")),
+            _event({"type": "message_end", "message": _assistant_msg("done.")}),
+            _event({"type": "agent_end", "messages": [_assistant_msg("done.")], "willRetry": False}),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+    emitted = _drain(agent._output_messages)
+    compacting = [i for i, m in enumerate(emitted) if isinstance(m, AutoCompactingAgentMessage)]
+    done = [i for i, m in enumerate(emitted) if isinstance(m, AutoCompactingDoneAgentMessage)]
+    assert len(compacting) == 1
+    # Exactly one Done — the explicit end, with no duplicate from stick-prevention.
+    assert len(done) == 1
+    # Shows before it clears.
+    assert compacting[0] < done[0]
+    finals = [m for m in emitted if isinstance(m, ResponseBlockAgentMessage)]
+    assert finals and finals[0].content == (TextBlock(text="done."),)
+
+
+@pytest.mark.parametrize(
+    "end_payload",
+    [
+        {"type": "compaction_end", "reason": "manual", "aborted": True, "willRetry": False},
+        {
+            "type": "compaction_end",
+            "reason": "threshold",
+            "aborted": False,
+            "willRetry": False,
+            "errorMessage": "compaction failed",
+        },
+    ],
+    ids=["aborted", "error_message"],
+)
+def test_compaction_end_aborted_or_errored_still_clears_without_inventing_failure(end_payload: dict[str, Any]) -> None:
+    """aborted / error_message on compaction_end must still clear the pill and must not raise.
+
+    A compaction failure is surfaced only if pi itself ends the run in error
+    (the agent_end / message_end paths) — the compaction handler never invents one.
+    """
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event({"type": "compaction_start", "reason": end_payload["reason"]}),
+            _event(end_payload),
+            _event({"type": "agent_end", "messages": [], "willRetry": False}),
+        ]
+    )
+    # Must not raise.
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+    emitted = _drain(agent._output_messages)
+    assert len([m for m in emitted if isinstance(m, AutoCompactingDoneAgentMessage)]) == 1
+    # No failure invented (a failed compaction is not turn-terminal on its own).
+    assert not [m for m in emitted if isinstance(m, ResponseBlockAgentMessage)]
+
+
+def test_compaction_start_without_end_emits_done_on_process_exit() -> None:
+    """Process dies mid-compaction (start, no end, no agent_end): the pill must not stick."""
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event({"type": "compaction_start", "reason": "threshold"}),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+    emitted = _drain(agent._output_messages)
+    assert any(isinstance(m, AutoCompactingAgentMessage) for m in emitted)
+    # Stick-prevention: a Done is synthesized on exit so is_auto_compacting clears.
+    assert any(isinstance(m, AutoCompactingDoneAgentMessage) for m in emitted)
+
+
+def test_compaction_end_without_start_emits_done_idempotently() -> None:
+    """A compaction_end with no preceding start (resumed mid-stream) emits Done harmlessly."""
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event({"type": "compaction_end", "reason": "threshold", "aborted": False, "willRetry": False}),
+            _event({"type": "agent_end", "messages": [], "willRetry": False}),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+    emitted = _drain(agent._output_messages)
+    assert len([m for m in emitted if isinstance(m, AutoCompactingDoneAgentMessage)]) == 1
+    assert not any(isinstance(m, AutoCompactingAgentMessage) for m in emitted)
+
+
+def test_compaction_end_with_will_retry_extends_the_turn() -> None:
+    """overflow compaction (willRetry:true) clears the pill but does not end the turn — pi re-runs the prompt."""
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event({"type": "compaction_start", "reason": "overflow"}),
+            _event({"type": "compaction_end", "reason": "overflow", "aborted": False, "willRetry": True}),
+            # The turn continues: pi re-runs and streams the real response.
+            _event(_text_delta_update("after retry", "after retry")),
+            _event({"type": "message_end", "message": _assistant_msg("after retry")}),
+            _event({"type": "agent_end", "messages": [_assistant_msg("after retry")], "willRetry": False}),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+    emitted = _drain(agent._output_messages)
+    # Compaction cycled (shows then clears) ...
+    assert any(isinstance(m, AutoCompactingAgentMessage) for m in emitted)
+    assert len([m for m in emitted if isinstance(m, AutoCompactingDoneAgentMessage)]) == 1
+    # ... and the turn extended past it to deliver the post-compaction response.
+    finals = [m for m in emitted if isinstance(m, ResponseBlockAgentMessage)]
+    assert finals and finals[-1].content == (TextBlock(text="after retry"),)
+
+
 # Wire-shape fixtures for every documented event type (RPC §5/§7/§9), lifted
 # from the protocol doc's examples. Each must parse to a typed variant whose
 # discriminator matches.
@@ -1392,13 +1519,13 @@ def test_parse_rpc_message_returns_unknown_for_missing_or_malformed_shape() -> N
 
 # Events pi-basic does not consume: each must be discarded (no emitted message,
 # no PiCrashError), and the turn must still end at the following agent_end.
+# compaction_start/end are deliberately ABSENT — they emit the AutoCompacting*
+# chrome pair (see the compaction tests above) rather than being discarded.
 _DISCARDED_EVENTS: list[dict[str, Any]] = [
     {"type": "turn_start"},
     {"type": "turn_end", "message": _assistant_msg("x"), "toolResults": []},
     {"type": "message_start", "message": _assistant_msg("x", stop_reason="")},
     {"type": "queue_update", "steering": ["a"], "followUp": []},
-    {"type": "compaction_start", "reason": "threshold"},
-    {"type": "compaction_end", "reason": "threshold", "aborted": False, "willRetry": False},
     {"type": "auto_retry_start", "attempt": 1, "maxAttempts": 3, "delayMs": 1, "errorMessage": "e"},
     {"type": "session_info_changed", "name": "s"},
     {"type": "thinking_level_changed", "level": "high"},
