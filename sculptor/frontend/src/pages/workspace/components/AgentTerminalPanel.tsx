@@ -24,6 +24,8 @@ export const AgentTerminalPanel = ({ taskId }: AgentTerminalPanelProps): ReactEl
   const { terminalContainerRef } = useTerminal({
     terminalPath: `/api/v1/agents/${taskId}/terminal/ws`,
     isVisible: true,
+    fontSize: 13,
+    lineHeight: 1.1,
   });
 
   return (
