@@ -1,11 +1,14 @@
 import { Flex, Select, Text } from "@radix-ui/themes";
+import { useSetAtom } from "jotai";
 import { FolderOpenIcon, PlusIcon } from "lucide-react";
 import type { ReactElement } from "react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import type { Project } from "../api";
-import { ElementIds } from "../api";
+import { ElementIds, getDependenciesStatus } from "../api";
+import { dependenciesStatusAtom } from "../common/state/atoms/dependenciesStatus.ts";
 import { AddRepoDialog } from "./add-repo/AddRepoDialog.tsx";
+import { prefetchInitialRemoteRepos } from "./add-repo/useRemoteRepos.ts";
 import styles from "./RepoSelector.module.scss";
 import type { ToastContent } from "./Toast.tsx";
 import { Toast } from "./Toast.tsx";
@@ -39,6 +42,7 @@ export const RepoSelector = ({
 }: RepoSelectorProps): ReactElement => {
   const [toast, setToast] = useState<ToastContent | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const setDependenciesStatus = useSetAtom(dependenciesStatusAtom);
 
   const handleValueChange = (value: string): void => {
     if (value === _NEW_REPO_SELECT_VALUE) {
@@ -47,6 +51,31 @@ export const RepoSelector = ({
     }
     onProjectChange(value);
   };
+
+  // Warm caches when the user pops open the repo dropdown so the Add
+  // Repository dialog paints with real data on first frame:
+  //   1. Dependencies status → skips the NotConfiguredSection flash while the
+  //      dialog's own first poll is in flight.
+  //   2. github/gitlab initial repo lists → the search combobox paints with
+  //      results instead of a spinner. Fired in parallel; 412 (unconfigured
+  //      CLI) is harmless since the combobox doesn't mount for that provider.
+  // All best-effort; on failure the dialog falls back to its own fetches.
+  const handleSelectOpenChange = useCallback(
+    (isOpen: boolean): void => {
+      if (!isOpen) return;
+      void (async (): Promise<void> => {
+        try {
+          const { data } = await getDependenciesStatus({ meta: { skipWsAck: true } });
+          if (data) setDependenciesStatus(data);
+        } catch {
+          // Dialog's own poll will retry on open.
+        }
+      })();
+      void prefetchInitialRemoteRepos("github");
+      void prefetchInitialRemoteRepos("gitlab");
+    },
+    [setDependenciesStatus],
+  );
 
   const currentProject = projects.find((p) => p.objectId === selectedProjectId);
   const displayName = currentProject?.name ?? "Select repo";
@@ -57,6 +86,7 @@ export const RepoSelector = ({
         size="1"
         value={selectedProjectId ?? undefined}
         onValueChange={handleValueChange}
+        onOpenChange={handleSelectOpenChange}
         disabled={projects.length === 0}
       >
         <Select.Trigger variant="ghost" className={className} data-testid={ElementIds.PROJECT_SELECTOR}>
@@ -95,10 +125,10 @@ export const RepoSelector = ({
           })}
           <Select.Separator className={styles.newRepoSeparator} />
           <Select.Item value={_NEW_REPO_SELECT_VALUE} data-testid={ElementIds.OPEN_NEW_REPO_BUTTON}>
-            <Flex direction="row" align="center" gapX="2">
-              <PlusIcon size={16} />
-              <Text>Open New Repo</Text>
-            </Flex>
+            <span className={styles.importRepoIndicator}>
+              <PlusIcon size={12} />
+            </span>
+            <Text>Import Repo</Text>
           </Select.Item>
         </Select.Content>
       </Select.Root>

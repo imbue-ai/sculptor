@@ -40,6 +40,7 @@ def test_path_autocomplete_shows_tilde_for_home_directory(
     settings_page = navigate_to_settings_page(page=page)
     repos_settings = settings_page.click_on_repositories()
     dialog = repos_settings.open_add_repo_dialog()
+    dialog.select_local_source()
 
     path_input = dialog.get_path_input()
     path_input.fill("~/")

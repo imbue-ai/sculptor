@@ -19,38 +19,38 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Checking: Story = {
-  args: {
-    state: { status: "checking", repoPath: "/Users/dev/my-project" },
-  },
-};
-
 export const NotGitRepo: Story = {
   args: {
-    state: { status: "not-git-repo", repoPath: "/Users/dev/my-project" },
+    phase: { type: "not-git-repo", repoPath: "/Users/dev/my-project" },
   },
 };
 
 export const EmptyRepo: Story = {
   args: {
-    state: { status: "empty-repo", repoPath: "/Users/dev/my-project" },
+    phase: { type: "empty-repo", repoPath: "/Users/dev/my-project" },
   },
 };
 
 export const Initializing: Story = {
   args: {
-    state: { status: "initializing", repoPath: "/Users/dev/my-project" },
-  },
-};
-
-export const Success: Story = {
-  args: {
-    state: { status: "success", repoPath: "/Users/dev/my-project" },
+    phase: { type: "initializing", repoPath: "/Users/dev/my-project" },
   },
 };
 
 export const Error: Story = {
   args: {
-    state: { status: "error", repoPath: "/Users/dev/my-project", errorMessage: "Directory does not exist" },
+    phase: { type: "error", repoPath: "/Users/dev/my-project", errorMessage: "Directory does not exist" },
+  },
+};
+
+export const ExistingFolder: Story = {
+  args: {
+    phase: {
+      type: "clone-failed",
+      repoPath: "/Users/dev/my-project",
+      errorMessage: "This folder already exists. Add it as a local folder instead?",
+      localPathSuggestion: "~/.sculptor/repos/github/my-project",
+    },
+    onOpenLocal: noop,
   },
 };

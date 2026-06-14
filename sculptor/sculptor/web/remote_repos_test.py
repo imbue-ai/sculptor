@@ -1,0 +1,1334 @@
+from pathlib import Path
+from unittest.mock import MagicMock
+from unittest.mock import patch
+
+import pytest
+from fastapi import HTTPException
+from fastapi import Request
+from fastapi.testclient import TestClient
+
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.subprocess_utils import FinishedProcess
+from sculptor.foundation.subprocess_utils import ProcessError
+from sculptor.foundation.subprocess_utils import ProcessTimeoutError
+from sculptor.service_collections.service_collection import CompleteServiceCollection
+from sculptor.services.dependency_management_service import Dependency
+from sculptor.services.dependency_management_service import DependencyManagementService
+from sculptor.utils.build import get_clones_folder
+from sculptor.utils.build import get_sculptor_folder
+from sculptor.web.data_types import RemoteRepo
+from sculptor.web.remote_repos import _REMOTE_CLONE_TIMEOUT_SECONDS
+from sculptor.web.remote_repos import _REMOTE_REPO_MAX_LIMIT
+from sculptor.web.remote_repos import _REMOTE_REPO_MAX_SEARCH_PAGES
+from sculptor.web.remote_repos import _build_remote_repos_api_path
+from sculptor.web.remote_repos import _filter_remote_repos
+from sculptor.web.remote_repos import _github_user_repos_page_path
+from sculptor.web.remote_repos import _looks_like_already_exists
+from sculptor.web.remote_repos import _parse_github_repos
+from sculptor.web.remote_repos import _parse_gitlab_repos
+from sculptor.web.remote_repos import _resolve_provider_cli
+from sculptor.web.remote_repos import _search_github_user_repos
+
+
+def _repo(full_name: str, description: str | None = None) -> RemoteRepo:
+    return RemoteRepo(
+        full_name=full_name,
+        clone_url=f"https://example.com/{full_name}.git",
+        ssh_url=f"git@example.com:{full_name}.git",
+        is_private=False,
+        pushed_at=None,
+        description=description,
+    )
+
+
+# --- _build_remote_repos_api_path: GitHub (single-fetch / browse mode) ---
+
+
+def test_github_empty_query_uses_display_limit_per_page() -> None:
+    """No query → browse mode, just enough rows for the dropdown."""
+    path = _build_remote_repos_api_path(Dependency.GH, None, 5)
+    assert path == "/user/repos?affiliation=owner,collaborator,organization_member&sort=pushed&per_page=5"
+
+
+def test_github_whitespace_query_is_treated_as_empty() -> None:
+    path = _build_remote_repos_api_path(Dependency.GH, "   ", 5)
+    assert path == "/user/repos?affiliation=owner,collaborator,organization_member&sort=pushed&per_page=5"
+
+
+# --- _github_user_repos_page_path (paginated search) ---
+
+
+def test_github_page_path_first_page() -> None:
+    assert (
+        _github_user_repos_page_path(1)
+        == "/user/repos?affiliation=owner,collaborator,organization_member&sort=pushed&per_page=100&page=1"
+    )
+
+
+def test_github_page_path_later_page() -> None:
+    """Pagination must increment ``page=`` while keeping per_page at the API max."""
+    assert (
+        _github_user_repos_page_path(3)
+        == "/user/repos?affiliation=owner,collaborator,organization_member&sort=pushed&per_page=100&page=3"
+    )
+
+
+def test_github_paged_search_stays_scoped_to_user_repos() -> None:
+    """The path must not switch to /search/repositories — that would span all
+    of GitHub, surfacing repos the user has no relationship with."""
+    path = _github_user_repos_page_path(1)
+    assert "/search/repositories" not in path
+    assert "affiliation=owner,collaborator,organization_member" in path
+
+
+# --- _build_remote_repos_api_path: GitLab ---
+
+
+def test_gitlab_empty_query_orders_by_created_at_not_last_activity() -> None:
+    """Regression: ``order_by=last_activity_at`` here makes gitlab.com 500
+    because the cross-table sort over the user's full membership set is too
+    expensive without a ``search=`` filter. ``order_by=created_at`` is cheap
+    on the same scope (the projects table is indexed that way), so use it
+    in browse mode."""
+    path = _build_remote_repos_api_path(Dependency.GLAB, None, 5)
+    assert path == "/projects?membership=true&order_by=created_at&per_page=5"
+
+
+def test_gitlab_non_empty_query_keeps_membership_and_adds_search() -> None:
+    """GitLab's /projects endpoint accepts ?search= alongside ?membership=true,
+    so we can push the filter server-side without losing the membership scope.
+    ``order_by=last_activity_at`` is safe here because ``search=`` bounds the
+    set being sorted."""
+    path = _build_remote_repos_api_path(Dependency.GLAB, "cli", 5)
+    assert path == "/projects?membership=true&order_by=last_activity_at&per_page=5&search=cli"
+
+
+def test_gitlab_search_param_is_url_encoded() -> None:
+    path = _build_remote_repos_api_path(Dependency.GLAB, "foo bar&baz", 5)
+    # The ``&`` and space must be percent-encoded so they don't break out of
+    # the search query and contaminate other params.
+    assert path.endswith("&search=foo%20bar%26baz")
+
+
+# --- _filter_remote_repos ---
+
+
+def test_filter_returns_all_on_empty_query() -> None:
+    repos = [_repo("a/one"), _repo("b/two")]
+    assert _filter_remote_repos(repos, None) == repos
+    assert _filter_remote_repos(repos, "") == repos
+    assert _filter_remote_repos(repos, "   ") == repos
+
+
+def test_filter_matches_full_name_case_insensitively() -> None:
+    repos = [_repo("sfcompute/cli"), _repo("imbue-ai/sculptor"), _repo("octocat/Hello-World")]
+    matches = _filter_remote_repos(repos, "CLI")
+    assert [r.full_name for r in matches] == ["sfcompute/cli"]
+
+
+def test_filter_matches_description_substring() -> None:
+    repos = [
+        _repo("a/one", description="a command-line interface for foo"),
+        _repo("b/two", description="unrelated"),
+    ]
+    matches = _filter_remote_repos(repos, "command-line")
+    assert [r.full_name for r in matches] == ["a/one"]
+
+
+def test_filter_matches_owner_slash_name_substring() -> None:
+    """Typing ``sfcompute/cli`` should pick out that exact repo from a list."""
+    repos = [_repo("sfcompute/cli"), _repo("sfcompute/other"), _repo("notsf/cli")]
+    matches = _filter_remote_repos(repos, "sfcompute/cli")
+    assert [r.full_name for r in matches] == ["sfcompute/cli"]
+
+
+# --- _search_github_user_repos (pagination orchestration) ---
+
+
+def _full_page(prefix: str, count: int = _REMOTE_REPO_MAX_LIMIT) -> list[RemoteRepo]:
+    """A page filled to the API max so pagination won't stop on end-of-data."""
+    return [_repo(f"{prefix}/repo-{i}") for i in range(count)]
+
+
+def test_pagination_stops_when_enough_matches_in_first_page() -> None:
+    """One full page with ≥ needed matches → only one fetch, no further pages."""
+    calls: list[int] = []
+
+    def fetch_page(page: int) -> list[RemoteRepo]:
+        calls.append(page)
+        # All 100 rows on page 1 match the query.
+        return _full_page("matches-here")
+
+    matches = _search_github_user_repos("matches-here", needed=5, fetch_page=fetch_page)
+    assert calls == [1]
+    assert len(matches) == _REMOTE_REPO_MAX_LIMIT  # all matched; caller slices to ``needed``
+
+
+def test_pagination_keeps_pulling_until_enough_matches() -> None:
+    """Page 1 has 0 matches, page 2 has 3, page 3 finally pushes us over 5."""
+    pages = {
+        1: _full_page("aaa"),  # nothing matches "needle"
+        2: _full_page("aaa")[:97] + [_repo("needle/one"), _repo("needle/two"), _repo("needle/three")],
+        3: _full_page("aaa")[:97] + [_repo("needle/four"), _repo("needle/five"), _repo("needle/six")],
+    }
+    calls: list[int] = []
+
+    def fetch_page(page: int) -> list[RemoteRepo]:
+        calls.append(page)
+        return pages[page]
+
+    matches = _search_github_user_repos("needle", needed=5, fetch_page=fetch_page)
+    assert calls == [1, 2, 3]
+    # All 6 matches across pages 2+3 returned; caller slices to ``needed``.
+    assert [r.full_name for r in matches] == [
+        "needle/one",
+        "needle/two",
+        "needle/three",
+        "needle/four",
+        "needle/five",
+        "needle/six",
+    ]
+
+
+def test_pagination_stops_on_partial_last_page() -> None:
+    """A short page (< 100) means GitHub has no more repos for this user, so
+    don't keep paging — even if we don't have enough matches yet."""
+    pages = {
+        1: _full_page("aaa"),  # 100 rows, no matches
+        2: [_repo("aaa/last1"), _repo("aaa/last2")],  # 2 rows, no matches → end of data
+    }
+    calls: list[int] = []
+
+    def fetch_page(page: int) -> list[RemoteRepo]:
+        calls.append(page)
+        return pages[page]
+
+    matches = _search_github_user_repos("needle", needed=5, fetch_page=fetch_page)
+    assert calls == [1, 2]
+    assert matches == []
+
+
+def test_pagination_stops_at_page_cap_even_without_matches() -> None:
+    """Bound subprocess fanout: never call gh more than ``_REMOTE_REPO_MAX_SEARCH_PAGES``
+    times for a single query, even if every page is full and matchless."""
+    calls: list[int] = []
+
+    def fetch_page(page: int) -> list[RemoteRepo]:
+        calls.append(page)
+        return _full_page("aaa")  # always full, never matches "needle"
+
+    matches = _search_github_user_repos("needle", needed=5, fetch_page=fetch_page)
+    assert calls == list(range(1, _REMOTE_REPO_MAX_SEARCH_PAGES + 1))
+    assert matches == []
+
+
+def test_pagination_filters_each_page_with_query() -> None:
+    """Per-page filtering: only the matching rows from each page accumulate."""
+    # Pages 1+2 are full so pagination continues; the named repos sit among
+    # ``aaa/repo-*`` filler that doesn't match the query.
+    pages = {
+        1: _full_page("aaa")[:99] + [_repo("sfcompute/cli")],
+        2: _full_page("aaa")[:98] + [_repo("sfcompute/sdk"), _repo("sfcompute/cli-extras")],
+        3: [_repo("unrelated/x")],  # partial → end of data; loop stops here
+    }
+
+    def fetch_page(page: int) -> list[RemoteRepo]:
+        return pages[page]
+
+    matches = _search_github_user_repos("sfcompute", needed=5, fetch_page=fetch_page)
+    assert [r.full_name for r in matches] == ["sfcompute/cli", "sfcompute/sdk", "sfcompute/cli-extras"]
+
+
+# --- _parse_github_repos ---
+
+
+def test_parse_github_repos_raises_502_on_non_list_payload() -> None:
+    """Anything other than a JSON array means GitHub returned something we
+    don't understand — bail out with a 502 rather than coercing."""
+    for payload in (None, {"items": []}, "oops", 42):
+        with pytest.raises(HTTPException) as exc_info:
+            _parse_github_repos(payload)
+        assert exc_info.value.status_code == 502
+
+
+def test_parse_github_repos_skips_non_dict_entries() -> None:
+    payload = [None, "string", 42, {"full_name": "ok/repo", "clone_url": "https://example.com/ok/repo.git"}]
+    repos = _parse_github_repos(payload)
+    assert [r.full_name for r in repos] == ["ok/repo"]
+
+
+def test_parse_github_repos_maps_every_field_from_input() -> None:
+    """Pin the field mapping so a future rename on GitHub's side gets caught."""
+    payload = [
+        {
+            "full_name": "octocat/Hello-World",
+            "clone_url": "https://github.com/octocat/Hello-World.git",
+            "ssh_url": "git@github.com:octocat/Hello-World.git",
+            "private": True,
+            "pushed_at": "2024-01-15T10:30:00Z",
+            "description": "My first repository",
+        }
+    ]
+    repos = _parse_github_repos(payload)
+    assert len(repos) == 1
+    repo = repos[0]
+    assert repo.full_name == "octocat/Hello-World"
+    assert repo.clone_url == "https://github.com/octocat/Hello-World.git"
+    assert repo.ssh_url == "git@github.com:octocat/Hello-World.git"
+    assert repo.is_private is True
+    assert repo.pushed_at == "2024-01-15T10:30:00Z"
+    assert repo.description == "My first repository"
+
+
+def test_parse_github_repos_defaults_optional_fields_to_none() -> None:
+    """``pushed_at`` and ``description`` are nullable on the model and on the
+    API response — missing keys must land as ``None`` rather than ``""``."""
+    payload = [
+        {
+            "full_name": "a/b",
+            "clone_url": "https://github.com/a/b.git",
+            "ssh_url": "git@github.com:a/b.git",
+            "private": False,
+        }
+    ]
+    repos = _parse_github_repos(payload)
+    assert len(repos) == 1
+    assert repos[0].pushed_at is None
+    assert repos[0].description is None
+
+
+def test_parse_github_repos_defaults_missing_url_fields_to_empty_string() -> None:
+    """The parser uses ``.get("full_name", "")`` etc., so a degenerate entry
+    with no identifying fields becomes a row of empty strings rather than
+    crashing. Documenting this so a future reader doesn't assume those fields
+    are guaranteed non-empty downstream."""
+    repos = _parse_github_repos([{}])
+    assert len(repos) == 1
+    repo = repos[0]
+    assert repo.full_name == ""
+    assert repo.clone_url == ""
+    assert repo.ssh_url == ""
+    assert repo.is_private is False
+    assert repo.pushed_at is None
+    assert repo.description is None
+
+
+# --- _parse_gitlab_repos ---
+
+
+def test_parse_gitlab_repos_raises_502_on_non_list_payload() -> None:
+    for payload in (None, {"projects": []}, "oops", 42):
+        with pytest.raises(HTTPException) as exc_info:
+            _parse_gitlab_repos(payload)
+        assert exc_info.value.status_code == 502
+
+
+def test_parse_gitlab_repos_skips_non_dict_entries() -> None:
+    payload = [None, "string", 42, {"path_with_namespace": "ok/repo"}]
+    repos = _parse_gitlab_repos(payload)
+    assert [r.full_name for r in repos] == ["ok/repo"]
+
+
+def test_parse_gitlab_repos_marks_private_visibility_as_private() -> None:
+    repos = _parse_gitlab_repos([{"path_with_namespace": "a/b", "visibility": "private"}])
+    assert repos[0].is_private is True
+
+
+def test_parse_gitlab_repos_marks_public_visibility_as_not_private() -> None:
+    repos = _parse_gitlab_repos([{"path_with_namespace": "a/b", "visibility": "public"}])
+    assert repos[0].is_private is False
+
+
+def test_parse_gitlab_repos_marks_internal_visibility_as_not_private() -> None:
+    """GitLab's third visibility level ``internal`` is not the same as
+    ``private`` — only members of the instance can see it, but it's not
+    private to the project. Treat it as non-private."""
+    repos = _parse_gitlab_repos([{"path_with_namespace": "a/b", "visibility": "internal"}])
+    assert repos[0].is_private is False
+
+
+def test_parse_gitlab_repos_treats_uppercase_visibility_as_private() -> None:
+    """Regression for the ``.lower()`` normalization — if GitLab ever upcases
+    the value (or a future maintainer drops the case fold), we still want to
+    classify it correctly."""
+    repos = _parse_gitlab_repos([{"path_with_namespace": "a/b", "visibility": "PRIVATE"}])
+    assert repos[0].is_private is True
+
+
+def test_parse_gitlab_repos_defaults_missing_visibility_to_not_private() -> None:
+    """Regression: a missing ``visibility`` key must not crash, and the safe
+    default for an unknown visibility level is public (not private)."""
+    repos = _parse_gitlab_repos([{"path_with_namespace": "a/b"}])
+    assert repos[0].is_private is False
+
+
+def test_parse_gitlab_repos_maps_every_field_from_input() -> None:
+    """Pin the GitLab → ``RemoteRepo`` field mapping so a future field rename
+    or accidental swap (e.g. ``http_url_to_repo`` ↔ ``ssh_url_to_repo``)
+    breaks this test."""
+    payload = [
+        {
+            "path_with_namespace": "gitlab-org/gitlab",
+            "http_url_to_repo": "https://gitlab.com/gitlab-org/gitlab.git",
+            "ssh_url_to_repo": "git@gitlab.com:gitlab-org/gitlab.git",
+            "last_activity_at": "2024-02-20T08:15:00Z",
+            "description": "The flagship project",
+            "visibility": "public",
+        }
+    ]
+    repos = _parse_gitlab_repos(payload)
+    assert len(repos) == 1
+    repo = repos[0]
+    assert repo.full_name == "gitlab-org/gitlab"
+    assert repo.clone_url == "https://gitlab.com/gitlab-org/gitlab.git"
+    assert repo.ssh_url == "git@gitlab.com:gitlab-org/gitlab.git"
+    assert repo.is_private is False
+    assert repo.pushed_at == "2024-02-20T08:15:00Z"
+    assert repo.description == "The flagship project"
+
+
+# --- _looks_like_already_exists ---
+
+
+def test_already_exists_matches_real_git_clone_stderr() -> None:
+    """Real ``git clone`` stderr when the destination directory is non-empty."""
+    stderr = "fatal: destination path 'foo' already exists and is not an empty directory."
+    assert _looks_like_already_exists(stderr) is True
+
+
+def test_already_exists_matches_real_gh_repo_clone_stderr() -> None:
+    """``gh repo clone`` shells out to ``git clone`` under the hood, so the
+    failing stderr ends with the same ``already exists and is not an empty
+    directory`` phrasing, prefixed by gh's own framing."""
+    stderr = (
+        "Cloning into 'foo'...\n"
+        "fatal: destination path 'foo' already exists and is not an empty directory.\n"
+        "exit status 128"
+    )
+    assert _looks_like_already_exists(stderr) is True
+
+
+def test_already_exists_matches_real_glab_repo_clone_stderr() -> None:
+    """``glab repo clone`` likewise wraps ``git clone``."""
+    stderr = "Cloning into 'foo'...\nfatal: destination path 'foo' already exists and is not an empty directory.\n"
+    assert _looks_like_already_exists(stderr) is True
+
+
+def test_already_exists_is_case_insensitive() -> None:
+    """Regression for the ``.lower()`` — match regardless of how the tool
+    capitalizes its error message."""
+    assert _looks_like_already_exists("Already Exists") is True
+    assert _looks_like_already_exists("ALREADY EXISTS") is True
+    assert _looks_like_already_exists("Destination is Not An Empty Directory") is True
+
+
+def test_already_exists_returns_false_for_empty_string() -> None:
+    assert _looks_like_already_exists("") is False
+
+
+def test_already_exists_returns_false_for_unrelated_clone_errors() -> None:
+    """Auth, network, and permission failures must NOT be misclassified as
+    destination conflicts — those need a 4xx that lets the user retry, not a
+    409 that suggests the path is taken."""
+    assert _looks_like_already_exists("Permission denied (publickey).") is False
+    assert _looks_like_already_exists("ssh: connect to host github.com port 22: Network is unreachable") is False
+    assert (
+        _looks_like_already_exists(
+            "fatal: could not read Username for 'https://github.com': terminal prompts disabled"
+        )
+        is False
+    )
+
+
+# ---------------------------------------------------------------------------
+# Route-level tests for POST /api/v1/remotes/clone
+#
+# These exercise clone_remote_repo end-to-end through FastAPI but stub the
+# subprocess boundary (gh / glab / git) so no real network or git CLI is
+# touched. We mock the dependency-management probes (resolve_binary_path /
+# check_authenticated) per-test to walk every branch of _resolve_clone_command
+# and the route handler, and we patch ConcurrencyGroup.run_process_to_completion
+# at the class level because the route obtains its concurrency_group lazily
+# via root_concurrency_group.make_concurrency_group(...).
+# ---------------------------------------------------------------------------
+
+
+def _clone_payload(
+    target_dir: Path,
+    *,
+    name: str = "my-repo",
+    provider: str = "github",
+    url: str = "https://github.com/owner/my-repo.git",
+    full_name: str | None = None,
+) -> dict[str, str]:
+    payload: dict[str, str] = {
+        "provider": provider,
+        "url": url,
+        "target_dir": str(target_dir),
+        "name": name,
+    }
+    if full_name is not None:
+        payload["full_name"] = full_name
+    return payload
+
+
+def _ok_process(command: list[str]) -> FinishedProcess:
+    return FinishedProcess(
+        returncode=0,
+        stdout="",
+        stderr="",
+        command=tuple(command),
+        is_output_already_logged=False,
+    )
+
+
+def _mock_binary_lookup(
+    *,
+    gh: str | None = "/fake/bin/gh",
+    glab: str | None = "/fake/bin/glab",
+    git: str | None = "/fake/bin/git",
+):
+    """Return a side_effect for resolve_binary_path keyed on Dependency."""
+
+    def _side_effect(tool: Dependency) -> str | None:
+        if tool == Dependency.GH:
+            return gh
+        if tool == Dependency.GLAB:
+            return glab
+        if tool == Dependency.GIT:
+            return git
+        return None
+
+    return _side_effect
+
+
+def _mock_auth_lookup(
+    *,
+    gh: bool | None = True,
+    glab: bool | None = True,
+):
+    """Return a side_effect for check_authenticated keyed on Dependency."""
+
+    def _side_effect(tool: Dependency) -> bool | None:
+        if tool == Dependency.GH:
+            return gh
+        if tool == Dependency.GLAB:
+            return glab
+        return None
+
+    return _side_effect
+
+
+def _resolve_for_self(inner):
+    """Wrap a single-arg side_effect so it works with ``autospec=True``.
+
+    ``patch.object(SomeClass, "method", autospec=True, side_effect=...)`` calls
+    the side_effect with ``self`` as the first positional argument. Pydantic
+    instances reject normal ``patch.object(instance, "method", ...)`` because
+    the model validates attribute writes — so we have to patch on the class
+    and accept the extra ``self`` here. Both ``resolve_binary_path`` and
+    ``check_authenticated`` take a single ``tool: Dependency`` argument."""
+
+    def _wrapped(_self: object, tool: Dependency) -> object:
+        return inner(tool)
+
+    return _wrapped
+
+
+def _make_fake_run(
+    *,
+    raises: BaseException | None = None,
+    capture: dict[str, object] | None = None,
+):
+    """Build an autospec-compatible side_effect for ``ConcurrencyGroup.run_process_to_completion``.
+
+    If ``raises`` is set, that exception is raised. Otherwise returns a successful
+    ``FinishedProcess`` echoing the command. When ``capture`` is provided, the
+    captured command and env are stored under ``"command"`` and ``"env"`` keys."""
+
+    def _fake_run(
+        _self: ConcurrencyGroup,
+        command,
+        timeout: float | None = None,
+        is_checked_after: bool = True,
+        on_output=None,
+        cwd=None,
+        trace_log_context=None,
+        env=None,
+        shutdown_event=None,
+        progress_handle=None,
+        log_command: bool = True,
+    ) -> FinishedProcess:
+        if capture is not None:
+            capture["command"] = list(command)
+            capture["env"] = env
+        if raises is not None:
+            raise raises
+        return _ok_process(list(command))
+
+    return _fake_run
+
+
+def test_clone_happy_path_uses_gh_repo_clone_and_returns_project_path(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    tmp_path: Path,
+) -> None:
+    """gh is installed + authed → command is ``gh repo clone <url> <target>`` and
+    the response carries ``target_dir/name`` as the project path."""
+    target_dir = tmp_path / "clones"
+    payload = _clone_payload(target_dir, name="sculptor")
+    captured: dict[str, object] = {}
+
+    with (
+        patch.object(
+            DependencyManagementService,
+            "resolve_binary_path",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_binary_lookup()),
+        ),
+        patch.object(
+            DependencyManagementService,
+            "check_authenticated",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_auth_lookup()),
+        ),
+        patch.object(
+            ConcurrencyGroup,
+            "run_process_to_completion",
+            autospec=True,
+            side_effect=_make_fake_run(capture=captured),
+        ),
+    ):
+        response = client.post("/api/v1/remotes/clone", json=payload)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    expected_path = str(target_dir / "sculptor")
+    assert body["projectPath"] == expected_path
+    # The CLI command must lead with the gh binary and the clone subcommand,
+    # and pass the URL + destination path in that order.
+    assert captured["command"] == [
+        "/fake/bin/gh",
+        "repo",
+        "clone",
+        "https://github.com/owner/my-repo.git",
+        expected_path,
+    ]
+
+
+def test_clone_with_full_name_passes_slug_to_glab_so_configured_protocol_is_honored(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    tmp_path: Path,
+) -> None:
+    """Picker selections include ``full_name``; the route must pass that
+    slug — not the HTTPS URL — to ``glab repo clone``. ``glab repo clone
+    <https-url>`` forces git into an HTTPS auth flow and hangs/fails for
+    users whose ``glab`` is configured for SSH; ``glab repo clone owner/repo``
+    honors the CLI's configured protocol."""
+    target_dir = tmp_path / "clones"
+    payload = _clone_payload(
+        target_dir,
+        name="hw1",
+        provider="gitlab",
+        url="https://gitlab.com/sigmachirality/hw1.git",
+        full_name="sigmachirality/hw1",
+    )
+    captured: dict[str, object] = {}
+
+    with (
+        patch.object(
+            DependencyManagementService,
+            "resolve_binary_path",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_binary_lookup()),
+        ),
+        patch.object(
+            DependencyManagementService,
+            "check_authenticated",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_auth_lookup()),
+        ),
+        patch.object(
+            ConcurrencyGroup,
+            "run_process_to_completion",
+            autospec=True,
+            side_effect=_make_fake_run(capture=captured),
+        ),
+    ):
+        response = client.post("/api/v1/remotes/clone", json=payload)
+
+    assert response.status_code == 200, response.text
+    expected_path = str(target_dir / "hw1")
+    assert captured["command"] == [
+        "/fake/bin/glab",
+        "repo",
+        "clone",
+        "sigmachirality/hw1",
+        expected_path,
+    ]
+
+
+def test_clone_returns_409_when_target_path_already_exists_without_spawning_subprocess(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    tmp_path: Path,
+) -> None:
+    """Pre-flight check: if ``target_dir/name`` already exists we 409 before
+    even resolving a clone command — saves the user a hung subprocess."""
+    target_dir = tmp_path / "clones"
+    target_dir.mkdir()
+    (target_dir / "sculptor").mkdir()  # The conflict.
+    payload = _clone_payload(target_dir, name="sculptor")
+
+    fake_run = patch.object(
+        ConcurrencyGroup, "run_process_to_completion", autospec=True, side_effect=AssertionError("should not run")
+    )
+    with (
+        patch.object(
+            DependencyManagementService,
+            "resolve_binary_path",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_binary_lookup()),
+        ),
+        patch.object(
+            DependencyManagementService,
+            "check_authenticated",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_auth_lookup()),
+        ),
+        fake_run,
+    ):
+        response = client.post("/api/v1/remotes/clone", json=payload)
+
+    assert response.status_code == 409, response.text
+    assert "already exists" in response.json()["detail"]
+
+
+def test_clone_returns_400_when_target_dir_cannot_be_created(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    tmp_path: Path,
+) -> None:
+    """``mkdir(parents=True, exist_ok=True)`` raising OSError surfaces as 400
+    with the underlying OS error in the detail. We force the failure by
+    rooting target_dir under a regular file rather than a directory."""
+    blocker = tmp_path / "not-a-dir"
+    blocker.write_text("regular file")
+    target_dir = blocker / "under-a-file"
+    payload = _clone_payload(target_dir)
+
+    with (
+        patch.object(
+            DependencyManagementService,
+            "resolve_binary_path",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_binary_lookup()),
+        ),
+        patch.object(
+            DependencyManagementService,
+            "check_authenticated",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_auth_lookup()),
+        ),
+        patch.object(ConcurrencyGroup, "run_process_to_completion", autospec=True),
+    ):
+        response = client.post("/api/v1/remotes/clone", json=payload)
+
+    assert response.status_code == 400, response.text
+    # The detail surfaces both the path and the OSError message so the user
+    # can tell what failed without spelunking the logs.
+    detail = response.json()["detail"]
+    assert "Could not create target directory" in detail
+    assert str(target_dir) in detail
+
+
+def test_clone_falls_back_to_git_when_gh_unauthenticated(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    tmp_path: Path,
+) -> None:
+    """``check_authenticated(GH) is False`` → skip ``gh repo clone``, use
+    ``git clone`` with ``GIT_TERMINAL_PROMPT=0`` so it fails fast instead of
+    hanging on a credentials prompt."""
+    target_dir = tmp_path / "clones"
+    payload = _clone_payload(target_dir, name="repo")
+    captured: dict[str, object] = {}
+
+    with (
+        patch.object(
+            DependencyManagementService,
+            "resolve_binary_path",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_binary_lookup()),
+        ),
+        patch.object(
+            DependencyManagementService,
+            "check_authenticated",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_auth_lookup(gh=False)),
+        ),
+        patch.object(
+            ConcurrencyGroup,
+            "run_process_to_completion",
+            autospec=True,
+            side_effect=_make_fake_run(capture=captured),
+        ),
+    ):
+        response = client.post("/api/v1/remotes/clone", json=payload)
+
+    assert response.status_code == 200, response.text
+    expected_path = str(target_dir / "repo")
+    assert captured["command"] == [
+        "/fake/bin/git",
+        "clone",
+        "https://github.com/owner/my-repo.git",
+        expected_path,
+    ]
+    # GIT_TERMINAL_PROMPT must be off so a private-repo clone fails fast
+    # rather than hanging on stdin.
+    env = captured["env"]
+    assert isinstance(env, dict)
+    assert env.get("GIT_TERMINAL_PROMPT") == "0"
+
+
+def test_clone_uses_cli_when_auth_probe_returns_none(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    tmp_path: Path,
+) -> None:
+    """Regression for the ``None`` policy in _resolve_clone_command:
+    ``check_authenticated(GH)`` returning ``None`` (probe couldn't determine
+    auth state) must route through ``gh repo clone``, NOT fall back to
+    ``git clone`` — falling back silently fails private-repo clones because
+    ``GIT_TERMINAL_PROMPT=0`` blocks credentials."""
+    target_dir = tmp_path / "clones"
+    payload = _clone_payload(target_dir, name="private-repo")
+    captured: dict[str, object] = {}
+
+    with (
+        patch.object(
+            DependencyManagementService,
+            "resolve_binary_path",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_binary_lookup()),
+        ),
+        patch.object(
+            DependencyManagementService,
+            "check_authenticated",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_auth_lookup(gh=None)),
+        ),
+        patch.object(
+            ConcurrencyGroup,
+            "run_process_to_completion",
+            autospec=True,
+            side_effect=_make_fake_run(capture=captured),
+        ),
+    ):
+        response = client.post("/api/v1/remotes/clone", json=payload)
+
+    assert response.status_code == 200, response.text
+    command = captured["command"]
+    assert isinstance(command, list)
+    assert command[0] == "/fake/bin/gh"
+    assert command[1:3] == ["repo", "clone"]
+
+
+def test_clone_returns_412_when_neither_provider_cli_nor_git_is_installed(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    tmp_path: Path,
+) -> None:
+    """No gh + no git → 412 ``git CLI not installed``. The frontend uses
+    412 to surface a "install git" CTA distinct from clone-time failures."""
+    target_dir = tmp_path / "clones"
+    payload = _clone_payload(target_dir)
+
+    with (
+        patch.object(
+            DependencyManagementService,
+            "resolve_binary_path",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_binary_lookup(gh=None, git=None)),
+        ),
+        patch.object(
+            DependencyManagementService,
+            "check_authenticated",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_auth_lookup()),
+        ),
+        patch.object(
+            ConcurrencyGroup,
+            "run_process_to_completion",
+            autospec=True,
+            side_effect=AssertionError("should not run"),
+        ),
+    ):
+        response = client.post("/api/v1/remotes/clone", json=payload)
+
+    assert response.status_code == 412, response.text
+    assert response.json()["detail"] == "git CLI not installed"
+
+
+def test_clone_maps_already_exists_stderr_to_409(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    tmp_path: Path,
+) -> None:
+    """Post-clone TOCTOU recovery: if the subprocess fails because the path
+    materialized between the pre-flight check and the clone, the stderr
+    pattern ``destination path '...' already exists`` must surface as 409."""
+    target_dir = tmp_path / "clones"
+    payload = _clone_payload(target_dir, name="repo")
+    stderr = "fatal: destination path 'repo' already exists and is not an empty directory."
+    fake_clone_error = ProcessError(
+        command=("/fake/bin/gh", "repo", "clone"),
+        stdout="",
+        stderr=stderr,
+        returncode=128,
+    )
+
+    with (
+        patch.object(
+            DependencyManagementService,
+            "resolve_binary_path",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_binary_lookup()),
+        ),
+        patch.object(
+            DependencyManagementService,
+            "check_authenticated",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_auth_lookup()),
+        ),
+        patch.object(
+            ConcurrencyGroup,
+            "run_process_to_completion",
+            autospec=True,
+            side_effect=_make_fake_run(raises=fake_clone_error),
+        ),
+    ):
+        response = client.post("/api/v1/remotes/clone", json=payload)
+
+    assert response.status_code == 409, response.text
+    assert "already exists" in response.json()["detail"]
+
+
+def test_clone_maps_unrelated_process_error_to_400(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    tmp_path: Path,
+) -> None:
+    """Generic clone failures (permission, network, auth) become 400 with the
+    stderr passed through. They must NOT be misclassified as 409."""
+    target_dir = tmp_path / "clones"
+    payload = _clone_payload(target_dir)
+    fake_clone_error = ProcessError(
+        command=("/fake/bin/gh", "repo", "clone"),
+        stdout="",
+        stderr="Permission denied (publickey).",
+        returncode=128,
+    )
+
+    with (
+        patch.object(
+            DependencyManagementService,
+            "resolve_binary_path",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_binary_lookup()),
+        ),
+        patch.object(
+            DependencyManagementService,
+            "check_authenticated",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_auth_lookup()),
+        ),
+        patch.object(
+            ConcurrencyGroup,
+            "run_process_to_completion",
+            autospec=True,
+            side_effect=_make_fake_run(raises=fake_clone_error),
+        ),
+    ):
+        response = client.post("/api/v1/remotes/clone", json=payload)
+
+    assert response.status_code == 400, response.text
+    assert "Permission denied" in response.json()["detail"]
+
+
+def test_clone_returns_504_on_subprocess_timeout(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    tmp_path: Path,
+) -> None:
+    """``ProcessTimeoutError`` → 504 with the timeout value in the detail so
+    the frontend can show the user how long we waited before giving up."""
+    target_dir = tmp_path / "clones"
+    payload = _clone_payload(target_dir)
+    fake_timeout = ProcessTimeoutError(
+        command=("/fake/bin/gh", "repo", "clone"),
+        stdout="",
+        stderr="",
+    )
+
+    with (
+        patch.object(
+            DependencyManagementService,
+            "resolve_binary_path",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_binary_lookup()),
+        ),
+        patch.object(
+            DependencyManagementService,
+            "check_authenticated",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_auth_lookup()),
+        ),
+        patch.object(
+            ConcurrencyGroup,
+            "run_process_to_completion",
+            autospec=True,
+            side_effect=_make_fake_run(raises=fake_timeout),
+        ),
+    ):
+        response = client.post("/api/v1/remotes/clone", json=payload)
+
+    assert response.status_code == 504, response.text
+    expected_timeout = int(_REMOTE_CLONE_TIMEOUT_SECONDS)
+    assert f"{expected_timeout}s" in response.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# _resolve_provider_cli
+#
+# Pure helper that maps a provider string to a (binary, Dependency) tuple by
+# probing DependencyManagementService. Raises 400 for unknown providers, 412
+# for missing/unauth CLIs. We call it directly with a fake Request whose
+# `state.services` returns a MagicMock-ish service collection — the helper
+# only touches `services.dependency_management_service.{resolve_binary_path,
+# check_authenticated}`, so a lightweight mock is enough.
+# ---------------------------------------------------------------------------
+
+
+def _fake_request_with_services(services_mock: MagicMock) -> Request:
+    """Build a minimal Request whose `get_services_from_request_or_websocket`
+    can resolve `services_mock`. The helper reads via `request.state.services`
+    in practice; in tests we patch the resolver instead."""
+    scope = {"type": "http", "headers": [], "state": {}}
+    return Request(scope)  # pyright: ignore[reportArgumentType]
+
+
+def test_resolve_provider_cli_returns_400_for_unknown_provider() -> None:
+    """The route should fast-fail on a typo'd provider before the dependency
+    probes run. Pinning this so a future enum change doesn't silently start
+    returning 412 instead."""
+    services = MagicMock()
+    with (
+        patch("sculptor.web.remote_repos.get_services_from_request_or_websocket", return_value=services),
+        pytest.raises(HTTPException) as exc_info,
+    ):
+        _resolve_provider_cli(_fake_request_with_services(services), "bitbucket")
+    assert exc_info.value.status_code == 400
+    assert "bitbucket" in exc_info.value.detail
+
+
+def test_resolve_provider_cli_returns_412_when_cli_missing() -> None:
+    """No gh on PATH → 412 ``gh CLI not installed``. The frontend keys off
+    this exact string to surface the NotConfiguredSection install link."""
+    services = MagicMock()
+    services.dependency_management_service.resolve_binary_path.return_value = None
+    with (
+        patch("sculptor.web.remote_repos.get_services_from_request_or_websocket", return_value=services),
+        pytest.raises(HTTPException) as exc_info,
+    ):
+        _resolve_provider_cli(_fake_request_with_services(services), "github")
+    assert exc_info.value.status_code == 412
+    assert exc_info.value.detail == "GH CLI not installed"
+
+
+def test_resolve_provider_cli_returns_412_when_explicitly_unauthenticated() -> None:
+    """``check_authenticated`` returning ``False`` (not ``None``) is the
+    explicit "signed out" signal. The frontend's NotConfiguredSection footer
+    references this 412 detail string for the auth-CTA copy."""
+    services = MagicMock()
+    services.dependency_management_service.resolve_binary_path.return_value = "/fake/bin/glab"
+    services.dependency_management_service.check_authenticated.return_value = False
+    with (
+        patch("sculptor.web.remote_repos.get_services_from_request_or_websocket", return_value=services),
+        pytest.raises(HTTPException) as exc_info,
+    ):
+        _resolve_provider_cli(_fake_request_with_services(services), "gitlab")
+    assert exc_info.value.status_code == 412
+    assert exc_info.value.detail == "GLAB CLI not authenticated"
+
+
+def test_resolve_provider_cli_returns_binary_when_authenticated() -> None:
+    services = MagicMock()
+    services.dependency_management_service.resolve_binary_path.return_value = "/fake/bin/gh"
+    services.dependency_management_service.check_authenticated.return_value = True
+    with patch("sculptor.web.remote_repos.get_services_from_request_or_websocket", return_value=services):
+        binary, tool = _resolve_provider_cli(_fake_request_with_services(services), "github")
+    assert binary == "/fake/bin/gh"
+    assert tool == Dependency.GH
+
+
+def test_resolve_provider_cli_treats_none_auth_probe_as_authenticated() -> None:
+    """Mirrors the `_resolve_clone_command` policy (`is not False`): a probe
+    timeout / can't-determine result still routes through the CLI, because the
+    common case (CLI is installed + user is signed in) shouldn't break just
+    because the auth subprocess hung. The clone happy path depends on this."""
+    services = MagicMock()
+    services.dependency_management_service.resolve_binary_path.return_value = "/fake/bin/gh"
+    services.dependency_management_service.check_authenticated.return_value = None
+    with patch("sculptor.web.remote_repos.get_services_from_request_or_websocket", return_value=services):
+        binary, tool = _resolve_provider_cli(_fake_request_with_services(services), "github")
+    assert binary == "/fake/bin/gh"
+    assert tool == Dependency.GH
+
+
+# ---------------------------------------------------------------------------
+# Route: GET /api/v1/config/backend-capabilities
+# ---------------------------------------------------------------------------
+
+
+def test_backend_capabilities_returns_default_clones_dir_as_repos_under_sculptor_folder(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+) -> None:
+    """The frontend expects the absolute path of ``<sculptor_folder>/repos``
+    so it can append ``/{provider}`` for the dialog's per-provider default.
+    Pin the shape — anything else and the dialog would clone into the wrong
+    parent directory."""
+    response = client.get("/api/v1/config/backend-capabilities")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    expected = str(get_sculptor_folder() / "repos")
+    assert body["defaultClonesDir"] == expected
+
+
+# ---------------------------------------------------------------------------
+# Route: GET /api/v1/remotes/{provider}/repos
+#
+# We patch _fetch_repos rather than ConcurrencyGroup.run_process_to_completion
+# so the search-vs-browse mode selection and 412 routing get exercised
+# without dragging in JSON parsing.
+# ---------------------------------------------------------------------------
+
+
+def test_list_remote_repos_returns_412_when_gh_unauthenticated(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+) -> None:
+    """Delegates to ``_resolve_provider_cli`` — verify the 412 surfaces with
+    the auth-not-configured detail string the frontend expects."""
+    with (
+        patch.object(
+            DependencyManagementService,
+            "resolve_binary_path",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_binary_lookup()),
+        ),
+        patch.object(
+            DependencyManagementService,
+            "check_authenticated",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_auth_lookup(gh=False)),
+        ),
+    ):
+        response = client.get("/api/v1/remotes/github/repos")
+    assert response.status_code == 412, response.text
+    assert response.json()["detail"] == "GH CLI not authenticated"
+
+
+def test_list_remote_repos_uses_paginated_search_for_github_with_query(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+) -> None:
+    """GitHub + query → the route walks pages via ``_search_github_user_repos``.
+    Patch ``_search_github_user_repos`` directly to assert the route selects
+    that branch (vs. the single-fetch one used for empty queries)."""
+    fake_match = RemoteRepo(
+        full_name="owner/cli",
+        clone_url="https://github.com/owner/cli.git",
+        ssh_url="git@github.com:owner/cli.git",
+        is_private=False,
+        pushed_at=None,
+        description=None,
+    )
+
+    with (
+        patch.object(
+            DependencyManagementService,
+            "resolve_binary_path",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_binary_lookup()),
+        ),
+        patch.object(
+            DependencyManagementService,
+            "check_authenticated",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_auth_lookup()),
+        ),
+        patch("sculptor.web.remote_repos._search_github_user_repos", return_value=[fake_match]) as search_mock,
+        patch("sculptor.web.remote_repos._fetch_repos", side_effect=AssertionError("browse mode should not run")),
+    ):
+        response = client.get("/api/v1/remotes/github/repos", params={"q": "cli", "limit": 10})
+
+    assert response.status_code == 200, response.text
+    assert response.json()[0]["fullName"] == "owner/cli"
+    # The query string is forwarded; the helper takes (q, needed, fetch_page).
+    search_args = search_mock.call_args.args
+    assert search_args[0] == "cli"
+
+
+def test_list_remote_repos_uses_single_fetch_in_browse_mode(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+) -> None:
+    """Empty query → the route hits ``_fetch_repos`` once with the browse-mode
+    API path. We patch ``_fetch_repos`` to short-circuit the JSON parse and
+    assert the search helper is never called."""
+    fake_repo = RemoteRepo(
+        full_name="owner/everything",
+        clone_url="https://github.com/owner/everything.git",
+        ssh_url="git@github.com:owner/everything.git",
+        is_private=False,
+        pushed_at=None,
+        description=None,
+    )
+
+    with (
+        patch.object(
+            DependencyManagementService,
+            "resolve_binary_path",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_binary_lookup()),
+        ),
+        patch.object(
+            DependencyManagementService,
+            "check_authenticated",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_auth_lookup()),
+        ),
+        patch("sculptor.web.remote_repos._fetch_repos", return_value=[fake_repo]) as fetch_mock,
+        patch(
+            "sculptor.web.remote_repos._search_github_user_repos", side_effect=AssertionError("search should not run")
+        ),
+    ):
+        response = client.get("/api/v1/remotes/github/repos")
+
+    assert response.status_code == 200, response.text
+    assert response.json()[0]["fullName"] == "owner/everything"
+    # api_path is the third positional arg in _fetch_repos(binary, cg, api_path, tool).
+    call_kwargs = fetch_mock.call_args
+    api_path = call_kwargs.args[2]
+    assert "/user/repos" in api_path
+    # `&page=` is the paginated-search marker — must be absent in browse mode.
+    # (Plain ``page=`` would false-positive on ``per_page=``.)
+    assert "&page=" not in api_path
+
+
+def test_list_remote_repos_caps_limit_at_max(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+) -> None:
+    """Callers asking for ``limit=10_000`` must be capped at ``_REMOTE_REPO_MAX_LIMIT``
+    so we never page through GitHub at silly sizes."""
+    captured: dict[str, object] = {}
+
+    def fetch_and_capture(binary: str, cg, api_path: str, tool: Dependency) -> list[RemoteRepo]:
+        captured["api_path"] = api_path
+        return []
+
+    with (
+        patch.object(
+            DependencyManagementService,
+            "resolve_binary_path",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_binary_lookup()),
+        ),
+        patch.object(
+            DependencyManagementService,
+            "check_authenticated",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_auth_lookup()),
+        ),
+        patch("sculptor.web.remote_repos._fetch_repos", side_effect=fetch_and_capture),
+    ):
+        response = client.get("/api/v1/remotes/github/repos", params={"limit": 10_000})
+
+    assert response.status_code == 200, response.text
+    api_path = captured["api_path"]
+    assert isinstance(api_path, str)
+    assert f"per_page={_REMOTE_REPO_MAX_LIMIT}" in api_path
+
+
+# ---------------------------------------------------------------------------
+# get_clones_folder
+# ---------------------------------------------------------------------------
+
+
+def test_get_clones_folder_returns_provider_subdirectory(tmp_path: Path, monkeypatch) -> None:
+    """``get_clones_folder("github")`` must land at
+    ``<sculptor_folder>/repos/github`` — the per-provider suffix is what the
+    frontend appends to the BackendCapabilities default. Override the sculptor
+    folder so the test doesn't touch the user's real ~/.sculptor."""
+    monkeypatch.setattr("sculptor.utils.build.get_sculptor_folder", lambda: tmp_path)
+
+    folder = get_clones_folder("github")
+    assert folder == tmp_path / "repos" / "github"
+
+
+def test_get_clones_folder_creates_intermediate_directories(tmp_path: Path, monkeypatch) -> None:
+    """First call on a fresh machine must create ``repos/<provider>`` — the
+    Add Repository default points at this path and the clone subprocess
+    would fail without it."""
+    monkeypatch.setattr("sculptor.utils.build.get_sculptor_folder", lambda: tmp_path)
+
+    folder = get_clones_folder("gitlab")
+    assert folder.is_dir()
+
+
+def test_get_clones_folder_is_idempotent_on_existing_directory(tmp_path: Path, monkeypatch) -> None:
+    """Subsequent calls must not raise even though the directory already
+    exists — the helper is called every time the dialog computes its default
+    target."""
+    monkeypatch.setattr("sculptor.utils.build.get_sculptor_folder", lambda: tmp_path)
+    first = get_clones_folder("github")
+    second = get_clones_folder("github")
+    assert first == second
+    assert first.is_dir()
+
+
+def test_get_clones_folder_keeps_providers_separated(tmp_path: Path, monkeypatch) -> None:
+    """github and gitlab must land in different subdirectories so the
+    per-provider default in the dialog reads the right one."""
+    monkeypatch.setattr("sculptor.utils.build.get_sculptor_folder", lambda: tmp_path)
+    assert get_clones_folder("github") != get_clones_folder("gitlab")
+
+
+# ---------------------------------------------------------------------------
+# DependencyManagementService.check_authenticated — timeout → None
+# (covered indirectly by dependency_management_service_test.py for the gh/glab
+# happy path; this pins the timeout-returns-None contract that the clone-route
+# `is not False` policy depends on.)
+# ---------------------------------------------------------------------------
+
+
+@patch("shutil.which", return_value="/fake/bin/gh")
+def test_check_authenticated_returns_none_on_subprocess_timeout(_mock_which: MagicMock) -> None:
+    """``check_authenticated`` must surface a hung ``gh auth status`` as
+    ``None``, NOT ``False``. ``False`` is reserved for "explicitly signed
+    out" (the CLI ran to completion with a non-zero exit). ``None`` lets the
+    clone route fall through its ``is not False`` policy and still try the
+    CLI rather than silently downgrading to ``git clone``."""
+    mock_cg = MagicMock()
+    mock_cg.run_process_to_completion.side_effect = ProcessTimeoutError(
+        command=("/fake/bin/gh", "auth", "status"),
+        stdout="",
+        stderr="",
+    )
+    service = DependencyManagementService.model_construct(concurrency_group=mock_cg)
+    assert service.check_authenticated(Dependency.GH) is None

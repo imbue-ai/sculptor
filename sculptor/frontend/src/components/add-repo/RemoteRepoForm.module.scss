@@ -1,0 +1,61 @@
+.browseHint {
+  color: var(--gray-11);
+}
+
+.browseLink {
+  background: none;
+  border: none;
+  border-radius: var(--radius-1);
+  color: var(--accent-9);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-decoration: underline;
+
+  &:hover {
+    text-decoration: none;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent-9);
+    outline-offset: 2px;
+  }
+}
+
+.selectedCard {
+  background-color: var(--gray-2);
+  border: 1px solid var(--gray-5);
+  border-radius: var(--radius-3);
+  padding: var(--space-3);
+}
+
+.selectedName {
+  overflow: hidden;
+  // Radix Link picks an accent-tinted underline by default; force it to match
+  // the high-contrast text color so the hover underline reads as white.
+  text-decoration-color: currentColor;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toggleLink {
+  background: none;
+  border: none;
+  border-radius: var(--radius-1);
+  color: var(--accent-9);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--font-size-1);
+  line-height: var(--line-height-1);
+  padding: 0;
+  text-decoration: underline;
+
+  &:hover {
+    text-decoration: none;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent-9);
+    outline-offset: 2px;
+  }
+}

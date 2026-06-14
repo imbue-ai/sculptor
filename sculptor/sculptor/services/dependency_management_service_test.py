@@ -1016,7 +1016,7 @@ class TestCheckAuthenticated:
         assert result is True
         mock_cg.run_process_to_completion.assert_called_once_with(
             ["/usr/bin/claude", "auth", "status"],
-            timeout=10.0,
+            timeout=3.0,
         )
 
     @patch("sculptor.services.dependency_management_service.get_user_config_instance")
@@ -1071,14 +1071,26 @@ class TestCheckAuthenticated:
         )
 
         mock_cg = MagicMock()
-        # git version, claude version, pi version, claude auth status
-        mock_cg.run_process_to_completion.side_effect = [version_result, version_result, version_result, auth_result]
+        # Order of calls in _get_status: git --version, claude --version, pi --version,
+        # claude auth status, gh --version, gh auth status, glab --version, glab auth status.
+        mock_cg.run_process_to_completion.side_effect = [
+            version_result,
+            version_result,
+            version_result,
+            auth_result,
+            version_result,
+            auth_result,
+            version_result,
+            auth_result,
+        ]
 
         service = DependencyManagementService.model_construct(concurrency_group=mock_cg)
         status = service.get_status()
 
         assert status.claude.is_authenticated is True
         assert status.git.is_authenticated is None
+        assert status.gh.is_authenticated is True
+        assert status.glab.is_authenticated is True
 
 
 class TestCheckInstalled:

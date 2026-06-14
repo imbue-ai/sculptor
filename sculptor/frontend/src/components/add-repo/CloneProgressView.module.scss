@@ -1,0 +1,13 @@
+.repoLink {
+  // Always-underlined link styling for the repo name. We control color
+  // directly here (rather than via Radix's color/highContrast props) so the
+  // hover state can step up to the heading's full text color, producing a
+  // visible "lit up" effect. Sculptor's accent palette is gray, so the
+  // DependencyCard `--accent-11` pattern wouldn't show contrast.
+  color: var(--gray-11);
+  text-decoration-color: currentColor;
+
+  &:hover {
+    color: var(--gray-12);
+  }
+}

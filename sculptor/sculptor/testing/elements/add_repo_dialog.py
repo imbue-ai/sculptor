@@ -5,6 +5,16 @@ from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
 
 
 class PlaywrightAddRepoDialogElement(PlaywrightIntegrationTestElement):
+    def select_local_source(self) -> None:
+        """Click the "Local" source radio card so the path-input form is shown.
+
+        The dialog defaults to GitHub, which keeps the Local form mounted but
+        hidden (`display:none`). Tests that drive the path input must select
+        Local first or Playwright will time out waiting for the input to
+        become visible.
+        """
+        self.get_source_local_card().click()
+
     def get_path_input(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.ADD_REPO_PATH_INPUT)
 
@@ -16,3 +26,93 @@ class PlaywrightAddRepoDialogElement(PlaywrightIntegrationTestElement):
 
     def get_submit_hint(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.PATH_AUTOCOMPLETE_SUBMIT_HINT)
+
+    def get_source_github_card(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.ADD_REPO_SOURCE_GITHUB)
+
+    def get_source_gitlab_card(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.ADD_REPO_SOURCE_GITLAB)
+
+    def get_source_local_card(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.ADD_REPO_SOURCE_LOCAL)
+
+    def get_remote_url_toggle(self) -> Locator:
+        # The "I'll paste a URL instead" / "Search my repositories instead"
+        # button. AddRepoDialog keeps every provider's form mounted (with
+        # display:none on the hidden providers) so each form preserves its
+        # state on radio-card switches. That means multiple buttons share
+        # this testid in the DOM at once; filter to the visible one so we
+        # resolve to the toggle inside the currently shown provider's form.
+        return self._locator.locator(f'[data-testid="{ElementIDs.ADD_REPO_REMOTE_URL_TOGGLE.value}"]:visible')
+
+    def get_remote_url_input(self) -> Locator:
+        # Mirrors the toggle: the URL TextField is mounted inside the URL
+        # view of every provider's form. Filter to the visible one so we
+        # resolve to the input in the currently active provider.
+        return self._locator.locator(f'[data-testid="{ElementIDs.ADD_REPO_REMOTE_URL_INPUT.value}"]:visible')
+
+    def get_clone_progress_title(self) -> Locator:
+        # CloneProgressView replaces the form with a "Cloning owner/repo…"
+        # dialog title once the submit fires; the test uses this to confirm
+        # the form → clone transition.
+        return self._locator.get_by_role("heading", name="Cloning", exact=False)
+
+    def get_clone_progress_link(self) -> Locator:
+        """The owner/repo anchor inside the cloning title. Present only when
+        deriveWebUrl could resolve a navigable URL (ssh or https inputs)."""
+        return self._page.get_by_test_id(ElementIDs.ADD_REPO_CLONE_PROGRESS_LINK)
+
+    def get_not_configured_section(self) -> Locator:
+        """The "X CLI not configured" panel mounted inside the active provider's
+        form. Multiple providers can mount this concurrently because all three
+        forms stay mounted, so filter to the visible one."""
+        return self._locator.locator(f'[data-testid="{ElementIDs.ADD_REPO_NOT_CONFIGURED.value}"]:visible')
+
+    def get_configure_cta_button(self) -> Locator:
+        """The footer "Configure {provider}" button that replaces the submit
+        button when the active remote provider isn't configured."""
+        return self._page.get_by_test_id(ElementIDs.ADD_REPO_CONFIGURE_CTA)
+
+    def get_clone_failed_path(self) -> Locator:
+        """The proposed local path inside the clone-failed view's path box.
+        Only mounted when localPathSuggestion is set (the 409 path)."""
+        return self._page.get_by_test_id(ElementIDs.ADD_REPO_CLONE_FAILED_PATH)
+
+    def get_clone_failed_copy_button(self) -> Locator:
+        """Clipboard-copy icon button next to the proposed local path."""
+        return self._page.get_by_test_id(ElementIDs.ADD_REPO_CLONE_FAILED_COPY)
+
+    def get_clone_failed_add_local_button(self) -> Locator:
+        """The "Add as local folder" primary CTA in the 409 clone-failed view."""
+        return self._page.get_by_test_id(ElementIDs.ADD_REPO_CLONE_FAILED_ADD_LOCAL)
+
+    def get_clone_failed_message(self) -> Locator:
+        """The error-message text inside the clone-failed view."""
+        return self._page.get_by_test_id(ElementIDs.ADD_REPO_CLONE_FAILED_MESSAGE)
+
+    def get_clone_failed_close_button(self) -> Locator:
+        """The Close button in the clone-failed view footer (always rendered)."""
+        return self._page.get_by_test_id(ElementIDs.ADD_REPO_CLONE_FAILED_CLOSE)
+
+    def get_remote_name_input(self) -> Locator:
+        """The Name TextField inside the active provider's RemoteRepoForm.
+        All three forms stay mounted, so filter to the visible input."""
+        return self._locator.locator(f'[data-testid="{ElementIDs.ADD_REPO_REMOTE_NAME_INPUT.value}"]:visible')
+
+    def get_repo_combobox_input(self) -> Locator:
+        """The search input inside the active provider's RemoteRepoCombobox.
+        Combobox lives inside the per-provider form so filter to visible."""
+        return self._locator.locator(f'[data-testid="{ElementIDs.ADD_REPO_REPO_COMBOBOX_INPUT.value}"]:visible')
+
+    def get_repo_combobox_items(self) -> Locator:
+        """All rendered combobox rows in the visible provider's form."""
+        return self._locator.locator(f'[data-testid="{ElementIDs.ADD_REPO_REPO_COMBOBOX_ITEM.value}"]:visible')
+
+    def get_repo_combobox_item(self, full_name: str) -> Locator:
+        """A specific combobox row by `owner/repo`. The row carries the slug as
+        a custom data attribute so the locator doesn't have to rely on
+        Radix-injected text positioning."""
+        return self._locator.locator(
+            f'[data-testid="{ElementIDs.ADD_REPO_REPO_COMBOBOX_ITEM.value}"]'
+            f'[data-repo-full-name="{full_name}"]:visible'
+        )

@@ -110,6 +110,8 @@ export const prDefaultTargetBranchAtom = atom<string>(
   (get) => get(userConfigAtom)?.prDefaultTargetBranch ?? "origin/main",
 );
 
+export const defaultCloneTargetDirAtom = atom<string>((get) => get(userConfigAtom)?.defaultCloneTargetDir ?? "");
+
 // CI Babysitter settings (experimental). The full nested config lives under
 // userConfig.ciBabysitter on the backend; individual atoms below derive from
 // that object with sensible per-field defaults for when the config hasn't

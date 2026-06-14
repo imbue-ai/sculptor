@@ -37,6 +37,8 @@ const makeStatus = (overrides: Partial<DependenciesStatus>): DependenciesStatus 
   git: makeInfo({ installed: true }),
   claude: makeInfo({}),
   pi: makeInfo({}),
+  gh: makeInfo({}),
+  glab: makeInfo({}),
   ...overrides,
 });
 

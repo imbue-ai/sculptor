@@ -145,9 +145,23 @@ class PlaywrightInstallationStepElement(PlaywrightIntegrationTestElement):
 class PlaywrightAddRepoStepElement(PlaywrightIntegrationTestElement):
     """Element representing the add-repo step of onboarding."""
 
+    def get_local_source_card(self) -> Locator:
+        """Get the 'Local Folder' source radio card."""
+        return self._page.get_by_test_id(ElementIDs.ADD_REPO_SOURCE_LOCAL)
+
     def get_path_input(self) -> Locator:
         """Get the repo path input field."""
         return self._page.get_by_test_id(ElementIDs.ADD_REPO_PATH_INPUT)
+
+    def get_submit_button(self) -> Locator:
+        """Get the 'Add' submit button."""
+        return self._page.get_by_test_id(ElementIDs.ADD_REPO_SUBMIT_BUTTON)
+
+    def select_local_source(self) -> None:
+        """Select the Local Folder source. Required before entering a path since
+        the step defaults to GitHub (the path input is hidden in remote modes).
+        """
+        self.get_local_source_card().click()
 
     def enter_path(self, path: str) -> None:
         """Enter a repo path in the input field."""
@@ -160,6 +174,7 @@ class PlaywrightAddRepoStepElement(PlaywrightIntegrationTestElement):
         self.get_path_input().press("Enter")
 
     def complete_step(self, repo_path: str) -> None:
-        """Complete the add-repo step by entering a path and submitting."""
+        """Complete the add-repo step by entering a local path and submitting."""
+        self.select_local_source()
         self.enter_path(repo_path)
         self.submit()

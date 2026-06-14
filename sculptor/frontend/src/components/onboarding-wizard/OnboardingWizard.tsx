@@ -215,15 +215,15 @@ export const OnboardingWizard = ({ initialStep, onComplete }: OnboardingWizardPr
   return (
     <Flex direction="column" className={styles.wizardContainer}>
       <TitleBar />
-      <Flex direction="column" className={styles.contentArea}>
-        <div className={styles.stepContent}>{renderStep()}</div>
-      </Flex>
       <StepIndicator
         totalSteps={STEP_COUNT}
         currentStep={currentStepIndex}
         maxVisitedStep={maxVisitedStep}
         onStepClick={handleStepClick}
       />
+      <Flex direction="column" className={styles.contentArea}>
+        <div className={styles.stepContent}>{renderStep()}</div>
+      </Flex>
     </Flex>
   );
 };

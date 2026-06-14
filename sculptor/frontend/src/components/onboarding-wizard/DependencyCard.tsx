@@ -135,6 +135,9 @@ export const DependencyCard = ({
 
   const canExpand = status.state !== "loading" && status.state !== "installing" && status.state !== "authenticating";
 
+  const isNeutralOptional =
+    optional && (status.state === "not-installed" || status.state === "needs-auth" || status.state === "wrong-version");
+
   const isSpinnerVisible =
     status.state === "loading" || status.state === "installing" || status.state === "authenticating";
 
@@ -186,7 +189,12 @@ export const DependencyCard = ({
     // dropped by the early-return. Surfacing the gate as `aria-disabled` makes the
     // framework's actionability contract honor it — Playwright auto-waits for the card to
     // become ready instead of dropping the click and timing out downstream (SCU-1215).
-    <Flex direction="column" className={ROW_CLASSES[status.state]} data-dependency={cliName} aria-disabled={!canExpand}>
+    <Flex
+      direction="column"
+      className={isNeutralOptional ? styles.row : ROW_CLASSES[status.state]}
+      data-dependency={cliName}
+      aria-disabled={!canExpand}
+    >
       <Flex
         align="center"
         gap="2"
@@ -199,6 +207,8 @@ export const DependencyCard = ({
           ) : (
             <Spinner size="1" />
           )
+        ) : isNeutralOptional ? (
+          <AlertCircleIcon size={14} className={styles.iconNeutral} />
         ) : (
           STATUS_ICONS[status.state]
         )}
@@ -211,13 +221,13 @@ export const DependencyCard = ({
           {STATUS_LABELS[status.state]}
         </Text>
 
-        {optional && status.state !== "installed" && (
-          <Text size="1" className={styles.optionalTag}>
-            optional
-          </Text>
-        )}
-
         <Flex align="center" gap="2" ml="auto" style={{ flexShrink: 0 }}>
+          {optional && status.state !== "installed" && (
+            <Text size="2" className={styles.optionalTag}>
+              optional
+            </Text>
+          )}
+
           {helpText && status.state === "installing" && (
             <Popover.Root>
               <Popover.Trigger>
