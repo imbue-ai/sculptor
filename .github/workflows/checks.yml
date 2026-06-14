@@ -36,10 +36,10 @@ jobs:
     continue-on-error: ${{ startsWith(github.base_ref, 'release/') }}
     env:
       JUST_VERBOSE: "1"
-      # imbue_core.common.get_filesystem_root() defaults to /mnt/private on
-      # Linux, a mount GitHub-hosted ubuntu doesn't have. Use a literal /tmp
-      # path (the OSX fallback) via the supported SCIENCE_FILESYSTEM_ROOT
-      # override.
+      # sculptor.foundation.common.get_filesystem_root() defaults to /mnt/private on
+      # Linux — a cluster mount the GitLab self-managed runners had but
+      # GitHub-hosted ubuntu doesn't. Use a literal /tmp path (the OSX
+      # fallback) via the supported SCIENCE_FILESYSTEM_ROOT override.
       # Note: can't use ${{ runner.temp }} here — the `runner` context isn't
       # available at job-level env, only inside step env/with/run.
       SCIENCE_FILESYSTEM_ROOT: /tmp/science

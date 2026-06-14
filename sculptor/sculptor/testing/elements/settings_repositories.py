@@ -107,11 +107,33 @@ class PlaywrightRepositoriesSettingsElement(PlaywrightIntegrationTestElement):
         return self._page.get_by_test_id(ElementIDs.SETTINGS_WORKSPACE_SETUP_COMMAND_INPUT).first
 
     def set_setup_command(self, command: str) -> None:
-        """Fill the setup command textarea and blur to trigger save."""
+        """Fill the setup command textarea, blur to trigger the save, and — when
+        the value actually changes — wait for the save request to complete before
+        returning.
+
+        Blur fires a ``PUT /api/v1/projects/{id}/workspace_setup_command`` only
+        when the trimmed value differs from what is currently shown (the saved
+        value, or the default while tracking it). When it does change, we wait for
+        that response so callers can immediately re-navigate or re-read the
+        persisted value without racing the in-flight save — a fixed
+        ``wait_for_timeout`` could not guarantee the round-trip had landed.
+
+        When the value is unchanged no request is sent, so we must NOT wait
+        (``expect_response`` would hang until timeout). This matters on shared
+        instances, where an earlier test may have already saved the same value.
+        """
         setup_input = self.get_setup_command_input()
         expect(setup_input).to_be_visible()
+        current_value = setup_input.input_value()
         setup_input.fill(command)
-        setup_input.blur()
+        if command.strip() == current_value.strip():
+            # No change → blur triggers no save request; nothing to wait for.
+            setup_input.blur()
+            return
+        with self._page.expect_response(
+            lambda response: "workspace_setup_command" in response.url and response.request.method == "PUT"
+        ):
+            setup_input.blur()
 
     def _get_repo_row(self, repo_name: str, path_contains: str | None = None) -> Locator:
         """Find a repo row containing the given name and optional path substring."""

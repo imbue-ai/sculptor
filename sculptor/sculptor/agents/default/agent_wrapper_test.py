@@ -1,11 +1,11 @@
 from queue import Queue
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.sculptor.state.messages import LLMModel
 from sculptor.agents.default.agent_wrapper import DefaultAgentWrapper
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
 from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.state.messages import LLMModel
 
 
 class _WrapperForTest(DefaultAgentWrapper):

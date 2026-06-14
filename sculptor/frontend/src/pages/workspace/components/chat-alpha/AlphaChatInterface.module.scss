@@ -22,7 +22,15 @@
 
 .scrollContainer {
   height: 100%;
-  overflow-y: auto;
+  // The chat scrolls vertically only. Without an explicit `overflow-x`, the
+  // spec promotes the default `visible` to `auto` whenever `overflow-y` is
+  // non-visible — so any transient horizontal overflow (e.g. a wide table or
+  // long inline-code line measured before layout settles) surfaces a thick,
+  // unstyled horizontal scrollbar (the vertical `thin-scrollbar` mixin only
+  // sizes the scrollbar width, not height). Pin it hidden: tables and code
+  // blocks carry their own inner horizontal scroll containers, so nothing
+  // legitimate is clipped.
+  overflow: hidden auto;
   position: relative;
   width: 100%;
 

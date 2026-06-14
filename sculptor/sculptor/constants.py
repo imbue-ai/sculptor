@@ -2,7 +2,7 @@
 
 from enum import StrEnum
 
-# Should be in sync with imbue_core.thread_utils.EXIT_CODE_IRRECOVERABLE_ERROR
+# Should be in sync with sculptor.foundation.thread_utils.EXIT_CODE_IRRECOVERABLE_ERROR
 SCULPTOR_EXIT_CODE_IRRECOVERABLE_ERROR = 3
 SCULPTOR_EXIT_CODE_PARENT_DIED = 4
 SCULPTOR_EXIT_CODE_COULD_NOT_ACQUIRE_LOCK = 5

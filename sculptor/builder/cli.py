@@ -29,7 +29,7 @@ from builder.artifacts import artifacts_for_target_and_stage
 from packaging.version import InvalidVersion
 from packaging.version import Version
 
-import imbue_core.git
+import sculptor.foundation.git
 from sculptor import posthog_settings
 from sculptor import sentry_settings
 from sculptor.version import VersionComponent
@@ -641,7 +641,7 @@ def commit_new_version(branch_name: str | None, new_version: str, dry_run: bool 
         _run_out(["git", "checkout", "-b", branch_name])
 
     write_project_version(new_version)
-    repo_root_path = imbue_core.git.get_git_repo_root()
+    repo_root_path = sculptor.foundation.git.get_git_repo_root()
 
     _run_out(["uv", "lock"])
 

@@ -32,6 +32,12 @@ thread that sets an abort flag the directive handlers poll between steps —
 kept deterministic via sentinel-file pauses, never wall-clock races. The
 process exits on stdin EOF (Sculptor closes stdin at shutdown).
 
+FakePi accepts the `prompt` command's optional `images[]` field (real pi's
+base64 `ImageContent` blocks) but never decodes them — it has no model. The
+`fake_pi:report_inputs` directive echoes the received image count + mimeTypes
+and the prompt text so integration tests can assert image/attachment delivery
+end-to-end without a real upstream model.
+
 CLI surface matches what ``PiAgent.start`` spawns:
 
     pi --mode rpc --session-dir <dir> --session-id <id> --append-system-prompt <prompt>
@@ -76,6 +82,19 @@ _COMMAND_REGEX = re.compile(r"fake_pi:\S+(?:\s+`[^`]*`)?")
 
 _DEFAULT_RESPONSE_TEXT = "[FakePi] Task completed."
 
+# A prompt rewritten to pi's skill-invocation shape (`/skill:<name> [args]`).
+# When such a prompt carries no `fake_pi:` directive, FakePi echoes that it
+# "followed" the skill so tests can assert PiAgent rewrote a picked `/name`
+# into `/skill:<name>` (FakePi only ever sees the already-rewritten text).
+_SKILL_INVOCATION_REGEX = re.compile(r"^/skill:(\S+)")
+_SKILL_FOLLOWED_PREFIX = "[FakePi] followed skill: "
+
+
+def _skill_invocation_name(prompt_text: str) -> str | None:
+    """Return the skill name if ``prompt_text`` is a ``/skill:<name>`` invocation."""
+    match = _SKILL_INVOCATION_REGEX.match(prompt_text.strip())
+    return match.group(1) if match else None
+
 
 class UnknownFakePiCommandError(ValueError):
     """Raised when an unknown ``fake_pi:`` directive is encountered."""
@@ -92,9 +111,16 @@ _STDOUT_LOCK = threading.Lock()
 
 @dataclass
 class _TurnBuilder:
-    """Accumulates the text emitted by directives in a single turn."""
+    """Accumulates the text emitted by directives in a single turn.
+
+    Carries the turn's received inputs (the prompt text and any `images[]`
+    blocks) so the ``report_inputs`` directive can echo them back — that echo
+    is how integration tests assert image/attachment delivery without a model.
+    """
 
     chunks: list[str] = field(default_factory=list)
+    prompt_text: str = ""
+    images: list[dict] = field(default_factory=list)
 
     def emit(self, text: str) -> None:
         self.chunks.append(text)
@@ -117,6 +143,10 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--session-dir", default=None)
     parser.add_argument("--session-id", default=None)
     parser.add_argument("--append-system-prompt", default="")
+    # PiAgent passes the workspace's skill source dirs as repeatable --skill
+    # flags. Parse them first-class (rather than swallowing them into _extra) so
+    # tests can assert which paths were handed to pi.
+    parser.add_argument("--skill", action="append", default=[], dest="skill")
     parsed, _extra = parser.parse_known_args(argv)
     return parsed
 
@@ -280,6 +310,57 @@ def _emit_aborted_agent_end(text: str) -> None:
     )
 
 
+def _emit_compaction_start(reason: str) -> None:
+    _emit({"type": "compaction_start", "reason": reason})
+
+
+def _emit_compaction_end(reason: str, aborted: bool, will_retry: bool) -> None:
+    # `result` mirrors real pi's manual-compact result shape (feasibility §5);
+    # PiAgent does not read it (Claude renders no equivalent), but FakePi emits
+    # it for wire fidelity.
+    _emit(
+        {
+            "type": "compaction_end",
+            "reason": reason,
+            "aborted": aborted,
+            "willRetry": will_retry,
+            "result": {"summary": "", "firstKeptEntryId": "", "tokensBefore": 0, "details": {}},
+        }
+    )
+
+
+def _handle_compaction(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
+    """Emit a compaction_start/end pair mid-turn.
+
+    Mirrors real pi's compaction wire shape (feasibility §5): manual,
+    threshold, and overflow all reuse the same two events, differing only in
+    ``reason`` (and overflow's ``willRetry:true``). The pair drives Sculptor's
+    AutoCompacting* messages → the StatusPill "Compacting" chrome.
+
+    Optional ``wait_path`` blocks between start and end on a sentinel file (as
+    ``fake_pi:wait_for_file`` does) so an integration test can observe the
+    "Compacting" pill while compaction is held open, then release it and watch
+    the pill clear. The compaction events carry no text, so the surrounding
+    turn still falls back to the default response when no text directive runs.
+    """
+    reason = str(args.get("reason", "threshold"))
+    aborted = bool(args.get("aborted", False))
+    will_retry = bool(args.get("will_retry", False))
+    _emit_compaction_start(reason)
+    wait_path = args.get("wait_path")
+    if wait_path:
+        timeout_seconds = float(args.get("timeout_seconds", 120))
+        sentinel = Path(wait_path)
+        deadline = time.monotonic() + timeout_seconds
+        while not sentinel.exists():
+            if abort_event.is_set():
+                raise _TurnAborted()
+            if time.monotonic() >= deadline:
+                raise RuntimeError(f"fake_pi:compaction timed out after {timeout_seconds}s waiting for {sentinel}")
+            time.sleep(0.05)
+    _emit_compaction_end(reason, aborted=aborted, will_retry=will_retry)
+
+
 def _handle_emit_text(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
     text = args.get("text", "")
     accumulated = builder.full_text + text
@@ -385,6 +466,22 @@ def _handle_sleep(args: dict, builder: _TurnBuilder, abort_event: Event, state: 
         time.sleep(0.05)
 
 
+def _handle_report_inputs(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
+    """Echo the inputs FakePi received this turn so tests can assert delivery.
+
+    Surfaces the `images[]` count and mimeTypes (image-input delivery) and the
+    full received prompt text — which, for non-image attachments, carries the
+    path-instructions block prompt assembly prepends (attachment delivery).
+    FakePi has no model and never reads the files; the real-pi suite covers
+    that the content is actually used.
+    """
+    mime_types = ",".join(str(image.get("mimeType", "")) for image in builder.images)
+    summary = f"[FakePi] images={len(builder.images)}; mimeTypes=[{mime_types}]; prompt={builder.prompt_text}"
+    accumulated = builder.full_text + summary
+    _emit_text_delta(summary, accumulated)
+    builder.emit(summary)
+
+
 def _handle_wait_for_file(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
     timeout_seconds = float(args.get("timeout_seconds", 120))
     sentinel = Path(args["path"])
@@ -419,6 +516,8 @@ _COMMAND_REGISTRY: dict[str, Callable[[dict, _TurnBuilder, Event, _SessionState]
     "sleep": _handle_sleep,
     "wait_for_file": _handle_wait_for_file,
     "recall": _handle_recall,
+    "report_inputs": _handle_report_inputs,
+    "compaction": _handle_compaction,
 }
 
 
@@ -463,6 +562,7 @@ def _emit_state(prompt_id: str | None, state: _SessionState) -> None:
 def _run_turn(
     prompt_id: str | None,
     prompt_text: str,
+    images: list[dict],
     turn_directives: list[str],
     system_directives: list[str],
     abort_event: Event,
@@ -493,7 +593,7 @@ def _run_turn(
     if error_message is not None:
         _emit_response("prompt", success=False, prompt_id=prompt_id, error=error_message)
         return
-    builder = _TurnBuilder()
+    builder = _TurnBuilder(prompt_text=prompt_text, images=images)
     _emit_response("prompt", success=True, prompt_id=prompt_id)
     _emit({"type": "agent_start"})
     _emit_user_message_end(prompt_text)
@@ -509,8 +609,10 @@ def _run_turn(
         state.record_turn(prompt_text)
         return
     if not builder.has_text:
-        _emit_text_delta(_DEFAULT_RESPONSE_TEXT, _DEFAULT_RESPONSE_TEXT)
-        builder.emit(_DEFAULT_RESPONSE_TEXT)
+        skill_name = _skill_invocation_name(prompt_text)
+        fallback = f"{_SKILL_FOLLOWED_PREFIX}{skill_name}" if skill_name is not None else _DEFAULT_RESPONSE_TEXT
+        _emit_text_delta(fallback, fallback)
+        builder.emit(fallback)
     full_text = builder.full_text
     _emit_message_end(full_text)
     _emit_agent_end(full_text)
@@ -578,9 +680,11 @@ def _run_rpc_loop(system_prompt: str, session_dir: Path | None, session_id: str)
         # PiAgent clearing interrupt-pending when it sends the next prompt).
         abort_event.clear()
         message_text = payload.get("message", "") or ""
+        raw_images = payload.get("images")
+        images = raw_images if isinstance(raw_images, list) else []
         turn_directives = _extract_directives(message_text)
         try:
-            _run_turn(command_id, message_text, turn_directives, system_directives, abort_event, state)
+            _run_turn(command_id, message_text, images, turn_directives, system_directives, abort_event, state)
         except UnknownFakePiCommandError as e:
             _emit_response("prompt", success=False, prompt_id=command_id, error=str(e))
             exit_code = 1

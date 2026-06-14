@@ -1,12 +1,13 @@
 """PiAgent — `DefaultAgentWrapper` subclass wrapping `pi --mode rpc`.
 
 The agent spawns a long-lived `pi --mode rpc --session-dir <dir>
---session-id <id> --append-system-prompt <prompt>` subprocess and pumps
-user turns over JSONL stdin/stdout. The session flags persist the
-conversation as a JSONL file under a per-task dir and pin its id
-Sculptor-side, so relaunching after an agent-process restart resumes the
-full conversation (`supports_session_resume`). Pi's stdout multiplexes
-three channels
+--session-id <id> --append-system-prompt <prompt> [--skill <dir> ...]`
+subprocess and pumps user turns over JSONL stdin/stdout. The session flags
+persist the conversation as a JSONL file under a per-task dir and pin its id
+Sculptor-side, so relaunching after an agent-process restart resumes the full
+conversation (`supports_session_resume`). The `--skill` flags point pi at the
+workspace's Claude-visible skill sources so its skill set matches the slash
+picker's (`supports_skills`). Pi's stdout multiplexes three channels
 (`response`, `extension_ui_request`, and the `AgentSessionEvent` union);
 the dispatcher distinguishes them by top-level `type`. Pi's tool calls
 render as rich tool blocks (`supports_tool_use_rendering=True`): the
@@ -27,8 +28,11 @@ from __future__ import annotations
 import json
 import os
 import queue
+import re
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from queue import Empty
 from queue import Queue
 from threading import Event
@@ -42,20 +46,6 @@ from packaging.version import Version
 from pydantic import PrivateAttr
 from pydantic import ValidationError
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.common import generate_id
-from imbue_core.ids import AssistantMessageID
-from imbue_core.ids import ToolUseID
-from imbue_core.sculptor.state.chat_state import ContentBlockTypes
-from imbue_core.sculptor.state.chat_state import TextBlock
-from imbue_core.sculptor.state.chat_state import ToolResultBlock
-from imbue_core.sculptor.state.chat_state import ToolUseBlock
-from imbue_core.sculptor.state.claude_state import get_tool_invocation_string
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import Message
-from imbue_core.sculptor.state.messages import ResponseBlockAgentMessage
-from imbue_core.secrets_utils import Secret
-from imbue_core.thread_utils import ObservableThread
 from sculptor.agents.default.agent_wrapper import DefaultAgentWrapper
 from sculptor.agents.default.utils import get_state_file_contents
 from sculptor.agents.pi_agent.harness import PiHarness
@@ -86,9 +76,19 @@ from sculptor.agents.pi_agent.output_processor import ParsedUnknownEvent
 from sculptor.agents.pi_agent.output_processor import RpcResponse
 from sculptor.agents.pi_agent.output_processor import extract_assistant_text
 from sculptor.agents.pi_agent.output_processor import parse_rpc_message
+from sculptor.agents.pi_agent.prompt_assembly import build_attachment_instructions
+from sculptor.agents.pi_agent.prompt_assembly import build_image_block
+from sculptor.agents.pi_agent.prompt_assembly import save_attachments_to_environment
+from sculptor.agents.pi_agent.prompt_assembly import split_image_and_path_attachments
 from sculptor.agents.pi_agent.tool_rendering import build_tool_result_content
 from sculptor.agents.pi_agent.tool_rendering import extract_text_from_tool_payload
 from sculptor.agents.pi_agent.tool_rendering import map_pi_tool_call
+from sculptor.common.plugin import get_plugin_dirs
+from sculptor.foundation.common import generate_id
+from sculptor.foundation.secrets_utils import Secret
+from sculptor.foundation.thread_utils import ObservableThread
+from sculptor.interfaces.agents.agent import AutoCompactingAgentMessage
+from sculptor.interfaces.agents.agent import AutoCompactingDoneAgentMessage
 from sculptor.interfaces.agents.agent import ClearContextUserMessage
 from sculptor.interfaces.agents.agent import InterruptProcessUserMessage
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
@@ -102,9 +102,24 @@ from sculptor.interfaces.agents.errors import PiBinaryNotFoundError
 from sculptor.interfaces.agents.errors import PiCrashError
 from sculptor.interfaces.agents.errors import PiVersionMismatchError
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import AssistantMessageID
+from sculptor.primitives.ids import ToolUseID
 from sculptor.services.dependency_management_service import PI_VERSION_RANGE
 from sculptor.services.dependency_management_service import parse_pi_version
 from sculptor.services.user_config.user_config import get_user_config_instance
+from sculptor.state.chat_state import ContentBlockTypes
+from sculptor.state.chat_state import TextBlock
+from sculptor.state.chat_state import ToolResultBlock
+from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.claude_state import get_tool_invocation_string
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import Message
+from sculptor.state.messages import ResponseBlockAgentMessage
+from sculptor.web.skills import SkillSourceKind
+from sculptor.web.skills import discover_skills
+from sculptor.web.skills import get_skill_source_directories
+from sculptor.web.skills import parse_command_frontmatter
 
 # Pi's file-mutating tools, keyed by their lowercase RPC `toolName`
 # (pi 0.78.0 `packages/coding-agent/src/core/tools/{edit,write,bash}.ts`;
@@ -173,6 +188,53 @@ class _ToolCall:
     partial_text: str = ""
 
 
+# Matches a leading slash-command token (`/name`) and captures the remainder
+# (args), DOTALL so multi-line prompts keep their tail. `\S+` lets the name
+# carry a `:` so a plugin-namespaced `/sculptor-workflow:fix-bug` is captured
+# whole before the namespace is stripped.
+_SKILL_INVOCATION_RE = re.compile(r"^/(\S+)(.*)$", re.DOTALL)
+
+
+def _rewrite_skill_invocation(text: str, discovered_skill_names: frozenset[str]) -> str:
+    """Rewrite a leading Sculptor skill invocation into pi's `/skill:<name>` shape.
+
+    The frontend stays harness-agnostic: it sends a picked skill as the same
+    `/name [args]` text it sends Claude. pi instead invokes a skill as
+    `/skill:<name>`. When `name` is one of the workspace's discovered skills
+    (the set the slash picker offers), rewrite `/name [args]` →
+    `/skill:<name> [args]`; otherwise the text is passed through untouched.
+
+    Pseudo-skills (`/clear`, `/copy`, `/btw`) are parsed frontend-side and
+    never reach here nor appear in the discovered set, so they pass through;
+    ordinary text that merely starts with `/` is left alone. A plugin-namespaced
+    name (`<plugin>:<skill>`) is reduced to its bare `<skill>` because pi
+    registers plugin skills un-namespaced.
+    """
+    if not text.startswith("/"):
+        return text
+    match = _SKILL_INVOCATION_RE.match(text)
+    if match is None:
+        return text
+    name, rest = match.group(1), match.group(2)
+    if name not in discovered_skill_names:
+        return text
+    bare_name = name.rsplit(":", 1)[-1]
+    return f"/skill:{bare_name}{rest}"
+
+
+def _render_synthesized_skill(name: str, description: str, body: str) -> str:
+    """Render a SKILL.md that wraps a loose `.claude/commands/*.md` command.
+
+    pi only discovers skills as `SKILL.md` directories, so a loose command file
+    is wrapped in one. `name`/`description` are JSON-encoded (valid YAML flow
+    scalars) so colons, quotes, or stray characters in either can't break the
+    frontmatter; the description is flattened to one line because pi refuses to
+    load a skill whose description is missing.
+    """
+    flat_description = " ".join(description.split())
+    return f"---\nname: {json.dumps(name)}\ndescription: {json.dumps(flat_description)}\n---\n\n{body}"
+
+
 class _TurnState:
     """Per-turn streaming accumulator state.
 
@@ -183,7 +245,14 @@ class _TurnState:
     the registry persists for the whole agent run (keyed by unique tool-call id).
     """
 
-    __slots__ = ("accumulated_text", "assistant_message_id", "first_message_id", "prompt_id", "tool_calls")
+    __slots__ = (
+        "accumulated_text",
+        "assistant_message_id",
+        "compaction_open",
+        "first_message_id",
+        "prompt_id",
+        "tool_calls",
+    )
 
     def __init__(self, prompt_id: str) -> None:
         self.prompt_id = prompt_id
@@ -191,6 +260,12 @@ class _TurnState:
         self.assistant_message_id = AssistantMessageID(generate_id())
         self.first_message_id = AgentMessageID()
         self.tool_calls: dict[str, _ToolCall] = {}
+        # True between a compaction_start and its matching compaction_end.
+        # Compaction spans assistant messages, so this is NOT reset in
+        # reset_accumulator. If the run exits while it is still open (process
+        # death or a raised error mid-compaction), _consume_until_turn_end
+        # emits the missing Done so is_auto_compacting cannot stick on True.
+        self.compaction_open = False
 
     def reset_accumulator(self) -> None:
         self.accumulated_text = ""
@@ -222,6 +297,10 @@ class PiAgent(DefaultAgentWrapper):
     # The current escalation timer's cancel signal (one per interrupt). Set when
     # the turn ends so the grace-window thread stands down without SIGTERM.
     _escalation_cancel: Event | None = PrivateAttr(default=None)
+    # The workspace's discovered skill names (the same set the slash picker
+    # offers), captured at launch so `_run_prompt_turn` can rewrite a picked
+    # `/name` into pi's `/skill:<name>` form. Empty until `start()`.
+    _discovered_skill_names: frozenset[str] = PrivateAttr(default_factory=frozenset)
 
     def start(self, secrets: Mapping[str, str | Secret]) -> None:
         # Resolve and validate the pi binary BEFORE super().start so the
@@ -269,6 +348,12 @@ class PiAgent(DefaultAgentWrapper):
             )
 
         system_prompt = self._build_system_prompt()
+        # Point pi at the workspace's Claude-visible skill sources (--skill) and
+        # capture the picker's skill names so invocations can be rewritten to
+        # pi's /skill: shape. Both derive from the same discover_skills roots so
+        # the picker list and pi's loaded set stay in lockstep.
+        skill_args = self._build_skill_launch_args()
+        self._discovered_skill_names = self._discover_skill_names()
         # `--session-id` (Sculptor-pinned id, "creating it if missing") is the
         # resume lever, chosen over `--session <id>`: it never errors on an
         # absent/corrupt session (real pi 0.78.0 exits non-zero for an unknown
@@ -285,6 +370,7 @@ class PiAgent(DefaultAgentWrapper):
             self._session_id,
             "--append-system-prompt",
             system_prompt,
+            *skill_args,
         ]
         self._process = self.environment.run_process_in_background(
             command,
@@ -404,6 +490,86 @@ class PiAgent(DefaultAgentWrapper):
         if self.system_prompt:
             parts.append(f"<User instructions>\n{self.system_prompt.strip()}\n</User instructions>")
         return "\n\n".join(parts)
+
+    def _discover_skill_names(self) -> frozenset[str]:
+        """The workspace's discovered skill names, matching the slash picker.
+
+        Sourced from `discover_skills` (the same authority the `/api/v1/skills`
+        endpoint serves the picker), so the rewrite accepts exactly the names a
+        user can pick. The names may be plugin-namespaced (`<plugin>:<skill>`);
+        `_rewrite_skill_invocation` reduces those to bare names for pi.
+        """
+        skills = discover_skills(self.environment.get_working_directory(), get_plugin_dirs())
+        return frozenset(skill.name for skill in skills)
+
+    def _build_skill_launch_args(self) -> list[str]:
+        """Build the repeatable `--skill <path>` flags pointing pi at the
+        workspace's Claude-visible skill sources.
+
+        Sources come from `get_skill_source_directories` — the same roots
+        `discover_skills` (and so the picker) scans — resolved against this
+        agent's environment paths. SKILL.md-directory sources (repo/home
+        `.claude/skills`, plugin `skills/`) map onto pi's agentskills.io
+        discovery directly. Loose `.claude/commands/*.md` files are not a shape
+        pi discovers, so they are wrapped in synthesized SKILL.md dirs (see
+        `_synthesize_command_skills`). Missing source dirs are skipped quietly
+        (a repo without `.claude/skills` is normal); flag order follows the
+        helper's discovery order.
+        """
+        sources = get_skill_source_directories(
+            self.environment.get_working_directory(),
+            plugin_dirs=get_plugin_dirs(),
+            home_path=self.environment.get_user_home_directory(),
+        )
+        args: list[str] = []
+        command_files: list[Path] = []
+        for source in sources:
+            if not source.path.is_dir():
+                continue
+            if source.kind is SkillSourceKind.SKILL_DIR:
+                args += ["--skill", str(source.path)]
+            else:
+                command_files += sorted(source.path.glob("*.md"))
+        synthesized_dir = self._synthesize_command_skills(command_files)
+        if synthesized_dir is not None:
+            args += ["--skill", str(synthesized_dir)]
+        return args
+
+    def _synthesize_command_skills(self, command_files: Sequence[Path]) -> Path | None:
+        """Wrap loose command-style `.md` files in synthesized SKILL.md dirs pi can load.
+
+        pi discovers skills only as `SKILL.md` directories, not the loose `.md`
+        command files Claude also supports (`.claude/commands/*.md`). For each
+        such file write a `<state>/pi_skills/<name>/SKILL.md` wrapper and return
+        the `pi_skills` parent to hand to a single `--skill`, or None when there
+        are no command files. The wrappers live under the per-task state dir —
+        outside the repo and outside `~/.claude` — so neither `discover_skills`
+        (the picker source) nor pi's own ancestor auto-discovery lists them a
+        second time; only the explicit `--skill` loads them. The file stem is
+        the skill name (matching `discover_skills`), the body is carried
+        through, and a description is synthesized when the command file has none
+        (pi refuses to load a skill with no description). First name wins,
+        matching `discover_skills`' cross-source precedence.
+        """
+        if not command_files:
+            return None
+        skills_root = self.environment.get_state_path() / "pi_skills"
+        seen_names: set[str] = set()
+        for command_file in command_files:
+            name = command_file.stem
+            if name in seen_names:
+                continue
+            try:
+                body = command_file.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as e:
+                logger.debug("PiAgent skipping unreadable command file {}: {}", command_file, e)
+                continue
+            seen_names.add(name)
+            description = parse_command_frontmatter(body) or f"Project command '{name}' (from {command_file.name})."
+            skill_md = skills_root / name / "SKILL.md"
+            skill_md.parent.mkdir(parents=True, exist_ok=True)
+            skill_md.write_text(_render_synthesized_skill(name, description, body), encoding="utf-8")
+        return skills_root if seen_names else None
 
     def _collect_api_key_secrets(self) -> dict[str, Secret]:
         config = get_user_config_instance()
@@ -601,7 +767,7 @@ class PiAgent(DefaultAgentWrapper):
             self._cancel_interrupt_escalation()
             prompt_id = generate_id()
             self._turn_in_flight.set()
-            self._send_rpc({"type": "prompt", "id": prompt_id, "message": message.text})
+            self._send_rpc(self._build_prompt_payload(prompt_id, message))
             try:
                 self._consume_until_turn_end(prompt_id)
             finally:
@@ -610,6 +776,33 @@ class PiAgent(DefaultAgentWrapper):
                 self._turn_in_flight.clear()
                 self._interrupt_pending.clear()
                 self._cancel_interrupt_escalation()
+
+    def _build_prompt_payload(self, prompt_id: str, message: ChatInputUserMessage) -> dict[str, Any]:
+        """Assemble the `prompt` command for one user turn, attachments included.
+
+        Attachments (`ChatInputUserMessage.files`) are split by type: images
+        ride the `images[]` field as base64 + mimeType; everything else is
+        presented as paths in the prompt text for pi to read with its own
+        `read` tool. See `prompt_assembly` for the helpers.
+        """
+        saved_paths = save_attachments_to_environment(self.environment, message.files)
+        image_paths, path_attachments = split_image_and_path_attachments(saved_paths)
+        rewritten_text = _rewrite_skill_invocation(message.text, self._discovered_skill_names)
+        prompt_text = build_attachment_instructions(path_attachments) + rewritten_text
+        payload: dict[str, Any] = {"type": "prompt", "id": prompt_id, "message": prompt_text}
+        if image_paths:
+            # No per-model image-capability gating here yet, only the
+            # harness-level "pi can carry images" flag. When per-model gating is
+            # added it belongs at this assembly site, mirroring the frontend's
+            # `getModelCapabilities` map (`frontend/src/.../modelCapabilities.ts`).
+            payload["images"] = [build_image_block(path, self._read_attachment_bytes(path)) for path in image_paths]
+        return payload
+
+    def _read_attachment_bytes(self, path: str) -> bytes:
+        """Read a saved attachment's bytes from the environment copy."""
+        content = self.environment.read_file(path, mode="rb")
+        assert isinstance(content, bytes), "binary read must return bytes"
+        return content
 
     def _consume_until_turn_end(self, prompt_id: str = "") -> None:
         """Drive pi's stdout until the current agent run terminates.
@@ -626,32 +819,43 @@ class PiAgent(DefaultAgentWrapper):
         out_queue = process.get_queue()
         state = _TurnState(prompt_id=prompt_id)
 
-        while not self._shutdown_event.is_set():
-            if process.is_finished() and out_queue.empty():
-                return
-            try:
-                line, is_stdout = out_queue.get(timeout=0.1)
-            except Empty:
-                continue
-            if not is_stdout:
-                continue
-            stripped = line.strip()
-            if not stripped:
-                continue
-            try:
-                event = json.loads(stripped)
-            except json.JSONDecodeError:
-                logger.debug("PiAgent ignoring non-JSON stdout line: {}", stripped)
-                continue
-            if not isinstance(event, dict):
-                logger.debug("PiAgent ignoring non-object stdout payload: {}", event)
-                continue
-            # Parse once at the boundary: the three lanes pi multiplexes
-            # (`response`, `extension_ui_request`, session events) become typed
-            # variants. Unrecognized / malformed payloads parse to
-            # ParsedUnknownEvent and are discarded (RPC §5.3 forward-compat).
-            if self._dispatch_event(parse_rpc_message(event), state):
-                return
+        try:
+            while not self._shutdown_event.is_set():
+                if process.is_finished() and out_queue.empty():
+                    return
+                try:
+                    line, is_stdout = out_queue.get(timeout=0.1)
+                except Empty:
+                    continue
+                if not is_stdout:
+                    continue
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                try:
+                    event = json.loads(stripped)
+                except json.JSONDecodeError:
+                    logger.debug("PiAgent ignoring non-JSON stdout line: {}", stripped)
+                    continue
+                if not isinstance(event, dict):
+                    logger.debug("PiAgent ignoring non-object stdout payload: {}", event)
+                    continue
+                # Parse once at the boundary: the three lanes pi multiplexes
+                # (`response`, `extension_ui_request`, session events) become typed
+                # variants. Unrecognized / malformed payloads parse to
+                # ParsedUnknownEvent and are discarded (RPC §5.3 forward-compat).
+                if self._dispatch_event(parse_rpc_message(event), state):
+                    return
+        finally:
+            # Stick-prevention: a compaction_start with no matching
+            # compaction_end (process died mid-compaction, or a PiCrashError
+            # raised before the end arrived) would otherwise leave
+            # is_auto_compacting stuck True — derived.py scans messages in
+            # reverse for the latest AutoCompacting*. Emit the Done so the
+            # "Compacting" pill always clears, on every exit path (normal
+            # agent_end, process exit, raised error, shutdown).
+            if state.compaction_open:
+                self._output_messages.put(AutoCompactingDoneAgentMessage(message_id=AgentMessageID()))
 
     def _handle_response_event(self, parsed: RpcResponse, state: _TurnState) -> None:
         """Process a top-level `response` envelope (correlated by `id`, RPC §5.1).
@@ -717,20 +921,24 @@ class PiAgent(DefaultAgentWrapper):
             case ParsedToolExecutionEnd():
                 self._handle_tool_execution_end(parsed, state)
                 return False
+            case ParsedCompactionStart():
+                self._handle_compaction_start(state)
+                return False
+            case ParsedCompactionEnd():
+                self._handle_compaction_end(state)
+                return False
             case (
                 ParsedTurnStart()
                 | ParsedTurnEnd()
                 | ParsedMessageStart()
                 | ParsedQueueUpdate()
-                | ParsedCompactionStart()
-                | ParsedCompactionEnd()
                 | ParsedAutoRetryStart()
                 | ParsedSessionInfoChanged()
                 | ParsedThinkingLevelChanged()
                 | ParsedUnknownEvent()
             ):
-                # Events this harness does not consume (turn/queue/compaction/
-                # retry/session notices) plus any unrecognized type.
+                # Events this harness does not consume (turn/queue/retry/session
+                # notices) plus any unrecognized type.
                 logger.debug("PiAgent ignoring unconsumed event: {}", type(parsed).__name__)
                 return False
             case _ as unreachable:
@@ -1034,6 +1242,34 @@ class PiAgent(DefaultAgentWrapper):
             text = parsed.final_error or state.accumulated_text or "pi exhausted retries"
             raise PiCrashError(text, exit_code=None, metadata=None)
         # Successful retry — a new agent run is about to begin; do not yield.
+
+    def _handle_compaction_start(self, state: _TurnState) -> None:
+        """Map pi's compaction_start onto the Compacting chrome.
+
+        Emits AutoCompactingAgentMessage so is_auto_compacting flips True and
+        the StatusPill shows "Compacting...". pi's `reason`
+        (manual/threshold/overflow) is deliberately not surfaced — Sculptor's
+        chrome is a single Compacting state with no per-reason distinction
+        (Claude parity). Arms the stick-prevention Done in
+        _consume_until_turn_end via `compaction_open`.
+        """
+        state.compaction_open = True
+        self._output_messages.put(AutoCompactingAgentMessage(message_id=AgentMessageID()))
+
+    def _handle_compaction_end(self, state: _TurnState) -> None:
+        """Map pi's compaction_end onto clearing the Compacting chrome.
+
+        ALWAYS emits AutoCompactingDoneAgentMessage so the pill never sticks,
+        including the aborted / error_message cases. We do NOT raise here: a
+        genuine failure is surfaced only if pi itself ends the run in error (the
+        agent_end / message_end error paths handle that). `willRetry:true`
+        (overflow) means pi re-runs the prompt; the turn extends via the normal
+        agent_end boundary, so this is non-terminal. pi's `result.summary` is not
+        rendered (Claude shows no equivalent). Idempotent: a Done with no
+        preceding start (resumed mid-stream) is harmless.
+        """
+        state.compaction_open = False
+        self._output_messages.put(AutoCompactingDoneAgentMessage(message_id=AgentMessageID()))
 
     def _handle_extension_error(self, parsed: ParsedExtensionError) -> None:
         # Non-terminal: extensions are not loaded in pi-basic but pi could

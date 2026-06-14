@@ -11,19 +11,16 @@ from typing import Mapping
 from loguru import logger
 from pydantic import PrivateAttr
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.constants import ExceptionPriority
-from imbue_core.processes.local_process import RunningProcess
-from imbue_core.sculptor.state.messages import Message
-from imbue_core.secrets_utils import Secret
 from sculptor.agents.default.constants import DEFAULT_WAIT_TIMEOUT
 from sculptor.agents.default.constants import REMOVED_MESSAGE_IDS_STATE_FILE
 from sculptor.agents.default.utils import get_state_file_contents
 from sculptor.agents.default.utils import get_turn_request_id
 from sculptor.agents.default.utils import serialize_agent_wrapper_error
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.constants import ExceptionPriority
+from sculptor.foundation.processes.local_process import RunningProcess
+from sculptor.foundation.secrets_utils import Secret
 from sculptor.interfaces.agents.agent import Agent
 from sculptor.interfaces.agents.agent import MessageTypes
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageAgentMessage
@@ -42,6 +39,9 @@ from sculptor.interfaces.agents.errors import AgentClientError
 from sculptor.interfaces.agents.errors import AgentTransientError
 from sculptor.interfaces.agents.harness import Harness
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import TaskID
+from sculptor.state.messages import Message
 
 
 class DefaultAgentWrapper(Agent):

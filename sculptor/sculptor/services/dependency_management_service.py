@@ -20,12 +20,12 @@ from packaging.version import InvalidVersion
 from packaging.version import Version
 from pydantic import PrivateAttr
 
-from imbue_core.concurrency_group import InvalidConcurrencyGroupStateError
-from imbue_core.processes.local_process import run_streaming
-from imbue_core.pydantic_serialization import FrozenModel
-from imbue_core.subprocess_utils import ProcessError
-from imbue_core.subprocess_utils import ProcessTimeoutError
-from imbue_core.thread_utils import ObservableThread
+from sculptor.foundation.concurrency_group import InvalidConcurrencyGroupStateError
+from sculptor.foundation.processes.local_process import run_streaming
+from sculptor.foundation.pydantic_serialization import FrozenModel
+from sculptor.foundation.subprocess_utils import ProcessError
+from sculptor.foundation.subprocess_utils import ProcessTimeoutError
+from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.primitives.service import Service
 from sculptor.services.managed_tools import CLAUDE_VERSION_RANGE

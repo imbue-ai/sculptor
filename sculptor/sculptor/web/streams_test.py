@@ -2,7 +2,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from imbue_core.agents.data_types.ids import ProjectID
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import Notification
 from sculptor.database.models import NotificationID
@@ -11,6 +10,7 @@ from sculptor.database.models import UserSettings
 from sculptor.database.models import Workspace
 from sculptor.database.models import WorkspaceInitializationStrategy
 from sculptor.primitives.ids import OrganizationReference
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import UserReference
 from sculptor.primitives.ids import UserSettingsID
 from sculptor.primitives.ids import WorkspaceID

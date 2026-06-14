@@ -2,8 +2,8 @@ import sys
 import weakref
 from concurrent.futures import thread as thread_executor_module
 
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.thread_utils import ObservableThread
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.thread_utils import ObservableThread
 
 if sys.version_info[:2] != (3, 12) and sys.version_info[:2] != (3, 11):
     raise RuntimeError(

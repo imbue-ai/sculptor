@@ -19,8 +19,8 @@ from typing_extensions import Annotated
 from uvicorn import Config
 from uvicorn import Server
 
-from imbue_core.log_utils import ensure_core_log_levels_configured
 from sculptor import version as sculptor_version
+from sculptor.foundation.log_utils import ensure_core_log_levels_configured
 from sculptor.services.user_config.user_config import initialize_from_file
 from sculptor.utils.errors import setup_irrecoverable_exception_handler
 from sculptor.utils.logs import setup_loggers

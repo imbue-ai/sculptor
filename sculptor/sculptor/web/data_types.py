@@ -11,24 +11,24 @@ from pydantic import EmailStr
 from pydantic import Field
 from pydantic import Tag
 
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.pydantic_serialization import SerializableModel
-from imbue_core.pydantic_serialization import build_discriminator
-from imbue_core.sculptor.state.chat_state import AskUserQuestionData
-from imbue_core.sculptor.state.messages import EffortLevel
-from imbue_core.sculptor.state.messages import LLMModel
-from imbue_core.sculptor.state.messages import Message
-from imbue_core.upper_case_str_enum import UpperCaseStrEnum
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.pydantic_serialization import SerializableModel
+from sculptor.foundation.pydantic_serialization import build_discriminator
+from sculptor.foundation.upper_case_str_enum import UpperCaseStrEnum
 from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.interfaces.agents.artifacts import DiffArtifact
 from sculptor.interfaces.agents.artifacts import TaskListArtifact
+from sculptor.primitives.ids import ProjectID
+from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.data_model_service.api import CompletedTransaction
 from sculptor.services.task_service.api import TaskMessageContainer
 from sculptor.services.workspace_service.api import GitOperationResult
+from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.messages import EffortLevel
+from sculptor.state.messages import LLMModel
+from sculptor.state.messages import Message
 
 
 class TaskInterface(StrEnum):
@@ -81,9 +81,9 @@ class PrStatusInfo(SerializableModel):
     pipeline_updated_at: str | None = None
     approvals: list[PrApproval] = Field(default_factory=list)
     unresolved_comments: list[PrComment] = Field(default_factory=list)
-    error_category: Literal["cli_missing", "not_authenticated", "no_access", "network_error", "transient"] | None = (
-        None
-    )
+    error_category: (
+        Literal["cli_missing", "not_authenticated", "no_access", "network_error", "rate_limited", "transient"] | None
+    ) = None
     error_provider: Literal["gitlab", "github"] | None = None
     error_message: str | None = None
     mismatched_pr_iid: int | None = None

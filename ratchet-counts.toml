@@ -45,7 +45,7 @@
 "." = 1
 
 [no-integration-page-evaluate]
-"." = 25
+"." = 22
 
 [no-integration-page-goto]
 "." = 0
@@ -93,7 +93,7 @@
 "." = 0
 
 [no-pyrefly-ignore]
-"." = 71
+"." = 73
 
 [no-pyrefly-ignore-errors]
 "." = 0

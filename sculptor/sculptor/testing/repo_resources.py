@@ -9,7 +9,7 @@ from loguru import logger
 from xdist import get_xdist_worker_id
 from xdist import is_xdist_worker
 
-from imbue_core.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.testing.git_snapshot import FullLocalGitRepo
 from sculptor.testing.git_snapshot import GitCommitSnapshot
 from sculptor.testing.mock_repo import MockRepoState

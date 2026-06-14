@@ -127,9 +127,7 @@ def _build_open_pr_status(
 ) -> PrStatusInfo:
     """Build a full PrStatusInfo for an open PR (checks, reviews, comments)."""
     pr_number = pr_data["number"]
-    pipeline_status = _fetch_check_status(working_dir, pr_number)
-    approvals = _fetch_reviews(working_dir, pr_number)
-    unresolved_comments = _fetch_review_comments(working_dir, pr_number)
+    details = _fetch_pr_details(working_dir, pr_number)
 
     return PrStatusInfo(
         workspace_id=workspace_id,
@@ -137,9 +135,9 @@ def _build_open_pr_status(
         pr_iid=pr_number,
         pr_title=pr_data.get("title"),
         pr_web_url=pr_data.get("url"),
-        pipeline_status=pipeline_status,
-        approvals=approvals,
-        unresolved_comments=unresolved_comments,
+        pipeline_status=_parse_check_status(details),
+        approvals=_parse_reviews(details),
+        unresolved_comments=_parse_review_comments(details),
     )
 
 
@@ -180,16 +178,41 @@ def _find_all_prs(working_dir: Path, source_branch: str) -> list[dict]:
     return prs
 
 
-def _fetch_check_status(working_dir: Path, pr_number: int) -> Literal["running", "passed", "failed"] | None:
+def _fetch_pr_details(working_dir: Path, pr_number: int) -> dict:
+    """Fetch checks, reviews, and review threads for an open PR in one call.
+
+    ``gh pr view`` issues a single GraphQL request no matter how many
+    ``--json`` fields are requested, so bundling ``statusCheckRollup``,
+    ``reviews``, and ``reviewThreads`` into one invocation collapses what
+    used to be three separate GraphQL round trips into one. That detail
+    fetch is the dominant per-poll cost for a workspace with an open PR, so
+    this roughly halves the GraphQL points spent polling it.
+
+    On a non-rate-limit failure this returns an empty dict so the caller
+    still reports the open PR (just without check/review detail), matching
+    the previous best-effort behaviour. A rate-limit failure is re-raised as
+    ``CliStatusError`` so the poller can surface it and back off instead of
+    silently dropping the signal.
+    """
     result = run_cli_with_retry(
-        ["gh", "pr", "view", str(pr_number), "--json", "statusCheckRollup"],
+        ["gh", "pr", "view", str(pr_number), "--json", "statusCheckRollup,reviews,reviewThreads"],
         working_dir,
     )
     if result.returncode != 0:
-        logger.debug("gh pr view checks failed: {}", result.stderr)
-        return None
-    data = json.loads(result.stdout)
-    checks = data.get("statusCheckRollup", [])
+        category = classify_cli_error(result.stderr)
+        if category == "rate_limited":
+            raise CliStatusError(category, result.stderr)
+        logger.debug("gh pr view details failed ({}): {}", category, result.stderr)
+        return {}
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError:
+        logger.debug("Invalid JSON from gh pr view details: {}", result.stdout[:200])
+        return {}
+
+
+def _parse_check_status(details: dict) -> Literal["running", "passed", "failed"] | None:
+    checks = details.get("statusCheckRollup", [])
     if not checks:
         return None
 
@@ -210,16 +233,8 @@ def _fetch_check_status(working_dir: Path, pr_number: int) -> Literal["running",
     return "passed"
 
 
-def _fetch_reviews(working_dir: Path, pr_number: int) -> list[PrApproval]:
-    result = run_cli_with_retry(
-        ["gh", "pr", "view", str(pr_number), "--json", "reviews"],
-        working_dir,
-    )
-    if result.returncode != 0:
-        logger.debug("gh pr view reviews failed: {}", result.stderr)
-        return []
-    data = json.loads(result.stdout)
-    reviews = data.get("reviews", [])
+def _parse_reviews(details: dict) -> list[PrApproval]:
+    reviews = details.get("reviews", [])
     # Keep only the latest review per author
     latest_by_author: dict[str, PrApproval] = {}
     for review in reviews:
@@ -231,16 +246,8 @@ def _fetch_reviews(working_dir: Path, pr_number: int) -> list[PrApproval]:
     return list(latest_by_author.values())
 
 
-def _fetch_review_comments(working_dir: Path, pr_number: int) -> list[PrComment]:
-    result = run_cli_with_retry(
-        ["gh", "pr", "view", str(pr_number), "--json", "reviewThreads"],
-        working_dir,
-    )
-    if result.returncode != 0:
-        logger.debug("gh pr view reviewThreads failed: {}", result.stderr)
-        return []
-    data = json.loads(result.stdout)
-    threads = data.get("reviewThreads", [])
+def _parse_review_comments(details: dict) -> list[PrComment]:
+    threads = details.get("reviewThreads", [])
     comments: list[PrComment] = []
     for thread in threads:
         if thread.get("isResolved"):

@@ -30,6 +30,7 @@ from sculptor.agents.pi_agent.output_processor import ParsedMessageEnd
 from sculptor.agents.pi_agent.output_processor import ParsedMessageUpdate
 from sculptor.agents.pi_agent.output_processor import RpcResponse
 from sculptor.services.dependency_management_service import PI_VERSION_RANGE
+from sculptor.testing.fake_pi import _parse_args
 from sculptor.testing.fake_pi import install_fake_pi_binary
 
 _FAKE_PI_MODULE = "sculptor.testing.fake_pi"
@@ -56,6 +57,16 @@ def _parse_jsonl(stdout: str) -> list[dict]:
 
 def _send_prompt(message: str, prompt_id: str = "p1") -> str:
     return json.dumps({"type": "prompt", "id": prompt_id, "message": message}) + "\n"
+
+
+def _send_prompt_with_images(message: str, images: list[dict], prompt_id: str = "p1") -> str:
+    return json.dumps({"type": "prompt", "id": prompt_id, "message": message, "images": images}) + "\n"
+
+
+def _last_assistant_text(events: list[dict]) -> str:
+    end = ParsedMessageEnd.model_validate(_by_type(events, "message_end")[-1])
+    assert end.message.role == "assistant"
+    return str(end.message.content[0]["text"])
 
 
 def _by_type(events: list[dict], event_type: str) -> list[dict]:
@@ -200,6 +211,52 @@ def test_fake_pi_rpc_tool_call_error_result_sets_is_error() -> None:
     assert end["result"]["content"][0]["text"] == "ENOENT"
 
 
+def test_fake_pi_rpc_compaction_directive_emits_start_end_pair_mid_turn() -> None:
+    """fake_pi:compaction emits a compaction_start/end pair between text directives."""
+    prompt = (
+        'fake_pi:emit_text `{"text": "before"}` '
+        'fake_pi:compaction `{"reason": "threshold"}` '
+        'fake_pi:emit_text `{"text": "after"}`'
+    )
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=_send_prompt(prompt),
+    )
+
+    assert result.returncode == 0
+    events = _parse_jsonl(result.stdout)
+    starts = _by_type(events, "compaction_start")
+    ends = _by_type(events, "compaction_end")
+    assert len(starts) == 1
+    assert starts[0]["reason"] == "threshold"
+    assert len(ends) == 1
+    assert ends[0]["reason"] == "threshold"
+    assert ends[0]["aborted"] is False
+    assert ends[0]["willRetry"] is False
+    # The pair lands mid-turn: start before end, both before the agent_end boundary.
+    types = [e["type"] for e in events]
+    assert types.index("compaction_start") < types.index("compaction_end") < types.index("agent_end")
+    # The surrounding text directives still stream in order.
+    deltas = [e["assistantMessageEvent"]["delta"] for e in events if e.get("type") == "message_update"]
+    assert deltas == ["before", "after"]
+
+
+def test_fake_pi_rpc_compaction_directive_passes_through_overflow_flags() -> None:
+    """The overflow case (willRetry/aborted) is forwarded onto compaction_end."""
+    prompt = 'fake_pi:compaction `{"reason": "overflow", "will_retry": true, "aborted": true}`'
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=_send_prompt(prompt),
+    )
+
+    assert result.returncode == 0
+    events = _parse_jsonl(result.stdout)
+    end = _by_type(events, "compaction_end")[0]
+    assert end["reason"] == "overflow"
+    assert end["willRetry"] is True
+    assert end["aborted"] is True
+
+
 def test_fake_pi_rpc_error_directive_emits_failure_response_and_no_session_events() -> None:
     prompt = 'fake_pi:error `{"message": "boom"}`'
     result = _run_fake_pi(
@@ -237,6 +294,40 @@ def test_fake_pi_rpc_default_response_when_no_directives_present() -> None:
     ParsedAgentEnd.model_validate(_by_type(events, "agent_end")[0])
 
 
+def test_fake_pi_parses_repeatable_skill_flags() -> None:
+    # PiAgent hands pi the workspace's skill dirs as repeatable --skill flags;
+    # FakePi parses them first-class so tests can assert what was passed.
+    parsed = _parse_args(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", "", "--skill", "/a/skills", "--skill", "/b/skills"]
+    )
+    assert parsed.skill == ["/a/skills", "/b/skills"]
+
+
+def test_fake_pi_accepts_skill_flags_and_runs_a_turn() -> None:
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", "", "--skill", "/some/skills"],
+        stdin_input=_send_prompt("hello"),
+    )
+    assert result.returncode == 0
+    events = _parse_jsonl(result.stdout)
+    RpcResponse.model_validate(events[0])
+    ParsedAgentEnd.model_validate(_by_type(events, "agent_end")[0])
+
+
+def test_fake_pi_echoes_followed_skill_for_skill_invocation() -> None:
+    # A prompt already rewritten to pi's /skill:<name> shape (with no fake_pi:
+    # directive) makes FakePi echo that it "followed" the skill, so an
+    # integration test can assert PiAgent rewrote a picked /name into /skill:.
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=_send_prompt("/skill:fix-bug the login flow"),
+    )
+    assert result.returncode == 0
+    events = _parse_jsonl(result.stdout)
+    update = _first_update(events)
+    assert "followed skill: fix-bug" in update.assistant_message_event.get("delta", "")
+
+
 def test_fake_pi_rpc_directives_in_system_prompt_drive_turn() -> None:
     system_prompt = 'fake_pi:emit_text `{"text": "from-system"}`'
     result = _run_fake_pi(
@@ -262,6 +353,58 @@ def test_fake_pi_rpc_per_turn_directives_take_precedence_over_system_prompt() ->
     events = _parse_jsonl(result.stdout)
     update = _first_update(events)
     assert update.assistant_message_event.get("delta") == "from-turn"
+
+
+def test_fake_pi_report_inputs_echoes_image_count_and_mimetypes() -> None:
+    """report_inputs surfaces the received images[] so image delivery is assertable."""
+    images = [
+        {"type": "image", "data": "AAAA", "mimeType": "image/png"},
+        {"type": "image", "data": "BBBB", "mimeType": "image/gif"},
+    ]
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=_send_prompt_with_images("fake_pi:report_inputs", images),
+    )
+
+    assert result.returncode == 0
+    text = _last_assistant_text(_parse_jsonl(result.stdout))
+    assert "images=2" in text
+    assert "image/png" in text
+    assert "image/gif" in text
+
+
+def test_fake_pi_report_inputs_echoes_prompt_text_for_path_attachments() -> None:
+    """Non-image attachments ride the prompt text; report_inputs echoes it back."""
+    message = """<system-instructions>
+The user has attached these files. Read them before proceeding.
+/env/attachments/notes.txt
+</system-instructions>
+
+read it fake_pi:report_inputs"""
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=_send_prompt(message),
+    )
+
+    assert result.returncode == 0
+    text = _last_assistant_text(_parse_jsonl(result.stdout))
+    # No images this turn, but the attached path is delivered in the prompt text.
+    assert "images=0" in text
+    assert "/env/attachments/notes.txt" in text
+
+
+def test_fake_pi_accepts_images_field_on_happy_path_without_report_directive() -> None:
+    """A prompt carrying images[] but no report directive still runs the happy path."""
+    images = [{"type": "image", "data": "AAAA", "mimeType": "image/png"}]
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=_send_prompt_with_images('fake_pi:emit_text `{"text": "ok"}`', images),
+    )
+
+    assert result.returncode == 0
+    events = _parse_jsonl(result.stdout)
+    assert _first_update(events).assistant_message_event.get("delta") == "ok"
+    assert len(_by_type(events, "agent_end")) == 1
 
 
 def test_fake_pi_rpc_abort_with_no_turn_acks_and_exits_on_eof() -> None:
@@ -370,12 +513,6 @@ def test_fake_pi_rpc_handles_multiple_turns_in_sequence() -> None:
     assert deltas == ["one", "two"]
     agent_ends = _by_type(events, "agent_end")
     assert len(agent_ends) == 2
-
-
-def _last_assistant_text(events: list[dict]) -> str:
-    end = ParsedMessageEnd.model_validate(_by_type(events, "message_end")[-1])
-    assert end.message.role == "assistant"
-    return end.message.content[0]["text"]
 
 
 def test_fake_pi_recall_resumes_prior_user_message_across_relaunch(tmp_path: Path) -> None:

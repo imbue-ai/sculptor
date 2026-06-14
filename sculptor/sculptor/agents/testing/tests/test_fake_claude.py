@@ -9,15 +9,6 @@ from uuid import uuid4
 
 import pytest
 
-from imbue_core.sculptor.state.chat_state import TextBlock
-from imbue_core.sculptor.state.chat_state import ToolUseBlock
-from imbue_core.sculptor.state.claude_state import ParsedAssistantResponse
-from imbue_core.sculptor.state.claude_state import ParsedEndResponse
-from imbue_core.sculptor.state.claude_state import ParsedInitResponse
-from imbue_core.sculptor.state.claude_state import ParsedTaskNotificationResponse
-from imbue_core.sculptor.state.claude_state import ParsedTaskStartedResponse
-from imbue_core.sculptor.state.claude_state import ParsedToolResultResponseSimple
-from imbue_core.sculptor.state.claude_state import parse_claude_code_json_lines_simple
 from sculptor.agents.testing.fake_claude import _parse_prompt
 from sculptor.agents.testing.fake_claude_commands import _read_mcp_control_response_text
 from sculptor.agents.testing.fake_claude_commands import handle_ask_user_question
@@ -43,6 +34,15 @@ from sculptor.agents.testing.fake_claude_jsonl import make_task_started_message
 from sculptor.agents.testing.fake_claude_jsonl import make_text_block
 from sculptor.agents.testing.fake_claude_jsonl import make_tool_result_message
 from sculptor.agents.testing.fake_claude_jsonl import make_tool_use_block
+from sculptor.state.chat_state import TextBlock
+from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.claude_state import ParsedAssistantResponse
+from sculptor.state.claude_state import ParsedEndResponse
+from sculptor.state.claude_state import ParsedInitResponse
+from sculptor.state.claude_state import ParsedTaskNotificationResponse
+from sculptor.state.claude_state import ParsedTaskStartedResponse
+from sculptor.state.claude_state import ParsedToolResultResponseSimple
+from sculptor.state.claude_state import parse_claude_code_json_lines_simple
 
 # ========== JSONL Round-Trip Tests ==========
 

@@ -38,14 +38,14 @@ from typing import Callable
 from pydantic import BaseModel
 from pydantic import ConfigDict
 
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.pydantic_serialization import SerializableModel
-from imbue_core.sculptor.state.chat_state import ContentBlock
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Project
+from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
+from sculptor.primitives.ids import TaskID
 from sculptor.services.workspace_service.api import WorkspaceService
+from sculptor.state.chat_state import ContentBlock
 
 
 class HarnessCapabilities(SerializableModel):

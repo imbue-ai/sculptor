@@ -11,23 +11,31 @@ renders under Claude" baseline; the pi branch is the "this affordance is
 suppressed by the harness gate" claim.
 """
 
+import io
+import subprocess
 import tempfile
 import uuid
 from pathlib import Path
 
 import pytest
+from PIL import Image
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.interfaces.agents.agent import HarnessName
+from sculptor.testing.elements.base import type_trigger_char
 from sculptor.testing.elements.chat_panel import send_chat_message
+from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
 from sculptor.testing.fake_pi import install_fake_pi_binary
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import navigate_to_settings_page
+from sculptor.testing.playwright_utils import send_message_via_api
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
+from sculptor.testing.playwright_utils import upload_file_via_api
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
+from sculptor.testing.utils import get_playwright_modifier_key
 from tests.integration.frontend.conftest import HarnessTestConfig  # noqa: F401
 
 # Mirror of the frontend's CAPABILITY_UNSUPPORTED_COPY (components/useCapabilityGate.ts).
@@ -127,6 +135,13 @@ def test_sub_agent_pill_render_path_gated(sculptor_instance_: SculptorInstance, 
     expect(sculptor_instance_.page.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_PILL)).to_have_count(0)
 
 
+def _png_bytes(color: tuple[int, int, int] = (0, 0, 255)) -> bytes:
+    """A small solid-color PNG, in memory."""
+    buffer = io.BytesIO()
+    Image.new("RGB", (8, 8), color).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
 @user_story("to see a scripted tool call render as a completed tool block under both harnesses")
 def test_tool_call_renders_under_both_harnesses(
@@ -184,28 +199,84 @@ def test_pi_write_and_edit_render_completed_file_chips(sculptor_instance_: Sculp
 
 
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
-@user_story("to keep the chat input usable when the file-upload path is gated off")
-def test_chat_remains_usable_when_uploads_gated(
-    sculptor_instance_: SculptorInstance, harness: HarnessTestConfig
-) -> None:
-    _create_workspace_for_harness(sculptor_instance_, harness, "File Upload Gate")
-    # FileUpload's hidden input is always in the DOM. The gate manifests as the
-    # `disabled` flag on the wrapping component, which forwards to the
-    # imperative handle (so paste / drop / +menu Images becomes a no-op).
-    # The chat input remains visible — only the upload paths are inert.
-    expect(sculptor_instance_.page.get_by_test_id(ElementIDs.CHAT_INPUT)).to_be_visible()
-    expect(sculptor_instance_.page.get_by_test_id(ElementIDs.FILE_UPLOAD)).to_be_attached()
+@user_story("to attach files in a pi workspace and have images and paths reach the agent")
+def test_uploads_usable_and_deliver_under_pi(sculptor_instance_: SculptorInstance, harness: HarnessTestConfig) -> None:
+    task_page = _create_workspace_for_harness(sculptor_instance_, harness, "File Upload Gate")
+    page = sculptor_instance_.page
+    # Both harnesses keep a usable chat input with the upload input in the DOM.
+    expect(page.get_by_test_id(ElementIDs.CHAT_INPUT)).to_be_visible()
+    expect(page.get_by_test_id(ElementIDs.FILE_UPLOAD)).to_be_attached()
+    if harness.workspace_harness != HarnessName.PI:
+        # Claude branch unchanged: the upload affordance has always been live.
+        return
+    # Flipped pi branch: attachments are no longer dropped. Deliver one image
+    # and one non-image file through the upload transport, then assert FakePi
+    # received the image on `images[]` (one image, image/png) and the text file
+    # as a path in the prompt text — the exclusive split prompt assembly does.
+    image_id = upload_file_via_api(page, name="pic.png", mime_type="image/png", content=_png_bytes())
+    text_id = upload_file_via_api(page, name="notes.txt", mime_type="text/plain", content=b"sentinel-99")
+    send_message_via_api(page, message="fake_pi:report_inputs", files=[image_id, text_id])
+
+    chat_panel = task_page.get_chat_panel()
+    wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2, timeout=30_000)
+    last = chat_panel.get_assistant_messages().last
+    expect(last).to_contain_text("images=1")
+    expect(last).to_contain_text("image/png")
+    # The non-image attachment rides the prompt text as a path (its upload id is
+    # preserved as the saved filename), not as a second image.
+    expect(last).to_contain_text(text_id)
+
+
+def _create_skill_in_directory(project_path: Path, skill_name: str, description: str) -> None:
+    """Commit a custom skill to the project's .claude/skills/ so the workspace
+    clone (and pi's --skill flags) include it."""
+    skill_dir = project_path / ".claude" / "skills" / skill_name
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    (skill_dir / "SKILL.md").write_text(f"---\nname: {skill_name}\ndescription: {description}\n---\nInstructions.\n")
+    subprocess.run(["git", "add", str(skill_dir)], cwd=project_path, check=True)
+    subprocess.run(["git", "commit", "-m", f"Add skill {skill_name}"], cwd=project_path, check=True)
 
 
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
-@user_story("to render the skills panel empty under harnesses without skills support")
-def test_skills_panel_empty_under_pi(sculptor_instance_: SculptorInstance, harness: HarnessTestConfig) -> None:
-    _create_workspace_for_harness(sculptor_instance_, harness, "Skills Panel Gate")
-    # SkillChip count is 0 under pi regardless of the panel's visibility.
-    # Under Claude the panel may or may not contain user-defined skills in
-    # this test repo, so the Claude branch is left unasserted.
-    if harness.workspace_harness == HarnessName.PI:
-        expect(sculptor_instance_.page.get_by_test_id(ElementIDs.SKILL_CHIP)).to_have_count(0)
+@user_story("to browse and pick the workspace's skills under any skills-supporting harness, including pi")
+def test_skills_panel_and_picker_list_skills(sculptor_instance_: SculptorInstance, harness: HarnessTestConfig) -> None:
+    """Pi reports supports_skills=True, so the skills panel and the slash picker
+    list the workspace's skills under pi exactly as under Claude (the picker is
+    harness-agnostic; PiAgent rewrites a picked /name into pi's /skill:<name>).
+
+    The gated-off (supports_skills=False) state is covered at the component
+    level by SkillsPanel.test.tsx, since no shipping harness reports False."""
+    skill_name = "skills-gate-custom"
+    _create_skill_in_directory(sculptor_instance_.project_path, skill_name, "Skill for the pi skills gate test")
+
+    task_page = _create_workspace_for_harness(sculptor_instance_, harness, "Skills Panel Gate")
+
+    # The side panel lists the seeded skill (this is the surface that reads the
+    # supports_skills flag) for both Claude and pi.
+    skills_panel = task_page.open_skills_panel()
+    expect(skills_panel.get_skill_chip(skill_name)).to_be_visible()
+
+    # The slash picker also surfaces it. The picker fetches the same
+    # discover_skills list for every harness; on slow CI the workspace clone's
+    # skills may not be discovered yet, so retry the trigger.
+    page = sculptor_instance_.page
+    chat_input = task_page.get_chat_panel().get_chat_input()
+    mention_list = page.get_by_test_id(ElementIDs.MENTION_LIST)
+    mod_key = get_playwright_modifier_key()
+    for attempt in range(5):
+        type_trigger_char(chat_input, "/")
+        chat_input.press_sequentially(skill_name)
+        try:
+            expect(mention_list).to_be_visible(timeout=10_000)
+            expect(mention_list).to_contain_text(skill_name, timeout=5_000)
+            break
+        except AssertionError:
+            if attempt == 4:
+                raise
+            page.keyboard.press("Escape")
+            page.keyboard.press(f"{mod_key}+a")
+            page.keyboard.press("Backspace")
+            page.wait_for_timeout(200)
 
 
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
@@ -287,11 +358,38 @@ def test_clear_pseudo_skill_gated_on_context_reset(
 
 
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
-@user_story("to keep compaction chrome absent for harnesses that do not compact context")
-def test_compaction_chrome_absent_under_pi(sculptor_instance_: SculptorInstance, harness: HarnessTestConfig) -> None:
-    """Compaction is status-only chrome (no disabled-with-tooltip treatment); for
-    pi the compaction bar/button are absent."""
-    _create_workspace_for_harness(sculptor_instance_, harness, "Compaction Chrome Gate")
-    if harness.workspace_harness == HarnessName.PI:
-        expect(sculptor_instance_.page.get_by_test_id(ElementIDs.COMPACTION_BAR)).to_have_count(0)
-        expect(sculptor_instance_.page.get_by_test_id(ElementIDs.COMPACTION_BUTTON)).to_have_count(0)
+@user_story("to show truthful compaction chrome under harnesses that compact context")
+def test_compaction_chrome_truthful_under_pi(sculptor_instance_: SculptorInstance, harness: HarnessTestConfig) -> None:
+    """Compaction is status-only chrome — the StatusPill "Compacting" state.
+
+    Under pi, a scripted compaction held open shows the Compacting pill while
+    active, and the pill clears once compaction ends and the turn finishes.
+    Claude is unchanged: it has no manual /compact surface to script here (parity
+    bar), so its branch only confirms the harness path is healthy — the pi branch
+    carries this test's claim. (Pi's deterministic show-then-clear and the
+    stuck-pill edges are covered at unit level in ``agent_wrapper_test``.)
+    """
+    page = sculptor_instance_.page
+    if harness.workspace_harness != HarnessName.PI:
+        _create_workspace_for_harness(sculptor_instance_, harness, "Compaction Chrome")
+        return
+
+    install_fake_pi_binary(sculptor_instance_.fake_bin_dir)
+    release_path = Path(tempfile.gettempdir()) / f"pi_compaction_{uuid.uuid4().hex}"
+    label = page.get_by_test_id(ElementIDs.STATUS_PILL_LABEL)
+    try:
+        start_task_and_wait_for_ready(
+            sculptor_page=page,
+            workspace_name="Compaction Chrome",
+            model_name=None,
+            harness=HarnessName.PI,
+            # The compaction is held open on the sentinel so the Compacting pill
+            # state is observable deterministically (no wall-clock race).
+            prompt=f'fake_pi:compaction `{{"reason": "threshold", "wait_path": "{release_path}"}}`',
+            wait_for_agent_to_finish=False,
+        )
+        expect(label).to_contain_text("Compacting", timeout=15000)
+    finally:
+        release_path.touch()
+    # Once compaction ends, the turn finishes and the Compacting chrome clears.
+    expect(page.get_by_test_id(ElementIDs.STATUS_PILL)).to_have_count(0, timeout=15000)

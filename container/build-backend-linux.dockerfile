@@ -35,7 +35,6 @@ WORKDIR /build
 COPY pyproject.toml uv.lock ./
 
 # Copy workspace members
-COPY imbue_core/ imbue_core/
 COPY tools/ tools/
 COPY sculptor/pyproject.toml sculptor/pyproject.toml
 COPY sculptor/sculptor/ sculptor/sculptor/

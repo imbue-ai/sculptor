@@ -202,6 +202,11 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
         """Get the SkillsPanel element. Only visible when its zone is open."""
         return PlaywrightSkillsPanelElement(self.get_by_test_id(ElementIDs.SKILLS_PANEL), page=self._page)
 
+    def toggle_theme(self) -> None:
+        """Toggle between dark and light theme via Cmd/Ctrl+Shift+D."""
+        mod_key = get_playwright_modifier_key()
+        self.press_keyboard_shortcut(f"{mod_key}+Shift+d")
+
     def open_skills_panel(self) -> PlaywrightSkillsPanelElement:
         """Click the skills sidebar icon and return the visible SkillsPanel.
 

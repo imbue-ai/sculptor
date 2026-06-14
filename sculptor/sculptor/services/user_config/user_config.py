@@ -7,9 +7,9 @@ import tomlkit
 from loguru import logger
 from pydantic import ValidationError
 
-from imbue_core.pydantic_utils import model_update
-from imbue_core.sculptor.user_config import PrivacySettings
-from imbue_core.sculptor.user_config import UserConfig
+from sculptor.config.user_config import PrivacySettings
+from sculptor.config.user_config import UserConfig
+from sculptor.foundation.pydantic_utils import model_update
 from sculptor.utils.build import get_internal_folder
 
 

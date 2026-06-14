@@ -14,12 +14,12 @@ from typing import Sequence
 from typing import TYPE_CHECKING
 from typing import runtime_checkable
 
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.event_utils import MutableEvent
-from imbue_core.processes.local_process import RunningProcess
-from imbue_core.secrets_utils import Secret
-from imbue_core.subprocess_utils import FinishedProcess
-from imbue_core.upper_case_str_enum import UpperCaseStrEnum
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.event_utils import MutableEvent
+from sculptor.foundation.processes.local_process import RunningProcess
+from sculptor.foundation.secrets_utils import Secret
+from sculptor.foundation.subprocess_utils import FinishedProcess
+from sculptor.foundation.upper_case_str_enum import UpperCaseStrEnum
 
 if TYPE_CHECKING:
     from _typeshed import OpenBinaryModeReading

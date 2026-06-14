@@ -12,9 +12,9 @@ from typing import TypeVar
 from loguru import logger
 from pydantic import PrivateAttr
 
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.errors import ExpectedError
-from imbue_core.pydantic_serialization import MutableModel
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.errors import ExpectedError
+from sculptor.foundation.pydantic_serialization import MutableModel
 
 # Threshold for TIMING LOG messages - only log if duration exceeds this value
 TIMING_LOG_THRESHOLD_SECONDS: float = 0.05  # 50ms

@@ -15,12 +15,12 @@ from unittest.mock import patch
 import httpx
 import pytest
 
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.sculptor.user_config import DependencyPaths
-from imbue_core.sculptor.user_config import UserConfig
-from imbue_core.subprocess_utils import FinishedProcess
-from imbue_core.subprocess_utils import ProcessError
-from imbue_core.subprocess_utils import ProcessTimeoutError
+from sculptor.config.user_config import DependencyPaths
+from sculptor.config.user_config import UserConfig
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.subprocess_utils import FinishedProcess
+from sculptor.foundation.subprocess_utils import ProcessError
+from sculptor.foundation.subprocess_utils import ProcessTimeoutError
 from sculptor.services.dependency_management_service import CLAUDE_VERSION_RANGE
 from sculptor.services.dependency_management_service import Dependency
 from sculptor.services.dependency_management_service import DependencyCheckResult

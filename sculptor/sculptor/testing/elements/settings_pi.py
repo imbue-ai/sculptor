@@ -57,7 +57,7 @@ class PlaywrightPiSettingsElement(PlaywrightIntegrationTestElement):
         return self.get_by_test_id(ElementIDs.PI_SETTINGS_DISABLED_BANNER)
 
     def get_install_commands_block(self) -> Locator:
-        """Get the CUSTOM-only manual npm/curl install block.
+        """Get the CUSTOM-only manual npm install block.
 
         The block carries no test id; the npm command text is the only place it
         renders, so its text identifies it (and its absence under MANAGED).

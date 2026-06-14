@@ -384,7 +384,7 @@ check:
       "just _run-check lint" \
       2>&1 | grep -v 'exited with code 0'
 
-# Run all unit tests (backend, frontend, imbue_core, and sculpt CLI)
+# Run all unit tests (backend, frontend, foundation, and sculpt CLI)
 # Pass junitxml="true" to output JUnit XML files for CI
 # Set JUST_VERBOSE=1 in the environment for full output (used in CI).
 [group("ci")]
@@ -398,19 +398,21 @@ test-unit junitxml="":
     fi
     just test-unit-backend {{ if junitxml != "" { "sculptor/pytest_junit.xml" } else { "" } }}
     just test-unit-frontend
-    just test-unit-imbue-core
+    just test-unit-foundation
     just test-unit-sculpt {{ if junitxml != "" { "sculpt_junit.xml" } else { "" } }}
 
-# Run imbue_core unit tests
+# Run foundation unit tests (the former imbue_core library, now sculptor.foundation).
+# Runs with sculptor/sculptor/foundation/ as the pytest rootdir (via its own pytest.ini) so it
+# keeps the isolated test environment it had as a standalone package, independent of sculptor/conftest.py.
 [group("ci")]
-test-unit-imbue-core:
+test-unit-foundation:
     #!/usr/bin/env bash
     set -euo pipefail
     {{ _quiet_by_default_fn }}
-    _do_test_unit_imbue_core() {
-      env -u SESSION_TOKEN PROJECT_PATH=/tmp/repo GOOGLE_API_KEY=fake ANTHROPIC_API_KEY=fake uv run --project imbue_core pytest -n "${SCULPTOR_TEST_WORKERS:-8}" imbue_core/ -m "not integration and not acceptance"
+    _do_test_unit_foundation() {
+      env -u SESSION_TOKEN PROJECT_PATH=/tmp/repo GOOGLE_API_KEY=fake ANTHROPIC_API_KEY=fake uv run --project sculptor pytest -n "${SCULPTOR_TEST_WORKERS:-8}" sculptor/sculptor/foundation/ -m "not integration and not acceptance"
     }
-    quiet_by_default test-unit-imbue-core _do_test_unit_imbue_core
+    quiet_by_default test-unit-foundation _do_test_unit_foundation
 
 # Run sculpt CLI unit tests
 # Pass a path to junitxml to output JUnit XML for CI
@@ -841,16 +843,16 @@ install:
     just install-build-deps
     just install-backend
     just install-frontend
-    just install-pi
+    # pi is not installed here: Sculptor provisions it in MANAGED mode (the
+    # default). Run `just install-pi` only for a CUSTOM or real_pi dev setup.
 
-# Downloads the pinned, self-contained pi binary from GitHub Releases.
-# pi ships standalone per-platform binaries (no Node needed) at
-# github.com/earendil-works/pi; we install the version Sculptor's
-# PI_VERSION_RANGE pins. The binary loads sibling files (package.json, wasm,
-# theme/) relative to its real path, so we keep the whole release tree under
-# .venv/pi and symlink the binary into .venv/bin — which `uv run` puts first on
-# PATH, so the backend's `which pi` resolves to this pinned build. Auto-update /
-# managed provisioning is a deferred followup; this is the dev stopgap.
+# Installs the pinned, self-contained pi binary from GitHub Releases into
+# .venv/pi (the whole release tree — the binary loads sibling files like
+# package.json/wasm/theme relative to its real path) and symlinks it into
+# .venv/bin, which `uv run` puts first on PATH so a CUSTOM `pi` resolves to it.
+# We install the version PI_VERSION_RANGE pins. Sculptor provisions pi itself
+# in MANAGED mode (the default), so this is NOT part of `just install`/`rebuild`.
+# Opt-in dev helper: for a CUSTOM pi against .venv/bin/pi, or the real_pi suite.
 [group("install")]
 install-pi:
     #!/usr/bin/env bash
@@ -1404,12 +1406,13 @@ test-real-claude tests="sculptor/tests/integration/real_claude/" buildargs="": b
     }
     quiet_by_default test-real-claude _do_test_real_claude
 
-# Runs real pi integration tests (requires a locally installed `pi` binary at
-# the pinned version and ANTHROPIC_API_KEY). These tests hit the real upstream
-# model through real pi and are excluded from CI. Run serially by default.
+# Runs real pi integration tests (require ANTHROPIC_API_KEY). These tests hit
+# the real upstream model through real pi and are excluded from CI. The
+# `install-pi` dependency puts the pinned pi on PATH (.venv/bin/pi), which the
+# real_pi resolver requires. Run serially by default.
 # Set XDIST_WORKERS to override (e.g. XDIST_WORKERS=2 for parallel).
 [group("test")]
-test-real-pi tests="sculptor/tests/integration/real_pi/" buildargs="": build-frontend generate-sculpt-client
+test-real-pi tests="sculptor/tests/integration/real_pi/" buildargs="": install-pi build-frontend generate-sculpt-client
     #!/usr/bin/env bash
     set -euo pipefail
     if [ "${JUST_VERBOSE:-}" != "1" ] && [ -z "${JUST_LOG_FILE:-}" ]; then

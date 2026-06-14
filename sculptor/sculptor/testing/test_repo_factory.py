@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from imbue_core.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.testing.mock_repo import MockRepoState
 from sculptor.testing.repo_resources import get_test_project_state
 

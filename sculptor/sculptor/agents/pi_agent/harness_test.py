@@ -10,16 +10,16 @@ def test_pi_harness_capabilities() -> None:
     # pi-side mechanism for it (see PiHarness.capabilities for the per-flag why).
     assert PI_HARNESS.capabilities() == HarnessCapabilities(
         supports_interactive_backchannel=False,
-        supports_skills=False,
+        supports_skills=True,
         supports_sub_agents=False,
-        supports_image_input=False,
+        supports_image_input=True,
         supports_fast_mode=False,
         supports_context_reset=False,
-        supports_compaction=False,
+        supports_compaction=True,
         supports_background_tasks=False,
         supports_session_resume=True,
         supports_tool_use_rendering=True,
-        supports_file_attachments=False,
+        supports_file_attachments=True,
         supports_interruption=True,
         supports_file_references=True,
     )

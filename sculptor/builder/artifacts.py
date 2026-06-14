@@ -19,7 +19,7 @@ import enum
 from os import path
 from typing import Mapping
 
-from imbue_core.pydantic_serialization import SerializableModel
+from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.version import dev_git_sha
 from sculptor.version import pep_440_to_semver
 from sculptor.version import pyproject_version

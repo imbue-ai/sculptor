@@ -4,7 +4,6 @@
 
 project_includes = [
     "sculptor/**",
-    "imbue_core/**",
 ]
 
 # Mirrors the old Pyre `exclude` + `ignore_all_errors` lists: build artifacts,
@@ -18,13 +17,11 @@ project_excludes = [
     "sculptor/sculptor/testing/**",
     "sculptor/sculptor/quarantine/**",
     "sculptor/agent_docs/**",
-    "imbue_core/imbue_core/test_data/**",
 ]
 
-# Import roots: `sculptor/sculptor/...` -> `sculptor.x`, `imbue_core/imbue_core/...` -> `imbue_core.x`.
+# Import root: `sculptor/sculptor/...` -> `sculptor.x`.
 search_path = [
     "sculptor",
-    "imbue_core",
 ]
 
 python_version = "3.11"

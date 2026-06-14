@@ -9,6 +9,7 @@ session-stream.
 
 from __future__ import annotations
 
+import base64
 import json
 import threading
 import time
@@ -21,25 +22,19 @@ from unittest.mock import patch
 
 import pytest
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.async_monkey_patches_test import expect_exact_logged_errors
-from imbue_core.sculptor.state.chat_state import AskUserQuestionData
-from imbue_core.sculptor.state.chat_state import GenericToolContent
-from imbue_core.sculptor.state.chat_state import TextBlock
-from imbue_core.sculptor.state.chat_state import ToolResultBlock
-from imbue_core.sculptor.state.chat_state import ToolUseBlock
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import Message
-from imbue_core.sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.agents.pi_agent.agent_wrapper import PI_SESSION_DIR_NAME
 from sculptor.agents.pi_agent.agent_wrapper import PI_SESSION_ID_STATE_FILE
 from sculptor.agents.pi_agent.agent_wrapper import PiAgent
+from sculptor.agents.pi_agent.agent_wrapper import _render_synthesized_skill
+from sculptor.agents.pi_agent.agent_wrapper import _rewrite_skill_invocation
 from sculptor.agents.pi_agent.harness import PI_HARNESS
 from sculptor.agents.pi_agent.output_processor import AgentMessage
 from sculptor.agents.pi_agent.output_processor import ParsedUnknownEvent
 from sculptor.agents.pi_agent.output_processor import extract_tool_call_blocks
 from sculptor.agents.pi_agent.output_processor import parse_rpc_message
+from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
+from sculptor.interfaces.agents.agent import AutoCompactingAgentMessage
+from sculptor.interfaces.agents.agent import AutoCompactingDoneAgentMessage
 from sculptor.interfaces.agents.agent import ClearContextUserMessage
 from sculptor.interfaces.agents.agent import InterruptProcessUserMessage
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
@@ -52,6 +47,16 @@ from sculptor.interfaces.agents.errors import PiBinaryNotFoundError
 from sculptor.interfaces.agents.errors import PiCrashError
 from sculptor.interfaces.agents.errors import PiVersionMismatchError
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import TaskID
+from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.chat_state import GenericToolContent
+from sculptor.state.chat_state import TextBlock
+from sculptor.state.chat_state import ToolResultBlock
+from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import Message
+from sculptor.state.messages import ResponseBlockAgentMessage
 
 _PROMPT_ID = "prompt-1"
 
@@ -1216,6 +1221,8 @@ def test_start_raises_pi_version_mismatch_when_out_of_range() -> None:
         agent.start(secrets={})
     assert exc_info.value.pinned_version == "0.78.0"
     assert exc_info.value.detected_version == "0.50.0"
+    # The message must point the user at the self-healing fix (managed install).
+    assert "Managed" in str(exc_info.value)
 
 
 def test_check_pi_version_reads_version_from_stderr_only_emission() -> None:
@@ -1232,6 +1239,105 @@ def test_check_pi_version_reads_version_from_stderr_only_emission() -> None:
     assert detected == "0.78.0"
 
 
+# --- Prompt assembly: files + images on the prompt command -----------------
+
+
+def _make_agent_with_attachments_env(tmp_path: Path, image_bytes: bytes = b"") -> tuple[PiAgent, MagicMock, Path]:
+    """An agent whose environment records writes and serves ``image_bytes`` on read."""
+    attachments_dir = tmp_path / "attachments"
+    env = MagicMock(spec=AgentExecutionEnvironment)
+    env.get_attachments_path.return_value = attachments_dir
+    env.read_file.return_value = image_bytes
+    return _make_agent(env), env, attachments_dir
+
+
+def test_build_prompt_payload_text_only_has_no_images(tmp_path: Path) -> None:
+    agent, _env, _dir = _make_agent_with_attachments_env(tmp_path)
+    payload = agent._build_prompt_payload("p1", ChatInputUserMessage(text="hello"))
+    assert payload == {"type": "prompt", "id": "p1", "message": "hello"}
+    assert "images" not in payload
+
+
+def test_build_prompt_payload_image_rides_images_field(tmp_path: Path) -> None:
+    image_bytes = b"\x89PNG\r\n\x1a\nblue-pixels"
+    source = tmp_path / "blue.png"
+    source.write_bytes(image_bytes)
+    agent, env, attachments_dir = _make_agent_with_attachments_env(tmp_path, image_bytes=image_bytes)
+
+    payload = agent._build_prompt_payload("p1", ChatInputUserMessage(text="what color?", files=[str(source)]))
+
+    # The prompt text is unchanged — the image does not appear as a path too.
+    assert payload["message"] == "what color?"
+    assert payload["images"] == [
+        {"type": "image", "data": base64.b64encode(image_bytes).decode("ascii"), "mimeType": "image/png"}
+    ]
+    # Bytes are read back from the saved environment copy, not the upload dir.
+    env.read_file.assert_called_once_with(str(attachments_dir / "blue.png"), mode="rb")
+
+
+def test_build_prompt_payload_non_image_rides_prompt_text(tmp_path: Path) -> None:
+    source = tmp_path / "notes.txt"
+    source.write_bytes(b"sentinel-XYZ")
+    agent, _env, attachments_dir = _make_agent_with_attachments_env(tmp_path)
+
+    payload = agent._build_prompt_payload("p1", ChatInputUserMessage(text="read it", files=[str(source)]))
+
+    assert "images" not in payload
+    assert str(attachments_dir / "notes.txt") in payload["message"]
+    assert "The user has attached these files" in payload["message"]
+    assert payload["message"].endswith("read it")
+
+
+def test_build_prompt_payload_image_and_path_split_exclusively(tmp_path: Path) -> None:
+    image_bytes = b"\x89PNGdata"
+    img = tmp_path / "shot.png"
+    img.write_bytes(image_bytes)
+    doc = tmp_path / "doc.md"
+    doc.write_bytes(b"# heading")
+    agent, _env, attachments_dir = _make_agent_with_attachments_env(tmp_path, image_bytes=image_bytes)
+
+    payload = agent._build_prompt_payload("p1", ChatInputUserMessage(text="both", files=[str(img), str(doc)]))
+
+    # Image only in images[]; doc only in the prompt text — never both.
+    assert len(payload["images"]) == 1
+    assert payload["images"][0]["mimeType"] == "image/png"
+    assert str(attachments_dir / "doc.md") in payload["message"]
+    assert "shot.png" not in payload["message"]
+
+
+def test_build_prompt_payload_skips_missing_file(tmp_path: Path) -> None:
+    missing = tmp_path / "gone.txt"  # never created
+    agent, _env, _dir = _make_agent_with_attachments_env(tmp_path)
+    payload = agent._build_prompt_payload("p1", ChatInputUserMessage(text="hi", files=[str(missing)]))
+    # Nothing delivered; the turn proceeds with just the user text.
+    assert payload == {"type": "prompt", "id": "p1", "message": "hi"}
+
+
+def test_unprocessable_image_error_reaches_user_no_silent_drop() -> None:
+    """An image the model can't process fails loud through the standard failed-turn path.
+
+    Pi surfaces the API rejection as an assistant message with
+    stopReason="error"; PiAgent raises PiCrashError carrying that text so the
+    failure is visible to the user (REQ-CAP-IMAGE-INPUT's no-silent-drop bar)
+    rather than the image being silently dropped.
+    """
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event(
+                {
+                    "type": "message_end",
+                    "message": _assistant_msg("API error 400: Could not process image", stop_reason="error"),
+                }
+            ),
+        ]
+    )
+    with pytest.raises(PiCrashError) as exc_info:
+        agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+    assert "Could not process image" in str(exc_info.value)
+
+
 def _drain(queue: Queue) -> list:
     out: list = []
     while not queue.empty():
@@ -1239,7 +1345,130 @@ def _drain(queue: Queue) -> list:
     return out
 
 
-# --- Typed protocol module: parse + dispatch coverage ----------------------
+# --- Compaction chrome (compaction_start/end → AutoCompacting* pair) --------
+
+
+def test_compaction_start_then_end_shows_then_clears_the_pill() -> None:
+    """A compaction_start→end pair emits AutoCompacting then Done (pill shows, then clears)."""
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event({"type": "compaction_start", "reason": "threshold"}),
+            _event({"type": "compaction_end", "reason": "threshold", "aborted": False, "willRetry": False}),
+            _event(_text_delta_update("done.", "done.")),
+            _event({"type": "message_end", "message": _assistant_msg("done.")}),
+            _event({"type": "agent_end", "messages": [_assistant_msg("done.")], "willRetry": False}),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+    emitted = _drain(agent._output_messages)
+    compacting = [i for i, m in enumerate(emitted) if isinstance(m, AutoCompactingAgentMessage)]
+    done = [i for i, m in enumerate(emitted) if isinstance(m, AutoCompactingDoneAgentMessage)]
+    assert len(compacting) == 1
+    # Exactly one Done — the explicit end, with no duplicate from stick-prevention.
+    assert len(done) == 1
+    # Shows before it clears.
+    assert compacting[0] < done[0]
+    finals = [m for m in emitted if isinstance(m, ResponseBlockAgentMessage)]
+    assert finals and finals[0].content == (TextBlock(text="done."),)
+
+
+@pytest.mark.parametrize(
+    "end_payload",
+    [
+        {"type": "compaction_end", "reason": "manual", "aborted": True, "willRetry": False},
+        {
+            "type": "compaction_end",
+            "reason": "threshold",
+            "aborted": False,
+            "willRetry": False,
+            "errorMessage": "compaction failed",
+        },
+    ],
+    ids=["aborted", "error_message"],
+)
+def test_compaction_end_aborted_or_errored_still_clears_without_inventing_failure(end_payload: dict[str, Any]) -> None:
+    """aborted / error_message on compaction_end must still clear the pill and must not raise.
+
+    A compaction failure is surfaced only if pi itself ends the run in error
+    (the agent_end / message_end paths) — the compaction handler never invents one.
+    """
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event({"type": "compaction_start", "reason": end_payload["reason"]}),
+            _event(end_payload),
+            _event({"type": "agent_end", "messages": [], "willRetry": False}),
+        ]
+    )
+    # Must not raise.
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+    emitted = _drain(agent._output_messages)
+    assert len([m for m in emitted if isinstance(m, AutoCompactingDoneAgentMessage)]) == 1
+    # No failure invented (a failed compaction is not turn-terminal on its own).
+    assert not [m for m in emitted if isinstance(m, ResponseBlockAgentMessage)]
+
+
+def test_compaction_start_without_end_emits_done_on_process_exit() -> None:
+    """Process dies mid-compaction (start, no end, no agent_end): the pill must not stick."""
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event({"type": "compaction_start", "reason": "threshold"}),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+    emitted = _drain(agent._output_messages)
+    assert any(isinstance(m, AutoCompactingAgentMessage) for m in emitted)
+    # Stick-prevention: a Done is synthesized on exit so is_auto_compacting clears.
+    assert any(isinstance(m, AutoCompactingDoneAgentMessage) for m in emitted)
+
+
+def test_compaction_end_without_start_emits_done_idempotently() -> None:
+    """A compaction_end with no preceding start (resumed mid-stream) emits Done harmlessly."""
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event({"type": "compaction_end", "reason": "threshold", "aborted": False, "willRetry": False}),
+            _event({"type": "agent_end", "messages": [], "willRetry": False}),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+    emitted = _drain(agent._output_messages)
+    assert len([m for m in emitted if isinstance(m, AutoCompactingDoneAgentMessage)]) == 1
+    assert not any(isinstance(m, AutoCompactingAgentMessage) for m in emitted)
+
+
+def test_compaction_end_with_will_retry_extends_the_turn() -> None:
+    """overflow compaction (willRetry:true) clears the pill but does not end the turn — pi re-runs the prompt."""
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event({"type": "compaction_start", "reason": "overflow"}),
+            _event({"type": "compaction_end", "reason": "overflow", "aborted": False, "willRetry": True}),
+            # The turn continues: pi re-runs and streams the real response.
+            _event(_text_delta_update("after retry", "after retry")),
+            _event({"type": "message_end", "message": _assistant_msg("after retry")}),
+            _event({"type": "agent_end", "messages": [_assistant_msg("after retry")], "willRetry": False}),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+    emitted = _drain(agent._output_messages)
+    # Compaction cycled (shows then clears) ...
+    assert any(isinstance(m, AutoCompactingAgentMessage) for m in emitted)
+    assert len([m for m in emitted if isinstance(m, AutoCompactingDoneAgentMessage)]) == 1
+    # ... and the turn extended past it to deliver the post-compaction response.
+    finals = [m for m in emitted if isinstance(m, ResponseBlockAgentMessage)]
+    assert finals and finals[-1].content == (TextBlock(text="after retry"),)
+
 
 # Wire-shape fixtures for every documented event type (RPC §5/§7/§9), lifted
 # from the protocol doc's examples. Each must parse to a typed variant whose
@@ -1290,13 +1519,13 @@ def test_parse_rpc_message_returns_unknown_for_missing_or_malformed_shape() -> N
 
 # Events pi-basic does not consume: each must be discarded (no emitted message,
 # no PiCrashError), and the turn must still end at the following agent_end.
+# compaction_start/end are deliberately ABSENT — they emit the AutoCompacting*
+# chrome pair (see the compaction tests above) rather than being discarded.
 _DISCARDED_EVENTS: list[dict[str, Any]] = [
     {"type": "turn_start"},
     {"type": "turn_end", "message": _assistant_msg("x"), "toolResults": []},
     {"type": "message_start", "message": _assistant_msg("x", stop_reason="")},
     {"type": "queue_update", "steering": ["a"], "followUp": []},
-    {"type": "compaction_start", "reason": "threshold"},
-    {"type": "compaction_end", "reason": "threshold", "aborted": False, "willRetry": False},
     {"type": "auto_retry_start", "attempt": 1, "maxAttempts": 3, "delayMs": 1, "errorMessage": "e"},
     {"type": "session_info_changed", "name": "s"},
     {"type": "thinking_level_changed", "level": "high"},
@@ -1329,3 +1558,146 @@ def test_extract_tool_call_blocks_returns_only_tool_call_blocks() -> None:
     blocks = extract_tool_call_blocks(message)
     assert len(blocks) == 1
     assert blocks[0]["type"] == "toolCall"
+
+
+_DISCOVERED = frozenset({"fix-bug", "sculptor-workflow:review", "write-release-notes"})
+
+
+def test_rewrite_skill_invocation_rewrites_a_discovered_skill() -> None:
+    assert _rewrite_skill_invocation("/fix-bug", _DISCOVERED) == "/skill:fix-bug"
+
+
+def test_rewrite_skill_invocation_preserves_arguments() -> None:
+    assert _rewrite_skill_invocation("/fix-bug the login flow", _DISCOVERED) == "/skill:fix-bug the login flow"
+
+
+def test_rewrite_skill_invocation_strips_plugin_namespace() -> None:
+    # pi registers plugin skills un-namespaced, so the <plugin>: prefix the
+    # picker shows is dropped when rewriting to pi's shape.
+    assert _rewrite_skill_invocation("/sculptor-workflow:review", _DISCOVERED) == "/skill:review"
+
+
+def test_rewrite_skill_invocation_leaves_unknown_name_untouched() -> None:
+    assert _rewrite_skill_invocation("/not-a-skill", _DISCOVERED) == "/not-a-skill"
+
+
+def test_rewrite_skill_invocation_ignores_pseudo_skills() -> None:
+    # Pseudo-skills are handled frontend-side and never appear in the discovered
+    # set, so they are never rewritten even if one reaches the prompt.
+    for pseudo in ("/clear", "/copy", "/btw why is the sky blue"):
+        assert _rewrite_skill_invocation(pseudo, _DISCOVERED) == pseudo
+
+
+def test_rewrite_skill_invocation_leaves_plain_slash_text_untouched() -> None:
+    # A leading slash that is not a discovered skill name (e.g. a path) passes through.
+    assert _rewrite_skill_invocation("/usr/local/bin matters", _DISCOVERED) == "/usr/local/bin matters"
+
+
+def test_rewrite_skill_invocation_leaves_non_slash_text_untouched() -> None:
+    assert _rewrite_skill_invocation("fix-bug please", _DISCOVERED) == "fix-bug please"
+
+
+def test_rewrite_skill_invocation_handles_multiline_prompt() -> None:
+    assert _rewrite_skill_invocation("/fix-bug\nextra context", _DISCOVERED) == "/skill:fix-bug\nextra context"
+
+
+def test_rewrite_skill_invocation_empty_discovered_set_is_noop() -> None:
+    assert _rewrite_skill_invocation("/fix-bug", frozenset()) == "/fix-bug"
+
+
+def _agent_with_skill_dirs(
+    monkeypatch: pytest.MonkeyPatch,
+    working_dir: Path,
+    home_dir: Path,
+    state_dir: Path,
+    plugin_dirs: list[Path],
+) -> PiAgent:
+    env = MagicMock(spec=AgentExecutionEnvironment)
+    env.get_working_directory.return_value = working_dir
+    env.get_user_home_directory.return_value = home_dir
+    env.get_state_path.return_value = state_dir
+    # Patch where it's looked up: agent_wrapper imports get_plugin_dirs at module level.
+    monkeypatch.setattr("sculptor.agents.pi_agent.agent_wrapper.get_plugin_dirs", lambda: plugin_dirs)
+    return _make_agent(environment=env)
+
+
+def _write_skill(skills_dir: Path, name: str) -> None:
+    skill_md = skills_dir / name / "SKILL.md"
+    skill_md.parent.mkdir(parents=True, exist_ok=True)
+    skill_md.write_text(f"---\nname: {name}\ndescription: {name} skill\n---\nBody\n")
+
+
+def test_build_skill_launch_args_passes_existing_skill_dirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = tmp_path / "repo"
+    home = tmp_path / "home"
+    _write_skill(repo / ".claude" / "skills", "fix-bug")
+    _write_skill(home / ".claude" / "skills", "deploy")
+    agent = _agent_with_skill_dirs(monkeypatch, repo, home, tmp_path / "state", plugin_dirs=[])
+
+    args = agent._build_skill_launch_args()
+
+    # Repo skills dir precedes home skills dir (discovery order); the absent
+    # .claude/commands dirs are skipped quietly.
+    assert args == [
+        "--skill",
+        str(repo / ".claude" / "skills"),
+        "--skill",
+        str(home / ".claude" / "skills"),
+    ]
+
+
+def test_build_skill_launch_args_puts_plugin_skills_first(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = tmp_path / "repo"
+    home = tmp_path / "home"
+    plugin = tmp_path / "plugin"
+    _write_skill(plugin / "skills", "help")
+    _write_skill(repo / ".claude" / "skills", "fix-bug")
+    agent = _agent_with_skill_dirs(monkeypatch, repo, home, tmp_path / "state", plugin_dirs=[plugin])
+
+    args = agent._build_skill_launch_args()
+
+    assert args[:2] == ["--skill", str(plugin / "skills")]
+    assert args[2:] == ["--skill", str(repo / ".claude" / "skills")]
+
+
+def test_build_skill_launch_args_no_sources_is_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    agent = _agent_with_skill_dirs(
+        monkeypatch, tmp_path / "repo", tmp_path / "home", tmp_path / "state", plugin_dirs=[]
+    )
+    assert agent._build_skill_launch_args() == []
+
+
+def test_build_skill_launch_args_synthesizes_loose_commands(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = tmp_path / "repo"
+    home = tmp_path / "home"
+    state = tmp_path / "state"
+    commands_dir = repo / ".claude" / "commands"
+    commands_dir.mkdir(parents=True)
+    (commands_dir / "fix-style.md").write_text("---\ndescription: Fix style issues\n---\nDo the thing.\n")
+    (commands_dir / "no-frontmatter.md").write_text("Just a body.\n")
+    agent = _agent_with_skill_dirs(monkeypatch, repo, home, state, plugin_dirs=[])
+
+    args = agent._build_skill_launch_args()
+
+    # The synthesized wrapper dir is passed as a single --skill, under the state
+    # dir (not under .claude), so discover_skills never lists it a second time.
+    synthesized_root = state / "pi_skills"
+    assert args == ["--skill", str(synthesized_root)]
+    # Each loose command becomes a SKILL.md directory named after the file stem.
+    fix_style = (synthesized_root / "fix-style" / "SKILL.md").read_text()
+    assert "Do the thing." in fix_style
+    assert '"fix-style"' in fix_style
+    assert '"Fix style issues"' in fix_style
+    # A command with no frontmatter still loads — a description is synthesized
+    # (pi refuses a skill with none).
+    no_fm = (synthesized_root / "no-frontmatter" / "SKILL.md").read_text()
+    assert "Just a body." in no_fm
+    assert "no-frontmatter" in no_fm
+
+
+def test_render_synthesized_skill_escapes_frontmatter() -> None:
+    # Colons / newlines in the description must not break the YAML frontmatter.
+    rendered = _render_synthesized_skill("my-cmd", "Does X: then\nY", "Body text")
+    assert '\nname: "my-cmd"\n' in rendered
+    assert '\ndescription: "Does X: then Y"\n' in rendered
+    assert rendered.endswith("Body text")

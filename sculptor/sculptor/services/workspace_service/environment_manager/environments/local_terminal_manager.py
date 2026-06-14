@@ -20,8 +20,8 @@ from typing import Callable
 
 from loguru import logger
 
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.thread_utils import ObservableThread
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.interfaces.terminal_manager import TerminalManager
 from sculptor.services.workspace_service.environment_manager.env_file_parser import load_project_env_vars
 from sculptor.services.workspace_service.environment_manager.environments.spawned_pty_process import SpawnedPtyProcess

@@ -67,6 +67,31 @@ def test_classify_cli_error_dns_keyword_returns_network_error() -> None:
     assert classify_cli_error("DNS lookup failed for api.github.com") == "network_error"
 
 
+# --- classify_cli_error: rate_limited ---
+
+
+def test_classify_cli_error_primary_rate_limit_returns_rate_limited() -> None:
+    """GitHub's primary GraphQL limit comes back as HTTP 403 'API rate limit exceeded'."""
+    assert classify_cli_error("HTTP 403: API rate limit exceeded for user ID 12345") == "rate_limited"
+
+
+def test_classify_cli_error_graphql_rate_limit_returns_rate_limited() -> None:
+    assert classify_cli_error("GraphQL: API rate limit exceeded (repository.pullRequests)") == "rate_limited"
+
+
+def test_classify_cli_error_secondary_rate_limit_returns_rate_limited() -> None:
+    assert classify_cli_error("You have exceeded a secondary rate limit. Please wait a few minutes.") == "rate_limited"
+
+
+def test_classify_cli_error_ratelimit_header_returns_rate_limited() -> None:
+    assert classify_cli_error("x-ratelimit-remaining: 0") == "rate_limited"
+
+
+def test_classify_cli_error_rate_limit_takes_priority_over_403() -> None:
+    """A rate-limit 403 must classify as rate_limited, not no_access."""
+    assert classify_cli_error("HTTP 403 Forbidden: API rate limit exceeded") == "rate_limited"
+
+
 # --- classify_cli_error: transient ---
 
 
