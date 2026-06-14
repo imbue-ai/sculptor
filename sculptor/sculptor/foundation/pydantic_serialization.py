@@ -21,22 +21,20 @@ _threading_local = threading.local()
 
 
 class EvolvableModel:
-    # pyre-ignore[47]: pyre is not so easily tricked
     def evolve(self: T, attribute: V, new_value: V) -> T:
-        # pyre-ignore[16]: pyre doesn't know about evolved_obj
         assert _threading_local.evolved_obj is not None, ".ref() must be called before evolve"
 
         assert isinstance(attribute, _Evolver)
         dest_evolver: _Evolver[T] = cast(_Evolver[T], attribute)
+        # the evolver's attribute-reference trick is invisible to the type system (V is really T here)
+        # pyrefly: ignore [bad-argument-type]
         dest_evolver.assign(new_value)
 
         result = chill(_threading_local.evolved_obj)
         _threading_local.evolved_obj = None
         return result
 
-    # pyre-ignore[47]: pyre is not so easily tricked
     def ref(self: T) -> T:
-        # pyre-ignore[16]: pyre doesn't know about evolved_obj
         _threading_local.evolved_obj = evolver(self)
         return _threading_local.evolved_obj
 
@@ -101,7 +99,6 @@ def model_dump(obj: BaseModel, is_camel_case: bool = False) -> dict:
 
 
 def model_dump_json(obj: BaseModel | Json, is_camel_case: bool = False) -> str:
-    # pyre-fixme[16]: pyre complains that obj can be pydantic.types.AnyType, which has no model_dump_json
     return obj.model_dump_json(by_alias=is_camel_case)
 
 

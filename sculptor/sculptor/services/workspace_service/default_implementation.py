@@ -640,7 +640,7 @@ class DefaultWorkspaceService(WorkspaceService):
                     )
                 logger.debug("Created new environment {} for workspace {}", environment.environment_id, workspace_id)
 
-            # Type narrowing for pycharm/pyre
+            # Type narrowing for pycharm/the type checker
             assert isinstance(environment, extract_leaf_types(EnvironmentTypes))
             environment = cast(EnvironmentTypes, environment)
 

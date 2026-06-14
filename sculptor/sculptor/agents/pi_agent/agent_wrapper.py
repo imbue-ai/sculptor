@@ -276,6 +276,7 @@ class _TurnState:
 class PiAgent(DefaultAgentWrapper):
     # Narrows the inherited `harness: Harness` field — the registry owns
     # construction, so no agent↔harness import cycle exists.
+    # pyrefly: ignore [bad-override-mutable-attribute]
     harness: PiHarness
     config: PiAgentConfig
     git_hash: str

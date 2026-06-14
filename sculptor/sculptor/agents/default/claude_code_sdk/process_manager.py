@@ -606,7 +606,9 @@ class ClaudeProcessManager:
             env_var_names = self.environment.get_project_env_var_names()
             setup_state = self._fetch_setup_state(is_first_message)
             user_instructions = get_user_instructions(
-                message=message,  # pyre-fixme[6]
+                # UserMessageUnion is wider than get_user_instructions accepts; non-chat messages never reach here
+                # pyrefly: ignore [bad-argument-type]
+                message=message,
                 file_paths=file_paths,
                 is_in_plan_mode=self._is_in_plan_mode,
                 env_var_names=env_var_names,

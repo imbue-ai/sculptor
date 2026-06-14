@@ -614,6 +614,8 @@ class PrPollingService(Service):
         with self._worker_sleep_lock:
             if not self._worker_sleep_until:
                 return
+            # dict.get never returns None for the dict's own keys
+            # pyrefly: ignore [no-matching-overload]
             sleepiest_index = max(self._worker_sleep_until, key=self._worker_sleep_until.get)
             if scheduled_time >= self._worker_sleep_until[sleepiest_index]:
                 return

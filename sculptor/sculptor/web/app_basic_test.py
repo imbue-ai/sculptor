@@ -686,7 +686,7 @@ def test_restore_agent_fails_when_workspace_deleted(
         fetched_task = test_services.task_service.get_task(task.object_id, transaction)
         assert fetched_task is not None
         updated_task = fetched_task.evolve(fetched_task.ref().outcome, TaskState.FAILED)
-        # pyre-fixme[16]: only TaskAndDataModelTransaction has upsert_task, not DataModelTransaction
+        # pyrefly: ignore [missing-attribute]
         transaction.upsert_task(updated_task)
 
     # Delete the workspace directly

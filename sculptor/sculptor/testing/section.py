@@ -41,10 +41,10 @@ class Section(contextlib.ContextDecorator):
     def __enter__(self) -> "Section":
         level = _thread_local.next_section_level
         _thread_local.next_section_level += 1
-        self.header = "#" * (level + 1)  # pyre-ignore[16]
-        self.start_monotonic_time = _monotonic_time()  # pyre-ignore[16]
+        self.header = "#" * (level + 1)
+        self.start_monotonic_time = _monotonic_time()
         start_clock_time = time.time()
-        self.section = {  # pyre-ignore[16]
+        self.section = {
             "name": self.message,
             "level": level,
             "start_monotonic_time": self.start_monotonic_time,
@@ -66,16 +66,15 @@ class Section(contextlib.ContextDecorator):
         _thread_local.next_section_level -= 1
         finish_monotonic_time = _monotonic_time()
         finish_clock_time = time.time()
-        # pyre-ignore[16]: we set this on __enter__
         duration_seconds = finish_monotonic_time - self.start_monotonic_time
-        section = self.section | {  # pyre-ignore[16]: we set this on __enter__
+        section = self.section | {
             "finish_monotonic_time": finish_monotonic_time,
             "finish_clock_time": finish_clock_time,
             "duration_seconds": duration_seconds,
         }
-        self.elapsed = duration_seconds  # pyre-ignore[16]
+        self.elapsed = duration_seconds
 
-        header = self.header  # pyre-ignore[16]: we set this on __enter__
+        header = self.header
 
         if exc_val is None:
             logger.log(

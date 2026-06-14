@@ -1579,9 +1579,8 @@ class ClaudeOutputProcessor:
             PartialResponseBlockAgentMessage(
                 message_id=AgentMessageID(),
                 content=tuple(content),
-                # pyre-ignore[6] pyre thinks these could be None even though we assert that they are not None above
                 assistant_message_id=self.current_turn_id,
-                first_response_message_id=self._first_response_message_id,  # pyre-ignore[6]
+                first_response_message_id=self._first_response_message_id,
                 parent_tool_use_id=self._current_parent_tool_use_id,
             )
         )

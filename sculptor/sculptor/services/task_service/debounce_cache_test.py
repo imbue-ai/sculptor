@@ -41,6 +41,7 @@ def test_debounce_duplicate_three_events(specimen: DebounceCache) -> None:
 def test_debounce_two_different_events(specimen: DebounceCache, old_exception=Exception) -> None:
     specimen.debounce(old_exception, 0)
 
+    # pyrefly: ignore [invalid-inheritance]
     class Exception(old_exception):
         """Creating a derived class here with the same name"""
 

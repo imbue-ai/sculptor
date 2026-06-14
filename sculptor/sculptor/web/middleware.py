@@ -133,7 +133,6 @@ class DecoratedAPIRouter(APIRouter):
         super().__init__(*args, **kwargs)
         self.decorator = decorator
 
-    # pyre-ignore[14]: we're using kwargs instead of spelling out every keyword argument here, but Pyre mistakenly thinks it's not consistent with the overridden method
     def add_api_route(self, path: str, endpoint: Callable[..., Any], **kwargs):
         if "operation_id" not in kwargs or kwargs["operation_id"] is None:
             kwargs["operation_id"] = alias_generators.to_camel(endpoint.__name__)
@@ -249,7 +248,6 @@ def _write_trace_if_enabled() -> None:
 
 
 class App(FastAPI):
-    # pyre-ignore[13]: Pyre doesn't like uninitialized fields; we are in fact initializing this field, just outside the __init__ method.
     shutdown_event: Event
 
 
@@ -292,6 +290,7 @@ async def lifespan(app: App):
                 # no longer has a setup command (or the toggle is off) become
                 # `not_configured`.
                 try:
+                    # pyrefly: ignore [missing-attribute]
                     services.workspace_service.reconcile_setup_state()
                 except Exception as exc:
                     logger.error("Failed to reconcile workspace setup state on startup: {}", exc)

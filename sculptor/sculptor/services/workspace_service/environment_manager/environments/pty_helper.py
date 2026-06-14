@@ -100,9 +100,6 @@ def _open_parent_connection() -> Connection:
     if fd_value is None:
         sys.stderr.write(f"pty_helper: {HELPER_FD_ENV} is not set\n")
         sys.exit(_EXIT_HELPER_BAD_ARGS)
-    # Default satisfies pyre's flow analysis: the except branch calls
-    # ``sys.exit`` (``NoReturn``) but pyre does not propagate that here.
-    fd: int = -1
     try:
         fd = int(fd_value)
     except ValueError:
@@ -164,20 +161,6 @@ def _send_initial_status_and_fd(conn: Connection, primary_fd: int, shell_pid: in
 
 
 def main() -> None:
-    # Defensive defaults satisfy pyre's flow analysis: the except branches
-    # below all call ``_report_error_and_exit`` (``NoReturn``), but pyre does
-    # not propagate that into the surrounding scope, so the variables must
-    # be definitely-assigned along every path.
-    config: object = None
-    shell: str = ""
-    argv: list[str] = []
-    cwd: str = ""
-    env_dict: dict[str, str] = {}
-    rows: int = 0
-    cols: int = 0
-    shell_pid: int = -1
-    primary_fd: int = -1
-
     conn = _open_parent_connection()
     try:
         config = conn.recv()

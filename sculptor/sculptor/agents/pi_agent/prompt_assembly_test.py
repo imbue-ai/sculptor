@@ -119,6 +119,7 @@ def test_save_attachments_resolves_absolute_path_and_copies_into_environment(tmp
     saved = save_attachments_to_environment(environment, [str(source)])
 
     assert saved == (str(attachments_dir / "picture.png"),)
+    # pyrefly: ignore [missing-attribute]
     environment.write_file.assert_called_once_with(
         path=str(attachments_dir / "picture.png"), content=b"image-bytes", mode="wb"
     )
@@ -138,6 +139,7 @@ def test_save_attachments_resolves_upload_id_under_internal_uploads(
     saved = save_attachments_to_environment(environment, ["uuid-123.txt"])
 
     assert saved == (str(attachments_dir / "uuid-123.txt"),)
+    # pyrefly: ignore [missing-attribute]
     environment.write_file.assert_called_once_with(
         path=str(attachments_dir / "uuid-123.txt"), content=b"text-bytes", mode="wb"
     )
@@ -154,4 +156,5 @@ def test_save_attachments_skips_missing_source_without_failing(tmp_path: Path) -
 
     # The missing source is skipped (not fatal); the present one still saves.
     assert saved == (str(attachments_dir / "present.png"),)
+    # pyrefly: ignore [missing-attribute]
     environment.write_file.assert_called_once_with(path=str(attachments_dir / "present.png"), content=b"ok", mode="wb")

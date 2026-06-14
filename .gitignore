@@ -141,9 +141,6 @@ fly/_warmup/
 **/.dmypy.json
 **/dmypy.json
 
-# Pyre type checker
-**/.pyre/
-
 # pycharm
 **/.idea/
 

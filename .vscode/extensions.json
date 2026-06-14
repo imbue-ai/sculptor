@@ -13,7 +13,7 @@
     "charliermarsh.ruff",
     //
     // CI-compliant type checking
-    "pyre-check.pyre-check",
+    "meta.pyrefly",
     //
     // For having VSCode source .envrc
     "cab404.vscode-direnv",

@@ -257,12 +257,13 @@ class UserConfig(SerializableModel):
         default=False,
         description="When enabled, new agents default to fast mode",
     )
+    # pyrefly: ignore [bad-assignment]
     default_effort_level: Literal["low", "medium", "high", "xhigh", "max"] = Field(
         default="xhigh",
         description="Default thinking effort level for new agents (low, medium, high, xhigh, max)",
     )
 
-    @model_validator(mode="before")  # pyre-ignore[56]: pyre doesn't understand pydantic
+    @model_validator(mode="before")
     @classmethod
     def _migrate_claude_binary_mode(cls, data: Any) -> Any:
         """Migrate old claude_binary_mode + dependency_paths.claude into unified dependency_paths.claude.
@@ -298,7 +299,7 @@ class UserConfig(SerializableModel):
                     paths[claude_key] = old_mode
         return data
 
-    @model_validator(mode="before")  # pyre-ignore[56]: pyre doesn't understand pydantic
+    @model_validator(mode="before")
     @classmethod
     def _sanitize_custom_actions(cls, data: Any) -> Any:
         """Discard custom_actions if it doesn't match the expected schema.
@@ -334,8 +335,9 @@ def _generate_user_config_field_enum() -> type[StrEnum]:
         # Convert field name to SCREAMING_SNAKE_CASE for enum constant
         enum_name = field_name.upper()
         fields[enum_name] = to_camel(field_name)
-    # pyre thinks this is an instance of a StrEnum because it doesn't understand enums
-    return StrEnum("UserConfigField", fields)  # pyre-ignore[7, 19]
+    # type checkers think this returns a StrEnum instance because they don't model functional enum creation
+    # pyrefly: ignore [bad-return]
+    return StrEnum("UserConfigField", fields)
 
 
 UserConfigField: type[StrEnum] = _generate_user_config_field_enum()

@@ -172,15 +172,15 @@ lint:
     }
     quiet_by_default lint _do_lint
 
-# Type check Python (pyre) and JS/TS (tsc) code
+# Type check Python (pyrefly) and JS/TS (tsc) code
 [group("ci")]
 typecheck:
     #!/usr/bin/env bash
     set -euo pipefail
     {{ _quiet_by_default_fn }}
     _do_typecheck() {
-      echo "Type checking Python files with pyre..."
-      cd "{{justfile_directory()}}/sculptor" && uv run --project sculptor pyre
+      echo "Type checking Python files with pyrefly..."
+      cd "{{justfile_directory()}}" && uv run --project sculptor pyrefly check
       echo "Type checking JS/TS files with tsc..."
       {{ nvm_use }}
       cd "{{justfile_directory()}}/sculptor/frontend" && npm run tsc
@@ -961,20 +961,20 @@ verify-release-tag tag="":
 
 # Builds the Sculptor webapp in the default environment.
 [group("build")]
-build: (pyre-check) build-frontend build-backend
+build: (pyrefly-check) build-frontend build-backend
 
-# run pyre type checking. can be skipped with by setting env var SKIP_PYRE_IN_SCULPTOR_BUILD=1
+# run pyrefly type checking. can be skipped with by setting env var SKIP_PYREFLY_IN_SCULPTOR_BUILD=1
 [private]
-pyre-check:
+pyrefly-check:
     #!/usr/bin/env bash
     set -euo pipefail
-    cd "{{justfile_directory()}}/sculptor"
-    if [ -n "${SKIP_PYRE_IN_SCULPTOR_BUILD:-}" ]; then
-        echo "Skipping pyre check (SKIP_PYRE_IN_SCULPTOR_BUILD is set)"
+    cd "{{justfile_directory()}}"
+    if [ -n "${SKIP_PYREFLY_IN_SCULPTOR_BUILD:-}" ]; then
+        echo "Skipping pyrefly check (SKIP_PYREFLY_IN_SCULPTOR_BUILD is set)"
     else
-        echo "Running pyre type check..."
-        uv run --project sculptor pyre
-        echo "Pyre check passed!"
+        echo "Running pyrefly type check..."
+        uv run --project sculptor pyrefly check
+        echo "Pyrefly check passed!"
     fi
 
 # Creates a production build of the Sculptor webapp and backend.

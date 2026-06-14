@@ -626,6 +626,7 @@ def _pydantic_value_to_row_value(value: Any) -> Any:
         return value.model_dump(mode="json")
     if isinstance(value, ObjectID):
         return str(value)
+    # pyrefly: ignore [invalid-argument]
     if isinstance(value, EmailStr):
         return str(value)
     return value
@@ -932,6 +933,7 @@ class SQLDataModelService(TaskDataModelService, Generic[TQ]):
         return transaction_summary
 
     @contextmanager
+    # pyrefly: ignore [bad-override]
     def observe_user_changes(
         self, user_reference: UserReference, organization_reference: OrganizationReference, queue: TQ
     ) -> Generator[TQ, None, None]:

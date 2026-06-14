@@ -748,7 +748,7 @@ def push_tags(version: str) -> None:
     # Create a new release tag it and push it to origin.
     tagname = f"sculptor-v{version}"
     _run_out(["git", "tag", tagname])
-    # No verify since this is only pushing a tag, and pyre can fail here.
+    # No verify since this is only pushing a tag, and the type checks can fail here.
     _run_out(["git", "push", "origin", tagname, "--no-verify"])
 
 
