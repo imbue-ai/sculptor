@@ -99,7 +99,16 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
         width="100vw"
         position="relative"
         overflow="hidden"
-        style={{ background: "var(--gray-2)" }}
+        style={{
+          background: "var(--gray-2)",
+          // Keep content clear of the iOS home indicator when the app runs
+          // full-screen from the home screen (viewport-fit=cover in
+          // index.html); the inset is 0 off iOS. box-sizing keeps the shell
+          // exactly --app-height tall so the padding eats into the content
+          // rather than overflowing past the bottom of the screen.
+          boxSizing: "border-box",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
       >
         {/* TopBar stays mounted (display:none) in zen mode so that workspace
             tab-cycling keyboard shortcuts (Cmd+[, Cmd+]) remain active. */}

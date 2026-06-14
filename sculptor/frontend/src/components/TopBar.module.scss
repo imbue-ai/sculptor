@@ -8,6 +8,13 @@
   // causing them to spill out below the bar's bottom border.
   min-height: calc(40px / var(--app-zoom));
   overflow: hidden;
+  // On iOS home-screen (standalone) launch the web view fills the whole screen
+  // behind the status bar (see viewport-fit=cover in index.html). Pad the bar
+  // down by the top safe-area inset so its contents clear the notch/status bar;
+  // the bar's own background then fills the area behind it. env() resolves to 0
+  // on Electron and desktop browsers, so this is a no-op off iOS. The bar is
+  // content-box, so the padding does not shrink the row below.
+  padding-top: env(safe-area-inset-top);
 
   button {
     app-region: no-drag;
