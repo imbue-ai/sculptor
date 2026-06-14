@@ -335,19 +335,16 @@ def test_queued_interrupt_gated_on_interruption(
 def test_clear_pseudo_skill_gated_on_context_reset(
     sculptor_instance_: SculptorInstance, harness: HarnessTestConfig
 ) -> None:
-    """Both Claude and pi support context reset, so typing /clear is accepted
-    (no refusal copy) and the workspace stays usable. The frontend refusal branch
-    remains for a harness that does not advertise the capability (covered by the
-    CapabilityGate unit test). The reset round-trip itself is proven by
-    test_pi_basic.test_pi_clear_resets_conversation and the real_pi/real_claude
-    clear tests — here we only assert the gate no longer refuses."""
+    """Typing /clear is accepted under both Claude and pi (no refusal copy) and the
+    workspace stays usable. This asserts only the gate; the reset round-trip is covered
+    by test_pi_basic.test_pi_clear_resets_conversation and the real_pi clear test."""
     page = sculptor_instance_.page
     task_page = _create_workspace_for_harness(sculptor_instance_, harness, "Clear Gate")
     send_chat_message(chat_panel=task_page.get_chat_panel(), message="/clear")
-    # Neither harness shows the refusal copy — both call the clear endpoint.
+    # Both harnesses support context reset: no refusal copy, the endpoint is called.
     refusal_toast = page.get_by_test_id(ElementIDs.TOAST).filter(has_text=_CAPABILITY_UNSUPPORTED_COPY)
     expect(refusal_toast).to_have_count(0)
-    # The workspace is intact — the chat input stays usable after the reset.
+    # The chat input stays usable after the reset.
     expect(page.get_by_test_id(ElementIDs.CHAT_INPUT)).to_be_visible()
 
 

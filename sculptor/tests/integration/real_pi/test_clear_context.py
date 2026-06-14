@@ -28,12 +28,7 @@ _SENTINEL = "KRYPTON-55812"
 @real_pi
 @pytest.mark.timeout(600)
 def test_real_pi_clear_resets_context(sculptor_instance_: SculptorInstance) -> None:
-    """/clear must reset the real pi session so the next turn cannot recall the codeword.
-
-    If the reset regressed (e.g. ``new_session`` not sent, or the persisted
-    session id not advanced), pi would still hold the pre-clear turn and answer
-    with the codeword instead of NO-CODE-REMEMBERED.
-    """
+    """/clear must reset the real pi session so the next turn cannot recall the codeword."""
     page = sculptor_instance_.page
 
     task_page = start_task_and_wait_for_ready(

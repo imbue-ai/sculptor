@@ -192,11 +192,9 @@ You are in plan mode. Investigate the request using read-only tools only (read f
 The user's request follows:
 """
 
-# How long the context-reset handler waits for pi's `new_session` acknowledgement
-# before treating the reset as failed. Kept well under the frontend's 30s clear
-# call budget (ChatInput.tsx `wsTimeout`) so a wedged `new_session` fails loudly
-# rather than hanging the UI; the `new_session` round-trip is otherwise sub-second
-# (it is a between-turns command, not an agent run).
+# How long the context-reset handler waits for `new_session` to be acknowledged
+# before treating the reset as failed. Under the frontend's 30s clear-call budget
+# (ChatInput.tsx `wsTimeout`) so a wedged `new_session` fails rather than hanging the UI.
 _CLEAR_CONTEXT_TIMEOUT_SECONDS: float = 10.0
 
 
@@ -518,14 +516,11 @@ class PiAgent(DefaultAgentWrapper):
             # `_try_deliver_answer_to_mcp`), not queued like a new prompt.
             self._deliver_question_answer(message)
             return True
-        # Belt-and-suspenders dead-letter: every control message pi supports is
-        # handled above (return True), and the base class handles the types in
+        # Dead-letter: every control message pi supports is handled above
+        # (return True), and the base class handles the types in
         # _BASE_CLASS_HANDLED_MESSAGE_TYPES after this False return. Anything else
-        # reaching here has no handler and the base class would drop it silently —
-        # almost certainly a frontend capability gate let through something pi
-        # cannot do. Log it loudly. We enumerate what we DO handle and reject the
-        # rest, rather than listing unsupported types ahead of time: you cannot
-        # enumerate the messages you do not yet know about.
+        # reaching here has no handler and would be dropped silently — likely a
+        # frontend capability gate let something through pi cannot do — so log it.
         if not isinstance(message, _BASE_CLASS_HANDLED_MESSAGE_TYPES):
             logger.error(
                 "PiAgent dropping unhandled control message {} for task {} — a frontend capability gate should have prevented it",
@@ -985,26 +980,21 @@ class PiAgent(DefaultAgentWrapper):
     def _handle_clear_context(self, message: ClearContextUserMessage) -> None:
         """Reset the conversation in-process via pi's `new_session` (`/clear`).
 
-        Routed through the same `_input_agent_messages` FIFO as chat turns, so it
-        runs strictly between turns: a `/clear` that arrives mid-turn waits for the
-        in-flight turn's `agent_end` before `new_session` is sent. That is exactly
-        pi's contract — `new_session` is a between-turns command — and the queue
-        gives the ordering for free. The clear-context endpoint's
+        Routed through the `_input_agent_messages` FIFO like chat turns, so it runs
+        between turns: a `/clear` arriving mid-turn waits for the in-flight turn's
+        `agent_end` before `new_session` is sent. The clear-context endpoint's
         `await_message_response` resolves on the terminal request message
-        `_handle_user_message` emits: RequestSuccess on a clean reset, RequestFailure
-        on the error path below.
+        `_handle_user_message` emits — RequestSuccess on a clean reset,
+        RequestFailure on the error path below.
 
         `new_session` clears history while preserving the model and thinking-level
-        selections (no process restart). On success pi mints a fresh session id;
-        because Sculptor resumes pi by id (`supports_session_resume`), the post-clear
-        id is read back and persisted (`_persist_post_clear_session_id`) — otherwise a
-        later restart would resume the PRE-clear session and silently undo the reset.
-        A `success:false` response, a `data.cancelled:true` veto (an extension's
-        `session_before_switch` declining — none are loaded today, handled
-        defensively), or no acknowledgement within `_CLEAR_CONTEXT_TIMEOUT_SECONDS`
-        is a failed reset, raised as `PiContextResetError` so the wrapper reports the
-        failure without killing the agent (the conversation is intact; the user can
-        retry).
+        selections (no process restart). It mints a fresh session id; since Sculptor
+        resumes pi by id (`supports_session_resume`), that id is read back and
+        persisted (`_persist_post_clear_session_id`) so a later resume targets the
+        post-clear session. A `success:false` response, a `data.cancelled:true` veto
+        (an extension's `session_before_switch`), or no acknowledgement within
+        `_CLEAR_CONTEXT_TIMEOUT_SECONDS` is a failed reset, raised as
+        `PiContextResetError` (an `AgentClientError`, so the agent keeps running).
         """
         with self._handle_user_message(message):
             command_id = generate_id()
@@ -1025,21 +1015,16 @@ class PiAgent(DefaultAgentWrapper):
                     metadata=None,
                 )
             self._persist_post_clear_session_id()
-            # UX parity with Claude's clear (process_manager._process_clear_context_message):
-            # the same ContextClearedMessage drives the "Context Cleared" chip — no
-            # bespoke pi chrome.
+            # Same ContextClearedMessage as Claude's clear — drives the "Context Cleared" chip.
             self._output_messages.put(ContextClearedMessage(message_id=AgentMessageID()))
 
     def _persist_post_clear_session_id(self) -> None:
         """After a successful `new_session`, persist pi's new session id.
 
-        `new_session` starts a fresh session whose id differs from the pre-clear
-        one; a later resume must target THAT id (see `start`). Read it back via
-        `get_state` and overwrite PI_SESSION_ID_STATE_FILE. If the new id cannot be
-        read (no/empty `get_state` response), log loud and keep the old id: the
-        reset still succeeded for THIS process — only a subsequent restart-resume
-        could regress to the pre-clear session, the same best-effort stance as
-        `_verify_resumed_session`.
+        `new_session` mints a fresh session id; a later resume must target it (see
+        `start`). Read it back via `get_state` and overwrite PI_SESSION_ID_STATE_FILE.
+        If it cannot be read (no/empty `get_state` response), log and keep the old id
+        — the reset still applied to the running process.
         """
         state = self._request_state_blocking()
         new_session_id = state.get("sessionId") if state is not None else None
