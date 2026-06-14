@@ -14,6 +14,24 @@ untouched.
 [`mocks.html`](mocks.html) is the source of truth for the design. [`mocks.context.md`](mocks.context.md)
 records the decisions and the full design history behind it.
 
+## Baseline — what this branch already provides
+
+This work is stacked on **`bryden/remote-repo-design`**, which already lands two pieces the
+mobile UI would otherwise have to build. The spec **reuses** them rather than re-implementing:
+
+- **`origin/main` is the global default source branch.** `AddWorkspacePage` no longer has a
+  source-branch picker; `createWorkspaceV2` is called with a `sourceBranch` computed as
+  `origin/main` → `origin/master` → the repo's current branch. The mobile landing (L1–L4)
+  **inherits** this default and shares the same creation path — it does **not** re-implement
+  "always origin/main" itself.
+- **iOS safe-area insets are handled in CSS via `env(safe-area-inset-*)`**, not JS:
+  `index.html` sets `viewport-fit=cover` + the `apple-mobile-web-app-*` meta, `PageLayout`
+  pads the app shell by `env(safe-area-inset-bottom)` (with `box-sizing: border-box` so it
+  stays exactly `--app-height` tall), and `TopBar.module.scss` pads by
+  `env(safe-area-inset-top)`. These resolve to `0` off iOS, so they are no-ops on
+  Electron/desktop. The mobile shell **reuses this CSS pattern** (see S5/H4); insets are
+  **not** wired off `useLayoutMode.platform`.
+
 ## Goals
 
 - Build `MobileWorkspaceShell` — a single-column, chat-first Workspace view that matches the mock.
@@ -93,15 +111,20 @@ Re-derived from `mocks.html`. Grouped by surface.
   bottom tab bar**. Top → bottom: OS status bar region · workspace header · optional changes
   pill · chat stream (fills) · chat input · agent pager.
 - **S2.** The shell **replaces the global desktop `TopBar`** within the Workspace view; its
-  own header carries navigation.
+  own header carries navigation. Because `PageLayout` renders `TopBar` above the routed
+  `<Outlet>` unconditionally today, "replace" means `PageLayout` must **suppress `TopBar`**
+  for the mobile Workspace view (see Open Q8); the mobile header is then the only top chrome.
 - **S3.** Secondary surfaces (drawer, review-all, terminal) open **over** the chat
   (drawer/overlays) or **as anchored dropdowns** (⋮, `+`), never as docked panels.
 - **S4.** The shell must work down to a **~390px design floor** (the mock devices are ~380px)
   with **no horizontal overflow** of the shell chrome (header, changes pill, input, dots).
 - **S5.** **Touch ergonomics:** interactive targets (header actions, agent dots, pill,
   input controls, ⋮/`+` menu items, file rows) meet a touch-friendly hit area (~44px), and
-  the shell respects **safe-area insets** (notch / home indicator) — driven off the platform
-  signal from `useLayoutMode`.
+  the shell respects **safe-area insets** (notch / home indicator) by **reusing the existing
+  CSS `env(safe-area-inset-*)` pattern** (see Baseline): the mobile header takes over the
+  **top** inset (replacing `TopBar`'s `env(safe-area-inset-top)`), and the shell sits inside
+  `PageLayout`'s existing **bottom** inset. Insets are CSS-driven and auto-zero off iOS — they
+  are **not** keyed off `useLayoutMode.platform`.
 
 ### Header / context bar (new)
 
@@ -109,7 +132,9 @@ Re-derived from `mocks.html`. Grouped by surface.
 - **H2.** Center: title = workspace name; subtitle = `agent · repo` with a small status dot.
 - **H3.** Right: ⋮ (`circle-ellipsis`) opens the jump dropdown.
 - **H4.** A border separates the header from the content; the header background matches the
-  status-bar region (uniform, no seam).
+  status-bar region (uniform, no seam). The header carries the `env(safe-area-inset-top)`
+  padding (taking over from the now-suppressed `TopBar`; see S2/Open Q8) so its background
+  fills behind the notch / status bar.
 
 ### Workspace drawer (new)
 
@@ -190,8 +215,10 @@ Re-derived from `mocks.html`. Grouped by surface.
 - **L1.** The **new-workspace screen is the default landing**. Minimal header
   (☰ · "Sculptor" · settings).
 - **L2.** Hero "Name your workspace"; **one real input** — the workspace name (focused).
-- **L3.** Branch is **always `origin/main`**; repo and branch are shown as a subtle,
-  tappable meta line. No recents, no keyboard-shortcut hint.
+- **L3.** Branch is **always `origin/main`** — **inherited from the existing global default**
+  (see Baseline), not re-implemented here. Repo and branch are shown as a subtle, tappable
+  meta line (tapping switches repo via the existing `RepoSelector`). No recents, no
+  keyboard-shortcut hint.
 - **L4.** A full-width **Create workspace** button creates the workspace and starts an agent.
 
 ### Reflow in place (CSS / `isMobile`)
@@ -227,7 +254,7 @@ and desktop is untouched. The split (proposed component names in parentheses):
 | Terminal | **Reuse unchanged** |
 | Empty-agent intro — `AlphaChatIntro` | **Reuse unchanged** |
 | Mobile chat input (`MobileChatInput`) | **New component**, shares submit/draft logic with `ChatInput` |
-| New-workspace page (`MobileNewWorkspace`) | **New component** |
+| New-workspace page (`MobileNewWorkspace`) | **New component**, shares `AddWorkspacePage`'s create-workspace submit core (`createWorkspaceV2` + `createWorkspaceAgent` + `navigateToAgent`; already defaults `origin/main`) |
 | Mobile shell tree (`MobileWorkspaceShell`) | **New** (no desktop twin) |
 | Header / context bar (`MobileWorkspaceHeader`) | **New** |
 | Workspace drawer (`WorkspaceDrawer`) | **New** |
@@ -254,6 +281,12 @@ Key real-component facts that make this viable (from a codebase pass):
   a `sendMessage`/interrupt path, and `modelAtomFamily` / `fastModeAtomFamily` /
   `effortAtomFamily`. The mobile input shares this by **extracting the submit/draft core**
   into something both inputs call, rather than duplicating it.
+- `AddWorkspacePage` already creates a workspace via `createWorkspaceV2` (with `sourceBranch`
+  defaulting to `origin/main`; see Baseline) + `createWorkspaceAgent` + `navigateToAgent`, and
+  drives the name field through `useDraftTabName(draftId)`. `MobileNewWorkspace` should
+  **share this submit core** rather than duplicate it — the same reuse posture as the mobile
+  chat input. The mobile landing drops the new-branch-name field and the gated harness/mode
+  selectors, keeping only the workspace-name input and a tappable `repo · origin/main` meta line.
 
 ### Theme: scoped token override
 
@@ -376,12 +409,18 @@ reshapes the plan **before** chrome is built — which is the whole point of spi
 4. **Model & effort placement.** Behind the `+` dropdown directly, or a secondary sheet off it?
 5. **"View pull request".** Is the PR URL reliably available on mobile, and does it open
    in-app or in an external browser?
-6. **Platform conventions in pass 1.** Which platform signals (safe-area insets, back gesture,
-   system font) to wire from `useLayoutMode.platform` first.
+6. **Platform conventions in pass 1.** Safe-area insets are **already resolved** in CSS (see
+   Baseline) and need no `useLayoutMode.platform` wiring. The remaining platform signals to
+   weigh are **back gesture** and **system font** — wire in pass 1, or defer with the rest of
+   the platform plumbing (no phone delivery yet)?
 7. **On-screen keyboard.** On a real phone the keyboard resizes the viewport (`visualViewport`)
    — how should the input/stream respond? Likely deferred (no phone delivery yet), but flagged.
-8. **Global TopBar on the workspace view.** Confirm the shell's own header fully replaces the
-   global `TopBar` inside the mobile Workspace view (TopBar reflow applies to Home/Settings).
+8. **Global TopBar on the workspace view.** `PageLayout` renders the global `TopBar` above the
+   routed `<Outlet>` **unconditionally**. For the mobile shell's header to *replace* it,
+   `PageLayout` needs an `isMobile` (+ Workspace-route) branch that **suppresses `TopBar`**, and
+   the mobile header must then take over the `env(safe-area-inset-top)` padding `TopBar` carries
+   today (H4). Confirm this is the chosen mechanism. (TopBar reflow per P3 still applies to
+   Home/Settings, where `TopBar` stays.)
 9. **Routing / back model.** How the drawer and full-screen review-all/terminal overlays map
    onto the hash router, and how their "back" affordance (and the device back gesture) behaves
    — does back close the overlay, or navigate?
