@@ -54,6 +54,10 @@ type DependencyCardProps = {
   authUrl?: string | null;
   authError?: string | null;
   onSubmitAuthCode?: (code: string) => Promise<void>;
+  // Device flow (e.g. gh): when userCode is set, the card shows the one-time code
+  // to enter at authUrl and waits for completion (no paste-back) — the parent
+  // polls the dependency's auth status and clears authUrl once authenticated.
+  userCode?: string | null;
   onModeSwitch?: (mode: string) => void;
   modeControls?: Array<{ label: string; mode: string }>;
   helpText?: string;
@@ -109,6 +113,7 @@ export const DependencyCard = ({
   authUrl = null,
   authError = null,
   onSubmitAuthCode,
+  userCode = null,
   onModeSwitch,
   modeControls,
   helpText,
@@ -321,7 +326,31 @@ export const DependencyCard = ({
 
       {(authUrl || authError) && (
         <Flex direction="column" gap="2" className={styles.details} data-role="auth-panel">
-          {authUrl && (
+          {authUrl && userCode ? (
+            // Device flow (gh): show the one-time code to enter at the URL, then
+            // wait — the parent polls auth status and clears authUrl on success.
+            <>
+              <Text size="1">Open the verification page, enter the code below, and approve access.</Text>
+              <Link href={authUrl} target="_blank" size="2" className={styles.installLink} data-role="auth-url-link">
+                <Flex align="center" gap="1">
+                  Open verification page
+                  <ExternalLinkIcon size={12} />
+                </Flex>
+              </Link>
+              <Flex align="center" gap="2">
+                <Text size="1">Code:</Text>
+                <Code size="2" data-role="auth-user-code">
+                  {userCode}
+                </Code>
+              </Flex>
+              <Flex align="center" gap="2">
+                <Spinner size="1" />
+                <Text size="1" color="gray">
+                  Waiting for authorization…
+                </Text>
+              </Flex>
+            </>
+          ) : authUrl ? (
             <>
               <Text size="1">Open the sign-in page, approve access, then paste the code shown back here.</Text>
               <Link href={authUrl} target="_blank" size="2" className={styles.installLink} data-role="auth-url-link">
@@ -353,7 +382,7 @@ export const DependencyCard = ({
                 </Button>
               </Flex>
             </>
-          )}
+          ) : null}
           {authError && (
             <Text size="1" color="red" data-role="auth-error">
               {authError}
