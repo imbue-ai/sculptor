@@ -102,7 +102,11 @@
 "." = 0
 
 [no-raw-html-button]
-"." = 21
+# +10 for the mobile Workspace shell's custom chrome: the agent-pager dots and
+# the full-bleed left-aligned drawer / changes-pill rows, whose tiny/row
+# geometry fights Radix Button/IconButton's enforced sizing. The icon-only
+# mobile buttons (header, overlays, chat input) DO use Radix IconButton.
+"." = 31
 
 [no-relative-imports]
 "." = 0

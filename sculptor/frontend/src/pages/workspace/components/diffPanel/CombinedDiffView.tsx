@@ -192,6 +192,14 @@ type CombinedDiffViewProps = {
   searchQuery?: string;
   /** Called after the commit button sends its message. */
   onCommit?: () => void;
+  /**
+   * Override the code theme (Shiki syntax + diff surface) instead of following
+   * the global app appearance. The mobile shell forces "light" so the diff body
+   * matches its light "sand" surface — its scoped CSS-var theme re-colors the
+   * surface, but Pierre's Shiki syntax colors come from a JS atom keyed off the
+   * global appearance, which would otherwise stay dark. Desktop omits this.
+   */
+  forceThemeType?: "light" | "dark";
 };
 
 export const CombinedDiffView = ({
@@ -201,6 +209,7 @@ export const CombinedDiffView = ({
   contentRef,
   searchQuery = "",
   onCommit,
+  forceThemeType,
 }: CombinedDiffViewProps): ReactElement => {
   const workspace = useWorkspace(workspaceId);
   const hasTargetBranch = workspace?.targetBranch != null;
@@ -208,6 +217,7 @@ export const CombinedDiffView = ({
   const [scope, setScope] = useAtom(diffScopeAtomFamily(workspaceId));
   const overflow = useAtomValue(fileBrowserLineWrappingAtom);
   const appTheme = useAtomValue(appThemeAtom);
+  const effectiveThemeType = forceThemeType ?? appTheme;
   const containerRef = useRef<HTMLDivElement>(null);
 
   const activeDiffString = scope === "vs-target-branch" ? diff?.targetBranchDiff : diff?.uncommittedDiff;
@@ -358,7 +368,7 @@ export const CombinedDiffView = ({
                   isCollapsed={collapsedFiles.has(fc.fileNames.referenceFileName)}
                   viewType={viewType}
                   overflow={overflow}
-                  themeType={appTheme}
+                  themeType={effectiveThemeType}
                   scope={scope}
                   mergeBaseRef={mergeBaseRef}
                   onToggleCollapse={toggleCollapse}

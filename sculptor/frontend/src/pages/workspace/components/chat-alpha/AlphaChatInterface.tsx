@@ -59,12 +59,20 @@ type AlphaChatInterfaceProps = ChatData & {
   appendTextRef?: React.MutableRefObject<((text: string) => void) | null>;
   insertSkillRef?: React.MutableRefObject<((skill: InsertSkillArg) => void) | null>;
   editorRef?: React.MutableRefObject<TipTapEditor | null>;
+  /**
+   * Suppress the built-in desktop input region (ChatInput / AskUserQuestion /
+   * ErrorInput). The mobile shell reuses the message stream + intro unchanged
+   * but supplies its own `MobileChatInput` below the stream (S1/I1). Defaults
+   * to false, so the desktop experience is unchanged.
+   */
+  hideChatInput?: boolean;
 };
 
 export const AlphaChatInterface = ({
   appendTextRef,
   insertSkillRef,
   editorRef,
+  hideChatInput = false,
   chatMessages,
   smoothInProgressChatMessage,
   isStreaming,
@@ -619,14 +627,24 @@ export const AlphaChatInterface = ({
               />
             </div>
           </div>
-          <AlphaPromptNavigator
-            userMessages={userMessages}
-            scrollContainerRef={scrollContainerRef}
-            activePromptIndex={activePromptIndex.index}
-            onNavigate={handlePromptNavigate}
-          />
-          <QueuedMessages messages={effectiveQueuedMessages} />
-          {taskStatus !== TaskStatus.ERROR &&
+          {/* The prompt navigator rail and the queued-messages strip are
+              companions to the desktop input; the mobile shell supplies its own
+              input and has no prompt-nav rail, so they are hidden with it. */}
+          {!hideChatInput && (
+            <>
+              <AlphaPromptNavigator
+                userMessages={userMessages}
+                scrollContainerRef={scrollContainerRef}
+                activePromptIndex={activePromptIndex.index}
+                onNavigate={handlePromptNavigate}
+              />
+              <QueuedMessages messages={effectiveQueuedMessages} />
+            </>
+          )}
+          {/* The mobile shell hides this entire desktop input region and renders
+              its own MobileChatInput below the stream (I1/I2). */}
+          {!hideChatInput &&
+            taskStatus !== TaskStatus.ERROR &&
             (pendingUserQuestion ? (
               <AskUserQuestion
                 key={pendingUserQuestion.toolUseId}
@@ -646,7 +664,9 @@ export const AlphaChatInterface = ({
                 showPromptNavHint
               />
             ))}
-          {taskStatus === TaskStatus.ERROR && <ErrorInput workspaceId={workspaceID} taskId={taskID ?? ""} />}
+          {!hideChatInput && taskStatus === TaskStatus.ERROR && (
+            <ErrorInput workspaceId={workspaceID} taskId={taskID ?? ""} />
+          )}
         </Flex>
       </ChatScrollProvider>
       <Toast open={!!toast} onOpenChange={handleToastOpenChange} title={toast?.title} type={toast?.type} />

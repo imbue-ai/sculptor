@@ -1,5 +1,6 @@
 import "@radix-ui/themes/styles.css";
 import "./index.css";
+import "./styles/mobile-sand.css";
 
 import React from "react";
 import ReactDOM from "react-dom/client";

@@ -1,0 +1,149 @@
+/* =============================================================================
+   MOBILE "SAND" THEME (mobile-only, scoped)
+
+   Applied via the global `.sandTheme` class on the mobile shell / landing root
+   (TH1/TH2). It re-maps the Radix tokens the reused chat / review-all / terminal
+   components read (--gray-*, --accent-*, --color-*) plus app semantic tokens, so
+   those components re-theme with NO component code changes. var() resolves
+   lazily at point-of-use, so overriding these token NAMES on this ancestor
+   re-themes every descendant — including Pierre's shadow DOM, which inherits CSS
+   custom properties across the shadow boundary.
+
+   This lives in a plain .css file (not an .scss module) on purpose: the palette
+   needs literal color values, which `npm run lint:styles` forbids in .scss.
+   The mobile component .scss modules reference only the var() tokens below.
+
+   Palette from agent_docs/responsive-mobile-ui/mocks.html:
+     bg #FAE8CA · accent #F50D00 · Inter (UI) + JetBrains Mono (code).
+   Desktop (outside `.sandTheme`) is untouched.
+   ============================================================================= */
+
+.sandTheme {
+  /* Base ink so nothing inherits a dark host color on the sand surface. */
+  color: var(--gray-12);
+
+  /* ---- gray ramp → warm sand (1-2 = sand page bg, 3-5 = subtle warm,
+         6-8 = borders, 9-10 = muted ink, 11-12 = text) ---- */
+  --gray-1: #fae8ca;
+  --gray-2: #fae8ca;
+  --gray-3: #fcf4e2;
+  --gray-4: #f5e7c6;
+  --gray-5: #f2e6cb;
+  --gray-6: #ead4a2;
+  --gray-7: #e3cb94;
+  --gray-8: #d3b779;
+  --gray-9: #9e8a63;
+  --gray-10: #8b7853;
+  --gray-11: #6e5e40;
+  --gray-12: #2b2316;
+
+  /* surface-tinted gray (Radix maps several names to these) */
+  --gray-surface: #fffdf7cc;
+  --gray-indicator: #9e8a63;
+  --gray-track: #9e8a63;
+  --gray-contrast: #ffffff;
+
+  /* alpha grays (hover/press/borders) — dark ink over sand */
+  --gray-a1: rgba(43, 35, 22, 0.02);
+  --gray-a2: rgba(43, 35, 22, 0.04);
+  --gray-a3: rgba(43, 35, 22, 0.08);
+  --gray-a4: rgba(43, 35, 22, 0.11);
+  --gray-a5: rgba(43, 35, 22, 0.15);
+  --gray-a6: rgba(43, 35, 22, 0.19);
+  --gray-a7: rgba(43, 35, 22, 0.25);
+  --gray-a8: rgba(43, 35, 22, 0.35);
+  --gray-a9: rgba(43, 35, 22, 0.45);
+  --gray-a10: rgba(43, 35, 22, 0.52);
+  --gray-a11: rgba(43, 35, 22, 0.68);
+  --gray-a12: rgba(43, 35, 22, 0.91);
+
+  /* ---- accent ramp → vivid red (#F50D00) ---- */
+  --accent-1: #fffaf8;
+  --accent-2: #fff0ec;
+  --accent-3: #ffdfd6;
+  --accent-4: #ffccbf;
+  --accent-5: #ffb6a6;
+  --accent-6: #ff9b86;
+  --accent-7: #f97a62;
+  --accent-8: #ef513a;
+  --accent-9: #f50d00;
+  --accent-10: #c90a00;
+  --accent-11: #a60800;
+  --accent-12: #4a0d04;
+
+  --accent-a1: rgba(245, 13, 0, 0.02);
+  --accent-a2: rgba(245, 13, 0, 0.06);
+  --accent-a3: rgba(245, 13, 0, 0.16);
+  --accent-a4: rgba(245, 13, 0, 0.25);
+  --accent-a5: rgba(245, 13, 0, 0.35);
+  --accent-a6: rgba(245, 13, 0, 0.45);
+  --accent-a7: rgba(245, 13, 0, 0.55);
+  --accent-a8: rgba(245, 13, 0, 0.7);
+  --accent-a9: rgba(245, 13, 0, 0.95);
+  --accent-a10: rgba(201, 10, 0, 0.95);
+  --accent-a11: rgba(166, 8, 0, 0.95);
+  --accent-a12: rgba(74, 13, 4, 0.95);
+
+  --accent-contrast: #ffffff;
+  --accent-surface: #fbdbd3;
+  --accent-indicator: #f50d00;
+  --accent-track: #f50d00;
+
+  /* ---- semantic Radix surfaces ---- */
+  --color-background: #fae8ca;
+  --color-panel-solid: #fffdf7;
+  --color-panel-translucent: rgba(255, 253, 247, 0.85);
+  --color-panel: rgba(255, 253, 247, 0.85);
+  --color-surface: #fcf4e2;
+  --color-overlay: rgba(40, 28, 10, 0.42);
+  --color-focus-root: #f50d00;
+  --focus-8: #f50d00;
+  --focus-a4: rgba(245, 13, 0, 0.25);
+
+  /* ---- app semantic tokens (styles/tokens.css) ---- */
+  /* Terminal stays dark (mock keeps the terminal body dark on the sand UI). */
+  --terminal-bg: #231c12;
+  --terminal-text: #ece2cf;
+  --terminal-border: #3a2f1f;
+  --button-primary-bg: #f50d00;
+  --button-primary-bg-hover: #c90a00;
+  --code-syntax-color: #a60800;
+
+  /* Warm shadows tuned for the sand surface. */
+  --shadow-sm: 0 2px 8px rgba(95, 58, 12, 0.12);
+  --shadow-md: 0 4px 14px rgba(95, 58, 12, 0.14);
+  --shadow-lg: 0 8px 26px rgba(95, 58, 12, 0.16);
+
+  /* ---- mobile-chrome-only semantic tokens (consumed by the *.module.scss
+         of the new mobile components; not read by reused components) ---- */
+  --mobile-bg: #fae8ca;
+  --mobile-surface: #fffdf7;
+  --mobile-surface-2: #fcf4e2;
+  --mobile-press: #f2e6cb;
+  --mobile-line: #ead4a2;
+  --mobile-line-soft: #f2e0b6;
+  --mobile-ink: #2b2316;
+  --mobile-ink-2: #6e5e40;
+  --mobile-ink-3: #9e8a63;
+  --mobile-accent: #f50d00;
+  --mobile-accent-press: #c90a00;
+  --mobile-accent-tint: #fbdbd3;
+  --mobile-accent-ink: #a60800;
+  --mobile-user-bubble: #efe4cc;
+  --mobile-add: #1e7b3d;
+  --mobile-add-bg: #d8ecd2;
+  --mobile-del: #c5341f;
+  --mobile-del-bg: #f6d9ce;
+  --mobile-modified: #9a6b12;
+  --mobile-modified-bg: #f4e1b4;
+  --mobile-link: #2f6fb3;
+  --mobile-shadow: 0 8px 26px rgba(95, 58, 12, 0.16);
+  --mobile-shadow-sm: 0 2px 8px rgba(95, 58, 12, 0.12);
+  --mobile-overlay: rgba(40, 28, 10, 0.42);
+
+  /* Status-dot colors (drawer / header). */
+  --mobile-dot-run: #f50d00;
+  --mobile-dot-idle: #9e8a63;
+  --mobile-dot-unread: #2f6fb3;
+  --mobile-dot-done: #1e7b3d;
+}

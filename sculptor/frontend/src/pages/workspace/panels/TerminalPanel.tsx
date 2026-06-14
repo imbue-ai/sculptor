@@ -38,7 +38,12 @@ type TerminalInstanceProps = {
   onOutput?: () => void;
 };
 
-const TerminalInstance = ({ workspaceID, terminalIndex, isVisible, onOutput }: TerminalInstanceProps): ReactElement => {
+export const TerminalInstance = ({
+  workspaceID,
+  terminalIndex,
+  isVisible,
+  onOutput,
+}: TerminalInstanceProps): ReactElement => {
   const { terminalContainerRef } = useTerminal({ workspaceID, terminalIndex, isVisible, onOutput });
 
   return (

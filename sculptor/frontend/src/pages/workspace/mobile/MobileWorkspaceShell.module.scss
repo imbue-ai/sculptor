@@ -1,0 +1,54 @@
+/* =============================================================================
+   MOBILE WORKSPACE SHELL — single-column layout (S1-S5).
+
+   The sand theme tokens live in src/styles/mobile-sand.css (.sandTheme); this
+   module references only var() tokens (Radix + --mobile-*) so it passes
+   `npm run lint:styles`. Reused chat / review-all / terminal re-theme via those
+   tokens with no component code changes.
+   ============================================================================= */
+
+.shell {
+  background: var(--mobile-bg);
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+/* Chat fills the remaining space. AlphaChatInterface sizes itself via flex and
+   requires a min-height:0 parent (the spike confirmed this contract). */
+.chatArea {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+}
+
+/* The changes pill sits in normal flow under the header; its expanded list is
+   absolutely positioned and floats over the chat (C2). */
+.chipSlot {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: var(--z-above);
+}
+
+/* Dimmed backdrop behind the drawer (D1). Dropdowns (Radix ⋮ / +) supply their
+   own transparent click-catcher and do NOT use this. */
+.backdrop {
+  background: var(--mobile-overlay);
+  inset: 0;
+  opacity: 0%;
+  pointer-events: none;
+  position: absolute;
+  transition: opacity var(--duration-slow) var(--ease-default);
+  z-index: var(--z-sticky);
+}
+
+.backdrop.open {
+  opacity: 100%;
+  pointer-events: auto;
+}

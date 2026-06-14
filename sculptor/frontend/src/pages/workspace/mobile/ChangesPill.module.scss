@@ -1,0 +1,190 @@
+/* ChangesPill (C1-C3). Compact pill that expands into a floating file list
+   overlaying the chat. */
+.pill {
+  background: var(--mobile-surface);
+  border: 1px solid var(--mobile-line);
+  border-radius: var(--radius-4);
+  box-shadow: var(--mobile-shadow-sm);
+  margin: var(--space-2) var(--space-3) var(--space-1);
+  position: relative;
+  z-index: var(--z-above);
+}
+
+.top {
+  align-items: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-3);
+  text-align: left;
+  width: 100%;
+}
+
+.gitIcon {
+  color: var(--mobile-ink-2);
+  display: flex;
+}
+
+.label {
+  color: var(--mobile-ink);
+  flex: 1;
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-semibold);
+}
+
+.stat {
+  color: var(--mobile-ink-2);
+  font-family: var(--mono-font-family);
+  font-size: var(--font-size-1);
+}
+
+.add {
+  color: var(--mobile-add);
+}
+
+.del {
+  color: var(--mobile-del);
+}
+
+.chevron {
+  color: var(--mobile-ink-3);
+  display: flex;
+  transition: transform var(--duration-normal) var(--ease-default);
+}
+
+.open .chevron {
+  transform: rotate(180deg);
+}
+
+/* Expanded list = a floating dropdown overlaying the chat (input stays put). */
+.body {
+  background: var(--mobile-surface);
+  border: 1px solid var(--mobile-line);
+  border-radius: var(--radius-4);
+  box-shadow: var(--mobile-shadow);
+  left: 0;
+  max-height: 0;
+  opacity: 0%;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--space-1));
+  transition: opacity var(--duration-fast) var(--ease-default);
+}
+
+.open .body {
+  max-height: 60vh;
+  opacity: 100%;
+  overflow-y: auto;
+  pointer-events: auto;
+}
+
+.fileRow {
+  align-items: center;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--mobile-line-soft);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  width: 100%;
+}
+
+.fileRow:hover {
+  background: var(--mobile-press);
+}
+
+.status {
+  align-items: center;
+  border-radius: var(--radius-2);
+  display: flex;
+  flex: 0 0 auto;
+  font-family: var(--mono-font-family);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-bold);
+  height: 19px;
+  justify-content: center;
+  width: 19px;
+}
+
+.statusM {
+  background: var(--mobile-modified-bg);
+  color: var(--mobile-modified);
+}
+
+.statusA {
+  background: var(--mobile-add-bg);
+  color: var(--mobile-add);
+}
+
+.statusD {
+  background: var(--mobile-del-bg);
+  color: var(--mobile-del);
+}
+
+.fileInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.fileName {
+  color: var(--mobile-ink);
+  display: block;
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filePath {
+  color: var(--mobile-ink-3);
+  display: block;
+  font-size: var(--font-size-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileStat {
+  display: flex;
+  flex: 0 0 auto;
+  font-family: var(--mono-font-family);
+  font-size: var(--font-size-1);
+  gap: var(--space-2);
+}
+
+.reviewRow {
+  display: flex;
+  padding: var(--space-1) var(--space-3) var(--space-3);
+}
+
+.reviewButton {
+  align-items: center;
+  background: var(--mobile-accent);
+  border: none;
+  border-radius: var(--radius-3);
+  color: var(--accent-contrast);
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  font: inherit;
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-bold);
+  gap: var(--space-2);
+  justify-content: center;
+  min-height: 44px;
+  padding: var(--space-3);
+}
+
+.reviewButton:hover {
+  background: var(--mobile-accent-press);
+}

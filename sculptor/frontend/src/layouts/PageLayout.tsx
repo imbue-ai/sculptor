@@ -2,8 +2,9 @@ import { Flex } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useState } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 
+import { useIsMobile } from "../common/hooks/useLayoutMode.ts";
 import { useSyncActiveTabFromRoute } from "../common/hooks/useSyncActiveTabFromRoute.ts";
 import { useActiveProjectID } from "../common/NavigateUtils.ts";
 import { backendStatusAtom } from "../common/state/atoms/backend.ts";
@@ -53,6 +54,13 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
   const projectID = useActiveProjectID();
   const currentProject = useProject(projectID ?? "");
   const [isRepoPathDialogOpen, setIsRepoPathDialogOpen] = useState(false);
+  const isMobile = useIsMobile();
+  const { pathname } = useLocation();
+  // On mobile, the Workspace view's own header replaces the global TopBar (S2)
+  // and takes over the top safe-area inset (H4). This covers `/ws/:id` and
+  // `/ws/:id/agent/:id` but NOT `/ws/new/...`, `/home`, or `/settings`, where
+  // the TopBar stays (reflowed per P3).
+  const isMobileWorkspaceRoute = isMobile && pathname.startsWith("/ws/") && !pathname.startsWith("/ws/new");
 
   // Stable callbacks so the memoized <Toast> instances below bail out instead
   // of re-rendering on every unrelated commit while they sit closed. (SCU-1455)
@@ -111,10 +119,14 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
         }}
       >
         {/* TopBar stays mounted (display:none) in zen mode so that workspace
-            tab-cycling keyboard shortcuts (Cmd+[, Cmd+]) remain active. */}
-        <div style={isZenModeActive ? { display: "none" } : undefined}>
-          <TopBar />
-        </div>
+            tab-cycling keyboard shortcuts (Cmd+[, Cmd+]) remain active. On the
+            mobile Workspace view it is suppressed entirely — the mobile header
+            owns the top chrome and safe-area inset (S2/H4). */}
+        {!isMobileWorkspaceRoute && (
+          <div style={isZenModeActive ? { display: "none" } : undefined}>
+            <TopBar />
+          </div>
+        )}
         {/* In zen mode, render a draggable region so the top window edge
             remains draggable. */}
         {isZenModeActive && <TitleBar className={styles.zenTitleBar} />}

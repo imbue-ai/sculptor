@@ -17,9 +17,16 @@ type ChatPanelContentProps = {
   appendTextRef?: React.MutableRefObject<((text: string) => void) | null>;
   insertSkillRef?: React.MutableRefObject<((skill: InsertSkillArg) => void) | null>;
   editorRef?: React.MutableRefObject<TipTapEditor | null>;
+  /** Mobile: suppress the built-in desktop input; the shell supplies its own. */
+  hideChatInput?: boolean;
 };
 
-export const ChatPanelContent = ({ appendTextRef, insertSkillRef, editorRef }: ChatPanelContentProps): ReactElement => {
+export const ChatPanelContent = ({
+  appendTextRef,
+  insertSkillRef,
+  editorRef,
+  hideChatInput,
+}: ChatPanelContentProps): ReactElement => {
   const { workspaceID, agentID: taskID } = useWorkspacePageParams();
   const isDebugView = useAtomValue(debugViewAtomFamily(taskID ?? ""));
   const closeBtwPopupIfNotForAgent = useSetAtom(closeBtwPopupIfNotForAgentAtom);
@@ -65,6 +72,7 @@ export const ChatPanelContent = ({ appendTextRef, insertSkillRef, editorRef }: C
         appendTextRef={appendTextRef}
         insertSkillRef={insertSkillRef}
         editorRef={editorRef}
+        hideChatInput={hideChatInput}
       />
       {isBtwPopupOpen && <BtwPopup />}
     </>
