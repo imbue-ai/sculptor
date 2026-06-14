@@ -337,6 +337,14 @@ class PiAgent(DefaultAgentWrapper):
     # `_deliver_question_answer`). Guarded by `_backchannel_lock`.
     _backchannel_lock: Lock = PrivateAttr(default_factory=Lock)
     _pending_ui_request_id: str | None = PrivateAttr(default=None)
+    # Tool-call id of the backchannel tool whose dialog is currently open. Pi
+    # assigns the tool call and the extension's `ui_request` separate ids; this
+    # is the tool-call id — the one carried by the rendered ToolUseBlock /
+    # ToolResultBlock — used as the question's `tool_use_id` so the frontend
+    # correlates the answered question with its tool block (Claude's single-id
+    # model). Set and read on the dispatcher thread only. `_pending_ui_request_id`
+    # keeps the separate ui_request id for the `extension_ui_response` round-trip.
+    _pending_backchannel_tool_call_id: str | None = PrivateAttr(default=None)
     # Answer request ids awaiting their deferred RequestSuccess (emitted at the
     # turn boundary so the post-answer content reaches the frontend first —
     # mirrors Claude's `_pending_answer_request_ids`).
@@ -1183,6 +1191,12 @@ class PiAgent(DefaultAgentWrapper):
                     claude_input=dict(block.input),
                     assistant_message_id=state.assistant_message_id,
                 )
+                # Remember the backchannel tool call so the dialog it opens next
+                # adopts its id as the question's tool_use_id (see
+                # `_build_question_data`). Dialogs are sequential, so the most
+                # recent backchannel call is the one whose dialog is opening.
+                if self.harness.classify_tool_ui_role(block.name) is not None:
+                    self._pending_backchannel_tool_call_id = str(block.id)
         if content:
             self._output_messages.put(
                 ResponseBlockAgentMessage(
@@ -1452,9 +1466,15 @@ class PiAgent(DefaultAgentWrapper):
         multiple choice, `input` (no options) → free-form. `other_label` lets the
         user type a free-form answer too; pi returns the typed value verbatim.
         """
+        # The question's tool_use_id is the originating tool call's id (not the
+        # ui_request id) so the frontend correlates the answered question with the
+        # rendered ToolUseBlock / ToolResultBlock. Fall back to the ui_request id
+        # only if no backchannel tool call was seen (unexpected — the tool issues
+        # the dialog).
+        tool_use_id = self._pending_backchannel_tool_call_id or parsed.id
         if parsed.method == "select" and parsed.title == PLAN_APPROVAL_DIALOG_TITLE:
-            return make_plan_approval_question(tool_use_id=parsed.id)
-        return build_ask_user_question_data(parsed.title or "", parsed.options or [], parsed.id)
+            return make_plan_approval_question(tool_use_id=tool_use_id)
+        return build_ask_user_question_data(parsed.title or "", parsed.options or [], tool_use_id)
 
     def _deliver_question_answer(self, message: UserQuestionAnswerMessage) -> None:
         """Post the user's answer back to the dialog pi is blocked on.

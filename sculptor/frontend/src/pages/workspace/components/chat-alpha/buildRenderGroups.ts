@@ -13,7 +13,6 @@ import {
 } from "~/common/Guards";
 import type { SubagentTreeNode } from "~/pages/workspace/utils/subagentTree.ts";
 import { SUBAGENT_TOOL_NAMES } from "~/pages/workspace/utils/subagentTree.ts";
-import { isAskUserQuestionTool, isExitPlanModeTool } from "~/pages/workspace/utils/utils.ts";
 
 export type RenderGroup =
   | { type: "text"; blocks: Array<{ text: string }> }
@@ -25,8 +24,10 @@ export type RenderGroup =
   | { type: "context_cleared"; text: string }
   | { type: "resume_response" };
 
-const isSpecialToolUse = (block: ToolUseBlock): boolean =>
-  isAskUserQuestionTool(block.name) || isExitPlanModeTool(block.name);
+// Backchannel tools (ask-user-question / exit-plan-mode) are isolated into their
+// own render group so they render as the inline question/plan panel. The harness
+// stamps `interactiveRole` server-side, so this is harness-agnostic.
+const isSpecialToolUse = (block: ToolUseBlock): boolean => block.interactiveRole != null;
 
 export const buildRenderGroups = (
   content: ReadonlyArray<BlockUnion>,

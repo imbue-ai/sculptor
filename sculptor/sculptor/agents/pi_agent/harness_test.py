@@ -48,6 +48,14 @@ def test_pi_harness_validates_ask_user_question_input() -> None:
     assert PI_HARNESS.is_valid_ask_user_question_input("read", {"path": "x"}) is True
 
 
+def test_pi_harness_classifies_tool_ui_role() -> None:
+    # The harness owns the name->role mapping; the conversion layer stamps the
+    # result onto the block so the frontend renders by role, not by tool name.
+    assert PI_HARNESS.classify_tool_ui_role(ASK_USER_QUESTION_TOOL_NAME) == "ask_user_question"
+    assert PI_HARNESS.classify_tool_ui_role(EXIT_PLAN_MODE_TOOL_NAME) == "exit_plan_mode"
+    assert PI_HARNESS.classify_tool_ui_role("read") is None
+
+
 def test_pi_harness_reconstructs_pending_question_from_flat_tool_input() -> None:
     # Real pi persists the ask_user_question call as a tool block whose input is
     # the extension's flat {question, options} shape — NOT AskUserQuestionData.

@@ -367,6 +367,7 @@ def convert_agent_messages_to_task_update(
                 msg.first_response_message_id,
                 msg.approximate_creation_time,
                 streaming.start_index,
+                harness,
                 parent_tool_use_id=msg_parent,
             )
 
@@ -871,6 +872,22 @@ def _create_empty_assistant_message(
     )
 
 
+def _stamp_interactive_role(block: ContentBlockTypes, harness: Harness) -> ContentBlockTypes:
+    """Stamp a tool block with its harness-derived interactive-backchannel role.
+
+    Applied wherever tool blocks enter the converted content — the final
+    (`_handle_response_blocks`) AND the streaming-partial (`_handle_partial_response`)
+    paths — so the frontend renders ask-user-question / plan-approval tools by
+    role rather than by tool name, whichever path delivered the block first.
+    Non-tool blocks pass through unchanged.
+    """
+    if isinstance(block, ToolUseBlock):
+        return block.model_copy(update={"interactive_role": harness.classify_tool_ui_role(block.name)})
+    if isinstance(block, ToolResultBlock):
+        return block.model_copy(update={"interactive_role": harness.classify_tool_ui_role(block.tool_name)})
+    return block
+
+
 def _handle_response_blocks(
     in_progress: ChatMessage | None,
     blocks: tuple[ContentBlockTypes, ...],
@@ -918,12 +935,14 @@ def _handle_response_blocks(
                 # For AskUserQuestion, remove any existing ToolResultBlock with matching tool_use_id.
                 # This handles the case where ToolResultBlock arrived in a previous message
                 # before ToolUseBlock (which can happen during streaming or persistence).
-                if harness.is_ask_user_question_tool(block.name) or harness.is_exit_plan_mode_tool(block.name):
+                if harness.classify_tool_ui_role(block.name) is not None:
                     content = [
                         b for b in content if not (isinstance(b, ToolResultBlock) and b.tool_use_id == block.id)
                     ]
 
-                content.append(block)
+                # Stamp the harness-derived interactive role so the frontend
+                # renders backchannel tools by role rather than by tool name.
+                content.append(_stamp_interactive_role(block, harness))
                 existing_tool_use_ids.add(block.id)
         elif isinstance(block, ToolResultBlock):
             # Defer ToolResultBlocks to second pass
@@ -931,6 +950,12 @@ def _handle_response_blocks(
 
     # Second pass: Process ToolResultBlocks now that all ToolUseBlocks are in place
     for block in tool_result_blocks:
+        # Stamp the harness-derived role so a backchannel result that survives to
+        # the frontend (its tool use lived in an earlier message) is suppressed by
+        # role rather than by tool name. Stamped inline (not via
+        # `_stamp_interactive_role`) to keep the narrow `ToolResultBlock` type
+        # `_replace_tool_use_with_result` requires.
+        block = block.model_copy(update={"interactive_role": harness.classify_tool_ui_role(block.tool_name)})
         # Try to replace matching tool use with result
         content, replaced = _replace_tool_use_with_result(content, block, harness)
 
@@ -977,6 +1002,7 @@ def _handle_partial_response(
     message_id: AgentMessageID,
     approximate_creation_time: datetime.datetime,
     streaming_start_index: int,
+    harness: Harness,
     parent_tool_use_id: str | None = None,
 ) -> ChatMessage:
     """Handle streaming partial - replace content from streaming_start_index."""
@@ -992,8 +1018,15 @@ def _handle_partial_response(
 
     # Skip ToolUseBlocks whose ID already exists in the committed content to prevent
     # duplication (e.g. if persistence ResponseBlockAgentMessage arrived before the partial).
+    # Stamp the interactive role here too: a backchannel tool's block is delivered
+    # via the partial first, and the later final ResponseBlockAgentMessage skips it
+    # as a duplicate — so without stamping on this path the live turn never gets a role.
     committed_tool_use_ids = {b.id for b in committed_content if isinstance(b, ToolUseBlock)}
-    deduplicated = tuple(b for b in content if not (isinstance(b, ToolUseBlock) and b.id in committed_tool_use_ids))
+    deduplicated = tuple(
+        _stamp_interactive_role(b, harness)
+        for b in content
+        if not (isinstance(b, ToolUseBlock) and b.id in committed_tool_use_ids)
+    )
     new_content = committed_content + deduplicated
 
     return in_progress.model_copy(update={"content": new_content})
