@@ -205,3 +205,33 @@ New direction the user chose after round 1, driven by reference screenshots in
   flows in a new file `docs/design/mobile-mocks/round-2-sand.html` (kept
   separate from round 1 because the theme is distinct; `index.html` links to
   it). Round 1 retained as historical record.
+- Round 4 (lock-in & consolidation): the round-3 direction is the agreed design.
+  Committed the mocks, then **deleted round 1 (`index.html`) and round 2
+  (`round-2-sand.html`)** and **renamed `round-3-sand.html` → `mocks.html`** so
+  there is a single mock file. Updated `spec.md` to match (and added an
+  Implementation Approach section). Permissions/approve-reject confirmed out of
+  scope (not a product concern).
+
+## Implementation direction (locked)
+
+Decided with the user; the full version (tradeoffs, per-piece table, spike) is in
+[`spec.md`](spec.md) → **Implementation Approach**.
+
+- **Reuse, unchanged (mount the real components):** the **chat interface**
+  (`ChatPanelContent` / `AlphaChatInterface`, incl. tool-call rendering — no look
+  or behavior changes), **review-all**, **terminal**, and the empty-agent intro
+  (`AlphaChatIntro`).
+- **New component:** the **mobile chat input** (shares submit/draft logic; `+`
+  context menu), and the **new-workspace** page (minimal, name-only).
+- **New (no desktop twin):** `MobileWorkspaceShell` tree, the **header/context
+  bar**, the **workspace drawer**, the **changes pill** + changes list, the
+  **agent pager** (dots + dashed new-agent), and the **⋮ / `+` dropdowns** (reuse
+  Radix).
+- **`isMobile` / CSS reflow in place:** Home, Settings (has `.mobileNav`), TopBar.
+- **Theme:** sand applied **mobile-only** via a scoped design-token override on
+  the shell root, so reused components re-theme with no code changes; desktop
+  untouched.
+- **Foundation:** a `useLayoutMode` hook (matchMedia @768px, re-render only on
+  crossing) + a single branch point in `WorkspacePage`.
+- **Spike first:** prove the reused chat/review-all/terminal render correctly
+  *outside* `DockingLayout` without re-render storms, before building chrome.
