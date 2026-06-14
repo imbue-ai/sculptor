@@ -312,14 +312,12 @@
 
 // ── Footer: "Create more" toggle + Create button ─────────────────────
 //
-// Outer padding (left / right / bottom) sits at `--space-5` so the
-// modal has a uniform `--space-5` cushion on all four exterior
-// edges, matching the `.context` row at the top. Top padding is
-// also `--space-5` so the Create button has visible breathing room
-// above it — the divider line was previously close enough to the
-// button to feel cramped. Right padding matching `.context` keeps
-// the Create button right-aligned with the new-branch field above
-// it.
+// Horizontal padding stays at `--space-5` so the modal keeps a
+// uniform `--space-5` cushion on its left/right exterior edges and
+// the Create button stays right-aligned with the `.context` row and
+// the new-branch field above it. Vertical padding is tightened to
+// `--space-4` to keep the bar compact while still leaving the Create
+// button and divider visible breathing room.
 .foot {
   align-items: center;
   border-top: 1px solid var(--gray-a3);
@@ -327,7 +325,7 @@
   flex-shrink: 0;
   gap: var(--space-3);
   justify-content: space-between;
-  padding: var(--space-5);
+  padding: var(--space-4) var(--space-5);
 }
 
 // Holds the "Create more" toggle (and any other footer-left affordances).
