@@ -519,10 +519,9 @@ def convert_agent_messages_to_task_update(
                     recent_plan_file_path = plan_path
                 if isinstance(block, ToolUseBlock) and harness.is_ask_user_question_tool(block.name):
                     if block.id not in submitted_question_answers:
-                        if harness.is_valid_ask_user_question_input(block.name, block.input):
-                            pending_user_question = AskUserQuestionData.model_validate(
-                                {**block.input, "tool_use_id": block.id}, strict=True
-                            )
+                        reconstructed_question = harness.reconstruct_pending_ask_user_question(block)
+                        if reconstructed_question is not None:
+                            pending_user_question = reconstructed_question
                         else:
                             logger.info(
                                 "Skipping AskUserQuestion pending state from persisted ToolUseBlock with invalid input: {}",

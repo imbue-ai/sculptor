@@ -27,9 +27,12 @@ from __future__ import annotations
 
 from sculptor.agents.pi_agent.backchannel import ASK_USER_QUESTION_TOOL_NAME
 from sculptor.agents.pi_agent.backchannel import EXIT_PLAN_MODE_TOOL_NAME
+from sculptor.agents.pi_agent.backchannel import build_ask_user_question_data
 from sculptor.interfaces.agents.harness import Harness
 from sculptor.interfaces.agents.harness import HarnessCapabilities
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
+from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.chat_state import ToolUseBlock
 
 # Pi has no MCP / AskUserQuestion / ExitPlanMode surface; the Claude
 # prompt's tool-instructions block is deliberately absent. Names Sculptor
@@ -129,6 +132,19 @@ class PiHarness(Harness):
             return True
         question = tool_input.get("question")
         return isinstance(question, str) and bool(question)
+
+    def reconstruct_pending_ask_user_question(self, block: ToolUseBlock) -> AskUserQuestionData | None:
+        # Pi's `ask_user_question` tool carries a flat `{question, options}` input
+        # (the extension's schema), not the nested `AskUserQuestionData` the base
+        # validates against, so translate it the same way live dispatch does.
+        if not self.is_valid_ask_user_question_input(block.name, block.input):
+            return None
+        options = block.input.get("options")
+        return build_ask_user_question_data(
+            block.input["question"],
+            options if isinstance(options, list) else [],
+            str(block.id),
+        )
 
     # NOTE (divergence, REQ-CAP-ALL-3): pi presents the plan inline as assistant
     # text rather than writing a `.claude/plans/` file, so there is no plan-file

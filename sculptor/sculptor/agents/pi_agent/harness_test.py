@@ -5,6 +5,8 @@ from sculptor.agents.pi_agent.backchannel import EXIT_PLAN_MODE_TOOL_NAME
 from sculptor.agents.pi_agent.harness import PI_HARNESS
 from sculptor.interfaces.agents.harness import HarnessCapabilities
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
+from sculptor.primitives.ids import ToolUseID
+from sculptor.state.chat_state import ToolUseBlock
 
 
 def test_pi_harness_capabilities() -> None:
@@ -44,6 +46,36 @@ def test_pi_harness_validates_ask_user_question_input() -> None:
     assert PI_HARNESS.is_valid_ask_user_question_input(ASK_USER_QUESTION_TOOL_NAME, {"question": ""}) is False
     # Non-AUQ tools always pass (mirrors the Claude harness convention).
     assert PI_HARNESS.is_valid_ask_user_question_input("read", {"path": "x"}) is True
+
+
+def test_pi_harness_reconstructs_pending_question_from_flat_tool_input() -> None:
+    # Real pi persists the ask_user_question call as a tool block whose input is
+    # the extension's flat {question, options} shape — NOT AskUserQuestionData.
+    # The harness translates it back into the canonical question so a reloaded
+    # page re-pends it (the base harness would reject this shape).
+    block = ToolUseBlock(
+        id=ToolUseID("tu_auq"),
+        name=ASK_USER_QUESTION_TOOL_NAME,
+        input={"question": "Tea or coffee?", "options": ["tea", "coffee"]},
+    )
+    reconstructed = PI_HARNESS.reconstruct_pending_ask_user_question(block)
+    assert reconstructed is not None
+    assert reconstructed.tool_use_id == "tu_auq"
+    question = reconstructed.questions[0]
+    assert question.question == "Tea or coffee?"
+    assert [option.label for option in question.options] == ["tea", "coffee"]
+
+
+def test_pi_harness_reconstructs_free_form_question_without_options() -> None:
+    block = ToolUseBlock(id=ToolUseID("tu_free"), name=ASK_USER_QUESTION_TOOL_NAME, input={"question": "Your name?"})
+    reconstructed = PI_HARNESS.reconstruct_pending_ask_user_question(block)
+    assert reconstructed is not None
+    assert reconstructed.questions[0].options == []
+
+
+def test_pi_harness_skips_reconstruction_for_invalid_question_input() -> None:
+    block = ToolUseBlock(id=ToolUseID("tu_bad"), name=ASK_USER_QUESTION_TOOL_NAME, input={"not_a_question": 1})
+    assert PI_HARNESS.reconstruct_pending_ask_user_question(block) is None
 
 
 def test_pi_harness_identity() -> None:

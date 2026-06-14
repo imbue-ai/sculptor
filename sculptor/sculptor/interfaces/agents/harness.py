@@ -45,7 +45,9 @@ from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.primitives.ids import TaskID
 from sculptor.services.workspace_service.api import WorkspaceService
+from sculptor.state.chat_state import AskUserQuestionData
 from sculptor.state.chat_state import ContentBlock
+from sculptor.state.chat_state import ToolUseBlock
 
 
 class HarnessCapabilities(SerializableModel):
@@ -142,6 +144,19 @@ class Harness(BaseModel, abc.ABC):
 
     def is_valid_ask_user_question_input(self, tool_name: str, tool_input: dict) -> bool:
         return False
+
+    def reconstruct_pending_ask_user_question(self, block: ToolUseBlock) -> AskUserQuestionData | None:
+        """Rebuild the pending question from a persisted ask-user-question tool
+        block (page-reload support), or `None` when its input is not valid.
+
+        The default reads the tool input as the `AskUserQuestionData` fields
+        directly — the shape of Claude's MCP AskUserQuestion tool. A harness
+        whose ask-user-question tool carries a different input shape overrides
+        this to translate from its own shape.
+        """
+        if not self.is_valid_ask_user_question_input(block.name, block.input):
+            return None
+        return AskUserQuestionData.model_validate({**block.input, "tool_use_id": block.id}, strict=True)
 
     def get_plan_file_path_from_tool_use(self, block: ContentBlock) -> str | None:
         return None

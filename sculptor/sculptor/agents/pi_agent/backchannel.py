@@ -23,7 +23,12 @@ contract and routes the user's `UserQuestionAnswerMessage` back as the matching
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
+from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.chat_state import QuestionOption
+from sculptor.state.chat_state import UserQuestion
 from sculptor.state.chat_state import make_plan_approval_question
 
 # Tool names registered by sculptor_backchannel.ts — MUST match the `.ts`.
@@ -54,6 +59,29 @@ DISMISSED_ANSWER_VALUE: str = "[Dismissed]"
 _CANONICAL_PLAN_QUESTION = make_plan_approval_question(tool_use_id="")
 PLAN_APPROVAL_HEADER: str = _CANONICAL_PLAN_QUESTION.questions[0].header
 PLAN_APPROVE_ANSWER: str = _CANONICAL_PLAN_QUESTION.questions[0].options[0].label
+
+
+def build_ask_user_question_data(question: str, options: Sequence[str], tool_use_id: str) -> AskUserQuestionData:
+    """Build the single-question `AskUserQuestionData` for a pi ask-user-question.
+
+    Shared by the live dispatch (from the `extension_ui_request`) and the
+    page-reload reconstruction (from the persisted `ask_user_question` tool
+    block) so both render an identical Q&A panel. Empty `options` → a free-form
+    question; non-empty → multiple choice. `other_label` always lets the user
+    type a free-form answer too.
+    """
+    return AskUserQuestionData(
+        questions=[
+            UserQuestion(
+                question=question,
+                header=PI_QUESTION_HEADER,
+                options=[QuestionOption(label=option, description="") for option in options],
+                multi_select=False,
+                other_label="Other",
+            )
+        ],
+        tool_use_id=tool_use_id,
+    )
 
 
 def is_plan_approval(message: UserQuestionAnswerMessage) -> bool:

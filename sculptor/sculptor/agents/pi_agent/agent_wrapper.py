@@ -53,8 +53,8 @@ from pydantic import ValidationError
 
 from sculptor.agents.default.agent_wrapper import DefaultAgentWrapper
 from sculptor.agents.default.utils import get_state_file_contents
-from sculptor.agents.pi_agent.backchannel import PI_QUESTION_HEADER
 from sculptor.agents.pi_agent.backchannel import PLAN_APPROVAL_DIALOG_TITLE
+from sculptor.agents.pi_agent.backchannel import build_ask_user_question_data
 from sculptor.agents.pi_agent.backchannel import extension_ui_response_body
 from sculptor.agents.pi_agent.backchannel import is_plan_approval
 from sculptor.agents.pi_agent.harness import PiHarness
@@ -123,11 +123,9 @@ from sculptor.services.dependency_management_service import parse_pi_version
 from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.state.chat_state import AskUserQuestionData
 from sculptor.state.chat_state import ContentBlockTypes
-from sculptor.state.chat_state import QuestionOption
 from sculptor.state.chat_state import TextBlock
 from sculptor.state.chat_state import ToolResultBlock
 from sculptor.state.chat_state import ToolUseBlock
-from sculptor.state.chat_state import UserQuestion
 from sculptor.state.chat_state import make_plan_approval_question
 from sculptor.state.claude_state import get_tool_invocation_string
 from sculptor.state.messages import ChatInputUserMessage
@@ -1456,19 +1454,7 @@ class PiAgent(DefaultAgentWrapper):
         """
         if parsed.method == "select" and parsed.title == PLAN_APPROVAL_DIALOG_TITLE:
             return make_plan_approval_question(tool_use_id=parsed.id)
-        options = [QuestionOption(label=option, description="") for option in (parsed.options or [])]
-        return AskUserQuestionData(
-            questions=[
-                UserQuestion(
-                    question=parsed.title or "",
-                    header=PI_QUESTION_HEADER,
-                    options=options,
-                    multi_select=False,
-                    other_label="Other",
-                )
-            ],
-            tool_use_id=parsed.id,
-        )
+        return build_ask_user_question_data(parsed.title or "", parsed.options or [], parsed.id)
 
     def _deliver_question_answer(self, message: UserQuestionAnswerMessage) -> None:
         """Post the user's answer back to the dialog pi is blocked on.
