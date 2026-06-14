@@ -147,16 +147,19 @@ class Harness(BaseModel, abc.ABC):
 
     def reconstruct_pending_ask_user_question(self, block: ToolUseBlock) -> AskUserQuestionData | None:
         """Rebuild the pending question from a persisted ask-user-question tool
-        block (page-reload support), or `None` when its input is not valid.
+        block (page-reload support), or `None` when its input is not a valid
+        question.
 
-        The default reads the tool input as the `AskUserQuestionData` fields
-        directly — the shape of Claude's MCP AskUserQuestion tool. A harness
-        whose ask-user-question tool carries a different input shape overrides
-        this to translate from its own shape.
+        Only reached once `is_ask_user_question_tool(block.name)` is True — i.e.
+        for a harness that has opted into ask-user-question — so the base has no
+        universal tool-input shape to assume. A harness whose
+        `is_ask_user_question_tool` can return True MUST override this to
+        translate its own tool-input shape into `AskUserQuestionData`.
         """
-        if not self.is_valid_ask_user_question_input(block.name, block.input):
-            return None
-        return AskUserQuestionData.model_validate({**block.input, "tool_use_id": block.id}, strict=True)
+        raise NotImplementedError(
+            "a harness whose is_ask_user_question_tool can return True must override "
+            "reconstruct_pending_ask_user_question"
+        )
 
     def get_plan_file_path_from_tool_use(self, block: ContentBlock) -> str | None:
         return None
