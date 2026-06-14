@@ -350,6 +350,19 @@ class DefaultWorkspaceService(WorkspaceService):
                 continue
         return None
 
+    def _resolve_default_source_branch(self, project_path: Path) -> str | None:
+        """Detect the default branch to start a new workspace from.
+
+        Prefers the remote-tracking default (``origin/main``/``origin/master``)
+        so new workspaces branch from the latest fetched upstream state rather
+        than a possibly-stale local HEAD; falls back to the local
+        ``main``/``master`` branch when there is no ``origin`` remote.
+        """
+        branch = self._detect_default_branch_for_remote(project_path, "origin")
+        if branch is not None:
+            return branch
+        return self._detect_local_main_or_master(project_path)
+
     def _detect_fallback_branch_for_clone_target(self, project_path: Path) -> str | None:
         """Return ``origin/main`` or ``origin/master`` for CLONE targets.
 
@@ -381,6 +394,12 @@ class DefaultWorkspaceService(WorkspaceService):
         # Diff-generation methods handle None explicitly (see _get_diff_base_ref).
         project_path = project.get_local_user_path()
         source_git_hash = self._get_current_git_hash(project_path)
+
+        # Default isolated worktree workspaces to branch from the latest upstream
+        # default (origin/main) when no source branch was specified, so they start
+        # from the freshest fetched state rather than a possibly-stale local HEAD.
+        if source_branch is None and initialization_strategy == WorkspaceInitializationStrategy.WORKTREE:
+            source_branch = self._resolve_default_source_branch(project_path)
 
         # Use the caller-provided target branch if given, otherwise resolve a
         # sensible default from the user's repo.

@@ -1,4 +1,4 @@
-import { Button, Flex, Select, Spinner, Text, Tooltip } from "@radix-ui/themes";
+import { Flex, Select, Spinner, Text } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import { BlocksIcon, BotIcon } from "lucide-react";
 import { posthog } from "posthog-js";
@@ -32,7 +32,6 @@ import {
 } from "../../common/state/atoms/workspaces.ts";
 import { useDraftTabName } from "../../common/state/hooks/usePromptDraft.ts";
 import { useRepoInfo } from "../../common/state/hooks/useRepoInfo.ts";
-import { BranchSelector } from "../../components/BranchSelector.tsx";
 import { RepoSelector } from "../../components/RepoSelector.tsx";
 import { Toast, type ToastContent, ToastType } from "../../components/Toast.tsx";
 import styles from "./AddWorkspacePage.module.scss";
@@ -75,7 +74,6 @@ export const AddWorkspacePage = (): ReactElement => {
     (value: string) => setWorkspaceNameDraft(value || null),
     [setWorkspaceNameDraft],
   );
-  const [userSelectedBranch, setUserSelectedBranch] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
   const [toast, setToast] = useState<ToastContent | null>(null);
   // `null` means "use the auto-filled preview"; any string means the user has
@@ -111,12 +109,16 @@ export const AddWorkspacePage = (): ReactElement => {
   // Repo info for the selected project
   const { repoInfo, fetchRepoInfo, fetchCurrentBranch } = useRepoInfo(selectedProjectId ?? "");
 
+  // New workspaces always branch from the latest upstream default (origin/main)
+  // so they start from the freshest state; there is no source-branch picker.
+  // Fall back to origin/master, then the repo's current branch, for repos
+  // without an origin/main (e.g. a local-only or master-default repo).
   const sourceBranch = useMemo(() => {
-    if (userSelectedBranch) {
-      return userSelectedBranch;
-    }
-    return repoInfo?.currentBranch;
-  }, [userSelectedBranch, repoInfo]);
+    const remoteDefault =
+      repoInfo?.remoteBranches?.find((branch) => branch === "origin/main") ??
+      repoInfo?.remoteBranches?.find((branch) => branch === "origin/master");
+    return remoteDefault ?? repoInfo?.currentBranch;
+  }, [repoInfo]);
 
   // Load projects on mount into global atom
   useEffect(() => {
@@ -176,7 +178,6 @@ export const AddWorkspacePage = (): ReactElement => {
     if (!selectedProjectId) return;
     fetchCurrentBranch();
     fetchRepoInfo();
-    setUserSelectedBranch(null);
   }, [selectedProjectId, fetchCurrentBranch, fetchRepoInfo]);
 
   const handleSubmit = useCallback(async (): Promise<void> => {
@@ -361,39 +362,6 @@ export const AddWorkspacePage = (): ReactElement => {
               onProjectChange={handleProjectChange}
               className={styles.compactSelector}
             />
-
-            {/* Branch selector */}
-            {repoInfo ? (
-              mode === WorkspaceInitializationStrategy.IN_PLACE ? (
-                <Tooltip content="In-place workspaces use the current branch in your repository">
-                  <span style={{ display: "flex" }}>
-                    <BranchSelector
-                      fetchRepoInfo={fetchRepoInfo}
-                      repoInfo={repoInfo}
-                      setUserSelectedBranch={setUserSelectedBranch}
-                      sourceBranch={sourceBranch}
-                      disabled={true}
-                      triggerVariant="ghost"
-                    />
-                  </span>
-                </Tooltip>
-              ) : (
-                <BranchSelector
-                  fetchRepoInfo={fetchRepoInfo}
-                  repoInfo={repoInfo}
-                  setUserSelectedBranch={setUserSelectedBranch}
-                  sourceBranch={sourceBranch}
-                  triggerVariant="ghost"
-                />
-              )
-            ) : (
-              <Button disabled={true} className={styles.loadingButton}>
-                <Flex align="center" gap="1">
-                  <Spinner />
-                  <Text size="1">Loading ...</Text>
-                </Flex>
-              </Button>
-            )}
 
             {/* Harness selector — gated behind the experimental multi-harness flag.
                 When off, the picker is hidden and `harness` stays Claude, so new

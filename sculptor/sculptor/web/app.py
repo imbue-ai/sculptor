@@ -666,8 +666,9 @@ def create_workspace_v2(
                 raise HTTPException(
                     status_code=400, detail="requested_branch_name is required for WORKTREE workspaces"
                 )
-            if workspace_request.source_branch is None:
-                raise HTTPException(status_code=400, detail="source_branch is required for WORKTREE workspaces")
+            # When no source branch is provided, the workspace service resolves a
+            # sensible default (origin/main) so new worktrees branch from the
+            # latest upstream state.
 
         if branch_name:
             with services.git_repo_service.open_local_user_git_repo_for_read(project, log_command=False) as repo:
