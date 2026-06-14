@@ -31,6 +31,17 @@ RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
 # `packageManager` field in sculptor/frontend/package.json.
 RUN corepack enable pnpm
 
+# GitHub CLI (gh) — used by the Add Repository remote-clone flow and signed in
+# via the in-app auth flow. Installed from GitHub's official apt repo.
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        -o /usr/share/keyrings/githubcli-archive-keyring.gpg && \
+    chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+        > /etc/apt/sources.list.d/github-cli.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends gh && \
+    rm -rf /var/lib/apt/lists/*
+
 # uv — Python package/venv manager; it provisions the right Python for the project.
 RUN curl -fsSL https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:${PATH}"
@@ -81,6 +92,9 @@ ENV SCULPTOR_API_PORT=5050
 ENV SCULPTOR_FOLDER=/data/app_data/sculptor
 # Persist Claude Code's OAuth credentials (written by the in-app sign-in flow).
 ENV CLAUDE_CONFIG_DIR=/data/app_data/sculptor/claude
+# Persist the GitHub CLI's auth token (written by the in-app gh sign-in flow) so
+# it survives rebuilds / "update and reload" like the Claude credentials do.
+ENV GH_CONFIG_DIR=/data/app_data/sculptor/gh
 
 # A minimal git repo for Sculptor to open as a project on first run.
 WORKDIR /workspace
@@ -121,4 +135,4 @@ ENTRYPOINT ["/usr/local/bin/openhost-entrypoint.sh"]
 # The venv lives at the uv *workspace* root (/app/.venv), not /app/sculptor.
 # No --no-serve-static: the backend serves the web UI built above (resolved via
 # the 'sculptor' package's editable install at /app/sculptor/frontend/dist).
-CMD ["sh", "-c", "mkdir -p \"$SCULPTOR_FOLDER\" \"$CLAUDE_CONFIG_DIR\" && exec /app/.venv/bin/python -m sculptor.cli.main --no-open-browser /workspace"]
+CMD ["sh", "-c", "mkdir -p \"$SCULPTOR_FOLDER\" \"$CLAUDE_CONFIG_DIR\" \"$GH_CONFIG_DIR\" && exec /app/.venv/bin/python -m sculptor.cli.main --no-open-browser /workspace"]

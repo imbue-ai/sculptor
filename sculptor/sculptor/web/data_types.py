@@ -667,10 +667,16 @@ class AuthStartResult(SerializableModel):
     On a machine with a usable local browser the CLI completes the loopback flow
     on its own and no code is needed — that case returns ``success=True`` with
     ``needs_code=False``.
+
+    Some tools (e.g. ``gh``) use a browser *device flow* instead: start returns
+    ``auth_url`` plus a ``user_code`` for the user to enter at that URL, then the
+    CLI polls and completes on its own — no code is pasted back (so ``needs_code``
+    stays ``False``); the frontend watches the dependency status for completion.
     """
 
     auth_url: str | None = None
     needs_code: bool = False
+    user_code: str | None = None
     success: bool = False
     error: str | None = None
 

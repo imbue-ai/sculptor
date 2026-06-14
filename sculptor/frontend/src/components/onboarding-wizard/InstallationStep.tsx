@@ -96,6 +96,11 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
   // "open this link, then paste the code" UI for headless/remote deployments.
   const [authUrl, setAuthUrl] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  // gh device-flow sign-in state: the one-time code + verification URL shown on
+  // the gh card while we poll for the user to authorize in their browser.
+  const [ghAuthUrl, setGhAuthUrl] = useState<string | null>(null);
+  const [ghUserCode, setGhUserCode] = useState<string | null>(null);
+  const [ghAuthError, setGhAuthError] = useState<string | null>(null);
   const [isRechecking, setIsRechecking] = useState(false);
   const { startPolling, stopPolling } = usePollingInterval();
 
@@ -222,6 +227,42 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
     }
   };
 
+  // gh sign-in: a browser device flow. Start returns a one-time code + URL; the
+  // user enters the code at github.com/login/device and gh completes on its own,
+  // so we poll the dependency status until gh reports authenticated (no paste-back).
+  const triggerGhAuth = async (): Promise<void> => {
+    setGhAuthError(null);
+    setGhAuthUrl(null);
+    setGhUserCode(null);
+    try {
+      const response = await startDependencyAuth({ query: { tool: "GH" } });
+      if (response.data?.success) {
+        await loadDependencies();
+        return;
+      }
+
+      if (response.data?.authUrl && response.data?.userCode) {
+        setGhAuthUrl(response.data.authUrl);
+        setGhUserCode(response.data.userCode);
+        startPolling(async () => {
+          try {
+            const { data: newDeps } = await getDependenciesStatus({ meta: { skipWsAck: true } });
+            if (newDeps) setDependencies(newDeps);
+            if (newDeps?.gh?.isAuthenticated === true) {
+              stopPolling();
+            }
+          } catch {
+            // Keep polling on a transient error.
+          }
+        });
+        return;
+      }
+      setGhAuthError(response.data?.error ?? "Sign-in failed. Please try again.");
+    } catch (err) {
+      setGhAuthError(err instanceof Error ? err.message : "Sign-in failed. Please try again.");
+    }
+  };
+
   // Initial load
   useEffect(() => {
     loadDependencies();
@@ -256,6 +297,17 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
       setAuthError(null);
     }
   }, [authUrl, dependencies?.claude?.isAuthenticated]);
+
+  // Clear the gh device-flow prompt once gh reports authenticated (the poll in
+  // triggerGhAuth, or the background 30s poll, picked up the completed sign-in).
+  useEffect(() => {
+    if (ghAuthUrl && dependencies?.gh?.isAuthenticated === true) {
+      setGhAuthUrl(null);
+      setGhUserCode(null);
+      setGhAuthError(null);
+      stopPolling();
+    }
+  }, [ghAuthUrl, dependencies?.gh?.isAuthenticated, stopPolling]);
 
   /* We can only submit if all the dependencies are installed, in range, and authenticated */
   const canSubmit = (): boolean => {
@@ -329,7 +381,8 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
   );
   const gitStatus = deriveGitStatus(dependencies?.git);
   const ghStatus = deriveOptionalCliStatus(dependencies?.gh);
-  const glabStatus = deriveOptionalCliStatus(dependencies?.glab);
+  // glab/GitLab temporarily disabled — restore alongside the commented-out GitLab card below.
+  // const glabStatus = deriveOptionalCliStatus(dependencies?.glab);
   const canInstallOptionalClis = getBackendCapabilities().canSelectLocalDir;
 
   const claudeMode = dependencies?.claude?.mode ?? null;
@@ -407,7 +460,9 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
                 <Link href="https://github.com/cli/cli#installation" target="_blank" className={styles.inlineLink}>
                   GitHub
                 </Link>
-              </Tooltip>{" "}
+              </Tooltip>
+              {/* glab/GitLab temporarily disabled — restore this block to bring GitLab back.
+              {" "}
               or{" "}
               <Tooltip
                 content={
@@ -436,6 +491,7 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
                   GitLab
                 </Link>
               </Tooltip>
+              */}
             </TooltipProvider>
           </Text>
           <Flex direction="column" gap="3">
@@ -446,9 +502,14 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
               status={ghStatus}
               installUrl="https://github.com/cli/cli#installation"
               brewPackage="gh"
-              helpText="Used to clone GitHub repos from inside Sculptor. Run 'gh auth login' after install."
+              helpText="Used to clone GitHub repos from inside Sculptor."
               onApplyOverride={(path) => handleOverride("gh", path)}
+              onAuthenticate={triggerGhAuth}
+              authUrl={ghAuthUrl}
+              userCode={ghUserCode}
+              authError={ghAuthError}
             />
+            {/* glab/GitLab temporarily disabled — restore this card to bring GitLab back.
             <DependencyCard
               name="GitLab CLI"
               cliName="glab"
@@ -459,6 +520,7 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
               helpText="Used to clone GitLab projects from inside Sculptor. Run 'glab auth login' after install."
               onApplyOverride={(path) => handleOverride("glab", path)}
             />
+            */}
           </Flex>
         </>
       )}

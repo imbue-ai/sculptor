@@ -212,6 +212,9 @@ def _version_from_dir_name(name: str) -> Version:
 
 # Regex for the sign-in URL the CLI prints to stdout/stderr.
 _AUTH_URL_RE = re.compile(r"(https://\S+)")
+# Regex for the device-flow one-time code `gh auth login --web` prints, e.g.
+# "! First copy your one-time code: ABCD-1234".
+_GH_DEVICE_CODE_RE = re.compile(r"one-time code:\s*(\S+)")
 # How long to wait for the CLI to emit its sign-in URL before giving up on start.
 _AUTH_URL_WAIT_SECONDS = 30.0
 # Overall cap on the spawned 'auth login' process (it idles waiting on stdin).
@@ -265,6 +268,34 @@ def _auth_error_text(process: RunningProcess, fallback: str = "Authentication fa
     return (process.read_stderr() or process.read_stdout() or fallback).strip()
 
 
+def _await_gh_device_code(process: RunningProcess) -> tuple[str | None, str | None]:
+    """Poll a running ``gh auth login --web`` process for its device-flow prompt.
+
+    ``gh`` prints a one-time ``user_code`` and a verification URL, then polls
+    GitHub until the user authorizes (so the process stays alive). Returns
+    ``(user_code, auth_url)`` once both appear, or ``(None, None)`` if the
+    process exits first or neither shows within ``_AUTH_URL_WAIT_SECONDS``.
+    """
+    deadline = time.monotonic() + _AUTH_URL_WAIT_SECONDS
+    while True:
+        output = process.read_stdout() + process.read_stderr()
+        code_match = _GH_DEVICE_CODE_RE.search(output)
+        url_match = _AUTH_URL_RE.search(output)
+        if code_match and url_match:
+            return code_match.group(1), url_match.group(1)
+        if process.is_finished():
+            output = process.read_stdout() + process.read_stderr()
+            code_match = _GH_DEVICE_CODE_RE.search(output)
+            url_match = _AUTH_URL_RE.search(output)
+            return (
+                code_match.group(1) if code_match else None,
+                url_match.group(1) if url_match else None,
+            )
+        if time.monotonic() >= deadline:
+            return None, None
+        time.sleep(0.2)
+
+
 class DependencyManagementService(Service):
     # Serializes the download+verify+stage operation. Held by the background
     # download thread for the entire duration of _download_verify_stage.
@@ -275,6 +306,11 @@ class DependencyManagementService(Service):
     # can be written to it. Only the brief reads and swaps of this field hold
     # _claude_auth_lock — never the blocking subprocess waits.
     _claude_auth_session: RunningProcess | None = PrivateAttr(default=None)
+    # The live `gh auth login --web` process: after start_auth_login(GH) it stays
+    # alive polling GitHub until the user authorizes the device code, then exits.
+    # Completion is observed via check_authenticated(GH); guarded by _gh_auth_lock.
+    _gh_auth_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
+    _gh_auth_session: RunningProcess | None = PrivateAttr(default=None)
     # Guards _install_progress, _installing, _install_error, and
     # _progress_notifier_thread.
     # Acquired briefly, never held during I/O.
@@ -603,8 +639,11 @@ class DependencyManagementService(Service):
         localhost-loopback login on its own and needs no pasted code; that case
         returns ``success=True`` with ``needs_code=False``.
 
-        Currently only Claude supports authentication. Other tools return an error.
+        ``gh`` uses a browser device flow instead (see :meth:`_start_gh_auth_login`).
+        Other tools do not support authentication and return an error.
         """
+        if tool == Dependency.GH:
+            return self._start_gh_auth_login()
         if tool != Dependency.CLAUDE:
             return AuthStartResult(error=f"Authentication not supported for {tool.value}")
         binary = self.resolve_binary_path(tool)
@@ -706,6 +745,62 @@ class DependencyManagementService(Service):
             _terminate_process(session)
         if process is None or process is self._claude_auth_session:
             self._claude_auth_session = None
+
+    def _start_gh_auth_login(self) -> AuthStartResult:
+        """Begin the GitHub CLI browser device-flow sign-in.
+
+        Spawns ``gh auth login --web`` (which over a non-interactive pipe prints a
+        one-time ``user_code`` and a verification URL, then polls GitHub until the
+        user authorizes). The process is kept alive so its polling can complete;
+        the frontend watches ``gh``'s auth status for completion rather than
+        pasting a code back. ``--hostname``/``--git-protocol`` are pinned so ``gh``
+        never blocks on an interactive prompt.
+        """
+        binary = self.resolve_binary_path(Dependency.GH)
+        if binary is None:
+            return AuthStartResult(error="gh CLI not installed")
+
+        with self._gh_auth_lock:
+            self._terminate_gh_auth_session_locked()
+            process = run_background(
+                [binary, "auth", "login", "--hostname", "github.com", "--git-protocol", "https", "--web"],
+                open_stdin=True,
+                timeout=_AUTH_PROCESS_TIMEOUT_SECONDS,
+                isolate_process_group=True,
+            )
+            # Non-interactive gh skips the "Press Enter" prompt, but nudge stdin so
+            # any default prompt is answered rather than blocking the poll loop.
+            try:
+                process.write_stdin("\n")
+            except Exception:
+                pass
+
+            user_code, auth_url = _await_gh_device_code(process)
+            if user_code is None or auth_url is None:
+                error = (process.read_stderr() or process.read_stdout() or "Could not start GitHub sign-in").strip()
+                self._terminate_gh_auth_session_locked(process)
+                return AuthStartResult(error=error)
+
+            self._gh_auth_session = process
+            return AuthStartResult(auth_url=auth_url, user_code=user_code, needs_code=False)
+
+    def _terminate_gh_auth_session_locked(self, process: RunningProcess | None = None) -> None:
+        """Tear down the gh device-flow session and clear the stored handle.
+
+        Must be called while holding ``_gh_auth_lock``. Mirrors
+        :meth:`_terminate_auth_session_locked` for the ``gh`` poll process.
+        """
+        session = process if process is not None else self._gh_auth_session
+        if session is not None and not session.is_finished():
+            try:
+                session.terminate(force_kill_seconds=2.0)
+            except Exception:
+                try:
+                    session.kill_now(signal.SIGKILL)
+                except Exception:
+                    pass
+        if process is None or process is self._gh_auth_session:
+            self._gh_auth_session = None
 
     def _get_status(self) -> DependenciesStatus:
         """Compute the current status of all dependencies (no side effects)."""
