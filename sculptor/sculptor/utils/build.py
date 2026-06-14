@@ -217,3 +217,10 @@ def get_workspaces_folder() -> Path:
     if path_from_env:
         return Path(path_from_env)
     return get_sculptor_folder() / "workspaces"
+
+
+def get_clones_folder(provider: str) -> Path:
+    """Default target directory for repos cloned via the Add Repository dialog."""
+    folder = get_sculptor_folder() / "repos" / provider
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder

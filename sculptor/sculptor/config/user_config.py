@@ -224,6 +224,10 @@ class UserConfig(SerializableModel):
         default="origin/main",
         description="Default target branch for new workspaces",
     )
+    default_clone_target_dir: str = Field(
+        default="",
+        description="Default target folder for cloning remote repositories via the Add Repository dialog. When empty, falls back to ~/.sculptor/repos/<provider>.",
+    )
     file_browser_default_split_ratio: int = Field(
         default=50,
         description="Default split ratio (percentage for diff panel) when the diff panel opens",

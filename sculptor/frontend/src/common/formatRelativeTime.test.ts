@@ -60,9 +60,19 @@ describe("formatRelativeTime", () => {
     expect(result29).not.toBe("0mo ago");
   });
 
-  it("returns months for 30+ days ago", () => {
+  it("returns months for 30+ days ago, up to less than a year", () => {
     expect(formatRelativeTime(ago(30 * DAY_MS))).toBe("1mo ago");
     expect(formatRelativeTime(ago(60 * DAY_MS))).toBe("2mo ago");
     expect(formatRelativeTime(ago(90 * DAY_MS))).toBe("3mo ago");
+    // 364 days / 30 = 12.1 → floor to 12; still under a year so the years
+    // branch doesn't fire. (We don't try to map 12 months → "11mo ago" — the
+    // function buckets in 30-day months, not calendar months.)
+    expect(formatRelativeTime(ago(364 * DAY_MS))).toBe("12mo ago");
+  });
+
+  it("returns years for 365+ days ago", () => {
+    expect(formatRelativeTime(ago(365 * DAY_MS))).toBe("1y ago");
+    expect(formatRelativeTime(ago(2 * 365 * DAY_MS))).toBe("2y ago");
+    expect(formatRelativeTime(ago(5 * 365 * DAY_MS))).toBe("5y ago");
   });
 });

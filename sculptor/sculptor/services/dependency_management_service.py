@@ -28,6 +28,7 @@ from sculptor.foundation.processes.local_process import RunningProcess
 from sculptor.foundation.processes.local_process import run_background
 from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.foundation.subprocess_utils import ProcessError
+from sculptor.foundation.subprocess_utils import ProcessTimeoutError
 from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.primitives.service import Service
@@ -119,11 +120,21 @@ def parse_pi_version(stdout: str) -> str | None:
     return match.group(1) if match else None
 
 
+def _parse_remote_cli_version(stdout: str) -> str | None:
+    """Extract a semver from gh/glab --version output.
+
+    Handles both ``gh version 2.65.0 (2024-...)`` and ``glab 1.48.0`` shapes.
+    """
+    match = re.search(r"(\d+\.\d+\.\d+\S*)", stdout)
+    return match.group(1) if match else None
+
+
 def _parse_version_for_tool(tool: Dependency, stdout: str) -> str | None:
     """Dispatch to the per-tool version parser.
 
     CLAUDE/PI route through their ``ManagedTool`` seam (one shared semver parse); GIT
-    has no conformer and keeps its own ``git version`` parser.
+    has no conformer and keeps its own ``git version`` parser; GH/GLAB are unmanaged
+    remote-host CLIs whose ``--version`` output we parse with a generic semver match.
     """
     managed_tool = get_managed_tool(tool)
     if managed_tool is not None:
@@ -131,6 +142,8 @@ def _parse_version_for_tool(tool: Dependency, stdout: str) -> str | None:
     match tool:
         case Dependency.GIT:
             return _parse_git_version(stdout)
+        case Dependency.GH | Dependency.GLAB:
+            return _parse_remote_cli_version(stdout)
         case Dependency():
             raise ValueError(f"Unhandled dependency: {tool}")
         case _ as unreachable:
@@ -434,6 +447,10 @@ class DependencyManagementService(Service):
                 return self._resolve_git_path()
             case Dependency.PI:
                 return self._resolve_pi_path()
+            case Dependency.GH:
+                return shutil.which("gh")
+            case Dependency.GLAB:
+                return shutil.which("glab")
             case _ as unreachable:
                 assert_never(unreachable)
 
@@ -549,20 +566,28 @@ class DependencyManagementService(Service):
     def check_authenticated(self, tool: Dependency) -> bool | None:
         """Check whether a dependency is authenticated.
 
-        Currently only Claude supports authentication checks. Returns None for
-        unsupported tools or when the tool is not installed.
+        Returns None when the tool has no auth concept (git), is not
+        installed, or the probe itself times out (so callers don't get
+        a misleading "unauthenticated" reading from a hung subprocess).
+        Otherwise runs ``<binary> auth status`` and returns ``True`` on
+        success, ``False`` on a non-zero exit.
         """
-        if tool != Dependency.CLAUDE:
+        if tool == Dependency.GIT:
             return None
         binary = self.resolve_binary_path(tool)
         if binary is None:
             return None
+        # 3s is more than enough — `gh`/`glab`/`claude auth status` read a local
+        # credentials file. Keeping the timeout tight matters because this is
+        # called from `_get_status`, which runs on every status snapshot.
         try:
             self.concurrency_group.run_process_to_completion(
                 [binary, "auth", "status"],
-                timeout=10.0,
+                timeout=3.0,
             )
             return True
+        except ProcessTimeoutError:
+            return None
         except ProcessError:
             return False
 
@@ -750,10 +775,31 @@ class DependencyManagementService(Service):
             install_error=error_by_tool.get(Dependency.PI),
         )
 
+        gh_info = self._get_remote_cli_info(Dependency.GH)
+        glab_info = self._get_remote_cli_info(Dependency.GLAB)
+
         return DependenciesStatus(
             git=git_info,
             claude=claude_info,
             pi=pi_info,
+            gh=gh_info,
+            glab=glab_info,
+        )
+
+    def _get_remote_cli_info(self, tool: Dependency) -> DependencyInfo:
+        """Build a DependencyInfo for the gh/glab remote-host CLIs.
+
+        These have no managed binary, no version range, and no per-tool mode;
+        we just surface install + auth state so the frontend can decide
+        whether the Add Repository → GitHub/GitLab flow is usable.
+        """
+        check = self.check_installed(tool)
+        is_authenticated = self.check_authenticated(tool) if check.installed else None
+        return DependencyInfo(
+            installed=check.installed,
+            path=check.path,
+            version=check.version,
+            is_authenticated=is_authenticated,
         )
 
     def get_status(self) -> DependenciesStatus:

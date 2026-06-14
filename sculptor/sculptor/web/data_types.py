@@ -688,6 +688,51 @@ class DependenciesStatus(SerializableModel):
     git: DependencyInfo
     claude: DependencyInfo
     pi: DependencyInfo
+    gh: DependencyInfo
+    glab: DependencyInfo
+
+
+class RemoteRepo(SerializableModel):
+    """A repository listed from a remote provider (GitHub or GitLab)."""
+
+    full_name: str
+    clone_url: str
+    ssh_url: str
+    is_private: bool
+    pushed_at: str | None = None
+    description: str | None = None
+
+
+class RemoteCloneRequest(RequestModel):
+    """Request to clone a remote repository into a local directory."""
+
+    provider: Literal["github", "gitlab"]
+    url: str
+    target_dir: str
+    name: str
+    # When the user picked from the repo list (not the manual-URL form), we
+    # also send the `owner/repo` slug. The backend prefers passing this to
+    # `gh repo clone` / `glab repo clone`, which then picks the protocol from
+    # the user's CLI config — necessary for SSH-only `glab` users, where
+    # passing the HTTPS URL forces git into an HTTPS auth flow that fails.
+    full_name: str | None = None
+
+
+class RemoteCloneResponse(SerializableModel):
+    """Path of the newly-cloned repository on the backend host."""
+
+    project_path: str
+
+
+class BackendCapabilities(SerializableModel):
+    """Backend-reported capabilities surfaced to the frontend.
+
+    The frontend keeps its own ``BackendCapabilities`` for client-side flags
+    (e.g. whether Electron is available); this model carries values the
+    backend is the authoritative source for.
+    """
+
+    default_clones_dir: str
 
 
 class WorkspaceSetupStatus(SerializableModel):

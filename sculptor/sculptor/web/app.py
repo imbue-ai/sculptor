@@ -254,6 +254,7 @@ from sculptor.web.middleware import resolve_stream_scope
 from sculptor.web.middleware import run_sync_function_with_debugging_support_if_enabled
 from sculptor.web.middleware import shutdown_event as shutdown_event_impl
 from sculptor.web.open_with import open_path_in_external_app
+from sculptor.web.remote_repos import remote_repos_router
 from sculptor.web.skills import discover_skills
 from sculptor.web.streams import Scope
 from sculptor.web.streams import ServerStopped
@@ -4393,6 +4394,7 @@ def _element_tags() -> ElementIDs:
 
 
 APP.include_router(router)
+APP.include_router(remote_repos_router)
 
 APP.add_middleware(SessionTokenMiddleware, settings_factory=get_settings)
 

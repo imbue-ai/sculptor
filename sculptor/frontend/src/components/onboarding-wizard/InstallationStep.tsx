@@ -1,4 +1,5 @@
-import { Button, Flex, Text } from "@radix-ui/themes";
+import { Provider as TooltipProvider } from "@radix-ui/react-tooltip";
+import { Button, Flex, Link, Text, Tooltip } from "@radix-ui/themes";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -13,6 +14,7 @@ import {
   updateUserConfig,
 } from "~/api";
 import { HTTPException } from "~/common/Errors.ts";
+import { getBackendCapabilities } from "~/common/state/atoms/backendCapabilities.ts";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import { useInterval } from "~/common/useInterval.ts";
 import { usePollingInterval } from "~/common/usePollingInterval.ts";
@@ -57,6 +59,15 @@ const deriveClaudeStatus = (
 const deriveGitStatus = (info: DependencyInfo | undefined): DependencyStatus => {
   if (!info) return { state: "loading" };
   if (!info.installed) return { state: "not-installed" };
+  return { state: "installed", path: info.path ?? "—", version: info.version ?? "—", isOverride: info.isOverride };
+};
+
+const deriveOptionalCliStatus = (info: DependencyInfo | undefined): DependencyStatus => {
+  if (!info) return { state: "loading" };
+  if (!info.installed) return { state: "not-installed" };
+  if (info.isAuthenticated === false) {
+    return { state: "needs-auth", path: info.path ?? "—", version: info.version ?? "—" };
+  }
   return { state: "installed", path: info.path ?? "—", version: info.version ?? "—", isOverride: info.isOverride };
 };
 
@@ -277,7 +288,7 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
     return (): void => window.removeEventListener("keydown", handleKeyDown);
   });
 
-  const handleOverride = async (depKey: "claude" | "git", path: string): Promise<void> => {
+  const handleOverride = async (depKey: "claude" | "git" | "gh" | "glab", path: string): Promise<void> => {
     const { data: currentConfig } = await getUserConfig({ meta: { skipWsAck: true } });
     if (!currentConfig) throw new Error("Config not loaded");
 
@@ -317,6 +328,9 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
     installError ?? backendInstallError,
   );
   const gitStatus = deriveGitStatus(dependencies?.git);
+  const ghStatus = deriveOptionalCliStatus(dependencies?.gh);
+  const glabStatus = deriveOptionalCliStatus(dependencies?.glab);
+  const canInstallOptionalClis = getBackendCapabilities().canSelectLocalDir;
 
   const claudeMode = dependencies?.claude?.mode ?? null;
   const claudeModeControls =
@@ -333,7 +347,7 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
         The following are required to use Sculptor
       </Text>
 
-      {/* Dependencies Section */}
+      {/* Required dependencies */}
       <Flex direction="column" gap="3">
         <DependencyCard
           name="Claude Code CLI"
@@ -362,6 +376,93 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
         />
       </Flex>
 
+      {/* Optional CLIs for cloning from GitHub / GitLab. Hidden in web-remote
+          mode since the user can't install binaries on the backend host. */}
+      {canInstallOptionalClis && (
+        <>
+          <Text size="2" mt="2" color="gray">
+            Recommended for{" "}
+            {/* Shared provider so moving from the GitHub tooltip to the GitLab one
+                (or vice versa) opens the second instantly, within skipDelayDuration. */}
+            <TooltipProvider delayDuration={700} skipDelayDuration={300}>
+              <Tooltip
+                content={
+                  <Flex direction="column" gap="2" style={{ maxWidth: 280 }}>
+                    <Text size="2" weight="medium">
+                      Sculptor uses gh (GitHub CLI) to:
+                    </Text>
+                    <Flex direction="column" gap="1">
+                      <Text size="1">• Create projects from your GitHub repos</Text>
+                      <Text size="1">• Create workspaces from your remote branches</Text>
+                      <Text size="1">• Warn when local and remote diverge</Text>
+                    </Flex>
+                    <Button asChild size="1" variant="surface" mt="1">
+                      <a href="https://github.com/cli/cli#installation" target="_blank" rel="noreferrer">
+                        Read GitHub CLI docs
+                      </a>
+                    </Button>
+                  </Flex>
+                }
+              >
+                <Link href="https://github.com/cli/cli#installation" target="_blank" className={styles.inlineLink}>
+                  GitHub
+                </Link>
+              </Tooltip>{" "}
+              or{" "}
+              <Tooltip
+                content={
+                  <Flex direction="column" gap="2" style={{ maxWidth: 280 }}>
+                    <Text size="2" weight="medium">
+                      Sculptor uses glab (GitLab CLI) to:
+                    </Text>
+                    <Flex direction="column" gap="1">
+                      <Text size="1">• Create projects from your GitLab repos</Text>
+                      <Text size="1">• Create workspaces from your remote branches</Text>
+                      <Text size="1">• Warn when local and remote diverge</Text>
+                    </Flex>
+                    <Button asChild size="1" variant="surface" mt="1">
+                      <a href="https://gitlab.com/gitlab-org/cli/#installation" target="_blank" rel="noreferrer">
+                        Read GitLab CLI docs
+                      </a>
+                    </Button>
+                  </Flex>
+                }
+              >
+                <Link
+                  href="https://gitlab.com/gitlab-org/cli/#installation"
+                  target="_blank"
+                  className={styles.inlineLink}
+                >
+                  GitLab
+                </Link>
+              </Tooltip>
+            </TooltipProvider>
+          </Text>
+          <Flex direction="column" gap="3">
+            <DependencyCard
+              name="GitHub CLI"
+              cliName="gh"
+              optional
+              status={ghStatus}
+              installUrl="https://github.com/cli/cli#installation"
+              brewPackage="gh"
+              helpText="Used to clone GitHub repos from inside Sculptor. Run 'gh auth login' after install."
+              onApplyOverride={(path) => handleOverride("gh", path)}
+            />
+            <DependencyCard
+              name="GitLab CLI"
+              cliName="glab"
+              optional
+              status={glabStatus}
+              installUrl="https://gitlab.com/gitlab-org/cli/#installation"
+              brewPackage="glab"
+              helpText="Used to clone GitLab projects from inside Sculptor. Run 'glab auth login' after install."
+              onApplyOverride={(path) => handleOverride("glab", path)}
+            />
+          </Flex>
+        </>
+      )}
+
       {error && (
         <Text size="2" color={dangerColor} className={styles.error}>
           {error}
@@ -375,26 +476,23 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
       )}
 
       <Flex mt="1">
-        <Text size="2" style={{ color: "var(--accent-10)" }}>
-          {isRechecking ? (
-            "Checking…"
-          ) : (
-            <>
-              Click{" "}
-              <Text
-                className={styles.recheckLink}
-                onClick={async () => {
-                  setIsRechecking(true);
-                  await loadDependencies(true);
-                  setIsRechecking(false);
-                }}
-              >
-                here
-              </Text>{" "}
-              to check again
-            </>
-          )}
-        </Text>
+        {isRechecking ? (
+          <Text size="2" style={{ color: "var(--accent-10)" }}>
+            Checking…
+          </Text>
+        ) : (
+          <Text
+            size="2"
+            className={styles.inlineLink}
+            onClick={async () => {
+              setIsRechecking(true);
+              await loadDependencies(true);
+              setIsRechecking(false);
+            }}
+          >
+            Click to check again
+          </Text>
+        )}
       </Flex>
 
       <Button

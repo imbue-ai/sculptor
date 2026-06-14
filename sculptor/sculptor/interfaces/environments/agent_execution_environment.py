@@ -39,6 +39,8 @@ class Dependency(UpperCaseStrEnum):
     CLAUDE = auto()
     GIT = auto()
     PI = auto()
+    GH = auto()
+    GLAB = auto()
 
 
 @runtime_checkable
