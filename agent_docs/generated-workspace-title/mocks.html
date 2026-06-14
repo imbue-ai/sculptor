@@ -1,0 +1,956 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Generated Workspace Title — Mocks (exploration)</title>
+<style>
+  /* ---------- Tokens (approximate Sculptor's Radix-based theme) ---------- */
+  :root {
+    --gray-1:  #FCFCFD;
+    --gray-2:  #F9F9FB;
+    --gray-3:  #F0F0F3;
+    --gray-4:  #E8E8EC;
+    --gray-5:  #E0E1E6;
+    --gray-6:  #D9D9E0;
+    --gray-7:  #CDCED6;
+    --gray-8:  #B9BBC6;
+    --gray-9:  #8B8D98;
+    --gray-10: #80838D;
+    --gray-11: #60646C;
+    --gray-12: #1C2024;
+    --gray-a2: rgba(0,0,6,0.04);
+    --gray-a3: rgba(0,0,6,0.07);
+    --gray-a4: rgba(0,0,6,0.09);
+    --gray-a5: rgba(0,0,6,0.12);
+    --accent-3: #EDF2FE;
+    --accent-9: #3E63DD;
+    --accent-10: #3A5CCC;
+    --accent-11: #3A5BC7;
+    --indigo-9: #3E63DD;
+    --indigo-10:#3A5CCC;
+    --blue-9:   #0091FF;
+    --green-9:  #30A46C;
+    --red-9:    #E5484D;
+    --violet-9: #6E56CF;
+    --violet-11:#5A4CAF;
+    --violet-3: #F1EEFC;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.06);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+    --shadow-lg: 0 24px 56px rgba(0,0,0,0.18), 0 4px 12px rgba(0,0,0,0.08);
+    --radius-2: 6px;
+    --radius-3: 8px;
+    --radius-4: 12px;
+    --fs-0: 11px;
+    --fs-1: 12px;
+    --fs-1-5: 13px;
+    --fs-2: 14px;
+    --fs-3: 16px;
+    --fs-4: 18px;
+    --fs-5: 22px;
+    --fs-6: 26px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #EDEDF0; color: var(--gray-12); }
+  body { font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: var(--fs-2); line-height: 1.45; }
+  code, pre, kbd, .mono { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; }
+
+  /* ---------- Page chrome ---------- */
+  .page-wrap { max-width: 1180px; margin: 0 auto; padding: 32px 24px 80px; }
+  .page-header { margin-bottom: 24px; }
+  .page-header h1 { font-size: 24px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .page-header p { margin: 0; color: var(--gray-11); font-size: var(--fs-2); }
+  .page-header p code { background: var(--gray-3); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+
+  /* ---------- Variant tabs ---------- */
+  .var-tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--gray-5); margin-bottom: 20px; }
+  .var-tab-btn {
+    appearance: none; border: none; background: transparent;
+    padding: 10px 14px; font: inherit; color: var(--gray-11);
+    cursor: pointer; border-bottom: 2px solid transparent;
+    margin-bottom: -1px; font-weight: 500;
+  }
+  .var-tab-btn:hover { color: var(--gray-12); }
+  .var-tab-btn.active { color: var(--indigo-10); border-bottom-color: var(--indigo-9); }
+  .var-tab-btn.rejected { color: var(--gray-9); text-decoration: line-through; text-decoration-color: var(--gray-8); }
+  .var-tab-btn.rejected::after { content: " · rejected"; text-decoration: none; display: inline; color: var(--gray-9); font-size: 11px; font-style: italic; }
+  .var-panel { display: none; }
+  .var-panel.active { display: block; }
+
+  .var-intro { margin: 0 0 18px; padding: 14px 16px; background: #FFF; border: 1px solid var(--gray-5); border-radius: var(--radius-3); }
+  .var-intro h2 { margin: 0 0 6px; font-size: var(--fs-3); }
+  .var-intro p { margin: 0; color: var(--gray-11); font-size: var(--fs-2); }
+  .var-intro .tags { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .tag { font-size: 11px; background: var(--accent-3); color: var(--accent-11); padding: 2px 8px; border-radius: 999px; font-weight: 500; }
+  .tag.warn { background: #FFF4D9; color: #8F6A00; }
+  .tag.muted { background: var(--gray-3); color: var(--gray-11); }
+
+  .state-label { margin: 26px 0 10px; }
+  .state-label h3 { margin: 0 0 2px; font-size: var(--fs-2); }
+  .state-label p { margin: 0; color: var(--gray-11); font-size: var(--fs-1-5); }
+
+  /* ---------- Realistic app chrome behind the modal ---------- */
+  .stage {
+    position: relative;
+    width: 100%; height: 580px;
+    background: var(--gray-2);
+    border: 1px solid var(--gray-5);
+    border-radius: var(--radius-3);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    isolation: isolate;
+  }
+  .stage.tall { height: 640px; }
+  .stage-titlebar {
+    height: 30px; background: var(--gray-3); border-bottom: 1px solid var(--gray-a4);
+    display: flex; align-items: center; padding: 0 12px; gap: 10px;
+  }
+  .stage-traffic { display: flex; gap: 6px; }
+  .stage-traffic span { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+  .stage-traffic span:nth-child(1) { background: #FF5F57; }
+  .stage-traffic span:nth-child(2) { background: #FEBC2E; }
+  .stage-traffic span:nth-child(3) { background: #28C840; }
+  .stage-title { font-size: var(--fs-1); color: var(--gray-11); flex: 1; text-align: center; }
+  .stage-body {
+    height: calc(100% - 30px);
+    background:
+      radial-gradient(circle at 20% 20%, rgba(110,143,225,0.06), transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(110,86,207,0.05), transparent 60%),
+      var(--gray-2);
+    position: relative;
+  }
+  .stage-overlay {
+    position: absolute; inset: 0;
+    background: rgba(20, 25, 40, 0.32);
+    backdrop-filter: blur(2px);
+    display: flex; align-items: flex-start; justify-content: center;
+    padding-top: 44px;
+  }
+
+  /* faint app behind the overlay */
+  .ghost-app { display: flex; height: 100%; }
+  .ghost-side { width: 200px; border-right: 1px solid var(--gray-4); padding: 14px 10px; }
+  .ghost-side .row { height: 26px; border-radius: 6px; background: var(--gray-3); margin-bottom: 8px; }
+  .ghost-side .row.active { background: var(--gray-4); }
+  .ghost-main { flex: 1; padding: 18px; }
+  .ghost-main .blk { height: 14px; border-radius: 4px; background: var(--gray-3); margin-bottom: 10px; }
+  .ghost-main .blk.w60 { width: 60%; } .ghost-main .blk.w40 { width: 40%; } .ghost-main .blk.w80 { width: 80%; }
+
+  /* ---------- The modal shell ---------- */
+  .modal {
+    width: min(680px, 92%);
+    background: #FFF;
+    border-radius: var(--radius-4);
+    box-shadow: var(--shadow-lg);
+    overflow: visible;
+    border: 1px solid var(--gray-5);
+    position: relative;
+  }
+  .modal-clip { border-radius: var(--radius-4); overflow: hidden; }
+
+  .ctx-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 12px 14px 0;
+    flex-wrap: wrap;
+  }
+  .ctx-row .spacer { flex: 1; }
+  .close-x { color: var(--gray-9); cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px; }
+  .close-x:hover { background: var(--gray-3); color: var(--gray-12); }
+
+  .pill-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--gray-2); border: 1px solid var(--gray-a4);
+    color: var(--gray-12); border-radius: var(--radius-2);
+    padding: 4px 9px; font-size: var(--fs-1); font-weight: 500;
+    cursor: pointer; max-width: 100%;
+  }
+  .pill-chip .ico { color: var(--gray-10); display: inline-flex; }
+  .pill-chip .label { color: var(--gray-10); font-weight: 400; margin-right: 1px; }
+  .pill-chip .caret { color: var(--gray-9); margin-left: 2px; font-size: 9px; }
+  .pill-chip:hover { background: var(--gray-3); }
+  .pill-chip .mono { font-size: 11.5px; }
+
+  .branch-field {
+    display: inline-flex; align-items: center; gap: 7px;
+    border: 1px solid var(--gray-a5); border-radius: var(--radius-2);
+    padding: 4px 9px; font-size: 11.5px; color: var(--gray-12);
+    background: #FFF; min-width: 220px;
+  }
+  .branch-field .ico { color: var(--gray-9); }
+  .branch-field .shuffle { margin-left: auto; color: var(--gray-9); cursor: pointer; display: inline-flex; }
+  .branch-field .shuffle:hover { color: var(--gray-12); }
+
+  svg.i { width: 13px; height: 13px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  svg.i.sm { width: 11px; height: 11px; }
+
+  .body-area { padding: 16px 22px 8px; min-height: 170px; }
+
+  .prompt-hero {
+    width: 100%; border: none; outline: none; resize: none;
+    font: inherit; font-size: var(--fs-4); line-height: 1.5; color: var(--gray-12);
+    min-height: 84px;
+  }
+  .prompt-hero .ph { color: var(--gray-9); }
+  .prompt-hero.focused { caret-color: var(--accent-9); }
+  .caret-blink { display: inline-block; width: 1.5px; height: 1.15em; background: var(--accent-9); vertical-align: text-bottom; animation: blink 1.1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* chips inside the prompt (TipTap-style) */
+  .t-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: var(--accent-3); color: var(--accent-11);
+    border-radius: 5px; padding: 1px 6px; font-size: 0.82em; font-weight: 500;
+    vertical-align: baseline; white-space: nowrap;
+  }
+  .t-chip.skill { background: var(--violet-3); color: var(--violet-11); }
+
+  /* ---------- Derived title row (variant A) ---------- */
+  .title-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 22px; border-top: 1px dashed var(--gray-4);
+    font-size: var(--fs-2); color: var(--gray-12); min-height: 38px;
+  }
+  .title-row .sparkle { color: var(--violet-9); display: inline-flex; }
+  .title-row .muted { color: var(--gray-9); }
+  .t-actions { display: inline-flex; align-items: center; gap: 4px; margin-left: 2px; }
+  .t-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 5px; color: var(--gray-9); cursor: pointer;
+  }
+  .t-btn:hover { background: var(--gray-3); color: var(--gray-12); }
+  .auto-tag { font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--violet-11); background: var(--violet-3); border-radius: 999px; padding: 1px 7px; }
+  .auto-tag.edited { color: var(--gray-11); background: var(--gray-3); }
+  .reset-link { font-size: var(--fs-1); color: var(--gray-10); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+  .reset-link:hover { color: var(--gray-12); text-decoration: underline; }
+
+  /* shimmer for "generating" */
+  .shimmer-bar {
+    display: inline-block; height: 14px; width: 190px; border-radius: 4px;
+    background: linear-gradient(90deg, var(--gray-4) 25%, var(--gray-3) 45%, var(--gray-4) 65%);
+    background-size: 200% 100%; animation: shimmer 1.4s linear infinite;
+  }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  .gen-note { font-size: var(--fs-1); color: var(--gray-9); }
+
+  /* ghost text (variant B) */
+  .ghost-text { color: var(--gray-8); animation: ghostpulse 1.8s ease-in-out infinite; }
+  @keyframes ghostpulse { 0%,100% { opacity: 0.85; } 50% { opacity: 0.55; } }
+  .tab-hint {
+    display: inline-flex; align-items: center; gap: 5px; margin-left: 10px;
+    font-size: var(--fs-1); color: var(--gray-9); vertical-align: middle;
+  }
+
+  /* dimmed sparkle toggle once the title is user-edited */
+  .sparkle-off { color: var(--gray-8); }
+  .sparkle-off:hover { color: var(--gray-11); }
+  .autotoggle { position: relative; margin-left: 8px; display: inline-flex; vertical-align: middle; }
+  .autotoggle .tip {
+    position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+    background: var(--gray-12); color: #FFF; font-size: 11px; font-weight: 400;
+    padding: 4px 9px; border-radius: 5px; white-space: nowrap;
+  }
+  .autotoggle .tip::before { content: ""; position: absolute; top: -3px; left: 50%; transform: translateX(-50%) rotate(45deg); width: 7px; height: 7px; background: var(--gray-12); }
+
+  .h-title { font-size: var(--fs-6); font-weight: 600; letter-spacing: -0.01em; margin: 0 0 8px; line-height: 1.25; }
+  .h-title.placeholder { color: var(--gray-8); font-weight: 600; }
+  .h-title .sparkle { color: var(--violet-9); display: inline-flex; margin-right: 6px; }
+  .h-row { display: flex; align-items: center; gap: 8px; }
+  .h-row .h-text { flex: 1; min-width: 0; }
+  .h-row .sparkle { margin-right: 0; }
+  .sparkle-anim { animation: sparklework 1.3s ease-in-out infinite; transform-origin: 50% 50%; display: inline-flex; }
+  @keyframes sparklework {
+    0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
+    50% { transform: scale(1.3) rotate(25deg); opacity: 0.65; }
+  }
+  /* icons inline, hugging the title text */
+  .h-inline-actions { display: inline-flex; align-items: center; gap: 2px; margin-left: 8px; vertical-align: -4px; }
+  /* shimmer sweeps the text itself (no skeleton bar) */
+  .text-shimmer {
+    background: linear-gradient(90deg, var(--gray-8) 30%, var(--gray-5) 48%, var(--gray-8) 66%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text; background-clip: text;
+    color: transparent;
+    animation: shimmer 1.4s linear infinite;
+  }
+
+  /* slash menu */
+  .slash-menu {
+    position: absolute; left: 22px; top: 100%; margin-top: -6px; width: 360px;
+    background: #FFF; border: 1px solid var(--gray-5); border-radius: var(--radius-3);
+    box-shadow: var(--shadow-md); padding: 5px; z-index: 5;
+  }
+  .slash-item { display: flex; align-items: baseline; gap: 10px; padding: 7px 10px; border-radius: 6px; cursor: pointer; }
+  .slash-item .name { font-family: "JetBrains Mono", monospace; font-size: 12.5px; color: var(--gray-12); font-weight: 500; }
+  .slash-item .desc { font-size: var(--fs-1); color: var(--gray-10); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .slash-item.active { background: var(--accent-3); }
+  .slash-item.active .name { color: var(--accent-11); }
+  .slash-head { font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--gray-9); padding: 6px 10px 4px; }
+
+  /* footer */
+  .foot {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px; border-top: 1px solid var(--gray-4);
+    background: var(--gray-1);
+  }
+  .foot .spacer { flex: 1; }
+  .switch { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-1-5); color: var(--gray-11); }
+  .switch .track { width: 28px; height: 16px; border-radius: 999px; background: var(--gray-5); position: relative; }
+  .switch .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #FFF; box-shadow: var(--shadow-sm); }
+  .shortcut-hint { display: inline-flex; align-items: center; gap: 6px; color: var(--gray-10); font-size: var(--fs-1); }
+  .kbd-key {
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 18px; padding: 0 5px;
+    background: var(--gray-2); border: 1px solid var(--gray-a4); border-bottom-color: var(--gray-a5);
+    border-radius: 4px; color: var(--gray-11); font-size: 11px; font-weight: 500;
+  }
+  .btn-primary {
+    background: var(--accent-9); color: #FFF; border: none;
+    padding: 7px 14px; border-radius: var(--radius-3);
+    font: inherit; font-weight: 500; font-size: var(--fs-2);
+    cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+  }
+  .btn-primary:hover { background: var(--accent-10); }
+  .ghost-link { font-size: var(--fs-1); color: var(--gray-9); cursor: pointer; }
+  .ghost-link:hover { color: var(--gray-12); text-decoration: underline; }
+
+  /* ---------- Variant C post-create agent view ---------- */
+  .agent-view { display: flex; height: 100%; }
+  .agent-side { width: 216px; border-right: 1px solid var(--gray-4); padding: 12px 10px; background: var(--gray-1); }
+  .agent-side .side-head { font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--gray-9); padding: 0 6px 8px; }
+  .ws-item { padding: 7px 8px; border-radius: 6px; font-size: var(--fs-1-5); color: var(--gray-11); display: flex; flex-direction: column; gap: 2px; }
+  .ws-item .ws-branch { font-size: 10.5px; color: var(--gray-9); font-family: "JetBrains Mono", monospace; }
+  .ws-item.active { background: var(--accent-3); color: var(--gray-12); }
+  .agent-main { flex: 1; display: flex; flex-direction: column; }
+  .agent-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--gray-4); background: #FFF; }
+  .agent-head .ws-title { font-size: var(--fs-3); font-weight: 600; display: inline-flex; align-items: center; gap: 8px; }
+  .agent-head .meta { color: var(--gray-9); font-size: var(--fs-1); font-family: "JetBrains Mono", monospace; }
+  .agent-chat { flex: 1; padding: 16px; }
+  .chat-bubble { max-width: 75%; background: var(--accent-3); border-radius: 10px; padding: 10px 12px; font-size: var(--fs-1-5); color: var(--gray-12); margin-left: auto; }
+  .chat-status { margin-top: 14px; color: var(--gray-10); font-size: var(--fs-1-5); display: flex; align-items: center; gap: 8px; }
+  .spin { width: 12px; height: 12px; border: 2px solid var(--gray-5); border-top-color: var(--accent-9); border-radius: 50%; animation: rot 0.9s linear infinite; display: inline-block; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+
+  .annot { margin-top: 8px; font-size: var(--fs-1); color: var(--gray-10); }
+  .annot b { color: var(--gray-11); }
+</style>
+</head>
+<body>
+<div class="page-wrap">
+  <div class="page-header">
+    <h1>Generated workspace title — exploration mocks</h1>
+    <p>
+      Four directions for making the prompt the primary input and the title a generated artifact.
+      All variants keep the existing pill row (repo · source · new branch), footer, and ⌘↵ submit.
+      Sample task throughout: <code>Add Google OAuth login to the settings page…</code>
+    </p>
+  </div>
+
+  <div class="var-tabs">
+    <button class="var-tab-btn rejected" data-tab="a">A · Prompt-first, derived title line</button>
+    <button class="var-tab-btn active" data-tab="b">B · Ghost-text title</button>
+    <button class="var-tab-btn rejected" data-tab="c">C · No title field</button>
+    <button class="var-tab-btn rejected" data-tab="d">D · Title as toolbar pill</button>
+  </div>
+
+  <!-- ================================================================ -->
+  <!-- VARIANT A -->
+  <!-- ================================================================ -->
+  <div class="var-panel" id="panel-a">
+    <div class="var-intro">
+      <h2>A · Prompt-first, derived title line</h2>
+      <p>
+        The prompt becomes the hero input (autofocus). The title is demoted to a small derived row
+        beneath it — same mental model as the branch name: auto until touched, shuffle to regenerate,
+        edit makes it sticky. Generation runs in-modal (debounced) but never blocks submit; if it
+        hasn't landed by ⌘↵, it finishes post-create.
+      </p>
+      <div class="tags">
+        <span class="tag">prompt = hero</span>
+        <span class="tag">title mirrors branch-field pattern</span>
+        <span class="tag muted">hybrid generation (in-modal, non-blocking)</span>
+        <span class="tag muted">slash commands in prompt</span>
+      </div>
+    </div>
+
+    <div class="state-label">
+      <h3>State 1 — Just opened</h3>
+      <p>Focus lands in the prompt. The title row advertises that title &amp; branch are automatic — answering "what happens if I just type and hit create?"</p>
+    </div>
+    <div class="stage">
+      <div class="stage-titlebar"><div class="stage-traffic"><span></span><span></span><span></span></div><div class="stage-title">Sculptor</div></div>
+      <div class="stage-body">
+        <div class="ghost-app"><div class="ghost-side"><div class="row active"></div><div class="row"></div><div class="row"></div><div class="row"></div></div><div class="ghost-main"><div class="blk w40"></div><div class="blk w80"></div><div class="blk w60"></div></div></div>
+        <div class="stage-overlay">
+          <div class="modal"><div class="modal-clip">
+            <div class="ctx-row">
+              <span class="pill-chip"><span class="ico">▣</span><span class="mono">sculptor</span><span class="caret">▾</span></span>
+              <span class="pill-chip"><svg class="i sm"><use href="#i-branch"/></svg><span class="label">source</span><span class="mono">main</span><span class="caret">▾</span></span>
+              <span class="branch-field"><svg class="i sm"><use href="#i-branch-plus"/></svg><span class="mono">bryden/lilac-jellyfish</span><span class="shuffle"><svg class="i sm"><use href="#i-shuffle"/></svg></span></span>
+              <span class="spacer"></span><span class="close-x">✕</span>
+            </div>
+            <div class="body-area">
+              <div class="prompt-hero focused"><span class="ph">Describe a task for your agent — or create a blank workspace…</span><span class="caret-blink"></span></div>
+            </div>
+            <div class="title-row">
+              <span class="sparkle"><svg class="i sm"><use href="#i-sparkle"/></svg></span>
+              <span class="muted">Title &amp; branch are generated from your prompt</span>
+            </div>
+            <div class="foot">
+              <span class="switch"><span class="track"></span>Keep open</span>
+              <span class="spacer"></span>
+              <span class="shortcut-hint"><span class="kbd-key">⌘↵</span> to create</span>
+              <button class="btn-primary">Create workspace</button>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state-label">
+      <h3>State 2 — Slash command in the prompt</h3>
+      <p>The prompt is the same rich input as agent chat: typing <code>/</code> opens the command menu (the "related fix"). @-mentions work the same way.</p>
+    </div>
+    <div class="stage">
+      <div class="stage-titlebar"><div class="stage-traffic"><span></span><span></span><span></span></div><div class="stage-title">Sculptor</div></div>
+      <div class="stage-body">
+        <div class="ghost-app"><div class="ghost-side"><div class="row active"></div><div class="row"></div><div class="row"></div><div class="row"></div></div><div class="ghost-main"><div class="blk w40"></div><div class="blk w80"></div><div class="blk w60"></div></div></div>
+        <div class="stage-overlay">
+          <div class="modal"><div class="modal-clip">
+            <div class="ctx-row">
+              <span class="pill-chip"><span class="ico">▣</span><span class="mono">sculptor</span><span class="caret">▾</span></span>
+              <span class="pill-chip"><svg class="i sm"><use href="#i-branch"/></svg><span class="label">source</span><span class="mono">main</span><span class="caret">▾</span></span>
+              <span class="branch-field"><svg class="i sm"><use href="#i-branch-plus"/></svg><span class="mono">bryden/lilac-jellyfish</span><span class="shuffle"><svg class="i sm"><use href="#i-shuffle"/></svg></span></span>
+              <span class="spacer"></span><span class="close-x">✕</span>
+            </div>
+            <div class="body-area" style="position: relative;">
+              <div class="prompt-hero focused">/fi<span class="caret-blink"></span></div>
+              <div class="slash-menu">
+                <div class="slash-head">Commands</div>
+                <div class="slash-item active"><span class="name">/fix-bug</span><span class="desc">Fix a bug using test-driven development</span></div>
+                <div class="slash-item"><span class="name">/find-or-create-linear-ticket</span><span class="desc">Find or create a matching Linear ticket</span></div>
+                <div class="slash-item"><span class="name">/code-review-checklist</span><span class="desc">Review changes against Sculptor's categories</span></div>
+              </div>
+            </div>
+            <div class="title-row">
+              <span class="sparkle"><svg class="i sm"><use href="#i-sparkle"/></svg></span>
+              <span class="muted">Title &amp; branch are generated from your prompt</span>
+            </div>
+            <div class="foot">
+              <span class="switch"><span class="track"></span>Keep open</span>
+              <span class="spacer"></span>
+              <span class="shortcut-hint"><span class="kbd-key">⌘↵</span> to create</span>
+              <button class="btn-primary">Create workspace</button>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state-label">
+      <h3>State 3 — Prompt typed, title generating</h3>
+      <p>After a ~600ms typing pause, a debounced fast-model call generates the title. Shimmer in the title row; submit stays enabled the whole time (whimsical branch covers the gap if the user doesn't wait).</p>
+    </div>
+    <div class="stage">
+      <div class="stage-titlebar"><div class="stage-traffic"><span></span><span></span><span></span></div><div class="stage-title">Sculptor</div></div>
+      <div class="stage-body">
+        <div class="ghost-app"><div class="ghost-side"><div class="row active"></div><div class="row"></div><div class="row"></div><div class="row"></div></div><div class="ghost-main"><div class="blk w40"></div><div class="blk w80"></div><div class="blk w60"></div></div></div>
+        <div class="stage-overlay">
+          <div class="modal"><div class="modal-clip">
+            <div class="ctx-row">
+              <span class="pill-chip"><span class="ico">▣</span><span class="mono">sculptor</span><span class="caret">▾</span></span>
+              <span class="pill-chip"><svg class="i sm"><use href="#i-branch"/></svg><span class="label">source</span><span class="mono">main</span><span class="caret">▾</span></span>
+              <span class="branch-field"><svg class="i sm"><use href="#i-branch-plus"/></svg><span class="mono">bryden/lilac-jellyfish</span><span class="shuffle"><svg class="i sm"><use href="#i-shuffle"/></svg></span></span>
+              <span class="spacer"></span><span class="close-x">✕</span>
+            </div>
+            <div class="body-area">
+              <div class="prompt-hero">Add Google OAuth login to the settings page. Users should be able to link their account from <span class="t-chip">@ settings/AccountPanel.tsx</span> and we need to store the refresh token securely.<span class="caret-blink"></span></div>
+            </div>
+            <div class="title-row">
+              <span class="sparkle"><svg class="i sm"><use href="#i-sparkle"/></svg></span>
+              <span class="shimmer-bar"></span>
+              <span class="gen-note">generating title…</span>
+            </div>
+            <div class="foot">
+              <span class="switch"><span class="track"></span>Keep open</span>
+              <span class="spacer"></span>
+              <span class="shortcut-hint"><span class="kbd-key">⌘↵</span> to create</span>
+              <button class="btn-primary">Create workspace</button>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state-label">
+      <h3>State 4 — Title generated (auto)</h3>
+      <p>Title lands with the sparkle marking it as auto. Shuffle regenerates; clicking the text edits it. The branch name re-derives from the generated title — title and branch stay coherent.</p>
+    </div>
+    <div class="stage">
+      <div class="stage-titlebar"><div class="stage-traffic"><span></span><span></span><span></span></div><div class="stage-title">Sculptor</div></div>
+      <div class="stage-body">
+        <div class="ghost-app"><div class="ghost-side"><div class="row active"></div><div class="row"></div><div class="row"></div><div class="row"></div></div><div class="ghost-main"><div class="blk w40"></div><div class="blk w80"></div><div class="blk w60"></div></div></div>
+        <div class="stage-overlay">
+          <div class="modal"><div class="modal-clip">
+            <div class="ctx-row">
+              <span class="pill-chip"><span class="ico">▣</span><span class="mono">sculptor</span><span class="caret">▾</span></span>
+              <span class="pill-chip"><svg class="i sm"><use href="#i-branch"/></svg><span class="label">source</span><span class="mono">main</span><span class="caret">▾</span></span>
+              <span class="branch-field"><svg class="i sm"><use href="#i-branch-plus"/></svg><span class="mono">bryden/add-google-oauth-login</span><span class="shuffle"><svg class="i sm"><use href="#i-shuffle"/></svg></span></span>
+              <span class="spacer"></span><span class="close-x">✕</span>
+            </div>
+            <div class="body-area">
+              <div class="prompt-hero">Add Google OAuth login to the settings page. Users should be able to link their account from <span class="t-chip">@ settings/AccountPanel.tsx</span> and we need to store the refresh token securely.</div>
+            </div>
+            <div class="title-row">
+              <span class="sparkle"><svg class="i sm"><use href="#i-sparkle"/></svg></span>
+              <span><b>Add Google OAuth login flow</b></span>
+              <span class="auto-tag">auto</span>
+              <span class="t-actions">
+                <span class="t-btn" title="Regenerate title"><svg class="i sm"><use href="#i-shuffle"/></svg></span>
+                <span class="t-btn" title="Edit title"><svg class="i sm"><use href="#i-pencil"/></svg></span>
+              </span>
+            </div>
+            <div class="foot">
+              <span class="switch"><span class="track"></span>Keep open</span>
+              <span class="spacer"></span>
+              <span class="shortcut-hint"><span class="kbd-key">⌘↵</span> to create</span>
+              <button class="btn-primary">Create workspace</button>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state-label">
+      <h3>State 5 — Title edited by the user (sticky)</h3>
+      <p>Once edited, the title stops tracking the prompt — exactly like a manually edited branch name. "Reset to auto" returns it to generated mode.</p>
+    </div>
+    <div class="stage">
+      <div class="stage-titlebar"><div class="stage-traffic"><span></span><span></span><span></span></div><div class="stage-title">Sculptor</div></div>
+      <div class="stage-body">
+        <div class="ghost-app"><div class="ghost-side"><div class="row active"></div><div class="row"></div><div class="row"></div><div class="row"></div></div><div class="ghost-main"><div class="blk w40"></div><div class="blk w80"></div><div class="blk w60"></div></div></div>
+        <div class="stage-overlay">
+          <div class="modal"><div class="modal-clip">
+            <div class="ctx-row">
+              <span class="pill-chip"><span class="ico">▣</span><span class="mono">sculptor</span><span class="caret">▾</span></span>
+              <span class="pill-chip"><svg class="i sm"><use href="#i-branch"/></svg><span class="label">source</span><span class="mono">main</span><span class="caret">▾</span></span>
+              <span class="branch-field"><svg class="i sm"><use href="#i-branch-plus"/></svg><span class="mono">bryden/oauth-settings-login</span><span class="shuffle"><svg class="i sm"><use href="#i-shuffle"/></svg></span></span>
+              <span class="spacer"></span><span class="close-x">✕</span>
+            </div>
+            <div class="body-area">
+              <div class="prompt-hero">Add Google OAuth login to the settings page. Users should be able to link their account from <span class="t-chip">@ settings/AccountPanel.tsx</span> and we need to store the refresh token securely.</div>
+            </div>
+            <div class="title-row">
+              <span><b>OAuth: settings-page login</b></span>
+              <span class="auto-tag edited">edited</span>
+              <span class="spacer" style="flex:1"></span>
+              <span class="reset-link"><svg class="i sm"><use href="#i-undo"/></svg> Reset to auto</span>
+            </div>
+            <div class="foot">
+              <span class="switch"><span class="track"></span>Keep open</span>
+              <span class="spacer"></span>
+              <span class="shortcut-hint"><span class="kbd-key">⌘↵</span> to create</span>
+              <button class="btn-primary">Create workspace</button>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!-- VARIANT B -->
+  <!-- ================================================================ -->
+  <div class="var-panel active" id="panel-b">
+    <div class="var-intro">
+      <h2>B · Ghost-text title (keeps the title-first layout)</h2>
+      <p>
+        The big title heading stays at the top — but it's no longer the first input. The sparkle sits
+        right next to the title text and is a <b>toggle</b>: on = auto mode (title tracks the prompt),
+        off = you own it (typing toggles it off). The title text is always normal black — the sparkle
+        alone signals auto vs owned. While generating, the shimmer sweeps the text itself — no
+        skeleton bar — and the sparkle animates. A refresh button beside it regenerates on demand.
+      </p>
+      <div class="tags">
+        <span class="tag">layout unchanged</span>
+        <span class="tag">sparkle = on/off toggle</span>
+        <span class="tag">shimmer over text, no skeleton</span>
+        <span class="tag">refresh icon = regenerate</span>
+        <span class="tag warn">needs fast in-modal generation to feel live</span>
+        <span class="tag muted">@-mentions in prompt</span>
+      </div>
+    </div>
+
+    <div class="state-label">
+      <h3>State 1 — Just opened</h3>
+      <p>The heading placeholder says what will happen ("Auto-generated title"), with the sparkle toggle sitting just to the right of the text — on by default. Autofocus is in the prompt below; the heading stays reachable by ↑ / click for users who want to name things up front.</p>
+    </div>
+    <div class="stage">
+      <div class="stage-titlebar"><div class="stage-traffic"><span></span><span></span><span></span></div><div class="stage-title">Sculptor</div></div>
+      <div class="stage-body">
+        <div class="ghost-app"><div class="ghost-side"><div class="row active"></div><div class="row"></div><div class="row"></div><div class="row"></div></div><div class="ghost-main"><div class="blk w40"></div><div class="blk w80"></div><div class="blk w60"></div></div></div>
+        <div class="stage-overlay">
+          <div class="modal"><div class="modal-clip">
+            <div class="ctx-row">
+              <span class="pill-chip"><span class="ico">▣</span><span class="mono">sculptor</span><span class="caret">▾</span></span>
+              <span class="pill-chip"><svg class="i sm"><use href="#i-branch"/></svg><span class="label">source</span><span class="mono">main</span><span class="caret">▾</span></span>
+              <span class="branch-field"><svg class="i sm"><use href="#i-branch-plus"/></svg><span class="mono">bryden/lilac-jellyfish</span><span class="shuffle"><svg class="i sm"><use href="#i-shuffle"/></svg></span></span>
+              <span class="spacer"></span><span class="close-x">✕</span>
+            </div>
+            <div class="body-area">
+              <div class="h-title"><span style="color: var(--gray-8);">Auto-generated title</span><span class="h-inline-actions"><span class="t-btn sparkle" style="opacity: 0.55;" title="Auto-title on"><svg class="i"><use href="#i-sparkle"/></svg></span></span></div>
+              <div class="prompt-hero focused"><span class="ph">Describe a task for your agent — or create a blank workspace…</span><span class="caret-blink"></span></div>
+            </div>
+            <div class="foot">
+              <span class="switch"><span class="track"></span>Keep open</span>
+              <span class="spacer"></span>
+              <span class="shortcut-hint"><span class="kbd-key">⌘↵</span> to create</span>
+              <button class="btn-primary">Create workspace</button>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state-label">
+      <h3>State 2 — Typing pause, title generating</h3>
+      <p>No skeleton bar and no "generating…" text: the shimmer sweeps the existing text itself (the placeholder on first generation; the previous title on re-generation) while the sparkle animates. The prompt here includes an @-mention chip — same rich input as chat.</p>
+    </div>
+    <div class="stage">
+      <div class="stage-titlebar"><div class="stage-traffic"><span></span><span></span><span></span></div><div class="stage-title">Sculptor</div></div>
+      <div class="stage-body">
+        <div class="ghost-app"><div class="ghost-side"><div class="row active"></div><div class="row"></div><div class="row"></div><div class="row"></div></div><div class="ghost-main"><div class="blk w40"></div><div class="blk w80"></div><div class="blk w60"></div></div></div>
+        <div class="stage-overlay">
+          <div class="modal"><div class="modal-clip">
+            <div class="ctx-row">
+              <span class="pill-chip"><span class="ico">▣</span><span class="mono">sculptor</span><span class="caret">▾</span></span>
+              <span class="pill-chip"><svg class="i sm"><use href="#i-branch"/></svg><span class="label">source</span><span class="mono">main</span><span class="caret">▾</span></span>
+              <span class="branch-field"><svg class="i sm"><use href="#i-branch-plus"/></svg><span class="mono">bryden/lilac-jellyfish</span><span class="shuffle"><svg class="i sm"><use href="#i-shuffle"/></svg></span></span>
+              <span class="spacer"></span><span class="close-x">✕</span>
+            </div>
+            <div class="body-area">
+              <div class="h-title"><span class="text-shimmer">Auto-generated title</span><span class="h-inline-actions"><span class="t-btn sparkle" title="Generating title…"><span class="sparkle-anim"><svg class="i"><use href="#i-sparkle"/></svg></span></span></span></div>
+              <div class="prompt-hero">Add Google OAuth login to the settings page. Users should be able to link their account from <span class="t-chip">@ settings/AccountPanel.tsx</span> and we need to store the refresh token securely.<span class="caret-blink"></span></div>
+            </div>
+            <div class="foot">
+              <span class="switch"><span class="track"></span>Keep open</span>
+              <span class="spacer"></span>
+              <span class="shortcut-hint"><span class="kbd-key">⌘↵</span> to create</span>
+              <button class="btn-primary">Create workspace</button>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state-label">
+      <h3>State 3 — Auto title showing (toggle on)</h3>
+      <p>The generated title renders in normal black; the lit sparkle is what says "auto". The refresh button next to it regenerates. Clicking in and typing takes ownership (no Tab hint). The title keeps tracking the prompt while auto; branch re-derives from it.</p>
+    </div>
+    <div class="stage">
+      <div class="stage-titlebar"><div class="stage-traffic"><span></span><span></span><span></span></div><div class="stage-title">Sculptor</div></div>
+      <div class="stage-body">
+        <div class="ghost-app"><div class="ghost-side"><div class="row active"></div><div class="row"></div><div class="row"></div><div class="row"></div></div><div class="ghost-main"><div class="blk w40"></div><div class="blk w80"></div><div class="blk w60"></div></div></div>
+        <div class="stage-overlay">
+          <div class="modal"><div class="modal-clip">
+            <div class="ctx-row">
+              <span class="pill-chip"><span class="ico">▣</span><span class="mono">sculptor</span><span class="caret">▾</span></span>
+              <span class="pill-chip"><svg class="i sm"><use href="#i-branch"/></svg><span class="label">source</span><span class="mono">main</span><span class="caret">▾</span></span>
+              <span class="branch-field"><svg class="i sm"><use href="#i-branch-plus"/></svg><span class="mono">bryden/add-google-oauth-login</span><span class="shuffle"><svg class="i sm"><use href="#i-shuffle"/></svg></span></span>
+              <span class="spacer"></span><span class="close-x">✕</span>
+            </div>
+            <div class="body-area">
+              <div class="h-title"><span>Add Google OAuth login flow</span><span class="h-inline-actions"><span class="t-btn sparkle" title="Auto-title on — click to turn off"><svg class="i"><use href="#i-sparkle"/></svg></span><span class="t-btn" title="Regenerate title"><svg class="i sm"><use href="#i-shuffle"/></svg></span></span></div>
+              <div class="prompt-hero">Add Google OAuth login to the settings page. Users should be able to link their account from <span class="t-chip">@ settings/AccountPanel.tsx</span> and we need to store the refresh token securely.<span class="caret-blink"></span></div>
+            </div>
+            <div class="foot">
+              <span class="switch"><span class="track"></span>Keep open</span>
+              <span class="spacer"></span>
+              <span class="shortcut-hint"><span class="kbd-key">⌘↵</span> to create</span>
+              <button class="btn-primary">Create workspace</button>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state-label">
+      <h3>State 4 — Title edited (toggle off)</h3>
+      <p>Typing toggles the sparkle off — the icon dims to gray and the title is owned. Clicking the sparkle turns auto back on and regenerates from the prompt. One line, no badge. Tooltip shown for clarity; it only appears on hover.</p>
+    </div>
+    <div class="stage">
+      <div class="stage-titlebar"><div class="stage-traffic"><span></span><span></span><span></span></div><div class="stage-title">Sculptor</div></div>
+      <div class="stage-body">
+        <div class="ghost-app"><div class="ghost-side"><div class="row active"></div><div class="row"></div><div class="row"></div><div class="row"></div></div><div class="ghost-main"><div class="blk w40"></div><div class="blk w80"></div><div class="blk w60"></div></div></div>
+        <div class="stage-overlay">
+          <div class="modal"><div class="modal-clip">
+            <div class="ctx-row">
+              <span class="pill-chip"><span class="ico">▣</span><span class="mono">sculptor</span><span class="caret">▾</span></span>
+              <span class="pill-chip"><svg class="i sm"><use href="#i-branch"/></svg><span class="label">source</span><span class="mono">main</span><span class="caret">▾</span></span>
+              <span class="branch-field"><svg class="i sm"><use href="#i-branch-plus"/></svg><span class="mono">bryden/oauth-settings-login</span><span class="shuffle"><svg class="i sm"><use href="#i-shuffle"/></svg></span></span>
+              <span class="spacer"></span><span class="close-x">✕</span>
+            </div>
+            <div class="body-area">
+              <div class="h-title"><span>OAuth: settings-page login</span><span class="caret-blink" style="height: 1em;"></span><span class="h-inline-actions autotoggle"><span class="t-btn" style="color: var(--gray-8);" title="Auto-title off"><svg class="i"><use href="#i-sparkle"/></svg></span><span class="tip">Auto-title off — click to re-enable</span></span></div>
+              <div class="prompt-hero">Add Google OAuth login to the settings page. Users should be able to link their account from <span class="t-chip">@ settings/AccountPanel.tsx</span> and we need to store the refresh token securely.</div>
+            </div>
+            <div class="foot">
+              <span class="switch"><span class="track"></span>Keep open</span>
+              <span class="spacer"></span>
+              <span class="shortcut-hint"><span class="kbd-key">⌘↵</span> to create</span>
+              <button class="btn-primary">Create workspace</button>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!-- VARIANT C -->
+  <!-- ================================================================ -->
+  <div class="var-panel" id="panel-c">
+    <div class="var-intro">
+      <h2>C · No title field in the modal</h2>
+      <p>
+        The boldest simplification: the modal is just the prompt plus context pills. The title is always
+        generated after create (the backend path for this already exists, including the don't-clobber-renames
+        guard) and lands in the workspace header a few seconds later, where renaming already lives.
+        A small "Add title" disclosure covers users who want to name things up front.
+      </p>
+      <div class="tags">
+        <span class="tag">simplest modal</span>
+        <span class="tag">post-create generation (existing backend path)</span>
+        <span class="tag warn">title and whimsical branch won't match</span>
+        <span class="tag muted">zero added modal latency</span>
+      </div>
+    </div>
+
+    <div class="state-label">
+      <h3>State 1 — The modal: prompt only</h3>
+      <p>Nothing competes with the prompt. The footer's left side gains an "Add title" ghost link for the up-front-naming case (clicking it reveals a small title input).</p>
+    </div>
+    <div class="stage">
+      <div class="stage-titlebar"><div class="stage-traffic"><span></span><span></span><span></span></div><div class="stage-title">Sculptor</div></div>
+      <div class="stage-body">
+        <div class="ghost-app"><div class="ghost-side"><div class="row active"></div><div class="row"></div><div class="row"></div><div class="row"></div></div><div class="ghost-main"><div class="blk w40"></div><div class="blk w80"></div><div class="blk w60"></div></div></div>
+        <div class="stage-overlay">
+          <div class="modal"><div class="modal-clip">
+            <div class="ctx-row">
+              <span class="pill-chip"><span class="ico">▣</span><span class="mono">sculptor</span><span class="caret">▾</span></span>
+              <span class="pill-chip"><svg class="i sm"><use href="#i-branch"/></svg><span class="label">source</span><span class="mono">main</span><span class="caret">▾</span></span>
+              <span class="branch-field"><svg class="i sm"><use href="#i-branch-plus"/></svg><span class="mono">bryden/lilac-jellyfish</span><span class="shuffle"><svg class="i sm"><use href="#i-shuffle"/></svg></span></span>
+              <span class="spacer"></span><span class="close-x">✕</span>
+            </div>
+            <div class="body-area" style="min-height: 150px;">
+              <div class="prompt-hero focused">Run <span class="t-chip skill">/fix-bug</span> on the flaky teardown in <span class="t-chip">@ test_service_collection.py</span> — the pi --version strand times out on CI.<span class="caret-blink"></span></div>
+            </div>
+            <div class="foot">
+              <span class="switch"><span class="track"></span>Keep open</span>
+              <span class="ghost-link">+ Add title</span>
+              <span class="spacer"></span>
+              <span class="shortcut-hint"><span class="kbd-key">⌘↵</span> to create</span>
+              <button class="btn-primary">Create workspace</button>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state-label">
+      <h3>State 2 — Right after create: title generating in the workspace header</h3>
+      <p>The user lands in the agent view immediately; the header title shimmers while generation runs post-create. The sidebar entry shows the same pending state.</p>
+    </div>
+    <div class="stage">
+      <div class="stage-titlebar"><div class="stage-traffic"><span></span><span></span><span></span></div><div class="stage-title">Sculptor</div></div>
+      <div class="stage-body">
+        <div class="agent-view">
+          <div class="agent-side">
+            <div class="side-head">Workspaces</div>
+            <div class="ws-item active"><span><span class="shimmer-bar" style="width: 120px; height: 11px;"></span></span><span class="ws-branch">bryden/lilac-jellyfish</span></div>
+            <div class="ws-item"><span>Restore MRU on restart</span><span class="ws-branch">bryden/restore-mru</span></div>
+            <div class="ws-item"><span>Floating tasks widget</span><span class="ws-branch">bryden/tasks-widget</span></div>
+          </div>
+          <div class="agent-main">
+            <div class="agent-head">
+              <span class="ws-title"><span class="sparkle" style="color: var(--violet-9); display: inline-flex;"><svg class="i sm"><use href="#i-sparkle"/></svg></span><span class="shimmer-bar" style="width: 200px; height: 16px;"></span></span>
+              <span class="meta">bryden/lilac-jellyfish · worktree</span>
+            </div>
+            <div class="agent-chat">
+              <div class="chat-bubble">Run /fix-bug on the flaky teardown in test_service_collection.py — the pi --version strand times out on CI.</div>
+              <div class="chat-status"><span class="spin"></span> Agent is setting up the worktree…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state-label">
+      <h3>State 3 — A few seconds later: title landed, rename affordance</h3>
+      <p>The generated title fades in with a brief sparkle; hover shows the pencil (rename) — the existing rename flow is the only title editor. If the user renames first, generation never overwrites it.</p>
+    </div>
+    <div class="stage">
+      <div class="stage-titlebar"><div class="stage-traffic"><span></span><span></span><span></span></div><div class="stage-title">Sculptor</div></div>
+      <div class="stage-body">
+        <div class="agent-view">
+          <div class="agent-side">
+            <div class="side-head">Workspaces</div>
+            <div class="ws-item active"><span>Fix flaky service-collection teardown</span><span class="ws-branch">bryden/lilac-jellyfish</span></div>
+            <div class="ws-item"><span>Restore MRU on restart</span><span class="ws-branch">bryden/restore-mru</span></div>
+            <div class="ws-item"><span>Floating tasks widget</span><span class="ws-branch">bryden/tasks-widget</span></div>
+          </div>
+          <div class="agent-main">
+            <div class="agent-head">
+              <span class="ws-title"><span class="sparkle" style="color: var(--violet-9); display: inline-flex;"><svg class="i sm"><use href="#i-sparkle"/></svg></span>Fix flaky service-collection teardown<span class="t-btn" style="display:inline-flex; width:22px; height:22px; align-items:center; justify-content:center; color: var(--gray-9); cursor:pointer;" title="Rename"><svg class="i sm"><use href="#i-pencil"/></svg></span></span>
+              <span class="meta">bryden/lilac-jellyfish · worktree</span>
+            </div>
+            <div class="agent-chat">
+              <div class="chat-bubble">Run /fix-bug on the flaky teardown in test_service_collection.py — the pi --version strand times out on CI.</div>
+              <div class="chat-status"><span class="spin"></span> Agent is reproducing the failure…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!-- VARIANT D -->
+  <!-- ================================================================ -->
+  <div class="var-panel" id="panel-d">
+    <div class="var-intro">
+      <h2>D · Title as a derived pill in the toolbar</h2>
+      <p>
+        The title joins the top pill row — the row that already holds the other derived/contextual
+        things (repo, source, generated branch). The body becomes pure prompt. The title pill behaves
+        exactly like the branch field: generated value, shuffle inside the pill, click to edit inline.
+      </p>
+      <div class="tags">
+        <span class="tag">title &amp; branch are visual siblings</span>
+        <span class="tag">body = 100% prompt</span>
+        <span class="tag warn">pill row is getting crowded</span>
+        <span class="tag muted">hybrid generation (in-modal, non-blocking)</span>
+      </div>
+    </div>
+
+    <div class="state-label">
+      <h3>State 1 — Just opened</h3>
+      <p>The title pill sits next to the branch field, advertising auto-generation. Prompt has full focus and all the body space.</p>
+    </div>
+    <div class="stage">
+      <div class="stage-titlebar"><div class="stage-traffic"><span></span><span></span><span></span></div><div class="stage-title">Sculptor</div></div>
+      <div class="stage-body">
+        <div class="ghost-app"><div class="ghost-side"><div class="row active"></div><div class="row"></div><div class="row"></div><div class="row"></div></div><div class="ghost-main"><div class="blk w40"></div><div class="blk w80"></div><div class="blk w60"></div></div></div>
+        <div class="stage-overlay">
+          <div class="modal"><div class="modal-clip">
+            <div class="ctx-row">
+              <span class="pill-chip"><span class="ico">▣</span><span class="mono">sculptor</span><span class="caret">▾</span></span>
+              <span class="pill-chip"><svg class="i sm"><use href="#i-branch"/></svg><span class="label">source</span><span class="mono">main</span><span class="caret">▾</span></span>
+              <span class="branch-field"><svg class="i sm"><use href="#i-branch-plus"/></svg><span class="mono">bryden/lilac-jellyfish</span><span class="shuffle"><svg class="i sm"><use href="#i-shuffle"/></svg></span></span>
+              <span class="pill-chip"><span class="ico" style="color: var(--violet-9);"><svg class="i sm"><use href="#i-sparkle"/></svg></span><span class="label">title</span><span style="color: var(--gray-9);">auto</span></span>
+              <span class="spacer"></span><span class="close-x">✕</span>
+            </div>
+            <div class="body-area" style="min-height: 150px;">
+              <div class="prompt-hero focused"><span class="ph">Describe a task for your agent — or create a blank workspace…</span><span class="caret-blink"></span></div>
+            </div>
+            <div class="foot">
+              <span class="switch"><span class="track"></span>Keep open</span>
+              <span class="spacer"></span>
+              <span class="shortcut-hint"><span class="kbd-key">⌘↵</span> to create</span>
+              <button class="btn-primary">Create workspace</button>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state-label">
+      <h3>State 2 — Title generated into the pill</h3>
+      <p>After the debounced generation, the pill fills in; shuffle regenerates, click edits inline. Branch derives from the title as it does today.</p>
+    </div>
+    <div class="stage">
+      <div class="stage-titlebar"><div class="stage-traffic"><span></span><span></span><span></span></div><div class="stage-title">Sculptor</div></div>
+      <div class="stage-body">
+        <div class="ghost-app"><div class="ghost-side"><div class="row active"></div><div class="row"></div><div class="row"></div><div class="row"></div></div><div class="ghost-main"><div class="blk w40"></div><div class="blk w80"></div><div class="blk w60"></div></div></div>
+        <div class="stage-overlay">
+          <div class="modal"><div class="modal-clip">
+            <div class="ctx-row">
+              <span class="pill-chip"><span class="ico">▣</span><span class="mono">sculptor</span><span class="caret">▾</span></span>
+              <span class="pill-chip"><svg class="i sm"><use href="#i-branch"/></svg><span class="label">source</span><span class="mono">main</span><span class="caret">▾</span></span>
+              <span class="branch-field"><svg class="i sm"><use href="#i-branch-plus"/></svg><span class="mono">bryden/add-google-oauth-login</span><span class="shuffle"><svg class="i sm"><use href="#i-shuffle"/></svg></span></span>
+              <span class="pill-chip"><span class="ico" style="color: var(--violet-9);"><svg class="i sm"><use href="#i-sparkle"/></svg></span><span>Add Google OAuth login flow</span><span class="shuffle" style="display:inline-flex; color: var(--gray-9); margin-left: 4px;"><svg class="i sm"><use href="#i-shuffle"/></svg></span></span>
+              <span class="spacer"></span><span class="close-x">✕</span>
+            </div>
+            <div class="body-area" style="min-height: 150px;">
+              <div class="prompt-hero">Add Google OAuth login to the settings page. Users should be able to link their account from <span class="t-chip">@ settings/AccountPanel.tsx</span> and we need to store the refresh token securely.<span class="caret-blink"></span></div>
+            </div>
+            <div class="foot">
+              <span class="switch"><span class="track"></span>Keep open</span>
+              <span class="spacer"></span>
+              <span class="shortcut-hint"><span class="kbd-key">⌘↵</span> to create</span>
+              <button class="btn-primary">Create workspace</button>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state-label">
+      <h3>State 3 — Editing the title pill inline</h3>
+      <p>Clicking the pill turns it into an inline input (mirrors the branch field's edit interaction). Once edited it shows the muted "edited" state with a reset affordance in its tooltip.</p>
+    </div>
+    <div class="stage">
+      <div class="stage-titlebar"><div class="stage-traffic"><span></span><span></span><span></span></div><div class="stage-title">Sculptor</div></div>
+      <div class="stage-body">
+        <div class="ghost-app"><div class="ghost-side"><div class="row active"></div><div class="row"></div><div class="row"></div><div class="row"></div></div><div class="ghost-main"><div class="blk w40"></div><div class="blk w80"></div><div class="blk w60"></div></div></div>
+        <div class="stage-overlay">
+          <div class="modal"><div class="modal-clip">
+            <div class="ctx-row">
+              <span class="pill-chip"><span class="ico">▣</span><span class="mono">sculptor</span><span class="caret">▾</span></span>
+              <span class="pill-chip"><svg class="i sm"><use href="#i-branch"/></svg><span class="label">source</span><span class="mono">main</span><span class="caret">▾</span></span>
+              <span class="branch-field"><svg class="i sm"><use href="#i-branch-plus"/></svg><span class="mono">bryden/oauth-settings-login</span><span class="shuffle"><svg class="i sm"><use href="#i-shuffle"/></svg></span></span>
+              <span class="branch-field" style="border-color: var(--accent-9); min-width: 200px;"><span>OAuth: settings-page login</span><span class="caret-blink"></span></span>
+              <span class="spacer"></span><span class="close-x">✕</span>
+            </div>
+            <div class="body-area" style="min-height: 150px;">
+              <div class="prompt-hero">Add Google OAuth login to the settings page. Users should be able to link their account from <span class="t-chip">@ settings/AccountPanel.tsx</span> and we need to store the refresh token securely.</div>
+            </div>
+            <div class="foot">
+              <span class="switch"><span class="track"></span>Keep open</span>
+              <span class="spacer"></span>
+              <span class="shortcut-hint"><span class="kbd-key">⌘↵</span> to create</span>
+              <button class="btn-primary">Create workspace</button>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- shared SVG symbols -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-branch" viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+    <symbol id="i-branch-plus" viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/><line x1="18" y1="14" x2="18" y2="20"/><line x1="15" y1="17" x2="21" y2="17"/></symbol>
+    <!-- regenerate = circular refresh arrows (replaced the shuffle icon everywhere, incl. the branch field) -->
+    <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></symbol>
+    <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M9.9 3.6c.2-.8 1.4-.8 1.6 0l1.3 4.2c.1.3.3.5.6.6l4.2 1.3c.8.2.8 1.4 0 1.6l-4.2 1.3c-.3.1-.5.3-.6.6l-1.3 4.2c-.2.8-1.4.8-1.6 0L8.6 13.2c-.1-.3-.3-.5-.6-.6L3.8 11.3c-.8-.2-.8-1.4 0-1.6l4.2-1.3c.3-.1.5-.3.6-.6Z"/><path d="M19 14.5l.6 2 2 .6-2 .6-.6 2-.6-2-2-.6 2-.6Z"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></symbol>
+  </defs>
+</svg>
+
+<script>
+  const tabs = document.querySelectorAll(".var-tab-btn");
+  const panels = document.querySelectorAll(".var-panel");
+  tabs.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      tabs.forEach((b) => b.classList.remove("active"));
+      panels.forEach((p) => p.classList.remove("active"));
+      btn.classList.add("active");
+      document.getElementById("panel-" + btn.dataset.tab).classList.add("active");
+    });
+  });
+</script>
+</body>
+</html>
