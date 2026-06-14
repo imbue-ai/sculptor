@@ -1,357 +1,387 @@
-# Responsive & Mobile-Friendly Sculptor
-
-## Mocks
-
-The agreed visual direction lives in a single interactive mock alongside this
-spec at [`mocks.html`](mocks.html) (Foundations, Chat components, and end-to-end
-Flows). [`mocks.context.md`](mocks.context.md) records the design decisions and
-the iteration log. The sections below are updated to match it.
+# Responsive / Mobile Sculptor — Spec
 
 ## Overview
 
-_(Rough first pass — to be sharpened in Q&A.)_
+Sculptor's Workspace view is a desktop multi-panel docking layout that is unusable on a
+phone. This work makes Sculptor usable in a narrow, single column. The deliverable is a
+**spike that reproduces [`mocks.html`](mocks.html) in the real app**: a chat-first
+single-column shell that **reuses the real chat, review-all, and terminal components**
+mounted outside the docking layout, wrapped in new mobile chrome (header, drawer, changes
+pill, agent pager) and a mobile-only "sand" theme. The spike's job is to prove the reuse
+strategy holds before any polished chrome is built; the desktop experience is left
+untouched.
 
-Sculptor's frontend is currently desktop-first with effectively no responsive
-design: a single `@media (width <= 800px)` rule, no breakpoint hook, no
-breakpoint tokens, no touch handling, and Radix's responsive props unused. The
-main Workspace view is a dense 5-zone docking layout (resizable side panels,
-center chat + side-by-side diff, bottom terminal, file tree) with hard
-minimum widths that cannot reflow gracefully onto a narrow viewport.
+[`mocks.html`](mocks.html) is the source of truth for the design. [`mocks.context.md`](mocks.context.md)
+records the decisions and the full design history behind it.
 
-This work makes Sculptor adapt to narrow viewports. The immediate, testable
-trigger is **viewport width only** — no remote-access or phone-browser plumbing
-— so it is fully exercised by resizing the window. But the strategic goal is to
-**lay the foundation for a real phone experience later**: window-resize is the
-proxy, and design decisions (single-column shell, breakpoint primitives,
-touch-friendliness) should be made with phones in mind even though phone
-delivery/serving is out of scope for now. The design floor is **~390px** (a
-typical phone width) — it must work well there, not just in the band just under
-the breakpoint.
+## Goals
 
-Below the breakpoint (mobile = width < 768px, Radix's `sm`), Sculptor reflows
-and, for the dense Workspace view, renders a **distinct single-column shell**
-rather than a squeezed desktop layout.
-
-**Primary task on mobile: monitor and nudge a running agent** — read the live
-chat stream and send a prompt. This is the one flow that must feel good. Viewing
-changes (review-all), the terminal, and switching workspaces/agents are
-secondary and may be more utilitarian.
-
-Strategy (settled from the mocks, hybrid):
-- **Shared foundation:** a 768px breakpoint + a `useLayoutMode` hook
-  (`mobile | desktop`, `matchMedia`-backed, re-rendering only on crossing)
-  exposed via context, plus breakpoint tokens. Components branch off this, not
-  ad-hoc `window.innerWidth`.
-- **Simple pages reflow via CSS / `isMobile` in place:** Home, Settings,
-  Add-Workspace, TopBar (Radix responsive props + module rules). Settings
-  already has a `.mobileNav` dropdown.
-- **Workspace view branches to a new tree:** below the breakpoint
-  `WorkspacePage` renders a new single-column `MobileWorkspaceShell` (new chrome)
-  instead of the desktop `DockingLayout`. The shell **mounts the existing chat,
-  review-all, and terminal components unchanged** and only adds mobile chrome
-  around them.
-- **The shell is _chat-first_, not a tab bar:** Chat fills the screen; Changes is
-  a header **changes pill → review-all**; the terminal and other jumps live in a
-  **⋮ dropdown**; agents switch via **pager dots under the input**; workspaces
-  via a **left drawer**. (The round-1 bottom tab bar was dropped.)
-- **Theme:** the warm "sand" light theme is applied **on mobile only**, via a
-  scoped design-token override on the shell root, so reused components re-theme
-  with no code changes; desktop is untouched.
-
-Mobile feature set is **"monitor + chat"**: list/switch workspaces & agents, read
-the chat stream, send prompts, view changes (review-all) and the terminal,
-create a workspace/agent. (Approve/reject permission prompts are **not** part of
-this product and are not mocked.) Multi-panel docking and side-by-side diff are
-deferred.
+- Build `MobileWorkspaceShell` — a single-column, chat-first Workspace view that matches the mock.
+- **Reuse the real chat, review-all, and terminal** unchanged, mounted outside `DockingLayout`.
+- Add a `useLayoutMode` hook and a **single branch point** in `WorkspacePage` that swaps the shell in.
+- Apply the **mobile-only "sand" theme** as a scoped token override so reused components re-theme with zero code changes.
+- Reflow the simple pages (Home, Settings, TopBar) in place.
+- **Prove the spike first**: the reused components render correctly outside the docking layout, without re-render storms.
 
 ## User Scenarios
 
-### Monitor and nudge a running agent (primary)
-User opens Sculptor in a narrow window (eventually, a phone). They land on a
-workspace with a running agent and see the single-column mobile shell, not the
-docking layout (REQ-WS-1). The chat fills the screen and streams live
-(REQ-WS-2, REQ-CHAT-1). They type a follow-up in the input pinned at the bottom
-and send it (REQ-CHAT-2, REQ-CHAT-5); model/effort and attach/skills sit behind
-the input's **`+` menu** (REQ-CHAT-3).
+All scenarios are exactly the flows in `mocks.html` (the **Flows** tab). They assume a
+narrow viewport (a phone, or a narrow Electron/desktop window during development).
 
-### Glance at the changes
-When the agent has changes, a **changes pill** appears under the top bar
-(REQ-DIFF-1). The user taps it, sees the changed files, and opens **review-all** —
-a unified combined diff, full-screen (REQ-DIFF-2, REQ-DIFF-4); a long code line
-scrolls horizontally (REQ-DIFF-3). Back returns to the chat.
+1. **Land and create a workspace (default screen).** Opening Sculptor lands on a minimal
+   **new-workspace** screen: a "Name your workspace" hero, a single name field (focused),
+   a subtle `repo · origin/main` meta line, and a full-width **Create workspace** button.
+   No recents, no shortcut chrome. Naming and tapping Create starts an agent and drops the
+   user into the chat.
 
-### Switch agents / workspaces / open the terminal
-The user switches agents with the **pager dots under the input**, or swipes to
-the dashed dot to create a new agent (REQ-WS-3, REQ-NAV-2). The **drawer** (opened
-from the top bar) lists workspaces grouped by repo, to switch or create one
-(REQ-NAV-1). The **⋮ menu** jumps to the terminal or review-all (REQ-TERM-1). At
-this width the desktop TopBar's workspace tabs collapse into a compact menu
-(REQ-NAV-3).
+2. **Monitor an in-progress agent (home / chat).** The chat fills the screen. A compact
+   header shows the workspace name with an `agent · repo` subtitle and a live status dot.
+   The user reads the streaming chat — user bubbles, assistant markdown, collapsible
+   status/tool lines, tool cards, the "Working…" indicator — and replies through the input
+   pinned at the bottom. Agent pager dots sit just under the input.
 
-### Resize across the breakpoint
-User drags the window from wide to narrow; the layout switches immediately from
-the docking layout to the mobile shell (REQ-RESIZE-1). An unsent draft or scroll
-position may reset (REQ-RESIZE-2), but the active agent and sent history are
-intact (REQ-RESIZE-3). Dragging back to wide restores the desktop docking layout
-with the user's previous panel preferences (REQ-LEGACY-1, REQ-LEGACY-2).
+3. **Switch workspaces via the drawer (Flow A).** Tapping ☰ (top-left) slides a left
+   drawer over the chat (dimmed backdrop). Workspaces are **grouped by repo**, collapsible,
+   with per-repo counts and status dots; the current one is highlighted. A full-width
+   **New workspace** button is pinned at the bottom. Selecting a workspace switches to it.
 
-### Settings and workspace creation on a narrow window
-User opens Settings; the section nav becomes a top dropdown/drawer and content
-is full-width; changing a setting saves exactly as on desktop (REQ-PAGES-2).
-User opens Add-Workspace; the form, dropdowns, and buttons all fit and are
-reachable, and they create a workspace (REQ-PAGES-3).
+4. **Review changes (Flow B).** A small **changes pill** under the header summarizes
+   `+X −Y · N files`. Tapping it expands a floating list of changed files (status badge,
+   name, path, per-file counts) **overlaying the chat** (the input stays put). **Review all
+   changes** pushes a full-screen **combined unified diff** (per-file sticky headers, a
+   "viewed" check, "Show next lines"). Back returns to chat.
 
-### Edge cases
-- **No changes yet:** the changes pill is absent (no broken list).
-- **No workspaces yet:** the workspace drawer shows an empty state with a "New
-  workspace" action.
-- **Fresh agent, no messages:** the chat shows the existing intro
-  (`AlphaChatIntro`) and an "Enter a prompt…" input (REQ-CHAT-4).
-- **Agent idle (not running):** the input is still usable to start the next
-  prompt.
-- **Very long message / wide content:** content wraps; only diffs and code may
-  scroll horizontally (REQ-DIFF-3).
+5. **Open the terminal (Flow C).** The ⋮ menu (top-right) is an anchored dropdown —
+   Open terminal · Review all changes · View pull request · Rename agent · Workspace
+   settings. **Open terminal** pushes a full-screen terminal (light header, dark body).
+   Back returns to chat.
+
+6. **Switch and create agents (Agents flow).** The **pager dots under the input** switch
+   between the workspace's agents (tap a dot or swipe); the header subtitle and chat update.
+   A **dashed "new agent" dot** sits at the end of the dots; swiping past the last agent /
+   tapping it lands on a fresh empty chat to compose the new agent's first prompt.
+
+7. **Empty states.** A workspace with no workspaces shows a friendly **empty drawer**
+   ("No workspaces yet" + New workspace). A fresh agent shows the existing **chat intro**
+   (`AlphaChatIntro`: "Branched off origin/main…", "This is agent X in workspace Y", "All
+   agents in this workspace share the same code…", "Type `/sculptor:help`…") with the
+   "Enter a prompt…" placeholder and no changes pill.
 
 ## Requirements
 
-### Foundation (REQ-FOUND)
-- **REQ-FOUND-1 (MUST):** A breakpoint at **768px** (Radix `sm`) defines the
-  boundary: width < 768px = "mobile", width ≥ 768px = "desktop".
-- **REQ-FOUND-2 (MUST):** A single shared mechanism (a `useLayoutMode` /
-  `useMediaQuery` hook backed by `matchMedia`, exposed via a provider/context)
-  reports the current layout mode; components branch off it rather than ad-hoc
-  `window.innerWidth` checks.
-- **REQ-FOUND-3 (MUST):** The mechanism MUST re-render consumers only when the
-  breakpoint is crossed, not on every resize event (the codebase is
-  render-count sensitive).
-- **REQ-FOUND-4 (SHOULD):** Breakpoint values SHOULD be design tokens that align
-  with Radix responsive props, so CSS reflow (`{ initial, sm }`) and JS
-  branching agree.
+Re-derived from `mocks.html`. Grouped by surface.
 
-### Breakpoint crossing (REQ-RESIZE)
-- **REQ-RESIZE-1 (MUST):** Crossing 768px live MUST switch between desktop and
-  mobile layouts immediately.
-- **REQ-RESIZE-2 (MAY):** Crossing MAY reset transient UI state (chat scroll
-  position, unsent draft); preserving it is not required.
-- **REQ-RESIZE-3 (MUST):** Crossing MUST NOT lose durable state — active
-  workspace/agent, sent messages, and desktop panel-layout preferences MUST
-  survive a round trip across the breakpoint.
+### Foundation
 
-### Mobile Workspace shell (REQ-WS)
-- **REQ-WS-1 (MUST):** Below the breakpoint the Workspace view MUST render a
-  single-column mobile shell and MUST NOT mount the desktop `DockingLayout`, its
-  sidebars, resize handles, or the bottom/terminal zone.
-- **REQ-WS-2 (MUST):** The shell MUST be **chat-first**: the chat fills the
-  screen by default (no bottom tab bar). Changes are reached via a **changes
-  pill** in/under the top bar that opens the changes list → **review-all**; the
-  **terminal** and other workspace jumps live in a **⋮ dropdown**.
-- **REQ-WS-3 (MUST):** A compact top context bar MUST show the current
-  workspace/agent identity, switch agents (**pager dots under the input**, with a
-  dashed "new agent" dot), and open the **workspace drawer** to switch
-  workspaces.
-- **REQ-WS-4 (MUST):** The shell MUST reuse the existing **chat interface**
-  (`ChatPanelContent` / `AlphaChatInterface`, including tool-call rendering)
-  unchanged, and reuse the existing **review-all** and **terminal** components,
-  rather than reimplementing them.
-- **REQ-WS-5 (MUST):** The shell MUST work well down to a **390px** viewport
-  with no horizontal overflow of the shell chrome (top bar, changes pill, input,
-  agent dots).
-- **REQ-WS-6 (MUST):** The warm "sand" theme MUST be scoped to the mobile shell
-  (via a design-token override on its root); it MUST NOT alter desktop styling.
+- **F1.** A `useLayoutMode` hook is the single source of truth for "mobile vs desktop"
+  (detection trigger resolved in [Implementation Approach](#detection-trigger-resolved)).
+  The width boundary is **768px** (Radix's `sm`), aligned so CSS responsive props
+  (`{ initial, sm }`) and the JS branch agree on the same number. It re-renders consumers
+  **only when the mode flips**, never on every resize — the codebase is render-count sensitive.
+- **F2.** `WorkspacePage` has exactly **one branch point**: when the mode is mobile, render
+  `MobileWorkspaceShell`; otherwise render the existing `DockingLayout` path unchanged.
+- **F3.** The **desktop experience is unchanged** — no behavior, layout, or render-count
+  regressions — and the mobile shell **must not write to or corrupt desktop panel-layout
+  persistence** (zone size/visibility atoms), so desktop preferences survive a mobile session.
+- **F4.** Crossing 768px live (dragging the window) **switches layouts immediately**. Durable
+  state (active workspace/agent, sent messages, desktop panel preferences) **survives a round
+  trip**; transient state (unsent draft, scroll position) **may** reset.
 
-### Chat (REQ-CHAT)
-- **REQ-CHAT-1 (MUST):** The chat stream MUST be the **existing chat interface,
-  reused unchanged** — same message/markdown/tool-call rendering and live
-  streaming as desktop. Its appearance changes only by inheriting the scoped
-  mobile theme tokens; no structural or tool-call changes.
-- **REQ-CHAT-2 (MUST):** A chat input MUST be pinned at the bottom of the chat
-  with the text field and send/stop action always visible.
-- **REQ-CHAT-3 (MUST):** Mobile MAY use a **new mobile chat-input component**
-  (sharing the underlying submit/draft logic). Its bottom-left is a single **`+`
-  context menu** (mention / skills & commands / attach / image); secondary
-  controls (model, effort, fast-mode) live there rather than on the input row.
-- **REQ-CHAT-4 (MUST):** A fresh agent with no messages MUST show the existing
-  chat intro (`AlphaChatIntro`) and the "Enter a prompt…" input — reused, not
-  reimplemented.
-- **REQ-CHAT-5 (SHOULD):** Sending a prompt, interrupting/cancelling a running
-  agent, and a jump-to-bottom affordance SHOULD all be available on mobile.
+### Mobile Workspace shell
 
-### Changes / Diff (REQ-DIFF)
-- **REQ-DIFF-1 (MUST):** A **changes pill** under the top bar MUST appear when the
-  agent has changes (file count + ±stats) and open a changes list of changed
-  files (a rounded drawer or bottom sheet that can expand to the top bar).
-- **REQ-DIFF-2 (MUST):** The primary diff view MUST be **review-all** (the
-  combined diff), reusing the existing review-all component; a single file MAY be
-  opened to its own diff.
-- **REQ-DIFF-3 (MUST):** Diffs on mobile MUST render as a unified (single-column)
-  view; side-by-side is out. Wide code lines MAY scroll horizontally.
-- **REQ-DIFF-4 (SHOULD):** Review-all / file diff SHOULD open full-screen, and
-  back returns to the chat, reusing the existing diff-open state.
+- **S1.** `MobileWorkspaceShell` is a **single column, chat-first** layout. There is **no
+  bottom tab bar**. Top → bottom: OS status bar region · workspace header · optional changes
+  pill · chat stream (fills) · chat input · agent pager.
+- **S2.** The shell **replaces the global desktop `TopBar`** within the Workspace view; its
+  own header carries navigation.
+- **S3.** Secondary surfaces (drawer, review-all, terminal) open **over** the chat
+  (drawer/overlays) or **as anchored dropdowns** (⋮, `+`), never as docked panels.
+- **S4.** The shell must work down to a **~390px design floor** (the mock devices are ~380px)
+  with **no horizontal overflow** of the shell chrome (header, changes pill, input, dots).
+- **S5.** **Touch ergonomics:** interactive targets (header actions, agent dots, pill,
+  input controls, ⋮/`+` menu items, file rows) meet a touch-friendly hit area (~44px), and
+  the shell respects **safe-area insets** (notch / home indicator) — driven off the platform
+  signal from `useLayoutMode`.
 
-### Terminal (REQ-TERM)
-- **REQ-TERM-1 (MUST):** The terminal MUST be reachable on mobile from the **⋮
-  dropdown**, opening full-screen and **reusing the existing terminal component**
-  (mobile shows a light header over the unchanged terminal body). Back returns to
-  the chat.
+### Header / context bar (new)
 
-### Navigation (REQ-NAV)
-- **REQ-NAV-1 (MUST):** On mobile the user MUST be able to browse workspaces (in
-  the **drawer**, grouped by repo, collapsible) and open one. When there are no
-  workspaces, the drawer MUST show an empty state with a New-workspace action.
-- **REQ-NAV-2 (MUST):** On mobile the user MUST be able to switch between agents
-  within a workspace.
-- **REQ-NAV-3 (MUST):** The desktop TopBar workspace tabs (which overflow at
-  narrow widths) MUST collapse into a compact control (menu/drawer) below the
-  breakpoint.
+- **H1.** Left: ☰ (`square-menu`) opens the workspace drawer.
+- **H2.** Center: title = workspace name; subtitle = `agent · repo` with a small status dot.
+- **H3.** Right: ⋮ (`circle-ellipsis`) opens the jump dropdown.
+- **H4.** A border separates the header from the content; the header background matches the
+  status-bar region (uniform, no seam).
 
-### Simple-page reflow (REQ-PAGES)
-- **REQ-PAGES-1 (MUST):** Home / recent-workspaces MUST reflow to a
-  single-column, full-width list with no horizontal overflow; row metadata wraps
-  or truncates gracefully.
-- **REQ-PAGES-2 (MUST):** Settings MUST adapt its two-column layout so the
-  section nav is reachable (top dropdown/drawer) and content is full-width.
-- **REQ-PAGES-3 (MUST):** The **new-workspace screen is the default landing**. On
-  mobile it MUST be a minimal, full-width form whose only real input is the
-  **workspace name** (no "optional" label); the source branch is fixed to
-  **origin/main** and the repo selector are shown subtly; no recents or
-  shortcut chrome. It MUST be usable at narrow widths and create a workspace.
-- **REQ-PAGES-4 (SHOULD):** These pages SHOULD reflow via CSS (Radix responsive
-  props + module rules) rather than separate mobile component trees.
+### Workspace drawer (new)
 
-### Touch ergonomics (REQ-TOUCH)
-- **REQ-TOUCH-1 (MUST):** Interactive targets in the mobile shell (agent dots,
-  changes pill, input controls, ⋮ / ＋ menus, file rows, top-bar actions) MUST
-  meet a touch-friendly minimum hit area (~44px).
-- **REQ-TOUCH-2 (SHOULD):** Tap-friendly spacing SHOULD prevent adjacent targets
-  from being easily mis-tapped.
-- **REQ-TOUCH-3 (MAY):** Touch gestures (swipe between agents/views, long-press
-  menus) MAY be added but are not required in this pass.
+- **D1.** Left drawer, slides in over the chat with a **dimmed backdrop**; tapping the
+  backdrop closes it.
+- **D2.** Header: "Sculptor" wordmark + user avatar. Nav rows: Home, Workspaces.
+- **D3.** Workspaces are **grouped by repo**, each group **collapsible** (chevron) with a
+  count; rows show a status dot (running / idle / unread / done), workspace name, branch.
+- **D4.** The current workspace is highlighted.
+- **D5.** A full-width **New workspace** button is pinned at the bottom.
+- **D6.** Empty state: "No workspaces yet" + the New workspace button.
 
-### Desktop preservation (REQ-LEGACY)
-- **REQ-LEGACY-1 (MUST):** Desktop behavior at ≥768px (docking layout, panels,
-  resize, terminal, side-by-side diff) MUST remain unchanged.
-- **REQ-LEGACY-2 (MUST):** The mobile shell MUST NOT write to or corrupt desktop
-  panel-layout persistence (zone visibility/size atoms); desktop preferences
-  persist across mobile sessions.
+### Changes pill + list (new)
+
+- **C1.** A small pill under the header shows `git-compare` · "Changes" · `+X −Y · N files`
+  · chevron. It is **shown only when there are changes** (absent on a fresh agent).
+- **C2.** Tapping it expands **downward into a floating list overlaying the chat** — the
+  chat and input stay in place. Each file row: status badge (M/A/D), filename, path,
+  per-file `+/−`.
+- **C3.** The expanded list has a **Review all changes** button → opens the review-all overlay.
+
+### Review-all overlay (reused component)
+
+- **R1.** Full-screen overlay, pushed in from the right. Header: back
+  (`circle-chevron-left`) · "Review all changes" · `+X −Y · N files` · an overflow/settings action.
+- **R2.** Body is the **combined diff**: per-file sticky header (status, filename, `+/−`, a
+  "viewed" check), diff lines, "Show next lines" expander.
+- **R3.** **Unified only** — no side-by-side on mobile.
+- **R4.** Single-file diff is secondary to review-all (review-all is the primary way to view changes).
+- **R5.** Back returns to the chat.
+
+### Terminal overlay (reused component)
+
+- **T1.** Reached from the ⋮ dropdown ("Open terminal"). Full-screen overlay; back returns to chat.
+- **T2.** Header is light ("Terminal" · `repo · branch` · overflow); the terminal body is
+  dark. Mono, no wrap.
+
+### ⋮ jump dropdown & `+` context menu (new, Radix)
+
+- **M1.** The ⋮ menu is a **standard Radix dropdown anchored under the icon with no dim
+  backdrop** (a transparent click-catcher dismisses it). Items: Open terminal · Review all
+  changes (N files) · View pull request (#NN) · — · Rename agent · Workspace settings.
+- **M2.** The chat input `+` opens its own anchored dropdown (also no dim): Mention · Skills
+  & commands · Attach files · Add image.
+
+### Chat (reused component, unchanged)
+
+- **CH1.** The real chat interface (`ChatPanelContent` / `AlphaChatInterface`, including
+  **tool-call rendering**) renders inside the shell with **no look or behavior changes**:
+  timestamp dividers, user bubbles, assistant markdown (prose / lists / code blocks),
+  collapsible status & tool lines, tool cards with output, the "Working…" indicator.
+- **CH2.** A fresh agent renders the existing **`AlphaChatIntro`** + the real "Enter a
+  prompt…" placeholder.
+
+### Chat input (new component, shared logic)
+
+- **I1.** A new rounded floating input. Placeholder is "Reply to `<agent>`…" (or "Enter a
+  prompt…" on a fresh agent).
+- **I2.** It **shares the desktop input's submit/draft logic** — `usePromptDraft(taskID)`,
+  the send / interrupt-and-send path, and the per-task model / fast-mode / effort atoms — and
+  is purely a new presentation over that logic.
+- **I3.** Bottom-left `+` (`circle-plus`) opens the `+` context menu (M2). **Model & effort
+  live behind the `+`** rather than as always-visible toolbar selectors.
+- **I4.** Right side: **send** (`arrow-up`, idle/active states) when not running; **stop**
+  (square) when the agent is busy — mirroring the real input's send/interrupt behavior.
+
+### Agent pager (new)
+
+- **A1.** Centered pager **dots under the input**, one per agent (active dot elongated /
+  accent), plus a **dashed outline "new agent" dot** at the end.
+- **A2.** Tapping a dot (or swiping the chat) switches the active agent; the header subtitle
+  and chat update.
+- **A3.** Tapping the dashed dot / swiping past the last agent lands on the **new-agent
+  compose destination** — a fresh empty chat (same as the empty-agent state, CH2).
+
+### New-workspace / landing page (new component)
+
+- **L1.** The **new-workspace screen is the default landing**. Minimal header
+  (☰ · "Sculptor" · settings).
+- **L2.** Hero "Name your workspace"; **one real input** — the workspace name (focused).
+- **L3.** Branch is **always `origin/main`**; repo and branch are shown as a subtle,
+  tappable meta line. No recents, no keyboard-shortcut hint.
+- **L4.** A full-width **Create workspace** button creates the workspace and starts an agent.
+
+### Reflow in place (CSS / `isMobile`)
+
+- **P1.** **Home** reflows to a single narrow column.
+- **P2.** **Settings** keeps its existing `.mobileNav` dropdown pattern (today a container
+  query at 825px → top dropdown + full-width content).
+- **P3.** **TopBar** (where it is still shown, e.g. Home/Settings) **collapses the workspace
+  tabs into a menu**.
+
+### Theme
+
+- **TH1.** A warm **"sand" light theme** — `bg #FAE8CA`, `accent #F50D00`, supporting
+  surface/ink/diff tokens — with **Inter** (UI) + **JetBrains Mono** (code) and real
+  **Lucide** icons.
+- **TH2.** Applied **mobile-only** via a **scoped design-token override on the shell root**,
+  so the reused chat / review-all / terminal re-theme with **no code changes**. Desktop is untouched.
 
 ## Implementation Approach
 
-### Strategy: copy vs. `isMobile` branch vs. new tree
+### Component strategy (the agreed hybrid)
 
-Three patterns, chosen per component by how much the mobile form diverges:
+The shell is mostly new chrome wrapping **reused, unchanged** content components. The hybrid
+is deliberate: **reuse the heavy content leaves** (chat, review-all, terminal) to avoid
+forking complex code, build **new chrome** only where there is no desktop twin, and use
+**`isMobile`/CSS** for the simple pages that are mostly the same — so nothing is duplicated
+and desktop is untouched. The split (proposed component names in parentheses):
 
-- **A — `isMobile` branch inside the existing component.** One source of truth;
-  no duplication; desktop + mobile stay in sync. But it clutters the component
-  with branches and risks regressing desktop. Best when the two forms are
-  *mostly the same* with small differences (simple pages, TopBar).
-- **B — Copy/fork into a `Mobile*` component.** Total freedom to diverge, zero
-  risk to desktop — but duplication drifts (fixes/features must be applied
-  twice). Best avoided unless a true desktop twin must diverge hard; for genuinely
-  new UI there's nothing to fork, so this collapses into (C).
-- **C — New mobile tree that mounts the existing leaf components unchanged.** A
-  new chrome tree (`MobileWorkspaceShell` + header/drawer/pill) that *imports and
-  renders* the heavy content components (chat, review-all, terminal) as-is. Reuses
-  the complex parts with zero duplication and isolates the new chrome; desktop is
-  untouched. The one risk to de-risk: those leaves must render correctly **outside
-  the docking layout**.
+| Piece | Strategy |
+| --- | --- |
+| Chat interface — `ChatPanelContent` / `AlphaChatInterface` (incl. tool-call rendering) | **Reuse unchanged** (mount the real component) |
+| Review-all combined diff — `CombinedDiffView` | **Reuse unchanged** (unified) |
+| Terminal | **Reuse unchanged** |
+| Empty-agent intro — `AlphaChatIntro` | **Reuse unchanged** |
+| Mobile chat input (`MobileChatInput`) | **New component**, shares submit/draft logic with `ChatInput` |
+| New-workspace page (`MobileNewWorkspace`) | **New component** |
+| Mobile shell tree (`MobileWorkspaceShell`) | **New** (no desktop twin) |
+| Header / context bar (`MobileWorkspaceHeader`) | **New** |
+| Workspace drawer (`WorkspaceDrawer`) | **New** |
+| Changes pill + changes list (`ChangesPill`) | **New** |
+| Agent pager (`AgentPager`, dots + dashed new-agent) | **New** |
+| ⋮ jump dropdown / `+` context menu | **New** (reuse Radix `DropdownMenu`) |
+| Home, Settings, TopBar | **`isMobile` / CSS reflow in place** |
+| `useLayoutMode` hook + `WorkspacePage` branch | **Foundation** |
 
-**Recommendation (hybrid):** **new tree for chrome that has no desktop twin;
-reuse (mount) the heavy content components unchanged; a new component only where
-the mobile form is structurally different; `isMobile`/CSS for simple pages that
-are mostly the same.** This directly satisfies "reuse the chat interface."
+Key real-component facts that make this viable (from a codebase pass):
 
-### Per-piece plan
+- `DockingLayout` provides **no React context** — panels read Jotai atoms directly. So
+  mounting chat/diff/terminal **outside** it is not blocked by a missing provider; the open
+  question is sizing and scroll containers, not context.
+- `ChatPanelContent` is a thin content wrapper with **no layout dependencies**.
+- `AlphaChatInterface` sizes itself via **flex** and drives a virtualizer off a
+  `scrollContainerRef`; it needs a proper flex parent (`min-height: 0`) and measures the
+  intro with a `ResizeObserver`. The mobile shell must give it that parent.
+- `CombinedDiffView` powers "review all"; it is gated behind `isReviewAllEnabledAtom` today
+  and inherits unified/split from `fileBrowserDiffViewTypeAtom` (mobile forces unified).
+  Its diff body is rendered by **Pierre (shadow DOM)** — re-theming and narrow-column
+  behavior need verification.
+- `ChatInput` owns send/draft logic **internally** (not a standalone hook): `usePromptDraft`,
+  a `sendMessage`/interrupt path, and `modelAtomFamily` / `fastModeAtomFamily` /
+  `effortAtomFamily`. The mobile input shares this by **extracting the submit/draft core**
+  into something both inputs call, rather than duplicating it.
 
-| Piece | Approach | Notes |
-|---|---|---|
-| Chat stream + tool calls | **Reuse as-is** | Mount `ChatPanelContent` / `AlphaChatInterface`. No code/look/tool-call changes; re-themes via scoped tokens. |
-| Review-all (combined diff) | **Reuse as-is** | Mount the existing review-all; opens full-screen. |
-| Terminal | **Reuse as-is** | Mount existing terminal; new light header chrome around it. |
-| Empty agent (no messages) | **Reuse as-is** | The existing `AlphaChatIntro` + "Enter a prompt…" input. |
-| Chat input | **New component** | `MobileChatInput`, sharing submit/draft logic; bottom-left `+` context menu; model/effort/etc. behind it. |
-| New-workspace page | **New component** | `MobileNewWorkspace` — minimal, name-only (branch always `origin/main`, repo subtle). Default landing screen. |
-| Mobile shell | **New tree** | `MobileWorkspaceShell` — single column, mounts the reused leaves. |
-| Top context bar / header | **New component** | `MobileWorkspaceHeader` — back/drawer, workspace+agent identity, ⋮. |
-| Workspace drawer | **New component** | `WorkspaceDrawer` (D1) — repos grouped & collapsible; empty state when none. |
-| Changes pill + changes list | **New component** | `ChangesPill` → rounded drawer / bottom sheet → review-all. |
-| Agent pager | **New component** | `AgentPager` — dots under the input + dashed "new agent" dot, reading existing task/agent atoms. |
-| ⋮ jump menu / `+` context menu | **New (reuse Radix)** | Radix `DropdownMenu`; wire to existing actions (terminal, review-all, PR, mention/skills/files). No dim backdrop. |
-| Home / recent list | **`isMobile` / CSS** | Reflow in place; reuse `RecentWorkspaces`. |
-| Settings | **CSS reflow** | Already has `.mobileNav`; full-width content. |
-| TopBar (desktop) | **`isMobile`** | Collapse workspace tabs into a menu below the breakpoint. |
-| Foundation | **New** | `useLayoutMode` hook + provider + breakpoint tokens. |
-| Branch point | **Edit** | `WorkspacePage`: if mobile, render `MobileWorkspaceShell` instead of `DockingLayout`. |
+### Theme: scoped token override
 
-### Theme (mobile-only)
+The mock expresses the sand palette with custom names (`--bg`, `--surface`, `--accent`,
+`--ink`). The real reused components consume **Radix tokens** (`--gray-*`, `--accent-*`,
+`--color-background`, `--color-panel`, …) plus app semantic tokens. So the mobile-only
+override must **remap the Radix/app token names the real components actually read**, scoped
+to the `MobileWorkspaceShell` root class — not introduce a parallel set of custom variables.
+`ThemeProvider` today only toggles a binary Radix `appearance` (light/dark); the sand theme
+is a **third, scoped variant** applied by class on the shell root, leaving the global theme
+untouched. Confirming this remap actually re-themes the reused components (especially Pierre)
+is part of the spike.
 
-Apply the sand theme by **scoping a design-token override** (Radix gray/accent +
-the semantic tokens) to the mobile shell's root element. Because the reused
-components read those CSS variables, they re-theme automatically with **no code
-changes**, and desktop (outside the scope) is unaffected. Inter / JetBrains Mono
-already match Sculptor's fonts.
+### <a id="detection-trigger-resolved"></a>Detection trigger (resolved): hybrid in `useLayoutMode`
 
-### Spike (first proof-of-concept)
+**Question raised:** can we detect **iOS/Android** instead of measuring pixels?
 
-De-risk the riskiest assumption first — that the existing chat (and
-review-all/terminal) render correctly **mounted outside the docking layout**,
-the layout branch doesn't regress desktop, and it doesn't trigger re-render
-storms (the codebase is render-count sensitive):
+**Recommendation: a hybrid trigger.** Pure platform detection is wrong on its own here —
+there is **no phone delivery yet**, so the mobile UI is exercised by a **narrow
+Electron/desktop window**, where platform detection would never fire and the shell would be
+undevelopable and untestable. Pure pixel-measurement is also insufficient — it cannot tell a
+real phone from a small window, and we want true-platform signals to drive native
+conventions (safe-area insets, back gesture, system font).
 
-1. Add `useLayoutMode` (matchMedia @768px, re-render only on crossing).
-2. In `WorkspacePage`, when mobile render a bare `MobileWorkspaceShell`.
-3. `MobileWorkspaceShell` = a static top bar + the mounted `ChatPanelContent` +
-   a placeholder input.
-4. Verify: chat streams/scrolls with no docking-layout dependency; desktop
-   unchanged; crossing 768px both ways is clean; render counts stay sane.
+So `useLayoutMode` treats the view as **mobile when EITHER** the viewport is narrow **OR**
+the platform is a real touch phone, **and separately exposes the platform** so platform-only
+conventions can key off it:
 
-Then layer chrome incrementally: header → changes pill → review-all → ⋮ →
-terminal → drawer → agent pager → `MobileChatInput` → scoped theme.
+```ts
+// mode flips on the width media query OR a (static) phone-platform signal.
+type LayoutMode = "mobile" | "desktop";
+interface LayoutState {
+  mode: LayoutMode;                 // mobile = narrow OR real phone
+  isMobile: boolean;                // convenience === (mode === "mobile")
+  platform: "ios" | "android" | "other";
+  isTouch: boolean;
+}
 
-### Things not to forget
+// width trigger — dev-testable in a narrow Electron/desktop window:
+const NARROW = "(max-width: 767px)"; // < 768px === Radix `sm`
 
-- Overlay primitives (drawer / sheet / dropdown) — reuse Radix.
-- Empty states: empty workspace drawer (new) and empty agent (reuse intro).
-- Routing / back behavior: the drawer and full-screen review-all/terminal must
-  map onto the hash router (and a sensible back affordance).
-- Touch targets (~44px) and safe-area insets (notch / home indicator) for later
-  real-phone delivery.
-- Default screen: the new-workspace landing.
-- Keyboard handling (input above the on-screen keyboard) — later polish.
+// phone-platform trigger — static, computed once:
+function detectPhonePlatform() {
+  const uaData = (navigator as any).userAgentData;
+  if (uaData?.mobile) return uaData.platform?.toLowerCase().includes("android") ? "android" : "ios-or-other";
+  const ua = navigator.userAgent;
+  if (/Android/i.test(ua)) return "android";
+  if (/iPhone|iPad|iPod/i.test(ua)) return "ios";
+  // iPadOS reports as desktop Safari ("MacIntel") — disambiguate via touch points:
+  if (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1) return "ios";
+  if (window.matchMedia("(pointer: coarse)").matches) return "touch"; // last-resort touch signal
+  return "none";
+}
+```
+
+- **Width** (`matchMedia("(max-width: 767px)")`) keeps the shell developable on the desktop.
+- **Platform** (`navigator.userAgentData?.mobile`; UA `/Android/` and `/iPhone|iPad|iPod/`;
+  `MacIntel` + `maxTouchPoints > 1` for **iPadOS-reporting-as-Mac**; `pointer: coarse` as a
+  fallback) catches a real phone regardless of width/orientation, and drives platform
+  conventions (safe-area insets, back gesture, system font).
+- **Render discipline (F1):** subscribe to the width query via the `MediaQueryList`
+  **`change` event** (not `resize`), and update a shared store **only when the boolean
+  flips**. Platform is computed once at startup. Consumers read via `useSyncExternalStore`
+  so they re-render only on a true mode flip. Verify with the **`measure-react-renders`** skill.
+
+### Spike first (the riskiest assumption)
+
+Before building any chrome, prove the reused content renders correctly **mounted outside
+`DockingLayout`**:
+
+1. Add `useLayoutMode` + the `WorkspacePage` branch behind it.
+2. Stand up a **bare** `MobileWorkspaceShell` (no header/drawer/pill) that mounts the real
+   **chat**, then **review-all**, then **terminal** in a plain single-column flex layout.
+3. In a narrow Electron/desktop window, confirm each:
+   - renders without errors, **sizes correctly** (chat virtualizer + `scrollContainerRef`
+     get a valid flex parent), scrolls, and streams;
+   - review-all renders the combined **unified** diff in a narrow column (Pierre behaves);
+   - terminal renders full-screen.
+4. Confirm **no re-render storms** — mode flips once, and mounting outside the docking layout
+   doesn't thrash (`measure-react-renders` vs. `origin/main` baseline).
+5. Confirm the **scoped sand override** re-themes the reused components.
+
+If any of panel-sizing, scroll containers, Pierre re-theming, or render counts break, that
+reshapes the plan **before** chrome is built — which is the whole point of spiking first.
+
+### Build order (after the spike)
+
+1. Foundation: `useLayoutMode` + `WorkspacePage` branch + scoped sand theme on the shell root.
+2. Shell skeleton mounting the reused chat (the spike, hardened).
+3. Header / context bar; workspace drawer.
+4. Changes pill + list → reused review-all overlay; ⋮ dropdown → reused terminal overlay.
+5. Mobile chat input (shared submit/draft) + `+` context menu.
+6. Agent pager (dots + dashed new-agent) + new-agent compose destination.
+7. New-workspace landing page.
+8. Reflow Home, Settings, TopBar in place.
 
 ## Non-Goals
 
-- **Remote-access / phone-browser plumbing.** Networking, auth, tunneling, or
-  serving the frontend to a device other than the machine running it is out of
-  scope. The phone-experience goal is served by the *layout foundation*, not by
-  delivery.
-- **A native mobile app.** No iOS/Android packaging.
-- **Approve/reject permission prompts.** Not part of this product; not mocked or
-  built on mobile.
-- **Multi-panel docking on mobile.** The desktop `DockingLayout` (sidebars,
-  resizable zones, drag-and-drop) is not rendered below the breakpoint.
-- **Side-by-side diff on mobile.** Mobile shows unified diff only.
-- **Desktop redesign / re-theme.** Desktop behavior and styling at ≥768px must
-  remain unchanged; the sand theme is mobile-only.
-- **Swipe gestures (this pass).** Agent/view switching is via the pager dots and
-  controls; physical swipe is a later enhancement.
+- **Permissions / approve-reject UI.** Not a product concern for this work — do not design or
+  build mobile permission UI. (The reused chat renders whatever it renders; the leftover
+  "approve/reject" card in the mock's *Chat components* gallery is **not** part of the agreed
+  direction.)
+- **Phone delivery / remote access.** No native app, no server/remote plumbing. The mobile UI
+  is exercised through a narrow Electron/desktop window.
+- **Desktop changes.** Not refactoring or restyling the desktop docking layout (beyond the
+  one `WorkspacePage` branch and the in-place reflows).
+- **Side-by-side diff on mobile** (unified only).
+- **Bottom tab bar**, multi-panel docking, and drag-to-reorder panels on mobile.
+- **Re-skinning the chat itself** — chat/tool-call rendering is reused unchanged.
+- **Recents / shortcut chrome** on the landing screen.
 
 ## Open Questions
 
-- **Mobile nav shape.** *(Resolved by the mocks.)* Chat-first shell; agents via
-  pager dots; changes via a header pill → review-all; terminal/jumps via ⋮;
-  workspaces via a left drawer; new-workspace as the default landing.
-- **Changes surface.** Rounded drawer vs. bottom sheet (expandable to the top
-  bar) for the changes list — both are mocked; pick during build.
-- **Mobile chat input reuse.** How much of the desktop `ChatInput` submit/draft
-  logic the new `MobileChatInput` can share vs. reimplement (a hook extraction?).
-- **Outside-the-dock rendering.** Confirm in the spike that `ChatPanelContent` /
-  review-all / terminal have no hard dependency on `DockingLayout` (panel
-  context, sizing, scroll containers).
-- **Theme scoping mechanism.** Exact place to apply the mobile token override
-  (a wrapper element/class vs. the Radix `Theme` props) so it covers the reused
-  components without leaking to desktop.
-- **Routing/back model.** How drawer + full-screen review-all/terminal map onto
-  the hash router, and back-affordance behavior.
-- **Delivery sequencing.** Suggested phasing (foundation → shell + reused chat →
-  changes/review-all → terminal → drawer/header/pill → mobile input → theme →
-  simple-page reflow → touch/polish) is for the plan phase, not the spec.
+1. **Swipe gestures.** The mock implies swiping to switch agents (and maybe views). Is swipe
+   in scope for the spike, or **tap-first** with swipe as a follow-up? (Recommend tap-first.)
+2. **Review-all gating.** `CombinedDiffView` is behind `isReviewAllEnabledAtom`. Is review-all
+   **always-on** for mobile, or does it stay flag-gated?
+3. **Sand token remap.** Exactly which Radix/app tokens to override, and whether **Pierre**
+   (shadow-DOM diff renderer) inherits the scoped override or needs its own path. (Spike confirms.)
+4. **Model & effort placement.** Behind the `+` dropdown directly, or a secondary sheet off it?
+5. **"View pull request".** Is the PR URL reliably available on mobile, and does it open
+   in-app or in an external browser?
+6. **Platform conventions in pass 1.** Which platform signals (safe-area insets, back gesture,
+   system font) to wire from `useLayoutMode.platform` first.
+7. **On-screen keyboard.** On a real phone the keyboard resizes the viewport (`visualViewport`)
+   — how should the input/stream respond? Likely deferred (no phone delivery yet), but flagged.
+8. **Global TopBar on the workspace view.** Confirm the shell's own header fully replaces the
+   global `TopBar` inside the mobile Workspace view (TopBar reflow applies to Home/Settings).
+9. **Routing / back model.** How the drawer and full-screen review-all/terminal overlays map
+   onto the hash router, and how their "back" affordance (and the device back gesture) behaves
+   — does back close the overlay, or navigate?
