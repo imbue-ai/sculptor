@@ -13,6 +13,7 @@ selected source branch. The test sets an explicit branch name so the expected va
 is deterministic.
 """
 
+import pytest
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.clipboard import install_clipboard_interceptor
@@ -24,6 +25,10 @@ from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
 
+@pytest.mark.skip(
+    reason="The source-branch picker was removed from the New Workspace page on this branch; "
+    "this test relied on selecting a non-default source branch there."
+)
 @user_story("to copy a workspace's branch name and get the correct branch")
 def test_copy_branch_name_copies_workspace_branch(sculptor_instance_: SculptorInstance) -> None:
     """Clicking the branch name in the workspace banner should copy the workspace's actual branch.

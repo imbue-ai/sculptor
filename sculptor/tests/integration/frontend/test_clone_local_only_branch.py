@@ -18,6 +18,7 @@ import re
 import subprocess
 from pathlib import Path
 
+import pytest
 from playwright.sync_api import Locator
 from playwright.sync_api import Page
 from playwright.sync_api import expect
@@ -68,6 +69,10 @@ def _git_branch(repo_path: Path) -> str:
     ).stdout.strip()
 
 
+@pytest.mark.skip(
+    reason="The source-branch picker was removed from the New Workspace page on this branch; "
+    "new workspaces always start from origin/main, so a local-only branch can no longer be selected."
+)
 @user_story("to start a workspace from a local-only branch even when my source repo has remotes")
 def test_clone_from_local_only_branch_with_source_remotes_present(
     sculptor_instance_: SculptorInstance,

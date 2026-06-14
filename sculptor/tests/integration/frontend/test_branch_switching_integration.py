@@ -1,5 +1,6 @@
 """Integration test for branch switching and workspace creation."""
 
+import pytest
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
@@ -14,6 +15,10 @@ from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
 
+@pytest.mark.skip(
+    reason="The source-branch picker was removed from the New Workspace page on this branch; "
+    "new workspaces always start from origin/main, so there is no branch to select."
+)
 @user_story("to create workspaces from different branches using the branch selector")
 def test_branch_switching_with_untracked_file(sculptor_instance_: SculptorInstance) -> None:
     """Test that sets up a test repo with two branches A and B as well as a single untracked file,
