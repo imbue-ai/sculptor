@@ -56,11 +56,11 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
   const [isRepoPathDialogOpen, setIsRepoPathDialogOpen] = useState(false);
   const isMobile = useIsMobile();
   const { pathname } = useLocation();
-  // On mobile, the Workspace view's own header replaces the global TopBar (S2)
-  // and takes over the top safe-area inset (H4). This covers `/ws/:id` and
-  // `/ws/:id/agent/:id` but NOT `/ws/new/...`, `/home`, or `/settings`, where
-  // the TopBar stays (reflowed per P3).
-  const isMobileWorkspaceRoute = isMobile && pathname.startsWith("/ws/") && !pathname.startsWith("/ws/new");
+  // On mobile, the Workspace view and the new-workspace landing each carry their
+  // own header (S2) and the top safe-area inset (H4), so the global TopBar is
+  // suppressed for all `/ws/*` routes. `/home` and `/settings` keep the TopBar
+  // (reflowed per P3).
+  const isMobileWorkspaceRoute = isMobile && pathname.startsWith("/ws/");
 
   // Stable callbacks so the memoized <Toast> instances below bail out instead
   // of re-rendering on every unrelated commit while they sit closed. (SCU-1455)
@@ -133,7 +133,7 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
         <PanelRegistryProvider panels={workspacePanels} defaultLayout={workspaceDefaultLayout}>
           <Outlet />
         </PanelRegistryProvider>
-        {showVersionIndicator && !isZenModeActive && (
+        {showVersionIndicator && !isZenModeActive && !isMobileWorkspaceRoute && (
           <Flex align="center" mx="3" mb="2" flexShrink="0" style={{ background: "var(--gray-2)" }}>
             <Flex flexBasis="0" flexGrow="1" />
             <Flex flexBasis="0" flexGrow="1" justify="center">

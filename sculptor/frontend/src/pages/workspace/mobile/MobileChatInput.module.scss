@@ -59,6 +59,13 @@
   flex: 1;
 }
 
+/* Current model/effort value shown on the right of a `+` submenu trigger. */
+.menuValue {
+  color: var(--mobile-ink-3);
+  margin-left: auto;
+  padding-left: var(--space-4);
+}
+
 .sendButton,
 .stopButton {
   align-items: center;

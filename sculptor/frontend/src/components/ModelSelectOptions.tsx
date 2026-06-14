@@ -3,21 +3,8 @@ import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 
 import { LlmModel } from "~/api";
-import { getModelLongName } from "~/common/modelConstants";
+import { getModelLongName, PRODUCTION_MODELS } from "~/common/modelConstants";
 import { sculptorSettingsAtom } from "~/common/state/atoms/sculptorSettings.ts";
-
-const PRODUCTION_MODELS = [
-  LlmModel.CLAUDE_FABLE_5,
-  LlmModel.CLAUDE_4_OPUS_200K,
-  LlmModel.CLAUDE_4_OPUS,
-  LlmModel.CLAUDE_4_7_OPUS_200K,
-  LlmModel.CLAUDE_4_7_OPUS,
-  LlmModel.CLAUDE_4_6_OPUS_200K,
-  LlmModel.CLAUDE_4_6_OPUS,
-  LlmModel.CLAUDE_4_SONNET_200K,
-  LlmModel.CLAUDE_4_SONNET,
-  LlmModel.CLAUDE_4_HAIKU,
-];
 
 // Fake Claude is a testing-only model that returns deterministic responses without making LLM calls.
 // Only shown when INTEGRATION_ENABLED is true.

@@ -1,0 +1,137 @@
+/* MobileNewWorkspace (L1-L4) — the minimal mobile landing. Uses only var()
+   tokens (sand palette from styles/mobile-sand.css). */
+.shell {
+  background: var(--mobile-bg);
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.header {
+  align-items: center;
+  background: var(--mobile-bg);
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  padding-top: calc(var(--space-1) + env(safe-area-inset-top));
+}
+
+.iconButton {
+  align-items: center;
+  border-radius: var(--radius-3);
+  color: var(--mobile-ink);
+  display: flex;
+  flex: 0 0 auto;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
+.wordmark {
+  color: var(--mobile-ink);
+  flex: 1;
+  font-size: var(--font-size-4);
+  font-weight: var(--font-weight-bold);
+  text-align: center;
+}
+
+.landing {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-5);
+  justify-content: center;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-5) var(--space-5) calc(var(--space-8) + env(safe-area-inset-bottom));
+}
+
+.hero {
+  text-align: center;
+}
+
+.heroTitle {
+  color: var(--mobile-ink);
+  font-size: var(--font-size-7);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.nameField {
+  background: var(--mobile-surface);
+  border: 1.5px solid var(--mobile-line);
+  border-radius: var(--radius-5);
+  box-shadow: var(--mobile-shadow-sm);
+  caret-color: var(--mobile-accent);
+  color: var(--mobile-ink);
+  font: inherit;
+  font-size: var(--font-size-5);
+  font-weight: var(--font-weight-semibold);
+  padding: var(--space-4) var(--space-4);
+  width: 100%;
+}
+
+.nameField::placeholder {
+  color: var(--mobile-ink-3);
+  font-weight: var(--font-weight-regular);
+}
+
+.nameField:focus {
+  border-color: var(--mobile-accent);
+  outline: none;
+}
+
+.metaLine {
+  align-items: center;
+  color: var(--mobile-ink-3);
+  display: flex;
+  font-size: var(--font-size-2);
+  gap: var(--space-2);
+  justify-content: center;
+}
+
+.repoSelector {
+  color: var(--mobile-ink);
+}
+
+.metaDot {
+  color: var(--mobile-ink-3);
+}
+
+.branch {
+  align-items: center;
+  color: var(--mobile-ink-3);
+  display: inline-flex;
+  font-family: var(--mono-font-family);
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+}
+
+.createButton {
+  border-radius: var(--radius-5);
+  font-size: var(--font-size-3);
+  font-weight: var(--font-weight-bold);
+  min-height: 52px;
+  width: 100%;
+}
+
+.backdrop {
+  background: var(--mobile-overlay);
+  inset: 0;
+  opacity: 0%;
+  pointer-events: none;
+  position: absolute;
+  transition: opacity var(--duration-slow) var(--ease-default);
+  z-index: var(--z-sticky);
+}
+
+.backdropOpen {
+  opacity: 100%;
+  pointer-events: auto;
+}

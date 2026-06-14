@@ -60,7 +60,7 @@ export const MobileWorkspaceShell = ({ taskID }: { taskID: string }): ReactEleme
         onClick={() => setIsDrawerOpen(false)}
         aria-hidden={!isDrawerOpen}
       />
-      <WorkspaceDrawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} />
+      <WorkspaceDrawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} currentWorkspaceID={workspaceID} />
 
       {overlay === "review" && <ReviewAllOverlay onBack={() => setOverlay(null)} />}
       {overlay === "terminal" && <TerminalOverlay onBack={() => setOverlay(null)} />}

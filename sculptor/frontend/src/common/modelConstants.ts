@@ -17,3 +17,17 @@ const modelNames: Partial<Record<LlmModel, { short: string; long: string }>> = {
 
 export const getModelShortName = (model: LlmModel): string => modelNames[model]?.short || "Unknown";
 export const getModelLongName = (model: LlmModel): string => modelNames[model]?.long || "Unknown";
+
+/** Models offered in production model pickers (desktop selector + mobile `+` menu). */
+export const PRODUCTION_MODELS: ReadonlyArray<LlmModel> = [
+  LlmModel.CLAUDE_FABLE_5,
+  LlmModel.CLAUDE_4_OPUS_200K,
+  LlmModel.CLAUDE_4_OPUS,
+  LlmModel.CLAUDE_4_7_OPUS_200K,
+  LlmModel.CLAUDE_4_7_OPUS,
+  LlmModel.CLAUDE_4_6_OPUS_200K,
+  LlmModel.CLAUDE_4_6_OPUS,
+  LlmModel.CLAUDE_4_SONNET_200K,
+  LlmModel.CLAUDE_4_SONNET,
+  LlmModel.CLAUDE_4_HAIKU,
+];

@@ -1,4 +1,4 @@
-import { useAtomValue } from "jotai";
+import { useAtom, useAtomValue } from "jotai";
 import { posthog } from "posthog-js";
 import { useCallback, useState } from "react";
 
@@ -22,6 +22,14 @@ export type ChatMessageSender = {
   send: () => Promise<void>;
   interrupt: () => Promise<void>;
   lastSendError: string | null;
+  // Per-task model / effort / fast-mode — surfaced behind the `+` menu (I3).
+  model: LlmModel;
+  setModel: (model: LlmModel) => void;
+  effort: EffortLevel;
+  setEffort: (effort: EffortLevel) => void;
+  isFastMode: boolean;
+  setIsFastMode: (value: boolean) => void;
+  supportsFastMode: boolean;
 };
 
 /**
@@ -39,9 +47,9 @@ export const useChatMessageSender = (workspaceID: string, taskID: string): ChatM
   const taskStatus = useTaskStatus(taskID);
   const { isInPlanMode } = useTaskDetailWithDefaults(taskID);
 
-  const storedModel = useAtomValue(modelAtomFamily(taskID));
-  const isStoredFastMode = useAtomValue(fastModeAtomFamily(taskID));
-  const storedEffort = useAtomValue(effortAtomFamily(taskID));
+  const [storedModel, setModel] = useAtom(modelAtomFamily(taskID));
+  const [isStoredFastMode, setStoredFastMode] = useAtom(fastModeAtomFamily(taskID));
+  const [storedEffort, setStoredEffort] = useAtom(effortAtomFamily(taskID));
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
 
@@ -49,6 +57,8 @@ export const useChatMessageSender = (workspaceID: string, taskID: string): ChatM
   const isFastMode = isStoredFastMode ?? isDefaultFastMode;
   const effort = storedEffort ?? (defaultEffortLevel as EffortLevel) ?? EffortLevel.XHIGH;
   const modelCapabilities = getModelCapabilities(localModel);
+  const setEffort = useCallback((value: EffortLevel) => setStoredEffort(value), [setStoredEffort]);
+  const setIsFastMode = useCallback((value: boolean) => setStoredFastMode(value), [setStoredFastMode]);
 
   const { interrupt, isInterrupting } = useInterruptAgent(workspaceID, taskID);
   const [lastSendError, setLastSendError] = useState<string | null>(null);
@@ -100,5 +110,21 @@ export const useChatMessageSender = (workspaceID: string, taskID: string): ChatM
     setAttachedFiles,
   ]);
 
-  return { draft, setDraft, isAgentBusy, isInterrupting, canSend, send, interrupt, lastSendError };
+  return {
+    draft,
+    setDraft,
+    isAgentBusy,
+    isInterrupting,
+    canSend,
+    send,
+    interrupt,
+    lastSendError,
+    model: localModel,
+    setModel,
+    effort,
+    setEffort,
+    isFastMode,
+    setIsFastMode,
+    supportsFastMode: modelCapabilities.supportsFastMode,
+  };
 };

@@ -17,6 +17,7 @@ import {
   WorkspaceInitializationStrategy,
 } from "../../api";
 import { HTTPException } from "../../common/Errors.ts";
+import { useIsMobile } from "../../common/hooks/useLayoutMode.ts";
 import { useImbueNavigate } from "../../common/NavigateUtils.ts";
 import { projectsArrayAtom, updateProjectsAtom } from "../../common/state/atoms/projects.ts";
 import {
@@ -38,6 +39,7 @@ import styles from "./AddWorkspacePage.module.scss";
 import { BranchNameField } from "./components/BranchNameField.tsx";
 import { NewWorkspaceForm } from "./components/NewWorkspaceForm.tsx";
 import { useBranchNamePreview } from "./hooks/useBranchNamePreview.ts";
+import { MobileNewWorkspace } from "./MobileNewWorkspace.tsx";
 
 export const AddWorkspacePage = (): ReactElement => {
   const { draftId } = useParams<{ draftId: string }>();
@@ -45,6 +47,7 @@ export const AddWorkspacePage = (): ReactElement => {
     throw new Error("AddWorkspacePage requires a draftId route parameter");
   }
   const { navigateToAgent } = useImbueNavigate();
+  const isMobile = useIsMobile();
   const isInPlaceWorkspacesEnabled = useAtomValue(isInPlaceWorkspacesEnabledAtom);
   const isCloneWorkspacesEnabled = useAtomValue(isCloneWorkspacesEnabledAtom);
   const isMultiHarnessEnabled = useAtomValue(isMultiHarnessEnabledAtom);
@@ -320,6 +323,26 @@ export const AddWorkspacePage = (): ReactElement => {
       <Flex align="center" justify="center" height="var(--app-height)">
         <Spinner size="3" />
       </Flex>
+    );
+  }
+
+  // The single mobile branch point for the landing (L1-L4). MobileNewWorkspace
+  // is pure presentation over the same create-workspace core wired above —
+  // name draft, project selection, sourceBranch default, and handleSubmit are
+  // passed straight in, so nothing is duplicated.
+  if (isMobile) {
+    return (
+      <MobileNewWorkspace
+        workspaceName={workspaceName}
+        onWorkspaceNameChange={setWorkspaceName}
+        nameInputRef={nameInputRef}
+        isPending={isPending}
+        onSubmit={handleSubmit}
+        projects={projects}
+        selectedProjectId={selectedProjectId}
+        onProjectChange={handleProjectChange}
+        sourceBranch={sourceBranch}
+      />
     );
   }
 

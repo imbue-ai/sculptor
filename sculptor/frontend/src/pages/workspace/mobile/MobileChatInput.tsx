@@ -1,29 +1,40 @@
 import { DropdownMenu, IconButton } from "@radix-ui/themes";
-import { ArrowUp, AtSign, CirclePlus, Command } from "lucide-react";
+import { ArrowUp, AtSign, Bot, CirclePlus, Command, Gauge, Image as ImageIcon, Paperclip, Zap } from "lucide-react";
 import type { KeyboardEvent, ReactElement } from "react";
 import { useCallback, useLayoutEffect, useRef } from "react";
 
+import type { EffortLevel, LlmModel } from "~/api";
+import { getModelShortName, PRODUCTION_MODELS } from "~/common/modelConstants.ts";
 import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
+import { useDraftAttachedFiles } from "~/common/state/hooks/useDraftAttachedFiles.ts";
 import { useTaskChatMessages } from "~/common/state/hooks/useTaskDetail.ts";
+import { useTaskSupportsFileAttachments, useTaskSupportsImageInput } from "~/common/state/hooks/useTaskHelpers.ts";
 import { useTask } from "~/common/state/hooks/useTaskHelpers.ts";
+import { EFFORT_DISPLAY_NAMES, EFFORT_OPTIONS } from "~/components/effortConstants.ts";
+import { FileUpload, type FileUploadHandle } from "~/components/FileUpload.tsx";
 
 import styles from "./MobileChatInput.module.scss";
 import { useChatMessageSender } from "./useChatMessageSender.ts";
 
 /**
  * MobileChatInput (I1-I4) — a rounded floating input that is purely a new
- * presentation over the shared submit/draft core (`useChatMessageSender`,
- * which composes `usePromptDraft`, the model/fast/effort atoms, the send API,
- * and `useInterruptAgent`). Bottom-left `+` opens an anchored Radix menu (M2);
- * the right shows send (idle/active) when not running and stop (square) when
- * the agent is busy (I4).
+ * presentation over the shared submit/draft core (`useChatMessageSender`).
+ * Bottom-left `+` opens an anchored Radix menu (M2) that also hosts the model
+ * and effort selectors (I3 — they live behind the `+`, not as always-visible
+ * toolbar controls); the right shows send (idle/active) when not running and
+ * stop (square) when the agent is busy (I4).
  */
 export const MobileChatInput = ({ taskID }: { taskID: string }): ReactElement => {
   const { workspaceID } = useWorkspacePageParams();
   const task = useTask(taskID);
   const { chatMessages } = useTaskChatMessages(taskID);
-  const { draft, setDraft, isAgentBusy, send, interrupt, canSend } = useChatMessageSender(workspaceID, taskID);
+  const sender = useChatMessageSender(workspaceID, taskID);
+  const { draft, setDraft, isAgentBusy, send, interrupt, canSend } = sender;
+  const [attachedFiles, setAttachedFiles] = useDraftAttachedFiles(taskID);
+  const canAttachFiles = useTaskSupportsFileAttachments(taskID) ?? true;
+  const canUseImageInput = useTaskSupportsImageInput(taskID) ?? true;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileUploadRef = useRef<FileUploadHandle | null>(null);
 
   const agentName = task?.titleOrSomethingLikeIt?.trim() || "agent";
   const placeholder = chatMessages.length === 0 ? "Enter a prompt…" : `Reply to ${agentName}…`;
@@ -60,6 +71,12 @@ export const MobileChatInput = ({ taskID }: { taskID: string }): ReactElement =>
 
   return (
     <div className={styles.inputRegion}>
+      <FileUpload
+        ref={fileUploadRef}
+        files={attachedFiles}
+        onFilesChange={setAttachedFiles}
+        onError={(toast) => console.error("File attach error:", toast.title, toast.description)}
+      />
       <div className={styles.box}>
         <textarea
           ref={textareaRef}
@@ -78,13 +95,75 @@ export const MobileChatInput = ({ taskID }: { taskID: string }): ReactElement =>
                 <CirclePlus size={26} />
               </IconButton>
             </DropdownMenu.Trigger>
-            <DropdownMenu.Content align="start" variant="soft">
+            {/* Radix portals the menu to <body>, outside the shell's .sandTheme
+                subtree, so re-apply the sand class on the portaled content. */}
+            <DropdownMenu.Content align="start" variant="soft" className="sandTheme">
+              {/* Model & effort live behind the + (I3). */}
+              <DropdownMenu.Sub>
+                <DropdownMenu.SubTrigger>
+                  <Bot size={18} /> Model
+                  <span className={styles.menuValue}>{getModelShortName(sender.model)}</span>
+                </DropdownMenu.SubTrigger>
+                <DropdownMenu.SubContent className="sandTheme">
+                  <DropdownMenu.RadioGroup
+                    value={sender.model}
+                    onValueChange={(value) => sender.setModel(value as LlmModel)}
+                  >
+                    {PRODUCTION_MODELS.map((modelValue) => (
+                      <DropdownMenu.RadioItem key={modelValue} value={modelValue}>
+                        {getModelShortName(modelValue)}
+                      </DropdownMenu.RadioItem>
+                    ))}
+                  </DropdownMenu.RadioGroup>
+                </DropdownMenu.SubContent>
+              </DropdownMenu.Sub>
+
+              <DropdownMenu.Sub>
+                <DropdownMenu.SubTrigger>
+                  <Gauge size={18} /> Effort
+                  <span className={styles.menuValue}>{EFFORT_DISPLAY_NAMES[sender.effort]}</span>
+                </DropdownMenu.SubTrigger>
+                <DropdownMenu.SubContent className="sandTheme">
+                  <DropdownMenu.RadioGroup
+                    value={sender.effort}
+                    onValueChange={(value) => sender.setEffort(value as EffortLevel)}
+                  >
+                    {EFFORT_OPTIONS.map((level) => (
+                      <DropdownMenu.RadioItem key={level} value={level}>
+                        {EFFORT_DISPLAY_NAMES[level]}
+                      </DropdownMenu.RadioItem>
+                    ))}
+                  </DropdownMenu.RadioGroup>
+                </DropdownMenu.SubContent>
+              </DropdownMenu.Sub>
+
+              {sender.supportsFastMode && (
+                <DropdownMenu.CheckboxItem
+                  checked={sender.isFastMode}
+                  onCheckedChange={(checked) => sender.setIsFastMode(checked === true)}
+                >
+                  <Zap size={18} /> Fast mode
+                </DropdownMenu.CheckboxItem>
+              )}
+
+              <DropdownMenu.Separator />
+
               <DropdownMenu.Item onSelect={() => insertTrigger("@")}>
                 <AtSign size={18} /> Mention
               </DropdownMenu.Item>
               <DropdownMenu.Item onSelect={() => insertTrigger("/")}>
                 <Command size={18} /> Skills &amp; commands
               </DropdownMenu.Item>
+              {canAttachFiles && (
+                <DropdownMenu.Item onSelect={() => fileUploadRef.current?.triggerUpload()}>
+                  <Paperclip size={18} /> Attach files
+                </DropdownMenu.Item>
+              )}
+              {canUseImageInput && (
+                <DropdownMenu.Item onSelect={() => fileUploadRef.current?.triggerUpload()}>
+                  <ImageIcon size={18} /> Add image
+                </DropdownMenu.Item>
+              )}
             </DropdownMenu.Content>
           </DropdownMenu.Root>
 

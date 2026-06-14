@@ -80,7 +80,7 @@ export const MobileWorkspaceHeader = ({
             <CircleEllipsis size={22} />
           </IconButton>
         </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="end" variant="soft">
+        <DropdownMenu.Content align="end" variant="soft" className="sandTheme">
           <DropdownMenu.Item onSelect={onOpenTerminal}>
             <Terminal size={16} /> Open terminal
           </DropdownMenu.Item>

@@ -4,7 +4,7 @@ import type { ReactElement } from "react";
 import { useMemo, useState } from "react";
 
 import type { Workspace } from "~/api";
-import { useImbueNavigate, useWorkspacePageParams } from "~/common/NavigateUtils.ts";
+import { useImbueNavigate } from "~/common/NavigateUtils.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { userEmailAtom } from "~/common/state/atoms/userConfig.ts";
 import { workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
@@ -18,6 +18,8 @@ import styles from "./WorkspaceDrawer.module.scss";
 type WorkspaceDrawerProps = {
   isOpen: boolean;
   onClose: () => void;
+  /** The workspace to highlight as current; undefined on the landing route. */
+  currentWorkspaceID?: string;
 };
 
 function getInitials(email: string | undefined): string {
@@ -115,8 +117,8 @@ const DrawerRepoGroup = ({
  * branch with the current one highlighted. A full-width New workspace button is
  * pinned at the bottom. Empty state when there are no workspaces.
  */
-export const WorkspaceDrawer = ({ isOpen, onClose }: WorkspaceDrawerProps): ReactElement => {
-  const { workspaceID } = useWorkspacePageParams();
+export const WorkspaceDrawer = ({ isOpen, onClose, currentWorkspaceID }: WorkspaceDrawerProps): ReactElement => {
+  const workspaceID = currentWorkspaceID ?? "";
   const { navigateToWorkspace, navigateToHome, navigateToAddWorkspace } = useImbueNavigate();
   const workspaces = useAtomValue(workspacesArrayAtom);
   const userEmail = useAtomValue(userEmailAtom);
