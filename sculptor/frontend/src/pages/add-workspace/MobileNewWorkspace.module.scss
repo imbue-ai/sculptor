@@ -1,7 +1,10 @@
-/* MobileNewWorkspace (L1-L4) — the minimal mobile landing. Uses only var()
-   tokens (sand palette from styles/mobile-sand.css). */
+/* MobileNewWorkspace — the mobile landing, aligned to the desktop create
+   modal. Name title on top, three stacked option-pills below (one centered
+   group), accent Create button pinned to the bottom. Uses only var() tokens
+   (standard palette from styles/mobile-theme.css). The shell + header use
+   --mobile-surface-2 (gray-2) so the screen matches the workspace page. */
 .shell {
-  background: var(--mobile-bg);
+  background: var(--mobile-surface-2);
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -13,7 +16,7 @@
 
 .header {
   align-items: center;
-  background: var(--mobile-bg);
+  background: var(--mobile-surface-2);
   display: flex;
   flex: 0 0 auto;
   gap: var(--space-1);
@@ -40,84 +43,144 @@
   text-align: center;
 }
 
-.landing {
+/* Name title + pills as one vertically-centered group. */
+.body {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-6);
   justify-content: center;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--space-5) var(--space-5) calc(var(--space-8) + env(safe-area-inset-bottom));
+  padding: var(--space-4) var(--space-5);
 }
 
-.hero {
+.nameBlock {
   text-align: center;
 }
 
-.heroTitle {
-  color: var(--mobile-ink);
-  font-size: var(--font-size-7);
-  font-weight: var(--font-weight-bold);
-  letter-spacing: -0.01em;
-  margin: 0;
-}
-
+/* Inline, ghost title that doubles as the name input. Empty shows the
+   "Untitled workspace" placeholder, which stays put on focus (nothing is
+   cleared on tap) and is replaced only as the user types. */
 .nameField {
-  background: var(--mobile-surface);
-  border: 1.5px solid var(--mobile-line);
-  border-radius: var(--radius-5);
-  box-shadow: var(--mobile-shadow-sm);
+  background: none;
+  border: none;
+  box-sizing: border-box;
   caret-color: var(--mobile-accent);
   color: var(--mobile-ink);
   font: inherit;
-  font-size: var(--font-size-5);
-  font-weight: var(--font-weight-semibold);
-  padding: var(--space-4) var(--space-4);
+  font-size: var(--font-size-7);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.01em;
+  outline: none;
+  text-align: center;
   width: 100%;
 }
 
 .nameField::placeholder {
   color: var(--mobile-ink-3);
-  font-weight: var(--font-weight-regular);
+  opacity: 100%;
 }
 
-.nameField:focus {
-  border-color: var(--mobile-accent);
+.pills {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Shared pill shell. `.pill` is the custom Branch row; `.pillTrigger` is the
+   same look applied to the reused Radix Select triggers (Repo + Source). */
+.pill,
+.pillTrigger {
+  align-items: center;
+  background: var(--mobile-surface);
+  border: 1.5px solid var(--mobile-line);
+  border-radius: var(--radius-4);
+  box-sizing: border-box;
+  color: var(--mobile-ink);
+  display: flex;
+  gap: var(--space-2);
+  min-height: 50px;
+  padding: 0 var(--space-3);
+  width: 100%;
+}
+
+/* Radix Select.Trigger: push its content left and the chevron to the right. */
+.pillTrigger {
+  font-size: var(--font-size-2);
+  justify-content: space-between;
+  margin: 0;
+}
+
+.pillContent {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.pillIcon {
+  color: var(--mobile-ink-2);
+  flex: 0 0 auto;
+}
+
+.pillLabel {
+  color: var(--mobile-ink-3);
+  font-size: var(--font-size-2);
+}
+
+.pillValue {
+  color: var(--mobile-ink);
+  font-family: var(--mono-font-family);
+  font-size: var(--font-size-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Editable branch name inside the Branch pill. */
+.branchInput {
+  background: none;
+  border: none;
+  box-sizing: border-box;
+  caret-color: var(--mobile-accent);
+  color: var(--mobile-ink);
+  flex: 1;
+  font-family: var(--mono-font-family);
+  font-size: var(--font-size-2);
+  min-width: 0;
   outline: none;
 }
 
-.metaLine {
-  align-items: center;
-  color: var(--mobile-ink-3);
-  display: flex;
-  font-size: var(--font-size-2);
-  gap: var(--space-2);
-  justify-content: center;
-}
-
-.repoSelector {
-  color: var(--mobile-ink);
-}
-
-.metaDot {
+.branchInput::placeholder {
   color: var(--mobile-ink-3);
 }
 
-.branch {
-  align-items: center;
+.regenButton {
   color: var(--mobile-ink-3);
-  display: inline-flex;
-  font-family: var(--mono-font-family);
+  flex: 0 0 auto;
+}
+
+.pillError {
+  border-color: var(--mobile-del);
+}
+
+.collisionError {
+  color: var(--mobile-del);
   font-size: var(--font-size-1);
-  gap: var(--space-1);
+  padding: 0 var(--space-1);
+}
+
+.footer {
+  flex: 0 0 auto;
+  padding: var(--space-3) var(--space-5) calc(var(--space-4) + env(safe-area-inset-bottom));
 }
 
 .createButton {
-  border-radius: var(--radius-5);
+  border-radius: var(--radius-4);
   font-size: var(--font-size-3);
   font-weight: var(--font-weight-bold);
-  min-height: 52px;
+  min-height: 50px;
   width: 100%;
 }
 

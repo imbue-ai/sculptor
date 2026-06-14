@@ -1,0 +1,54 @@
+/* AgentSwitcher — the current-agent pill, sharing the status row under the
+   header with the changes pill (Variant D). Swipe the pill to switch agents; tap
+   to open the AgentSheet. It adopts the same indicator chrome as the changes
+   pill / StatusPill (gray-1 surface, gray-4 hairline, radius-2, shadow-sm). */
+
+/* The flex item: left side of the status row. Content-sized but capped so a long
+   agent name truncates rather than crowding out the changes pill. `flex: 0 0`
+   keeps its width independent of the changes pill (so the overlap measurement
+   there stays stable). */
+.switcher {
+  display: flex;
+  flex: 0 0 auto;
+  max-width: 55%;
+  min-width: 0;
+}
+
+.pill {
+  align-items: center;
+  background: var(--gray-1);
+  border: 1px solid var(--gray-4);
+  border-radius: var(--radius-2);
+  box-shadow: var(--shadow-sm);
+  color: var(--gray-12);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-semibold);
+  gap: var(--space-2);
+  max-width: 100%;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+
+  /* Horizontal drags drive the swipe; let vertical scrolls pass through. */
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.pill:hover,
+.pill:active {
+  background: var(--gray-3);
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.caret {
+  color: var(--gray-9);
+  flex: 0 0 auto;
+}

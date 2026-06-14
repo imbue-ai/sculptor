@@ -6,6 +6,7 @@ import { type ReactElement, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { getUpdateStatusText } from "~/common/autoUpdateUtils.ts";
+import { useIsMobile } from "~/common/hooks/useLayoutMode.ts";
 import { autoUpdateStatusAtom, updateChannelAtom } from "~/common/state/atoms/autoUpdate.ts";
 import { healthCheckDataAtom } from "~/common/state/atoms/backend.ts";
 import { themeBuilderSettingsAtom } from "~/common/state/atoms/themeBuilder.ts";
@@ -50,6 +51,7 @@ import { SettingRow } from "./components/SettingRow.tsx";
 import { SettingsSectionLayout } from "./components/SettingsSection.tsx";
 import { TelemetryRow } from "./components/TelemetryRow.tsx";
 import { ThemeBuilderSection } from "./components/ThemeBuilderSection.tsx";
+import { MobileSettingsHeader } from "./MobileSettingsHeader.tsx";
 import { SETTINGS_SECTIONS, SettingsSection, type SettingsSectionId } from "./sections.ts";
 import styles from "./SettingsPage.module.scss";
 
@@ -72,6 +74,9 @@ export const SettingsPage = (): ReactElement => {
   const [activeSection, setActiveSection] = useAtom(activeSectionAtom);
   const [searchParams] = useSearchParams();
   const { install, isInstalling } = useInstallUpdate();
+  // On mobile the global TopBar is suppressed (see PageLayout), so Settings
+  // carries its own header with a back affordance, like the Workspace view.
+  const isMobile = useIsMobile();
 
   // Apply ?section= query param once on mount (e.g. when linked from an error block).
   useEffect(() => {
@@ -148,6 +153,7 @@ export const SettingsPage = (): ReactElement => {
 
   return (
     <>
+      {isMobile && <MobileSettingsHeader />}
       <Flex
         direction="column"
         className={styles.container}

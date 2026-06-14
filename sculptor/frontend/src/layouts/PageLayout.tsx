@@ -56,11 +56,13 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
   const [isRepoPathDialogOpen, setIsRepoPathDialogOpen] = useState(false);
   const isMobile = useIsMobile();
   const { pathname } = useLocation();
-  // On mobile, the Workspace view and the new-workspace landing each carry their
-  // own header (S2) and the top safe-area inset (H4), so the global TopBar is
-  // suppressed for all `/ws/*` routes. `/home` and `/settings` keep the TopBar
-  // (reflowed per P3).
+  // On mobile, the Workspace view, the Settings page, and the Home view each
+  // carry their own header (S2) and the top safe-area inset (H4), so the global
+  // TopBar is suppressed for `/ws/*`, `/settings`, and `/home`.
   const isMobileWorkspaceRoute = isMobile && pathname.startsWith("/ws/");
+  const isMobileSettingsRoute = isMobile && pathname.startsWith("/settings");
+  const isMobileHomeRoute = isMobile && pathname.startsWith("/home");
+  const shouldHideGlobalTopBar = isMobileWorkspaceRoute || isMobileSettingsRoute || isMobileHomeRoute;
 
   // Stable callbacks so the memoized <Toast> instances below bail out instead
   // of re-rendering on every unrelated commit while they sit closed. (SCU-1455)
@@ -120,9 +122,9 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
       >
         {/* TopBar stays mounted (display:none) in zen mode so that workspace
             tab-cycling keyboard shortcuts (Cmd+[, Cmd+]) remain active. On the
-            mobile Workspace view it is suppressed entirely — the mobile header
-            owns the top chrome and safe-area inset (S2/H4). */}
-        {!isMobileWorkspaceRoute && (
+            mobile Workspace and Settings views it is suppressed entirely — the
+            mobile header owns the top chrome and safe-area inset (S2/H4). */}
+        {!shouldHideGlobalTopBar && (
           <div style={isZenModeActive ? { display: "none" } : undefined}>
             <TopBar />
           </div>
@@ -133,7 +135,7 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
         <PanelRegistryProvider panels={workspacePanels} defaultLayout={workspaceDefaultLayout}>
           <Outlet />
         </PanelRegistryProvider>
-        {showVersionIndicator && !isZenModeActive && !isMobileWorkspaceRoute && (
+        {showVersionIndicator && !isZenModeActive && !shouldHideGlobalTopBar && (
           <Flex align="center" mx="3" mb="2" flexShrink="0" style={{ background: "var(--gray-2)" }}>
             <Flex flexBasis="0" flexGrow="1" />
             <Flex flexBasis="0" flexGrow="1" justify="center">

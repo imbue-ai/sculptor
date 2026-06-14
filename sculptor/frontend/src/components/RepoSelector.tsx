@@ -32,6 +32,12 @@ type RepoSelectorProps = {
   selectedProjectId: string | null;
   onProjectChange: (projectId: string) => void;
   className?: string;
+  /**
+   * Hide the inline "repo" label, showing just the icon + repo name. The mobile
+   * landing's subtle `repo · origin/main` meta line omits the label to match its
+   * mock. Desktop omits this (label shown).
+   */
+  hideLabel?: boolean;
 };
 
 export const RepoSelector = ({
@@ -39,6 +45,7 @@ export const RepoSelector = ({
   selectedProjectId,
   onProjectChange,
   className,
+  hideLabel = false,
 }: RepoSelectorProps): ReactElement => {
   const [toast, setToast] = useState<ToastContent | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -92,7 +99,7 @@ export const RepoSelector = ({
         <Select.Trigger variant="ghost" className={className} data-testid={ElementIds.PROJECT_SELECTOR}>
           <Flex align="center" gap="1">
             <FolderOpenIcon size={12} />
-            <Text className={styles.selectorLabel}>repo</Text>
+            {!hideLabel && <Text className={styles.selectorLabel}>repo</Text>}
             <Text truncate size="1">
               {displayName}
             </Text>

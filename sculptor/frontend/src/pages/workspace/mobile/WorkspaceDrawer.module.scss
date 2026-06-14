@@ -37,7 +37,7 @@
 .avatar {
   align-items: center;
   background: var(--mobile-press);
-  border-radius: var(--radius-full);
+  border-radius: var(--mobile-radius-full);
   color: var(--mobile-ink-2);
   display: flex;
   font-size: var(--font-size-1);
@@ -172,7 +172,7 @@
 .workspaceName {
   color: var(--mobile-ink);
   display: block;
-  font-size: var(--font-size-2);
+  font-size: var(--font-size-3);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -202,7 +202,7 @@
 .emptyIcon {
   align-items: center;
   background: var(--mobile-press);
-  border-radius: var(--radius-full);
+  border-radius: var(--mobile-radius-full);
   color: var(--mobile-ink-3);
   display: flex;
   height: 60px;

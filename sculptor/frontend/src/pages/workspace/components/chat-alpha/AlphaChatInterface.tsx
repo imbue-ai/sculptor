@@ -15,6 +15,7 @@ import {
   sendWorkspaceAgentMessages,
   TaskStatus,
 } from "~/api";
+import { useIsMobile } from "~/common/hooks/useLayoutMode.ts";
 import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
 import { chatSearchVisibleAtom } from "~/common/state/atoms/chatSearch.ts";
@@ -60,10 +61,10 @@ type AlphaChatInterfaceProps = ChatData & {
   insertSkillRef?: React.MutableRefObject<((skill: InsertSkillArg) => void) | null>;
   editorRef?: React.MutableRefObject<TipTapEditor | null>;
   /**
-   * Suppress the built-in desktop input region (ChatInput / AskUserQuestion /
-   * ErrorInput). The mobile shell reuses the message stream + intro unchanged
-   * but supplies its own `MobileChatInput` below the stream (S1/I1). Defaults
-   * to false, so the desktop experience is unchanged.
+   * Suppress the built-in input region (ChatInput / AskUserQuestion /
+   * ErrorInput) entirely — e.g. a read-only embedding. Mobile does NOT use this:
+   * it renders the real ChatInput, which adapts to a compact toolbar itself.
+   * Defaults to false; currently no caller sets it true.
    */
   hideChatInput?: boolean;
 };
@@ -106,6 +107,7 @@ export const AlphaChatInterface = ({
   // `pendingUserQuestion` is null (see below), so the value it sees is unchanged.
   const isAgentBusy =
     (taskStatus === TaskStatus.RUNNING && workingUserMessageId !== null) || pendingUserQuestion !== null;
+  const isMobile = useIsMobile();
   const effectiveQueuedMessages = useMemo(
     () => (isAgentBusy ? omitMessagesAlreadyInChat(queuedChatMessages, chatMessages) : []),
     [chatMessages, isAgentBusy, queuedChatMessages],
@@ -627,22 +629,20 @@ export const AlphaChatInterface = ({
               />
             </div>
           </div>
-          {/* The prompt navigator rail and the queued-messages strip are
-              companions to the desktop input; the mobile shell supplies its own
-              input and has no prompt-nav rail, so they are hidden with it. */}
-          {!hideChatInput && (
-            <>
-              <AlphaPromptNavigator
-                userMessages={userMessages}
-                scrollContainerRef={scrollContainerRef}
-                activePromptIndex={activePromptIndex.index}
-                onNavigate={handlePromptNavigate}
-              />
-              <QueuedMessages messages={effectiveQueuedMessages} />
-            </>
+          {/* The prompt-navigator rail is a desktop-only companion to the input
+              (↑↓ keyboard nav); mobile has no hardware arrows, so it's hidden
+              there. The queued-messages strip shows on both. */}
+          {!hideChatInput && !isMobile && (
+            <AlphaPromptNavigator
+              userMessages={userMessages}
+              scrollContainerRef={scrollContainerRef}
+              activePromptIndex={activePromptIndex.index}
+              onNavigate={handlePromptNavigate}
+            />
           )}
-          {/* The mobile shell hides this entire desktop input region and renders
-              its own MobileChatInput below the stream (I1/I2). */}
+          {!hideChatInput && <QueuedMessages messages={effectiveQueuedMessages} />}
+          {/* The real ChatInput renders on mobile too (it adapts to a compact
+              toolbar internally); only the desktop shell ever passes hideChatInput. */}
           {!hideChatInput &&
             taskStatus !== TaskStatus.ERROR &&
             (pendingUserQuestion ? (
@@ -661,7 +661,7 @@ export const AlphaChatInterface = ({
                 appendTextRef={appendTextRef}
                 insertSkillRef={insertSkillRef}
                 editorRef={editorRef}
-                showPromptNavHint
+                showPromptNavHint={!isMobile}
               />
             ))}
           {!hideChatInput && taskStatus === TaskStatus.ERROR && (

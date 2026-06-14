@@ -1,5 +1,5 @@
 import { IconButton } from "@radix-ui/themes";
-import { CircleChevronLeft, CircleEllipsis } from "lucide-react";
+import { ChevronLeft, Ellipsis } from "lucide-react";
 import type { ReactElement } from "react";
 
 import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
@@ -34,7 +34,7 @@ export const TerminalOverlay = ({ onBack }: { onBack: () => void }): ReactElemen
           aria-label="Back to chat"
           onClick={onBack}
         >
-          <CircleChevronLeft size={22} />
+          <ChevronLeft size={22} />
         </IconButton>
         <div className={styles.headerInfo}>
           <div className={styles.headerTitle}>Terminal</div>
@@ -47,7 +47,7 @@ export const TerminalOverlay = ({ onBack }: { onBack: () => void }): ReactElemen
           ) : null}
         </div>
         <span className={styles.iconButton} aria-hidden="true">
-          <CircleEllipsis size={20} />
+          <Ellipsis size={20} />
         </span>
       </header>
       <div className={styles.terminalBody}>

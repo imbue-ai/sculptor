@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 
 import { ChatPanelContent } from "../components/ChatPanelContent.tsx";
-import { AgentPager } from "./AgentPager.tsx";
+import { AgentSheet } from "./AgentSheet.tsx";
+import { AgentSwitcher } from "./AgentSwitcher.tsx";
 import { ChangesPill } from "./ChangesPill.tsx";
-import { MobileChatInput } from "./MobileChatInput.tsx";
 import { MobileWorkspaceHeader } from "./MobileWorkspaceHeader.tsx";
 import styles from "./MobileWorkspaceShell.module.scss";
 import { ReviewAllOverlay } from "./overlays/ReviewAllOverlay.tsx";
@@ -17,16 +17,19 @@ type Overlay = "review" | "terminal" | null;
 
 /**
  * MobileWorkspaceShell — single-column, chat-first Workspace view for narrow
- * viewports (S1). Top → bottom: workspace header · optional changes pill ·
- * chat stream (fills) · chat input · agent pager. Secondary surfaces (drawer,
+ * viewports (S1). Top → bottom: workspace header · status row (agent switcher +
+ * changes pill) · chat stream (fills) · chat input. Secondary surfaces (drawer,
  * review-all, terminal) open over the chat as in-shell state; "back" closes the
  * overlay rather than navigating the router (Open Q9). It reuses the real chat
- * (ChatPanelContent) unchanged, suppressing only its built-in desktop input
- * (hideChatInput) so the shell can supply MobileChatInput (I1).
+ * (ChatPanelContent) and its real ChatInput unchanged — ChatInput adapts itself
+ * to a compact toolbar on mobile, so the shell no longer supplies a bespoke
+ * input. The AgentSwitcher and ChangesPill share one row under the header: the
+ * agent switcher on the left, the changes pill on the right (S/C).
  */
 export const MobileWorkspaceShell = ({ taskID }: { taskID: string }): ReactElement => {
   const { workspaceID } = useWorkspacePageParams();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isAgentSheetOpen, setIsAgentSheetOpen] = useState(false);
   const [overlay, setOverlay] = useState<Overlay>(null);
 
   // Switching agent/workspace closes any open secondary surface so it doesn't
@@ -34,33 +37,36 @@ export const MobileWorkspaceShell = ({ taskID }: { taskID: string }): ReactEleme
   useEffect(() => {
     setOverlay(null);
     setIsDrawerOpen(false);
+    setIsAgentSheetOpen(false);
   }, [taskID, workspaceID]);
 
   return (
-    <div className={`sandTheme ${styles.shell}`}>
+    <div className={`mobileTheme ${styles.shell}`}>
       <MobileWorkspaceHeader
         onOpenDrawer={() => setIsDrawerOpen(true)}
         onOpenReview={() => setOverlay("review")}
         onOpenTerminal={() => setOverlay("terminal")}
       />
 
-      <div className={styles.chipSlot}>
+      <div className={styles.statusRow}>
+        <AgentSwitcher onOpenSheet={() => setIsAgentSheetOpen(true)} />
         <ChangesPill onReviewAll={() => setOverlay("review")} />
       </div>
 
       <div className={styles.chatArea}>
-        <ChatPanelContent hideChatInput />
+        <ChatPanelContent />
       </div>
 
-      <MobileChatInput taskID={taskID} />
-      <AgentPager />
-
       <div
-        className={`${styles.backdrop} ${isDrawerOpen ? styles.open : ""}`}
-        onClick={() => setIsDrawerOpen(false)}
-        aria-hidden={!isDrawerOpen}
+        className={`${styles.backdrop} ${isDrawerOpen || isAgentSheetOpen ? styles.open : ""}`}
+        onClick={() => {
+          setIsDrawerOpen(false);
+          setIsAgentSheetOpen(false);
+        }}
+        aria-hidden={!(isDrawerOpen || isAgentSheetOpen)}
       />
       <WorkspaceDrawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} currentWorkspaceID={workspaceID} />
+      <AgentSheet isOpen={isAgentSheetOpen} onClose={() => setIsAgentSheetOpen(false)} />
 
       {overlay === "review" && <ReviewAllOverlay onBack={() => setOverlay(null)} />}
       {overlay === "terminal" && <TerminalOverlay onBack={() => setOverlay(null)} />}

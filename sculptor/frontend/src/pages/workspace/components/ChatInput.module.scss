@@ -58,6 +58,23 @@
   width: 1px;
 }
 
+/* Active-state check pushed to the right edge of a mobile settings menu item. */
+.menuTrailing {
+  color: var(--gray-11);
+  margin-left: auto;
+}
+
+/* On mobile the input spans the full width with the same side inset as the
+   floating jump-to-bottom indicator (--space-3), instead of the desktop
+   86%-centered column. border-box so the padding insets both edges rather than
+   overflowing the box off the right (this div is content-box by default). */
+:global(.mobileTheme) .container {
+  box-sizing: border-box;
+  max-width: none;
+  padding-inline: var(--space-3);
+  width: 100%;
+}
+
 .dragging {
   border-color: var(--accent-9);
   box-shadow: 0 0 0 3px var(--accent-5), 0 0 12px var(--accent-6);

@@ -19,17 +19,21 @@ OpenHost clones the repo at a branch, builds `openhost.Dockerfile`, runs the
 container under rootless podman, and reverse-proxies HTTPS to it behind
 OpenHost's owner login.
 
-This skill is instance-generic. Set these at the top of any session and
-substitute throughout — the app name and host are the only instance-specific
-parts:
+This skill is instance-generic. The instance-specific values (app name and your
+personal host) live in a gitignored file, `openhost.env`, in this skill's folder
+— source it at the top of any session and substitute throughout:
 
 ```bash
-APP=sculptor                                       # OpenHost app name (openhost.toml [app].name)
-HOST=<app>.<your-openhost-host>                    # public URL host for this instance
-REPO=https://github.com/imbue-ai/sculptor          # public GitHub repo the deploy builds from
-BRANCH=<branch>                                     # the branch to deploy
+# Load your local instance config (gitignored; see openhost.env.example).
+set -a; [ -f .claude/skills/openhost-sculptor/openhost.env ] && \
+  . .claude/skills/openhost-sculptor/openhost.env; set +a
+: "${BRANCH:=$(git rev-parse --abbrev-ref HEAD)}"   # default to the current branch
 CONTAINER=openhost-$APP                             # podman container name (always openhost-<app>)
 ```
+
+This sets `APP`, `HOST`, `REPO` (and optionally `BRANCH`). If `openhost.env`
+doesn't exist yet, copy `openhost.env.example` to `openhost.env` and fill it in
+(only `HOST` is personal); never commit `openhost.env`.
 
 ## Prereqs
 

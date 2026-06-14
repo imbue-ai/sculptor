@@ -1,11 +1,9 @@
-/* MobileWorkspaceHeader (H1-H4). Background matches the status-bar region for a
-   seamless top (H4); border separates it from the content. Owns the top
-   safe-area inset (zeroes off iOS). */
+/* MobileSettingsHeader — mirrors MobileWorkspaceHeader (H1-H4). Background
+   matches the settings surface (--gray-2 via --mobile-surface-2) for a seamless
+   top; the border separates it from the content. Owns the top safe-area inset
+   (zeroes off iOS). */
 .header {
   align-items: center;
-
-  /* Matches the chat body (--gray-2) so the header reads as part of the same
-     continuous surface (unified with .shell / .pager). */
   background: var(--mobile-surface-2);
   border-bottom: 1px solid var(--mobile-line);
   display: flex;
@@ -52,9 +50,10 @@
   white-space: nowrap;
 }
 
-.menuMeta {
-  color: var(--mobile-ink-3);
-  font-size: var(--font-size-1);
-  margin-left: auto;
-  padding-left: var(--space-3);
+/* Same footprint as .iconButton, balancing the back button so .name is
+   centered against the full header width rather than the leftover space. */
+.spacer {
+  flex: 0 0 auto;
+  height: 44px;
+  width: 44px;
 }

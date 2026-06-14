@@ -1,5 +1,5 @@
 import { IconButton } from "@radix-ui/themes";
-import { CircleChevronLeft, Settings } from "lucide-react";
+import { ChevronLeft, Settings } from "lucide-react";
 import type { ReactElement } from "react";
 
 import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
@@ -28,7 +28,7 @@ export const ReviewAllOverlay = ({ onBack }: { onBack: () => void }): ReactEleme
           aria-label="Back to chat"
           onClick={onBack}
         >
-          <CircleChevronLeft size={22} />
+          <ChevronLeft size={22} />
         </IconButton>
         <div className={styles.headerInfo}>
           <div className={styles.headerTitle}>Review all changes</div>
@@ -42,7 +42,7 @@ export const ReviewAllOverlay = ({ onBack }: { onBack: () => void }): ReactEleme
         </span>
       </header>
       <div className={styles.body}>
-        <CombinedDiffView workspaceId={workspaceID} viewType="unified" isActive={true} forceThemeType="light" />
+        <CombinedDiffView workspaceId={workspaceID} viewType="unified" isActive={true} hideToolbar />
       </div>
     </div>
   );

@@ -84,6 +84,12 @@ export const AddWorkspacePage = (): ReactElement => {
   // collapse into one piece of state so they can never disagree.
   const [branchNameOverride, setBranchNameOverride] = useState<string | null>(null);
   const isBranchNameManuallyEdited = branchNameOverride !== null;
+  // Bumped to pull a fresh auto-generated branch name (mobile "regenerate" ⇄).
+  const [regenerationNonce, setRegenerationNonce] = useState(0);
+  // `null` means "branch from the derived default" (origin/main). A string is
+  // the user's explicit source-branch pick (mobile Source pill). Desktop has no
+  // source picker, so this stays null there.
+  const [userSelectedSourceBranch, setUserSelectedSourceBranch] = useState<string | null>(null);
 
   const handleModeChange = useCallback((nextMode: WorkspaceInitializationStrategy): void => {
     setMode(nextMode);
@@ -93,6 +99,13 @@ export const AddWorkspacePage = (): ReactElement => {
   const handleProjectChange = useCallback((nextProjectId: string | null): void => {
     setSelectedProjectId(nextProjectId);
     setBranchNameOverride(null);
+    setUserSelectedSourceBranch(null);
+  }, []);
+
+  // Drop any manual edit and pull a fresh auto-generated name from the backend.
+  const handleRegenerateBranchName = useCallback((): void => {
+    setBranchNameOverride(null);
+    setRegenerationNonce((n) => n + 1);
   }, []);
 
   // Single source of truth for the branch-name field. The hook owns preview
@@ -107,6 +120,7 @@ export const AddWorkspacePage = (): ReactElement => {
     workspaceName,
     mode,
     override: branchNameOverride,
+    regenerationNonce,
   });
 
   // Repo info for the selected project
@@ -122,6 +136,11 @@ export const AddWorkspacePage = (): ReactElement => {
       repoInfo?.remoteBranches?.find((branch) => branch === "origin/master");
     return remoteDefault ?? repoInfo?.currentBranch;
   }, [repoInfo]);
+
+  // The branch new work forks from: the user's explicit pick (mobile Source
+  // pill) if any, otherwise the derived default. Desktop never sets an override
+  // so it keeps branching from origin/main exactly as before.
+  const effectiveSourceBranch = userSelectedSourceBranch ?? sourceBranch;
 
   // Load projects on mount into global atom
   useEffect(() => {
@@ -214,7 +233,7 @@ export const AddWorkspacePage = (): ReactElement => {
         body: {
           projectId: selectedProjectId,
           initializationStrategy: mode,
-          sourceBranch: mode === WorkspaceInitializationStrategy.IN_PLACE ? undefined : sourceBranch,
+          sourceBranch: mode === WorkspaceInitializationStrategy.IN_PLACE ? undefined : effectiveSourceBranch,
           description: workspaceName.trim() || "Untitled workspace",
           requestedBranchName,
           harness,
@@ -252,7 +271,7 @@ export const AddWorkspacePage = (): ReactElement => {
         has_workspace_name: workspaceName.trim().length > 0,
         // Branch names are user-entered text (they can encode feature/ticket/
         // customer names), so record only whether one was chosen.
-        has_source_branch: sourceBranch != null,
+        has_source_branch: effectiveSourceBranch != null,
       });
 
       // Navigate to the new workspace + agent
@@ -288,7 +307,7 @@ export const AddWorkspacePage = (): ReactElement => {
     draftId,
     mode,
     harness,
-    sourceBranch,
+    effectiveSourceBranch,
     workspaceName,
     effectiveBranchName,
     defaultModelPreference,
@@ -341,7 +360,15 @@ export const AddWorkspacePage = (): ReactElement => {
         projects={projects}
         selectedProjectId={selectedProjectId}
         onProjectChange={handleProjectChange}
-        sourceBranch={sourceBranch}
+        repoInfo={repoInfo}
+        fetchRepoInfo={fetchRepoInfo}
+        branchName={effectiveBranchName}
+        isBranchNameLoading={isBranchNamePreviewLoading}
+        branchNameCollision={branchNameCollision}
+        onBranchNameChange={setBranchNameOverride}
+        onRegenerateBranchName={handleRegenerateBranchName}
+        sourceBranch={effectiveSourceBranch}
+        onSourceBranchChange={setUserSelectedSourceBranch}
       />
     );
   }

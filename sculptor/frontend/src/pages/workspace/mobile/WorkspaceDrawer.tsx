@@ -1,10 +1,10 @@
 import { useAtomValue } from "jotai";
-import { ChevronDown, CirclePlus, Folder, FolderPlus, House } from "lucide-react";
+import { ChevronDown, Folder, FolderPlus, House, Plus, Settings } from "lucide-react";
 import type { ReactElement } from "react";
 import { useMemo, useState } from "react";
 
 import type { Workspace } from "~/api";
-import { useImbueNavigate } from "~/common/NavigateUtils.ts";
+import { useImbueLocation, useImbueNavigate } from "~/common/NavigateUtils.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { userEmailAtom } from "~/common/state/atoms/userConfig.ts";
 import { workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
@@ -112,14 +112,16 @@ const DrawerRepoGroup = ({
 
 /**
  * WorkspaceDrawer (D1-D6) — left drawer over the chat (dimmed backdrop lives in
- * the shell). Header: Sculptor wordmark + user avatar; Home / Workspaces nav.
- * Workspaces are grouped by repo, collapsible, each row a status dot + name +
- * branch with the current one highlighted. A full-width New workspace button is
- * pinned at the bottom. Empty state when there are no workspaces.
+ * the shell / home). Header: Sculptor wordmark + user avatar; Home / Settings
+ * nav (the current route is highlighted). Workspaces are grouped by repo,
+ * collapsible, each row a status dot + name + branch with the current one
+ * highlighted. A full-width New workspace button is pinned at the bottom. Empty
+ * state when there are no workspaces.
  */
 export const WorkspaceDrawer = ({ isOpen, onClose, currentWorkspaceID }: WorkspaceDrawerProps): ReactElement => {
   const workspaceID = currentWorkspaceID ?? "";
-  const { navigateToWorkspace, navigateToHome, navigateToAddWorkspace } = useImbueNavigate();
+  const { navigateToWorkspace, navigateToHome, navigateToGlobalSettings, navigateToAddWorkspace } = useImbueNavigate();
+  const { isHomeRoute, isSettingsRoute } = useImbueLocation();
   const workspaces = useAtomValue(workspacesArrayAtom);
   const userEmail = useAtomValue(userEmailAtom);
 
@@ -150,7 +152,7 @@ export const WorkspaceDrawer = ({ isOpen, onClose, currentWorkspaceID }: Workspa
       <nav className={styles.nav}>
         <button
           type="button"
-          className={styles.navItem}
+          className={`${styles.navItem} ${isHomeRoute ? styles.navCurrent : ""}`}
           onClick={() => {
             onClose();
             navigateToHome();
@@ -158,8 +160,15 @@ export const WorkspaceDrawer = ({ isOpen, onClose, currentWorkspaceID }: Workspa
         >
           <House size={20} /> Home
         </button>
-        <button type="button" className={`${styles.navItem} ${styles.navCurrent}`}>
-          <Folder size={20} /> Workspaces
+        <button
+          type="button"
+          className={`${styles.navItem} ${isSettingsRoute ? styles.navCurrent : ""}`}
+          onClick={() => {
+            onClose();
+            navigateToGlobalSettings();
+          }}
+        >
+          <Settings size={20} /> Settings
         </button>
       </nav>
 
@@ -194,7 +203,7 @@ export const WorkspaceDrawer = ({ isOpen, onClose, currentWorkspaceID }: Workspa
           navigateToAddWorkspace();
         }}
       >
-        <CirclePlus size={18} /> New workspace
+        <Plus size={18} /> New workspace
       </button>
     </aside>
   );
