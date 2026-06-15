@@ -32,6 +32,34 @@ button {
   cursor: pointer;
 }
 
+/* iOS Safari auto-zooms the page when a focused form control's font-size is
+   below 16px, and in standalone (home-screen / PWA) mode the user cannot pinch
+   back out — leaving the layout stuck zoomed with controls (e.g. the chat
+   send button) clipped off-screen. Force >= 16px for focusable text inputs on
+   the mobile surface so focusing them never triggers the zoom.
+
+   Gate: coarse pointer (real phones, incl. landscape) OR a viewport <= 767px
+   (matches the app's own mobile breakpoint NARROW_QUERY in useLayoutMode.ts,
+   and — unlike `pointer: coarse` alone — also matches the iOS Simulator, which
+   is driven by a mouse and may report `pointer: fine`). A normal-width desktop
+   window is unaffected; a narrow desktop window is already in the mobile layout.
+
+   16px is the platform threshold (an absolute CSS px), so we can't use
+   --font-size-3: it scales with --scaling and can fall below 16px. This catches
+   Radix inputs (.rt-TextFieldInput / .rt-TextAreaInput, e.g. settings/dialogs)
+   and any class-less native inputs; inputs that set a smaller font-size via
+   their own class are bumped in their component module, and the TipTap chat
+   editor (contenteditable) is handled in Editor.module.scss. */
+@media (pointer: coarse), (width <= 767px) {
+  input,
+  textarea,
+  select,
+  .rt-TextFieldInput,
+  .rt-TextAreaInput {
+    font-size: 16px;
+  }
+}
+
 /* While a panel resize drag is active, route every pointer event back to the
    host window. Native Electron <webview> elements run in a separate render
    process and would otherwise swallow pointermove/pointerup the moment the
