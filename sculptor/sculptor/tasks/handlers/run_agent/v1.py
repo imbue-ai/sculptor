@@ -107,6 +107,8 @@ _POLL_SECONDS: float = 1.0
 _MAX_SOFT_SHUTDOWN_SECONDS: float = 10.0
 # how long to wait when hard killing the agent after the soft shutdown has been requested
 _MAX_HARD_SHUTDOWN_SECONDS: float = 10.0
+# how long to wait for an already-completed agent to fully finish (and surface any exception)
+_COMPLETED_AGENT_FINAL_WAIT_SECONDS: float = 10.0
 
 
 class AgentTaskFailure(TaskError):
@@ -386,7 +388,7 @@ def _run_agent_in_environment(
             if isinstance(message, PersistentRequestCompleteAgentMessage):
                 if message.request_id == initial_in_flight_user_chat_message_id:
                     # it doesn't count if this was from a sigterm
-                    was_killed = _get_is_killed_request(message)
+                    was_killed = _get_killed_exit_code(message)
                     if not was_killed:
                         initial_in_flight_user_chat_message_id = None
             # used above so that we can figure out which user messages started being processed so far
@@ -394,7 +396,7 @@ def _run_agent_in_environment(
                 persistent_user_message_by_id[message.message_id] = message
             # remember all messages that have been emitted so far by the agent
             if isinstance(message, PersistentAgentMessage):
-                was_killed = _get_is_killed_request(message)
+                was_killed = _get_killed_exit_code(message)
                 if not was_killed:
                     persistent_message_history.append(message)
                 # A ResponseBlockAgentMessage from the in-flight turn means Claude
@@ -487,7 +489,7 @@ def _run_agent_in_environment(
         # add any persistent messages to our history
         for message in new_messages:
             if isinstance(message, PersistentAgentMessage):
-                killed_exit_code = _get_is_killed_request(message)
+                killed_exit_code = _get_killed_exit_code(message)
                 if killed_exit_code:
                     logger.debug("Agent seems like it exited, returning")
                     return _handle_completed_agent(
@@ -603,7 +605,7 @@ def _run_agent_in_environment(
                 agent_wrapper.push_message(message)
 
 
-def _get_is_killed_request(message: Message) -> int:
+def _get_killed_exit_code(message: Message) -> int:
     if isinstance(message, RequestStoppedAgentMessage):
         causal_error = message.error.construct_instance()
         # sigterm and signint
@@ -766,7 +768,7 @@ def _get_agent_wrapper(
     in_testing: bool = False,
     on_diff_needed: Callable[[], None] | None = None,
 ) -> Agent:
-    logger.info("Discriminating agent wrapper")
+    logger.debug("Discriminating agent wrapper")
     context = AgentRunContext(
         task_data=task_data,
         task_state=task_state,
@@ -809,7 +811,9 @@ def _handle_completed_agent(
     # call — applied here for the final batch of messages popped after the loop exits.
     _record_latest_completion_in_state(new_messages, task.object_id, task_state, services)
 
-    agent_wrapper.wait(10)  # NOTE: if the agent has hit an exception, we will raise it here
+    agent_wrapper.wait(
+        _COMPLETED_AGENT_FINAL_WAIT_SECONDS
+    )  # NOTE: if the agent has hit an exception, we will raise it here
 
     # if we expected to shut down, and we observed the correct exit code, fine
     if exit_code == AGENT_EXIT_CODE_CLEAN_SHUTDOWN_ON_INTERRUPT or exit_code in (

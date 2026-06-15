@@ -17,5 +17,5 @@ def run_noop_task_v1(
     task_deadline: datetime.datetime | None,
 ) -> Callable[[DataModelTransaction], Any] | None:
     """Test-only task handler that does no work and completes immediately."""
-    logger.info("Running no-op task {}", task.object_id)
+    logger.debug("Running no-op task {}", task.object_id)
     return None
