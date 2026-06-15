@@ -468,6 +468,38 @@ MR description. *(Free-form: this is a design exclusion, not a version gap — a
 pinned-version bump is **not** expected to unlock it; revisit only if pi-core
 adds a background-execution primitive.)*
 
+**REVERSAL — pursue now (Danver, 2026-06-13).** The deferral is withdrawn. Its
+premise ("only a bespoke extension simulation exists, against an undefined
+Sculptor affordance") has been overtaken by what landed since: the **sub-agents
+extension** (`sculptor/sculptor/agents/pi_agent/extensions/sculptor_subagent.ts`
++ `subagent.py`, merged in the sub-agents tranche) already spawns child `pi`
+processes and streams their async progress over a tool's lane while the parent
+run proceeds — i.e. the "background-execution primitive" pi-core lacks is now
+demonstrably expressible as a Sculptor-pinned extension, and the base tranche
+already added the `supports_background_tasks` gate substrate (atom/hook). The
+extension path is no longer a throwaway "imitation"; it is the same proven
+mechanism the sub-agents capability shipped on.
+
+Target behaviours (both required for the flip):
+1. **Backgrounded tool calls** — a long-running tool (e.g. `bash`/Exec) can run
+   in the background; the turn does not block on it; Sculptor surfaces it
+   through the existing `BackgroundTaskStartedAgentMessage` /
+   `BackgroundTaskNotificationAgentMessage` contracts and
+   `pending_background_task_ids` (the same path Claude uses —
+   `agents/default/claude_code_sdk/output_processor.py:648,674`,
+   `web/derived.py:801`).
+2. **Subagents / Tasks in flight while the main thread stays interactive** — the
+   user can send messages to the main pi agent while spawned subagents/tasks
+   are still running.
+
+This is still **extension-only / pi-core immutable**, and a pinned-version bump
+still needs Danver's explicit permission. The implementing tranche
+re-investigates feasibility against current `sculptor-oss/main` first (the
+verdict above predates the sub-agent landing); if a genuine pi-core wall
+remains for either behaviour, that is a REQ-INV-6 pause-and-ask, not a silent
+re-deferral. Implementation spec: `implementation_plan/11_01_background_tasks.md`
+(supersedes the deferral-only task file).
+
 ---
 
 ## Cross-cutting findings (exceed the per-flag taxonomy)

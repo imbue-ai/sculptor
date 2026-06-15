@@ -33,8 +33,10 @@ mechanism and the base tranche's actual landed names.
   REQ-EXT home and fail-loud posture), 08 skills, 09 image input + file
   attachments (bundled), 10 sub-agents (**after 03 and 07; schedule
   late** — heaviest, lowest-confidence, pre-staged deferral
-  contingency), 11 background tasks (**deferral execution only** — no
-  code, no MR expected).
+  contingency), 11 background tasks (**originally deferred; reversal
+  2026-06-13 — now an implementation tranche**: backgrounded tool calls
+  + subagents/tasks in flight while the main thread stays interactive;
+  see `11_01_background_tasks.md` and `feasibility.md` §11 REVERSAL).
 
 ## Phase Rationale
 
@@ -94,7 +96,7 @@ mechanism and the base tranche's actual landed names.
 | `08_01_skills.md` | Repeatable `--skill` flags from `discover_skills` sources; `/skill:<name>` invocation seam; loose-commands/plugin verification | 8 | REQ-CAP-SKILLS |
 | `09_01_image_input_and_file_attachments.md` | Prompt assembly stops dropping `files`: images → `prompt.images[]` (base64), others → paths; loud-failure posture + hoist-later comment | 9 | REQ-CAP-IMAGE-INPUT, REQ-CAP-FILE-ATTACHMENTS |
 | `10_01_sub_agents.md` | Bespoke structured-progress extension + nested `parent_tool_use_id` adapter; spike-first with REQ-INV-6 deferral contingency | 10 | REQ-CAP-SUB-AGENTS |
-| `11_01_background_tasks_deferral.md` | Execute the verdict-(iv) deferral: verify fail-closed invariants + FOLLOWUPS handoff; no code expected | 11 | REQ-CAP-BACKGROUND-TASKS |
+| `11_01_background_tasks.md` | **Reversal (2026-06-13)** — implement background tasks: backgrounded tool calls + subagents/tasks in flight while the main thread stays interactive (extension mechanism, per the merged sub-agents pattern) | 11 | REQ-CAP-BACKGROUND-TASKS |
 
 ## Pass-2 handoff contract — completed
 
