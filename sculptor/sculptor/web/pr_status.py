@@ -1,4 +1,5 @@
 import json
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
 
@@ -108,7 +109,7 @@ def _fetch_pr_status_inner(
     return PrStatusInfo(workspace_id=workspace_id, pr_state="none")
 
 
-def _first_matching_target(prs: list[dict], target_branch: str) -> dict | None:
+def _first_matching_target(prs: Sequence[dict], target_branch: str) -> dict | None:
     """Return the first PR whose base branch equals ``target_branch``, if any.
 
     ``gh pr list`` returns PRs newest-first, so the first match is the most
