@@ -115,6 +115,14 @@ class PlaywrightSettingsPage(PlaywrightProjectLayoutPage):
         """Get the Panels navigation item."""
         return self.get_by_test_id(ElementIDs.SETTINGS_NAV_PANELS)
 
+    def get_plugins_nav(self) -> Locator:
+        """Get the Plugins navigation item.
+
+        The Plugins section is gated on the experimental frontend-plugins
+        flag, so this locator is expected to be absent unless that flag is on.
+        """
+        return self.get_by_test_id(ElementIDs.SETTINGS_NAV_PLUGINS)
+
     def _get_pi_nav(self) -> Locator:
         """Get the Pi (experimental) navigation item."""
         return self.get_by_test_id(ElementIDs.SETTINGS_NAV_PI)
