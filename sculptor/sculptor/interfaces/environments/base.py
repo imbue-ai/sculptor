@@ -260,7 +260,7 @@ class Environment(BaseModel, abc.ABC):
             timeout=timeout,
             on_output=on_output,
         )
-        _result = process.wait()
+        process.wait()
         if is_checked_after:
             process.check()
         return FinishedProcess(
