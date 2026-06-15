@@ -270,7 +270,7 @@ def make_plan_approval_question(
     return AskUserQuestionData(
         questions=[
             UserQuestion(
-                question="Claude has finished planning. How would you like to proceed?",
+                question="Planning complete. How would you like to proceed?",
                 header="Plan approval",
                 options=[
                     QuestionOption(label="Approve plan", description="Proceed with implementing the plan"),

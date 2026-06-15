@@ -1706,7 +1706,7 @@ def test_answered_plan_approval_not_re_shown_after_ephemeral_replay() -> None:
     plan_question_data = make_plan_approval_question(str(tool_use_id))
     answer_msg = UserQuestionAnswerMessage(
         message_id=AgentMessageID(),
-        answers={"Claude has finished planning. How would you like to proceed?": "Approve plan"},
+        answers={"Planning complete. How would you like to proceed?": "Approve plan"},
         question_data=plan_question_data,
         tool_use_id=str(tool_use_id),
     )
