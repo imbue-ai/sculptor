@@ -17,14 +17,15 @@ type Overlay = "review" | "terminal" | null;
 
 /**
  * MobileWorkspaceShell — single-column, chat-first Workspace view for narrow
- * viewports (S1). Top → bottom: workspace header · status row (agent switcher +
- * changes pill) · chat stream (fills) · chat input. Secondary surfaces (drawer,
- * review-all, terminal) open over the chat as in-shell state; "back" closes the
- * overlay rather than navigating the router (Open Q9). It reuses the real chat
- * (ChatPanelContent) and its real ChatInput unchanged — ChatInput adapts itself
- * to a compact toolbar on mobile, so the shell no longer supplies a bespoke
- * input. The AgentSwitcher and ChangesPill share one row under the header: the
- * agent switcher on the left, the changes pill on the right (S/C).
+ * viewports (S1). Top → bottom: workspace header · chat stream (fills) · chat
+ * input. The status row (agent switcher + changes pill) floats over the top of
+ * the chat with a transparent background, so the stream scrolls behind the
+ * pills. Secondary surfaces (drawer, review-all, terminal) open over the chat as
+ * in-shell state; "back" closes the overlay rather than navigating the router
+ * (Open Q9). It reuses the real chat (ChatPanelContent) and its real ChatInput
+ * unchanged — ChatInput adapts itself to a compact toolbar on mobile, so the
+ * shell no longer supplies a bespoke input. In the status row the agent switcher
+ * sits on the left, the changes pill on the right (S/C).
  */
 export const MobileWorkspaceShell = ({ taskID }: { taskID: string }): ReactElement => {
   const { workspaceID } = useWorkspacePageParams();
@@ -48,12 +49,14 @@ export const MobileWorkspaceShell = ({ taskID }: { taskID: string }): ReactEleme
         onOpenTerminal={() => setOverlay("terminal")}
       />
 
-      <div className={styles.statusRow}>
-        <AgentSwitcher onOpenSheet={() => setIsAgentSheetOpen(true)} />
-        <ChangesPill onReviewAll={() => setOverlay("review")} />
-      </div>
-
       <div className={styles.chatArea}>
+        {/* The status row floats over the top of the chat (transparent
+            background, click-through gaps) so the stream scrolls behind the
+            pills. */}
+        <div className={styles.statusRow}>
+          <AgentSwitcher onOpenSheet={() => setIsAgentSheetOpen(true)} />
+          <ChangesPill onReviewAll={() => setOverlay("review")} />
+        </div>
         <ChatPanelContent />
       </div>
 

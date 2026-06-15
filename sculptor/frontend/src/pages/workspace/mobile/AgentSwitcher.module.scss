@@ -31,6 +31,9 @@
   min-width: 0;
   padding: var(--space-2) var(--space-3);
 
+  /* The status row is click-through; the pill itself is interactive. */
+  pointer-events: auto;
+
   /* Horizontal drags drive the swipe; let vertical scrolls pass through. */
   touch-action: pan-y;
   user-select: none;

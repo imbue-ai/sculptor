@@ -21,6 +21,9 @@
   font-size: var(--font-size-1);
   max-width: 100%;
   overflow: hidden;
+
+  /* The status row is click-through; the bar itself is interactive. */
+  pointer-events: auto;
 }
 
 /* Left: a soft "+ PR" button (no split-button popover). */

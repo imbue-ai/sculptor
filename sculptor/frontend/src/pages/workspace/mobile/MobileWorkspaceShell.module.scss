@@ -31,17 +31,22 @@
   position: relative;
 }
 
-/* Status row under the header: the agent switcher (left) and the changes pill
-   (right) share one line. It's the positioning context for the changes pill's
-   expanded list, which is absolutely positioned and floats over the chat (C2). */
+/* Status row floating over the top of the chat: the agent switcher (left) and
+   the changes pill (right) share one line. Its background is transparent and it
+   is click-through (`pointer-events: none`) so the chat stream scrolls behind
+   the pills; each pill re-enables pointer events on itself. It's also the
+   positioning context for the changes pill's expanded list (C2). */
 .statusRow {
   align-items: center;
   display: flex;
-  flex: 0 0 auto;
   gap: var(--space-2);
   justify-content: space-between;
+  left: 0;
   padding: var(--space-2) var(--space-3) var(--space-1);
-  position: relative;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 0;
   z-index: var(--z-above);
 }
 
