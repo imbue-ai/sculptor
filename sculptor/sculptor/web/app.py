@@ -170,6 +170,7 @@ from sculptor.web.data_types import AgentTypeName
 from sculptor.web.data_types import AnswerQuestionRequest
 from sculptor.web.data_types import ArtifactDataResponse
 from sculptor.web.data_types import AuthResult
+from sculptor.web.data_types import AuthStartResult
 from sculptor.web.data_types import BatchUpdateOpenStateRequest
 from sculptor.web.data_types import BranchExistsResponse
 from sculptor.web.data_types import BtwRequest
@@ -212,6 +213,7 @@ from sculptor.web.data_types import SignalEventRequest
 from sculptor.web.data_types import SkillInfo
 from sculptor.web.data_types import SkipAccountSetupRequest
 from sculptor.web.data_types import StartTaskRequest
+from sculptor.web.data_types import SubmitAuthCodeRequest
 from sculptor.web.data_types import TerminalInputRequest
 from sculptor.web.data_types import UpdateUserConfigRequest
 from sculptor.web.data_types import UpdateWorkspaceRequest
@@ -2574,19 +2576,40 @@ def install_dependency(
 
 
 @router.post("/api/v1/dependencies/auth")
-def authenticate_dependency(
+def start_dependency_auth(
     request: Request,
     tool: str = "CLAUDE",
     user_session: UserSession = Depends(get_user_session),
-) -> AuthResult:
-    """Trigger dependency authentication via browser login."""
+) -> AuthStartResult:
+    """Begin interactive dependency authentication and return the sign-in URL.
+
+    The CLI keeps running, waiting for the code the user pastes back via
+    POST /api/v1/dependencies/auth/code. On a machine with a usable local
+    browser the flow self-completes and the response has ``success=True``.
+    """
     try:
         dependency = Dependency(tool)
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}")
 
     services = get_services_from_request_or_websocket(request)
-    return services.dependency_management_service.run_auth_login(dependency)
+    return services.dependency_management_service.start_auth_login(dependency)
+
+
+@router.post("/api/v1/dependencies/auth/code")
+def submit_dependency_auth_code(
+    body: SubmitAuthCodeRequest,
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> AuthResult:
+    """Submit the code the user pasted from the sign-in page to finish authentication."""
+    try:
+        dependency = Dependency(body.tool)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Unknown tool: {body.tool}")
+
+    services = get_services_from_request_or_websocket(request)
+    return services.dependency_management_service.submit_auth_code(dependency, body.code)
 
 
 @router.post("/api/v1/config/complete")
