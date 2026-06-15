@@ -65,7 +65,7 @@ class BtwService(Service):
         question: str,
         request_id: str,
         is_fake_claude: bool = False,
-        main_agent_started: bool = True,
+        is_main_agent_started: bool = True,
     ) -> None:
         """Spawn a /btw Haiku turn on a background thread.
 
@@ -73,7 +73,7 @@ class BtwService(Service):
         first so the popup's "second /btw replaces the first" guarantee
         (architecture §4.4.3) halts the previous subprocess.
 
-        ``main_agent_started`` should be True when the user has sent at
+        ``is_main_agent_started`` should be True when the user has sent at
         least one prompt to the main agent (so a session id either exists
         or is imminent). When False, the request fails immediately
         instead of waiting on a session id that will never arrive.
@@ -97,7 +97,7 @@ class BtwService(Service):
         # never been started, no init is coming — fail fast so the user
         # sees the "/btw is unavailable until you've sent a message"
         # toast immediately.
-        session_id = manager.wait_for_session_id() if main_agent_started else manager.read_session_id()
+        session_id = manager.wait_for_session_id() if is_main_agent_started else manager.read_session_id()
         if session_id is None:
             raise NoBtwSessionAvailable(f"Agent {task_id} has no session file to fork from")
         if not is_fake_claude and environment.get_tool_binary_path(CLAUDE_CODE_HARNESS.binary_dependency) is None:

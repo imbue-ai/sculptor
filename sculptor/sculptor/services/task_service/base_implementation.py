@@ -196,7 +196,6 @@ class BaseTaskService(TaskService, ABC):
         task = self.get_task(task_id, transaction)
         if not task:
             raise TaskNotFound(f"{task_id} not found")
-        assert task is not None  # for the type checker
         logger.debug("Marking task {} as read", task_id)
         updated_task = task.evolve(task.ref().last_read_at, get_current_time())
         updated_task = transaction.upsert_task(updated_task)
@@ -208,7 +207,6 @@ class BaseTaskService(TaskService, ABC):
         task = self.get_task(task_id, transaction)
         if not task:
             raise TaskNotFound(f"{task_id} not found")
-        assert task is not None  # for the type checker
         logger.debug("Marking task {} as unread", task_id)
         updated_task = task.evolve(task.ref().last_read_at, None)
         updated_task = transaction.upsert_task(updated_task)

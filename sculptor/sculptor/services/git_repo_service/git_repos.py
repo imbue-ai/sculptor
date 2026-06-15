@@ -29,9 +29,9 @@ class ReadOnlyGitRepo(MutableModel, ABC):
     @abstractmethod
     def get_current_commit_hash(self) -> str:
         """
-        The output of `git rev-parse HEAD`
+        The output of `git rev-parse HEAD`.
 
-        Obviously there may be other current (uncommitted or untracked) changes in the repository,
+        There may be other uncommitted or untracked changes in the repository.
         """
 
     @abstractmethod

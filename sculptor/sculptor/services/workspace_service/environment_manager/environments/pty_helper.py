@@ -55,6 +55,7 @@ import struct
 import sys
 import termios
 import traceback
+from collections.abc import Mapping
 from multiprocessing.connection import Connection
 from multiprocessing.reduction import send_handle
 from typing import Final
@@ -108,7 +109,7 @@ def _open_parent_connection() -> Connection:
     return Connection(fd)
 
 
-def _exec_shell_in_grandchild(shell: str, argv: list[str], cwd: str, env: dict[str, str]) -> NoReturn:
+def _exec_shell_in_grandchild(shell: str, argv: list[str], cwd: str, env: Mapping[str, str]) -> NoReturn:
     """Final stage of the grandchild: chdir, reset signals, execvpe.
 
     Runs in the pty grandchild between ``pty.fork()`` returning 0 and

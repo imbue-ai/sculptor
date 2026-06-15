@@ -219,7 +219,7 @@ def test_run_btw_for_task_fails_fast_when_main_agent_not_started(
                 question="anything",
                 request_id="fast-fail-1",
                 is_fake_claude=True,
-                main_agent_started=False,
+                is_main_agent_started=False,
             )
         elapsed = time.monotonic() - start
 

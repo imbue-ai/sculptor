@@ -466,7 +466,7 @@ class SQLTransaction(BaseDataModelTransaction):
             .order_by(TASK_LATEST_TABLE.c.created_at.desc())
         )
         result = self.connection.execute(query)
-        return tuple(_row_to_pydantic_model(row, Task, prefix="task_latest_") for row in result.all())
+        return tuple(_row_to_pydantic_model(row, Task) for row in result.all())
 
     def _insert_model(self, obj: DatabaseModel, table: Table) -> DatabaseModel:
         """
@@ -591,11 +591,11 @@ def _get_serializable_fields(model_cls: type) -> frozenset[str]:
     return frozen
 
 
-def _row_to_pydantic_model(row: sqlalchemy.Row, model_cls: type[T2], prefix: str = "") -> T2:
+def _row_to_pydantic_model(row: sqlalchemy.Row, model_cls: type[T2]) -> T2:
     serializable_fields = _get_serializable_fields(model_cls)
     values = {}
     for field_name in model_cls.model_fields:
-        row_value = getattr(row, f"{prefix}{field_name}")
+        row_value = getattr(row, field_name)
         if row_value is not None and field_name in serializable_fields:
             values[field_name] = row_value
             continue

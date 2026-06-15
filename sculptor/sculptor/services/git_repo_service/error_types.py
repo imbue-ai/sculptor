@@ -4,7 +4,7 @@ from pydantic import AnyUrl
 
 
 class GitRepoError(Exception):
-    """Exception raised when git operations"""
+    """Exception raised when a git operation fails."""
 
     def __init__(
         self,
@@ -15,7 +15,8 @@ class GitRepoError(Exception):
         exit_code: int | None = None,
         stderr: str | bytes | None = None,
     ) -> None:
-        # TODO these inits result in SerializedException.build(e).construct_instance() not working
+        # The required positional constructor args prevent
+        # SerializedException.build(e).construct_instance() from reconstructing this exception.
         super().__init__(message)
         self.operation = operation
         self.repo_url = repo_url

@@ -12,6 +12,7 @@ def get_task_service_collection(
     concurrency_group: ConcurrencyGroup,
     settings: SculptorSettings,
 ) -> TaskServiceCollection:
+    """Build the service collection that the task service depends on."""
     services = get_git_repo_service_collection(concurrency_group, settings)
     task_service = LocalThreadTaskService(
         concurrency_group=concurrency_group.make_concurrency_group("task_service"),
