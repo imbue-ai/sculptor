@@ -14,18 +14,13 @@ def extract_leaf_types(type_annotation: Any, is_everything_expanded: bool = Fals
     Otherwise, only expand Union and Annotated types.
 
     Example:
-        _extract_leaf_types(Annotated[Union[int, None], Tag("foo")]) == (int, None)
+        extract_leaf_types(Annotated[Union[int, None], Tag("foo")]) == (int, None)
     """
     origin = get_origin(type_annotation)
     args = get_args(type_annotation)
     if origin is Annotated:
         return extract_leaf_types(args[0], is_everything_expanded=is_everything_expanded)
-    elif (
-        origin is Union
-        or origin is UnionType
-        or (hasattr(type_annotation, "__class__") and type_annotation.__class__.__name__ == "UnionType")
-        or (origin is not None and is_everything_expanded)
-    ):
+    elif origin is Union or origin is UnionType or (origin is not None and is_everything_expanded):
         result = []
         for arg in args:
             result.extend(extract_leaf_types(arg, is_everything_expanded=is_everything_expanded))
