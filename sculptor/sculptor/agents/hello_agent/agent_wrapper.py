@@ -41,6 +41,10 @@ class HelloAgent(DefaultAgentWrapper):
             case StopAgentUserMessage():
                 with self._handle_user_message(message):
                     logger.info("Stopping agent")
+                    # Mark the turn as stopping so the clean-exit branch of
+                    # _handle_user_message suppresses RequestSuccessAgentMessage: an
+                    # interrupted turn must not report success.
+                    self._is_stopping = True
                     self._shutdown_event.set()
                     self.wait(10.0)
                     self._exit_code = AGENT_EXIT_CODE_CLEAN_SHUTDOWN_ON_INTERRUPT

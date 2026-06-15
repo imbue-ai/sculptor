@@ -259,7 +259,6 @@ class ConcurrentTaskService(BaseTaskService, ABC):
             task_id = task.object_id
             if task_id not in self._runner_by_id:
                 # exceptions in here will definitely have been logged, see implementation of self._run_task
-                logger.info("Creating runner:{}", self.settings)
                 new_runner = self.create_runner(task, task_id, self.settings)
                 self._runner_by_id[task_id] = new_runner
                 new_runner.start()

@@ -14,15 +14,17 @@ class InvalidTaskOperation(ExpectedError):
 
 
 class TaskError(ExpectedError):
-    def __init__(self, transaction_callback: Callable[[DataModelTransaction], Any], is_user_notified: bool) -> None:
+    def __init__(
+        self, transaction_callback: Callable[[DataModelTransaction], Any] | None, is_user_notified: bool
+    ) -> None:
         super().__init__()
         self.transaction_callback = transaction_callback
         self.is_user_notified = is_user_notified
 
 
-class UserStoppedTaskError(ExpectedError):
+class UserStoppedTaskError(TaskError):
     def __init__(self) -> None:
-        super().__init__(None, True)
+        super().__init__(transaction_callback=None, is_user_notified=True)
 
 
 class UserPausedTaskError(UserStoppedTaskError):
