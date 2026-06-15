@@ -20,7 +20,7 @@
           },
           {
             "type": "command",
-            "command": "sid=$(sed -n 's/^{[[:space:]]*\"session_id\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p'); [ -n \"$sid\" ] && sculpt signal session-id \"$sid\" || true"
+            "command": "sid=$(sed -n 's/.*\"session_id\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p' | head -n1); [ -n \"$sid\" ] && sculpt signal session-id \"$sid\" || true"
           }
         ]
       }
