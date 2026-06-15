@@ -84,6 +84,12 @@ class TaskService(Service, ABC):
     ) -> tuple[PersistentMessageTypes, ...]: ...
 
     @abstractmethod
+    def get_live_messages_for_task(self, task_id: TaskID) -> tuple[Message, ...]:
+        """Snapshot of the task's in-memory messages, INCLUDING ephemeral
+        run-scoped ones (e.g. terminal-agent signals) that
+        get_saved_messages_for_task never sees."""
+
+    @abstractmethod
     @contextmanager
     def subscribe_to_all_tasks_for_user(
         self, user_reference: UserReference

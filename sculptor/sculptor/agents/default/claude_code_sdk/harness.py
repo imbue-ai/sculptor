@@ -134,6 +134,7 @@ class ClaudeCodeHarness(Harness):
 
     def capabilities(self) -> HarnessCapabilities:
         return HarnessCapabilities(
+            supports_chat_interface=True,
             supports_interactive_backchannel=True,
             supports_skills=True,
             supports_sub_agents=True,

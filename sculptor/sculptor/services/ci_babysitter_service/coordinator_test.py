@@ -7,6 +7,7 @@ classes; only the methods the coordinator actually uses are
 implemented.
 """
 
+import datetime
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,7 @@ from pydantic import PrivateAttr
 
 from sculptor.config.user_config import CIBabysitterConfig
 from sculptor.config.user_config import UserConfig
+from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Project
 from sculptor.database.models import Task
@@ -26,11 +28,15 @@ from sculptor.database.models import TaskID
 from sculptor.database.models import Workspace
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
 from sculptor.interfaces.agents.agent import MessageTypes
+from sculptor.interfaces.agents.agent import PiAgentConfig
+from sculptor.interfaces.agents.agent import TerminalAgentConfig
 from sculptor.primitives.ids import OrganizationReference
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import TransactionID
+from sculptor.primitives.ids import UserReference
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.ci_babysitter_service import coordinator as coordinator_module
 from sculptor.services.ci_babysitter_service.coordinator import CIBabysitterCoordinator
@@ -42,6 +48,7 @@ from sculptor.services.git_repo_service.git_repos import ReadOnlyGitRepo
 from sculptor.services.task_service.api import TaskService
 from sculptor.services.workspace_service.api import WorkspaceService
 from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import LLMModel
 from sculptor.web.derived import PrStatusInfo
 from sculptor.web.pr_polling_service import PrPollingService
 
@@ -155,6 +162,9 @@ class _StubTaskService(TaskService):
 
     def get_saved_messages_for_task(self, task_id: TaskID, transaction: DataModelTransaction) -> Any:
         return _stub(task_id, transaction)
+
+    def get_live_messages_for_task(self, task_id: TaskID) -> Any:
+        return _stub(task_id)
 
     @contextmanager
     def subscribe_to_all_tasks_for_user(self, user_reference: Any) -> Generator[Any, None, None]:
@@ -734,3 +744,99 @@ def test_pipeline_failed_dispatch_dedupes_per_pipeline_id(
     coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=2))
     assert len(task_service.create_message_calls) == 2
     assert state.last_dispatched_pipeline_failed_id == 2
+
+
+# Chat-agent config inheritance for babysitter tasks:
+# the babysitter inherits the config TYPE of the workspace's most recent chat
+# agent; terminal agents are skipped; fallback is Claude.
+
+
+class _TasksTransaction(_FakeTransaction):
+    _tasks: list[Task] = PrivateAttr(default_factory=list)
+
+    def __init__(self, env: _FakeEnv, tasks: list[Task]) -> None:
+        super().__init__(env)
+        self._tasks = tasks
+
+    def get_tasks_for_project(self, project_id: ProjectID, input_data_classes: Any = None) -> list[Task]:
+        del project_id, input_data_classes
+        return list(self._tasks)
+
+
+def _make_agent_task(
+    env: _FakeEnv,
+    agent_config: Any,
+    created_at: str,
+    default_model: LLMModel | None = None,
+    title: str = "Agent",
+) -> Task:
+    return Task(
+        object_id=TaskID(),
+        created_at=datetime.datetime.fromisoformat(created_at),
+        user_reference=UserReference("usr_123"),
+        organization_reference=OrganizationReference("org-123"),
+        project_id=env.project_id,
+        input_data=AgentTaskInputsV2(
+            agent_config=agent_config,
+            git_hash="abc123",
+            default_model=default_model,
+        ),
+        current_state=AgentTaskStateV2(workspace_id=env.workspace_id, title=title),
+    )
+
+
+def test_babysitter_inherits_pi_config_from_most_recent_chat_agent(
+    env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    tasks = [
+        _make_agent_task(env, ClaudeCodeSDKAgentConfig(), "2026-01-01T00:00:00"),
+        _make_agent_task(env, PiAgentConfig(), "2026-01-02T00:00:00"),
+    ]
+    config = coordinator._select_chat_agent_config_for_workspace(
+        env.workspace_id, env.project_id, _TasksTransaction(env, tasks)
+    )
+    assert isinstance(config, PiAgentConfig)
+
+
+def test_babysitter_skips_terminal_agents_when_inheriting_config(
+    env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    # Terminal agent is the most recent — it must be skipped, so pi wins.
+    tasks = [
+        _make_agent_task(env, PiAgentConfig(), "2026-01-01T00:00:00"),
+        _make_agent_task(env, TerminalAgentConfig(), "2026-01-02T00:00:00"),
+    ]
+    config = coordinator._select_chat_agent_config_for_workspace(
+        env.workspace_id, env.project_id, _TasksTransaction(env, tasks)
+    )
+    assert isinstance(config, PiAgentConfig)
+
+
+def test_babysitter_falls_back_to_claude_with_only_terminal_agents(
+    env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    tasks = [_make_agent_task(env, TerminalAgentConfig(), "2026-01-01T00:00:00")]
+    config = coordinator._select_chat_agent_config_for_workspace(
+        env.workspace_id, env.project_id, _TasksTransaction(env, tasks)
+    )
+    assert isinstance(config, ClaudeCodeSDKAgentConfig)
+
+
+def test_select_model_for_workspace_skips_terminal_agents(
+    env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    # The terminal task is most recent and even carries a default_model (it
+    # never does in production — this proves the skip is explicit); the older
+    # chat task's model must win.
+    tasks = [
+        _make_agent_task(env, ClaudeCodeSDKAgentConfig(), "2026-01-01T00:00:00", default_model=LLMModel.CLAUDE_4_OPUS),
+        _make_agent_task(env, TerminalAgentConfig(), "2026-01-02T00:00:00", default_model=LLMModel.CLAUDE_4_SONNET),
+    ]
+    model = coordinator._select_model_for_workspace(
+        env.workspace_id, env.project_id, _make_user_config(), _TasksTransaction(env, tasks)
+    )
+    assert model == LLMModel.CLAUDE_4_OPUS

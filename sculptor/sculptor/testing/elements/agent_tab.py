@@ -20,6 +20,44 @@ class PlaywrightAgentTabBarElement:
     def get_add_agent_button(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.ADD_AGENT_BUTTON)
 
+    def get_add_agent_chevron_button(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.ADD_AGENT_CHEVRON_BUTTON)
+
+    def get_agent_type_menu(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.AGENT_TYPE_MENU)
+
+    def get_agent_type_menu_item_claude(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.AGENT_TYPE_MENU_ITEM_CLAUDE)
+
+    def get_agent_type_menu_item_pi(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.AGENT_TYPE_MENU_ITEM_PI)
+
+    def get_agent_type_menu_item_terminal(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.AGENT_TYPE_MENU_ITEM_TERMINAL)
+
+    def get_agent_type_menu_item_registered(self, registration_id: str) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.AGENT_TYPE_MENU_ITEM_REGISTERED).and_(
+            self._page.locator(f'[data-registration-id="{registration_id}"]')
+        )
+
+    def open_agent_type_menu(self) -> Locator:
+        """Click the chevron next to the `+` button and return the open menu.
+
+        Retries the click: a click landing while Radix is still tearing down
+        a just-dismissed menu can be swallowed (or toggle the menu straight
+        closed), and `expect` alone cannot recover from a lost click.
+        """
+        menu = self.get_agent_type_menu()
+        for _attempt in range(3):
+            self.get_add_agent_chevron_button().click()
+            try:
+                expect(menu).to_be_visible(timeout=3_000)
+                return menu
+            except AssertionError:
+                continue
+        expect(menu).to_be_visible()
+        return menu
+
     def open_diagnostics_submenu(self, tab: Locator) -> None:
         """Right-click a tab and hover on Diagnostics to open the submenu."""
         tab.click(button="right")

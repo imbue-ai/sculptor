@@ -26,6 +26,9 @@ from sculptor.interfaces.agents.agent import HelloAgentConfig
 from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
 from sculptor.interfaces.agents.agent import RequestStoppedAgentMessage
 from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
+from sculptor.interfaces.agents.agent import TerminalAgentConfig
+from sculptor.interfaces.agents.agent import TerminalAgentSignalRunnerMessage
+from sculptor.interfaces.agents.agent import TerminalStatusSignal
 from sculptor.interfaces.agents.harness import HarnessCapabilities
 from sculptor.interfaces.agents.tasks import TaskState
 from sculptor.primitives.ids import AgentMessageID
@@ -454,6 +457,7 @@ def _make_hello_task() -> Task:
 def test_harness_capabilities_for_claude_task_advertises_all_true() -> None:
     view = _make_task_view(_make_task())
     assert view.harness_capabilities == HarnessCapabilities(
+        supports_chat_interface=True,
         supports_interactive_backchannel=True,
         supports_skills=True,
         supports_sub_agents=True,
@@ -470,9 +474,52 @@ def test_harness_capabilities_for_claude_task_advertises_all_true() -> None:
     )
 
 
+def _make_terminal_task(*, outcome: TaskState = TaskState.RUNNING) -> Task:
+    return Task(
+        object_id=TaskID(),
+        user_reference=UserReference("test-user"),
+        organization_reference=OrganizationReference("test-org"),
+        project_id=ProjectID(),
+        input_data=AgentTaskInputsV2(
+            agent_config=TerminalAgentConfig(),
+            git_hash="abc123",
+            system_prompt=None,
+        ),
+        current_state=AgentTaskStateV2(workspace_id=WorkspaceID()),
+        outcome=outcome,
+    )
+
+
+def test_terminal_task_status_is_building_before_environment() -> None:
+    # Unlike chat tasks, a prompt-less terminal task with no environment is
+    # still building — the "no user message → READY" special case must not apply.
+    view = _make_task_view(_make_terminal_task())
+    assert view.status == TaskStatus.BUILDING
+
+
+def test_terminal_task_status_is_ready_after_environment() -> None:
+    view = _make_task_view(_make_terminal_task())
+    view.add_message(
+        EnvironmentAcquiredRunnerMessage.model_construct(
+            message_id=AgentMessageID(),
+            environment=None,
+        )
+    )
+    assert view.status == TaskStatus.READY
+
+
+def test_terminal_task_status_outcome_short_circuits_unchanged() -> None:
+    assert _make_task_view(_make_terminal_task(outcome=TaskState.QUEUED)).status == TaskStatus.BUILDING
+    assert _make_task_view(_make_terminal_task(outcome=TaskState.FAILED)).status == TaskStatus.ERROR
+    assert _make_task_view(_make_terminal_task(outcome=TaskState.DELETED)).status == TaskStatus.READY
+
+
 def test_harness_capabilities_for_hello_task_are_all_false() -> None:
     view = _make_task_view(_make_hello_task())
+    # Hello is a chat agent (its main panel is the chat interface); every
+    # per-affordance capability is false.
     assert view.harness_capabilities == HarnessCapabilities(
+        supports_chat_interface=True,
         supports_interactive_backchannel=False,
         supports_skills=False,
         supports_sub_agents=False,
@@ -487,3 +534,64 @@ def test_harness_capabilities_for_hello_task_are_all_false() -> None:
         supports_interruption=False,
         supports_file_references=False,
     )
+
+
+def _env_acquired() -> EnvironmentAcquiredRunnerMessage:
+    return EnvironmentAcquiredRunnerMessage.model_construct(
+        message_id=AgentMessageID(),
+        environment=None,
+    )
+
+
+def _signal(signal: TerminalStatusSignal) -> TerminalAgentSignalRunnerMessage:
+    return TerminalAgentSignalRunnerMessage(signal=signal)
+
+
+def test_terminal_status_follows_latest_signal_since_run_start() -> None:
+    view = _make_task_view(_make_terminal_task())
+    view.add_message(_env_acquired())
+
+    view.add_message(_signal(TerminalStatusSignal.BUSY))
+    assert view.status == TaskStatus.RUNNING
+
+    view.add_message(_signal(TerminalStatusSignal.WAITING))
+    assert view.status == TaskStatus.WAITING
+
+    # Latest wins.
+    view.add_message(_signal(TerminalStatusSignal.BUSY))
+    assert view.status == TaskStatus.RUNNING
+
+    view.add_message(_signal(TerminalStatusSignal.IDLE))
+    assert view.status == TaskStatus.READY
+
+
+def test_terminal_status_resets_at_each_run_start() -> None:
+    # A pre-re-run WAITING must NOT survive the next run's anchor
+    # (stale-status risk).
+    view = _make_task_view(_make_terminal_task())
+    view.add_message(_env_acquired())
+    view.add_message(_signal(TerminalStatusSignal.WAITING))
+    assert view.status == TaskStatus.WAITING
+
+    view.add_message(_env_acquired())
+    assert view.status == TaskStatus.READY
+
+    view.add_message(_signal(TerminalStatusSignal.BUSY))
+    assert view.status == TaskStatus.RUNNING
+
+
+def test_terminal_status_neutral_after_restart_until_signals_re_drive() -> None:
+    # Signals are ephemeral: after a backend restart a fresh view only sees
+    # persistent messages, so status is BUILDING pre-anchor and neutral READY
+    # once the new run acquires its environment.
+    view = _make_task_view(_make_terminal_task())
+    assert view.status == TaskStatus.BUILDING
+    view.add_message(_env_acquired())
+    assert view.status == TaskStatus.READY
+
+
+def test_terminal_status_outcome_short_circuit_beats_signals() -> None:
+    view = _make_task_view(_make_terminal_task(outcome=TaskState.FAILED))
+    view.add_message(_env_acquired())
+    view.add_message(_signal(TerminalStatusSignal.BUSY))
+    assert view.status == TaskStatus.ERROR

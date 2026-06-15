@@ -71,15 +71,20 @@ from sculptor.foundation.pydantic_serialization import model_dump
 from sculptor.foundation.pydantic_utils import model_update
 from sculptor.foundation.serialization import SerializedException
 from sculptor.foundation.subprocess_utils import ProcessSetupError
+from sculptor.interfaces.agents.agent import AgentConfigTypes
 from sculptor.interfaces.agents.agent import AgentMessageID
 from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
 from sculptor.interfaces.agents.agent import ClearContextUserMessage
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.interfaces.agents.agent import InterruptProcessUserMessage
 from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessage
 from sculptor.interfaces.agents.agent import PiAgentConfig
+from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageUserMessage
+from sculptor.interfaces.agents.agent import TerminalAgentConfig
+from sculptor.interfaces.agents.agent import TerminalAgentSignalRunnerMessage
+from sculptor.interfaces.agents.agent import TerminalStatusSignal
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
+from sculptor.interfaces.agents.agent import is_terminal_agent_config
 from sculptor.interfaces.agents.artifacts import ArtifactType
 from sculptor.interfaces.agents.artifacts import DiffArtifact
 from sculptor.interfaces.agents.artifacts import TaskListArtifact
@@ -105,6 +110,9 @@ from sculptor.services.project_service.default_implementation import get_most_re
 from sculptor.services.project_service.default_implementation import update_most_recently_used_project
 from sculptor.services.task_service.errors import InvalidTaskOperation
 from sculptor.services.task_service.errors import TaskNotFound
+from sculptor.services.terminal_agent_registry.bundled import install_bundled_registrations
+from sculptor.services.terminal_agent_registry.registry import get_registration
+from sculptor.services.terminal_agent_registry.registry import load_registrations
 from sculptor.services.user_config.telemetry_info import get_onboarding_telemetry_info
 from sculptor.services.user_config.telemetry_info import get_telemetry_info as get_telemetry_info_impl
 from sculptor.services.user_config.user_config import get_config_path
@@ -140,6 +148,8 @@ from sculptor.startup_checks import check_is_user_email_field_valid
 from sculptor.startup_checks import check_sculptor_directory_writable
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
+from sculptor.tasks.handlers.run_terminal_agent.terminal_session import create_agent_terminal
+from sculptor.tasks.handlers.run_terminal_agent.terminal_session import make_agent_terminal_id
 from sculptor.telemetry import telemetry
 from sculptor.utils import build as build_utils
 from sculptor.utils.build import get_install_path
@@ -156,6 +166,7 @@ from sculptor.web.auth import SESSION_TOKEN_HEADER_NAME
 from sculptor.web.auth import SessionTokenMiddleware
 from sculptor.web.auth import UserSession
 from sculptor.web.data_types import AgentDiagnosticsResponse
+from sculptor.web.data_types import AgentTypeName
 from sculptor.web.data_types import AnswerQuestionRequest
 from sculptor.web.data_types import ArtifactDataResponse
 from sculptor.web.data_types import AuthResult
@@ -178,6 +189,7 @@ from sculptor.web.data_types import EmailConfigRequest
 from sculptor.web.data_types import EnvVarNamesResponse
 from sculptor.web.data_types import HealthCheckResponse
 from sculptor.web.data_types import InitializeGitRepoRequest
+from sculptor.web.data_types import ListTerminalAgentRegistrationsResponse
 from sculptor.web.data_types import ListWorkspacesResponse
 from sculptor.web.data_types import NamingPatternRequest
 from sculptor.web.data_types import OpenFileUiAction
@@ -196,9 +208,11 @@ from sculptor.web.data_types import RenameAgentRequest
 from sculptor.web.data_types import RepoInfo
 from sculptor.web.data_types import SendMessageRequest
 from sculptor.web.data_types import SetTelemetryRequest
+from sculptor.web.data_types import SignalEventRequest
 from sculptor.web.data_types import SkillInfo
 from sculptor.web.data_types import SkipAccountSetupRequest
 from sculptor.web.data_types import StartTaskRequest
+from sculptor.web.data_types import TerminalInputRequest
 from sculptor.web.data_types import UpdateUserConfigRequest
 from sculptor.web.data_types import UpdateWorkspaceRequest
 from sculptor.web.data_types import UploadDiagnosticsRequest
@@ -217,6 +231,7 @@ from sculptor.web.derived import CodingAgentTaskView
 from sculptor.web.derived import TaskInterface
 from sculptor.web.derived import TaskViewTypes
 from sculptor.web.derived import create_initial_task_view
+from sculptor.web.derived import scan_terminal_signal_state
 from sculptor.web.message_conversion import convert_agent_messages_to_task_update
 from sculptor.web.middleware import App
 from sculptor.web.middleware import DecoratedAPIRouter
@@ -387,6 +402,10 @@ def on_startup():
         logger.error("Sculptor cannot start: data directory is not writable")
         raise RuntimeError("Sculptor data directory is not writable. Please check permissions.")
 
+    # One-time install of the bundled Claude Code terminal-agent registration
+    # (a no-op once its sentinel exists; never fatal).
+    install_bundled_registrations()
+
 
 register_on_startup(on_startup)
 
@@ -527,12 +546,17 @@ def start_task(
                 )
                 logger.debug("Created workspace {} for task {}", workspace.object_id, task_id)
 
-            # Auto-assign "Agent N" name when no explicit name is provided
+            # Prompt-ful creation is always a chat agent — terminal agents have
+            # no chat stream to deliver the prompt to.
+            if task_request.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED):
+                raise HTTPException(status_code=422, detail="terminal agents do not take an initial prompt")
+            agent_config = _agent_config_for_request(task_request.agent_type, None)
+
+            # Auto-assign a type-derived name ("Claude N" / "Pi N") when no
+            # explicit name is provided.
             if not task_name:
                 workspace_tasks = _get_tasks_for_workspace(workspace, transaction)
-                task_name = _compute_next_agent_name(workspace_tasks)
-
-        agent_config = _agent_config_for_workspace(workspace)
+                task_name = _compute_next_agent_name(workspace_tasks, _default_agent_name_prefix(agent_config))
 
         with services.git_repo_service.open_local_user_git_repo_for_read(project) as repo:
             # Get the current commit hash to use as the starting point for diffs
@@ -679,7 +703,6 @@ def create_workspace_v2(
             description=workspace_request.description,
             transaction=transaction,
             target_branch=workspace_request.target_branch,
-            harness=workspace_request.harness,
         )
         update_most_recently_used_project(project_id=validated_project_id)
         logger.info("Created workspace {} for project {}", workspace.object_id, workspace_request.project_id)
@@ -864,7 +887,6 @@ def list_recent_workspaces(
             agent_count=row["agent_count"],
             is_open=row["is_open"],
             last_activity_at=row["last_activity_at"],
-            harness=row["harness"],
         )
         for row in workspace_dicts
     ]
@@ -1573,9 +1595,37 @@ def _get_workspace_or_404(
     return workspace
 
 
-# DELIBERATE-TEMPORARY: workspace-bound harness selection.
-def _agent_config_for_workspace(workspace: Workspace) -> ClaudeCodeSDKAgentConfig | PiAgentConfig:
-    if workspace.harness == HarnessName.PI:
+def _agent_config_for_request(
+    agent_type: AgentTypeName,
+    registration_id: str | None,
+) -> AgentConfigTypes:
+    """Resolve the requested agent type into a stamped `AgentConfigTypes`.
+
+    Agent type comes ONLY from the creation request — the workspace-bound
+    harness selection is gone.
+    """
+    if agent_type == AgentTypeName.TERMINAL:
+        return TerminalAgentConfig()
+    if agent_type == AgentTypeName.REGISTERED:
+        if registration_id is None:
+            raise HTTPException(status_code=422, detail="registered terminal agents require a registration_id")
+        registration = get_registration(registration_id)
+        if registration is None:
+            # The menu may have raced a registration-file deletion.
+            raise HTTPException(
+                status_code=422,
+                detail=f"Terminal-agent registration '{registration_id}' not found",
+            )
+        # Stamped at creation so the task stays self-describing even if the
+        # registration file later changes.
+        return RegisteredTerminalAgentConfig(
+            registration_id=registration.registration_id,
+            display_name=registration.display_name,
+            launch_command=registration.launch_command,
+            resume_command_template=registration.resume_command_template,
+            accepts_automated_prompts=registration.accepts_automated_prompts,
+        )
+    if agent_type == AgentTypeName.PI:
         return PiAgentConfig()
     return ClaudeCodeSDKAgentConfig()
 
@@ -1614,13 +1664,32 @@ def _validate_agent_in_workspace(
     return task
 
 
-def _compute_next_agent_name(existing_tasks: list[Task]) -> str:
-    """Compute the next auto-generated agent name like 'Agent N'.
+def _default_agent_name_prefix(agent_config: AgentConfigTypes) -> str:
+    """The default-name prefix for an agent's type ("Claude 1", "Pi 2", ...).
 
-    Reuses the lowest available number so that deleting "Agent 1" and creating
-    a new agent produces "Agent 1" again instead of an ever-increasing counter.
+    Registered terminal agents default-name from their registration's display
+    name; every other type names from the type itself so a tab is identifiable
+    before (or without) a generated title.
     """
-    pattern = re.compile(r"^Agent (\d+)$")
+    if isinstance(agent_config, RegisteredTerminalAgentConfig):
+        return agent_config.display_name
+    if isinstance(agent_config, TerminalAgentConfig):
+        return "Terminal"
+    if isinstance(agent_config, PiAgentConfig):
+        return "Pi"
+    if isinstance(agent_config, ClaudeCodeSDKAgentConfig):
+        return "Claude"
+    return "Agent"
+
+
+def _compute_next_agent_name(existing_tasks: list[Task], prefix: str = "Agent") -> str:
+    """Compute the next auto-generated agent name like 'Claude N' (or '<prefix> N').
+
+    Reuses the lowest available number so that deleting "Claude 1" and creating
+    a new agent produces "Claude 1" again instead of an ever-increasing counter.
+    Numbering is independent per prefix ("Terminal N" for terminal agents).
+    """
+    pattern = re.compile(rf"^{re.escape(prefix)} (\d+)$")
     used_numbers: set[int] = set()
     for task in existing_tasks:
         if isinstance(task.current_state, AgentTaskStateV2) and task.current_state.title:
@@ -1630,7 +1699,7 @@ def _compute_next_agent_name(existing_tasks: list[Task]) -> str:
     n = 1
     while n in used_numbers:
         n += 1
-    return f"Agent {n}"
+    return f"{prefix} {n}"
 
 
 @router.post("/api/v1/workspaces/{workspace_id}/agents")
@@ -1656,6 +1725,8 @@ def create_workspace_agent(
             raise HTTPException(status_code=404, detail="Workspace project not found")
 
         if agent_request.prompt:
+            if agent_request.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED):
+                raise HTTPException(status_code=422, detail="terminal agents do not take an initial prompt")
             # Delegate to existing start_task logic
             model = agent_request.model
             if model is None:
@@ -1681,6 +1752,7 @@ def create_workspace_agent(
                 fast_mode=agent_request.fast_mode,
                 effort=agent_request.effort,
                 sent_via=agent_request.sent_via,
+                agent_type=agent_request.agent_type,
             )
             return start_task(
                 project_id=workspace.project_id,
@@ -1694,20 +1766,24 @@ def create_workspace_agent(
         _prevent_action_if_out_of_free_space(services)
 
         workspace_tasks = _get_tasks_for_workspace(workspace, transaction)
-        task_name = agent_request.name or _compute_next_agent_name(workspace_tasks)
+        agent_config = _agent_config_for_request(agent_request.agent_type, agent_request.registration_id)
+        task_name = agent_request.name or _compute_next_agent_name(
+            workspace_tasks, _default_agent_name_prefix(agent_config)
+        )
         task_id = TaskID()
 
         # Check if this is the user's very first agent ever (including deleted ones).
         # get_all_tasks() includes deleted tasks, so this stays False once any agent
         # has ever been created — even if all workspaces were later deleted.
         # Skip during integration tests to avoid injecting unexpected messages.
+        # Terminal agents (resolved config, so registered ones too) have no chat
+        # stream — an intro message would sit in their queue forever, so skip it.
         is_first_agent = (
             not settings.TESTING.INTEGRATION_ENABLED
+            and not is_terminal_agent_config(agent_config)
             and len(workspace_tasks) == 0
             and len(transaction.get_all_tasks()) == 0  # pyre-fixme[16]
         )
-
-        agent_config = _agent_config_for_workspace(workspace)
 
         with services.git_repo_service.open_local_user_git_repo_for_read(project) as repo:
             initial_commit_hash = repo.get_current_commit_hash()
@@ -3110,6 +3186,221 @@ async def workspace_terminal_websocket(
 
     await websocket.accept()
     await websocket.close(code=4404, reason=f"Terminal {index} not found for workspace {workspace_id}")
+
+
+@router.get("/api/v1/terminal-agent-registrations")
+def list_terminal_agent_registrations(
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> ListTerminalAgentRegistrationsResponse:
+    """List the current terminal-agent registrations.
+
+    Re-reads the registrations directory on every call — that IS the
+    no-restart re-read the menus rely on; no caching.
+    """
+    del request, user_session
+    return ListTerminalAgentRegistrationsResponse(registrations=load_registrations())
+
+
+# Wire names for the status events; `files-changed` and
+# `session-id` are events, not status, and are handled separately.
+_TERMINAL_SIGNAL_STATUS_BY_EVENT: dict[str, TerminalStatusSignal] = {
+    "busy": TerminalStatusSignal.BUSY,
+    "idle": TerminalStatusSignal.IDLE,
+    "waiting-on-input": TerminalStatusSignal.WAITING,
+}
+# Session ids are later interpolated into a resume shell command — keep the
+# accepted alphabet far away from anything shell-significant.
+_TERMINAL_SESSION_ID_PATTERN = re.compile(r"[A-Za-z0-9._-]{1,128}")
+
+
+@router.post("/api/v1/agents/{agent_id}/signal", status_code=204)
+def post_agent_signal(
+    agent_id: str,
+    request: Request,
+    signal_request: SignalEventRequest,
+    user_session: UserSession = Depends(get_user_session),
+) -> Response:
+    """The local HTTP event API terminal-agent integrations post to.
+
+    Status events become ephemeral runner messages (run-scoped, no unread
+    tracking); `files-changed` refreshes the workspace diff; `session-id` is
+    validated and persisted for resume; unknown events are logged and ignored
+    so the vocabulary can evolve additively.
+    """
+    validated_task_id = validate_task_id(agent_id)
+    services = get_services_from_request_or_websocket(request)
+    diff_workspace_id: WorkspaceID | None = None
+    # Immediate (writer-slot-first) so the session-id read-then-write below
+    # cannot clobber a concurrent state writer (e.g. a rename) on a stale snapshot.
+    with user_session.open_transaction(services, immediate=True) as transaction:
+        task = services.task_service.get_task(validated_task_id, transaction)
+        if (
+            task is None
+            or task.is_deleted
+            or not isinstance(task.current_state, AgentTaskStateV2)
+            or not isinstance(task.input_data, AgentTaskInputsV2)
+            or not is_terminal_agent_config(task.input_data.agent_config)
+        ):
+            # 404 for chat agents too — don't leak the task type.
+            raise HTTPException(status_code=404, detail=f"Terminal agent {agent_id} not found")
+        current_state = task.current_state
+        assert isinstance(current_state, AgentTaskStateV2)
+
+        event = signal_request.event
+        status_signal = _TERMINAL_SIGNAL_STATUS_BY_EVENT.get(event)
+        if status_signal is not None:
+            services.task_service.create_message(
+                TerminalAgentSignalRunnerMessage(signal=status_signal),
+                task_id=task.object_id,
+                transaction=transaction,
+            )
+        elif event == "files-changed":
+            # Refreshed below, outside this transaction (it opens its own).
+            diff_workspace_id = current_state.workspace_id
+        elif event == "session-id":
+            session_id = signal_request.session_id
+            if session_id is None or _TERMINAL_SESSION_ID_PATTERN.fullmatch(session_id) is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail="session-id event requires a session_id matching [A-Za-z0-9._-]{1,128}",
+                )
+            # Evolve only this field; the immediate transaction (above) keeps
+            # the read-then-write atomic against a concurrent state writer.
+            updated_state = current_state.evolve(current_state.ref().terminal_session_id, session_id)
+            updated_task = task.evolve(task.ref().current_state, updated_state)
+            transaction.upsert_task(updated_task)  # pyre-fixme[16]
+        else:
+            logger.info("ignoring unknown terminal signal event {} for task {}", event, task.object_id)
+    if diff_workspace_id is not None:
+        services.workspace_service.maybe_refresh_workspace_diff(diff_workspace_id)
+    return Response(status_code=204)
+
+
+# Bracketed-paste markers: TUIs that support them (Claude Code's included)
+# treat the wrapped block as one paste and do not auto-submit on embedded
+# newlines, so the program — not us — controls submission.
+_BRACKETED_PASTE_START = b"\x1b[200~"
+_BRACKETED_PASTE_END = b"\x1b[201~"
+
+
+@router.post("/api/v1/agents/{agent_id}/terminal/input", status_code=204)
+def post_agent_terminal_input(
+    agent_id: str,
+    request: Request,
+    input_request: TerminalInputRequest,
+    user_session: UserSession = Depends(get_user_session),
+) -> Response:
+    """Write an automated prompt into a registered terminal agent's PTY.
+
+    The reverse channel that lets Sculptor features (Commit, Create PR,
+    custom actions) reach a TUI as if the user typed the prompt. Guarded so
+    text is only ever written to a program that expects it; works with the
+    terminal panel closed (server-side write, not the WebSocket layer).
+    """
+    validated_task_id = validate_task_id(agent_id)
+    services = get_services_from_request_or_websocket(request)
+    with user_session.open_transaction(services) as transaction:
+        task = services.task_service.get_task(validated_task_id, transaction)
+    if task is None or task.is_deleted:
+        raise HTTPException(status_code=404, detail=f"Terminal agent {agent_id} not found")
+    input_data = task.input_data
+    if not isinstance(input_data, AgentTaskInputsV2) or not is_terminal_agent_config(input_data.agent_config):
+        # 404 for chat agents too — don't leak the task type.
+        raise HTTPException(status_code=404, detail=f"Terminal agent {agent_id} not found")
+
+    # Guard 1: only registrations that opted in. Plain terminals and
+    # non-opt-in registrations NEVER receive writes — a bare shell would
+    # execute the prompt as commands.
+    agent_config = input_data.agent_config
+    if not isinstance(agent_config, RegisteredTerminalAgentConfig) or not agent_config.accepts_automated_prompts:
+        raise HTTPException(status_code=409, detail="this agent does not accept automated prompts")
+
+    # Guard 2: the program must be at its prompt — the latest signal of the
+    # CURRENT run must be IDLE or WAITING (answering a question is a primary
+    # use case). "Run started but no signals yet" is NOT enough: a registered
+    # agent whose hooks are broken degrades to plain-terminal behavior,
+    # and we must not write into an unknown state. The check is
+    # inherently racy (the program may go busy between check and write) —
+    # acceptable: it prevents the systematic misuse, not a TOCTOU-proof lock.
+    run_started, latest_signal = scan_terminal_signal_state(
+        services.task_service.get_live_messages_for_task(task.object_id)
+    )
+    if not run_started or latest_signal not in (TerminalStatusSignal.IDLE, TerminalStatusSignal.WAITING):
+        raise HTTPException(status_code=409, detail="agent is busy or not at its prompt")
+
+    # Guard 3: a live PTY to write into.
+    terminal_manager = get_terminal_manager(make_agent_terminal_id(task.object_id))
+    if terminal_manager is None:
+        raise HTTPException(status_code=409, detail="terminal not running")
+
+    text = input_request.text
+    if "\n" in text:
+        # One write for the paste block, one for the submit — mirrors how a
+        # human pastes then hits Enter.
+        terminal_manager.write(_BRACKETED_PASTE_START + text.encode() + _BRACKETED_PASTE_END)
+        if input_request.submit:
+            terminal_manager.write(b"\r")
+    else:
+        terminal_manager.write(text.encode() + (b"\r" if input_request.submit else b""))
+    # Log the event, never the text — prompts can embed user content.
+    logger.info("Wrote automated prompt ({} chars) to terminal agent {}", len(text), task.object_id)
+    return Response(status_code=204)
+
+
+@APP.websocket("/api/v1/agents/{agent_id}/terminal/ws")
+async def agent_terminal_websocket(
+    websocket: WebSocket,
+    agent_id: str,
+) -> None:
+    """WebSocket endpoint for a terminal agent's PTY, routed by agent (task) id.
+
+    Connects to the agent-scoped terminal manager spawned by the terminal task
+    handler. When the shell has self-exited (the manager unregistered itself)
+    or the eager spawn failed, a fresh login shell is created on demand — no
+    registered program is relaunched here. Spawn rate is bounded
+    without extra machinery: one spawn attempt per client connection, and the
+    frontend backs off 2s between 4404 retries.
+    """
+    services = get_services_from_request_or_websocket(websocket)
+    try:
+        validated_task_id = validate_task_id(agent_id)
+    except HTTPException:
+        # Accept the WebSocket before closing so the client receives the 4404
+        # close code as a proper WebSocket close frame (see
+        # workspace_terminal_websocket for the full explanation).
+        await websocket.accept()
+        await websocket.close(code=4404, reason=f"Agent {agent_id} not found")
+        return
+    with services.data_model_service.open_transaction(RequestID()) as transaction:
+        task = services.task_service.get_task(validated_task_id, transaction)
+    if (
+        task is None
+        or task.is_deleted
+        or not isinstance(task.current_state, AgentTaskStateV2)
+        or not isinstance(task.input_data, AgentTaskInputsV2)
+        or not is_terminal_agent_config(task.input_data.agent_config)
+    ):
+        await websocket.accept()
+        await websocket.close(code=4404, reason=f"Terminal agent {agent_id} not found")
+        return
+
+    terminal_id = make_agent_terminal_id(validated_task_id)
+    terminal_manager = get_terminal_manager(terminal_id)
+
+    # On-demand creation: covers both an eager spawn that failed and a shell
+    # the user exited (the reader thread unregistered the manager). Returns
+    # None when no config is registered — the task handler isn't running
+    # (still QUEUED/BUILDING or being torn down) — so the client retries.
+    if terminal_manager is None:
+        terminal_manager = create_agent_terminal(validated_task_id)
+
+    if terminal_manager is not None:
+        await _connect_terminal_websocket(websocket, terminal_id)
+        return
+
+    await websocket.accept()
+    await websocket.close(code=4404, reason=f"Terminal not available for agent {agent_id}")
 
 
 async def _connect_terminal_websocket(websocket: WebSocket, terminal_id: str) -> None:

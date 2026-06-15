@@ -39,7 +39,11 @@ type TerminalInstanceProps = {
 };
 
 const TerminalInstance = ({ workspaceID, terminalIndex, isVisible, onOutput }: TerminalInstanceProps): ReactElement => {
-  const { terminalContainerRef } = useTerminal({ workspaceID, terminalIndex, isVisible, onOutput });
+  const { terminalContainerRef } = useTerminal({
+    terminalPath: `/api/v1/workspaces/${workspaceID}/terminal/${terminalIndex}/ws`,
+    isVisible,
+    onOutput,
+  });
 
   return (
     <div className={isVisible ? styles.terminalInstanceVisible : styles.terminalInstanceHidden}>

@@ -16,7 +16,6 @@ from __future__ import annotations
 import pytest
 from playwright.sync_api import expect
 
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.playwright_utils import send_message_via_api
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -38,7 +37,7 @@ def test_attached_text_file_is_readable_that_turn(sculptor_instance_: SculptorIn
         sculptor_page=sculptor_instance_.page,
         workspace_name="Real Pi Attachment",
         model_name=None,
-        harness=HarnessName.PI,
+        agent_type="pi",
     )
     text_id = upload_file_via_api(
         sculptor_instance_.page,

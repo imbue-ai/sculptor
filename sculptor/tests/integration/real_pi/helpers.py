@@ -10,7 +10,6 @@ import pytest
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.testing.elements.chat_panel import PlaywrightChatPanelElement
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
@@ -115,7 +114,7 @@ def create_pi_workspace_and_send(
         workspace_name=workspace_name,
         prompt=prefixed(prompt),
         model_name=None,
-        harness=HarnessName.PI,
+        agent_type="pi",
         wait_for_agent_to_finish=wait_for_finish,
     )
     if wait_for_finish:

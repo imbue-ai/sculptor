@@ -22,8 +22,8 @@ import {
   isDefaultFastModeAtom,
   isEntityMentionsEnabledAtom,
   isInPlaceWorkspacesEnabledAtom,
-  isMultiHarnessEnabledAtom,
   isPanelLayoutPerWorkspaceAtom,
+  isPiAgentEnabledAtom,
   isReviewAllEnabledAtom,
   isRichMarkdownRenderingEnabledAtom,
   isSmoothStreamingUserPreferenceAtom,
@@ -88,7 +88,7 @@ export const SettingsPage = (): ReactElement => {
   const isInPlaceWorkspacesEnabled = useAtomValue(isInPlaceWorkspacesEnabledAtom);
   const isCloneWorkspacesEnabled = useAtomValue(isCloneWorkspacesEnabledAtom);
   const isReviewAllEnabled = useAtomValue(isReviewAllEnabledAtom);
-  const isMultiHarnessEnabled = useAtomValue(isMultiHarnessEnabledAtom);
+  const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
   const isEntityMentionsEnabled = useAtomValue(isEntityMentionsEnabledAtom);
   const isRichMarkdownRenderingEnabled = useAtomValue(isRichMarkdownRenderingEnabledAtom);
   const isSmoothStreamingEnabled = useAtomValue(isSmoothStreamingUserPreferenceAtom);
@@ -491,13 +491,13 @@ export const SettingsPage = (): ReactElement => {
                     />
                   </SettingRow>
                   <SettingRow
-                    title="Multi-harness support"
-                    description="Enable Sculptor to work with multiple harness systems in addition to Claude Code, e.g. Pi."
+                    title="Pi agent"
+                    description="Offer the experimental pi agent as a choice when creating new agents."
                   >
                     <Switch
-                      checked={isMultiHarnessEnabled}
-                      onCheckedChange={(checked) => handleSettingChange(UserConfigField.ENABLE_MULTI_HARNESS, checked)}
-                      data-testid={ElementIds.SETTINGS_ENABLE_MULTI_HARNESS_TOGGLE}
+                      checked={isPiAgentEnabled}
+                      onCheckedChange={(checked) => handleSettingChange(UserConfigField.ENABLE_PI_AGENT, checked)}
+                      data-testid={ElementIds.SETTINGS_ENABLE_PI_AGENT_TOGGLE}
                     />
                   </SettingRow>
                   <CustomBackendSection setToast={setToast} />

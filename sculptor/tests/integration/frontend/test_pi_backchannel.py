@@ -14,7 +14,6 @@ the agent receives, not on AUQ/ExitPlanMode tool blocks.
 from playwright.sync_api import expect
 
 from sculptor.agents.pi_agent.backchannel import PLAN_APPROVAL_DIALOG_TITLE
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.fake_pi import install_fake_pi_binary
@@ -41,7 +40,7 @@ def _start_pi_workspace(sculptor_instance_: SculptorInstance, prompt: str, works
         sculptor_page=sculptor_instance_.page,
         workspace_name=workspace_name,
         model_name=None,
-        harness=HarnessName.PI,
+        agent_type="pi",
         prompt=prompt,
         wait_for_agent_to_finish=False,
     )

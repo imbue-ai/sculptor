@@ -71,6 +71,8 @@ class PiHarness(Harness):
 
     def capabilities(self) -> HarnessCapabilities:
         return HarnessCapabilities(
+            # Pi's chat is degraded but real — its main panel is the chat interface.
+            supports_chat_interface=True,
             # Delivered via the pinned `sculptor_backchannel` extension (AUQ +
             # plan mode); the gated methods below recognize its tool names.
             supports_interactive_backchannel=True,

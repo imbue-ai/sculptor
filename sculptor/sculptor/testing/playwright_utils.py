@@ -20,13 +20,12 @@ from tenacity import wait_fixed
 
 from sculptor.constants import ElementIDs
 from sculptor.foundation.async_monkey_patches import log_exception
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.state.messages import LLMModel
 from sculptor.testing.elements.base import type_into_tiptap
 from sculptor.testing.elements.chat_panel import select_model_by_name
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
 from sculptor.testing.elements.user_config import enable_clone_workspaces
-from sculptor.testing.elements.user_config import enable_multi_harness
+from sculptor.testing.elements.user_config import enable_pi_agent
 from sculptor.testing.pages.settings_page import PlaywrightSettingsPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 
@@ -244,7 +243,7 @@ def start_task_and_wait_for_ready(
     model_name: str | None = FAKE_CLAUDE_MODEL_NAME,
     workspace_name: str | None = None,
     mode: str | None = None,
-    harness: HarnessName | None = None,
+    agent_type: str | None = None,
 ) -> PlaywrightTaskPage:
     """Create a workspace and agent through the Add Workspace UI.
 
@@ -279,11 +278,13 @@ def start_task_and_wait_for_ready(
     elif mode not in (None, "WORKTREE"):
         raise ValueError(f"unsupported mode: {mode!r}; expected None, 'WORKTREE', or 'CLONE'")
 
-    # The harness picker is gated behind the experimental multi-harness flag
-    # (off by default). Any explicit harness selection drives the picker below,
-    # so enable the flag before navigating so the picker is present.
-    if harness is not None:
-        enable_multi_harness(sculptor_page)
+    if agent_type not in (None, "claude", "pi", "terminal"):
+        raise ValueError(f"unsupported agent_type: {agent_type!r}; expected None, 'claude', 'pi', or 'terminal'")
+    # Only the pi *option* is gated behind the experimental pi-agent flag
+    # (the agent-type select itself is always visible) — enable the flag
+    # before navigating so the option is present.
+    if agent_type == "pi":
+        enable_pi_agent(sculptor_page)
 
     navigate_to_add_workspace_page(sculptor_page)
 
@@ -300,12 +301,15 @@ def start_task_and_wait_for_ready(
         sculptor_page.get_by_test_id(ElementIDs.MODE_SELECTOR).click()
         sculptor_page.get_by_test_id(ElementIDs.MODE_OPTION_CLONE).click()
 
-    # When a harness is requested, drive the picker before submitting so the
-    # selection is persisted on the workspace row. Defaults to Claude (the form
-    # default) when omitted.
-    if harness is not None:
-        sculptor_page.get_by_test_id(ElementIDs.HARNESS_SELECTOR).click()
-        option_id = ElementIDs.HARNESS_OPTION_PI if harness == HarnessName.PI else ElementIDs.HARNESS_OPTION_CLAUDE
+    # When an agent type is requested, drive the first-agent type select
+    # before submitting. Defaults to Claude (the form default) when omitted.
+    if agent_type is not None:
+        sculptor_page.get_by_test_id(ElementIDs.ADD_WORKSPACE_AGENT_TYPE_SELECT).click()
+        option_id = {
+            "claude": ElementIDs.AGENT_TYPE_OPTION_CLAUDE,
+            "pi": ElementIDs.AGENT_TYPE_OPTION_PI,
+            "terminal": ElementIDs.AGENT_TYPE_OPTION_TERMINAL,
+        }[agent_type]
         sculptor_page.get_by_test_id(option_id).click()
 
     # Wait for the submit button to be enabled — repo info loaded, AND the
@@ -316,6 +320,13 @@ def start_task_and_wait_for_ready(
 
     # Click create workspace
     submit_button.click()
+
+    # A terminal first agent has no chat surface — wait for the terminal
+    # panel instead and skip the chat-panel/model/prompt steps entirely.
+    if agent_type == "terminal":
+        terminal_panel_locator = sculptor_page.get_by_test_id(ElementIDs.AGENT_TERMINAL_PANEL)
+        expect(terminal_panel_locator).to_be_visible(timeout=60_000)
+        return PlaywrightTaskPage(page=sculptor_page)
 
     # Wait for the chat panel to appear (indicates we navigated to the agent page).
     # On Fly runners the workspace clone + environment setup can take >30s.

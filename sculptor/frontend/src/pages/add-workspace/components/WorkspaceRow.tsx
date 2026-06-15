@@ -1,14 +1,14 @@
-import { Badge, ContextMenu, IconButton } from "@radix-ui/themes";
+import { ContextMenu, IconButton } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import { Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
 import { useMemo } from "react";
 
 import type { RecentWorkspaceResponse } from "~/api";
-import { ElementIds, HarnessName } from "~/api";
+import { ElementIds } from "~/api";
 import { formatRelativeTime } from "~/common/formatRelativeTime.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
-import { isMultiHarnessEnabledAtom, prDefaultTargetBranchAtom } from "~/common/state/atoms/userConfig.ts";
+import { prDefaultTargetBranchAtom } from "~/common/state/atoms/userConfig.ts";
 import { useGitProvider } from "~/common/state/hooks/useGitProvider.ts";
 import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch.ts";
 import { computeWorkspaceDotStatus, EMPTY_WORKSPACE_DOT_STATUS, WorkspaceStatusDots } from "~/components/statusDot";
@@ -46,7 +46,6 @@ export const WorkspaceRow = ({
   onDelete,
 }: WorkspaceRowProps): ReactElement => {
   const prDefaultTargetBranch = useAtomValue(prDefaultTargetBranchAtom);
-  const isMultiHarnessEnabled = useAtomValue(isMultiHarnessEnabledAtom);
   const branchInfo = useWorkspaceBranch(workspace.objectId);
   const displayBranch = branchInfo?.currentBranch ?? workspace.sourceBranch;
   const gitProvider = useGitProvider(workspace.projectId);
@@ -71,33 +70,6 @@ export const WorkspaceRow = ({
             {displayBranch}
           </span>
         )}
-        {/* Harness badge is part of the multi-harness UI; hidden entirely when
-            the experimental flag is off so the row looks identical to a
-            single-harness build. */}
-        {isMultiHarnessEnabled &&
-          (workspace.harness === HarnessName.PI ? (
-            <Badge
-              size="1"
-              color="orange"
-              variant="soft"
-              data-testid={ElementIds.WORKSPACE_ROW_HARNESS_BADGE}
-              data-harness={HarnessName.PI}
-            >
-              pi (experimental)
-            </Badge>
-          ) : (
-            // Default-to-Claude fallback: legacy clients that pre-date the
-            // `harness` field still land here with `undefined`.
-            <Badge
-              size="1"
-              color="gray"
-              variant="soft"
-              data-testid={ElementIds.WORKSPACE_ROW_HARNESS_BADGE}
-              data-harness={HarnessName.CLAUDE}
-            >
-              Claude
-            </Badge>
-          ))}
       </div>
 
       <div className={styles.rightGroup}>
