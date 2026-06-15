@@ -136,7 +136,7 @@ def test_sub_agent_pill_renders_under_both_harnesses(
     """
     task_page = _create_workspace_for_harness(sculptor_instance_, harness, "Sub-Agent Render")
     chat_panel = task_page.get_chat_panel()
-    if harness.workspace_harness == HarnessName.PI:
+    if harness.first_agent_type == "pi":
         prompt = 'fake_pi:subagent `{"children": [{"childId": "c0", "label": "scout", "task": "find files", "status": "done", "events": [{"seq": 0, "kind": "text", "text": "Found 10 files."}]}]}`'
     else:
         prompt = (
