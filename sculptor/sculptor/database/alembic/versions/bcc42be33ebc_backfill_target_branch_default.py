@@ -23,18 +23,19 @@ down_revision: str | None = "eedceaef0697"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
+DEFAULT_TARGET_BRANCH = "origin/main"
+TABLE_NAMES = ("workspace", "workspace_latest")
+
 
 def upgrade() -> None:
     """Set target_branch to 'origin/main' for workspaces that have NULL or empty values."""
     connection = op.get_bind()
-    connection.execute(
-        sa.text("UPDATE workspace SET target_branch = 'origin/main' WHERE target_branch IS NULL OR target_branch = ''")
-    )
-    connection.execute(
-        sa.text(
-            "UPDATE workspace_latest SET target_branch = 'origin/main' WHERE target_branch IS NULL OR target_branch = ''"
+    for table_name in TABLE_NAMES:
+        connection.execute(
+            sa.text(
+                f"UPDATE {table_name} SET target_branch = :default_branch WHERE target_branch IS NULL OR target_branch = ''"
+            ).bindparams(sa.bindparam("default_branch", DEFAULT_TARGET_BRANCH))
         )
-    )
 
 
 def downgrade() -> None:

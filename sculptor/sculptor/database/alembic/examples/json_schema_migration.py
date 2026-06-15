@@ -6,14 +6,15 @@ An example migration showing the removal of the "goal" field from the "UpdateGoa
 import json
 from typing import Any
 from typing import Callable
+from typing import Sequence
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "xyz123"
-down_revision = "abc789"
-branch_labels = None
-depends_on = None
+revision: str = "xyz123"
+down_revision: str | None = "abc789"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -62,7 +63,7 @@ def _bulk_update(update_message_in_place_function: Callable[[dict[str, Any]], No
             update_message_in_place_function(message)
             update_data.append({primary_key: row[primary_key], "message": json.dumps(message)})
 
-        if len(update_data) > 0:
+        if update_data:
             connection.execute(
                 sa.text(
                     f"""

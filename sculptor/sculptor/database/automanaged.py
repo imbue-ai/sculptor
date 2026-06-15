@@ -155,7 +155,6 @@ def create_tables(
             assert not is_nullable
             base_columns.append(Column(field_name, column_type, nullable=False, default=field.default_factory))
         else:
-            # If we ever need nulls, we'll need to add support for them.
             base_columns.append(Column(field_name, column_type, nullable=is_nullable))
 
     # when this is a dual table, the constraints are applied to the latest table.
@@ -165,7 +164,7 @@ def create_tables(
     # If this is not a dual table, the constraints are applied to the main table.
     else:
         full_table_constraints = constraints
-        latest_table_constraints = []
+        latest_table_constraints = ()
 
     snapshots_table = Table(
         table_name,
@@ -180,7 +179,7 @@ def create_tables(
             column.type,
             primary_key=column.primary_key,
             nullable=column.nullable,
-            default=column.default if column.default is not None else None,
+            default=column.default,
         )
         for column in base_columns
     ]
