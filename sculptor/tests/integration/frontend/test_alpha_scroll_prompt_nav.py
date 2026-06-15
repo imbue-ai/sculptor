@@ -118,7 +118,7 @@ def _setup_three_prompt_chat(sculptor_instance_: SculptorInstance):
     # scrollTop ≈ start[lastUserMessage], then immediately exit navigation by
     # focusing the chat input.  Without this, the auto-scroll-to-bottom after
     # the 3rd response leaves scrollTop past the last prompt's start — on
-    # Fly runners that trips ``isScrolledPastActive()`` in the app's keydown
+    # slow CI runners that trips ``isScrolledPastActive()`` in the app's keydown
     # hook, so the first ArrowUp from a test becomes "scroll current turn
     # to top" instead of "decrement to previous prompt".
     dots.nth(2).click()

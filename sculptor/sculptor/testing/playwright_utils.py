@@ -316,7 +316,7 @@ def start_task_and_wait_for_ready(
     submit_button.click()
 
     # Wait for the chat panel to appear (indicates we navigated to the agent page).
-    # On Fly runners the workspace clone + environment setup can take >30s.
+    # On contended CI runners the workspace clone + environment setup can take >30s.
     chat_panel_locator = sculptor_page.get_by_test_id(ElementIDs.CHAT_PANEL)
     expect(chat_panel_locator).to_be_visible(timeout=60_000)
 
