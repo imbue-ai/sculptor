@@ -24,6 +24,14 @@ finished file-mutating tool (`edit`/`write`/`bash`) additionally triggers
 `on_diff_needed` so the workspace diff is regenerated — pi runs the tools
 against the workspace itself and emits no other signal that files changed.
 
+Sub-agents (`supports_sub_agents=True`) ride the same tool-execution lane: the
+pinned `sculptor_subagent` extension's `subagent` tool (mapped to Claude's
+`Agent`) streams a structured per-child payload in its accumulated
+`partialResult`, which the adapter (`_emit_subagent_children` + `subagent.py`)
+parses into nested child `ResponseBlockAgentMessage`s carrying
+`parent_tool_use_id`, so children group under the parent exactly as Claude's
+sub-agents do.
+
 Wire-protocol reference: the pi RPC protocol notes (pi 0.78.0).
 """
 
@@ -36,6 +44,7 @@ import re
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
+from dataclasses import field
 from pathlib import Path
 from queue import Empty
 from queue import Queue
@@ -89,6 +98,10 @@ from sculptor.agents.pi_agent.prompt_assembly import build_attachment_instructio
 from sculptor.agents.pi_agent.prompt_assembly import build_image_block
 from sculptor.agents.pi_agent.prompt_assembly import save_attachments_to_environment
 from sculptor.agents.pi_agent.prompt_assembly import split_image_and_path_attachments
+from sculptor.agents.pi_agent.subagent import SubagentChild
+from sculptor.agents.pi_agent.subagent import build_child_content_blocks
+from sculptor.agents.pi_agent.subagent import parse_subagent_progress
+from sculptor.agents.pi_agent.tool_rendering import SUBAGENT_DISPLAY_NAME
 from sculptor.agents.pi_agent.tool_rendering import build_tool_result_content
 from sculptor.agents.pi_agent.tool_rendering import extract_text_from_tool_payload
 from sculptor.agents.pi_agent.tool_rendering import map_pi_tool_call
@@ -179,6 +192,10 @@ _INTERRUPT_ESCALATION_GRACE_SECONDS: float = 5.0
 # pyproject.toml). Resolved next to this module so it works from an installed
 # build as well as a repo checkout, then written into the environment at launch.
 _BACKCHANNEL_EXTENSION_FILENAME: str = "sculptor_backchannel.ts"
+# The sub-agent extension shipped with Sculptor (package data; see pyproject.toml).
+# Registers the `subagent` tool that spawns child `pi` processes and streams
+# structured per-child progress the adapter renders nested (see subagent.py).
+_SUBAGENT_EXTENSION_FILENAME: str = "sculptor_subagent.ts"
 _EXTENSIONS_SOURCE_DIR: Path = Path(__file__).resolve().parent / "extensions"
 
 # Prepended to a turn's prompt while the agent is in plan mode. Drives the pi
@@ -225,6 +242,13 @@ class _ToolCall:
     # Accumulated (not delta) tool output from the latest `tool_execution_update`,
     # used as the result text if `tool_execution_end` carries no result body.
     partial_text: str = ""
+    # True for the sub-agent tool (mapped to Claude's `Agent`): its lane events
+    # carry a structured per-child payload the adapter renders as nested child
+    # messages instead of a single result. See `_emit_subagent_children`.
+    is_subagent: bool = False
+    # Child ids whose nested ChatMessage has already been emitted, so the
+    # accumulated (re-sent-every-update) payload emits each child exactly once.
+    emitted_child_ids: set[str] = field(default_factory=set)
 
 
 # Matches a leading slash-command token (`/name`) and captures the remainder
@@ -667,7 +691,7 @@ class PiAgent(DefaultAgentWrapper):
         extension_args: list[str] = []
         loaded_paths: list[str] = []
         state_path = self.environment.get_state_path()
-        for filename in (_BACKCHANNEL_EXTENSION_FILENAME,):
+        for filename in (_BACKCHANNEL_EXTENSION_FILENAME, _SUBAGENT_EXTENSION_FILENAME):
             content = (_EXTENSIONS_SOURCE_DIR / filename).read_text(encoding="utf-8")
             destination = state_path / filename
             self.environment.write_file(str(destination), content)
@@ -1289,6 +1313,7 @@ class PiAgent(DefaultAgentWrapper):
                     claude_name=block.name,
                     claude_input=dict(block.input),
                     assistant_message_id=state.assistant_message_id,
+                    is_subagent=block.name == SUBAGENT_DISPLAY_NAME,
                 )
                 # Remember the backchannel tool call so the dialog it opens next
                 # adopts its id as the question's tool_use_id (see
@@ -1369,6 +1394,7 @@ class PiAgent(DefaultAgentWrapper):
             claude_name=claude_name,
             claude_input=claude_input,
             assistant_message_id=state.assistant_message_id,
+            is_subagent=claude_name == SUBAGENT_DISPLAY_NAME,
         )
         text_blocks: tuple[ContentBlockTypes, ...] = (
             (TextBlock(text=state.accumulated_text),) if state.accumulated_text else ()
@@ -1394,6 +1420,9 @@ class PiAgent(DefaultAgentWrapper):
         if info is None:
             return
         info.partial_text = extract_text_from_tool_payload(parsed.partial_result)
+        if info.is_subagent:
+            # Stream each child's nested activity as it finishes.
+            self._emit_subagent_children(parsed.partial_result, info, parsed.tool_call_id, include_running=False)
 
     def _handle_tool_execution_end(self, parsed: ParsedToolExecutionEnd, state: _TurnState) -> None:
         """Finish a tool call: refresh the workspace diff, then emit its result block."""
@@ -1420,6 +1449,10 @@ class PiAgent(DefaultAgentWrapper):
             tool_input = info.claude_input
             assistant_message_id = info.assistant_message_id
             fallback_text = info.partial_text
+            if info.is_subagent:
+                # Flush any child not yet emitted (including one still running at
+                # an aborted parent end) before the parent's result block lands.
+                self._emit_subagent_children(parsed.result, info, tool_call_id, include_running=True)
         else:
             # No registration (no toolCall block and no start seen) — map the
             # name with empty input (the end event carries no args).
@@ -1439,6 +1472,51 @@ class PiAgent(DefaultAgentWrapper):
                 role="assistant",
                 assistant_message_id=assistant_message_id,
                 content=(result_block,),
+            )
+        )
+
+    def _emit_subagent_children(
+        self,
+        result_payload: Any,
+        info: _ToolCall,
+        parent_tool_call_id: str,
+        include_running: bool,
+    ) -> None:
+        """Emit each finished child of a sub-agent call as a nested ChatMessage.
+
+        The extension re-sends the full `{v, children}` snapshot on every
+        `tool_execution_update` (and at `_end`), so this parses the accumulated
+        value and emits each child exactly once (tracked by
+        `info.emitted_child_ids`). Each child becomes its own
+        `ResponseBlockAgentMessage` carrying `parent_tool_use_id =
+        parent_tool_call_id`, which message_conversion groups under the parent
+        `Agent` tool block — the same attribution Claude's sub-agents use.
+
+        With `include_running=False` only terminal children are emitted; at the
+        parent's end (`include_running=True`) any remaining child is flushed too.
+        """
+        progress = parse_subagent_progress(result_payload)
+        if progress is None:
+            return
+        for child in progress.children:
+            if child.child_id in info.emitted_child_ids:
+                continue
+            if not include_running and not child.is_terminal:
+                continue
+            info.emitted_child_ids.add(child.child_id)
+            self._emit_child_message(child, parent_tool_call_id)
+
+    def _emit_child_message(self, child: SubagentChild, parent_tool_call_id: str) -> None:
+        # A fresh message id and assistant_message_id per child so each renders
+        # as its own attributed ChatMessage; message_conversion keys the nested
+        # grouping off parent_tool_use_id, not these ids.
+        self._output_messages.put(
+            ResponseBlockAgentMessage(
+                message_id=AgentMessageID(),
+                role="assistant",
+                assistant_message_id=AssistantMessageID(generate_id()),
+                content=build_child_content_blocks(child, parent_tool_call_id),
+                parent_tool_use_id=parent_tool_call_id,
             )
         )
 

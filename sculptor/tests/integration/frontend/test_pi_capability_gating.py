@@ -118,14 +118,38 @@ def test_fast_mode_toggle_gated(sculptor_instance_: SculptorInstance, harness: H
 
 
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
-@user_story("to suppress the sub-agent pill render path in harnesses without sub-agent support")
-def test_sub_agent_pill_render_path_gated(sculptor_instance_: SculptorInstance, harness: HarnessTestConfig) -> None:
-    _create_workspace_for_harness(sculptor_instance_, harness, "Sub-Agent Gate")
-    # Neither fake binary emits sub-agent tool blocks by default, so the
-    # rendered count is 0 in both branches. The assertion still has value as a
-    # regression guard against the pill leaking under pi if a future change
-    # accidentally seeds metadata for it.
-    expect(sculptor_instance_.page.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_PILL)).to_have_count(0)
+@user_story("to see a sub-agent's activity render as a nested attributed pill under both harnesses")
+def test_sub_agent_pill_renders_under_both_harnesses(
+    sculptor_instance_: SculptorInstance, harness: HarnessTestConfig
+) -> None:
+    """Sub-agents are now a shared capability: a scripted sub-agent call renders
+    as the AlphaSubagentPill (the parent entry with nested, attributed child
+    activity) under Claude AND pi.
+
+    This is the two-sided assertion for `supports_sub_agents` (REQ-TEST-4): the
+    render path was previously suppressed for pi (the gate hid the pill); pi now
+    spawns sub-agents through the pinned `sculptor_subagent` extension, whose
+    structured per-child progress the adapter maps onto the same
+    `parent_tool_use_id` grouping Claude uses. Pi's `fake_pi:subagent` directive
+    scripts the structured payload; FakeClaude's `subagent` directive scripts an
+    Agent tool call. Both surface the pill.
+    """
+    task_page = _create_workspace_for_harness(sculptor_instance_, harness, "Sub-Agent Render")
+    chat_panel = task_page.get_chat_panel()
+    if harness.first_agent_type == "pi":
+        prompt = 'fake_pi:subagent `{"children": [{"childId": "c0", "label": "scout", "task": "find files", "status": "done", "events": [{"seq": 0, "kind": "text", "text": "Found 10 files."}]}]}`'
+    else:
+        prompt = (
+            'fake_claude:subagent `{"description": "Find files", "prompt": "List files", '
+            + '"subagent_result": "Found 10 files.", "summary_text": "The sub-agent found 10 files."}`'
+        )
+    send_chat_message(chat_panel=chat_panel, message=prompt)
+
+    # The sub-agent activity renders as the pill under both harnesses (the gate
+    # no longer suppresses it for pi).
+    expect(sculptor_instance_.page.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_PILL).first).to_be_visible(
+        timeout=30000
+    )
 
 
 def _png_bytes(color: tuple[int, int, int] = (0, 0, 255)) -> bytes:

@@ -2087,3 +2087,131 @@ def test_render_synthesized_skill_escapes_frontmatter() -> None:
     assert '\nname: "my-cmd"\n' in rendered
     assert '\ndescription: "Does X: then Y"\n' in rendered
     assert rendered.endswith("Body text")
+
+
+# --- Sub-agents (structured per-child progress → nested child messages) ------
+
+
+def _subagent_child(child_id: str, status: str, events: list[dict[str, Any]], label: str = "subagent") -> dict:
+    """One child entry in the wire shape sculptor_subagent.ts emits."""
+    return {"childId": child_id, "label": label, "task": "do a thing", "status": status, "events": events}
+
+
+def _subagent_envelope(children: list[dict]) -> dict:
+    """The {content, details} result envelope carrying the structured payload."""
+    return {"content": [{"type": "text", "text": "summary"}], "details": {"v": 1, "children": children}}
+
+
+def _read_child_events() -> list[dict[str, Any]]:
+    return [
+        {"seq": 0, "kind": "tool_call", "toolCallId": "ct1", "toolName": "read", "args": {"path": "/etc/hosts"}},
+        {"seq": 1, "kind": "tool_result", "toolCallId": "ct1", "text": "127.0.0.1 localhost", "isError": False},
+        {"seq": 2, "kind": "text", "text": "It has one line."},
+    ]
+
+
+def _child_messages(emitted: list) -> list[ResponseBlockAgentMessage]:
+    return [m for m in emitted if isinstance(m, ResponseBlockAgentMessage) and m.parent_tool_use_id is not None]
+
+
+def _run_subagent_turn(updates: list[dict], end_payload: dict) -> list:
+    """Drive one sub-agent tool call (toolCall block → lane updates → end)."""
+    agent = _make_agent()
+    events = [
+        _event({"type": "agent_start"}),
+        _event(
+            {
+                "type": "message_end",
+                "message": _assistant_msg_with_content([_tool_call_block("sa1", "subagent", {"task": "investigate"})]),
+            }
+        ),
+        _event(_tool_execution_start("sa1", "subagent", {"task": "investigate"})),
+    ]
+    for payload in updates:
+        events.append(
+            _event(
+                {
+                    "type": "tool_execution_update",
+                    "toolCallId": "sa1",
+                    "toolName": "subagent",
+                    "args": {"task": "investigate"},
+                    "partialResult": payload,
+                }
+            )
+        )
+    events.append(_event(_tool_execution_end("sa1", "subagent", result=end_payload)))
+    events.append(_event({"type": "agent_end", "messages": [], "willRetry": False}))
+    agent._process = _make_process(events)
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+    return _drain(agent._output_messages)
+
+
+def test_subagent_parent_renders_as_agent_block() -> None:
+    """The pi `subagent` tool maps to Claude's `Agent` so the frontend pills it."""
+    payload = _subagent_envelope([_subagent_child("c0", "done", _read_child_events())])
+    emitted = _run_subagent_turn(updates=[payload], end_payload=payload)
+    use_blocks = _tool_use_blocks(emitted)
+    assert any(b.id == "sa1" and b.name == "Agent" for b in use_blocks)
+
+
+def test_subagent_emits_nested_child_message_with_parent_attribution() -> None:
+    """A finished child becomes its own ChatMessage carrying parent_tool_use_id =
+    the parent Agent tool id, with the child's own tool call + text nested."""
+    payload = _subagent_envelope([_subagent_child("c0", "done", _read_child_events())])
+    emitted = _run_subagent_turn(updates=[payload], end_payload=payload)
+
+    children = _child_messages(emitted)
+    assert len(children) == 1
+    child_msg = children[0]
+    assert child_msg.parent_tool_use_id == "sa1"
+    # The child's own read renders nested: a Read tool block + its result + text.
+    names = [b.name for b in child_msg.content if isinstance(b, ToolUseBlock)]
+    results = [b for b in child_msg.content if isinstance(b, ToolResultBlock)]
+    texts = [b.text for b in child_msg.content if isinstance(b, TextBlock)]
+    assert names == ["Read"]
+    assert results and results[0].tool_use_id == "sa1:c0:ct1"
+    assert "It has one line." in texts
+
+
+def test_subagent_child_emitted_exactly_once_across_accumulated_updates() -> None:
+    """partialResult is accumulated and re-sent; a done child whose snapshot
+    repeats on every update (and again at end) is emitted only once."""
+    payload = _subagent_envelope([_subagent_child("c0", "done", _read_child_events())])
+    # Same done child snapshot three times (two updates + end).
+    emitted = _run_subagent_turn(updates=[payload, payload], end_payload=payload)
+    assert len(_child_messages(emitted)) == 1
+
+
+def test_subagent_streams_child_when_it_finishes_mid_run() -> None:
+    """A child that is still running in the first snapshot, then done in the
+    next, is emitted as soon as it reaches a terminal status."""
+    running = _subagent_envelope([_subagent_child("c0", "running", [])])
+    done = _subagent_envelope([_subagent_child("c0", "done", _read_child_events())])
+    emitted = _run_subagent_turn(updates=[running, done], end_payload=done)
+    children = _child_messages(emitted)
+    assert len(children) == 1
+    assert children[0].parent_tool_use_id == "sa1"
+
+
+def test_subagent_running_child_flushed_at_parent_end() -> None:
+    """A child still 'running' when the parent tool ends (e.g. aborted) is still
+    flushed as an attributed message so no sub-agent work silently vanishes."""
+    running = _subagent_envelope([_subagent_child("c0", "running", [])])
+    emitted = _run_subagent_turn(updates=[running], end_payload=running)
+    children = _child_messages(emitted)
+    assert len(children) == 1
+    assert children[0].parent_tool_use_id == "sa1"
+
+
+def test_subagent_emits_one_child_message_per_child_in_parallel() -> None:
+    """Two parallel children each become their own attributed nested message."""
+    payload = _subagent_envelope(
+        [
+            _subagent_child("c0", "done", _read_child_events(), label="subagent 1"),
+            _subagent_child("c1", "done", _read_child_events(), label="subagent 2"),
+        ]
+    )
+    emitted = _run_subagent_turn(updates=[payload], end_payload=payload)
+    children = _child_messages(emitted)
+    assert {m.parent_tool_use_id for m in children} == {"sa1"}
+    assert len(children) == 2
