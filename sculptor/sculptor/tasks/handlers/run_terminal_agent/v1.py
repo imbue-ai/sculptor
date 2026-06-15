@@ -51,7 +51,7 @@ from sculptor.tasks.handlers.run_terminal_agent.terminal_session import AgentTer
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import create_agent_terminal
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import reap_stale_shell
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import register_agent_terminal_config
-from sculptor.tasks.handlers.run_terminal_agent.terminal_session import render_resume_command
+from sculptor.tasks.handlers.run_terminal_agent.terminal_session import render_terminal_command
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import stop_agent_terminal
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import unregister_agent_terminal_config
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import write_launch_command
@@ -75,8 +75,8 @@ def launch_command_for_start(task_data: AgentTaskInputsV2, task_state: AgentTask
     if not isinstance(config, RegisteredTerminalAgentConfig):
         return None
     if task_state.terminal_session_id is not None and config.resume_command_template is not None:
-        return render_resume_command(config.resume_command_template, task_state.terminal_session_id)
-    return config.launch_command
+        return render_terminal_command(config.resume_command_template, session_id=task_state.terminal_session_id)
+    return render_terminal_command(config.launch_command)
 
 
 def _persist_terminal_shell_pid(task_id: TaskID, pid: int | None, services: ServiceCollectionForTask) -> None:

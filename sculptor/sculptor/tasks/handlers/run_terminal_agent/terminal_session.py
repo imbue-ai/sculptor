@@ -27,6 +27,10 @@ from loguru import logger
 
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.primitives.ids import TaskID
+from sculptor.services.terminal_agent_registry.registry import SCULPTOR_DIRECTORY_PLACEHOLDER
+from sculptor.services.terminal_agent_registry.registry import SESSION_ID_PLACEHOLDER
+from sculptor.services.terminal_agent_registry.registry import TERMINAL_AGENTS_DIRECTORY_PLACEHOLDER
+from sculptor.services.terminal_agent_registry.registry import get_registrations_dir
 from sculptor.services.workspace_service.environment_manager.env_file_parser import load_project_env_vars
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     LocalTerminalManager,
@@ -40,6 +44,7 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     unregister_terminal_manager,
 )
+from sculptor.utils.build import get_sculptor_folder
 
 
 def make_agent_terminal_id(task_id: TaskID) -> str:
@@ -141,16 +146,24 @@ def stop_agent_terminal(task_id: TaskID) -> None:
         manager.stop()
 
 
-def render_resume_command(template: str, session_id: str) -> str:
-    """Render a registration's resume template with the reported session id.
+def render_terminal_command(template: str, *, session_id: str | None = None) -> str:
+    """Substitute a registration command's placeholders with concrete values.
 
-    `str.replace`, NOT `.format` — a template containing other braces must
-    not crash (the loader already validates this; belt-and-suspenders).
-    `shlex.quote` even though the API-validated charset
-    ([A-Za-z0-9._-]{1,128}) can't currently contain shell metacharacters —
-    two independent layers of defense.
+    Directory placeholders ({sculptor_directory}, {terminal_agents_directory})
+    resolve to absolute paths — authors wrap them in quotes in the TOML, the
+    same convention as the `$SCULPT_*` env vars, so a space in the path is
+    safe. `{session_id}` is substituted only when one is supplied (resume; the
+    loader already rejects it in `launch_command`) and is `shlex.quote`d —
+    belt-and-suspenders over the API-validated charset ([A-Za-z0-9._-]{1,128}).
+
+    `str.replace`, NOT `.format`, so any literal braces elsewhere are left
+    untouched (the loader already rejects unknown `{…}` placeholders).
     """
-    return template.replace("{session_id}", shlex.quote(session_id))
+    command = template.replace(SCULPTOR_DIRECTORY_PLACEHOLDER, str(get_sculptor_folder()))
+    command = command.replace(TERMINAL_AGENTS_DIRECTORY_PLACEHOLDER, str(get_registrations_dir()))
+    if session_id is not None:
+        command = command.replace(SESSION_ID_PLACEHOLDER, shlex.quote(session_id))
+    return command
 
 
 _REAP_SIGHUP_WAIT_SECONDS = 1.0

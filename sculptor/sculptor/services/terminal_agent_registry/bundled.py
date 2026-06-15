@@ -22,16 +22,6 @@ from sculptor.services.terminal_agent_registry.registry import get_registrations
 
 _SENTINEL_FILE_NAME = ".claude-code.installed"
 _BUNDLED_FILE_NAMES = ("claude-code.toml", "claude-code-hooks.json")
-_HOOKS_FILE_NAME = "claude-code-hooks.json"
-# Named placeholder the sample TOML carries in place of its hooks-file path;
-# the installer rewrites it to the absolute, shell-quoted path where the hooks
-# actually land (see _install_claude_code_registration). A named token avoids
-# matching a brittle hardcoded path string and keeps the manual-install
-# substitution point obvious — see the comment beside it in claude-code.toml.
-# Deliberately NOT a {brace} token: the registration loader reserves {…} for
-# the launch-time {session_id} placeholder and rejects any other brace token,
-# so an install-time token must use a distinct syntax.
-_SAMPLE_HOOKS_PATH_TOKEN = "__SCULPTOR_HOOKS_PATH__"
 
 
 def get_bundled_claude_code_dir() -> Path | None:
@@ -82,18 +72,16 @@ def _install_claude_code_registration() -> None:
         return
 
     registrations_dir.mkdir(parents=True, exist_ok=True)
-    hooks_destination = registrations_dir / _HOOKS_FILE_NAME
+    # Files are copied verbatim: the TOML's {terminal_agents_directory}
+    # placeholder is resolved at command-render time (see render_terminal_command),
+    # not rewritten here, so the installed registration survives a moved
+    # Sculptor folder.
     for file_name in _BUNDLED_FILE_NAMES:
         destination = registrations_dir / file_name
         if destination.exists():
             # The user (or a previous partial install) already has this file.
             continue
-        content = (source_dir / file_name).read_text()
-        if file_name.endswith(".toml"):
-            # Double quotes are safe both inside the TOML literal string and
-            # in the shell (handles spaces in the sculptor folder path).
-            content = content.replace(_SAMPLE_HOOKS_PATH_TOKEN, f'"{hooks_destination}"')
-        destination.write_text(content)
+        destination.write_text((source_dir / file_name).read_text())
         logger.info("Installed bundled terminal-agent file {}", destination)
     sentinel.write_text(
         "The bundled Claude Code registration was installed once into this directory.\n"

@@ -37,12 +37,14 @@ def test_fresh_install_writes_files_and_loads(sculptor_folder: Path) -> None:
     assert hooks_path.is_file()
     assert (registrations_dir / _SENTINEL).is_file()
 
-    # The hooks reference is rewritten to the actual destination (quoted for
-    # the shell) and the result is still valid TOML.
+    # Files are copied verbatim: the {terminal_agents_directory} placeholder is
+    # resolved at command-render time, not rewritten at install, so the
+    # installed TOML matches the shipped sample byte-for-byte.
+    sample_dir = get_bundled_claude_code_dir()
+    assert sample_dir is not None
+    assert toml_path.read_text() == (sample_dir / "claude-code.toml").read_text()
     data = tomllib.loads(toml_path.read_text())
-    assert f'"{hooks_path}"' in data["launch_command"]
-    assert f'"{hooks_path}"' in data["resume_command_template"]
-    assert "~/.sculptor" not in data["launch_command"]
+    assert "{terminal_agents_directory}" in data["launch_command"]
 
     registrations = load_registrations()
     assert [r.registration_id for r in registrations] == ["claude-code"]

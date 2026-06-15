@@ -23,13 +23,14 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.environment_manager.environments.local_terminal_manager import (
     stop_terminals_for_environment,
 )
+from sculptor.tasks.handlers.run_terminal_agent import terminal_session as terminal_session_module
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import AgentTerminalConfig
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import create_agent_terminal
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import get_agent_terminal_config
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import make_agent_terminal_id
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import reap_stale_shell
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import register_agent_terminal_config
-from sculptor.tasks.handlers.run_terminal_agent.terminal_session import render_resume_command
+from sculptor.tasks.handlers.run_terminal_agent.terminal_session import render_terminal_command
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import stop_agent_terminal
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import unregister_agent_terminal_config
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import write_launch_command
@@ -174,13 +175,23 @@ def test_write_launch_command_times_out_and_writes_anyway() -> None:
     assert len(manager.removed_callbacks) == 1
 
 
-def test_render_resume_command_replaces_and_quotes() -> None:
-    assert render_resume_command("claude --resume {session_id}", "abc.123") == "claude --resume abc.123"
+def test_render_terminal_command_replaces_and_quotes_session_id() -> None:
+    assert render_terminal_command("claude --resume {session_id}", session_id="abc.123") == "claude --resume abc.123"
     # A charset-legal but odd-looking value stays inert (shlex quoting is the
     # second defense layer behind the API's charset validation).
-    assert render_resume_command("claude --resume {session_id}", "a_b-c.D") == "claude --resume a_b-c.D"
-    # No placeholder → the template is unchanged.
-    assert render_resume_command("claude --continue", "abc") == "claude --continue"
+    assert render_terminal_command("claude --resume {session_id}", session_id="a_b-c.D") == "claude --resume a_b-c.D"
+    # No session id supplied (the launch path) → {session_id} is left untouched
+    # (the loader forbids it in launch_command, so it never reaches here).
+    assert render_terminal_command("claude --continue") == "claude --continue"
+
+
+def test_render_terminal_command_substitutes_directory_placeholders(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(terminal_session_module, "get_sculptor_folder", lambda: Path("/sculptor"))
+    monkeypatch.setattr(terminal_session_module, "get_registrations_dir", lambda: Path("/sculptor/terminal_agents"))
+    rendered = render_terminal_command(
+        'c --settings "{terminal_agents_directory}/h.json" --root "{sculptor_directory}"'
+    )
+    assert rendered == 'c --settings "/sculptor/terminal_agents/h.json" --root "/sculptor"'
 
 
 def test_reap_stale_shell_ignores_nonexistent_pid() -> None:

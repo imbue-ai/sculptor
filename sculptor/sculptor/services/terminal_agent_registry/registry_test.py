@@ -116,11 +116,35 @@ def test_bundled_claude_code_sample_round_trips_through_loader(registrations_dir
     assert '"$SCULPT_CLAUDE_BIN"' in registration.launch_command
     assert "$SCULPT_PLUGINS_DIR" in registration.launch_command
     assert "--dangerously-skip-permissions" in registration.launch_command
+    # The hooks path uses the {terminal_agents_directory} placeholder, resolved
+    # at command-render time (not baked in), and the loader accepts it verbatim.
+    assert "{terminal_agents_directory}" in registration.launch_command
     assert registration.resume_command_template is not None
     assert "{session_id}" in registration.resume_command_template
     # A resumed session must come back with exactly the launch flags.
     assert registration.resume_command_template == f"{registration.launch_command} --resume {{session_id}}"
     assert registration.accepts_automated_prompts is True
+
+
+def test_loader_validates_command_placeholders(registrations_dir: Path) -> None:
+    # Known placeholders load; an unknown {…} token and a {session_id} in
+    # launch_command (no session exists at first launch) are both rejected.
+    good = registry_module.TerminalAgentRegistration(
+        registration_id="good",
+        display_name="Good",
+        launch_command='c --settings "{terminal_agents_directory}/h.json" --root "{sculptor_directory}"',
+        resume_command_template="c --resume {session_id}",
+    )
+    assert good.registration_id == "good"
+
+    with pytest.raises(ValueError, match="unsupported placeholder"):
+        registry_module.TerminalAgentRegistration(
+            registration_id="bad", display_name="Bad", launch_command="c {not_a_real_variable}"
+        )
+    with pytest.raises(ValueError, match="unsupported placeholder"):
+        registry_module.TerminalAgentRegistration(
+            registration_id="bad", display_name="Bad", launch_command="c --resume {session_id}"
+        )
 
 
 def test_bundled_claude_cli_hooks_only_signal_waiting_for_genuine_attention() -> None:

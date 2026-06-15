@@ -23,8 +23,29 @@ from sculptor.utils.build import get_sculptor_folder
 
 _REGISTRATIONS_DIR_NAME = "terminal_agents"
 _REGISTRATION_ID_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]*")
-_SESSION_ID_PLACEHOLDER = "{session_id}"
+
+# The replacement placeholders a registration's commands may contain, each
+# substituted with a concrete value at command-render time (see
+# `render_terminal_command` in the terminal-session module). Directory
+# placeholders resolve to absolute paths and are valid in any command;
+# `{session_id}` is only meaningful in `resume_command_template` (there is no
+# session at first launch). The loader rejects any other `{…}` token so a typo
+# fails loudly here instead of surviving verbatim into the launched command.
+SESSION_ID_PLACEHOLDER = "{session_id}"
+SCULPTOR_DIRECTORY_PLACEHOLDER = "{sculptor_directory}"
+TERMINAL_AGENTS_DIRECTORY_PLACEHOLDER = "{terminal_agents_directory}"
+_DIRECTORY_PLACEHOLDERS = frozenset({SCULPTOR_DIRECTORY_PLACEHOLDER, TERMINAL_AGENTS_DIRECTORY_PLACEHOLDER})
+_LAUNCH_COMMAND_PLACEHOLDERS = _DIRECTORY_PLACEHOLDERS
+_RESUME_COMMAND_PLACEHOLDERS = _DIRECTORY_PLACEHOLDERS | {SESSION_ID_PLACEHOLDER}
 _PLACEHOLDER_PATTERN = re.compile(r"\{[^}]*\}")
+
+
+def _reject_unknown_placeholders(command: str, allowed: frozenset[str], field_name: str) -> None:
+    unknown = sorted({p for p in _PLACEHOLDER_PATTERN.findall(command) if p not in allowed})
+    if unknown:
+        raise ValueError(
+            f"{field_name} contains unsupported placeholder(s) {unknown}; allowed: {', '.join(sorted(allowed))}"
+        )
 
 
 class TerminalAgentRegistration(SerializableModel):
@@ -36,24 +57,24 @@ class TerminalAgentRegistration(SerializableModel):
 
     registration_id: str
     display_name: str
+    # May contain the directory placeholders; rendered with `str.replace` at
+    # launch (see `render_terminal_command`), NOT `.format`.
     launch_command: str
-    # May contain the literal `{session_id}` placeholder (at most once, no
-    # other placeholders) — it is rendered with `str.replace`, not `.format`.
+    # May contain `{session_id}` plus the directory placeholders, same render.
     resume_command_template: str | None = None
     accepts_automated_prompts: bool = False
 
     @model_validator(mode="after")
-    def _validate_resume_command_template(self) -> "TerminalAgentRegistration":
+    def _validate_command_placeholders(self) -> "TerminalAgentRegistration":
+        _reject_unknown_placeholders(self.launch_command, _LAUNCH_COMMAND_PLACEHOLDERS, "launch_command")
         template = self.resume_command_template
-        if template is None:
-            return self
-        placeholders = _PLACEHOLDER_PATTERN.findall(template)
-        if any(placeholder != _SESSION_ID_PLACEHOLDER for placeholder in placeholders):
-            raise ValueError(
-                f"resume_command_template may only contain the {_SESSION_ID_PLACEHOLDER} placeholder; got {placeholders}"
-            )
-        if len(placeholders) > 1:
-            raise ValueError(f"resume_command_template may contain {_SESSION_ID_PLACEHOLDER} at most once")
+        if template is not None:
+            _reject_unknown_placeholders(template, _RESUME_COMMAND_PLACEHOLDERS, "resume_command_template")
+            # A resume command resumes exactly one session; the directory
+            # placeholders may repeat freely, but a second {session_id} is a
+            # mistake.
+            if template.count(SESSION_ID_PLACEHOLDER) > 1:
+                raise ValueError(f"resume_command_template may contain {SESSION_ID_PLACEHOLDER} at most once")
         return self
 
 
