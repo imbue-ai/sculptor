@@ -4,6 +4,7 @@ from typing import Final
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 from pydantic_settings import SettingsConfigDict
 
@@ -48,7 +49,9 @@ class SculptorSettings(BaseSettings):
 
     # When provided, all requests are expected to have this exact key in the `x-session-token` header (or GET param or cookie).
     # That way, we can prevent unauthorized access to the API (csrf and similar attacks).
-    SESSION_TOKEN: str | None = None
+    # SecretStr so the token is masked in logs/reprs of the settings object; unwrap
+    # with .get_secret_value() at the (single) comparison/serialization sites.
+    SESSION_TOKEN: SecretStr | None = None
 
     @property
     def task_sync_path(self) -> Path:

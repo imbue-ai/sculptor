@@ -466,7 +466,7 @@ def set_session_token_cookie(
 ) -> None:
     response.set_cookie(
         key=SESSION_TOKEN_HEADER_NAME,
-        value=settings.SESSION_TOKEN or "",
+        value=settings.SESSION_TOKEN.get_secret_value() if settings.SESSION_TOKEN is not None else "",
         samesite="strict",
         httponly=True,
     )
