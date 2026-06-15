@@ -30,6 +30,7 @@ from sculptor.interfaces.environments.agent_execution_environment import AgentEx
 from sculptor.services.dependency_management_service import Dependency
 from sculptor.state.chat_state import AskUserQuestionData
 from sculptor.state.chat_state import ContentBlock
+from sculptor.state.chat_state import ToolInput
 from sculptor.state.chat_state import ToolUseBlock
 from sculptor.state.chat_state import UserQuestion
 
@@ -156,7 +157,7 @@ class ClaudeCodeHarness(Harness):
     def is_exit_plan_mode_tool(self, tool_name: str) -> bool:
         return tool_name in _EXIT_PLAN_MODE_TOOL_NAMES
 
-    def is_valid_ask_user_question_input(self, tool_name: str, tool_input: dict) -> bool:
+    def is_valid_ask_user_question_input(self, tool_name: str, tool_input: ToolInput) -> bool:
         if tool_name != _MCP_ASK_USER_QUESTION_TOOL_NAME:
             return True
         questions = tool_input.get("questions")
