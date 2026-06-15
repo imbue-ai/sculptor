@@ -5,11 +5,8 @@ from uuid import uuid4
 from loguru import logger
 
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
-from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
-from sculptor.foundation.constants import ExceptionPriority
 from sculptor.foundation.pydantic_serialization import MutableModel
-from sculptor.foundation.subprocess_utils import ProcessError
 from sculptor.interfaces.environments.base import Environment
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import ProjectID
@@ -153,27 +150,24 @@ class DefaultEnvironmentManager(MutableModel, EnvironmentManager):
         Only deletes workspaces that are NOT associated with any active (non-deleted) workspace.
         Workspace is the single owner of environment, so we query workspaces directly.
         """
-        try:
-            # Get environment_ids of all active workspaces (non-deleted)
-            active_environment_ids: set[str] = set()
-            with self.data_model_service.open_task_transaction() as transaction:
-                # get_workspaces() returns non-deleted workspaces
-                all_workspaces = transaction.get_workspaces()
-                for workspace in all_workspaces:
-                    if workspace.environment_id is not None:
-                        active_environment_ids.add(workspace.environment_id)
+        # Get environment_ids of all active workspaces (non-deleted)
+        active_environment_ids: set[str] = set()
+        with self.data_model_service.open_task_transaction() as transaction:
+            # get_workspaces() returns non-deleted workspaces
+            all_workspaces = transaction.get_workspaces()
+            for workspace in all_workspaces:
+                if workspace.environment_id is not None:
+                    active_environment_ids.add(workspace.environment_id)
 
-            # Clean up workspaces not associated with active workspaces
-            if not LOCAL_WORKSPACE_DIR.exists():
-                return
+        # Clean up workspaces not associated with active workspaces
+        if not LOCAL_WORKSPACE_DIR.exists():
+            return
 
-            for workspace_dir in LOCAL_WORKSPACE_DIR.iterdir():
-                if workspace_dir.is_dir() and not workspace_dir.name.startswith("."):
-                    workspace_path_str = str(workspace_dir)
-                    if workspace_path_str not in active_environment_ids:
-                        logger.info("Cleaning up stale workspace: {}", workspace_dir)
-                        _cleanup_workspace(workspace_dir)
-                    else:
-                        logger.debug("Preserving active workspace: {}", workspace_dir)
-        except ProcessError as e:
-            log_exception(e, "Failed to clean up stale environments", priority=ExceptionPriority.LOW_PRIORITY)
+        for workspace_dir in LOCAL_WORKSPACE_DIR.iterdir():
+            if workspace_dir.is_dir() and not workspace_dir.name.startswith("."):
+                workspace_path_str = str(workspace_dir)
+                if workspace_path_str not in active_environment_ids:
+                    logger.info("Cleaning up stale workspace: {}", workspace_dir)
+                    _cleanup_workspace(workspace_dir)
+                else:
+                    logger.debug("Preserving active workspace: {}", workspace_dir)
