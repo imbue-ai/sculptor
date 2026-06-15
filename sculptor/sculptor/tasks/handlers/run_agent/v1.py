@@ -93,6 +93,7 @@ from sculptor.tasks.handlers.run_agent.setup import load_initial_task_state
 from sculptor.tasks.handlers.run_agent.setup import message_queue_subscription_context
 from sculptor.tasks.handlers.run_agent.setup import title_prediction_context
 from sculptor.tasks.handlers.run_agent.setup import wait_for_initial_message_and_process_queue
+from sculptor.utils.build import build_sculpt_backend_env
 from sculptor.utils.build import get_sculpt_bin_dir
 from sculptor.utils.build import is_packaged
 from sculptor.utils.shutdown import GLOBAL_SHUTDOWN_EVENT
@@ -339,12 +340,12 @@ def _run_agent_in_environment(
             in_testing=in_testing,
             on_diff_needed=on_diff_needed,
         )
-        secrets: dict[str, str] = {
-            "SCULPT_API_PORT": str(settings.BACKEND_PORT),
-            "SCULPT_WORKSPACE_ID": str(task_state.workspace_id),
-            "SCULPT_PROJECT_ID": str(project.object_id),
-            "SCULPT_AGENT_ID": str(task.object_id),
-        }
+        secrets: dict[str, str] = build_sculpt_backend_env(
+            backend_port=settings.BACKEND_PORT,
+            workspace_id=task_state.workspace_id,
+            project_id=project.object_id,
+            agent_id=task.object_id,
+        )
         executable_parent = Path(sys.executable).parent
         secrets["PATH"] = _build_agent_path(
             is_packaged=is_packaged(),

@@ -55,6 +55,7 @@ from sculptor.tasks.handlers.run_terminal_agent.terminal_session import render_r
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import stop_agent_terminal
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import unregister_agent_terminal_config
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import write_launch_command
+from sculptor.utils.build import build_sculpt_backend_env
 from sculptor.utils.build import get_sculpt_bin_dir
 
 # it will take at most this much time to notice a shutdown request
@@ -205,10 +206,12 @@ def _run_terminal_agent_in_environment(
     # updates — and on every AppImage launch — so a registration file cannot
     # bake them in.
     extra_env: dict[str, str] = {
-        "SCULPT_API_PORT": str(settings.BACKEND_PORT),
-        "SCULPT_WORKSPACE_ID": str(task_state.workspace_id),
-        "SCULPT_PROJECT_ID": str(project.object_id),
-        "SCULPT_AGENT_ID": str(task.object_id),
+        **build_sculpt_backend_env(
+            backend_port=settings.BACKEND_PORT,
+            workspace_id=task_state.workspace_id,
+            project_id=project.object_id,
+            agent_id=task.object_id,
+        ),
         "SCULPT_PLUGINS_DIR": str(get_plugins_base_dir()),
         # Managed binary when resolvable; bare `claude` (PATH) as fallback so
         # the command still works for users who manage their own install.

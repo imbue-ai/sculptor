@@ -70,6 +70,7 @@ from sculptor.services.workspace_service.setup_command_runner import DefaultSetu
 from sculptor.services.workspace_service.setup_command_runner import SetupCommandRunner
 from sculptor.services.workspace_service.setup_command_runner import SetupStateChanged
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
+from sculptor.utils.build import build_sculpt_backend_env
 from sculptor.utils.build import get_sculpt_bin_dir
 from sculptor.utils.timeout import timeout_monitor
 from sculptor.utils.type_utils import extract_leaf_types
@@ -647,9 +648,11 @@ class DefaultWorkspaceService(WorkspaceService):
             # that doesn't belong in the EnvironmentManager interface.
             environment.set_sculpt_terminal_env_vars(
                 {
-                    "SCULPT_API_PORT": str(self.backend_port),
-                    "SCULPT_WORKSPACE_ID": str(workspace_id),
-                    "SCULPT_PROJECT_ID": str(project.object_id),
+                    **build_sculpt_backend_env(
+                        backend_port=self.backend_port,
+                        workspace_id=workspace_id,
+                        project_id=project.object_id,
+                    ),
                     "PATH": str(get_sculpt_bin_dir()),
                 }
             )

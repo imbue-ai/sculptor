@@ -3,12 +3,18 @@ import sys
 from functools import cache
 from pathlib import Path
 from typing import Final
+from typing import TYPE_CHECKING
 
 from loguru import logger
 from packaging.version import Version
 
 import sculptor
 from sculptor import version
+
+if TYPE_CHECKING:
+    from sculptor.primitives.ids import ProjectID
+    from sculptor.primitives.ids import TaskID
+    from sculptor.primitives.ids import WorkspaceID
 
 SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG: Final = "SCULPTOR_FOLDER"
 SCULPTOR_WORKSPACES_FOLDER_OVERRIDE_ENV_FLAG: Final = "SCULPTOR_WORKSPACES_FOLDER"
@@ -73,6 +79,35 @@ def get_sculpt_bin_dir(executable_parent: Path | None = None, *, packaged: bool 
             sculpt_link.unlink()
         sculpt_link.symlink_to(sculpt_target)
     return sculpt_bin_dir
+
+
+def build_sculpt_backend_env(
+    *,
+    backend_port: int,
+    workspace_id: "WorkspaceID",
+    project_id: "ProjectID",
+    agent_id: "TaskID | None" = None,
+) -> dict[str, str]:
+    """The ``SCULPT_*`` identity vars a shell needs so a bare ``sculpt``
+    invocation reaches this backend and resolves its workspace/project (and,
+    when given, agent) without flags.
+
+    Single source for the three surfaces that expose these — the chat task
+    handler, the terminal-agent task handler, and the workspace terminal
+    manager — so the set cannot drift between them. ``PATH`` is intentionally
+    NOT included: each caller computes it differently (the chat handler's
+    packaging-aware ``_build_agent_path`` vs. ``get_sculpt_bin_dir()``), so it
+    stays a per-site concern. Workspace terminals are not agent-scoped, so they
+    omit ``agent_id``.
+    """
+    env = {
+        "SCULPT_API_PORT": str(backend_port),
+        "SCULPT_WORKSPACE_ID": str(workspace_id),
+        "SCULPT_PROJECT_ID": str(project_id),
+    }
+    if agent_id is not None:
+        env["SCULPT_AGENT_ID"] = str(agent_id)
+    return env
 
 
 def is_dev_build() -> bool:
