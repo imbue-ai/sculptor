@@ -77,6 +77,7 @@ from sculptor.services.data_model_service.api import TaskDataModelService
 from sculptor.services.data_model_service.data_types import BaseDataModelTransaction
 from sculptor.services.data_model_service.data_types import ProjectFieldUpdate
 from sculptor.services.data_model_service.data_types import WorkspaceFieldUpdate
+from sculptor.services.data_model_service.data_types import WorkspaceListingRow
 from sculptor.utils.process_utils import get_original_parent_pid
 from sculptor.utils.type_utils import extract_leaf_types
 
@@ -312,7 +313,7 @@ class SQLTransaction(BaseDataModelTransaction):
         )
 
     @overwrite_missing_table_error_for_sentry
-    def get_all_workspaces(self) -> list[dict[str, Any]]:
+    def get_all_workspaces(self) -> list[WorkspaceListingRow]:
         """Get cross-project workspace listing with denormalized fields, ordered by recent activity."""
         rows = self.connection.execute(
             text("""
@@ -350,7 +351,7 @@ class SQLTransaction(BaseDataModelTransaction):
             """)
         ).all()
 
-        return [{str(k): v for k, v in row._mapping.items()} for row in rows]
+        return [WorkspaceListingRow(**{str(k): v for k, v in row._mapping.items()}) for row in rows]
 
     @overwrite_missing_table_error_for_sentry
     def upsert_task(self, task: Task) -> Task:

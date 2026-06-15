@@ -873,23 +873,23 @@ def list_recent_workspaces(
     services = get_services_from_request_or_websocket(request)
 
     with user_session.open_transaction(services) as transaction:
-        workspace_dicts = transaction.get_all_workspaces()
+        workspace_rows = transaction.get_all_workspaces()
 
     workspaces = [
         RecentWorkspaceResponse(
-            object_id=row["object_id"],
-            project_id=row["project_id"],
-            description=row["description"],
-            initialization_strategy=row["initialization_strategy"],
-            source_branch=row["source_branch"],
-            is_deleted=row["is_deleted"],
-            created_at=row["created_at"],
-            project_name=row["project_name"],
-            agent_count=row["agent_count"],
-            is_open=row["is_open"],
-            last_activity_at=row["last_activity_at"],
+            object_id=row.object_id,
+            project_id=row.project_id,
+            description=row.description,
+            initialization_strategy=row.initialization_strategy,
+            source_branch=row.source_branch,
+            is_deleted=row.is_deleted,
+            created_at=row.created_at,
+            project_name=row.project_name,
+            agent_count=row.agent_count,
+            is_open=row.is_open,
+            last_activity_at=row.last_activity_at,
         )
-        for row in workspace_dicts
+        for row in workspace_rows
     ]
 
     return ListWorkspacesResponse(workspaces=workspaces)
