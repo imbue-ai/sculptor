@@ -11,6 +11,10 @@ from pydantic.alias_generators import to_camel
 from sculptor.config.custom_actions import CustomActionsConfig
 from sculptor.foundation.pydantic_serialization import SerializableModel
 
+# The free-disk warning threshold is this multiple of the hard minimum, so warnings
+# fire before tasks are blocked outright.
+_FREE_DISK_GB_WARN_LIMIT_MULTIPLIER: float = 3.0
+
 
 class UpdateChannel(StrEnum):
     """Update channel for receiving Sculptor updates."""
@@ -320,7 +324,7 @@ class UserConfig(SerializableModel):
 
     @property
     def free_disk_gb_warn_limit(self) -> float:
-        return self.min_free_disk_gb * 3.0
+        return self.min_free_disk_gb * _FREE_DISK_GB_WARN_LIMIT_MULTIPLIER
 
 
 # At Runtime, ensure that all fields in PrivacySettings are also in UserConfig

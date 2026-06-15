@@ -39,7 +39,7 @@ class SculptorSettings(BaseSettings):
     # Add the validation aliases for compatibility with existing code.
     BIND_HOST: str = Field(default="127.0.0.1", validation_alias="SCULPTOR_BIND_HOST")
     BACKEND_PORT: int = Field(default=DEFAULT_BACKEND_PORT, validation_alias="SCULPTOR_API_PORT")
-    DATABASE_URL: str = str("sqlite:///" + str(get_internal_folder() / "database.db"))
+    DATABASE_URL: str = "sqlite:///" + str(get_internal_folder() / "database.db")
     LOG_LEVEL: str = "DEBUG"
     TASK_SYNC_DIR: str = str(get_internal_folder() / "artifacts" / "task_sync")
     WORKSPACE_SYNC_DIR: str = str(get_internal_folder() / "artifacts" / "workspace_sync")
