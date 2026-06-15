@@ -1,18 +1,14 @@
 /**
  * Sculptor sub-agent extension.
  *
- * Gives a pi (`--mode rpc`) agent the sub-agent capability Sculptor already
- * exposes for Claude. Registers a single `subagent` tool that delegates work to
- * child agents, each running as its own isolated `pi` process (single task, or
- * a capped parallel batch). Adapted from pi's shipped `examples/extensions/
- * subagent` (process spawning, concurrency limiting, and Ctrl+C/abort →
- * child-kill propagation), but DIVERGES in what it surfaces: instead of the
- * example's aggregated formatted text, it streams a STRUCTURED, versioned
- * per-child lifecycle payload under the tool result's `details` so the Sculptor
- * adapter can render each child's activity as nested, attributed blocks (a
- * parent entry with the child's own tool calls and text grouped beneath it) —
- * Claude-parity sub-agent rendering. A spike proved this lane carries child
- * tool events with ids + ordering intact before this was built.
+ * Gives a pi (`--mode rpc`) agent the sub-agent capability Sculptor exposes for
+ * Claude. Registers a single `subagent` tool that delegates work to child
+ * agents, each running as its own isolated `pi` process (single task, or a
+ * capped parallel batch). It streams a STRUCTURED, versioned per-child lifecycle
+ * payload under the tool result's `details` so the Sculptor adapter can render
+ * each child's activity as nested, attributed blocks (a parent entry with the
+ * child's own tool calls and text grouped beneath it) — Claude-parity sub-agent
+ * rendering.
  *
  * `partialResult` is ACCUMULATED, not a delta, so every `onUpdate` re-sends the
  * full `{ v, children }` snapshot; the Python adapter re-parses it idempotently
@@ -43,12 +39,10 @@ const SUBAGENT_TOOL_NAME = "subagent";
 // MUST match subagent.py: SUBAGENT_PAYLOAD_VERSION.
 const SUBAGENT_PAYLOAD_VERSION = 1;
 
-// Conservative caps (mirroring the shipped example) so a runaway prompt cannot
-// spawn unbounded child processes. The adapter tolerates any child count.
+// Caps so a runaway prompt cannot spawn unbounded child processes.
 const MAX_TASKS = 8;
 const MAX_CONCURRENCY = 4;
-// Per-child bounds so the accumulated payload (re-sent every update) stays
-// bounded even if a child emits huge tool output or a very long transcript.
+// Per-child bounds so the accumulated (re-sent-every-update) payload stays bounded.
 const MAX_EVENTS_PER_CHILD = 200;
 const MAX_EVENT_TEXT_BYTES = 8 * 1024;
 
@@ -87,8 +81,8 @@ function truncateText(text: string): string {
 }
 
 function resultText(result: any): string {
-	// pi tool results ride as { content: [{type:"text", text}], details } — flatten
-	// the text parts; fall back to a compact stringify so nothing is silently lost.
+	// pi tool results ride as { content: [{type:"text", text}], details }; flatten
+	// the text parts, else stringify.
 	if (result && Array.isArray(result.content)) {
 		const parts = result.content
 			.filter((b: any) => b && b.type === "text" && typeof b.text === "string")
@@ -105,7 +99,7 @@ function resultText(result: any): string {
 
 // Reuse the parent's exact pi runtime/binary for children (the managed
 // standalone binary, or a dev `node cli.js`), rather than a bare PATH `pi`
-// which may be absent or a different version. Lifted from the shipped example.
+// which may be absent or a different version.
 function getPiInvocation(args: string[]): { command: string; args: string[] } {
 	const currentScript = process.argv[1];
 	const isBunVirtualScript = currentScript?.startsWith("/$bunfs/root/");

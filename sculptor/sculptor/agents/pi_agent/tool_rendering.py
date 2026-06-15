@@ -49,9 +49,8 @@ _SIMPLE_NAME_MAP: dict[str, str] = {
 
 # The tool name pi exposes for the Sculptor-pinned sub-agent extension
 # (`extensions/sculptor_subagent.ts`); MUST match the `name` that extension
-# registers. The adapter keys on this to parse the structured per-child progress
-# (`subagent.py`); the renderer maps it onto Claude's sub-agent tool so pi's
-# nested sub-agent activity reuses Claude's AlphaSubagentPill verbatim.
+# registers. The adapter (`subagent.py`) keys on this to parse the structured
+# per-child progress.
 SUBAGENT_TOOL_NAME: str = "subagent"
 
 # Claude's sub-agent tool name (the post-rename of "Task"). The frontend's

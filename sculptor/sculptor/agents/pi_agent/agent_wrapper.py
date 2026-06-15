@@ -1421,8 +1421,7 @@ class PiAgent(DefaultAgentWrapper):
             return
         info.partial_text = extract_text_from_tool_payload(parsed.partial_result)
         if info.is_subagent:
-            # Stream each child's nested activity as it finishes (the parent
-            # `Agent` tool block stays in-progress until its own end event).
+            # Stream each child's nested activity as it finishes.
             self._emit_subagent_children(parsed.partial_result, info, parsed.tool_call_id, include_running=False)
 
     def _handle_tool_execution_end(self, parsed: ParsedToolExecutionEnd, state: _TurnState) -> None:
@@ -1451,9 +1450,8 @@ class PiAgent(DefaultAgentWrapper):
             assistant_message_id = info.assistant_message_id
             fallback_text = info.partial_text
             if info.is_subagent:
-                # Flush any child not yet emitted (including one still "running"
-                # at an aborted/failed parent end) so no sub-agent work is lost,
-                # before the parent `Agent` result block lands.
+                # Flush any child not yet emitted (including one still running at
+                # an aborted parent end) before the parent's result block lands.
                 self._emit_subagent_children(parsed.result, info, tool_call_id, include_running=True)
         else:
             # No registration (no toolCall block and no start seen) — map the
@@ -1486,22 +1484,16 @@ class PiAgent(DefaultAgentWrapper):
     ) -> None:
         """Emit each finished child of a sub-agent call as a nested ChatMessage.
 
-        The sub-agent extension re-sends the full `{v, children}` snapshot on
-        every `tool_execution_update` (and once more at `_end`), so this parses
-        the accumulated value idempotently and emits each child exactly once,
-        tracked by `info.emitted_child_ids`. Each child becomes its own
+        The extension re-sends the full `{v, children}` snapshot on every
+        `tool_execution_update` (and at `_end`), so this parses the accumulated
+        value and emits each child exactly once (tracked by
+        `info.emitted_child_ids`). Each child becomes its own
         `ResponseBlockAgentMessage` carrying `parent_tool_use_id =
-        parent_tool_call_id`; message_conversion turns that into a separate
-        ChatMessage grouped under the parent `Agent` tool block — the same
-        `parent_tool_use_id` attribution Claude's sub-agents use, so pi reuses
-        the AlphaSubagentPill rendering unchanged.
+        parent_tool_call_id`, which message_conversion groups under the parent
+        `Agent` tool block — the same attribution Claude's sub-agents use.
 
-        While the parent runs (`include_running=False`) only children that have
-        reached a terminal status are emitted; at the parent's end
-        (`include_running=True`) every remaining child is flushed so an
-        aborted/unfinished child still surfaces as attributed work rather than
-        vanishing. The parent `Agent` ToolUseBlock stays in-progress until its
-        own result block lands, so the pill shows a running sub-agent meanwhile.
+        With `include_running=False` only terminal children are emitted; at the
+        parent's end (`include_running=True`) any remaining child is flushed too.
         """
         progress = parse_subagent_progress(result_payload)
         if progress is None:

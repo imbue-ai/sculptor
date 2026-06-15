@@ -15,19 +15,16 @@ result envelope's `details`:
              {"seq", "kind": "tool_result", "toolCallId", "text", "isError"},
              {"seq", "kind": "text",        "text"}]}]}
 
-Unlike the shipped `subagent` example (which surfaces only aggregated formatted
-text), this structured shape lets the adapter render each child's activity as
-nested, attributed blocks — a parent `Agent` tool with the child's own tool
-calls and text grouped beneath it (`parent_tool_use_id`), matching Claude's
-sub-agent rendering. The lane carrying this faithfully (ids + ordering intact,
-no coalescing loss) was proven by a spike before this was built.
+The structured shape lets the adapter render each child's activity as nested,
+attributed blocks — a parent `Agent` tool with the child's own tool calls and
+text grouped beneath it (`parent_tool_use_id`), matching Claude's sub-agent
+rendering.
 
 `partialResult` is ACCUMULATED, not a delta: each update re-sends the full
 children/events snapshot, so this module re-parses the whole value idempotently
 (it never appends). Parsing is permissive — the payload crosses a subprocess
-boundary, so a malformed value or unknown version yields `None` (the call still
-renders as a plain `Agent` tool block) and a bad event is skipped rather than
-raising.
+boundary, so a malformed value or unknown version yields `None` (the call then
+renders as a plain `Agent` tool block) and a bad event is skipped.
 
 Wire contract shared with `extensions/sculptor_subagent.ts`: the version and
 field names below MUST match what that extension emits. Changing one means
@@ -49,15 +46,12 @@ from sculptor.state.chat_state import ToolResultBlock
 from sculptor.state.chat_state import ToolUseBlock
 from sculptor.state.claude_state import get_tool_invocation_string
 
-# Payload schema version (the `v` field). The extension stamps this; a payload
-# whose `v` differs is treated as unparseable so an extension/binary version
-# skew degrades to plain rendering rather than mis-parsing. MUST match
-# `SUBAGENT_PAYLOAD_VERSION` in `extensions/sculptor_subagent.ts`.
+# Payload schema version (the `v` field); a payload with a different `v` is
+# treated as unparseable. MUST match `SUBAGENT_PAYLOAD_VERSION` in
+# `extensions/sculptor_subagent.ts`.
 SUBAGENT_PAYLOAD_VERSION: int = 1
 
-# Terminal child statuses — a child in one of these has finished and its nested
-# message is safe to emit once. "running" children are emitted (with whatever
-# they have) only when the parent tool itself ends.
+# Child statuses that mean the child has finished.
 _TERMINAL_STATUSES: frozenset[str] = frozenset({"done", "error"})
 
 
@@ -133,8 +127,7 @@ def _parse_child(raw: Any) -> SubagentChild | None:
             event = _parse_event(entry)
             if event is not None:
                 events.append(event)
-    # Stable ordering by seq so coalesced/out-of-order updates still render in
-    # the order the child produced them (the extension assigns monotonic seqs).
+    # Sort by seq so out-of-order events render in producer order.
     events.sort(key=lambda event: event.seq)
     status = raw.get("status")
     return SubagentChild(
@@ -209,8 +202,8 @@ def build_child_content_blocks(child: SubagentChild, parent_tool_call_id: str) -
                     is_error=event.is_error,
                 )
             )
-    # A child that produced no events still surfaces as an attributed bubble so
-    # the user sees it ran (e.g. an aborted child) — its status carries the why.
+    # A child with no events still surfaces as an attributed bubble (e.g. an
+    # aborted child).
     if not blocks:
         blocks.append(TextBlock(text=_empty_child_text(child)))
     return tuple(blocks)
