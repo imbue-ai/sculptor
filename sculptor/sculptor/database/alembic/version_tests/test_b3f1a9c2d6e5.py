@@ -56,6 +56,24 @@ class TestMigrationB3f1a9c2d6e5(MigrationTestFixture):
                 {"ws_id": WORKSPACE_ID, "project_id": PROJECT_ID},
             )
 
+        # Reproduce production state: at runtime, initialize_db() installs an auto-managed
+        # before-insert trigger on `workspace` that references every base column, including
+        # NEW.harness (see database/automanaged.py). SQLite validates trigger bodies during
+        # ALTER TABLE, so dropping the harness column fails unless the migration drops this
+        # trigger first. The migration test harness does not install these triggers, so we
+        # recreate the relevant one here to exercise the DROP COLUMN path the way production does.
+        connection.execute(
+            sa.text("""
+                CREATE TRIGGER workspace_before_insert
+                BEFORE INSERT ON workspace
+                BEGIN
+                    INSERT INTO workspace_latest (object_id, harness)
+                    VALUES (NEW.object_id, NEW.harness)
+                    ON CONFLICT (object_id) DO UPDATE SET harness = excluded.harness;
+                END;
+            """)
+        )
+
     def verify(self, connection: sa.engine.Connection) -> None:
         for table in ("workspace", "workspace_latest"):
             columns = {
