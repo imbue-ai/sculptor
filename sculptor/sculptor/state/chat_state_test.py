@@ -13,6 +13,13 @@ def test_make_plan_approval_question_propagates_plan_file_path() -> None:
     assert q.plan_file_path == "/abs/.claude/plans/y.md"
 
 
+def test_make_plan_approval_question_text_is_harness_neutral() -> None:
+    # The canonical plan question is shown by every harness (including pi, which
+    # is deliberately Claude-free), so it must not name a specific agent.
+    question_text = make_plan_approval_question(tool_use_id="toolu_x").questions[0].question
+    assert "Claude" not in question_text
+
+
 def test_ask_user_question_data_deserializes_without_plan_file_path() -> None:
     legacy_payload = {
         "questions": [

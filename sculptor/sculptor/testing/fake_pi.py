@@ -38,6 +38,13 @@ base64 `ImageContent` blocks) but never decodes them — it has no model. The
 and the prompt text so integration tests can assert image/attachment delivery
 end-to-end without a real upstream model.
 
+The `fake_pi:ui_request` directive scripts the interactive-backchannel lane:
+it emits an `extension_ui_request` (the shape the `sculptor_backchannel`
+extension's dialogs produce), blocks until the matching
+`extension_ui_response` arrives on stdin, then streams the answer back as
+assistant text — exercising the full ask-user-question / plan-approval
+round-trip without loading any real extension.
+
 CLI surface matches what ``PiAgent.start`` spawns:
 
     pi --mode rpc --session-dir <dir> --session-id <id> --append-system-prompt <prompt>
@@ -108,6 +115,13 @@ class _TurnAborted(Exception):
 # main loop emits turn events), so serialize whole lines to avoid interleaving.
 _STDOUT_LOCK = threading.Lock()
 
+# `extension_ui_response` payloads, routed here from the background stdin reader
+# so a blocked `ui_request` directive can collect its answer while the reader
+# keeps handling out-of-band `abort`. The reader is the single stdin consumer,
+# and the directive handler is registry-dispatched, so this module-level queue
+# is how the two connect.
+_UI_RESPONSE_QUEUE: "Queue[dict]" = Queue()
+
 
 @dataclass
 class _TurnBuilder:
@@ -118,12 +132,23 @@ class _TurnBuilder:
     is how integration tests assert image/attachment delivery without a model.
     """
 
+    prompt_id: str | None = None
     chunks: list[str] = field(default_factory=list)
     prompt_text: str = ""
     images: list[dict] = field(default_factory=list)
+    _ui_counter: int = 0
 
     def emit(self, text: str) -> None:
         self.chunks.append(text)
+
+    def reset(self) -> None:
+        """Drop accumulated text — used after flushing a message_end mid-turn."""
+        self.chunks = []
+
+    def next_ui_request_id(self) -> str:
+        """A fresh extension_ui_request id, unique within the turn."""
+        self._ui_counter += 1
+        return f"{self.prompt_id or 'turn'}-ui-{self._ui_counter}"
 
     @property
     def has_text(self) -> bool:
@@ -509,6 +534,64 @@ def _handle_recall(args: dict, builder: _TurnBuilder, abort_event: Event, state:
         builder.emit("RECALL:NO_PRIOR_CONTEXT")
 
 
+def _read_extension_ui_response(expected_id: str, abort_event: Event) -> dict:
+    """Collect the matching `extension_ui_response` routed from the stdin reader.
+
+    The background reader enqueues `extension_ui_response` payloads on
+    `_UI_RESPONSE_QUEUE`; a set `abort_event` (an `abort` command or stdin EOF)
+    resolves as a cancellation — mirroring how the real backchannel dialog
+    unblocks when the client answers or the turn is aborted. A payload carrying
+    `cancelled` (the client's dismissal, or the reader's EOF sentinel) is itself
+    a cancellation.
+    """
+    while not abort_event.is_set():
+        try:
+            payload = _UI_RESPONSE_QUEUE.get(timeout=0.05)
+        except Empty:
+            continue
+        if payload.get("cancelled"):
+            return payload
+        if payload.get("id") == expected_id:
+            return payload
+    return {"cancelled": True}
+
+
+def _handle_ui_request(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
+    """Emit a backchannel dialog, block for the answer, echo it into the turn.
+
+    Scripts the real extension's blocking-dialog lane without loading any
+    extension: emit `extension_ui_request {method,title,options}`, wait for the
+    matching `extension_ui_response` (routed from the stdin reader), then stream
+    the answer back as assistant text so a test can assert the agent used it. A
+    `message_end` is flushed first (mirroring pi ending the assistant message
+    that carried the tool call) so the post-answer text streams as a fresh
+    assistant message.
+
+    `state` is unused (backchannel dialogs are not session-dependent) but the
+    signature matches the shared directive-handler contract.
+
+    Args: `method` ("select"/"input"), `title`, optional `options`, optional
+    `answer_prefix` (default "ANSWER="), optional `dismissed_text`.
+    """
+    _emit_message_end(builder.full_text)
+    builder.reset()
+    request_id = builder.next_ui_request_id()
+    event: dict = {"type": "extension_ui_request", "id": request_id, "method": args.get("method", "select")}
+    if "title" in args:
+        event["title"] = args["title"]
+    if "options" in args:
+        event["options"] = args["options"]
+    _emit(event)
+    response = _read_extension_ui_response(request_id, abort_event)
+    if response.get("cancelled"):
+        answer_text = str(args.get("dismissed_text", "[dismissed]"))
+    else:
+        answer_text = str(response.get("value", ""))
+    rendered = str(args.get("answer_prefix", "ANSWER=")) + answer_text
+    _emit_text_delta(rendered, builder.full_text + rendered)
+    builder.emit(rendered)
+
+
 _COMMAND_REGISTRY: dict[str, Callable[[dict, _TurnBuilder, Event, _SessionState], None]] = {
     "emit_text": _handle_emit_text,
     "stream_text": _handle_stream_text,
@@ -518,6 +601,7 @@ _COMMAND_REGISTRY: dict[str, Callable[[dict, _TurnBuilder, Event, _SessionState]
     "recall": _handle_recall,
     "report_inputs": _handle_report_inputs,
     "compaction": _handle_compaction,
+    "ui_request": _handle_ui_request,
 }
 
 
@@ -593,7 +677,7 @@ def _run_turn(
     if error_message is not None:
         _emit_response("prompt", success=False, prompt_id=prompt_id, error=error_message)
         return
-    builder = _TurnBuilder(prompt_text=prompt_text, images=images)
+    builder = _TurnBuilder(prompt_id=prompt_id, prompt_text=prompt_text, images=images)
     _emit_response("prompt", success=True, prompt_id=prompt_id)
     _emit({"type": "agent_start"})
     _emit_user_message_end(prompt_text)
@@ -656,9 +740,15 @@ def _run_rpc_loop(system_prompt: str, session_dir: Path | None, session_id: str)
                 # NOT exit (real pi stays alive — see module docstring).
                 _emit_response("abort", success=True, prompt_id=command_id)
                 abort_event.set()
+            elif event_type == "extension_ui_response":
+                # Out-of-band: route to a blocked `ui_request` directive (see
+                # _handle_ui_request); the main loop never processes these.
+                _UI_RESPONSE_QUEUE.put(payload)
             elif event_type in ("prompt", "get_state"):
                 # In-order: queued so get_state observes preceding turns' state.
                 command_queue.put(payload)
+        # Unblock any `ui_request` still waiting when stdin closes at shutdown.
+        _UI_RESPONSE_QUEUE.put({"cancelled": True})
         stdin_closed.set()
 
     reader = threading.Thread(target=_read_stdin, name="fake_pi-stdin-reader", daemon=True)

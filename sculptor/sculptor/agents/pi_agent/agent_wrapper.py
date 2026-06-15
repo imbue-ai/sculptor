@@ -1,22 +1,26 @@
 """PiAgent — `DefaultAgentWrapper` subclass wrapping `pi --mode rpc`.
 
-The agent spawns a long-lived `pi --mode rpc --session-dir <dir>
---session-id <id> --append-system-prompt <prompt> [--skill <dir> ...]`
-subprocess and pumps user turns over JSONL stdin/stdout. The session flags
-persist the conversation as a JSONL file under a per-task dir and pin its id
-Sculptor-side, so relaunching after an agent-process restart resumes the full
-conversation (`supports_session_resume`). The `--skill` flags point pi at the
-workspace's Claude-visible skill sources so its skill set matches the slash
-picker's (`supports_skills`). Pi's stdout multiplexes three channels
-(`response`, `extension_ui_request`, and the `AgentSessionEvent` union);
-the dispatcher distinguishes them by top-level `type`. Pi's tool calls
-render as rich tool blocks (`supports_tool_use_rendering=True`): the
-issuing assistant message's `toolCall` content blocks become
-`ToolUseBlock`s (name + input, shown while running) and the
-tool-execution lane's `tool_execution_end` becomes the `ToolResultBlock`
-(the result, shown when done), correlated by the shared tool-call id (see
-`tool_rendering.py` for the pi→Claude name/arg adaptation). A finished
-file-mutating tool (`edit`/`write`/`bash`) additionally triggers
+The agent spawns a long-lived `pi --mode rpc --session-dir <dir> --session-id
+<id> --no-extensions -e <pinned extension> --append-system-prompt <prompt>
+[--skill <dir> ...]` subprocess and pumps user turns over JSONL stdin/stdout.
+The session flags persist the conversation as a JSONL file under a per-task dir
+and pin its id Sculptor-side, so relaunching after an agent-process restart
+resumes the full conversation (`supports_session_resume`). The `--skill` flags
+point pi at the workspace's Claude-visible skill sources so its skill set
+matches the slash picker's (`supports_skills`). The pinned `sculptor_backchannel`
+extension (`extensions/`, `backchannel.py`), loaded with `--no-extensions -e`,
+provides ask-user-question + plan mode: its blocking dialogs arrive as
+`extension_ui_request` and are mapped onto `AskUserQuestionAgentMessage`, with
+the user's `UserQuestionAnswerMessage` routed back as the matching
+`extension_ui_response`. Pi's stdout multiplexes three channels (`response`,
+`extension_ui_request`, and the `AgentSessionEvent` union); the dispatcher
+distinguishes them by top-level `type`. Pi's tool calls render as rich tool
+blocks (`supports_tool_use_rendering=True`): the issuing assistant message's
+`toolCall` content blocks become `ToolUseBlock`s (name + input, shown while
+running) and the tool-execution lane's `tool_execution_end` becomes the
+`ToolResultBlock` (the result, shown when done), correlated by the shared
+tool-call id (see `tool_rendering.py` for the pi→Claude name/arg adaptation). A
+finished file-mutating tool (`edit`/`write`/`bash`) additionally triggers
 `on_diff_needed` so the workspace diff is regenerated — pi runs the tools
 against the workspace itself and emits no other signal that files changed.
 
@@ -36,6 +40,7 @@ from pathlib import Path
 from queue import Empty
 from queue import Queue
 from threading import Event
+from threading import Lock
 from typing import Any
 from typing import Mapping
 from typing import assert_never
@@ -48,6 +53,10 @@ from pydantic import ValidationError
 
 from sculptor.agents.default.agent_wrapper import DefaultAgentWrapper
 from sculptor.agents.default.utils import get_state_file_contents
+from sculptor.agents.pi_agent.backchannel import PLAN_APPROVAL_DIALOG_TITLE
+from sculptor.agents.pi_agent.backchannel import build_ask_user_question_data
+from sculptor.agents.pi_agent.backchannel import extension_ui_response_body
+from sculptor.agents.pi_agent.backchannel import is_plan_approval
 from sculptor.agents.pi_agent.harness import PiHarness
 from sculptor.agents.pi_agent.output_processor import AgentMessage
 from sculptor.agents.pi_agent.output_processor import ExtensionUiRequest
@@ -87,12 +96,16 @@ from sculptor.common.plugin import get_plugin_dirs
 from sculptor.foundation.common import generate_id
 from sculptor.foundation.secrets_utils import Secret
 from sculptor.foundation.thread_utils import ObservableThread
+from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingDoneAgentMessage
 from sculptor.interfaces.agents.agent import ClearContextUserMessage
 from sculptor.interfaces.agents.agent import InterruptProcessUserMessage
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import PiAgentConfig
+from sculptor.interfaces.agents.agent import PlanModeAgentMessage
+from sculptor.interfaces.agents.agent import RequestSkippedAgentMessage
+from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
 from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
@@ -108,10 +121,12 @@ from sculptor.primitives.ids import ToolUseID
 from sculptor.services.dependency_management_service import PI_VERSION_RANGE
 from sculptor.services.dependency_management_service import parse_pi_version
 from sculptor.services.user_config.user_config import get_user_config_instance
+from sculptor.state.chat_state import AskUserQuestionData
 from sculptor.state.chat_state import ContentBlockTypes
 from sculptor.state.chat_state import TextBlock
 from sculptor.state.chat_state import ToolResultBlock
 from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.chat_state import make_plan_approval_question
 from sculptor.state.claude_state import get_tool_invocation_string
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import Message
@@ -146,17 +161,30 @@ PI_SESSION_ID_STATE_FILE: str = "pi_session_id"
 # them (pi has no RPC equivalent) and logs each at error level — the frontend
 # gate should keep them from reaching pi, so one arriving means a gate has
 # failed. Each maps to the capability whose handler will replace its drop:
-#   UserQuestionAnswerMessage        → supports_interactive_backchannel
 #   ClearContextUserMessage          → supports_context_reset
-_DEAD_LETTER_MESSAGE_TYPES: tuple[type[Message], ...] = (
-    UserQuestionAnswerMessage,
-    ClearContextUserMessage,
-)
+_DEAD_LETTER_MESSAGE_TYPES: tuple[type[Message], ...] = (ClearContextUserMessage,)
 
 # If pi's abort-induced `agent_end` does not arrive within this grace window
 # (pi wedged or ignoring the abort), escalate to SIGTERM; the process-exit
 # fallback in `_consume_until_turn_end` then resolves the turn.
 _INTERRUPT_ESCALATION_GRACE_SECONDS: float = 5.0
+
+# The backchannel extension shipped with Sculptor (package data; see
+# pyproject.toml). Resolved next to this module so it works from an installed
+# build as well as a repo checkout, then written into the environment at launch.
+_BACKCHANNEL_EXTENSION_FILENAME: str = "sculptor_backchannel.ts"
+_EXTENSIONS_SOURCE_DIR: Path = Path(__file__).resolve().parent / "extensions"
+
+# Prepended to a turn's prompt while the agent is in plan mode. Drives the pi
+# agent to explore read-only and present its plan via the `exit_plan_mode` tool
+# for approval — the pi analogue of Claude's `is_in_plan_mode` user-instructions.
+# (Divergence, REQ-CAP-ALL-3: read-only is requested in the prompt, not enforced
+# by a tool allowlist.)
+_PLAN_MODE_PROMPT_PREFIX: str = """[PLAN MODE]
+You are in plan mode. Investigate the request using read-only tools only (read files, inspect with read-only bash, grep, find, ls) and do NOT modify any files or run state-changing commands. Produce a clear, numbered plan describing what you would do. When the plan is ready, call the `exit_plan_mode` tool to present it to the user for approval. Do not begin implementing until the user approves; if they request revisions, refine the plan and call `exit_plan_mode` again.
+
+The user's request follows:
+"""
 
 
 def _pi_version_in_range(version: str) -> bool:
@@ -300,6 +328,34 @@ class PiAgent(DefaultAgentWrapper):
     # offers), captured at launch so `_run_prompt_turn` can rewrite a picked
     # `/name` into pi's `/skill:<name>` form. Empty until `start()`.
     _discovered_skill_names: frozenset[str] = PrivateAttr(default_factory=frozenset)
+    # Absolute paths pi was launched with via `-e` (the pinned extension set);
+    # used by the fail-loud posture to tell our extension's errors from foreign.
+    _loaded_extension_paths: tuple[str, ...] = PrivateAttr(default=())
+    # Interactive-backchannel state, shared between the dispatcher thread (which
+    # sets `_pending_ui_request_id` when our extension opens a dialog) and the
+    # request-handling thread (which clears it and writes the answer in
+    # `_deliver_question_answer`). Guarded by `_backchannel_lock`.
+    _backchannel_lock: Lock = PrivateAttr(default_factory=Lock)
+    _pending_ui_request_id: str | None = PrivateAttr(default=None)
+    # Tool-call id of the backchannel tool whose dialog is currently open. Pi
+    # assigns the tool call and the extension's `ui_request` separate ids; this
+    # is the tool-call id — the one carried by the rendered ToolUseBlock /
+    # ToolResultBlock — used as the question's `tool_use_id` so the frontend
+    # correlates the answered question with its tool block (Claude's single-id
+    # model). Set and read on the dispatcher thread only. `_pending_ui_request_id`
+    # keeps the separate ui_request id for the `extension_ui_response` round-trip.
+    _pending_backchannel_tool_call_id: str | None = PrivateAttr(default=None)
+    # Answer request ids awaiting their deferred RequestSuccess (emitted at the
+    # turn boundary so the post-answer content reaches the frontend first —
+    # mirrors Claude's `_pending_answer_request_ids`).
+    _pending_answer_request_ids: list[AgentMessageID] = PrivateAttr(default_factory=list)
+    # Tracks plan mode across turns (set from ChatInputUserMessage flags, cleared
+    # on plan approval) so the prompt carries the plan-mode preamble — the pi
+    # analogue of ClaudeProcessManager._is_in_plan_mode.
+    _is_in_plan_mode: bool = PrivateAttr(default=False)
+    # Serializes stdin writes: the prompt pump, the answer-delivery thread, and
+    # `wait()`'s abort can all write to pi's stdin.
+    _send_lock: Lock = PrivateAttr(default_factory=Lock)
 
     def start(self, secrets: Mapping[str, str | Secret]) -> None:
         # Resolve and validate the pi binary BEFORE super().start so the
@@ -353,12 +409,16 @@ class PiAgent(DefaultAgentWrapper):
         # the picker list and pi's loaded set stay in lockstep.
         skill_args = self._build_skill_launch_args()
         self._discovered_skill_names = self._discover_skill_names()
+        extension_args = self._install_pinned_extensions()
         # `--session-id` (Sculptor-pinned id, "creating it if missing") is the
         # resume lever, chosen over `--session <id>`: it never errors on an
         # absent/corrupt session (real pi 0.78.0 exits non-zero for an unknown
         # `--session`), so a lost session file degrades to a loud fresh start
         # rather than a crash loop. Pi also tolerates a truncated JSONL tail,
-        # resuming the valid prefix. See the MR for the lever rationale.
+        # resuming the valid prefix. `--no-extensions` disables pi's own
+        # extension *discovery* while the explicit `-e <path>` still loads our
+        # pinned set — together the immutability guarantee (REQ-EXT-3): only
+        # Sculptor's curated, version-pinned extension set loads.
         command = [
             binary,
             "--mode",
@@ -367,6 +427,8 @@ class PiAgent(DefaultAgentWrapper):
             str(session_dir),
             "--session-id",
             self._session_id,
+            "--no-extensions",
+            *extension_args,
             "--append-system-prompt",
             system_prompt,
             *skill_args,
@@ -430,6 +492,12 @@ class PiAgent(DefaultAgentWrapper):
                     interrupted=False,
                 )
             )
+            return True
+        if isinstance(message, UserQuestionAnswerMessage):
+            # Mid-turn answer to a backchannel dialog the agent is blocked on:
+            # delivered here on the request-handling thread (mirrors Claude's
+            # `_try_deliver_answer_to_mcp`), not queued like a new prompt.
+            self._deliver_question_answer(message)
             return True
         if isinstance(message, _DEAD_LETTER_MESSAGE_TYPES):
             # See _DEAD_LETTER_MESSAGE_TYPES. Returns False so the base class's
@@ -570,6 +638,28 @@ class PiAgent(DefaultAgentWrapper):
             skill_md.write_text(_render_synthesized_skill(name, description, body), encoding="utf-8")
         return skills_root if seen_names else None
 
+    def _install_pinned_extensions(self) -> list[str]:
+        """Materialize the pinned extension set and return its `-e <path>` args.
+
+        The extension source ships as package data next to this module
+        (`extensions/`, see pyproject.toml), so it resolves in an installed
+        build as well as a repo checkout. We write it into the per-task state
+        dir via `environment.write_file` so the pi process can read it whatever
+        the environment type (local / container / remote) — a repo-relative path
+        would not survive packaging, the trap this avoids.
+        """
+        extension_args: list[str] = []
+        loaded_paths: list[str] = []
+        state_path = self.environment.get_state_path()
+        for filename in (_BACKCHANNEL_EXTENSION_FILENAME,):
+            content = (_EXTENSIONS_SOURCE_DIR / filename).read_text(encoding="utf-8")
+            destination = state_path / filename
+            self.environment.write_file(str(destination), content)
+            extension_args.extend(["-e", str(destination)])
+            loaded_paths.append(str(destination))
+        self._loaded_extension_paths = tuple(loaded_paths)
+        return extension_args
+
     def _collect_api_key_secrets(self) -> dict[str, Secret]:
         config = get_user_config_instance()
         collected: dict[str, Secret] = {}
@@ -604,10 +694,13 @@ class PiAgent(DefaultAgentWrapper):
         if process is None:
             return
         line = json.dumps(payload, separators=(",", ":")) + "\n"
-        try:
-            process.write_stdin(line)
-        except Exception as e:  # noqa: BLE001
-            logger.debug("PiAgent write_stdin failed: {}", e)
+        # The prompt pump, answer delivery, and wait()'s abort can all write
+        # stdin from different threads; serialize so lines never interleave.
+        with self._send_lock:
+            try:
+                process.write_stdin(line)
+            except Exception as e:  # noqa: BLE001
+                logger.debug("PiAgent write_stdin failed: {}", e)
 
     def _request_state_blocking(self, timeout: float = 10.0) -> dict[str, Any] | None:
         """Send `get_state` and return pi's reported `RpcSessionState` data (RPC §5.1).
@@ -757,6 +850,7 @@ class PiAgent(DefaultAgentWrapper):
             self._run_prompt_turn(message)
 
     def _run_prompt_turn(self, message: ChatInputUserMessage) -> None:
+        self._update_plan_mode_from_message(message)
         with self._handle_user_message(message):
             # A fresh turn starts un-interrupted: clear interrupt state left by an
             # interrupt that raced in with no turn in flight, which would otherwise
@@ -766,15 +860,37 @@ class PiAgent(DefaultAgentWrapper):
             self._cancel_interrupt_escalation()
             prompt_id = generate_id()
             self._turn_in_flight.set()
+            turn_failed = False
             self._send_rpc(self._build_prompt_payload(prompt_id, message))
             try:
                 self._consume_until_turn_end(prompt_id)
+            except BaseException:
+                turn_failed = True
+                raise
             finally:
                 # Turn over: stand down escalation and drop interrupt-pending so a
                 # late grace-window thread can't SIGTERM the next turn's pi.
                 self._turn_in_flight.clear()
                 self._interrupt_pending.clear()
                 self._cancel_interrupt_escalation()
+                # Finalize any backchannel answer delivered mid-turn (its
+                # RequestSuccess was deferred to here so the post-answer content
+                # reached the frontend first). Runs on the failure path too, so the
+                # answer's request resolves instead of pinning the frontend
+                # "thinking" (mirrors Claude).
+                self._finalize_pending_answers(interrupted=turn_failed)
+
+    def _update_plan_mode_from_message(self, message: ChatInputUserMessage) -> None:
+        """Track plan mode across turns from the chat input's toggle flags.
+
+        Mirrors `ClaudeProcessManager` (`process_manager.py`): entering sets the
+        flag, leaving clears it; plan approval clears it later in
+        `_deliver_question_answer`.
+        """
+        if message.enter_plan_mode:
+            self._is_in_plan_mode = True
+        elif message.exit_plan_mode:
+            self._is_in_plan_mode = False
 
     def _build_prompt_payload(self, prompt_id: str, message: ChatInputUserMessage) -> dict[str, Any]:
         """Assemble the `prompt` command for one user turn, attachments included.
@@ -786,8 +902,7 @@ class PiAgent(DefaultAgentWrapper):
         """
         saved_paths = save_attachments_to_environment(self.environment, message.files)
         image_paths, path_attachments = split_image_and_path_attachments(saved_paths)
-        rewritten_text = _rewrite_skill_invocation(message.text, self._discovered_skill_names)
-        prompt_text = build_attachment_instructions(path_attachments) + rewritten_text
+        prompt_text = build_attachment_instructions(path_attachments) + self._build_prompt_text(message)
         payload: dict[str, Any] = {"type": "prompt", "id": prompt_id, "message": prompt_text}
         if image_paths:
             # No per-model image-capability gating here yet, only the
@@ -797,11 +912,35 @@ class PiAgent(DefaultAgentWrapper):
             payload["images"] = [build_image_block(path, self._read_attachment_bytes(path)) for path in image_paths]
         return payload
 
+    def _build_prompt_text(self, message: ChatInputUserMessage) -> str:
+        """The user text with the skill-invocation rewrite, plus the plan-mode
+        preamble while in plan mode."""
+        text = _rewrite_skill_invocation(message.text, self._discovered_skill_names)
+        if self._is_in_plan_mode:
+            return f"{_PLAN_MODE_PROMPT_PREFIX}{text}"
+        return text
+
     def _read_attachment_bytes(self, path: str) -> bytes:
         """Read a saved attachment's bytes from the environment copy."""
         content = self.environment.read_file(path, mode="rb")
         assert isinstance(content, bytes), "binary read must return bytes"
         return content
+
+    def _finalize_pending_answers(self, interrupted: bool) -> None:
+        """Emit the deferred RequestSuccess for answers delivered this turn.
+
+        Deferred from `_deliver_question_answer` to the turn boundary so the
+        post-answer content reaches the frontend's in-progress message before it
+        is finalized — mirrors Claude's `_process_single_message` finally block.
+        """
+        with self._backchannel_lock:
+            pending = self._pending_answer_request_ids
+            self._pending_answer_request_ids = []
+            self._pending_ui_request_id = None
+        for request_id in pending:
+            self._output_messages.put(
+                RequestSuccessAgentMessage(message_id=AgentMessageID(), request_id=request_id, interrupted=interrupted)
+            )
 
     def _consume_until_turn_end(self, prompt_id: str = "") -> None:
         """Drive pi's stdout until the current agent run terminates.
@@ -809,9 +948,10 @@ class PiAgent(DefaultAgentWrapper):
         Top-level dispatch routes on `event["type"]` into three lanes:
         `response` (command-ACK; correlate by `id`; `success: false` on
         the outstanding `prompt` raises `PiCrashError`),
-        `extension_ui_request` (logged and discarded; pi-basic loads no
-        extensions), and everything else (the `AgentSessionEvent` union,
-        dispatched per-`type`).
+        `extension_ui_request` (the backchannel extension's blocking dialogs →
+        AskUserQuestion; the turn stays open until the answer is posted back),
+        and everything else (the `AgentSessionEvent` union, dispatched
+        per-`type`).
         """
         process = self._process
         assert process is not None
@@ -876,8 +1016,8 @@ class PiAgent(DefaultAgentWrapper):
         """Dispatch one parsed RPC message. Returns True when the turn ends.
 
         A single `match` over the typed union makes the three lanes explicit:
-        `response` (correlated by `id`), `extension_ui_request` (discarded —
-        no extensions are loaded), and the session-event union. `agent_end`
+        `response` (correlated by `id`), `extension_ui_request` (the backchannel
+        extension's dialogs → AskUserQuestion), and the session-event union. `agent_end`
         is the only turn boundary; `message_end` fires once per assistant
         message (several times per run in tool loops) and so cannot terminate
         the turn. The `tool_execution_*` lane renders tool calls:
@@ -892,7 +1032,7 @@ class PiAgent(DefaultAgentWrapper):
                 self._handle_response_event(parsed, state)
                 return False
             case ExtensionUiRequest():
-                logger.debug("PiAgent ignoring extension_ui_request (no extensions loaded): {}", parsed)
+                self._handle_extension_ui_request(parsed)
                 return False
             case ParsedAgentStart():
                 # Streaming begins; nothing to emit until text_delta arrives.
@@ -1051,6 +1191,12 @@ class PiAgent(DefaultAgentWrapper):
                     claude_input=dict(block.input),
                     assistant_message_id=state.assistant_message_id,
                 )
+                # Remember the backchannel tool call so the dialog it opens next
+                # adopts its id as the question's tool_use_id (see
+                # `_build_question_data`). Dialogs are sequential, so the most
+                # recent backchannel call is the one whose dialog is opening.
+                if self.harness.classify_tool_ui_role(block.name) is not None:
+                    self._pending_backchannel_tool_call_id = str(block.id)
         if content:
             self._output_messages.put(
                 ResponseBlockAgentMessage(
@@ -1271,11 +1417,91 @@ class PiAgent(DefaultAgentWrapper):
         self._output_messages.put(AutoCompactingDoneAgentMessage(message_id=AgentMessageID()))
 
     def _handle_extension_error(self, parsed: ParsedExtensionError) -> None:
-        # Non-terminal: extensions are not loaded in pi-basic but pi could
-        # still surface one from its own bundled defaults.
+        """Fail loud on an error from our pinned extension; log foreign ones.
+
+        A thrown extension surfaces as a non-terminal `extension_error`
+        (RPC §5.2/§8). An error from the extension Sculptor loaded (`-e <path>`)
+        fails the turn visibly via `PiCrashError` rather than continuing with a
+        silently broken backchannel. An error from any other extension path
+        stays log-only.
+        """
+        if parsed.extension_path in self._loaded_extension_paths:
+            text = parsed.error or "the Sculptor backchannel extension raised an error"
+            raise PiCrashError(text, exit_code=None, metadata=None)
         logger.info(
-            "PiAgent extension_error: extension={} event={} error={}",
+            "PiAgent extension_error from foreign extension: extension={} event={} error={}",
             parsed.extension_path,
             parsed.event,
             parsed.error,
         )
+
+    def _handle_extension_ui_request(self, parsed: ExtensionUiRequest) -> None:
+        """Map a backchannel dialog onto an AskUserQuestion and hold the turn.
+
+        Our extension only opens blocking `select` (multiple-choice / plan
+        approval) and `input` (free-form) dialogs. Each becomes an
+        `AskUserQuestionAgentMessage`, and the request id is recorded so
+        `_deliver_question_answer` can post the matching `extension_ui_response`.
+        pi blocks until then (we never set a `timeout`), so the consume loop just
+        keeps draining stdout — the turn is not over. Fire-and-forget methods
+        (`notify`/`setStatus`/…) need no response and are ignored.
+        """
+        if parsed.method not in ("select", "input"):
+            logger.debug("PiAgent ignoring non-dialog extension_ui_request method: {}", parsed.method)
+            return
+        question_data = self._build_question_data(parsed)
+        with self._backchannel_lock:
+            self._pending_ui_request_id = parsed.id
+        self._output_messages.put(
+            AskUserQuestionAgentMessage(message_id=AgentMessageID(), question_data=question_data)
+        )
+
+    def _build_question_data(self, parsed: ExtensionUiRequest) -> AskUserQuestionData:
+        """Build the AskUserQuestion payload from a backchannel dialog request.
+
+        The `exit_plan_mode` tool's `select` uses the plan-approval sentinel
+        title, which maps to the canonical Sculptor plan-approval question (so
+        the frontend shows "Waiting for plan approval" and the gated methods
+        agree). Any other dialog is a regular question: `select` (options) →
+        multiple choice, `input` (no options) → free-form. `other_label` lets the
+        user type a free-form answer too; pi returns the typed value verbatim.
+        """
+        # The question's tool_use_id is the originating tool call's id (not the
+        # ui_request id) so the frontend correlates the answered question with the
+        # rendered ToolUseBlock / ToolResultBlock. Fall back to the ui_request id
+        # only if no backchannel tool call was seen (unexpected — the tool issues
+        # the dialog).
+        tool_use_id = self._pending_backchannel_tool_call_id or parsed.id
+        if parsed.method == "select" and parsed.title == PLAN_APPROVAL_DIALOG_TITLE:
+            return make_plan_approval_question(tool_use_id=tool_use_id)
+        return build_ask_user_question_data(parsed.title or "", parsed.options or [], tool_use_id)
+
+    def _deliver_question_answer(self, message: UserQuestionAnswerMessage) -> None:
+        """Post the user's answer back to the dialog pi is blocked on.
+
+        Runs on the request-handling thread while the dispatcher thread drains
+        stdout. Emits the answer's own `RequestStarted` immediately and defers
+        its `RequestSuccess` to the turn boundary (`_finalize_pending_answers`),
+        mirroring Claude's `_try_deliver_answer_to_mcp`. A plan approval also
+        clears plan mode and emits `PlanModeAgentMessage(False)`. An answer with
+        no pending dialog is stale (the frontend gate should prevent it): emit a
+        terminal `RequestSkipped` so the request resolves, and drop it.
+        """
+        with self._backchannel_lock:
+            request_id = self._pending_ui_request_id
+            if request_id is None:
+                logger.info(
+                    "PiAgent received question answer with no pending dialog (stale); skipping. tool_use_id={}",
+                    message.tool_use_id,
+                )
+                self._output_messages.put(RequestSkippedAgentMessage(request_id=message.message_id))
+                return
+            self._pending_ui_request_id = None
+            self._pending_answer_request_ids.append(message.message_id)
+        if self._is_in_plan_mode and is_plan_approval(message):
+            self._is_in_plan_mode = False
+            self._output_messages.put(PlanModeAgentMessage(message_id=AgentMessageID(), is_in_plan_mode=False))
+        self._output_messages.put(
+            RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=message.message_id)
+        )
+        self._send_rpc({"type": "extension_ui_response", "id": request_id, **extension_ui_response_body(message)})

@@ -11,12 +11,7 @@ import {
 } from "~/common/state/hooks/useTaskHelpers.ts";
 import type { SubagentMetadata, SubagentTreeNode } from "~/pages/workspace/utils/subagentTree.ts";
 import { SUBAGENT_TOOL_NAMES } from "~/pages/workspace/utils/subagentTree.ts";
-import {
-  isAskUserQuestionTool,
-  isEnterPlanModeTool,
-  isExitPlanModeTool,
-  isHiddenTool,
-} from "~/pages/workspace/utils/utils.ts";
+import { isEnterPlanModeTool, isHiddenTool } from "~/pages/workspace/utils/utils.ts";
 
 import { AlphaAskUserQuestionBlock } from "./AlphaAskUserQuestionBlock.tsx";
 import { AlphaExitPlanModeBlock } from "./AlphaExitPlanModeBlock.tsx";
@@ -33,18 +28,18 @@ const isTopLevelToolBlock = (block: ToolUseBlock | ToolResultBlock): boolean => 
   return isEnterPlanModeTool(toolName);
 };
 
-const isSpecialToolUse = (block: ToolUseBlock): boolean =>
-  isAskUserQuestionTool(block.name) || isExitPlanModeTool(block.name);
+// The harness stamps interactiveRole on backchannel tool blocks (server-side,
+// from Harness.classify_tool_ui_role) so rendering keys off the role rather than
+// a hardcoded set of tool names — each harness owns which of its tools are
+// ask-user-question / exit-plan-mode.
+const isSpecialToolUse = (block: ToolUseBlock): boolean => block.interactiveRole != null;
 
 // AUQ / ExitPlanMode tool_result blocks are consumed by the inline
 // AlphaAskUserQuestionBlock / AlphaExitPlanModeBlock via the
 // submittedQuestionAnswers lookup. Rendering them as a separate generic
 // tool-call card would duplicate what the inline block already shows.
-const isSpecialToolResult = (block: ToolUseBlock | ToolResultBlock): boolean => {
-  if (block.type !== "tool_result") return false;
-  const toolName = getToolName(block);
-  return isAskUserQuestionTool(toolName) || isExitPlanModeTool(toolName);
-};
+const isSpecialToolResult = (block: ToolUseBlock | ToolResultBlock): boolean =>
+  block.type === "tool_result" && block.interactiveRole != null;
 
 export const ToolBlockGroup = ({
   blocks,
@@ -129,11 +124,11 @@ export const ToolBlockGroup = ({
         })}
       {canRenderInteractiveBackchannel &&
         specialBlocks.map((block) => {
-          if (isAskUserQuestionTool(block.name)) {
+          if (block.interactiveRole === "ask_user_question") {
             return <AlphaAskUserQuestionBlock key={block.id} toolBlock={block} />;
           }
 
-          if (isExitPlanModeTool(block.name)) {
+          if (block.interactiveRole === "exit_plan_mode") {
             return <AlphaExitPlanModeBlock key={block.id} toolBlock={block} />;
           }
           return null;

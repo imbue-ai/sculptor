@@ -16,17 +16,9 @@ export const isDiffTool = (toolName: string): toolName is DiffTool => {
   return DIFF_TOOLS.includes(toolName as DiffTool);
 };
 
-export const isAskUserQuestionTool = (toolName: string): boolean => {
-  return toolName === "AskUserQuestion" || toolName === "mcp__sculptor__ask_user_question";
-};
-
 export const formatSubagentType = (subagentType: string | undefined): string => {
   if (!subagentType) return "Subagent";
   return subagentType.charAt(0).toUpperCase() + subagentType.slice(1) + " subagent";
-};
-
-export const isExitPlanModeTool = (toolName: string): boolean => {
-  return toolName === "ExitPlanMode" || toolName === "mcp__sculptor__exit_plan_mode";
 };
 
 export const isEnterPlanModeTool = (toolName: string): boolean => {

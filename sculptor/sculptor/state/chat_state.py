@@ -47,6 +47,12 @@ class ResumeResponseBlock(ContentBlock):
 
 ToolInput = dict[str, Any]
 
+# The interactive-backchannel role of a tool, when it is one — set server-side
+# from the task's harness (`Harness.classify_tool_ui_role`) so the frontend
+# renders ask-user-question / plan-approval tools by role instead of matching a
+# hardcoded set of tool names. `None` for a regular tool.
+ToolInteractiveRole = Literal["ask_user_question", "exit_plan_mode"]
+
 
 class ToolUseBlock(ContentBlock):
     object_type: str = "ToolUseBlock"
@@ -54,6 +60,10 @@ class ToolUseBlock(ContentBlock):
     id: ToolUseID = Field(..., description="Unique identifier for this tool use")
     name: str = Field(..., description="Name of the tool being used")
     input: ToolInput = Field(default_factory=ToolInput, description="Input parameters for the tool")
+    interactive_role: ToolInteractiveRole | None = Field(
+        default=None,
+        description="Set server-side from the harness when this tool is an interactive-backchannel surface (ask-user-question / exit-plan-mode); the frontend renders by this role rather than by tool name. None for a regular tool.",
+    )
 
 
 class ToolResultContent(SerializableModel):
@@ -113,6 +123,10 @@ class ToolResultBlock(ContentBlock):
     is_error: bool = Field(default=False, description="Whether the tool execution resulted in an error")
     duration_seconds: float | None = Field(
         default=None, description="Wall-clock duration of the tool execution in seconds"
+    )
+    interactive_role: ToolInteractiveRole | None = Field(
+        default=None,
+        description="Set server-side from the harness when the originating tool is an interactive-backchannel surface; lets the frontend suppress the result (it renders inside the question panel) by role rather than by tool name. None for a regular tool.",
     )
     description: str | None = Field(default=None, description="Human-readable description of what the tool call does")
 
@@ -256,7 +270,7 @@ def make_plan_approval_question(
     return AskUserQuestionData(
         questions=[
             UserQuestion(
-                question="Claude has finished planning. How would you like to proceed?",
+                question="Planning complete. How would you like to proceed?",
                 header="Plan approval",
                 options=[
                     QuestionOption(label="Approve plan", description="Proceed with implementing the plan"),
