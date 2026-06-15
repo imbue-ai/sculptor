@@ -5,13 +5,17 @@ subdirectory is an independent Vite project that builds an ESM bundle into
 the host's `public/plugins/<id>/` tree. The host loads built-in plugins plus
 any user-added sources — see `src/plugins/pluginManager.tsx`.
 
-No plugin ships bundled yet (`BUILTIN_SOURCES` is empty); this is the
-scaffolding the first plugins will target. The whole system sits behind the
-experimental **Frontend plugins** flag (Settings → Experimental): with the
-flag off (the default) nothing loads and the Plugins settings section is
-hidden from the sidebar and palette. Toggling the flag takes effect after an
-app reload. The section also stays reachable at `#/settings?section=PLUGINS`
-regardless of the flag, for plugin development.
+The whole system sits behind the experimental **Frontend plugins** flag
+(Settings → Experimental): with the flag off (the default) nothing loads and
+the Plugins settings section is hidden from the sidebar and palette.
+Toggling the flag takes effect after an app reload. The section also stays
+reachable at `#/settings?section=PLUGINS` regardless of the flag, for plugin
+development.
+
+The bundled example is `linear-issue`: it reads the workspace branch via the
+SDK, parses a ticket id out of it, fetches that issue from Linear's GraphQL
+API (cached on the shared QueryClient), and stores its API key through the
+plugin-settings SDK.
 
 ## How a plugin is built and loaded
 

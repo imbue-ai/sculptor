@@ -1,0 +1,16 @@
+{
+  "name": "@sculptor-plugins/linear-issue",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build"
+  },
+  "//peerDependencies": "Declared in manifest.json; not in package.json so npm doesn't try to resolve @sculptor/plugin-sdk from a registry. The plugin's vite.config marks all of these external; the runtime import map resolves them in the host.",
+  "devDependencies": {
+    "@types/react": "^18",
+    "@vitejs/plugin-react-swc": "^3.7",
+    "typescript": "^5",
+    "vite": "^5"
+  }
+}
