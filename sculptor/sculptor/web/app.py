@@ -105,6 +105,7 @@ from sculptor.services.dependency_management_service import InstallResult
 from sculptor.services.git_repo_service.default_implementation import LocalReadOnlyGitRepo
 from sculptor.services.git_repo_service.default_implementation import LocalWritableGitRepo
 from sculptor.services.git_repo_service.error_types import GitRepoError
+from sculptor.services.git_repo_service.error_types import GitRepoNotFoundError
 from sculptor.services.git_repo_service.git_commands import run_git_command_local
 from sculptor.services.project_service.default_implementation import get_most_recently_used_project_id
 from sculptor.services.project_service.default_implementation import update_most_recently_used_project
@@ -2954,7 +2955,7 @@ def get_current_branch(
             with services.git_repo_service.open_local_user_git_repo_for_read(project, log_command=False) as repo:
                 try:
                     current_branch = repo.get_current_git_branch()
-                except FileNotFoundError as e:
+                except GitRepoNotFoundError as e:
                     raise HTTPException(status_code=500, detail=f"Could not find repository: {e}") from e
                 except ProcessSetupError:
                     if project.is_path_accessible:
@@ -3005,7 +3006,7 @@ def branch_exists(
     try:
         with services.git_repo_service.open_local_user_git_repo_for_read(project, log_command=False) as repo:
             return BranchExistsResponse(exists=repo.is_branch_ref(trimmed))
-    except FileNotFoundError:
+    except GitRepoNotFoundError:
         return BranchExistsResponse(exists=False)
 
 
@@ -3037,7 +3038,7 @@ def get_repo_info(
                 try:
                     branches = repo.get_all_branches()
                     current_branch = repo.get_current_git_branch()
-                except FileNotFoundError as e:
+                except GitRepoNotFoundError as e:
                     raise HTTPException(status_code=500, detail=f"Could not find repository: {e}") from e
                 except ProcessSetupError:
                     # The is_path_accessible attribute is set in _check_and_update_project_accessibility, which
