@@ -23,9 +23,15 @@ from sculptor.services.terminal_agent_registry.registry import get_registrations
 _SENTINEL_FILE_NAME = ".claude-code.installed"
 _BUNDLED_FILE_NAMES = ("claude-code.toml", "claude-code-hooks.json")
 _HOOKS_FILE_NAME = "claude-code-hooks.json"
-# The sample TOML references its hooks file at the manual-install location;
-# the installer rewrites it to wherever the hooks actually land.
-_SAMPLE_HOOKS_PATH_TOKEN = "~/.sculptor/terminal_agents/claude-code-hooks.json"
+# Named placeholder the sample TOML carries in place of its hooks-file path;
+# the installer rewrites it to the absolute, shell-quoted path where the hooks
+# actually land (see _install_claude_code_registration). A named token avoids
+# matching a brittle hardcoded path string and keeps the manual-install
+# substitution point obvious — see the comment beside it in claude-code.toml.
+# Deliberately NOT a {brace} token: the registration loader reserves {…} for
+# the launch-time {session_id} placeholder and rejects any other brace token,
+# so an install-time token must use a distinct syntax.
+_SAMPLE_HOOKS_PATH_TOKEN = "__SCULPTOR_HOOKS_PATH__"
 
 
 def get_bundled_claude_code_dir() -> Path | None:
@@ -35,6 +41,13 @@ def get_bundled_claude_code_dir() -> Path | None:
     Running from source: `samples/` at the repo root.
     """
     base = get_plugins_base_dir()
+    # Two candidates, one per layout (probed in order):
+    #  - Packaged app: get_plugins_base_dir() is the PyInstaller `_internal/`
+    #    dir, and the build bundles samples as data at `_internal/samples/…`
+    #    (see build-sidecar.sh), so the sample is at `base / "samples"`.
+    #  - Source checkout: get_plugins_base_dir() is `<repo>/sculptor/` (the
+    #    project dir), while `samples/` lives at the repo root one level up,
+    #    so the sample is at `base.parent / "samples"`.
     candidates = (
         base / "samples" / "terminal_agents" / "claude-code",
         base.parent / "samples" / "terminal_agents" / "claude-code",
