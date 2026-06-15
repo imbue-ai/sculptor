@@ -2,6 +2,7 @@
 
 import json
 import os
+from http import HTTPStatus
 from pathlib import Path
 from typing import Any
 from typing import Callable
@@ -18,6 +19,7 @@ from sculpt.client.api.default import workspace_ui_webview_refresh as _workspace
 from sculpt.client.models.open_file_ui_request import OpenFileUiRequest
 from sculpt.client.models.open_file_ui_request_mode import OpenFileUiRequestMode
 from sculpt.client.models.webview_navigate_request import WebviewNavigateRequest
+from sculpt.client.types import Response
 from sculpt.commands.agent import resolve_workspace
 from sculpt.formatting import cli_error
 from sculpt.formatting import handle_connection_error
@@ -28,6 +30,7 @@ ui_app = typer.Typer(
 )
 
 _MODE_VALUES = {m.value for m in OpenFileUiRequestMode}
+_MAX_ERROR_DETAIL_LENGTH = 500
 
 
 @ui_app.command("open-file")
@@ -77,7 +80,7 @@ def open_file(
             exit_code=2,
         )
 
-    resolved_path = path if Path(path).is_absolute() else str(Path(os.getcwd(), path).resolve())
+    resolved_path = path if Path(path).is_absolute() else str((Path.cwd() / path).resolve())
 
     base_url = base_url or get_default_base_url()
     try:
@@ -106,9 +109,9 @@ def open_file(
     _handle_response(response, workspace_id, resolved_path, json_output)
 
 
-def _handle_response(response: Any, workspace_id: str, file_path: str, json_output: bool) -> None:
+def _handle_response(response: Response[Any], workspace_id: str, file_path: str, json_output: bool) -> None:
     status = int(response.status_code)
-    if 200 <= status < 300:
+    if HTTPStatus.OK <= status < HTTPStatus.MULTIPLE_CHOICES:
         if json_output:
             typer.echo(json.dumps({"opened": True, "workspace_id": workspace_id, "file_path": file_path}))
         return
@@ -117,19 +120,19 @@ def _handle_response(response: Any, workspace_id: str, file_path: str, json_outp
     code = detail.get("code") if isinstance(detail, dict) else None
     message = detail.get("message") if isinstance(detail, dict) else None
 
-    if status == 409 and code == "workspace_not_open":
+    if status == HTTPStatus.CONFLICT and code == "workspace_not_open":
         cli_error(
             message or f"workspace {workspace_id} is not open",
             json_output=json_output,
             exit_code=3,
         )
-    if status == 404 and code == "file_not_found":
+    if status == HTTPStatus.NOT_FOUND and code == "file_not_found":
         cli_error(
             f"file not found: {message or file_path}",
             json_output=json_output,
             exit_code=4,
         )
-    if status == 400 and code == "file_not_absolute":
+    if status == HTTPStatus.BAD_REQUEST and code == "file_not_absolute":
         cli_error(
             message or f"path not absolute: {file_path}",
             json_output=json_output,
@@ -138,7 +141,7 @@ def _handle_response(response: Any, workspace_id: str, file_path: str, json_outp
 
     cli_error(
         f"backend error (HTTP {status})",
-        detail=str(detail or response.content)[:500],
+        detail=str(detail or response.content)[:_MAX_ERROR_DETAIL_LENGTH],
         json_output=json_output,
         exit_code=5,
     )
@@ -149,7 +152,7 @@ def _call_webview_endpoint(
     workspace: str | None,
     json_output: bool,
     base_url: str | None,
-    send: Callable[[AuthenticatedClient, str], Any],
+    send: Callable[[AuthenticatedClient, str], Response[Any]],
     success_payload_extras: dict[str, Any],
 ) -> None:
     """Shared boilerplate for the two `sculpt ui webview-*` commands.
@@ -263,13 +266,13 @@ def webview_refresh(
 
 
 def _handle_webview_response(
-    response: Any,
+    response: Response[Any],
     workspace_id: str,
     json_output: bool,
     success_payload: dict[str, Any],
 ) -> None:
     status = int(response.status_code)
-    if 200 <= status < 300:
+    if HTTPStatus.OK <= status < HTTPStatus.MULTIPLE_CHOICES:
         if json_output:
             typer.echo(json.dumps(success_payload))
         return
@@ -278,13 +281,13 @@ def _handle_webview_response(
     code = detail.get("code") if isinstance(detail, dict) else None
     message = detail.get("message") if isinstance(detail, dict) else None
 
-    if status == 409 and code == "workspace_not_open":
+    if status == HTTPStatus.CONFLICT and code == "workspace_not_open":
         cli_error(
             message or f"workspace {workspace_id} is not open",
             json_output=json_output,
             exit_code=3,
         )
-    if status == 404 and code == "workspace_not_found":
+    if status == HTTPStatus.NOT_FOUND and code == "workspace_not_found":
         cli_error(
             message or f"workspace {workspace_id} not found",
             json_output=json_output,
@@ -293,7 +296,7 @@ def _handle_webview_response(
 
     cli_error(
         f"backend error (HTTP {status})",
-        detail=str(detail or response.content)[:500],
+        detail=str(detail or response.content)[:_MAX_ERROR_DETAIL_LENGTH],
         json_output=json_output,
         exit_code=5,
     )

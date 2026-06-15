@@ -13,6 +13,7 @@ import websockets.exceptions
 from sculpt.auth import MODEL_MAPPING
 from sculpt.auth import get_authenticated_client
 from sculpt.auth import get_default_base_url
+from sculpt.client import Client
 from sculpt.client.api.default import create_workspace_agent
 from sculpt.client.api.default import delete_workspace_agent
 from sculpt.client.api.default import interrupt_workspace_agent
@@ -71,8 +72,13 @@ agent_app = typer.Typer(
     help="Manage agents.",
 )
 
+# Display widths for the `list` table and the `send --json` message echo.
+_ID_DISPLAY_PREFIX_LENGTH = 11
+_TITLE_DISPLAY_MAX_LENGTH = 40
+_MESSAGE_PREVIEW_MAX_LENGTH = 100
 
-def resolve_workspace(workspace: str | None, client: object, json_output: bool) -> str:
+
+def resolve_workspace(workspace: str | None, client: Client, json_output: bool) -> str:
     """Resolve workspace from flag or env var, with prefix resolution."""
     if workspace is not None:
         return resolve_workspace_id(client, workspace, json_output)
@@ -144,7 +150,7 @@ def create(
     )
 
     try:
-        result = create_workspace_agent.sync(workspace_id=workspace_id, client=client, body=request)  # type: ignore[arg-type]
+        result = create_workspace_agent.sync(workspace_id=workspace_id, client=client, body=request)
     except httpx.ConnectError:
         handle_connection_error(json_output)
 
@@ -242,12 +248,12 @@ def list_cmd(
     headers = ["ID", "STATUS", "MODEL", "WORKSPACE", "CREATED", "TITLE"]
     rows = [
         [
-            t.task_id[:11],
+            t.task_id[:_ID_DISPLAY_PREFIX_LENGTH],
             t.status,
             _format_model_name(t.model),
-            t.workspace_id[:11],
+            t.workspace_id[:_ID_DISPLAY_PREFIX_LENGTH],
             _format_snapshot_datetime(t.created_at),
-            truncate(t.title or t.task_id, 40),
+            truncate(t.title or t.task_id, _TITLE_DISPLAY_MAX_LENGTH),
         ]
         for t in agents
     ]
@@ -255,10 +261,10 @@ def list_cmd(
 
 
 def _fetch_agents_for_workspace(
-    client: object, workspace_id: str, json_output: bool
+    client: Client, workspace_id: str, json_output: bool
 ) -> list[CodingAgentTaskView]:
     try:
-        result = list_workspace_agents.sync(workspace_id=workspace_id, client=client)  # type: ignore[arg-type]
+        result = list_workspace_agents.sync(workspace_id=workspace_id, client=client)
     except httpx.ConnectError:
         handle_connection_error(json_output)
 
@@ -361,7 +367,7 @@ def rename(
     try:
         result = rename_workspace_agent.sync(
             workspace_id=workspace_id, agent_id=agent.id, client=client, body=request
-        )  # type: ignore[arg-type]
+        )
     except httpx.ConnectError:
         handle_connection_error(json_output)
 
@@ -396,7 +402,7 @@ def delete(
     resolved_id = agent.id
 
     try:
-        delete_workspace_agent.sync(workspace_id=workspace_id, agent_id=resolved_id, client=client)  # type: ignore[arg-type]
+        delete_workspace_agent.sync(workspace_id=workspace_id, agent_id=resolved_id, client=client)
     except httpx.ConnectError:
         handle_connection_error(json_output)
 
@@ -446,7 +452,7 @@ def send(
     try:
         response = send_workspace_agent_messages.sync_detailed(
             workspace_id=workspace_id, agent_id=agent.id, client=client, body=request
-        )  # type: ignore[arg-type]
+        )
     except httpx.ConnectError:
         handle_connection_error(json_output)
 
@@ -454,10 +460,10 @@ def send(
         detail = ""
         try:
             body = response.parsed or json.loads(response.content)
-            if isinstance(body, dict):
-                detail = body.get("detail", "")
-        except Exception:
-            pass
+        except (json.JSONDecodeError, ValueError):
+            body = None
+        if isinstance(body, dict):
+            detail = body.get("detail", "")
         cli_error(
             detail or f"Server returned {response.status_code.value}",
             json_output=json_output,
@@ -469,7 +475,7 @@ def send(
         return
 
     if json_output:
-        output = AgentSendOutput(sent=True, agent_id=agent.id, message=message[:100])
+        output = AgentSendOutput(sent=True, agent_id=agent.id, message=message[:_MESSAGE_PREVIEW_MAX_LENGTH])
         typer.echo(output.model_dump_json())
         return
 
@@ -684,7 +690,7 @@ def interrupt(
     try:
         interrupt_workspace_agent.sync(
             workspace_id=workspace_id, agent_id=agent.id, client=client
-        )  # type: ignore[arg-type]
+        )
     except httpx.ConnectError:
         handle_connection_error(json_output)
 
