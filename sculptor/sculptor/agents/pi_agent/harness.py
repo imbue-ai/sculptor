@@ -14,9 +14,14 @@ the StatusPill "Compacting" chrome. And it gains an interactive backchannel
 (ask-user-question + plan mode) from the Sculptor-pinned `sculptor_backchannel`
 extension (see `backchannel.py` and `extensions/sculptor_backchannel.ts`), so
 `supports_interactive_backchannel` is `True` and the gated methods recognize
-that extension's tool names. Still `False`: sub-agents, context reset, fast
-mode, and background tasks. The `capabilities()` override is the truthful
-declaration that consumers gate on.
+that extension's tool names. Sub-agents ARE supported — the pinned
+`sculptor_subagent` extension spawns each child as its own `pi` process and
+streams structured per-child progress that the adapter renders as nested,
+attributed child messages under the parent `Agent` tool (see `subagent.py` and
+`extensions/sculptor_subagent.ts`), so `supports_sub_agents` is `True`. Still
+`False`: fast mode, and background tasks (pi-core has no background-execution
+primitive — verdict (iv) deferral). The `capabilities()` override is the
+truthful declaration that consumers gate on.
 
 Agent construction is owned by the registry
 (`harness_registry.create_agent_for_run`), not this module, so the pi
@@ -81,7 +86,14 @@ class PiHarness(Harness):
             # them through its own skills layer, and follows a picked skill
             # rewritten to /skill:<name> (agent_wrapper._rewrite_skill_invocation).
             supports_skills=True,
-            supports_sub_agents=False,
+            # Pi spawns sub-agents through the Sculptor-pinned `sculptor_subagent`
+            # extension: each child runs as its own `pi` process and the parent
+            # tool streams a STRUCTURED per-child lifecycle payload that the
+            # adapter (agent_wrapper._emit_subagent_children + subagent.py) renders
+            # as nested, attributed child messages under the parent `Agent` tool
+            # block — Claude's parent_tool_use_id grouping, so the AlphaSubagentPill
+            # renders pi's sub-agents the same way. Parent abort kills the children.
+            supports_sub_agents=True,
             # Pi carries images on the `prompt` command's `images[]` field
             # (base64 + mimeType); attached image files are delivered there by
             # prompt assembly (agent_wrapper._build_prompt_payload). Harness-level

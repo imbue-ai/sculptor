@@ -47,6 +47,38 @@ _SIMPLE_NAME_MAP: dict[str, str] = {
     "bash": "Bash",
 }
 
+# The tool name pi exposes for the Sculptor-pinned sub-agent extension
+# (`extensions/sculptor_subagent.ts`); MUST match the `name` that extension
+# registers. The adapter keys on this to parse the structured per-child progress
+# (`subagent.py`); the renderer maps it onto Claude's sub-agent tool so pi's
+# nested sub-agent activity reuses Claude's AlphaSubagentPill verbatim.
+SUBAGENT_TOOL_NAME: str = "subagent"
+
+# Claude's sub-agent tool name (the post-rename of "Task"). The frontend's
+# `SUBAGENT_TOOL_NAMES` set keys the subagent pill / metadata off this; mapping
+# pi's `subagent` tool onto it groups children (attached by `parent_tool_use_id`)
+# under the parent exactly as Claude's sub-agents render.
+SUBAGENT_DISPLAY_NAME: str = "Agent"
+
+
+def _summarize_subagent_tasks(pi_args: dict[str, Any]) -> tuple[str, str]:
+    """Derive `(subagent_type, prompt)` for the Claude-shaped `Agent` input.
+
+    The pi sub-agent tool takes either a single `{task}` or a parallel
+    `{tasks: [{task, label?}]}`. The frontend's `buildSubagentMetadataMap` reads
+    `subagent_type` (the pill's label) and `prompt` (its task text) off the
+    `Agent` tool input, so map onto those: a single task keeps its text; a
+    parallel batch summarizes the count and joins the task lines.
+    """
+    tasks = pi_args.get("tasks")
+    if isinstance(tasks, list) and tasks:
+        lines: list[str] = []
+        for entry in tasks:
+            if isinstance(entry, dict):
+                lines.append(_first_str(entry, "task"))
+        return f"subagent (x{len(tasks)})", "\n".join(line for line in lines if line)
+    return "subagent", _first_str(pi_args, "task", "prompt")
+
 
 def _first_str(args: dict[str, Any], *keys: str) -> str:
     """Return the first string value present under `keys`, else ""."""
@@ -94,6 +126,14 @@ def map_pi_tool_call(pi_tool_name: str, pi_args: dict[str, Any]) -> tuple[str, d
             }
         # bash
         return claude_name, {"command": _first_str(pi_args, "command")}
+
+    if pi_tool_name == SUBAGENT_TOOL_NAME:
+        # Render the parent sub-agent call as Claude's `Agent` tool so the
+        # frontend groups its children (attached via parent_tool_use_id) under
+        # the same AlphaSubagentPill. The structured per-child progress is
+        # parsed separately by the adapter (see `subagent.py`).
+        subagent_type, prompt = _summarize_subagent_tasks(pi_args)
+        return SUBAGENT_DISPLAY_NAME, {"subagent_type": subagent_type, "prompt": prompt}
 
     if pi_tool_name == "edit":
         file_path = _first_str(pi_args, "path", "file_path")

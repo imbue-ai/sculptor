@@ -501,6 +501,76 @@ def _handle_tool_call(args: dict, builder: _TurnBuilder, abort_event: Event, sta
     )
 
 
+def _handle_subagent(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
+    """Script a sub-agent tool call: emit a `subagent` toolCall block, then the
+    tool-execution lane with the STRUCTURED per-child payload under
+    `result.details` (the shape `sculptor_subagent.ts` emits, parsed by
+    `subagent.py`). Lets a deterministic UI test render the nested sub-agent
+    group without spawning real child `pi` processes.
+
+    Args (all optional)::
+
+        {"id": "sa1",                   # parent tool-call id
+         "children": [                  # structured child snapshots
+             {"childId": "c0", "label": "subagent", "task": "...",
+              "status": "done",
+              "events": [{"seq":0,"kind":"tool_call","toolCallId":"ct1",
+                          "toolName":"read","args":{...}},
+                         {"seq":1,"kind":"text","text":"..."}]}]}
+
+    With no `children` a single trivial done child is scripted so the simplest
+    directive still renders a nested group.
+    """
+    tool_call_id = str(args.get("id") or "sa1")
+    children = args.get("children")
+    if not isinstance(children, list) or not children:
+        children = [
+            {
+                "childId": "c0",
+                "label": "subagent",
+                "task": "investigate",
+                "status": "done",
+                "events": [{"seq": 0, "kind": "text", "text": "Sub-agent finished."}],
+            }
+        ]
+    task_arg = {"task": str(args.get("task", "investigate"))}
+    payload = {"v": 1, "children": children}
+
+    # Close the issuing assistant message with the subagent toolCall block.
+    content: list[dict] = []
+    if builder.full_text:
+        content.append({"type": "text", "text": builder.full_text})
+    content.append({"type": "toolCall", "id": tool_call_id, "name": "subagent", "arguments": task_arg})
+    _emit({"type": "message_end", "message": {"role": "assistant", "content": content, "stopReason": "toolUse"}})
+    builder.chunks.clear()
+
+    # Tool-execution lane: the accumulated structured payload rides under
+    # `partialResult.details` / `result.details`.
+    _emit({"type": "tool_execution_start", "toolCallId": tool_call_id, "toolName": "subagent", "args": task_arg})
+    update_result = _tool_text_payload("running")
+    update_result["details"] = payload
+    _emit(
+        {
+            "type": "tool_execution_update",
+            "toolCallId": tool_call_id,
+            "toolName": "subagent",
+            "args": task_arg,
+            "partialResult": update_result,
+        }
+    )
+    end_result = _tool_text_payload("sub-agents complete")
+    end_result["details"] = payload
+    _emit(
+        {
+            "type": "tool_execution_end",
+            "toolCallId": tool_call_id,
+            "toolName": "subagent",
+            "result": end_result,
+            "isError": False,
+        }
+    )
+
+
 def _handle_sleep(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
     seconds = float(args.get("seconds", 0))
     if seconds <= 0:
@@ -618,6 +688,7 @@ _COMMAND_REGISTRY: dict[str, Callable[[dict, _TurnBuilder, Event, _SessionState]
     "emit_text": _handle_emit_text,
     "stream_text": _handle_stream_text,
     "tool_call": _handle_tool_call,
+    "subagent": _handle_subagent,
     "sleep": _handle_sleep,
     "wait_for_file": _handle_wait_for_file,
     "recall": _handle_recall,
