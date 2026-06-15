@@ -84,6 +84,6 @@ def _install_claude_code_registration() -> None:
         logger.info("Installed bundled terminal-agent file {}", destination)
     sentinel.write_text(
         "The bundled Claude Code registration was installed once into this directory.\n"
-        "This marker makes deleting claude-code.toml permanent — remove it to have\n"
-        "Sculptor re-install the registration on the next start.\n"
+        + "This marker makes deleting claude-code.toml permanent — remove it to have\n"
+        + "Sculptor re-install the registration on the next start.\n"
     )

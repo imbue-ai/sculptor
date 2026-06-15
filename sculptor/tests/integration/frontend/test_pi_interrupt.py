@@ -13,7 +13,6 @@ from pathlib import Path
 
 from playwright.sync_api import expect
 
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.fake_pi import install_fake_pi_binary
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -34,7 +33,7 @@ def test_pi_interrupt_during_turn_then_continue(sculptor_instance_: SculptorInst
             sculptor_page=page,
             workspace_name="Pi Interrupt",
             model_name=None,
-            harness=HarnessName.PI,
+            agent_type="pi",
             prompt=prompt,
             wait_for_agent_to_finish=False,
         )

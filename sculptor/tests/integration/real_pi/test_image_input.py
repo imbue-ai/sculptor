@@ -19,7 +19,6 @@ import pytest
 from PIL import Image
 from playwright.sync_api import expect
 
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.playwright_utils import send_message_via_api
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -44,7 +43,7 @@ def test_attached_image_is_seen_by_the_model(sculptor_instance_: SculptorInstanc
         sculptor_page=sculptor_instance_.page,
         workspace_name="Real Pi Image",
         model_name=None,
-        harness=HarnessName.PI,
+        agent_type="pi",
     )
     image_id = upload_file_via_api(
         sculptor_instance_.page, name="blue.png", mime_type="image/png", content=_solid_png_bytes((0, 0, 255))

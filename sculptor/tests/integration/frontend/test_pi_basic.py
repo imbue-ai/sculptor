@@ -1,6 +1,6 @@
 """Basic end-to-end pi workspace through the UI.
 
-Creates a workspace with ``harness=pi``, sends a user message, and asserts the
+Creates a workspace with ``agent_type=pi``, sends a user message, and asserts the
 FakePi assistant response renders. Spot-checks that the most prominent
 Claude-only affordances (sub-agent pill, fast-mode toggle) are suppressed and
 the skills panel renders its empty state. The plan-mode toggle is NOT here: pi
@@ -65,7 +65,7 @@ def test_pi_clear_resets_conversation(
         sculptor_page=page,
         workspace_name="Pi Clear",
         model_name=None,
-        harness=HarnessName.PI,
+        agent_type="pi",
     )
     chat_panel = task_page.get_chat_panel()
 

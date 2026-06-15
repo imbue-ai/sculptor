@@ -16,7 +16,6 @@ from pathlib import Path
 import pytest
 from playwright.sync_api import expect
 
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -53,7 +52,7 @@ def test_pi_follows_invoked_skill(sculptor_instance_: SculptorInstance) -> None:
         sculptor_page=sculptor_instance_.page,
         workspace_name="Real Pi Skills",
         model_name=None,
-        harness=HarnessName.PI,
+        agent_type="pi",
     )
 
     # Invoke via the picker path: open the SkillsPanel and click the skill chip,
