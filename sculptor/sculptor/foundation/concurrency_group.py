@@ -61,6 +61,11 @@ CLEANUP_INTERVAL_TICKS = 1
 # (In practice, concurrency groups will refuse to create new strands after a failure so it's unlikely to have too many failed strands anyway.)
 MAX_FAILED_STRANDS_TO_KEEP_AFTER_CLEANUP = 8
 
+# How much of a timed-out process's captured output to include in its error message, to avoid huge outputs.
+MAX_TIMED_OUT_PROCESS_OUTPUT_CHARS = 1024
+# How much of a failed process's captured output to include in the aggregated failure message.
+MAX_FAILED_PROCESS_OUTPUT_CHARS = 128
+
 
 def _raise_if_any_strands_or_ancestors_failed_or_is_shutting_down(
     func: Callable[Concatenate["ConcurrencyGroup", P], T],
@@ -182,7 +187,7 @@ class ConcurrencyGroup(MutableModel, AbstractContextManager):
         #   - timeouts while waiting for threads or processes to finish
         #
         # All of them should be reported if they occur. We use the ExceptionGroup mechanism for that.
-        main_exception: BaseException | None = exc_value if exc_value is not None else None
+        main_exception: BaseException | None = exc_value
         timeout_exception_group: ConcurrencyExceptionGroup | None = None
         failure_exception_group: ConcurrencyExceptionGroup | None = None
 
@@ -252,8 +257,8 @@ class ConcurrencyGroup(MutableModel, AbstractContextManager):
                     setup_errors.append(error)
                 except TimeoutExpired as error:
                     command = error.cmd
-                    stdout = process.read_stdout()[:1024]  # Avoid huge outputs.
-                    stderr = process.read_stderr()[:1024]
+                    stdout = process.read_stdout()[:MAX_TIMED_OUT_PROCESS_OUTPUT_CHARS]
+                    stderr = process.read_stderr()[:MAX_TIMED_OUT_PROCESS_OUTPUT_CHARS]
                     message = "\n".join(
                         [
                             f"Process {command} did not terminate in time and was killed.",
@@ -297,15 +302,15 @@ class ConcurrencyGroup(MutableModel, AbstractContextManager):
 
     def _get_remaining_timeout(self, start_time_seconds: float, total_timeout_seconds: float) -> float:
         elapsed_seconds = time.monotonic() - start_time_seconds
-        return max(0, total_timeout_seconds - elapsed_seconds)
+        return max(0.0, total_timeout_seconds - elapsed_seconds)
 
-    def _raise_if_not_active(self):
+    def _raise_if_not_active(self) -> None:
         if self._state != ConcurrencyGroupState.ACTIVE:
             raise InvalidConcurrencyGroupStateError(
                 f"Concurrency group `{self.name}` not active: the state is {self._state}."
             )
 
-    def _raise_if_any_strands_or_ancestors_failed(self):
+    def _raise_if_any_strands_or_ancestors_failed(self) -> None:
         exceptions = []
         with self._lock:
             threads = self._threads[:]
@@ -333,14 +338,18 @@ class ConcurrencyGroup(MutableModel, AbstractContextManager):
             message = f"{len(exceptions)} strands failed in concurrency group `{self.name}`."
             if len(exceptions) == 1 and isinstance(exceptions[0], ProcessError):
                 # Add more information in this common case.
-                output = exceptions[0].stdout[:128] + " (...) " + exceptions[0].stderr[:128]
+                output = (
+                    exceptions[0].stdout[:MAX_FAILED_PROCESS_OUTPUT_CHARS]
+                    + " (...) "
+                    + exceptions[0].stderr[:MAX_FAILED_PROCESS_OUTPUT_CHARS]
+                )
                 message += f"\nFailed command: {exceptions[0].command}\nOutput: {output}"
             raise ConcurrencyExceptionGroup(
                 message,
                 exceptions,
             )
 
-    def raise_if_any_strands_or_ancestors_failed_or_is_shutting_down(self):
+    def raise_if_any_strands_or_ancestors_failed_or_is_shutting_down(self) -> None:
         """
         Go through all the registered strands and raise an exception if any of them failed.
         Also check if the parent concurrency group failed. (This is used to propagate failures sideways and downwards in the concurrency group tree.)
@@ -708,15 +717,17 @@ class ConcurrencyExceptionGroup(ExceptionGroup):
         - The "main" exception is a convention that allows us to highlight the "original" exception in cases we know it.
     """
 
-    def __new__(cls, message: str, exceptions: Sequence[Exception], main_exception: Exception | None = None):
+    def __new__(
+        cls, message: str, exceptions: Sequence[Exception], main_exception: Exception | None = None
+    ) -> "ConcurrencyExceptionGroup":
         instance = super().__new__(cls, message, exceptions)
         return instance
 
-    def __init__(self, message: str, exceptions: Sequence[Exception], main_exception: Exception | None = None):
+    def __init__(self, message: str, exceptions: Sequence[Exception], main_exception: Exception | None = None) -> None:
         super().__init__(message, exceptions)
         self.main_exception = main_exception
 
-    def __str__(self):
+    def __str__(self) -> str:
         base_str = super().__str__()
         if self.main_exception:
             return f"{base_str}\nMain exception: {self.main_exception}"
