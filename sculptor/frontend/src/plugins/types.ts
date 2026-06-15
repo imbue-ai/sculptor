@@ -29,6 +29,22 @@ export type PluginManifest = {
  * contribute panels, commands, etc. Returning a disposer from `activate` lets
  * the host unmount/remove contributions when the plugin is unloaded.
  */
+/**
+ * An always-on, app-global floating contribution. Unlike a panel, an overlay
+ * is not tied to a zone or a single workspace: the host renders it above the
+ * whole app (across every route) for as long as the plugin is loaded. The
+ * component draws into a full-viewport, click-through layer, so it must opt
+ * its own interactive box back into pointer events. Use the workspace SDK
+ * hooks (`useWorkspaces`, `useCurrentWorkspaceId`) to react to app state —
+ * there is no single workspace context, because an overlay outlives any one
+ * workspace page.
+ */
+export type OverlayDefinition = {
+  /** Stable id; registering twice with the same id replaces the previous one. */
+  id: string;
+  component: ComponentType;
+};
+
 export type PluginHostApi = {
   registerPanel: (panel: PanelDefinition) => () => void;
   /**
@@ -38,6 +54,12 @@ export type PluginHostApi = {
    * disposer.
    */
   registerSettings: (component: ComponentType) => () => void;
+  /**
+   * Registers an always-on floating overlay rendered above the whole app.
+   * Wrapped, like panels, in a per-plugin error boundary and the host's
+   * PluginContext (so `usePluginSetting` works). Returns a disposer.
+   */
+  registerOverlay: (overlay: OverlayDefinition) => () => void;
 };
 
 export type PluginActivate = (api: PluginHostApi) => void | (() => void) | Promise<void | (() => void)>;

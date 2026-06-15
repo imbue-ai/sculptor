@@ -19,6 +19,14 @@ export const pluginPanelsAtom = atom<ReadonlyArray<PanelDefinition>>([]);
 export const pluginSettingsComponentsAtom = atom<Readonly<Record<string, ComponentType>>>({});
 
 /**
+ * Always-on floating overlays contributed by plugins via `registerOverlay`.
+ * `PluginOverlays` renders each one above the whole app, in registration
+ * order. Each entry's component is already wrapped by the loader in an error
+ * boundary and the plugin's PluginContext.
+ */
+export const pluginOverlaysAtom = atom<ReadonlyArray<{ id: string; component: ComponentType }>>([]);
+
+/**
  * User-added plugin sources, persisted to localStorage. A source is a URL or
  * directory that contains a `manifest.json` (e.g. `http://localhost:5174/my-plugin`
  * or `/plugins/my-plugin`). Built-in sources are loaded separately and are not

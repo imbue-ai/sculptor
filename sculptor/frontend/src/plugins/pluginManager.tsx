@@ -9,13 +9,21 @@ import { installHostRuntime } from "./hostRuntime.ts";
 import { PluginContext } from "./PluginContext.tsx";
 import { PluginErrorBoundary } from "./PluginErrorBoundary.tsx";
 import {
+  pluginOverlaysAtom,
   pluginPanelsAtom,
   pluginSettingsComponentsAtom,
   pluginSourcesAtom,
   type PluginSourceState,
   pluginSourceStatesAtom,
 } from "./pluginRegistry.ts";
-import type { LoadedPlugin, PluginHostApi, PluginLoadError, PluginManifest, PluginModule } from "./types.ts";
+import type {
+  LoadedPlugin,
+  OverlayDefinition,
+  PluginHostApi,
+  PluginLoadError,
+  PluginManifest,
+  PluginModule,
+} from "./types.ts";
 import { WorkspacePluginContext } from "./WorkspaceContext.tsx";
 
 type JotaiStore = ReturnType<typeof createStore>;
@@ -33,7 +41,7 @@ type LoaderFn = (
  * settings UI. Empty in the base scaffolding — no plugin ships bundled yet;
  * sources serve from `public/plugins/<id>/`.
  */
-const BUILTIN_SOURCES: ReadonlyArray<string> = [];
+const BUILTIN_SOURCES: ReadonlyArray<string> = ["/plugins/sculpty", "/plugins/pomodoro"];
 
 /** SDK major version the host currently provides. */
 const HOST_SDK_VERSION = 1;
@@ -300,6 +308,29 @@ export class PluginManager {
             delete next[manifest.id];
             return next;
           });
+        };
+        loadDisposers.push(undo);
+        return undo;
+      },
+      registerOverlay: (overlay: OverlayDefinition): (() => void) => {
+        // Like a panel, wrap in the error boundary and PluginContext, but with
+        // no WorkspacePluginContext: an overlay is app-global, so it reads the
+        // current workspace through the SDK hooks instead of a fixed context.
+        const PluginComponent = overlay.component;
+        const Wrapped = (): ReactElement => (
+          <PluginErrorBoundary pluginId={overlay.id} pluginName={overlay.id}>
+            <PluginContext.Provider value={{ pluginId: manifest.id }}>
+              <PluginComponent />
+            </PluginContext.Provider>
+          </PluginErrorBoundary>
+        );
+        Wrapped.displayName = `PluginOverlay(${overlay.id})`;
+        const entry = { id: overlay.id, component: Wrapped };
+
+        // Replace-by-id; undo by instance (see the panel undo above).
+        store.set(pluginOverlaysAtom, (prev) => [...prev.filter((o) => o.id !== overlay.id), entry]);
+        const undo = (): void => {
+          store.set(pluginOverlaysAtom, (prev) => prev.filter((o) => o !== entry));
         };
         loadDisposers.push(undo);
         return undo;
