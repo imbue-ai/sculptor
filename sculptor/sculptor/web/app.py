@@ -2156,6 +2156,18 @@ def clear_workspace_agent_context(
     with user_session.open_transaction(services) as transaction:
         workspace = _get_workspace_or_404(workspace_id, transaction)
         task = _validate_agent_in_workspace(agent_id, workspace, transaction, services)
+        # Defense-in-depth mirror of the frontend context-reset gate (and the
+        # plan-mode guard on the messages endpoint): a harness that cannot reset
+        # context must not be sent a ClearContextUserMessage.
+        assert isinstance(task.input_data, AgentTaskInputsV2), (
+            f"Expected AgentTaskInputsV2 for clear-context endpoint, got {type(task.input_data).__name__}"
+        )
+        harness = get_harness_for_config(task.input_data.agent_config)
+        if not harness.capabilities().supports_context_reset:
+            raise HTTPException(
+                status_code=400,
+                detail="context reset requires a harness that supports it",
+            )
 
     message_id = AgentMessageID()
     with await_message_response(message_id, task.object_id, services):
