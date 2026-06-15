@@ -47,6 +47,8 @@ from sculptor.services.git_repo_service.git_commands import run_git_command_loca
 from sculptor.services.git_repo_service.git_errors import GitCommandFailure
 from sculptor.services.project_service.api import ProjectService
 from sculptor.services.user_config.user_config import get_user_config_instance
+from sculptor.services.workspace_service.api import CommitFileChange
+from sculptor.services.workspace_service.api import CommitRecord
 from sculptor.services.workspace_service.api import FileAtRefResult
 from sculptor.services.workspace_service.api import FileNotFoundAtRefError
 from sculptor.services.workspace_service.api import GitOperationResult
@@ -1343,7 +1345,7 @@ class DefaultWorkspaceService(WorkspaceService):
         self,
         workspace_id: WorkspaceID,
         transaction: DataModelTransaction,
-    ) -> tuple[list, str | None]:
+    ) -> tuple[list[CommitRecord], str | None]:
         """Get the commit history for the workspace branch."""
         workspace = transaction.get_workspace(workspace_id)
         if workspace is None:
@@ -1405,7 +1407,7 @@ class DefaultWorkspaceService(WorkspaceService):
         )
 
         # Combine into final commit list
-        commits = []
+        commits: list[CommitRecord] = []
         for meta in commit_meta:
             commit_hash = meta["hash"]
             numstat = numstat_by_hash.get(commit_hash, {})
@@ -1417,17 +1419,27 @@ class DefaultWorkspaceService(WorkspaceService):
                 stats = numstat.get(path, (0, 0))
                 status_info = statuses.get(path, ("M", None))
                 files.append(
-                    {
-                        "path": path,
-                        "status": status_info[0],
-                        "old_path": status_info[1],
-                        "additions": stats[0],
-                        "deletions": stats[1],
-                    }
+                    CommitFileChange(
+                        path=path,
+                        status=status_info[0],
+                        old_path=status_info[1],
+                        additions=stats[0],
+                        deletions=stats[1],
+                    )
                 )
 
-            meta["files"] = files
-            commits.append(meta)
+            commits.append(
+                CommitRecord(
+                    hash=meta["hash"],
+                    short_hash=meta["short_hash"],
+                    message=meta["message"],
+                    author_name=meta["author_name"],
+                    author_email=meta["author_email"],
+                    timestamp=meta["timestamp"],
+                    parent_hashes=meta["parent_hashes"],
+                    files=files,
+                )
+            )
 
         return (commits, fork_point)
 

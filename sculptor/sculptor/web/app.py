@@ -1075,21 +1075,21 @@ def get_workspace_commits(
         return CommitHistoryResponse(
             commits=[
                 CommitInfo(
-                    hash=c["hash"],
-                    short_hash=c["short_hash"],
-                    message=c["message"],
-                    author_name=c["author_name"],
-                    timestamp=c["timestamp"],
-                    parent_hashes=c.get("parent_hashes", []),
+                    hash=c.hash,
+                    short_hash=c.short_hash,
+                    message=c.message,
+                    author_name=c.author_name,
+                    timestamp=c.timestamp,
+                    parent_hashes=c.parent_hashes,
                     files=[
                         CommitFileInfo(
-                            path=f["path"],
-                            status=f["status"],
-                            old_path=f["old_path"],
-                            additions=f["additions"],
-                            deletions=f["deletions"],
+                            path=f.path,
+                            status=f.status,
+                            old_path=f.old_path,
+                            additions=f.additions,
+                            deletions=f.deletions,
                         )
-                        for f in c["files"]
+                        for f in c.files
                     ],
                 )
                 for c in commits
