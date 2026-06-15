@@ -429,8 +429,8 @@ def _run_agent_in_environment(
             kill_time_start = time.monotonic()
             try:
                 agent_wrapper.terminate(_MAX_HARD_SHUTDOWN_SECONDS)
-                remaining_shutdown_time = time.monotonic() - kill_time_start
-                if remaining_shutdown_time < 0:
+                remaining_shutdown_time = _MAX_HARD_SHUTDOWN_SECONDS - (time.monotonic() - kill_time_start)
+                if remaining_shutdown_time <= 0:
                     raise UncleanTerminationAgentError("No time left to call wait() on agent wrapper")
                 exit_code = agent_wrapper.wait(remaining_shutdown_time)
             except (UncleanTerminationAgentError, WaitTimeoutAgentError) as e:
