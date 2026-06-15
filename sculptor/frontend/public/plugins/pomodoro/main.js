@@ -44,12 +44,69 @@ const clampPos = (p) => ({
   y: Math.max(8, Math.min(p.y, window.innerHeight - 48)),
 });
 
+const durationFor = (mode) => (mode === "work" ? WORK_SECONDS : BREAK_SECONDS);
+const flip = (mode) => (mode === "work" ? "break" : "work");
+
+// The timer is persisted via usePluginSetting too, so a hard reload or plugin
+// refresh re-derives it instead of resetting. The trick: while running we store
+// `endsAt` (an absolute epoch-ms deadline), not a countdown — so on reload we
+// subtract the real elapsed wall-clock. While paused we store the frozen
+// `secondsLeft`. Shape: { mode, running, endsAt, secondsLeft }.
+const parseTimer = (raw) => {
+  if (!raw) return null;
+  try {
+    const t = JSON.parse(raw);
+    if (t && (t.mode === "work" || t.mode === "break")) return t;
+  } catch {
+    /* fall through to default */
+  }
+  return null;
+};
+
+// If a running deadline (and maybe several phases after it) passed while away,
+// walk forward to the phase that contains `now`, alternating work/break, so we
+// resume in the right place rather than showing a stale 00:00.
+const rollForward = (mode, endsAt, now) => {
+  let m = mode;
+  let end = endsAt;
+  while (now >= end) {
+    m = flip(m);
+    end += durationFor(m) * 1000;
+  }
+  return { mode: m, endsAt: end };
+};
+
+const remainingSeconds = (endsAt, now) => Math.max(0, Math.ceil((endsAt - now) / 1000));
+
+// Re-derive the live phase from the persisted record at mount time.
+const derivePhase = (raw, now) => {
+  const t = parseTimer(raw);
+  if (!t) return { mode: "work", running: false, endsAt: null, secondsLeft: WORK_SECONDS };
+  if (!t.running) {
+    const secondsLeft = typeof t.secondsLeft === "number" ? t.secondsLeft : durationFor(t.mode);
+    return { mode: t.mode, running: false, endsAt: null, secondsLeft };
+  }
+  const rolled = rollForward(t.mode, t.endsAt, now);
+  return { mode: rolled.mode, running: true, endsAt: rolled.endsAt, secondsLeft: remainingSeconds(rolled.endsAt, now) };
+};
+
 const Pomodoro = () => {
   const [task, setTask] = usePluginSetting("task");
   const [expanded, setExpanded] = useState(false);
-  const [mode, setMode] = useState("work"); // "work" | "break"
-  const [running, setRunning] = useState(false);
-  const [secondsLeft, setSecondsLeft] = useState(WORK_SECONDS);
+
+  // Single source of truth for the timer, mirrored to the persisted record.
+  // `nowMs` is just a 1s re-render pulse; the displayed time is *derived* from
+  // `endsAt`, never decremented, so it can't drift from wall-clock.
+  const [timerRaw, setTimerRaw] = usePluginSetting("timer");
+  const [phase, setPhase] = useState(() => derivePhase(timerRaw, Date.now()));
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const persist = (next) => {
+    setPhase(next);
+    setTimerRaw(JSON.stringify(next));
+  };
+  const mode = phase.mode;
+  const running = phase.running;
+  const secondsLeft = running && phase.endsAt != null ? remainingSeconds(phase.endsAt, nowMs) : phase.secondsLeft;
 
   const [posRaw, setPosRaw] = usePluginSetting("pos");
   const [pos, setPos] = useState(() => parsePos(posRaw) ?? defaultPos());
@@ -81,26 +138,36 @@ const Pomodoro = () => {
     window.addEventListener("pointerup", onUp);
   };
 
-  // Tick once a second while running; when a phase hits zero, flip work<->break.
-  const modeRef = useRef(mode);
-  modeRef.current = mode;
+  // While running, pulse a re-render each second; when the deadline passes,
+  // advance to the next phase (rolling through any we slept past) and persist.
   useEffect(() => {
-    if (!running) return;
-    const id = setInterval(() => {
-      setSecondsLeft((s) => {
-        if (s > 1) return s - 1;
-        const nextMode = modeRef.current === "work" ? "break" : "work";
-        setMode(nextMode);
-        return nextMode === "work" ? WORK_SECONDS : BREAK_SECONDS;
-      });
-    }, 1000);
+    if (!running || phase.endsAt == null) return;
+    const tick = () => {
+      const now = Date.now();
+      if (now >= phase.endsAt) {
+        const rolled = rollForward(phase.mode, phase.endsAt, now);
+        persist({
+          mode: rolled.mode,
+          running: true,
+          endsAt: rolled.endsAt,
+          secondsLeft: remainingSeconds(rolled.endsAt, now),
+        });
+      } else {
+        setNowMs(now);
+      }
+    };
+    const id = setInterval(tick, 1000);
+    tick();
     return () => clearInterval(id);
-  }, [running]);
+  }, [running, phase.endsAt, phase.mode]);
 
-  const reset = () => {
-    setRunning(false);
-    setSecondsLeft(mode === "work" ? WORK_SECONDS : BREAK_SECONDS);
+  const start = () => {
+    const now = Date.now();
+    persist({ mode, running: true, endsAt: now + secondsLeft * 1000, secondsLeft });
+    setNowMs(now);
   };
+  const pause = () => persist({ mode, running: false, endsAt: null, secondsLeft });
+  const reset = () => persist({ mode, running: false, endsAt: null, secondsLeft: durationFor(mode) });
 
   const accent = mode === "work" ? "var(--accent-9)" : "var(--grass-9)";
 
@@ -126,11 +193,15 @@ const Pomodoro = () => {
     style: { width: 8, height: 8, borderRadius: "50%", background: accent, flexShrink: 0 },
   });
 
-  const time = h("span", { style: { fontVariantNumeric: "tabular-nums", fontWeight: 600, fontSize: 16 } }, format(secondsLeft));
+  const time = h(
+    "span",
+    { style: { fontVariantNumeric: "tabular-nums", fontWeight: 600, fontSize: 16 } },
+    format(secondsLeft),
+  );
 
   const playPause = h(
     "button",
-    { onClick: () => setRunning((r) => !r), style: btn(accent) },
+    { onClick: () => (running ? pause() : start()), style: btn(accent) },
     running ? "Pause" : "Start",
   );
 
@@ -150,14 +221,12 @@ const Pomodoro = () => {
     time,
     h(
       "span",
-      { style: { flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--gray-11)" } },
+      {
+        style: { flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--gray-11)" },
+      },
       task || (mode === "work" ? "Focus" : "Break"),
     ),
-    h(
-      "button",
-      { onClick: () => setExpanded((e) => !e), style: linkBtn() },
-      expanded ? "▾" : "▸",
-    ),
+    h("button", { onClick: () => setExpanded((e) => !e), style: linkBtn() }, expanded ? "▾" : "▸"),
   );
 
   if (!expanded) return h("div", { style: shell }, header);
@@ -187,10 +256,8 @@ const Pomodoro = () => {
         "button",
         {
           onClick: () => {
-            const next = mode === "work" ? "break" : "work";
-            setMode(next);
-            setRunning(false);
-            setSecondsLeft(next === "work" ? WORK_SECONDS : BREAK_SECONDS);
+            const next = flip(mode);
+            persist({ mode: next, running: false, endsAt: null, secondsLeft: durationFor(next) });
           },
           style: linkBtn(),
         },
@@ -200,9 +267,7 @@ const Pomodoro = () => {
     h(
       "div",
       { style: { color: "var(--gray-10)", fontSize: 12 } },
-      currentWorkspace
-        ? `On: ${currentWorkspace.description || currentWorkspace.objectId}`
-        : "Not in a workspace",
+      currentWorkspace ? `On: ${currentWorkspace.description || currentWorkspace.objectId}` : "Not in a workspace",
     ),
   );
 
