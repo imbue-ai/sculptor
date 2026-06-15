@@ -54,10 +54,13 @@ COPY . /app
 RUN cd /app/sculptor && uv sync
 
 # Regenerate the API client from the (just-built) backend, then build the web UI.
+# NODE_OPTIONS raises V8's heap ceiling for the Vite build: the default (~2 GB)
+# leaves the production build right at the limit, so it intermittently aborts
+# with "JavaScript heap out of memory" (exit 134). 4 GB gives reliable headroom.
 RUN cd /app/sculptor/frontend && \
     npm install --force && \
     npm run generate-api && \
-    npm run build
+    NODE_OPTIONS=--max-old-space-size=4096 npm run build
 
 # --- Runtime setup ---------------------------------------------------------
 
