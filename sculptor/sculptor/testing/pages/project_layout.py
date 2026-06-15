@@ -180,8 +180,8 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
         for modifier in shortcut.split("+")[:-1]:
             self._page.keyboard.up(modifier)
 
-    def get_warning_banner(self) -> PlaywrightWarningBannerElement | None:
-        """Get the warning banner element if it's visible."""
+    def get_warning_banner(self) -> PlaywrightWarningBannerElement:
+        """Get the warning banner element. Only visible when a warning is active."""
         banner_locator = self.get_by_test_id(ElementIDs.WARNING_STATUS_BANNER)
         return PlaywrightWarningBannerElement(locator=banner_locator, page=self._page)
 

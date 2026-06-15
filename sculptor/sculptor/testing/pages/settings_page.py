@@ -48,7 +48,6 @@ class PlaywrightSettingsPage(PlaywrightProjectLayoutPage):
     def click_on_keybindings(self) -> PlaywrightKeybindingsSettingsElement:
         """Navigate to Keybindings settings and return the section element."""
         self._get_keybindings_nav().click()
-        # Return the keybindings settings section scoped to the page
         return PlaywrightKeybindingsSettingsElement(locator=self._get_settings_content(), page=self._page)
 
     def click_on_panels(self) -> PlaywrightPanelsSettingsElement:

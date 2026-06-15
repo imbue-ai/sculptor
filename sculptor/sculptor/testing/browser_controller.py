@@ -195,6 +195,7 @@ class BrowserController:
                         screenshot_path = controller._take_screenshot("get")
                         self._send_json({"success": True, "screenshot": screenshot_path})
                     except Exception as e:
+                        logger.error("Screenshot request failed: {}\n{}", e, traceback.format_exc())
                         self._send_json({"success": False, "error": str(e)}, status=500)
                 elif self.path == "/status":
                     self._send_json(

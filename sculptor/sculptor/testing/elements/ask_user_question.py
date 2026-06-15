@@ -7,6 +7,8 @@ from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
 
 
 class PlaywrightAskUserQuestionPanelElement(PlaywrightIntegrationTestElement):
+    """Page Object Model for the interactive ask-user-question panel."""
+
     def get_question_text(self) -> Locator:
         return self.get_by_test_id(ElementIDs.ASK_USER_QUESTION_TEXT)
 
@@ -57,6 +59,8 @@ class PlaywrightAskUserQuestionPanelElement(PlaywrightIntegrationTestElement):
 
 
 class PlaywrightAskUserQuestionBlockElement(PlaywrightIntegrationTestElement):
+    """Page Object Model for a submitted or dismissed ask-user-question tool block."""
+
     def get_custom_text(self) -> Locator:
         return self.get_by_test_id(ElementIDs.ASK_USER_QUESTION_CUSTOM_TEXT)
 

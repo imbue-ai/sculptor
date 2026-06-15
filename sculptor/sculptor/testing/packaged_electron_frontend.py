@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Generator
 
 from loguru import logger
+from playwright.sync_api import Browser
 from playwright.sync_api import BrowserContext
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page
@@ -25,6 +26,12 @@ from sculptor.testing.port_manager import PortManager
 from sculptor.testing.server_utils import SculptorServer
 from sculptor.testing.subprocess_utils import Forwarder
 from sculptor.utils.build import SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG
+
+# tenacity delays are in seconds; Playwright timeouts are in milliseconds.
+_CDP_CONNECT_TIMEOUT_SECONDS = 120
+_CDP_CONNECT_RETRY_INTERVAL_SECONDS = 1
+_CDP_CONNECT_ATTEMPT_TIMEOUT_MS = 10_000
+_BLANK_PAGE_NAVIGATION_TIMEOUT_MS = 60_000
 
 _KNOWN_HARMLESS_ELECTRON_SUBSTRINGS = (
     "Keychain lookup for suffixed key failed:",
@@ -146,7 +153,7 @@ class PackagedElectronFrontend:
             # the bundled SPA without navigating.
             if self.wait_until_ready and (not page.url or page.url == "about:blank"):
                 logger.info("Page is blank, waiting for navigation to complete...")
-                page.wait_for_url("**/*", timeout=60_000)
+                page.wait_for_url("**/*", timeout=_BLANK_PAGE_NAVIGATION_TIMEOUT_MS)
 
             configure_page(page, timeout_ms=self.timeout_ms)
         except Exception as e:
@@ -169,18 +176,20 @@ class PackagedElectronFrontend:
         """Register a project with the backend so the frontend skips the setup page."""
         _register_project(self.backend_port, self.session_token, project_path)
 
-    def _connect_playwright_cdp(self) -> object:
+    def _connect_playwright_cdp(self) -> Browser:
         retry_connect = retry(
-            stop=stop_after_delay(120),
-            wait=wait_fixed(1),
+            stop=stop_after_delay(_CDP_CONNECT_TIMEOUT_SECONDS),
+            wait=wait_fixed(_CDP_CONNECT_RETRY_INTERVAL_SECONDS),
             retry=retry_if_exception_type(PlaywrightError),
             reraise=True,
         )(self._connect_cdp)
         return retry_connect()
 
-    def _connect_cdp(self) -> object:
+    def _connect_cdp(self) -> Browser:
         logger.debug("Attempting CDP connection on port {}", self.cdp_port)
-        return self.playwright.chromium.connect_over_cdp(f"http://localhost:{self.cdp_port}", timeout=10_000)
+        return self.playwright.chromium.connect_over_cdp(
+            f"http://localhost:{self.cdp_port}", timeout=_CDP_CONNECT_ATTEMPT_TIMEOUT_MS
+        )
 
     def _kill_packaged_app(self) -> None:
         kill_process_tree(self._electron_proc, self._forwarder, self.backend_port)

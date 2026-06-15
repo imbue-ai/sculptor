@@ -14,9 +14,7 @@ class RunCommandError(subprocess.CalledProcessError):
     """Custom exception for errors encountered during Git commands."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        self.cwd = kwargs.get("cwd", None)
-        if "cwd" in kwargs:
-            del kwargs["cwd"]
+        self.cwd = kwargs.pop("cwd", None)
         super().__init__(*args, **kwargs)
 
     def __str__(self) -> str:

@@ -1,3 +1,5 @@
+from typing import Literal
+
 from playwright.sync_api import Locator
 from playwright.sync_api import Page
 from playwright.sync_api import expect
@@ -110,7 +112,7 @@ class PlaywrightDiffPanelElement(PlaywrightIntegrationTestElement):
     def get_read_only_preview_markdown(self) -> Locator:
         return self.get_read_only_preview().get_by_test_id(ElementIDs.READ_ONLY_PREVIEW_MARKDOWN)
 
-    def ensure_render_mode(self, mode: str) -> None:
+    def ensure_render_mode(self, mode: Literal["rendered", "source"]) -> None:
         """Ensure the render-mode toggle is in ``mode`` (``"rendered"`` or ``"source"``)."""
         toggle = self.get_render_toggle()
         expect(toggle).to_be_visible()

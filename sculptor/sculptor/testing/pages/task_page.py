@@ -1,4 +1,5 @@
 import re
+from typing import Literal
 
 from playwright.sync_api import Locator
 from playwright.sync_api import expect
@@ -32,7 +33,7 @@ class PlaywrightTaskPage(PlaywrightProjectLayoutPage):
         return branch_name
 
     def get_branch_name(self) -> str:
-        return self.get_branch_name_element().text_content()
+        return self.get_branch_name_element().text_content() or ""
 
     def get_workspace_banner(self) -> Locator:
         """Get the workspace banner (the repo/branch/target header strip)."""
@@ -115,7 +116,7 @@ class PlaywrightTaskPage(PlaywrightProjectLayoutPage):
         history_panel = self._page.get_by_test_id(ElementIDs.HISTORY_PANEL)
         return PlaywrightHistoryPanelElement(locator=history_panel, page=self._page)
 
-    def activate_changes_panel(self, scope: str = "all") -> None:
+    def activate_changes_panel(self, scope: Literal["all", "uncommitted"] = "all") -> None:
         """Ensure the changes panel is visible by opening the File Browser and switching to Changes tab.
 
         Args:

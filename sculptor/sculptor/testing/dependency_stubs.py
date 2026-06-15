@@ -140,9 +140,7 @@ esac
 """
 
 CLAUDE_INSTALLED_NOT_AUTHENTICATED_STUB = f"""#!/bin/bash
-# State file to track authentication across invocations
-AUTH_STATE_FILE="/tmp/claude_stub_auth_$$_state"
-# Use a shared state dir based on the stub's directory
+# Track authentication across invocations via a state file next to the stub.
 AUTH_STATE_DIR="$(dirname "$0")"
 AUTH_STATE_FILE="${{AUTH_STATE_DIR}}/.claude_auth_state"
 
