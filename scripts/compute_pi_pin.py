@@ -28,6 +28,7 @@ SUPPORTED_PLATFORM_KEYS: tuple[str, ...] = ("darwin-arm64", "darwin-x64", "linux
 
 _RELEASE_URL_TEMPLATE = "https://github.com/earendil-works/pi/releases/download/v{version}/{asset}"
 _DOWNLOAD_CHUNK_SIZE = 1024 * 1024
+_DOWNLOAD_TIMEOUT_SECONDS = 30
 
 
 class PiAssetDownloadError(RuntimeError):
@@ -48,13 +49,13 @@ def compute_asset_sha256(url: str) -> str:
     """Stream the asset at ``url`` and return its hex sha256 digest."""
     digest = hashlib.sha256()
     try:
-        with urllib.request.urlopen(url) as response:
+        with urllib.request.urlopen(url, timeout=_DOWNLOAD_TIMEOUT_SECONDS) as response:
             while True:
                 chunk = response.read(_DOWNLOAD_CHUNK_SIZE)
                 if not chunk:
                     break
                 digest.update(chunk)
-    except urllib.error.URLError as error:
+    except (urllib.error.URLError, TimeoutError) as error:
         raise PiAssetDownloadError(f"Could not download pi asset: {url}") from error
     return digest.hexdigest()
 
