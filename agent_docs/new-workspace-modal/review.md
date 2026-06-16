@@ -1,151 +1,118 @@
-# New Workspace Modal — Inline-on-empty-Home — Review
+# New Workspace Modal — Merge-Readiness Review
 
-Scope: this review covers the single commit added this session —
-`50e824186a [SCU-1494] Render the new-workspace form inline on an empty Home`
-(`git diff HEAD~1..HEAD`). The earlier 7 commits on
-`bryden/scu-1494-rewrite-new-workspace-modal` (the modal rewrite itself) are
-prior, separately-reviewed work and are out of scope here.
+Scope: the full branch `bryden/scu-1494-rewrite-new-workspace-modal` vs
+`origin/main` (`git diff origin/main...HEAD`) — the SCU-752 + SCU-1494
+new-workspace-modal rewrite, ending with the inline new-workspace form on an
+empty Home. Tracked by **SCU-1494** ("Rewrite the new-workspace modal (mount
+form only when open)").
 
 Note on the spec: `agent_docs/new-workspace-modal/spec.md` is the original
-SCU-752 spec and is now partly historical (see `agent_docs/CLAUDE.md`). The
-SCU-1494 change **intentionally supersedes** the spec's "First-load behavior"
-(auto-open the modal on top of HomePage) with "render the form inline on an
-empty Home; no auto-open." Requirements below are therefore assessed against
-the approved SCU-1494 plan + two follow-up requests, with the superseded spec
-section flagged.
+SCU-752 spec (and `agent_docs/CLAUDE.md` flags these docs as historical). The
+SCU-1494 work **intentionally supersedes** the spec's "First-load behavior"
+(auto-open the modal on top of HomePage) with an **inline form on an empty
+Home, no auto-open**. Requirements are assessed against the spec with that
+divergence called out.
 
 ## Summary
 
-- The implementation meets the stated goal and the approved plan. It is
-  well-tested (a unit test for the prefill decision + an inline-create
-  integration test) and green on `just format` / `just check` /
-  `just test-unit` and the directly-affected integration suites.
-- No CRITICAL or HIGH findings. Two things worth addressing/calling out before
-  merge: (1) `useNewWorkspaceModal` subscribes to the whole `workspacesArrayAtom`
-  when it only needs emptiness, widening re-renders (MEDIUM, perf); (2) the
-  removal of the backend first-agent greeting changes behavior for CLI/API
-  agent-creation paths (intentional — call it out in the PR body).
-- Nothing blocks the change.
+- The branch delivers the spec: a Cmd+K-style modal replacing the `/ws/new`
+  page, all fields on one screen, optional initial prompt, three entry points,
+  palette swap-in-place + back-affordance, draft persistence in atoms, and the
+  shell+form (form mounts only when open). SCU-1494 then supersedes first-load
+  auto-open with the inline empty-Home form + editable `/sculptor:help` prefill.
+- Verified green on `just check` and all four `just test-unit` suites; the
+  directly-affected integration suites pass (home, add-workspace, branch
+  collisions, restart-mru, onboarding, migration, worktree-create, tab
+  enhancements, multi-repo).
+- One finding auto-addressed: a stray commented-out assertion + ownerless TODO
+  in the unrelated `test_compaction` test (scope creep from `b1a76f1645`) was
+  removed. Two non-blocking items to note in the PR body (below). Nothing
+  blocks the merge.
 
 ## Requirements Coverage
 
-| Requirement (SCU-1494 plan / follow-ups) | Status | Evidence |
-|------------------------------------------|--------|----------|
-| Zero workspaces → render the new-workspace form inline, centered, replacing the empty state | Covered | `RecentWorkspaces.tsx:174-184`, `RecentWorkspaces.module.scss:25-51` |
-| Drop the search bar in that state | Covered | empty branch returns before the search bar (`RecentWorkspaces.tsx`) |
-| Delete the `EmptyState` component | Covered | `EmptyState.tsx` / `.module.scss` deleted |
-| `"home"` entry source hides close-X and "Keep open" toggle | Covered | `NewWorkspaceForm.tsx:592-608, 770-783`; union update `atoms.ts:14` |
-| Editable, optional, one-shot, integration-gated prefill | Covered | `homePromptPrefill.ts` (`shouldPrefillHomePrompt`), effect at `NewWorkspaceForm.tsx:143-151` |
-| Prefill uses the fuller `/sculptor:help …` sentence | Covered | `homePromptPrefill.ts:11-12` |
-| Remove backend first-agent auto-injection (all paths) | Covered | `app.py:1695-1733` removed; obsolete tests deleted in `app_basic_test.py` |
-| Off-Home / has-workspaces → modal opens normally | Covered | `hooks.ts:40-58` (`isHomeRoute && empty` gate only) |
-| Hide topbar "+" only on empty Home | Covered | `WorkspaceTabs.tsx:61-66, 472-495` |
-| Entry points at zero workspaces focus the inline prompt | Covered | `homePromptFocusRequestAtom` (`atoms.ts:70`), focus effect `NewWorkspaceForm.tsx:126-134` |
-| Remove `firstLoad` auto-open; simplify Router fallback | Covered | `HomePage.tsx` effect removed; `Router.tsx:53-54` → `/home` |
-| Fix red "required" flash during initial auto-fill | Covered | `NewWorkspaceForm.tsx:546-553` (`isAwaitingAutoFillBranch`) |
-| (Superseded) spec "auto-open modal on first load" | Superseded | intentional — replaced by the inline form |
+| Requirement (spec section) | Status | Evidence |
+|---|---|---|
+| Reuse Cmd+K modal frame; extract shared shell | Covered | `PaletteDialog/PaletteDialog.tsx` (shared by palette + modal) |
+| Modal width tuned; inline `⌘↵` hint | Covered | `NewWorkspaceModal.module.scss`; `NewWorkspaceForm.tsx` KeyboardHint |
+| All fields on one screen (name, repo, source branch, mode, branch name, prompt) | Covered | `NewWorkspaceForm.tsx` |
+| Reuse `BranchNameField` / `BranchSelector` / `RepoSelector` / `useBranchNamePreview` | Covered | moved under `components/NewWorkspaceModal/` |
+| `Cmd+Enter` submits from any field | Covered | `NewWorkspaceForm.tsx` `handleKeyDown` |
+| Entry points: palette swap-in-place, dedicated keybinding, topbar button | Covered | `navigation.ts`, `usePageLayoutKeyboardShortcuts.ts`, `WorkspaceTabs.tsx` |
+| Submit pipeline `createWorkspaceV2 → createWorkspaceAgent → navigate`; send prompt if non-empty | Covered | `NewWorkspaceForm.tsx` `handleSubmit` |
+| Draft state in atoms; persists across open/close; clears on success | Covered | `atoms.ts` (`draft*Atom`, `resetDraftAtom`) |
+| Mutual exclusion with command palette | Covered | `hooks.ts` (closes palette on open) |
+| Back-to-palette affordance; entry-source tracking | Covered | `atoms.ts` `NewWorkspaceModalEntrySource`, `NewWorkspaceModal.tsx` Esc handling |
+| Route deprecation: delete `/ws/new`, `AddWorkspacePage`, move field components | Covered | files deleted; `Router.tsx`, `NavigateUtils.ts`, `useWorkspaceTabActions.ts` updated |
+| First-load behavior (auto-open modal on top of HomePage) | **Superseded** | SCU-1494: empty Home renders the form inline (`RecentWorkspaces.tsx`); no auto-open |
 
 ## User Scenarios
 
-- **First-time user lands with no workspaces.** Delivered and superseding the
-  spec: instead of an auto-opened modal, the empty Home renders the form inline
-  with the help prefill. Covered by `test_inline_new_workspace_form_shown_and_creates_for_new_user`
-  and `test_restart_with_no_mru_lands_on_home`.
-- **Power user creates from anywhere (off Home / with workspaces).** The modal
-  still opens via topbar "+", palette, and keybinding. Covered by
-  `test_cmd_t_opens_new_workspace_modal`, `test_workspace_form_draft_persists_after_navigation`,
-  multi-repo, and tab-enhancement suites.
-- **Create without a prompt.** In integration mode the prefill is gated off, so
-  submit yields a waiting agent — `test_create_workspace_without_prompt` stays
-  green.
-- **Send an initial prompt with creation.** An untouched prefill is sent as the
-  first message on create (reproducing the old greeting via a visible, editable
-  field). Not asserted in integration (gated off by design); the decision logic
-  is unit-tested.
+- **Create from anywhere / palette → modal swap / send-with-prompt / create
+  without prompt:** all delivered by the modal flow; covered by
+  `test_add_workspace_page.py`, `test_workspace_tab_enhancements.py`,
+  `test_worktree_create_happy_path.py`, `test_create_workspace_without_prompt`.
+- **First-time user with no workspaces:** superseding the spec, the empty Home
+  renders the form inline with the editable help prefill; covered by
+  `test_home_page.py::test_inline_new_workspace_form_shown_and_creates_for_new_user`
+  and `test_restart_mru.py::test_restart_with_no_mru_lands_on_home` (routing).
+- **Mid-edit close + reopen keeps inputs:** draft atoms persist within a
+  session; covered by `test_workspace_form_draft_persists_after_navigation`.
+  (Cross-restart persistence is explicitly out of scope — `test_restarts.py`
+  carries a justified skip noting drafts aren't serialized across restarts.)
 
 ## Test Coverage
 
-- Tests added: `homePromptPrefill.test.ts` (6 cases for `shouldPrefillHomePrompt`);
-  `test_inline_new_workspace_form_shown_and_creates_for_new_user`
-  (inline render + create); a HOME_NEW_WORKSPACE_FORM assertion added to
-  `test_restart_with_no_mru_lands_on_home`.
-- Tests updated for the new surface: branch-collision (inline-form getter),
-  onboarding/migration (union "create surface" beacon), restart_mru
-  (firstLoad removal), plus page-object/helper updates.
-- Suite status: `just check` green; `just test-unit` green (all four suites).
-  Integration — batch 1 (home, add_workspace, branch_collisions, restart_mru,
-  onboarding, migration): 31 passed, 1 pre-existing skip. Batch 2
-  (worktree_create, workspace_tab_enhancements, multi_repo): 15 passed, 1
-  pre-existing skip. One flake (`test_worktree_create_with_default_branch_name`,
-  a `git worktree list` timing race unrelated to this change) passed on re-run.
-- Skipped/xfail: only two pre-existing, unrelated skips (onboarding config
-  timing; multi_repo duplicate-name redesign). None introduced here.
+- Tests added/updated: the whole integration suite was migrated off `/ws/new`
+  to the modal flow; new `homePromptPrefill.test.ts` (unit) and
+  `useHomeToggle.test.tsx`; `test_home_toggle_safety.py`; the SCU-1494 inline
+  form + restart routing tests. `test_home_page_tab.py` deleted (pseudo-tab gone).
+- Suite status: `just check` ✅ (typecheck, lint, ratchets, file-hygiene);
+  `just test-unit` ✅ (backend, frontend, imbue-core, sculpt); affected
+  integration suites ✅.
+- Skips/xfails: all pre-existing or justified — `test_restarts.py`
+  (drafts not serialized across restarts), `test_multi_repo.py:313`
+  (duplicate-name redesign), `test_onboarding.py:316` (onboarding config
+  timing), `test_regression_workspace_mode_persistence.py` (mode persistence
+  not yet implemented). No new unjustified skips.
 
 ## Code Review Findings
 
-Code-review skill: `/code-review-checklist` (configured in `.sculptor/docs.md`),
-run on `HEAD~1..HEAD`. Verbatim findings:
+Applied the configured `/code-review-checklist` categories (plus
+`docs/review/react.md`, `sculptor.md`, `integration-tests.md`) to the full
+branch diff.
 
-> **Correctness** — LOW: modal form also subscribes to `homePromptFocusRequestAtom`
-> via the shared focus effect (safe by invariant, documented). LOW: a
-> session-persistent prefill could linger into a later modal open if a workspace
-> arrives by a non-submit path. No HIGH/CRITICAL.
->
-> **Consistency with goal** — Matches. LOW: per-mount prefill guard re-applies on
-> remount, overwriting a persisted draft edit (accepted in the plan).
->
-> **Test coverage** — No issues.
->
-> **Dead code** — No issues (EmptyState, auto-open effect, `newWorkspaceModalAutoOpenedAtom`,
-> `"auto"` source, backend injection, unused `CreateAgentRequest` import, two
-> obsolete tests all removed; `isBranchNamePreviewLoading` still used).
->
-> **Comments / Error handling / Security / Type safety / Style & ratchets /
-> Public-facing text** — No issues. (`just generate-api` was run for the
-> ElementId rename; typecheck/lint/ratchets green; commit message clean.)
->
-> **Backwards compatibility** — MEDIUM (intentional): removing the first-agent
-> injection drops the auto-greeting for CLI/API agent-creation paths too. Call
-> out in the PR body.
->
-> **Frontend (`use_derived_atoms`)** — MEDIUM: `useNewWorkspaceModal` reads the
-> whole `workspacesArrayAtom` but only needs emptiness; widens re-renders of all
-> hook consumers. Consider a derived emptiness atom.
-> **RESOLVED** in `3a789c885d` — added `isWorkspaceListEmptyAtom` and switched
-> the hook to it, so consumers re-render only when emptiness flips.
->
-> **Integration tests** — LOW `use_pom_hierarchy`: new home test mixes POM and
-> raw `get_by_test_id`. LOW `no_lowered_timeouts`: the added inline-form
-> visibility assertion in `test_restart_mru.py` reuses the 10s constant; a
-> render-dependent wait is safer at the 30s default. LOW: `.first` is used in the
-> navigate helper but not in the SPA-ready beacons — a latent strict-mode trap if
-> both elements ever co-render at boot.
-> **RESOLVED** (committed alongside this `review.md` update):
-> - `use_pom_hierarchy`: the home test now drives creation via
->   `PlaywrightAddWorkspacePage.get_workspace_name_input()/get_submit_button()`.
-> - `no_lowered_timeouts`: rather than relax the timeout, the fragile inline-form
->   assertion was **removed** from `test_restart_with_no_mru_lands_on_home` — that
->   test's subject is the no-MRU routing (the `/home` URL); coupling it to the
->   recent-workspaces fetch latency added no coverage (the inline form is covered
->   by `test_inline_new_workspace_form_shown_and_creates_for_new_user`) and made
->   it flaky under load.
-> - `.first` asymmetry: investigated and the finding's premise was a false
->   positive — the "+" and the inline form's submit button are mutually exclusive
->   on `/home`, so the beacons never match two elements. Adding `.first` actually
->   broke `expect_app_not_onboarding` (which composes its own `.or_(onboarding)`),
->   so it was reverted; a clarifying comment now records why no `.first` belongs
->   there. The navigate helper keeps its `.first` (it genuinely can see both).
->
-> **Git hygiene** — LOW: commit bundles the feature + the branch-name flash fix
-> (thematically related).
+- **RESOLVED — Dead code / ownerless TODO (LOW):** `test_task_page_chatting.py`
+  `test_compaction` carried a commented-out `assert` and a `# TODO: This fails
+  since there's a bug with our context` (added in `b1a76f1645`, unrelated to the
+  modal; `origin/main` had no assertion there). Removed — `test_compaction` now
+  matches `origin/main`.
+- **Note — scope creep (LOW, surfaced not auto-removed):** the branch also
+  commits design mocks for two *other* features —
+  `agent_docs/generated-workspace-title/` and
+  `agent_docs/new-workspace-branch-name/` (~94KB `mocks.html` each). Harmless
+  docs, but unrelated to this PR. Left in place because they're intentional
+  artifacts I didn't author; consider dropping them from the PR.
+- **Note — intentional behavior change:** removing the backend first-agent
+  `/sculptor:help` injection drops the auto-greeting for **all** agent-creation
+  paths, including CLI/API (which have no frontend prefill). Deliberate — call
+  it out in the PR body.
+- **SCU-1494 delta findings** (from the prior pass) were all resolved:
+  `use_derived_atoms` re-render widening → `isWorkspaceListEmptyAtom`
+  (`3a789c885d`); test-polish (POM getters, fragile restart assertion removed,
+  beacon `.first` investigated and correctly NOT applied) → `f57ca7a583`.
+- All reviewed source files (the modal components, `PaletteDialog`,
+  `CommandPalette`/`WorkspaceTabs` refactors, `useHomeToggle`, `AgentSettingsControls`,
+  `RepoSelector`, `useWorkspaceTabActions`, `PageLayout`, `NavigateUtils`,
+  `useSyncActiveTabFromRoute`, `app.py`) are correct, well-commented, and free of
+  effect/atom/error-handling issues per the rules. No CRITICAL/HIGH/MEDIUM
+  findings remain.
 
 ## Overall Assessment
 
-Ready to merge. The change is correct, tested at unit and integration level, and
-clean on all configured gates. The `use_derived_atoms` re-render widening in
-`useNewWorkspaceModal` is **resolved** (commit `3a789c885d`), and the three LOW
-integration-test notes are **resolved** in a follow-up commit (POM getters in the
-home test; the fragile inline-form assertion removed from the restart routing
-test; the `.first` "asymmetry" investigated, found to be a false positive, and
-reverted). The one remaining item — non-blocking — is documenting the CLI/API
-greeting-removal as an intentional behavior change in the PR description.
+Ready to merge. The implementation meets the spec (with the deliberate
+inline-Home supersession), is well-tested at unit and integration level, and is
+clean on all configured gates. No blocking issues. Two things for the PR
+description: (1) the intentional CLI/API greeting removal, and (2) the two
+unrelated `agent_docs` feature mocks that ride along — drop them if you want a
+tighter diff.

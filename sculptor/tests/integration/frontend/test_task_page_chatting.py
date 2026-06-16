@@ -301,6 +301,3 @@ def test_compaction(sculptor_instance_: SculptorInstance) -> None:
     expect(compaction_header).to_contain_text("Context Remaining")
     expect(chat_panel.get_context_summary_messages()).to_have_count(1)
     _final_context_remaining = compaction_header.get_context_remaining()
-
-    # TODO: This fails since there's a bug with our context
-    # assert _final_context_remaining > _initial_context_remaining
