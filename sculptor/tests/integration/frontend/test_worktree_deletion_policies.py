@@ -15,8 +15,8 @@ from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.user_config import _set_user_config_flag
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.pages.new_workspace_modal_page import PlaywrightNewWorkspaceModalPage
+from sculptor.testing.playwright_utils import open_new_workspace_modal
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
@@ -26,8 +26,8 @@ def _create_worktree_workspace(page: Page, workspace_name: str) -> tuple[str, st
 
     Worktree is the default mode, so there's no mode selection to make.
     """
-    navigate_to_add_workspace_page(page)
-    add_workspace = PlaywrightAddWorkspacePage(page=page)
+    open_new_workspace_modal(page)
+    add_workspace = PlaywrightNewWorkspaceModalPage(page=page)
     add_workspace.get_workspace_name_input().fill(workspace_name)
     branch_name = add_workspace.wait_for_branch_preview()
     add_workspace.submit_and_wait_for_chat_panel()

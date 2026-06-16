@@ -5,7 +5,7 @@ from sculptor.constants import ElementIDs
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.playwright_utils import open_new_workspace_modal
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
@@ -27,14 +27,14 @@ def test_home_page_prompts_persist_on_restart(sculptor_instance_factory_: Sculpt
 
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
-        navigate_to_add_workspace_page(page)
+        open_new_workspace_modal(page)
         task_input = page.get_by_test_id(ElementIDs.TASK_INPUT)
         expect(task_input).to_have_attribute("contenteditable", "true")
         task_input.click()
         task_input.fill(prompt_text)
 
     with sculptor_instance_factory_.spawn_instance() as instance:
-        navigate_to_add_workspace_page(instance.page)
+        open_new_workspace_modal(instance.page)
         task_input = instance.page.get_by_test_id(ElementIDs.TASK_INPUT)
         expect(task_input).to_have_text(prompt_text)
 

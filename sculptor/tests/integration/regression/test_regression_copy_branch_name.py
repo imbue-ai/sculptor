@@ -19,8 +19,8 @@ from sculptor.constants import ElementIDs
 from sculptor.testing.elements.clipboard import install_clipboard_interceptor
 from sculptor.testing.elements.clipboard import read_intercepted_clipboard
 from sculptor.testing.elements.user_config import enable_clone_workspaces
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.pages.new_workspace_modal_page import PlaywrightNewWorkspaceModalPage
+from sculptor.testing.playwright_utils import open_new_workspace_modal
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
@@ -56,8 +56,8 @@ def test_copy_branch_name_copies_workspace_branch(sculptor_instance_: SculptorIn
     # selector pick up the newly created feature_branch. After the reload we
     # land on /home with the modal closed, so open it explicitly.
     enable_clone_workspaces(page)
-    navigate_to_add_workspace_page(page)
-    add_workspace = PlaywrightAddWorkspacePage(page=page)
+    open_new_workspace_modal(page)
+    add_workspace = PlaywrightNewWorkspaceModalPage(page=page)
 
     add_workspace.get_workspace_name_input().fill("Feature branch workspace")
     add_workspace.select_clone_mode()

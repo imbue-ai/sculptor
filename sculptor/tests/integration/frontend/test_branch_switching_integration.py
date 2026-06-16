@@ -9,9 +9,9 @@ from sculptor.testing.elements.chat_panel import wait_for_completed_message_coun
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
 from sculptor.testing.elements.user_config import enable_clone_workspaces
 from sculptor.testing.elements.user_config import enable_in_place_workspaces
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
+from sculptor.testing.pages.new_workspace_modal_page import PlaywrightNewWorkspaceModalPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.playwright_utils import open_new_workspace_modal
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
@@ -58,8 +58,8 @@ def test_branch_switching_with_untracked_file(sculptor_instance_: SculptorInstan
     # Clone mode is opt-in — enable it before opening the modal.
     enable_clone_workspaces(page)
 
-    navigate_to_add_workspace_page(page)
-    add_workspace = PlaywrightAddWorkspacePage(page=page)
+    open_new_workspace_modal(page)
+    add_workspace = PlaywrightNewWorkspaceModalPage(page=page)
     add_workspace.get_workspace_name_input().fill("Branch B workspace")
     add_workspace.select_clone_mode()
 
@@ -89,8 +89,8 @@ def test_in_place_mode_displayed_correctly(sculptor_instance_: SculptorInstance)
     # Enable the experimental in-place workspaces flag so the mode selector is visible.
     enable_in_place_workspaces(page)
 
-    navigate_to_add_workspace_page(page)
-    add_workspace = PlaywrightAddWorkspacePage(page=page)
+    open_new_workspace_modal(page)
+    add_workspace = PlaywrightNewWorkspaceModalPage(page=page)
     add_workspace.get_workspace_name_input().fill("In-place workspace")
     add_workspace.select_in_place_mode()
 

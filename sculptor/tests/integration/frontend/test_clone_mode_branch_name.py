@@ -16,8 +16,8 @@ from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.user_config import enable_clone_workspaces
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.pages.new_workspace_modal_page import PlaywrightNewWorkspaceModalPage
+from sculptor.testing.playwright_utils import open_new_workspace_modal
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
@@ -65,8 +65,8 @@ def test_clone_mode_cleared_branch_checks_out_base(sculptor_instance_: SculptorI
     page = sculptor_instance_.page
     enable_clone_workspaces(page)
 
-    navigate_to_add_workspace_page(page)
-    add_workspace = PlaywrightAddWorkspacePage(page=page)
+    open_new_workspace_modal(page)
+    add_workspace = PlaywrightNewWorkspaceModalPage(page=page)
     add_workspace.get_workspace_name_input().fill("Some work")
     add_workspace.select_clone_mode()
 
@@ -91,8 +91,8 @@ def test_clone_mode_kept_branch_name_creates_new_branch(sculptor_instance_: Scul
     page = sculptor_instance_.page
     enable_clone_workspaces(page)
 
-    navigate_to_add_workspace_page(page)
-    add_workspace = PlaywrightAddWorkspacePage(page=page)
+    open_new_workspace_modal(page)
+    add_workspace = PlaywrightNewWorkspaceModalPage(page=page)
     add_workspace.get_workspace_name_input().fill("Fix login bug")
     add_workspace.select_clone_mode()
 

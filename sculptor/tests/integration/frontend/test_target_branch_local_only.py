@@ -22,9 +22,9 @@ from sculptor.testing.elements.chat_panel import select_model_by_name
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
+from sculptor.testing.pages.new_workspace_modal_page import PlaywrightNewWorkspaceModalPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.playwright_utils import open_new_workspace_modal
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
@@ -49,16 +49,16 @@ def test_worktree_on_local_only_repo_shows_all_tab_and_uncommitted_changes(
     """
     page = sculptor_instance_.page
 
-    navigate_to_add_workspace_page(page)
-    add_workspace_page = PlaywrightAddWorkspacePage(page=page)
-    add_workspace_page.get_workspace_name_input().fill("Local only worktree")
+    open_new_workspace_modal(page)
+    new_workspace_modal_page = PlaywrightNewWorkspaceModalPage(page=page)
+    new_workspace_modal_page.get_workspace_name_input().fill("Local only worktree")
 
     # Branch-name input auto-fills; just wait for it to settle.
-    branch_input = add_workspace_page.get_branch_name_input()
+    branch_input = new_workspace_modal_page.get_branch_name_input()
     expect(branch_input).to_be_visible()
     expect(branch_input).not_to_have_value("")
 
-    add_workspace_page.submit_and_wait_for_chat_panel()
+    new_workspace_modal_page.submit_and_wait_for_chat_panel()
 
     task_page = PlaywrightTaskPage(page=page)
     chat_panel = task_page.get_chat_panel()

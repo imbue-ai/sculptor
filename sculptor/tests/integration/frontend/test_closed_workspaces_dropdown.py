@@ -146,11 +146,11 @@ def test_delete_workspace_from_dropdown(
     expect(pill).not_to_be_visible()
 
 
-@user_story("to see the closed workspaces pill on the new workspace page")
-def test_pill_visible_on_add_workspace_page(
+@user_story("to see the closed workspaces pill on the new workspace modal")
+def test_pill_visible_on_new_workspace_modal(
     sculptor_instance_: SculptorInstance,
 ) -> None:
-    """Verify the pill remains visible when navigating to the add workspace page."""
+    """Verify the pill remains visible when opening the new workspace modal."""
     page = sculptor_instance_.page
     layout = PlaywrightProjectLayoutPage(page=page)
 
@@ -164,10 +164,10 @@ def test_pill_visible_on_add_workspace_page(
     expect(pill).to_be_visible()
     expect(pill).to_contain_text("1")
 
-    # Navigate to the add workspace page
+    # Open the new workspace modal
     layout.get_add_workspace_button().click()
 
-    # Pill should still be visible on the new workspace page
+    # Pill should still be visible on the new workspace modal
     expect(pill).to_be_visible()
     expect(pill).to_contain_text("1")
 

@@ -7,13 +7,13 @@ from sculptor.constants import ElementIDs
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 
 
-class PlaywrightAddWorkspacePage(PlaywrightProjectLayoutPage):
+class PlaywrightNewWorkspaceModalPage(PlaywrightProjectLayoutPage):
     """Page object for the New Workspace modal.
 
     The legacy ``/ws/new`` page was replaced by a modal that shares the
     command-palette chrome; this POM wraps the modal's fields (repo, mode,
     source branch, branch name, workspace name, prompt) and the submit button.
-    Open the modal first via ``navigate_to_add_workspace_page`` (the topbar
+    Open the modal first via ``open_new_workspace_modal`` (the topbar
     "+" button).
     """
 

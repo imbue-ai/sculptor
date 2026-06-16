@@ -95,7 +95,7 @@ def navigate_to_home_page(page: Page) -> None:
     expect(workspace_rows.first.or_(inline_new_workspace_form)).to_be_visible(timeout=10000)
 
 
-def navigate_to_add_workspace_page(page: Page) -> None:
+def open_new_workspace_modal(page: Page) -> None:
     """Ensure the new-workspace form is visible with its inputs ready.
 
     No-op when the submit button is already visible — either the modal is
@@ -273,7 +273,7 @@ def start_task_and_wait_for_ready(
     if harness is not None:
         enable_multi_harness(sculptor_page)
 
-    navigate_to_add_workspace_page(sculptor_page)
+    open_new_workspace_modal(sculptor_page)
 
     # Fill in the workspace name. Each call gets a unique name by default so
     # the auto-generated worktree branch (`<user>/<slug>`) doesn't collide
@@ -459,7 +459,7 @@ def delete_project_via_settings(
 
     # Re-open the new-workspace modal so callers see the same post-deletion
     # state they got before the modal migration.
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_modal(page)
 
 
 # NOTE: The helpers below use page.goto() and page.evaluate(), which are

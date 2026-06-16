@@ -20,8 +20,8 @@ from sculptor.testing.elements.chat_panel import wait_for_completed_message_coun
 from sculptor.testing.elements.panels import ensure_terminal_visible
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
 from sculptor.testing.playwright_utils import blur_active_element
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
 from sculptor.testing.playwright_utils import navigate_to_settings_page
+from sculptor.testing.playwright_utils import open_new_workspace_modal
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
@@ -202,7 +202,7 @@ def test_cmd_i_focuses_prompt_input(sculptor_instance_: SculptorInstance) -> Non
     mod_key = get_playwright_modifier_key()
 
     # Step 1: Open the new-workspace modal, blur all inputs, then press Cmd+I.
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_modal(page)
     name_input = page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT)
     expect(name_input).to_be_visible()
     blur_active_element(page)
@@ -233,7 +233,7 @@ def test_arrow_down_focuses_name_input_when_nothing_focused(
     """Pressing ArrowDown when no element has focus should focus the workspace name input."""
     page = sculptor_instance_.page
 
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_modal(page)
     name_input = page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT)
     expect(name_input).to_be_visible()
 
@@ -251,7 +251,7 @@ def test_arrow_up_focuses_name_input_when_nothing_focused(
     """Pressing ArrowUp when no element has focus should focus the workspace name input."""
     page = sculptor_instance_.page
 
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_modal(page)
     name_input = page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT)
     expect(name_input).to_be_visible()
 
@@ -270,7 +270,7 @@ def test_cmd_enter_in_workspace_name_creates_workspace(
     page = sculptor_instance_.page
     mod_key = get_playwright_modifier_key()
 
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_modal(page)
     name_input = page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT)
     expect(name_input).to_be_visible()
 

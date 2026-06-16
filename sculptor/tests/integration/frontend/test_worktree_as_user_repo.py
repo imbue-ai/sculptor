@@ -16,9 +16,9 @@ from pathlib import Path
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.pages.new_workspace_modal_page import PlaywrightNewWorkspaceModalPage
 from sculptor.testing.playwright_utils import navigate_to_settings_page
+from sculptor.testing.playwright_utils import open_new_workspace_modal
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.test_repo_factory import TestRepoFactory
@@ -60,9 +60,9 @@ def test_clone_workspace_from_worktree_user_repo(
 
     # The registered project should be canonicalised to the parent repo's
     # name, not the worktree directory's name.
-    navigate_to_add_workspace_page(page)
-    add_workspace_page = PlaywrightAddWorkspacePage(page)
-    add_workspace_page.select_project_by_name(parent_name)
+    open_new_workspace_modal(page)
+    new_workspace_modal_page = PlaywrightNewWorkspaceModalPage(page)
+    new_workspace_modal_page.select_project_by_name(parent_name)
 
     # Creating a clone workspace from the worktree-derived repo must succeed.
     task_page = start_task_and_wait_for_ready(

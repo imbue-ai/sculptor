@@ -16,8 +16,8 @@ from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.testing.elements.user_config import disable_multi_harness
 from sculptor.testing.elements.user_config import enable_multi_harness
 from sculptor.testing.fake_pi import install_fake_pi_binary
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
 from sculptor.testing.playwright_utils import navigate_to_home_page
+from sculptor.testing.playwright_utils import open_new_workspace_modal
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -30,7 +30,7 @@ def test_harness_picker_visible_with_claude_default(
     page = sculptor_instance_.page
 
     enable_multi_harness(page)
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_modal(page)
     picker = page.get_by_test_id(ElementIDs.HARNESS_SELECTOR)
     expect(picker).to_be_visible()
     expect(picker).to_contain_text("Claude")
@@ -43,7 +43,7 @@ def test_harness_picker_selects_pi(
     page = sculptor_instance_.page
 
     enable_multi_harness(page)
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_modal(page)
     picker = page.get_by_test_id(ElementIDs.HARNESS_SELECTOR)
     picker.click()
     page.get_by_test_id(ElementIDs.HARNESS_OPTION_PI).click()
@@ -64,7 +64,7 @@ def test_harness_picker_hidden_and_defaults_to_claude_when_flag_off(
     # defensively so this flag-off assertion does not depend on test ordering.
     disable_multi_harness(page)
 
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_modal(page)
     expect(page.get_by_test_id(ElementIDs.HARNESS_SELECTOR)).to_have_count(0)
 
     # `harness=None` means the helper neither enables the flag nor drives the

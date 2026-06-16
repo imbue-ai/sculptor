@@ -24,9 +24,9 @@ from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.user_config import enable_clone_workspaces
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
+from sculptor.testing.pages.new_workspace_modal_page import PlaywrightNewWorkspaceModalPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.playwright_utils import open_new_workspace_modal
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
@@ -98,8 +98,8 @@ def test_clone_from_local_only_branch_with_source_remotes_present(
     page = sculptor_instance_.page
     enable_clone_workspaces(page)
 
-    navigate_to_add_workspace_page(page)
-    add_ws_page = PlaywrightAddWorkspacePage(page)
+    open_new_workspace_modal(page)
+    add_ws_page = PlaywrightNewWorkspaceModalPage(page)
     add_ws_page.get_workspace_name_input().fill("From local-only transfer branch")
 
     # Worktree is the default; this test exercises CLONE behaviour, so flip
