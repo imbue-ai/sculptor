@@ -698,9 +698,8 @@ class PiAgent(DefaultAgentWrapper):
             self._input_agent_messages.put(message)
             return True
         if isinstance(message, SetModelUserMessage):
-            # Enqueued on the same FIFO as chat turns so the set_model RPC runs
-            # strictly between turns (see _handle_set_model), where consuming its
-            # response is safe; supports_model_selection.
+            # Enqueued on the same FIFO as chat turns so the switch runs strictly
+            # between turns (see _handle_set_model); supports_model_selection.
             self._input_agent_messages.put(message)
             return True
         if isinstance(message, ResumeAgentResponseRunnerMessage):
@@ -1187,8 +1186,7 @@ class PiAgent(DefaultAgentWrapper):
                 self._handle_clear_context(message)
                 continue
             if isinstance(message, SetModelUserMessage):
-                # Between-turns model switch: same one-at-a-time guarantee as the
-                # reset above, so the set_model RPC's response can be consumed safely.
+                # Between-turns model switch (see _handle_set_model).
                 self._handle_set_model(message)
                 continue
             self._run_prompt_turn(message)
@@ -1376,22 +1374,16 @@ class PiAgent(DefaultAgentWrapper):
         logger.info("PiAgent persisted post-clear pi session id {}", new_session_id)
 
     def _handle_set_model(self, message: SetModelUserMessage) -> None:
-        """Switch pi's model in-process via the `set_model` RPC (supports_model_selection).
+        """Switch pi's model via the `set_model` RPC (supports_model_selection).
 
-        Routed through the `_input_agent_messages` FIFO like chat turns and the
-        context reset, so it runs between turns — the sole-reader window where
-        `_consume_until_command_response` is safe. The set-model endpoint blocks
-        on the terminal request message `_handle_user_message` emits —
-        RequestSuccess on a clean switch, RequestFailure on the error path below
-        (which the endpoint surfaces so the frontend toasts).
-
-        `set_model` is session-level and persists for later turns. On success pi
-        returns the new Model in `data`; we re-emit a `ModelsAvailableAgentMessage`
-        carrier (same catalog, new current model) so the persisted current model —
-        and the switcher's selection — follows. A `success:false` response (e.g.
-        `Model not found`) or no acknowledgement within the budget is raised as
-        `PiSetModelError` (an `AgentClientError`, so the agent keeps running) and
-        the current model is left untouched.
+        Routed through the `_input_agent_messages` FIFO so it runs between turns,
+        where `_consume_until_command_response` is safe. `set_model` is
+        session-level and persists for later turns. On success pi returns the new
+        Model; we re-emit a `ModelsAvailableAgentMessage` carrier (same catalog,
+        new current model) so the persisted current model and the switcher's
+        selection follow. A `success:false` response (e.g. `Model not found`) or
+        no acknowledgement is raised as `PiSetModelError`, leaving the current
+        model unchanged.
         """
         with self._handle_user_message(message):
             command_id = generate_id()

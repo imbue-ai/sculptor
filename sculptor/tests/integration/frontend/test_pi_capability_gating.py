@@ -234,12 +234,11 @@ def test_pi_model_switcher_offers_pi_models_and_accepts_a_pick(sculptor_instance
     model POSTs the set-model endpoint, which FakePi's `set_model` accepts, so no
     error toast appears.
 
-    Gap: the switcher's displayed selection updating to the new model after the
-    out-of-band switch is NOT asserted here — that reflection is server-driven
-    (the view's `selected_model_id`) and did not land deterministically within
-    the harness window. The set_model RPC round-trip (success persists
-    `current_model`, failure surfaces an error) is covered at unit level in
-    `agent_wrapper_test` (`test_set_model_*`) and `fake_pi_test`.
+    The post-switch displayed-selection update is not asserted here — it is
+    server-driven (the view's `selected_model_id`) and not deterministic within
+    the test harness; the set_model round-trip (success persists `current_model`,
+    failure surfaces an error) is covered at unit level in `agent_wrapper_test`
+    (`test_set_model_*`) and `fake_pi_test`.
     """
     install_fake_pi_binary(sculptor_instance_.fake_bin_dir)
     page = sculptor_instance_.page
