@@ -64,6 +64,16 @@ const normalizeManifestUrl = (source: string): string => {
   return trimmed.endsWith(".json") ? trimmed : `${trimmed}/manifest.json`;
 };
 
+/**
+ * Resolve a manifest's `entry` against the manifest's *own* URL. A path-only
+ * source (`/plugins/foo/manifest.json`) resolves against the app origin; an
+ * absolute cross-origin source (`http://127.0.0.1:8765/foo/manifest.json`)
+ * resolves `entry` against that origin, so a plugin served from a local dev
+ * server loads its `main.js` from the same place its manifest came from.
+ */
+export const resolveEntryUrl = (manifestUrl: string, entry: string): string =>
+  new URL(entry, new URL(manifestUrl, window.location.origin)).toString();
+
 /** Fetch + validate a manifest, dynamic-import the bundle, run `activate`. */
 const loadOneFromNetwork: LoaderFn = async (manifestUrl, makeApi, cacheBust) => {
   let manifest: PluginManifest;
@@ -84,8 +94,7 @@ const loadOneFromNetwork: LoaderFn = async (manifestUrl, makeApi, cacheBust) => 
     return { manifest, phase: "validate", error: validationError };
   }
 
-  const entryBase = manifestUrl.slice(0, manifestUrl.lastIndexOf("/"));
-  const entryUrl = new URL(manifest.entry, window.location.origin + entryBase + "/").toString();
+  const entryUrl = resolveEntryUrl(manifestUrl, manifest.entry);
   // A cache-bust token forces the browser to re-fetch the module instead of
   // returning the previously-imported (cached) one — used by reload.
   const importUrl = cacheBust ? `${entryUrl}?t=${cacheBust}` : entryUrl;

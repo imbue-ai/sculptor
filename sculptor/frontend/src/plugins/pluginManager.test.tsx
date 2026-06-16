@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { PanelDefinition } from "~/components/panels/types.ts";
 
-import { PluginManager } from "./pluginManager.tsx";
+import { PluginManager, resolveEntryUrl } from "./pluginManager.tsx";
 import {
   pluginPanelsAtom,
   pluginSettingsComponentsAtom,
@@ -190,5 +190,22 @@ describe("PluginManager", () => {
 
     expect(loaded).toEqual(["/plugins/alpha/manifest.json"]);
     expect(store.get(pluginSourcesAtom)).toEqual(["/plugins/alpha"]);
+  });
+});
+
+describe("resolveEntryUrl", () => {
+  it("resolves a path-only manifest against the app origin", () => {
+    const url = resolveEntryUrl("/plugins/linear-issue/manifest.json", "main.js");
+    expect(url).toBe(`${window.location.origin}/plugins/linear-issue/main.js`);
+  });
+
+  it("resolves a cross-origin manifest against the plugin's own origin, not the app's", () => {
+    const url = resolveEntryUrl("http://127.0.0.1:8765/hello/manifest.json", "main.js");
+    expect(url).toBe("http://127.0.0.1:8765/hello/main.js");
+  });
+
+  it("honors a nested entry path in the manifest", () => {
+    const url = resolveEntryUrl("https://cdn.example/p/v2/manifest.json", "dist/main.js");
+    expect(url).toBe("https://cdn.example/p/v2/dist/main.js");
   });
 });
