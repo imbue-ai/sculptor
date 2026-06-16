@@ -13,6 +13,7 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  OFFLOAD_VERSION: "0.9.8"
   # HCP Vault address + namespace. Mirrors the values in scripts/export-vault-env.
   VAULT_ADDR: https://vault-cluster-public-vault-df29b16f.9b573ab7.z1.hashicorp.cloud:8200
   VAULT_NAMESPACE: admin
@@ -97,12 +98,12 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             ~/.cargo/bin/offload
-          key: cargo-offload-0.9.7-${{ runner.os }}
+          key: cargo-offload-${{ env.OFFLOAD_VERSION }}-${{ runner.os }}
 
       - name: Install offload
         run: |
-          if ! command -v offload >/dev/null || ! offload --version | grep -q '0.9.7'; then
-            cargo install offload@0.9.7 --force
+          if ! command -v offload >/dev/null || ! offload --version | grep -qF "$OFFLOAD_VERSION"; then
+            cargo install offload@"$OFFLOAD_VERSION" --force
           fi
           offload --version
 
