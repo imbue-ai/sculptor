@@ -47,6 +47,7 @@ import {
   defaultEffortLevelAtom,
   isAlwaysInterruptAndSendAtom,
   isDefaultFastModeAtom,
+  lastUsedModelAtom,
   userConfigAtom,
 } from "../../../common/state/atoms/userConfig.ts";
 import { useDraftAttachedFiles } from "../../../common/state/hooks/useDraftAttachedFiles.ts";
@@ -114,6 +115,7 @@ export const ChatInput = ({
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
   const userConfig = useAtomValue(userConfigAtom);
   const [storedModel, setStoredModel] = useAtom(modelAtomFamily(taskID ?? ""));
+  const setLastUsedModel = useSetAtom(lastUsedModelAtom);
   const localModel = storedModel ?? (taskModel as LlmModel) ?? LlmModel.CLAUDE_4_OPUS_200K;
   const [isPlanFirst, setIsPlanFirst] = useState<boolean>(false);
 
@@ -127,6 +129,19 @@ export const ChatInput = ({
 
   const setIsFastMode = useCallback((value: boolean) => setStoredFastMode(value), [setStoredFastMode]);
   const setEffort = useCallback((value: EffortLevel) => setStoredEffort(value), [setStoredEffort]);
+
+  // Switching the model both updates this task's preference and records the
+  // model as the user's most recently used. The MRU value is what new
+  // workspaces default to when the "Default model" setting is "Most Recently
+  // Used"; without recording it here the MRU default would never reflect the
+  // model the user is actually using and would fall back to Fable (SCU-1457).
+  const handleModelChange = useCallback(
+    (value: LlmModel) => {
+      setStoredModel(value);
+      setLastUsedModel(value);
+    },
+    [setStoredModel, setLastUsedModel],
+  );
 
   const [toast, setToast] = useState<ToastContent | null>(null);
   // Mirrored onto the send button as `data-last-send-error` so callers can
@@ -648,7 +663,7 @@ export const ChatInput = ({
               )}
               <EffortSelector effort={effort} onEffortChange={setEffort} />
               <Flex pr="1">
-                <ModelSelector model={localModel} onModelChange={(value: LlmModel) => setStoredModel(value)} />
+                <ModelSelector model={localModel} onModelChange={handleModelChange} />
               </Flex>
               <SendButton
                 onClick={handleSend}
