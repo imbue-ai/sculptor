@@ -1,5 +1,6 @@
 import { useAtom, useAtomValue } from "jotai";
 import { atomFamily, atomWithStorage } from "jotai/utils";
+import { useMemo } from "react";
 
 import type { CodingAgentTaskView } from "~/api";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
@@ -45,6 +46,8 @@ export const usePluginSetting = (key: string): [string, (value: string) => void]
 export const useWorkspaceTasks = (): ReadonlyArray<CodingAgentTaskView> | undefined => {
   const { workspaceId } = useWorkspacePluginContext();
   const tasks = useAtomValue(tasksArrayAtom);
-  if (tasks === undefined) return undefined;
-  return tasks.filter((t) => t.workspaceId === workspaceId);
+  // Memoize so plugin authors get a stable array identity across renders (safe
+  // to use as an effect/memo dependency); recomputes only when the host task
+  // list or the workspace changes.
+  return useMemo(() => tasks?.filter((t) => t.workspaceId === workspaceId), [tasks, workspaceId]);
 };

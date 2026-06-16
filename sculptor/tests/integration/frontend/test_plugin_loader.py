@@ -21,7 +21,6 @@ export or throws on activate. The companion "plugin runtime" tests (a plugin
 actually interacting with Sculptor) are intentionally out of scope here.
 """
 
-import contextlib
 from pathlib import Path
 
 import pytest
@@ -201,5 +200,8 @@ def test_plugin_loader_in_electron(sculptor_instance_: SculptorInstance) -> None
             _exercise_error_modes(plugins, server)
             _exercise_valid_load_and_remove(plugins, server)
     finally:
-        with contextlib.suppress(Exception):
-            settings_page.click_on_experimental().set_frontend_plugins(enabled=False)
+        # Restore the shared instance's flag for later Electron tests. Let this
+        # raise on failure rather than swallowing it: a silent cleanup failure
+        # would leave the instance in a bad state for the next test, so it's
+        # better to surface it (worst case, a double exception with the body).
+        settings_page.click_on_experimental().set_frontend_plugins(enabled=False)
