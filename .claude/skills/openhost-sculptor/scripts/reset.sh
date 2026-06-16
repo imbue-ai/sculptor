@@ -5,7 +5,7 @@
 # `oh app remove` WITHOUT --keep-data deletes the persistent app_data, then the
 # deploy rebuilds from source (~10 min). To keep data instead, use redeploy.sh.
 set -eu
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 . "$SCRIPT_DIR/_common.sh"
 
 printf 'This WIPES all data for app "%s" and redeploys fresh. Continue? [y/N] ' "$APP"

@@ -1,3 +1,4 @@
+# shellcheck shell=sh
 # Shared bootstrap for the openhost-sculptor deploy/reset scripts.
 #
 # Not run directly — each script sources it after setting SCRIPT_DIR to its own
@@ -7,7 +8,7 @@
 #   HOST   - public URL host for verify     (from openhost.env; verify.sh only)
 #   BRANCH - branch to deploy               (openhost.env, else current branch)
 
-SKILL_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+SKILL_DIR=$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)
 ENV_FILE="$SKILL_DIR/openhost.env"
 
 if [ ! -f "$ENV_FILE" ]; then

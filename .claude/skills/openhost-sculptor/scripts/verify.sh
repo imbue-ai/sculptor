@@ -2,7 +2,7 @@
 # Verify a deployed Sculptor OpenHost app: right code live, serving, clean boot.
 # All over the CLI / HTTP — no SSH.
 set -eu
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 . "$SCRIPT_DIR/_common.sh"
 : "${HOST:?set HOST in openhost.env}"
 
