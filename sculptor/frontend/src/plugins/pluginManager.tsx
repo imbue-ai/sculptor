@@ -207,11 +207,24 @@ export class PluginManager {
     // Registrations made during this load attempt collect here and are only
     // committed if the attempt is still current once the import resolves.
     const loadDisposers: Array<() => void> = [];
-    const outcome = await this.loadOne(
-      normalizeManifestUrl(source),
-      (manifest) => this.makeApi(store, manifest, loadDisposers),
-      cacheBust,
-    );
+    let outcome: LoadedPlugin | PluginLoadError;
+    try {
+      outcome = await this.loadOne(
+        normalizeManifestUrl(source),
+        (manifest) => this.makeApi(store, manifest, loadDisposers),
+        cacheBust,
+      );
+    } catch (e) {
+      // A loader is expected to *return* a PluginLoadError, never throw. Guard
+      // against one that throws anyway (e.g. a synchronous URL-construction
+      // failure) so the source settles into an error state instead of being
+      // stranded in "loading" forever.
+      outcome = {
+        manifest: { id: source, name: source, version: "?", entry: "", sdkVersion: "?" },
+        phase: "load",
+        error: e instanceof Error ? e : new Error(String(e)),
+      };
+    }
 
     if (this.loadSeqBySource.get(source) !== seq) {
       // A newer load/unload/remove superseded this attempt while the import

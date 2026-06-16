@@ -53,6 +53,13 @@ export type LoadedPlugin = {
 
 export type PluginLoadError = {
   manifest: PluginManifest;
-  phase: "manifest" | "validate" | "import" | "activate";
+  /**
+   * Where the load failed. `manifest`/`validate`/`import`/`activate` are the
+   * known stages the loader returns. `load` is the catch-all the manager
+   * assigns when the loader *throws* outright instead of returning one of the
+   * above — so an unexpected loader fault still surfaces as an error state
+   * rather than a stuck "loading" row.
+   */
+  phase: "manifest" | "validate" | "import" | "activate" | "load";
   error: Error;
 };

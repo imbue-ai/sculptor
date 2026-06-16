@@ -191,6 +191,28 @@ describe("PluginManager", () => {
     expect(loaded).toEqual(["/plugins/alpha/manifest.json"]);
     expect(store.get(pluginSourcesAtom)).toEqual(["/plugins/alpha"]);
   });
+
+  it("settles a throwing loader into an error state instead of stuck loading", async () => {
+    const store = createStore();
+    // A loader is supposed to *return* a PluginLoadError; this one throws
+    // outright, mimicking a synchronous fault (e.g. a bad URL construction).
+    const loadOne = async (): Promise<LoadedPlugin | PluginLoadError> => {
+      throw new TypeError("Invalid URL");
+    };
+    const manager = new PluginManager({ loadOne, builtinSources: [] });
+
+    // The throw must not escape addSource: it resolves, and the source row
+    // lands in "error" (with the catch-all phase) rather than "loading".
+    await manager.addSource(store, "http://127.0.0.1:8765/hello");
+
+    expect(store.get(pluginSourceStatesAtom)["http://127.0.0.1:8765/hello"]).toMatchObject({
+      status: "error",
+      phase: "load",
+    });
+    // The source stays persisted so the user can see and remove it.
+    expect(store.get(pluginSourcesAtom)).toEqual(["http://127.0.0.1:8765/hello"]);
+    expect(store.get(pluginPanelsAtom)).toEqual([]);
+  });
 });
 
 describe("resolveEntryUrl", () => {
