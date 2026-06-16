@@ -17,7 +17,7 @@
  * and is the kind of thing an agent could pre-fill when it spins the timer up.
  */
 
-import { createElement as h, useEffect, useRef, useState } from "react";
+import { createElement as h, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useCurrentWorkspaceId, usePluginSetting, useWorkspaces } from "@sculptor/plugin-sdk";
 
 const WORK_SECONDS = 25 * 60;
@@ -38,10 +38,13 @@ const parsePos = (raw) => {
   }
   return null;
 };
-// Keep the pill on-screen even after a resize moved the viewport edges in.
-const clampPos = (p) => ({
-  x: Math.max(8, Math.min(p.x, window.innerWidth - 80)),
-  y: Math.max(8, Math.min(p.y, window.innerHeight - 48)),
+// Keep the whole pill on-screen given its measured size, with an 8px margin.
+// Used both while dragging and to refit after a resize/restore. `Math.max(8,
+// …)` guards viewports too small to fit the box at all (upper bound < 8).
+const MARGIN = 8;
+const clampPos = (p, w, h) => ({
+  x: Math.min(Math.max(MARGIN, p.x), Math.max(MARGIN, window.innerWidth - w - MARGIN)),
+  y: Math.min(Math.max(MARGIN, p.y), Math.max(MARGIN, window.innerHeight - h - MARGIN)),
 });
 
 const durationFor = (mode) => (mode === "work" ? WORK_SECONDS : BREAK_SECONDS);
@@ -113,6 +116,7 @@ const Pomodoro = () => {
   const [dragging, setDragging] = useState(false);
   const posRef = useRef(pos);
   posRef.current = pos;
+  const boxRef = useRef(null);
 
   const workspaces = useWorkspaces();
   const currentWorkspaceId = useCurrentWorkspaceId();
@@ -126,8 +130,12 @@ const Pomodoro = () => {
     const startX = e.clientX;
     const startY = e.clientY;
     const origin = posRef.current;
+    const box = boxRef.current;
+    const w = box ? box.offsetWidth : 0;
+    const hgt = box ? box.offsetHeight : 0;
     setDragging(true);
-    const onMove = (ev) => setPos(clampPos({ x: origin.x + ev.clientX - startX, y: origin.y + ev.clientY - startY }));
+    const onMove = (ev) =>
+      setPos(clampPos({ x: origin.x + ev.clientX - startX, y: origin.y + ev.clientY - startY }, w, hgt));
     const onUp = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
@@ -137,6 +145,25 @@ const Pomodoro = () => {
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
   };
+
+  // Pull the pill back into view on mount, on viewport resize, and when it
+  // changes size (expand/collapse). This is what rescues a position restored
+  // from a larger viewport, and stops an expansion near an edge from spilling
+  // off-screen. The corrected spot is persisted so storage stays valid.
+  useLayoutEffect(() => {
+    const fit = () => {
+      const box = boxRef.current;
+      if (!box) return;
+      const next = clampPos(posRef.current, box.offsetWidth, box.offsetHeight);
+      if (next.x !== posRef.current.x || next.y !== posRef.current.y) {
+        setPos(next);
+        setPosRaw(JSON.stringify(next));
+      }
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, [expanded]);
 
   // While running, pulse a re-render each second; when the deadline passes,
   // advance to the next phase (rolling through any we slept past) and persist.
@@ -229,7 +256,7 @@ const Pomodoro = () => {
     h("button", { onClick: () => setExpanded((e) => !e), style: linkBtn() }, expanded ? "▾" : "▸"),
   );
 
-  if (!expanded) return h("div", { style: shell }, header);
+  if (!expanded) return h("div", { ref: boxRef, style: shell }, header);
 
   const body = h(
     "div",
@@ -271,7 +298,7 @@ const Pomodoro = () => {
     ),
   );
 
-  return h("div", { style: shell }, header, body);
+  return h("div", { ref: boxRef, style: shell }, header, body);
 };
 
 const btn = (accent) => ({
