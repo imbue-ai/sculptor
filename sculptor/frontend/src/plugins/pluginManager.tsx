@@ -281,7 +281,10 @@ export class PluginManager {
           const { workspaceID } = useWorkspacePageParams();
           if (!workspaceID) return null;
           return (
-            <PluginErrorBoundary pluginId={panel.id} pluginName={panel.displayName}>
+            // Attribute crashes to the plugin, not the individual panel — one
+            // plugin can contribute several panels, and the error UI/logs should
+            // name the plugin that owns them.
+            <PluginErrorBoundary pluginId={manifest.id} pluginName={manifest.name}>
               <PluginContext.Provider value={{ pluginId: manifest.id }}>
                 <WorkspacePluginContext.Provider value={{ workspaceId: workspaceID }}>
                   <PluginComponent />

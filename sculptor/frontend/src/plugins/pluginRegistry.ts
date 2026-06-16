@@ -25,7 +25,13 @@ export const pluginSettingsComponentsAtom = atom<Readonly<Record<string, Compone
  * stored here. This list is the source of truth for what the user wants loaded;
  * the actual registration is re-derived from it on every boot.
  */
-export const pluginSourcesAtom = atomWithStorage<ReadonlyArray<string>>("sculptor-plugin-sources", []);
+// `getOnInit: true` so the very first synchronous `store.get` (pluginManager
+// bootstrap, before any React component mounts the atom) reads the persisted
+// value from localStorage instead of returning the default `[]`. Without it,
+// saved sources would silently fail to load on app startup.
+export const pluginSourcesAtom = atomWithStorage<ReadonlyArray<string>>("sculptor-plugin-sources", [], undefined, {
+  getOnInit: true,
+});
 
 /** Per-source load status, keyed by the source string (built-in + user). */
 export type PluginSourceState =

@@ -95,6 +95,10 @@ export const SettingsPage = (): ReactElement => {
   // The Plugins section only shows once the experimental flag is on; the
   // page itself stays reachable via ?section=PLUGINS for plugin development.
   const visibleSections = SETTINGS_SECTIONS.filter((s) => s.id !== SettingsSection.PLUGINS || isFrontendPluginsEnabled);
+  // The mobile Select binds value={activeSection}, so its options must always
+  // include the active section — even one normally hidden (e.g. deep-linked to
+  // ?section=PLUGINS with the flag off) — or the trigger renders blank.
+  const mobileSections = SETTINGS_SECTIONS.filter((s) => visibleSections.includes(s) || s.id === activeSection);
   const isEntityMentionsEnabled = useAtomValue(isEntityMentionsEnabledAtom);
   const isRichMarkdownRenderingEnabled = useAtomValue(isRichMarkdownRenderingEnabledAtom);
   const isSmoothStreamingEnabled = useAtomValue(isSmoothStreamingUserPreferenceAtom);
@@ -183,7 +187,7 @@ export const SettingsPage = (): ReactElement => {
               <Select.Root value={activeSection} onValueChange={(value) => setActiveSection(value as SettingsSection)}>
                 <Select.Trigger variant="soft" />
                 <Select.Content>
-                  {visibleSections.map(({ id }) => (
+                  {mobileSections.map(({ id }) => (
                     <Select.Item key={id} value={id} data-testid={SECTION_TEST_IDS[id] ?? ""}>
                       {getDisplayName(id)}
                     </Select.Item>
