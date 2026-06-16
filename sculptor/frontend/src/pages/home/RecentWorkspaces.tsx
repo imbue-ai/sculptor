@@ -3,12 +3,13 @@ import { useAtomValue } from "jotai";
 import type { ReactElement, RefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { RecentWorkspaceResponse } from "../../../api";
-import { ElementIds, listRecentWorkspaces } from "../../../api";
-import { deletedWorkspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
-import { useOptimisticWorkspaceDelete } from "../../../common/state/hooks/useOptimisticWorkspaceDelete.ts";
-import { DeleteConfirmationDialog } from "../../../components/DeleteConfirmationDialog.tsx";
-import { NewWorkspaceForm } from "../../../components/NewWorkspaceModal/NewWorkspaceForm.tsx";
+import type { RecentWorkspaceResponse } from "~/api";
+import { ElementIds, listRecentWorkspaces } from "~/api";
+import { deletedWorkspaceIdsAtom } from "~/common/state/atoms/workspaces.ts";
+import { useOptimisticWorkspaceDelete } from "~/common/state/hooks/useOptimisticWorkspaceDelete.ts";
+import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
+import { NewWorkspaceForm } from "~/components/NewWorkspaceModal/NewWorkspaceForm.tsx";
+
 import styles from "./RecentWorkspaces.module.scss";
 import { WorkspaceRow } from "./WorkspaceRow.tsx";
 import { WorkspaceSearchBar } from "./WorkspaceSearchBar.tsx";

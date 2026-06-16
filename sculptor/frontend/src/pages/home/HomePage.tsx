@@ -3,8 +3,8 @@ import type { ReactElement } from "react";
 import { useRef } from "react";
 
 import { useWorkspaceNavigation } from "../../common/state/hooks/useWorkspaceNavigation.ts";
-import { RecentWorkspaces } from "../add-workspace/components/RecentWorkspaces.tsx";
 import styles from "./HomePage.module.scss";
+import { RecentWorkspaces } from "./RecentWorkspaces.tsx";
 
 export const HomePage = (): ReactElement => {
   const { handleWorkspaceClick, handleOpenInNewTab } = useWorkspaceNavigation();
