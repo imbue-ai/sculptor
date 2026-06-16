@@ -76,3 +76,30 @@ def test_pi_subagent_yields_stays_interactive_then_completes(sculptor_instance_:
     # The completion is surfaced out-of-band, live: the child's activity renders as
     # the nested sub-agent pill.
     expect(page.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_PILL).first).to_be_visible(timeout=30000)
+
+
+@user_story("to see a sub-agent whose child fails surface as the sub-agent pill under pi, not be silently dropped")
+def test_pi_subagent_failure_surfaces(sculptor_instance_: SculptorInstance) -> None:
+    """A sub-agent that finishes failed (a child errored) still renders as the
+    sub-agent pill and surfaces a "failed" completion, rather than vanishing."""
+    page = sculptor_instance_.page
+    install_fake_pi_binary(sculptor_instance_.fake_bin_dir)
+    release_path = Path(tempfile.gettempdir()) / f"pi_subagent_fail_{uuid.uuid4().hex}"
+    error_child = '{"childId": "c0", "label": "scout", "task": "find files", "status": "error", "events": []}'
+    try:
+        task_page = start_task_and_wait_for_ready(
+            sculptor_page=page,
+            workspace_name="Pi Sub-Agent Failure",
+            model_name=None,
+            agent_type="pi",
+            prompt=f'fake_pi:subagent `{{"status": "failed", "children": [{error_child}], "wait_path": "{release_path}"}}`',
+            wait_for_agent_to_finish=True,
+        )
+        chat_panel = task_page.get_chat_panel()
+    finally:
+        release_path.touch()
+
+    # The failed sub-agent still renders as the nested pill, and the failure is
+    # visible (the failed child + completion summary carry "failed").
+    expect(page.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_PILL).first).to_be_visible(timeout=30000)
+    expect(chat_panel.get_messages().filter(has_text="failed").first).to_be_visible(timeout=30000)
