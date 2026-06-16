@@ -1,3 +1,7 @@
+from sculptor.config.user_config import BabysitterAgentClaude
+from sculptor.config.user_config import BabysitterAgentMRU
+from sculptor.config.user_config import BabysitterAgentPi
+from sculptor.config.user_config import BabysitterAgentRegistered
 from sculptor.config.user_config import CIBabysitterConfig
 from sculptor.config.user_config import DependencyPaths
 from sculptor.config.user_config import PiConfig
@@ -18,6 +22,49 @@ def test_ci_babysitter_defaults() -> None:
     assert config.ci_babysitter.pipeline_failed_prompt.startswith("Investigate the failing pipeline")
     assert config.ci_babysitter.merge_conflict_prompt.startswith("This MR has a merge conflict")
     assert UserConfigField["CI_BABYSITTER"].value == "ciBabysitter"
+
+
+def test_ci_babysitter_agent_defaults_to_mru() -> None:
+    # REQ-SET-2: a fresh config selects the MRU variant.
+    config = CIBabysitterConfig()
+    assert isinstance(config.agent, BabysitterAgentMRU)
+
+
+def test_ci_babysitter_config_without_agent_key_is_mru() -> None:
+    # Backwards compatibility: configs persisted before this field existed
+    # deserialize to the MRU default.
+    config = CIBabysitterConfig.model_validate({"enabled": True, "retryCap": 5})
+    assert config.enabled is True
+    assert config.retry_cap == 5
+    assert isinstance(config.agent, BabysitterAgentMRU)
+
+
+def test_ci_babysitter_agent_variants_round_trip() -> None:
+    for variant in (
+        BabysitterAgentMRU(),
+        BabysitterAgentClaude(),
+        BabysitterAgentPi(),
+        BabysitterAgentRegistered(registration_id="claude-code"),
+    ):
+        config = CIBabysitterConfig(agent=variant)
+        restored = CIBabysitterConfig.model_validate(config.model_dump())
+        assert type(restored.agent) is type(variant)
+        assert restored.agent == variant
+
+
+def test_ci_babysitter_registered_agent_keeps_registration_id() -> None:
+    config = CIBabysitterConfig(agent=BabysitterAgentRegistered(registration_id="my-tui"))
+    restored = CIBabysitterConfig.model_validate(config.model_dump())
+    assert isinstance(restored.agent, BabysitterAgentRegistered)
+    assert restored.agent.registration_id == "my-tui"
+
+
+def test_ci_babysitter_agent_camel_case_alias_round_trips() -> None:
+    config = CIBabysitterConfig(agent=BabysitterAgentRegistered(registration_id="my-tui"))
+    dumped = config.model_dump(by_alias=True)
+    restored = CIBabysitterConfig.model_validate(dumped)
+    assert isinstance(restored.agent, BabysitterAgentRegistered)
+    assert restored.agent.registration_id == "my-tui"
 
 
 def test_pi_config_defaults_on_user_config() -> None:
