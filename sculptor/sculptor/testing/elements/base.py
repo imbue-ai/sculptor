@@ -115,7 +115,7 @@ def type_into_tiptap(page: Page, locator: Locator, text: str) -> None:
     # After a page reload the React fiber tree may not have the Tiptap editor
     # prop attached yet even though the DOM element is visible and clickable.
     # Poll with requestAnimationFrame (once per frame, ~16 ms) for up to 5 s
-    # before giving up.  On Fly runners after shared-instance recreation,
+    # before giving up.  On contended CI runners after shared-instance recreation,
     # the editor can take >2 s to initialize.
     locator.evaluate(
         f"""(el, text) => new Promise((resolve, reject) => {{

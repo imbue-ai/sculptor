@@ -51,7 +51,7 @@ def test_streaming_cursor_visible_during_streaming(sculptor_instance_: SculptorI
 
     # Wait for the streaming to finish and the cursor to disappear.
     # Wait directly for the cursor element to be removed.  The streaming takes
-    # ~40s on fast machines, potentially longer on slow Fly runners.
+    # ~40s on fast machines, potentially longer on slow CI runners.
     expect(cursor).to_have_count(0, timeout=120_000)
 
 
