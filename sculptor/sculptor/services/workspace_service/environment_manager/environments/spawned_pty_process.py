@@ -55,7 +55,7 @@ from typing import Final
 
 from loguru import logger
 
-from imbue_core.processes.local_process import RunningProcess
+from sculptor.foundation.processes.local_process import RunningProcess
 from sculptor.services.workspace_service.environment_manager.environments.pty_helper import HELPER_FD_ENV
 from sculptor.utils.build import is_packaged
 
@@ -436,6 +436,10 @@ class SpawnedPtyProcess(RunningProcess):
         if self._helper is None or self._is_primary_fd_closed:
             return None
         return self._helper.primary_fd
+
+    @property
+    def shell_pid(self) -> int | None:
+        return self._helper.shell_pid if self._helper is not None else None
 
     @property
     def is_checked(self) -> bool:

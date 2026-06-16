@@ -54,6 +54,80 @@ def run_command_in_active_terminal(page: Page, command: str) -> None:
     textarea.press("Enter")
 
 
+def type_with_global_keyboard(page: Page, text: str, *, delay_ms: int = 30) -> None:
+    """Type ``text`` via the global keyboard, which routes to whatever element
+    currently holds focus (``document.activeElement``).
+
+    Unlike ``locator.press_sequentially`` / ``type_with_delay`` (which dispatch
+    keystrokes straight to a target element regardless of focus), this exercises
+    real focus routing -- so a caller can prove which element actually receives
+    keyboard input.
+    """
+    page.keyboard.type(text, delay=delay_ms)
+
+
+def get_agent_terminal_panel(page: Page) -> Locator:
+    """The terminal-agent main panel (it replaces the chat panel for terminal agents)."""
+    return page.get_by_test_id(ElementIDs.AGENT_TERMINAL_PANEL)
+
+
+def expect_terminal_panel_replaces_chat(page: Page) -> None:
+    """Assert the main panel is the terminal, not the chat.
+
+    Both halves of the panel switch for terminal agents: the agent terminal
+    panel is visible AND no chat input is mounted anywhere on the page
+    (page-level check — the chat-panel POM is scoped to a panel that does
+    not exist here).
+    """
+    expect(get_agent_terminal_panel(page)).to_be_visible()
+    expect(page.get_by_test_id(ElementIDs.CHAT_INPUT)).to_have_count(0)
+
+
+def expect_chat_replaces_terminal_panel(page: Page) -> None:
+    """Assert the main panel is the chat, not the terminal (the inverse switch)."""
+    expect(page.get_by_test_id(ElementIDs.CHAT_INPUT)).to_be_visible()
+    expect(get_agent_terminal_panel(page)).to_have_count(0)
+
+
+def get_agent_terminal_textarea(page: Page) -> Locator:
+    """The agent terminal panel's xterm input textarea.
+
+    Scoped to ``AGENT_TERMINAL_PANEL`` because the workspace bottom terminal
+    panel can also be mounted (hidden), making the bare
+    ``.xterm-helper-textarea`` selector ambiguous.
+    """
+    return page.get_by_test_id(ElementIDs.AGENT_TERMINAL_PANEL).get_by_label("Terminal input")
+
+
+def type_into_agent_terminal(page: Page, text: str, press_enter: bool = True) -> None:
+    """Type ``text`` into the agent terminal's xterm without shell padding.
+
+    For TUIs (e.g. Claude Code) whose input box is not a shell prompt — the
+    ``run_command_in_agent_terminal`` no-op padding would pollute the prompt.
+    """
+    textarea = get_agent_terminal_textarea(page)
+    textarea.focus()
+    page.wait_for_timeout(300)
+    page.keyboard.type(text, delay=20)
+    if press_enter:
+        page.keyboard.press("Enter")
+
+
+def run_command_in_agent_terminal(page: Page, command: str) -> None:
+    """Type ``command`` into a terminal agent's xterm and press Enter.
+
+    Mirrors ``run_command_in_active_terminal`` (including the no-op padding
+    that absorbs xterm.js's freshly-mounted-terminal keystroke drops) but
+    scoped to the agent terminal panel.
+    """
+    no_op = ": ; " * 8  # 32 chars of "no-op then sep" -- absorbs heavy drops
+    textarea = get_agent_terminal_textarea(page)
+    textarea.focus()
+    page.wait_for_timeout(200)
+    page.keyboard.type(no_op + command, delay=30)
+    textarea.press("Enter")
+
+
 def get_xterm_active_line(page: Page) -> str:
     """Read the current input line from the xterm buffer (the line the cursor is on)."""
     return page.evaluate(
@@ -117,6 +191,33 @@ def wait_for_xterm_substring(page: Page, substring: str) -> None:
         raise AssertionError(
             f"Expected xterm buffer to contain {substring!r}, but timed out. Buffer:\n{buffer_text}"
         ) from e
+
+
+def wait_for_xterm_buffer_nonempty(page: Page) -> None:
+    """Wait until the xterm buffer has rendered some shell output.
+
+    A non-empty buffer means the WebSocket connected and the shell delivered its
+    prompt -- i.e. the terminal mount/connect cycle has settled. Use this as a
+    condition-based alternative to a fixed ``wait_for_timeout`` after opening the
+    panel: it adapts to however long the connection actually takes, instead of
+    guessing a window that is simultaneously too long on fast machines and too
+    short under CI load.
+    """
+    try:
+        page.wait_for_function(
+            """() => {
+                const xterm = window.__xterm;
+                if (!xterm) return false;
+                const buffer = xterm.buffer.active;
+                for (let i = 0; i <= buffer.baseY + buffer.cursorY; i++) {
+                    const line = buffer.getLine(i);
+                    if (line && line.translateToString(true).trim().length > 0) return true;
+                }
+                return false;
+            }"""
+        )
+    except PlaywrightTimeoutError as e:
+        raise AssertionError("xterm buffer never rendered any shell output (terminal failed to connect).") from e
 
 
 def get_xterm_cursor_row(page: Page) -> int:
@@ -206,6 +307,18 @@ def get_add_terminal_button(page: Page) -> Locator:
     return page.get_by_test_id(ElementIDs.ADD_TERMINAL_BUTTON)
 
 
+def get_terminal_panel_icon(page: Page) -> Locator:
+    return page.get_by_test_id(ElementIDs.PANEL_ICON_TERMINAL)
+
+
+def get_terminal_starting_text(page: Page) -> Locator:
+    return page.get_by_test_id(ElementIDs.TERMINAL_STARTING_TEXT)
+
+
+def get_tab_close_button(tab: Locator) -> Locator:
+    return tab.get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON)
+
+
 def get_tab_context_menu_close_others(page: Page) -> Locator:
     return page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_CLOSE_OTHERS)
 
@@ -231,3 +344,41 @@ def get_xterm_theme_foreground(page: Page) -> str:
         return xterm.options.theme.foreground || '';
     }"""
     )
+
+
+def wait_for_xterm_theme_ready(page: Page) -> None:
+    """Wait until the xterm theme has non-empty background and foreground colors."""
+    try:
+        page.wait_for_function(
+            """() => {
+                const xterm = window.__xterm;
+                return !!(xterm && xterm.options.theme
+                    && xterm.options.theme.background
+                    && xterm.options.theme.foreground);
+            }"""
+        )
+    except PlaywrightTimeoutError as e:
+        bg = get_xterm_theme_background(page)
+        fg = get_xterm_theme_foreground(page)
+        raise AssertionError(f"xterm theme not ready. bg: {bg!r}, fg: {fg!r}") from e
+
+
+def wait_for_xterm_theme_change(page: Page, old_bg: str, old_fg: str) -> None:
+    """Wait until the xterm theme colors differ from the given values."""
+    try:
+        page.wait_for_function(
+            """([oldBg, oldFg]) => {
+                const xterm = window.__xterm;
+                if (!xterm || !xterm.options.theme) return false;
+                const bg = xterm.options.theme.background || '';
+                const fg = xterm.options.theme.foreground || '';
+                return bg !== oldBg && fg !== oldFg;
+            }""",
+            arg=[old_bg, old_fg],
+        )
+    except PlaywrightTimeoutError as e:
+        new_bg = get_xterm_theme_background(page)
+        new_fg = get_xterm_theme_foreground(page)
+        raise AssertionError(
+            f"Terminal theme did not change. bg: {old_bg!r} → {new_bg!r}, fg: {old_fg!r} → {new_fg!r}"
+        ) from e

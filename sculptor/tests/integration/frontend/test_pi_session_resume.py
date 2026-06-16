@@ -14,7 +14,6 @@ way through PiAgent's ``--session-id`` relaunch.
 
 from playwright.sync_api import expect
 
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.fake_pi import install_fake_pi_binary
@@ -39,7 +38,7 @@ def test_pi_session_resumes_prior_context_across_restart(
             sculptor_page=instance.page,
             workspace_name="Pi Resume",
             model_name=None,
-            harness=HarnessName.PI,
+            agent_type="pi",
             prompt=f"Remember the codeword {_SENTINEL}.",
         )
         chat_panel = task_page.get_chat_panel()
@@ -76,7 +75,7 @@ def test_pi_fresh_workspace_has_no_prior_context(
             sculptor_page=instance.page,
             workspace_name="Pi Fresh",
             model_name=None,
-            harness=HarnessName.PI,
+            agent_type="pi",
             prompt="fake_pi:recall",
         )
         chat_panel = task_page.get_chat_panel()

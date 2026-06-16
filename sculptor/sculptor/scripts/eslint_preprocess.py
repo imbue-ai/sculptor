@@ -12,7 +12,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from imbue_core.git import get_git_repo_root
+from sculptor.foundation.git import get_git_repo_root
 
 
 def get_frontend_path() -> Path:

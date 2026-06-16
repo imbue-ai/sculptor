@@ -17,7 +17,7 @@ from pathlib import Path
 import typer
 from typer import Typer
 
-from imbue_core.git import get_git_repo_root
+from sculptor.foundation.git import get_git_repo_root
 
 
 @lru_cache

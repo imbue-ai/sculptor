@@ -20,9 +20,9 @@ from typing import runtime_checkable
 
 from loguru import logger
 
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.event_utils import CompoundEvent
-from imbue_core.event_utils import ReadOnlyEvent
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.event_utils import CompoundEvent
+from sculptor.foundation.event_utils import ReadOnlyEvent
 
 SubprocessRunner = Callable[[str, Callable[[bytes], None], Callable[[int], None], ReadOnlyEvent], int]
 

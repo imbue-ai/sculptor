@@ -18,22 +18,19 @@ from queue import Queue
 from loguru import logger
 from pydantic import PrivateAttr
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.pydantic_serialization import SerializableModel
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import EffortLevel
-from imbue_core.sculptor.state.messages import LLMModel
-from imbue_core.sculptor.user_config import UserConfig
+from sculptor.config.user_config import UserConfig
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Task
 from sculptor.database.models import TaskID
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.interfaces.agents.agent import PiAgentConfig
+from sculptor.interfaces.agents.agent import is_terminal_agent_config
 from sculptor.primitives.constants import ANONYMOUS_USER_REFERENCE
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.primitives.service import Service
@@ -45,6 +42,9 @@ from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.git_repo_service.api import GitRepoService
 from sculptor.services.task_service.api import TaskService
 from sculptor.services.user_config.user_config import get_user_config_instance
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import EffortLevel
+from sculptor.state.messages import LLMModel
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import PrStatusInfo
 from sculptor.web.pr_polling_service import PrPollingService
@@ -293,9 +293,8 @@ class CIBabysitterCoordinator(Service):
             model = self._select_model_for_workspace(state.workspace_id, workspace.project_id, config, transaction)
             with self._git_repo_service.open_local_user_git_repo_for_read(project) as repo:
                 initial_commit_hash = repo.get_current_commit_hash()
-            # DELIBERATE-TEMPORARY: workspace-bound harness selection.
-            agent_config: ClaudeCodeSDKAgentConfig | PiAgentConfig = (
-                PiAgentConfig() if workspace.harness == HarnessName.PI else ClaudeCodeSDKAgentConfig()
+            agent_config = self._select_chat_agent_config_for_workspace(
+                state.workspace_id, workspace.project_id, transaction
             )
             task = Task(
                 object_id=TaskID(),
@@ -325,20 +324,21 @@ class CIBabysitterCoordinator(Service):
             return task.input_data.default_model
         return _model_from_config_or_fallback(config)
 
-    def _select_model_for_workspace(
+    def _workspace_agent_tasks_most_recent_first(
         self,
         workspace_id: WorkspaceID,
         project_id: ProjectID,
-        config: UserConfig,
         transaction: DataModelTransaction,
-    ) -> LLMModel:
+    ) -> list[Task]:
+        """The workspace's agent tasks, most-recent-first, excluding
+        deleted/deleting tasks and the babysitter's own."""
         try:
             project_tasks = transaction.get_tasks_for_project(  # pyre-ignore[16]
                 project_id=project_id,
                 input_data_classes=(AgentTaskInputsV2,),
             )
         except Exception as exc:
-            logger.debug("Could not list workspace tasks for model inheritance: {}", exc)
+            logger.debug("Could not list workspace tasks for inheritance: {}", exc)
             project_tasks = ()
         workspace_agent_tasks = [
             task
@@ -350,15 +350,52 @@ class CIBabysitterCoordinator(Service):
             and not task.is_deleting
             and task.current_state.title != _BABYSITTER_TITLE
         ]
+        return sorted(workspace_agent_tasks, key=lambda t: t.created_at, reverse=True)
+
+    def _select_chat_agent_config_for_workspace(
+        self,
+        workspace_id: WorkspaceID,
+        project_id: ProjectID,
+        transaction: DataModelTransaction,
+    ) -> ClaudeCodeSDKAgentConfig | PiAgentConfig:
+        """Inherit the chat-agent config type from the workspace's most recent
+        chat agent, falling back to Claude.
+
+        Terminal agents are skipped — the babysitter is always a chat agent
+        (it is driven by prompts) and a terminal config carries nothing to
+        inherit.
+        """
+        for task in self._workspace_agent_tasks_most_recent_first(workspace_id, project_id, transaction):
+            input_data = task.input_data
+            assert isinstance(input_data, AgentTaskInputsV2)
+            if is_terminal_agent_config(input_data.agent_config):
+                continue
+            if isinstance(input_data.agent_config, PiAgentConfig):
+                return PiAgentConfig()
+            return ClaudeCodeSDKAgentConfig()
+        return ClaudeCodeSDKAgentConfig()
+
+    def _select_model_for_workspace(
+        self,
+        workspace_id: WorkspaceID,
+        project_id: ProjectID,
+        config: UserConfig,
+        transaction: DataModelTransaction,
+    ) -> LLMModel:
         # Most-recent-first; pick the first task that yields a usable model.
         # Task input_data.default_model is None when the agent was created in
         # waiting state and the model was first selected via a chat message;
         # in that case fall back to the model_name of the most recent
         # ChatInputUserMessage on that task.
-        for task in sorted(workspace_agent_tasks, key=lambda t: t.created_at, reverse=True):
-            assert isinstance(task.input_data, AgentTaskInputsV2)
-            if task.input_data.default_model is not None:
-                return task.input_data.default_model
+        for task in self._workspace_agent_tasks_most_recent_first(workspace_id, project_id, transaction):
+            input_data = task.input_data
+            assert isinstance(input_data, AgentTaskInputsV2)
+            # Terminal agents have no model concept — skip them explicitly so
+            # an older chat agent's model wins.
+            if is_terminal_agent_config(input_data.agent_config):
+                continue
+            if input_data.default_model is not None:
+                return input_data.default_model
             inherited = self._latest_chat_model_for_task(task.object_id, transaction)
             if inherited is not None:
                 return inherited

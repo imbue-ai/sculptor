@@ -18,7 +18,12 @@ type TerminalInstanceProps = {
 };
 
 const TerminalInstance = ({ workspaceID, terminalIndex }: TerminalInstanceProps): ReactElement => {
-  const { terminalContainerRef } = useTerminal({ workspaceID, terminalIndex, isVisible: true });
+  // Each terminal panel is its own always-visible instance (no shared tab
+  // strip), so `isVisible` is constant and there is no `onOutput` consumer.
+  const { terminalContainerRef } = useTerminal({
+    terminalPath: `/api/v1/workspaces/${workspaceID}/terminal/${terminalIndex}/ws`,
+    isVisible: true,
+  });
 
   return (
     <div className={styles.terminalInstanceVisible}>

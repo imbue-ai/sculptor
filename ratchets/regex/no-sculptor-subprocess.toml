@@ -7,4 +7,4 @@ severity = "error"
 pattern = "subprocess\\.(run|check_output|check_call)\\("
 languages = ["python"]
 include = ["sculptor/sculptor/**/*.py"]
-exclude = ["**/test/**", "**/testing/**", "**/scripts/**", "**/*_test.py"]
+exclude = ["**/test/**", "**/testing/**", "**/scripts/**", "**/*_test.py", "**/foundation/git.py", "**/foundation/subprocess_utils.py", "**/foundation/processes/**"]

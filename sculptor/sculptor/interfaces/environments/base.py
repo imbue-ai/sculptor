@@ -11,14 +11,14 @@ from typing import final
 from pydantic import BaseModel
 from pydantic import PrivateAttr
 
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.event_utils import MutableEvent
-from imbue_core.event_utils import ReadOnlyEvent
-from imbue_core.processes.local_process import RunningProcess
-from imbue_core.secrets_utils import Secret
-from imbue_core.subprocess_utils import FinishedProcess
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.event_utils import MutableEvent
+from sculptor.foundation.event_utils import ReadOnlyEvent
+from sculptor.foundation.processes.local_process import RunningProcess
+from sculptor.foundation.secrets_utils import Secret
+from sculptor.foundation.subprocess_utils import FinishedProcess
 from sculptor.interfaces.terminal_manager import TerminalManager
+from sculptor.primitives.ids import ProjectID
 
 # https://github.com/python/typeshed/tree/main/stdlib/_typeshed
 if TYPE_CHECKING:

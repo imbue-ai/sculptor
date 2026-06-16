@@ -14,7 +14,13 @@ import styles from "./PrButton.module.scss";
 
 export type GitProvider = "gitlab" | "github" | null;
 
-export type PrErrorCategory = "cli_missing" | "not_authenticated" | "no_access" | "network_error" | "transient";
+export type PrErrorCategory =
+  | "cli_missing"
+  | "not_authenticated"
+  | "no_access"
+  | "network_error"
+  | "rate_limited"
+  | "transient";
 
 export type EffectiveError = {
   category: PrErrorCategory;
@@ -74,6 +80,18 @@ const ERROR_CONTENT: Record<string, Record<string, ErrorContent>> = {
     github: {
       title: "Can't connect to GitHub",
       description: "DNS resolution failed. Check your network connection.",
+      command: null,
+    },
+  },
+  rate_limited: {
+    gitlab: {
+      title: "Rate limited by GitLab",
+      description: "Too many API requests. Status updates are paused and will resume automatically.",
+      command: null,
+    },
+    github: {
+      title: "Rate limited by GitHub",
+      description: "Too many API requests. Status updates are paused and will resume automatically.",
       command: null,
     },
   },

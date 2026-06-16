@@ -7,8 +7,10 @@ and the user's home directory (~/.claude).
 
 import json
 from collections.abc import Sequence
+from enum import Enum
 from pathlib import Path
 from typing import Literal
+from typing import NamedTuple
 
 import yaml
 from loguru import logger
@@ -64,11 +66,13 @@ def _parse_skill_frontmatter(content: str) -> tuple[str | None, str | None]:
     return name, description
 
 
-def _parse_command_frontmatter(content: str) -> str | None:
+def parse_command_frontmatter(content: str) -> str | None:
     """Extract description from a command markdown file's YAML frontmatter.
 
     Commands use a simpler format than skills: the filename is the command name,
-    and the frontmatter may optionally contain a description field.
+    and the frontmatter may optionally contain a description field. Public
+    because the pi agent reuses it when wrapping loose commands in synthesized
+    SKILL.md files.
     """
     if not content.startswith("---"):
         return None
@@ -144,16 +148,72 @@ def _scan_commands_directory(commands_dir: Path, source: Literal["custom", "plug
             logger.debug("Failed to read {}: {}", command_file, e)
             continue
         name = command_file.stem
-        description = _parse_command_frontmatter(content) or ""
+        description = parse_command_frontmatter(content) or ""
         skills.append(SkillInfo(name=name, description=description, source=source, file_path=str(command_file)))
 
     return skills
 
 
+class SkillSourceKind(Enum):
+    """Layout of a skill-source directory, so callers read it correctly.
+
+    ``SKILL_DIR`` holds ``<name>/SKILL.md`` subdirectories (the agentskills.io
+    standard). ``COMMAND_FILES`` holds loose ``<name>.md`` command files with no
+    ``SKILL.md`` — Claude's legacy command format.
+    """
+
+    SKILL_DIR = "skill_dir"
+    COMMAND_FILES = "command_files"
+
+
+class SkillSourceDirectory(NamedTuple):
+    """One directory Sculptor looks in for skills, plus how to read it.
+
+    ``namespace`` is the plugin-name prefix applied to discovered skill names
+    (plugin sources only); ``None`` for repo/home sources.
+    """
+
+    path: Path
+    kind: SkillSourceKind
+    namespace: str | None
+
+
+def get_skill_source_directories(
+    repo_path: Path,
+    plugin_dirs: Sequence[Path] = (),
+    home_path: Path | None = None,
+) -> list[SkillSourceDirectory]:
+    """Return every skill/command source directory, in discovery order.
+
+    The single source of truth for *where* Sculptor looks for skills:
+    ``discover_skills`` scans exactly these directories (in this order,
+    first-name-wins), and the pi agent points pi at the same directories via
+    ``--skill`` so the slash-picker list and pi's loaded skill set stay in
+    lockstep. Directories are returned whether or not they exist on disk;
+    callers that act on them (scan, or hand to a subprocess) should skip the
+    missing ones.
+
+    ``home_path`` overrides ``Path.home()`` for the user-global sources, so the
+    pi agent can pass its environment's home and have the paths resolve inside
+    that environment.
+    """
+    home = Path.home() if home_path is None else home_path
+    directories: list[SkillSourceDirectory] = []
+    for plugin_dir in plugin_dirs:
+        directories.append(
+            SkillSourceDirectory(plugin_dir / "skills", SkillSourceKind.SKILL_DIR, _get_plugin_namespace(plugin_dir))
+        )
+    directories.append(SkillSourceDirectory(repo_path / ".claude" / "skills", SkillSourceKind.SKILL_DIR, None))
+    directories.append(SkillSourceDirectory(repo_path / ".claude" / "commands", SkillSourceKind.COMMAND_FILES, None))
+    directories.append(SkillSourceDirectory(home / ".claude" / "skills", SkillSourceKind.SKILL_DIR, None))
+    directories.append(SkillSourceDirectory(home / ".claude" / "commands", SkillSourceKind.COMMAND_FILES, None))
+    return directories
+
+
 def discover_skills(repo_path: Path, plugin_dirs: Sequence[Path] = ()) -> list[SkillInfo]:
     """Discover all skills and commands from the plugins, repo, and home directory.
 
-    Searches these locations in order:
+    Searches the directories from ``get_skill_source_directories`` in order:
     0. <plugin>/skills/          (plugin skills, namespaced with the
                                   plugin's name from .claude-plugin/plugin.json)
     1. <repo>/.claude/skills/    (directory-based, SKILL.md)
@@ -169,32 +229,29 @@ def discover_skills(repo_path: Path, plugin_dirs: Sequence[Path] = ()) -> list[S
     seen_names: set[str] = set()
     all_skills: list[SkillInfo] = []
 
-    for plugin_dir in plugin_dirs:
-        namespace = _get_plugin_namespace(plugin_dir)
-        for skill in _scan_skills_directory(plugin_dir / "skills", source="plugin"):
-            namespaced = SkillInfo(
-                name=f"{namespace}:{skill.name}",
-                description=skill.description,
-                source=skill.source,
-                file_path=skill.file_path,
+    for source in get_skill_source_directories(repo_path, plugin_dirs):
+        if source.kind is SkillSourceKind.SKILL_DIR:
+            scanned = _scan_skills_directory(
+                source.path, source="plugin" if source.namespace is not None else "custom"
             )
-            if namespaced.name in seen_names:
+        else:
+            scanned = _scan_commands_directory(source.path)
+        for skill in scanned:
+            name = f"{source.namespace}:{skill.name}" if source.namespace is not None else skill.name
+            if name in seen_names:
                 continue
-            seen_names.add(namespaced.name)
-            all_skills.append(namespaced)
-
-    search_paths = [
-        (repo_path / ".claude" / "skills", _scan_skills_directory),
-        (repo_path / ".claude" / "commands", _scan_commands_directory),
-        (Path.home() / ".claude" / "skills", _scan_skills_directory),
-        (Path.home() / ".claude" / "commands", _scan_commands_directory),
-    ]
-
-    for directory, scanner in search_paths:
-        for skill in scanner(directory):
-            if skill.name not in seen_names:
-                seen_names.add(skill.name)
+            seen_names.add(name)
+            if source.namespace is None:
                 all_skills.append(skill)
+            else:
+                all_skills.append(
+                    SkillInfo(
+                        name=name,
+                        description=skill.description,
+                        source=skill.source,
+                        file_path=skill.file_path,
+                    )
+                )
 
     all_skills.sort(key=lambda s: s.name)
     return all_skills

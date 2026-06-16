@@ -3,10 +3,10 @@ from typing import Generator
 
 import pytest
 
-from imbue_core.concurrency_group import ConcurrencyGroup
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import Project
 from sculptor.database.models import ProjectID
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.primitives.ids import OrganizationReference
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import UserReference

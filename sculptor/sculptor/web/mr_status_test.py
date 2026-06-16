@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-from imbue_core.subprocess_utils import FinishedProcess
+from sculptor.foundation.subprocess_utils import FinishedProcess
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.web.mr_status import fetch_mr_status
 

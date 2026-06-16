@@ -7,29 +7,7 @@ from typing import Sequence
 
 from loguru import logger
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.ids import AssistantMessageID
-from imbue_core.sculptor.state.chat_state import AskUserQuestionData
-from imbue_core.sculptor.state.chat_state import ChatMessage
-from imbue_core.sculptor.state.chat_state import ChatMessageRole
-from imbue_core.sculptor.state.chat_state import ContentBlockTypes
-from imbue_core.sculptor.state.chat_state import ContextClearedBlock
-from imbue_core.sculptor.state.chat_state import ContextSummaryBlock
-from imbue_core.sculptor.state.chat_state import ErrorBlock
-from imbue_core.sculptor.state.chat_state import FileBlock
-from imbue_core.sculptor.state.chat_state import ResumeResponseBlock
-from imbue_core.sculptor.state.chat_state import TextBlock
-from imbue_core.sculptor.state.chat_state import ToolResultBlock
-from imbue_core.sculptor.state.chat_state import ToolUseBlock
-from imbue_core.sculptor.state.chat_state import TurnMetrics
-from imbue_core.sculptor.state.chat_state import WarningBlock
-from imbue_core.sculptor.state.chat_state import make_plan_approval_question
-from imbue_core.sculptor.state.claude_state import split_text_and_media
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import Message
-from imbue_core.sculptor.state.messages import ResponseBlockAgentMessage
-from imbue_core.serialization import SerializedException
+from sculptor.foundation.serialization import SerializedException
 from sculptor.interfaces.agents.agent import AgentCrashedRunnerMessage
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import BackgroundTaskNotificationAgentMessage
@@ -57,7 +35,29 @@ from sculptor.interfaces.agents.agent import WarningAgentMessage
 from sculptor.interfaces.agents.agent import WarningMessage
 from sculptor.interfaces.agents.artifacts import ArtifactType
 from sculptor.interfaces.agents.harness import Harness
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import AssistantMessageID
+from sculptor.primitives.ids import TaskID
 from sculptor.services.data_model_service.api import CompletedTransaction
+from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.chat_state import ChatMessage
+from sculptor.state.chat_state import ChatMessageRole
+from sculptor.state.chat_state import ContentBlockTypes
+from sculptor.state.chat_state import ContextClearedBlock
+from sculptor.state.chat_state import ContextSummaryBlock
+from sculptor.state.chat_state import ErrorBlock
+from sculptor.state.chat_state import FileBlock
+from sculptor.state.chat_state import ResumeResponseBlock
+from sculptor.state.chat_state import TextBlock
+from sculptor.state.chat_state import ToolResultBlock
+from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.chat_state import TurnMetrics
+from sculptor.state.chat_state import WarningBlock
+from sculptor.state.chat_state import make_plan_approval_question
+from sculptor.state.claude_state import split_text_and_media
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import Message
+from sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.web.derived import SubmittedQuestionAnswers
 from sculptor.web.derived import TaskUpdate
 
@@ -367,6 +367,7 @@ def convert_agent_messages_to_task_update(
                 msg.first_response_message_id,
                 msg.approximate_creation_time,
                 streaming.start_index,
+                harness,
                 parent_tool_use_id=msg_parent,
             )
 
@@ -519,10 +520,9 @@ def convert_agent_messages_to_task_update(
                     recent_plan_file_path = plan_path
                 if isinstance(block, ToolUseBlock) and harness.is_ask_user_question_tool(block.name):
                     if block.id not in submitted_question_answers:
-                        if harness.is_valid_ask_user_question_input(block.name, block.input):
-                            pending_user_question = AskUserQuestionData.model_validate(
-                                {**block.input, "tool_use_id": block.id}, strict=True
-                            )
+                        reconstructed_question = harness.reconstruct_pending_ask_user_question(block)
+                        if reconstructed_question is not None:
+                            pending_user_question = reconstructed_question
                         else:
                             logger.info(
                                 "Skipping AskUserQuestion pending state from persisted ToolUseBlock with invalid input: {}",
@@ -872,6 +872,22 @@ def _create_empty_assistant_message(
     )
 
 
+def _stamp_interactive_role(block: ContentBlockTypes, harness: Harness) -> ContentBlockTypes:
+    """Stamp a tool block with its harness-derived interactive-backchannel role.
+
+    Applied wherever tool blocks enter the converted content — the final
+    (`_handle_response_blocks`) AND the streaming-partial (`_handle_partial_response`)
+    paths — so the frontend renders ask-user-question / plan-approval tools by
+    role rather than by tool name, whichever path delivered the block first.
+    Non-tool blocks pass through unchanged.
+    """
+    if isinstance(block, ToolUseBlock):
+        return block.model_copy(update={"interactive_role": harness.classify_tool_ui_role(block.name)})
+    if isinstance(block, ToolResultBlock):
+        return block.model_copy(update={"interactive_role": harness.classify_tool_ui_role(block.tool_name)})
+    return block
+
+
 def _handle_response_blocks(
     in_progress: ChatMessage | None,
     blocks: tuple[ContentBlockTypes, ...],
@@ -919,12 +935,14 @@ def _handle_response_blocks(
                 # For AskUserQuestion, remove any existing ToolResultBlock with matching tool_use_id.
                 # This handles the case where ToolResultBlock arrived in a previous message
                 # before ToolUseBlock (which can happen during streaming or persistence).
-                if harness.is_ask_user_question_tool(block.name) or harness.is_exit_plan_mode_tool(block.name):
+                if harness.classify_tool_ui_role(block.name) is not None:
                     content = [
                         b for b in content if not (isinstance(b, ToolResultBlock) and b.tool_use_id == block.id)
                     ]
 
-                content.append(block)
+                # Stamp the harness-derived interactive role so the frontend
+                # renders backchannel tools by role rather than by tool name.
+                content.append(_stamp_interactive_role(block, harness))
                 existing_tool_use_ids.add(block.id)
         elif isinstance(block, ToolResultBlock):
             # Defer ToolResultBlocks to second pass
@@ -932,6 +950,12 @@ def _handle_response_blocks(
 
     # Second pass: Process ToolResultBlocks now that all ToolUseBlocks are in place
     for block in tool_result_blocks:
+        # Stamp the harness-derived role so a backchannel result that survives to
+        # the frontend (its tool use lived in an earlier message) is suppressed by
+        # role rather than by tool name. Stamped inline (not via
+        # `_stamp_interactive_role`) to keep the narrow `ToolResultBlock` type
+        # `_replace_tool_use_with_result` requires.
+        block = block.model_copy(update={"interactive_role": harness.classify_tool_ui_role(block.tool_name)})
         # Try to replace matching tool use with result
         content, replaced = _replace_tool_use_with_result(content, block, harness)
 
@@ -978,6 +1002,7 @@ def _handle_partial_response(
     message_id: AgentMessageID,
     approximate_creation_time: datetime.datetime,
     streaming_start_index: int,
+    harness: Harness,
     parent_tool_use_id: str | None = None,
 ) -> ChatMessage:
     """Handle streaming partial - replace content from streaming_start_index."""
@@ -993,8 +1018,15 @@ def _handle_partial_response(
 
     # Skip ToolUseBlocks whose ID already exists in the committed content to prevent
     # duplication (e.g. if persistence ResponseBlockAgentMessage arrived before the partial).
+    # Stamp the interactive role here too: a backchannel tool's block is delivered
+    # via the partial first, and the later final ResponseBlockAgentMessage skips it
+    # as a duplicate — so without stamping on this path the live turn never gets a role.
     committed_tool_use_ids = {b.id for b in committed_content if isinstance(b, ToolUseBlock)}
-    deduplicated = tuple(b for b in content if not (isinstance(b, ToolUseBlock) and b.id in committed_tool_use_ids))
+    deduplicated = tuple(
+        _stamp_interactive_role(b, harness)
+        for b in content
+        if not (isinstance(b, ToolUseBlock) and b.id in committed_tool_use_ids)
+    )
     new_content = committed_content + deduplicated
 
     return in_progress.model_copy(update={"content": new_content})

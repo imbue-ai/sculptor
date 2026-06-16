@@ -10,6 +10,7 @@ import { backendStatusAtom } from "../common/state/atoms/backend.ts";
 import {
   deleteErrorToastAtom,
   mentionChipUnreachableToastAtom,
+  terminalPromptRejectedToastAtom,
   workspaceDeleteErrorToastAtom,
   workspaceOpenCloseErrorToastAtom,
 } from "../common/state/atoms/toasts.ts";
@@ -53,6 +54,8 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
   const setWorkspaceOpenCloseErrorToast = useSetAtom(workspaceOpenCloseErrorToastAtom);
   const mentionChipUnreachableToast = useAtomValue(mentionChipUnreachableToastAtom);
   const setMentionChipUnreachableToast = useSetAtom(mentionChipUnreachableToastAtom);
+  const terminalPromptRejectedToast = useAtomValue(terminalPromptRejectedToastAtom);
+  const setTerminalPromptRejectedToast = useSetAtom(terminalPromptRejectedToastAtom);
   const projectID = useActiveProjectID();
   const currentProject = useProject(projectID ?? "");
   const [isRepoPathDialogOpen, setIsRepoPathDialogOpen] = useState(false);
@@ -82,6 +85,12 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
       if (!open) setMentionChipUnreachableToast(null);
     },
     [setMentionChipUnreachableToast],
+  );
+  const handleTerminalPromptRejectedOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) setTerminalPromptRejectedToast(null);
+    },
+    [setTerminalPromptRejectedToast],
   );
 
   // Agents and terminals are panels too (REQ-AGENT-1 / REQ-TERM-2): merge the
@@ -204,6 +213,12 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
         onOpenChange={handleMentionChipUnreachableOpenChange}
         title={mentionChipUnreachableToast?.title}
         description={mentionChipUnreachableToast?.description}
+      />
+      <Toast
+        open={terminalPromptRejectedToast !== null}
+        onOpenChange={handleTerminalPromptRejectedOpenChange}
+        title={terminalPromptRejectedToast?.title}
+        description={terminalPromptRejectedToast?.description}
       />
     </>
   );

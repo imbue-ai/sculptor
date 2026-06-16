@@ -9,8 +9,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.event_utils import ReadOnlyEvent
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.event_utils import ReadOnlyEvent
 from sculptor.services.workspace_service.setup_command_runner import HEAD_BYTES
 from sculptor.services.workspace_service.setup_command_runner import LOG_FILENAME
 from sculptor.services.workspace_service.setup_command_runner import SetupCommandRunner

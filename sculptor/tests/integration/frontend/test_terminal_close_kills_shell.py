@@ -23,20 +23,21 @@ changes needed here when the underlying pty class swaps.
 """
 
 import os
-import re
 import time
 
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
+from sculptor.testing.elements.terminal import get_add_terminal_button
+from sculptor.testing.elements.terminal import get_tab_close_button
+from sculptor.testing.elements.terminal import get_terminal_tabs
 from sculptor.testing.elements.terminal import get_xterm_buffer_text
 from sculptor.testing.elements.terminal import open_terminal_and_wait
 from sculptor.testing.elements.terminal import run_command_in_active_terminal
+from sculptor.testing.elements.terminal import wait_for_xterm_substring
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
-
-_PID_MARKER = re.compile(r"PID:(\d+)")
 
 
 def _read_shell_pid_from_active_terminal(page, baseline_pids: set[int]) -> int:
@@ -58,15 +59,32 @@ def _read_shell_pid_from_active_terminal(page, baseline_pids: set[int]) -> int:
     works for both the initial tab and any newly added tab.
     """
     run_command_in_active_terminal(page, 'echo "PID:$$"')
-    deadline = time.monotonic() + 5.0
-    while time.monotonic() < deadline:
+    try:
+        result = page.wait_for_function(
+            """(baselinePids) => {
+                const xterm = window.__xterm;
+                if (!xterm) return null;
+                const buffer = xterm.buffer.active;
+                const lines = [];
+                for (let i = 0; i <= buffer.baseY + buffer.cursorY; i++) {
+                    const line = buffer.getLine(i);
+                    if (line) lines.push(line.translateToString(true));
+                }
+                const text = lines.join('\\n');
+                const re = /PID:(\\d+)/g;
+                let match;
+                while ((match = re.exec(text)) !== null) {
+                    const pid = parseInt(match[1]);
+                    if (!baselinePids.includes(pid)) return pid;
+                }
+                return null;
+            }""",
+            arg=list(baseline_pids),
+        )
+        return result.json_value()
+    except PlaywrightTimeoutError:
         buffer_text = get_xterm_buffer_text(page)
-        for match in _PID_MARKER.findall(buffer_text):
-            pid = int(match)
-            if pid not in baseline_pids:
-                return pid
-        page.wait_for_timeout(200)
-    raise AssertionError(f"never saw fresh PID marker; buffer was:\n{get_xterm_buffer_text(page)!r}")
+        raise AssertionError(f"never saw fresh PID marker; buffer was:\n{buffer_text!r}")
 
 
 def _wait_for_dead(page, pid: int, timeout: float = 3.0) -> bool:
@@ -115,9 +133,9 @@ def test_close_terminal_tab_kills_shell_process(sculptor_instance_: SculptorInst
     #    handleCloseTerminal doesn't fire (which would mask the close).
     # 2. After the close, we can run a command in the surviving second
     #    tab to prove the panel is still healthy.
-    add_button = page.get_by_test_id(ElementIDs.ADD_TERMINAL_BUTTON)
+    add_button = get_add_terminal_button(page)
     add_button.click()
-    terminal_tabs = page.get_by_test_id(ElementIDs.TERMINAL_TAB)
+    terminal_tabs = get_terminal_tabs(page)
     expect(terminal_tabs).to_have_count(2)
 
     # The second tab is active by default after add. Capture its pid too
@@ -128,7 +146,7 @@ def test_close_terminal_tab_kills_shell_process(sculptor_instance_: SculptorInst
     # Close the FIRST tab (index 0) — explicitly not the active one, so
     # we can keep typing in the second tab afterward.
     first_tab = terminal_tabs.first
-    close_button = first_tab.get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON)
+    close_button = get_tab_close_button(first_tab)
     close_button.click()
 
     # Only the second tab remains.
@@ -148,10 +166,4 @@ def test_close_terminal_tab_kills_shell_process(sculptor_instance_: SculptorInst
     os.kill(second_pid, 0)
     # Feed via xterm.paste -- same rationale as _read_shell_pid_from_active_terminal.
     run_command_in_active_terminal(page, 'echo "STILL_ALIVE_xyz"')
-    deadline = time.monotonic() + 5.0
-    while time.monotonic() < deadline:
-        if "STILL_ALIVE_xyz" in get_xterm_buffer_text(page):
-            break
-        page.wait_for_timeout(200)
-    else:
-        raise AssertionError("second tab did not echo back after the first tab was closed")
+    wait_for_xterm_substring(page, "STILL_ALIVE_xyz")

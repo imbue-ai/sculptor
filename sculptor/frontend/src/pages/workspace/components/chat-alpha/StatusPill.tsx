@@ -32,7 +32,9 @@ import { useElapsedTime } from "./useElapsedTime.ts";
 
 type StatusPillProps = {
   taskStatus: TaskStatus | null;
-  // CAPABILITY-GAP: supportsCompaction — `isAutoCompacting` drives a "Compacting" state in the pill that is meaningful only for harnesses that compact context (Claude). Pi never sets this.
+  // `isAutoCompacting` drives the "Compacting" pill state, fed by the
+  // AutoCompacting* message pair via the `is_auto_compacting` derivation. Every
+  // harness that compacts (Claude and pi) feeds it.
   isAutoCompacting: boolean;
   isStreaming: boolean;
   inProgressChatMessage: ChatMessage | null;

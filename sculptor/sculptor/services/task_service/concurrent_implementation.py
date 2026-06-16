@@ -13,22 +13,22 @@ from typing import TypeVar
 from loguru import logger
 from pydantic import PrivateAttr
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.concurrency_group import ConcurrencyExceptionGroup
-from imbue_core.concurrency_group import ConcurrentShutdownError
-from imbue_core.constants import ExceptionPriority
-from imbue_core.log_utils import log_and_exit_program
-from imbue_core.pydantic_serialization import MutableModel
-from imbue_core.time_utils import get_current_time
 from sculptor.config.settings import SculptorSettings
 from sculptor.constants import SCULPTOR_EXIT_CODE_IRRECOVERABLE_ERROR
 from sculptor.database.models import Project
 from sculptor.database.models import Task
 from sculptor.database.models import TaskID
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.concurrency_group import ConcurrencyExceptionGroup
+from sculptor.foundation.concurrency_group import ConcurrentShutdownError
+from sculptor.foundation.constants import ExceptionPriority
+from sculptor.foundation.log_utils import log_and_exit_program
+from sculptor.foundation.pydantic_serialization import MutableModel
+from sculptor.foundation.time_utils import get_current_time
 from sculptor.interfaces.agents.agent import TaskStatusRunnerMessage
 from sculptor.interfaces.agents.tasks import TaskState
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import ProjectID
 from sculptor.services.task_service.base_implementation import BaseTaskService
 from sculptor.utils.errors import is_irrecoverable_exception
 
@@ -259,7 +259,6 @@ class ConcurrentTaskService(BaseTaskService, ABC):
             task_id = task.object_id
             if task_id not in self._runner_by_id:
                 # exceptions in here will definitely have been logged, see implementation of self._run_task
-                logger.info("Creating runner:{}", self.settings)
                 new_runner = self.create_runner(task, task_id, self.settings)
                 self._runner_by_id[task_id] = new_runner
                 new_runner.start()

@@ -279,42 +279,42 @@ def test_agent_tab_reuses_lowest_available_number(
 ) -> None:
     """Deleting an auto-named agent and adding a new one should reuse the lowest number.
 
-    The first agent created via the Add Workspace form is auto-named "Agent 1"
+    The first agent created via the Add Workspace form is auto-named "Claude 1"
     (even when a prompt is provided, the backend auto-assigns "Agent N" names).
 
     Steps:
-    1. Create a workspace — first agent is auto-named "Agent 1"
-    2. Click "+" twice to create "Agent 2" and "Agent 3"
-    3. Delete "Agent 2"
-    4. Click "+" — the new agent should be "Agent 2", not "Agent 4"
+    1. Create a workspace — first agent is auto-named "Claude 1"
+    2. Click "+" twice to create "Claude 2" and "Claude 3"
+    3. Delete "Claude 2"
+    4. Click "+" — the new agent should be "Claude 2", not "Claude 4"
     """
     page = sculptor_instance_.page
     task_page = PlaywrightTaskPage(page=page)
     agent_tab_bar = task_page.get_agent_tab_bar()
 
-    # Create a workspace — the first agent is auto-named "Agent 1".
+    # Create a workspace — the first agent is auto-named "Claude 1".
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Reuse WS")
 
     agent_tabs = agent_tab_bar.get_agent_tabs()
     expect(agent_tabs).to_have_count(1)
-    expect(agent_tabs.first).to_have_text("Agent 1")
+    expect(agent_tabs.first).to_have_text("Claude 1")
 
-    # Add two more agents via the "+" button — they get "Agent 2" and "Agent 3".
+    # Add two more agents via the "+" button — they get "Claude 2" and "Claude 3".
     add_agent_button = agent_tab_bar.get_add_agent_button()
     add_agent_button.click()
     expect(agent_tabs).to_have_count(2)
-    expect(agent_tabs.nth(1)).to_have_text("Agent 2")
+    expect(agent_tabs.nth(1)).to_have_text("Claude 2")
 
     add_agent_button.click()
     expect(agent_tabs).to_have_count(3)
-    expect(agent_tabs.nth(2)).to_have_text("Agent 3")
+    expect(agent_tabs.nth(2)).to_have_text("Claude 3")
 
-    # Delete "Agent 2". On slow CI the close+confirm flow occasionally loses
+    # Delete "Claude 2". On slow CI the close+confirm flow occasionally loses
     # the click (Radix AlertDialog.Action auto-closes the dialog before
     # onConfirm fires), so target Agent 2 by text and retry the UI flow
     # until the tab actually disappears.
     for _attempt in range(3):
-        tab2 = agent_tab_bar.get_agent_tab_by_name("Agent 2").first
+        tab2 = agent_tab_bar.get_agent_tab_by_name("Claude 2").first
         if not tab2.is_visible():
             break  # already gone — a previous attempt succeeded
         tab2.click()
@@ -327,12 +327,12 @@ def test_agent_tab_reuses_lowest_available_number(
         confirm_button.click()
         expect(agent_tab_bar.get_delete_confirmation_dialog()).to_be_hidden()
         try:
-            expect(agent_tab_bar.get_agent_tab_by_name("Agent 2")).to_have_count(0)
+            expect(agent_tab_bar.get_agent_tab_by_name("Claude 2")).to_have_count(0)
             break
         except AssertionError:
             continue
     else:
-        expect(agent_tab_bar.get_agent_tab_by_name("Agent 2")).to_have_count(0)
+        expect(agent_tab_bar.get_agent_tab_by_name("Claude 2")).to_have_count(0)
     expect(agent_tabs).to_have_count(2)
 
     # The UI removes the tab optimistically, but the backend's "lowest
@@ -345,7 +345,7 @@ def test_agent_tab_reuses_lowest_available_number(
     # Add another agent — should reuse number 2, not increment to 4.
     add_agent_button.click()
     expect(agent_tabs).to_have_count(3)
-    expect(agent_tabs.nth(2)).to_have_text("Agent 2")
+    expect(agent_tabs.nth(2)).to_have_text("Claude 2")
 
 
 @pytest.mark.skip(

@@ -1,7 +1,7 @@
 """Data types for git repository service."""
 
-from imbue_core.pydantic_serialization import FrozenModel
 from sculptor.config.settings import SculptorSettings
+from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.services.data_model_service.api import DataModelService
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.git_repo_service.api import GitRepoService

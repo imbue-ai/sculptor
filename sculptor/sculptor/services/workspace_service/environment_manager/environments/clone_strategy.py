@@ -16,8 +16,8 @@ from pathlib import Path
 
 from loguru import logger
 
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.subprocess_utils import ProcessError
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.subprocess_utils import ProcessError
 
 
 class CloneError(Exception):

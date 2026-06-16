@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 import sculptor.services.user_config.user_config as user_config_module
-from imbue_core.sculptor.user_config import UserConfig
+from sculptor.config.user_config import UserConfig
 from sculptor.services.user_config.user_config import canonicalize_telemetry_flags
 from sculptor.services.user_config.user_config import save_config
 

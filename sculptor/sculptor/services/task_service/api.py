@@ -7,20 +7,20 @@ from typing import Generator
 
 from pydantic import AnyUrl
 
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.pydantic_serialization import FrozenModel
-from imbue_core.sculptor.state.messages import Message
 from sculptor.database.models import Task
 from sculptor.database.models import TaskID
+from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.interfaces.agents.agent import MessageTypes
 from sculptor.interfaces.agents.agent import PersistentMessageTypes
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
 from sculptor.interfaces.agents.agent import UserMessageUnion
 from sculptor.interfaces.environments.base import Environment
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import UserReference
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.primitives.service import Service
 from sculptor.services.data_model_service.data_types import DataModelTransaction
+from sculptor.state.messages import Message
 
 
 class TaskMessageContainer(FrozenModel):
@@ -82,6 +82,12 @@ class TaskService(Service, ABC):
     def get_saved_messages_for_task(
         self, task_id: TaskID, transaction: DataModelTransaction
     ) -> tuple[PersistentMessageTypes, ...]: ...
+
+    @abstractmethod
+    def get_live_messages_for_task(self, task_id: TaskID) -> tuple[Message, ...]:
+        """Snapshot of the task's in-memory messages, INCLUDING ephemeral
+        run-scoped ones (e.g. terminal-agent signals) that
+        get_saved_messages_for_task never sees."""
 
     @abstractmethod
     @contextmanager

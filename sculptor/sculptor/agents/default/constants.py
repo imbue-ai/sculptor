@@ -1,7 +1,7 @@
 from typing import Final
 
-from imbue_core.agents.agent_api.data_types import AgentToolName
-from imbue_core.sculptor.state.messages import LLMModel
+from sculptor.interfaces.agents.tool_names import AgentToolName
+from sculptor.state.messages import LLMModel
 
 DEFAULT_WAIT_TIMEOUT = 30.0
 REMOVED_MESSAGE_IDS_STATE_FILE = "removed_message_ids"

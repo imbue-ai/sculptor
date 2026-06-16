@@ -369,8 +369,10 @@ def main() -> None:
         "--panel-setup",
         choices=["none", "changes-vs-files"],
         default="none",
-        help="Optional per-workspace panel configuration before capturing "
-        "(changes-vs-files: ALPHA on the Changes panel with an open diff, BRAVO on Files)",
+        help=(
+            "Optional per-workspace panel configuration before capturing "
+            + "(changes-vs-files: ALPHA on the Changes panel with an open diff, BRAVO on Files)"
+        ),
     )
     args = parser.parse_args()
 

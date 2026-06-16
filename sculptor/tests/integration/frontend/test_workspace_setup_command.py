@@ -12,7 +12,6 @@ import re
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.setup_status import PlaywrightSetupStatusElement
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -41,17 +40,14 @@ def test_setup_command_saves_on_blur(sculptor_instance_: SculptorInstance) -> No
     page = sculptor_instance_.page
 
     settings_page = navigate_to_settings_page(page=page)
-    settings_page.click_on_repositories().expand_repo_config()
-    setup_input = page.get_by_test_id(ElementIDs.SETTINGS_WORKSPACE_SETUP_COMMAND_INPUT).first
-    expect(setup_input).to_be_visible()
-
-    setup_input.fill("echo test-persist")
-    setup_input.blur()
-    page.wait_for_timeout(500)
+    repos = settings_page.click_on_repositories()
+    repos.expand_repo_config()
+    repos.set_setup_command("echo test-persist")
 
     settings_page = navigate_to_settings_page(page=page)
-    settings_page.click_on_repositories().expand_repo_config()
-    setup_input = page.get_by_test_id(ElementIDs.SETTINGS_WORKSPACE_SETUP_COMMAND_INPUT).first
+    repos = settings_page.click_on_repositories()
+    repos.expand_repo_config()
+    setup_input = repos.get_setup_command_input()
     expect(setup_input).to_be_visible()
     expect(setup_input).to_have_value("echo test-persist")
 

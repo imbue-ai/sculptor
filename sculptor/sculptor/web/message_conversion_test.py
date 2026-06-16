@@ -1,25 +1,8 @@
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.ids import AssistantMessageID
-from imbue_core.ids import ToolUseID
-from imbue_core.itertools import only
-from imbue_core.sculptor.state.chat_state import AskUserQuestionData
-from imbue_core.sculptor.state.chat_state import ChatMessage
-from imbue_core.sculptor.state.chat_state import ChatMessageRole
-from imbue_core.sculptor.state.chat_state import ErrorBlock
-from imbue_core.sculptor.state.chat_state import FileBlock
-from imbue_core.sculptor.state.chat_state import GenericToolContent
-from imbue_core.sculptor.state.chat_state import QuestionOption
-from imbue_core.sculptor.state.chat_state import TextBlock
-from imbue_core.sculptor.state.chat_state import ToolResultBlock
-from imbue_core.sculptor.state.chat_state import ToolUseBlock
-from imbue_core.sculptor.state.chat_state import TurnMetrics
-from imbue_core.sculptor.state.chat_state import UserQuestion
-from imbue_core.sculptor.state.chat_state import make_plan_approval_question
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import LLMModel
-from imbue_core.serialization import SerializedException
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
+from sculptor.agents.pi_agent.backchannel import build_ask_user_question_data
+from sculptor.agents.pi_agent.harness import PI_HARNESS
+from sculptor.foundation.itertools import only
+from sculptor.foundation.serialization import SerializedException
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import BackgroundTaskNotificationAgentMessage
 from sculptor.interfaces.agents.agent import BackgroundTaskStartedAgentMessage
@@ -35,6 +18,25 @@ from sculptor.interfaces.agents.agent import ResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import StreamingMessageCompleteAgentMessage
 from sculptor.interfaces.agents.agent import TurnMetricsAgentMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import AssistantMessageID
+from sculptor.primitives.ids import TaskID
+from sculptor.primitives.ids import ToolUseID
+from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.chat_state import ChatMessage
+from sculptor.state.chat_state import ChatMessageRole
+from sculptor.state.chat_state import ErrorBlock
+from sculptor.state.chat_state import FileBlock
+from sculptor.state.chat_state import GenericToolContent
+from sculptor.state.chat_state import QuestionOption
+from sculptor.state.chat_state import TextBlock
+from sculptor.state.chat_state import ToolResultBlock
+from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.chat_state import TurnMetrics
+from sculptor.state.chat_state import UserQuestion
+from sculptor.state.chat_state import make_plan_approval_question
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import LLMModel
 from sculptor.web.derived import TaskUpdate
 from sculptor.web.message_conversion import convert_agent_messages_to_task_update
 
@@ -1704,7 +1706,7 @@ def test_answered_plan_approval_not_re_shown_after_ephemeral_replay() -> None:
     plan_question_data = make_plan_approval_question(str(tool_use_id))
     answer_msg = UserQuestionAnswerMessage(
         message_id=AgentMessageID(),
-        answers={"Claude has finished planning. How would you like to proceed?": "Approve plan"},
+        answers={"Planning complete. How would you like to proceed?": "Approve plan"},
         question_data=plan_question_data,
         tool_use_id=str(tool_use_id),
     )
@@ -5914,3 +5916,131 @@ def test_resumed_turn_log_shape_replays_to_a_finalized_state() -> None:
         f"the turn must finalize (no stuck Thinking pill); got {state.in_progress_user_message_id}"
     )
     assert state.in_progress_chat_message is None
+
+
+def test_pi_ask_user_question_stamps_role_and_correlates_with_answer() -> None:
+    """Real-pi AUQ rendering parity with Claude — the gap FakePi can't catch.
+
+    Pi emits the ask_user_question call as a tool block with the extension's flat
+    ``{question, options}`` input. Conversion must (1) stamp ``interactive_role``
+    from the pi harness so the frontend renders the question panel by role rather
+    than by tool name, and (2) key ``submitted_question_answers`` by the same
+    tool-call id the rendered ToolUseBlock carries, so the answered panel
+    correlates (the dispatcher unifies the question's tool_use_id onto the
+    tool-call id; FakePi never emits this tool block, so this is unit-level).
+    """
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+    tool_call_id = ToolUseID("toolu_pi_auq")
+
+    tool_use = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=AssistantMessageID("assistant-pi-auq"),
+        message_id=AgentMessageID(),
+        content=(
+            ToolUseBlock(
+                id=tool_call_id,
+                name="ask_user_question",
+                input={"question": "Tabs or spaces?", "options": ["Tabs", "Spaces"]},
+            ),
+        ),
+    )
+    state = convert_agent_messages_to_task_update(
+        [tool_use],
+        task_id=task_id,
+        harness=PI_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+    assert state.in_progress_chat_message is not None
+    use_block = state.in_progress_chat_message.content[0]
+    assert isinstance(use_block, ToolUseBlock)
+    assert use_block.interactive_role == "ask_user_question"
+
+    answer = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"Tabs or spaces?": "Spaces"},
+        question_data=build_ask_user_question_data("Tabs or spaces?", ["Tabs", "Spaces"], str(tool_call_id)),
+        tool_use_id=str(tool_call_id),
+    )
+    state = convert_agent_messages_to_task_update(
+        [answer],
+        task_id=task_id,
+        harness=PI_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+    # The answer is keyed by the same id the rendered tool block carries, so the
+    # answered question panel finds it (this is the correlation that was broken).
+    assert str(use_block.id) in state.submitted_question_answers
+    assert state.submitted_question_answers[str(use_block.id)].answers == {"Tabs or spaces?": "Spaces"}
+
+
+def test_pi_ask_user_question_result_block_is_stamped_for_suppression() -> None:
+    """A pi AUQ tool_result that reaches the frontend (its tool use lived in an
+    earlier, already-finalized message) must carry ``interactive_role`` so the
+    frontend suppresses it — otherwise it renders as a stray second tool card."""
+    state = convert_agent_messages_to_task_update(
+        [
+            ResponseBlockAgentMessage(
+                role="assistant",
+                assistant_message_id=AssistantMessageID("assistant-pi-auq-result"),
+                message_id=AgentMessageID(),
+                content=(
+                    ToolResultBlock(
+                        tool_use_id=ToolUseID("toolu_pi_auq_orphan"),
+                        tool_name="ask_user_question",
+                        invocation_string="",
+                        content=GenericToolContent(text="The user answered: Spaces"),
+                    ),
+                ),
+            )
+        ],
+        task_id=TaskID(),
+        harness=PI_HARNESS,
+        completed_message_by_id={},
+        current_state=None,
+    )
+    assert state.in_progress_chat_message is not None
+    result_block = state.in_progress_chat_message.content[0]
+    assert isinstance(result_block, ToolResultBlock)
+    assert result_block.interactive_role == "ask_user_question"
+
+
+def test_pi_ask_user_question_role_stamped_when_delivered_via_partial_first() -> None:
+    """The live-streaming escape: the AUQ tool block arrives first in a
+    PartialResponseBlockAgentMessage (the agent re-advertises its interleaved
+    content as a partial), and the later ResponseBlockAgentMessage is skipped as
+    a duplicate. The partial path must stamp interactive_role too, or the live
+    turn renders as a generic tool card instead of the question panel.
+    """
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+    assistant_message_id = AssistantMessageID("assistant-pi-partial")
+    chat_message_id = AgentMessageID()
+    tool_call_id = ToolUseID("toolu_pi_partial")
+    auq_block = ToolUseBlock(id=tool_call_id, name="ask_user_question", input={"question": "Tabs or spaces?"})
+
+    partial = PartialResponseBlockAgentMessage(
+        assistant_message_id=assistant_message_id,
+        message_id=AgentMessageID(),
+        first_response_message_id=chat_message_id,
+        content=(auq_block,),
+    )
+    final = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=assistant_message_id,
+        message_id=chat_message_id,
+        content=(auq_block,),
+    )
+    state = convert_agent_messages_to_task_update(
+        [partial, final],
+        task_id=task_id,
+        harness=PI_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+    assert state.in_progress_chat_message is not None
+    blocks = [b for b in state.in_progress_chat_message.content if isinstance(b, ToolUseBlock)]
+    assert len(blocks) == 1, "the duplicate final block must not double-render"
+    assert blocks[0].interactive_role == "ask_user_question"

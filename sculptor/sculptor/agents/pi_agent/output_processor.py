@@ -29,7 +29,7 @@ from pydantic import Field
 from pydantic import TypeAdapter
 from pydantic import ValidationError
 
-from imbue_core.pydantic_serialization import SerializableModel
+from sculptor.foundation.pydantic_serialization import SerializableModel
 
 
 # `content` is untyped dicts: pi interleaves text and toolCall blocks, and only
@@ -75,11 +75,15 @@ class ExtensionUiRequest(SerializableModel):
     # `editor`) and fire-and-forget calls (`notify`/`setStatus`/`setWidget`/
     # `setTitle`/`set_editor_text`). `timeout`, when present, means pi
     # auto-resolves a dialog with a default if the client doesn't reply, so
-    # the client need not track timeouts. Method-specific payload fields are
-    # left to `extra="allow"`; pi-basic loads no extensions, so these never
-    # appear in practice (RPC §5.3).
+    # the client need not track timeouts — the backchannel extension never sets
+    # one (Sculptor's unbounded-wait question model).
     method: str
     timeout: int | None = None
+    # Dialog payload fields the backchannel dispatcher consumes (RPC §5.3):
+    # `select`/`input`/`confirm`/`editor` carry a `title`; `select` also carries
+    # `options`. Other method-specific fields ride `extra="allow"`.
+    title: str | None = None
+    options: list[str] | None = None
 
 
 # --- Lane 3: session events (the AgentSessionEvent union, RPC §5.2) --------

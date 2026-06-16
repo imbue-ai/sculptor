@@ -5,10 +5,7 @@ from typing import get_origin
 
 from loguru import logger
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.sculptor.state.messages import Message
-from imbue_core.serialization import SerializedException
+from sculptor.foundation.serialization import SerializedException
 from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
 from sculptor.interfaces.agents.agent import RequestStoppedAgentMessage
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
@@ -16,6 +13,9 @@ from sculptor.interfaces.agents.agent import UserMessageUnion
 from sculptor.interfaces.agents.agent import WarningAgentMessage
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.interfaces.environments.errors import EnvironmentFailure
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import TaskID
+from sculptor.state.messages import Message
 
 
 def get_warning_message(

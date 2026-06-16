@@ -45,7 +45,7 @@
 "." = 1
 
 [no-integration-page-evaluate]
-"." = 25
+"." = 22
 
 [no-integration-page-goto]
 "." = 0
@@ -54,7 +54,7 @@
 "." = 4
 
 [no-integration-time-sleep]
-"." = 8
+"." = 9
 
 [no-integration-type-method]
 "." = 0

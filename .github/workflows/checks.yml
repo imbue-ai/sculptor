@@ -5,6 +5,7 @@ name: checks
 
 on:
   pull_request:
+  merge_group:
   push:
     branches: [main]
 
@@ -14,6 +15,16 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Pin the GITHUB_TOKEN scopes this workflow needs. The
+# mikepenz/action-junit-report steps below create check runs ("backend pytest"
+# and "sculpt CLI pytest"), which requires `checks: write`. Without this block
+# the job inherits the repository's default token permission; when that default
+# is read-only the action 403s ("Resource not accessible by integration") and
+# the required checks never get reported, leaving PRs stuck on a pending status.
+permissions:
+  contents: read
+  checks: write
 
 jobs:
   checks-and-unit-tests:
@@ -25,10 +36,10 @@ jobs:
     continue-on-error: ${{ startsWith(github.base_ref, 'release/') }}
     env:
       JUST_VERBOSE: "1"
-      # imbue_core.common.get_filesystem_root() defaults to /mnt/private on
-      # Linux, a mount GitHub-hosted ubuntu doesn't have. Use a literal /tmp
-      # path (the OSX fallback) via the supported SCIENCE_FILESYSTEM_ROOT
-      # override.
+      # sculptor.foundation.common.get_filesystem_root() defaults to /mnt/private on
+      # Linux — a cluster mount the GitLab self-managed runners had but
+      # GitHub-hosted ubuntu doesn't. Use a literal /tmp path (the OSX
+      # fallback) via the supported SCIENCE_FILESYSTEM_ROOT override.
       # Note: can't use ${{ runner.temp }} here — the `runner` context isn't
       # available at job-level env, only inside step env/with/run.
       SCIENCE_FILESYSTEM_ROOT: /tmp/science

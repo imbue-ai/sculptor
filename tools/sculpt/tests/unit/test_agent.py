@@ -57,6 +57,7 @@ def _task_response_dict(
         "isCompacting": False,
         "isClearingContext": False,
         "isAutoCompacting": False,
+        "acceptsAutomatedPrompts": False,
         "artifactNames": [],
         "initialPrompt": "Test prompt",
         "titleOrSomethingLikeIt": "Test task title",
@@ -64,6 +65,7 @@ def _task_response_dict(
         "systemPrompt": None,
         "model": model,
         "harnessCapabilities": {
+            "supportsChatInterface": True,
             "supportsInteractiveBackchannel": True,
             "supportsSkills": True,
             "supportsSubAgents": True,

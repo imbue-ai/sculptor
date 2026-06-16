@@ -12,13 +12,13 @@ from uuid import uuid4
 import anyio
 from loguru import logger
 
-from imbue_core.computing_environment.data_types import AnyPath
-from imbue_core.computing_environment.data_types import FailedToMakeCommitError
-from imbue_core.computing_environment.data_types import PatchApplicationError
-from imbue_core.computing_environment.data_types import RunCommandError
-from imbue_core.git_data_types import CommitTimestamp
-from imbue_core.section import Section
-from imbue_core.time_utils import get_current_time
+from sculptor.foundation.time_utils import get_current_time
+from sculptor.testing.computing_environment_types import AnyPath
+from sculptor.testing.computing_environment_types import FailedToMakeCommitError
+from sculptor.testing.computing_environment_types import PatchApplicationError
+from sculptor.testing.computing_environment_types import RunCommandError
+from sculptor.testing.git_data_types import CommitTimestamp
+from sculptor.testing.section import Section
 
 # Import the types needed for file modes
 if TYPE_CHECKING:

@@ -14,27 +14,6 @@ from typing import cast
 
 from loguru import logger
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.common import is_live_debugging
-from imbue_core.concurrency_group import ConcurrencyExceptionGroup
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.concurrency_group import ConcurrentShutdownError
-from imbue_core.constants import ExceptionPriority
-from imbue_core.errors import ExpectedError
-from imbue_core.event_utils import CancelledByEventError
-from imbue_core.event_utils import ReadOnlyEvent
-from imbue_core.nested_evolver import assign
-from imbue_core.nested_evolver import chill
-from imbue_core.nested_evolver import evolver
-from imbue_core.progress_tracking.progress_tracking import RootProgressHandle
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import Message
-from imbue_core.sculptor.state.messages import PersistentAgentMessage
-from imbue_core.sculptor.state.messages import PersistentUserMessage
-from imbue_core.sculptor.state.messages import ResponseBlockAgentMessage
-from imbue_core.serialization import SerializedException
 from sculptor.agents.harness_registry import create_agent_for_run
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskInputsV2
@@ -44,6 +23,20 @@ from sculptor.database.models import NotificationID
 from sculptor.database.models import NotificationImportance
 from sculptor.database.models import Project
 from sculptor.database.models import Task
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.common import is_live_debugging
+from sculptor.foundation.concurrency_group import ConcurrencyExceptionGroup
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.concurrency_group import ConcurrentShutdownError
+from sculptor.foundation.constants import ExceptionPriority
+from sculptor.foundation.errors import ExpectedError
+from sculptor.foundation.event_utils import CancelledByEventError
+from sculptor.foundation.event_utils import ReadOnlyEvent
+from sculptor.foundation.nested_evolver import assign
+from sculptor.foundation.nested_evolver import chill
+from sculptor.foundation.nested_evolver import evolver
+from sculptor.foundation.progress_tracking.progress_tracking import RootProgressHandle
+from sculptor.foundation.serialization import SerializedException
 from sculptor.interfaces.agents.agent import Agent
 from sculptor.interfaces.agents.agent import AgentCrashedRunnerMessage
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
@@ -76,6 +69,8 @@ from sculptor.interfaces.agents.errors import WaitTimeoutAgentError
 from sculptor.interfaces.agents.harness import AgentRunContext
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.interfaces.environments.errors import EnvironmentFailure
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import UserReference
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.git_repo_service.api import GitRepoService
@@ -88,11 +83,17 @@ from sculptor.services.workspace_service.api import WorkspaceService
 from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
     LocalAgentExecutionEnvironment,
 )
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import Message
+from sculptor.state.messages import PersistentAgentMessage
+from sculptor.state.messages import PersistentUserMessage
+from sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.tasks.handlers.run_agent.setup import finalize_task_setup
 from sculptor.tasks.handlers.run_agent.setup import load_initial_task_state
 from sculptor.tasks.handlers.run_agent.setup import message_queue_subscription_context
 from sculptor.tasks.handlers.run_agent.setup import title_prediction_context
 from sculptor.tasks.handlers.run_agent.setup import wait_for_initial_message_and_process_queue
+from sculptor.utils.build import build_sculpt_backend_env
 from sculptor.utils.build import get_sculpt_bin_dir
 from sculptor.utils.build import is_packaged
 from sculptor.utils.shutdown import GLOBAL_SHUTDOWN_EVENT
@@ -256,10 +257,10 @@ def run_agent_task_v1(
                         )
     # handle ConcurrencyExceptionGroup as a general exception
     except ConcurrencyExceptionGroup as e:
-        _on_exception(e, task_id, user_reference, services, shutdown_event)
+        on_exception(e, task_id, user_reference, services, shutdown_event)
     # all other exceptions should be handled and turned into task failures
     except Exception as e:
-        _on_exception(e, task_id, user_reference, services, shutdown_event)
+        on_exception(e, task_id, user_reference, services, shutdown_event)
     return None
 
 
@@ -272,7 +273,7 @@ def _build_agent_path(*, is_packaged: bool, executable_parent: Path, current_pat
 
     When running from source (not packaged), the server runs inside a uv-managed
     venv (via ``uv run``) that has editable installs of workspace members
-    (sculptor, imbue_core, etc.) pointing at the server's source tree. If agents
+    (sculptor, sculptor.foundation, etc.) pointing at the server's source tree. If agents
     inherit the venv's bin dir at the front of PATH, they use the venv Python —
     which imports from the server's source tree instead of the workspace clone's,
     causing cross-workspace pollution. So in dev mode we additionally strip the
@@ -339,12 +340,12 @@ def _run_agent_in_environment(
             in_testing=in_testing,
             on_diff_needed=on_diff_needed,
         )
-        secrets: dict[str, str] = {
-            "SCULPT_API_PORT": str(settings.BACKEND_PORT),
-            "SCULPT_WORKSPACE_ID": str(task_state.workspace_id),
-            "SCULPT_PROJECT_ID": str(project.object_id),
-            "SCULPT_AGENT_ID": str(task.object_id),
-        }
+        secrets: dict[str, str] = build_sculpt_backend_env(
+            backend_port=settings.BACKEND_PORT,
+            workspace_id=task_state.workspace_id,
+            project_id=project.object_id,
+            agent_id=task.object_id,
+        )
         executable_parent = Path(sys.executable).parent
         secrets["PATH"] = _build_agent_path(
             is_packaged=is_packaged(),
@@ -428,8 +429,8 @@ def _run_agent_in_environment(
             kill_time_start = time.monotonic()
             try:
                 agent_wrapper.terminate(_MAX_HARD_SHUTDOWN_SECONDS)
-                remaining_shutdown_time = time.monotonic() - kill_time_start
-                if remaining_shutdown_time < 0:
+                remaining_shutdown_time = _MAX_HARD_SHUTDOWN_SECONDS - (time.monotonic() - kill_time_start)
+                if remaining_shutdown_time <= 0:
                     raise UncleanTerminationAgentError("No time left to call wait() on agent wrapper")
                 exit_code = agent_wrapper.wait(remaining_shutdown_time)
             except (UncleanTerminationAgentError, WaitTimeoutAgentError) as e:
@@ -650,7 +651,7 @@ def _send_user_input_message(
     return user_input_message_being_processed
 
 
-def _on_exception(
+def on_exception(
     e: Exception,
     task_id: TaskID,
     user_reference: UserReference,

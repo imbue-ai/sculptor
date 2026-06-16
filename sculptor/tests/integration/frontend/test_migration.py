@@ -16,8 +16,8 @@ from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 import sculptor.primitives.ids
-from imbue_core.sculptor.user_config import DependencyPaths
-from imbue_core.sculptor.user_config import UserConfig
+from sculptor.config.user_config import DependencyPaths
+from sculptor.config.user_config import UserConfig
 from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.dependency_stubs import DependencyState
 from sculptor.testing.dependency_stubs import stub_dependency

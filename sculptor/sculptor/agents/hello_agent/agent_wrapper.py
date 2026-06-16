@@ -9,15 +9,10 @@ from loguru import logger
 from pydantic import AnyUrl
 from pydantic import PrivateAttr
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.common import generate_id
-from imbue_core.ids import AssistantMessageID
-from imbue_core.sculptor.state.chat_state import TextBlock
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import ResponseBlockAgentMessage
-from imbue_core.secrets_utils import Secret
-from imbue_core.thread_utils import ObservableThread
 from sculptor.agents.default.agent_wrapper import DefaultAgentWrapper
+from sculptor.foundation.common import generate_id
+from sculptor.foundation.secrets_utils import Secret
+from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.interfaces.agents.agent import FileAgentArtifact
 from sculptor.interfaces.agents.agent import HelloAgentConfig
 from sculptor.interfaces.agents.agent import StopAgentUserMessage
@@ -25,6 +20,11 @@ from sculptor.interfaces.agents.agent import UpdatedArtifactAgentMessage
 from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_CLEAN_SHUTDOWN_ON_INTERRUPT
 from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_SHUTDOWN_DUE_TO_EXCEPTION
 from sculptor.interfaces.agents.errors import AgentCrashed
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import AssistantMessageID
+from sculptor.state.chat_state import TextBlock
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import ResponseBlockAgentMessage
 
 
 class HelloAgent(DefaultAgentWrapper):
@@ -41,6 +41,10 @@ class HelloAgent(DefaultAgentWrapper):
             case StopAgentUserMessage():
                 with self._handle_user_message(message):
                     logger.info("Stopping agent")
+                    # Mark the turn as stopping so the clean-exit branch of
+                    # _handle_user_message suppresses RequestSuccessAgentMessage: an
+                    # interrupted turn must not report success.
+                    self._is_stopping = True
                     self._shutdown_event.set()
                     self.wait(10.0)
                     self._exit_code = AGENT_EXIT_CODE_CLEAN_SHUTDOWN_ON_INTERRUPT

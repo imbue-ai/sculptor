@@ -15,34 +15,34 @@ from typing import Mapping
 from pydantic import Field
 from pydantic import Tag
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import TaskID as TaskID
-from imbue_core.ids import AssistantMessageID
-from imbue_core.pydantic_serialization import MutableModel
-from imbue_core.pydantic_serialization import SerializableModel
-from imbue_core.pydantic_serialization import build_discriminator
-from imbue_core.sculptor.state.chat_state import AskUserQuestionData
-from imbue_core.sculptor.state.chat_state import ContentBlockTypes
-from imbue_core.sculptor.state.chat_state import TurnMetrics
-from imbue_core.sculptor.state.claude_state import ParsedAgentResponsePassthrough
-from imbue_core.sculptor.state.claude_state import ParsedToolResultResponse
-from imbue_core.sculptor.state.messages import AgentMessageSource
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import EffortLevel
-from imbue_core.sculptor.state.messages import LLMModel
-from imbue_core.sculptor.state.messages import Message
-from imbue_core.sculptor.state.messages import PersistentAgentMessage
-from imbue_core.sculptor.state.messages import PersistentMessage
-from imbue_core.sculptor.state.messages import PersistentUserMessage
-from imbue_core.sculptor.state.messages import ResponseBlockAgentMessage
-from imbue_core.secrets_utils import Secret
-from imbue_core.serialization import SerializedException
-from imbue_core.time_utils import get_current_time
+from sculptor.foundation.pydantic_serialization import MutableModel
+from sculptor.foundation.pydantic_serialization import SerializableModel
+from sculptor.foundation.pydantic_serialization import build_discriminator
+from sculptor.foundation.secrets_utils import Secret
+from sculptor.foundation.serialization import SerializedException
+from sculptor.foundation.time_utils import get_current_time
 from sculptor.interfaces.agents.artifacts import FileAgentArtifact
 from sculptor.interfaces.agents.messages import EphemeralAgentMessage
 from sculptor.interfaces.agents.messages import EphemeralMessage
 from sculptor.interfaces.agents.tasks import TaskState
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import AssistantMessageID
+from sculptor.primitives.ids import TaskID as TaskID
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
+from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.chat_state import ContentBlockTypes
+from sculptor.state.chat_state import TurnMetrics
+from sculptor.state.claude_state import ParsedAgentResponsePassthrough
+from sculptor.state.claude_state import ParsedToolResultResponse
+from sculptor.state.messages import AgentMessageSource
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import EffortLevel
+from sculptor.state.messages import LLMModel
+from sculptor.state.messages import Message
+from sculptor.state.messages import PersistentAgentMessage
+from sculptor.state.messages import PersistentMessage
+from sculptor.state.messages import PersistentUserMessage
+from sculptor.state.messages import ResponseBlockAgentMessage
 
 ParsedAgentResponseType = ParsedAgentResponsePassthrough | ParsedToolResultResponse
 
@@ -205,6 +205,30 @@ class TaskStatusRunnerMessage(EphemeralRunnerMessage):
     outcome: TaskState
 
 
+class TerminalStatusSignal(StrEnum):
+    """Status vocabulary a terminal-agent integration may signal.
+
+    `files-changed` and `session-id` are events, not status — they never
+    become one of these values.
+    """
+
+    BUSY = "BUSY"
+    IDLE = "IDLE"
+    WAITING = "WAITING"
+
+
+class TerminalAgentSignalRunnerMessage(EphemeralRunnerMessage):
+    """A status signal posted by a terminal agent's integration.
+
+    Ephemeral on purpose: signals are run-scoped (they survive frontend
+    reloads via the in-memory replay but vanish on backend restart) and
+    never drive unread tracking.
+    """
+
+    object_type: str = "TerminalAgentSignalRunnerMessage"
+    signal: TerminalStatusSignal
+
+
 class ResumeAgentResponseRunnerMessage(PersistentRunnerMessage):
     object_type: str = "ResumeAgentResponseRunnerMessage"
     for_user_message_id: AgentMessageID
@@ -230,6 +254,7 @@ EphemeralRunnerMessageUnion = (
     Annotated[TaskStatusRunnerMessage, Tag("TaskStatusRunnerMessage")]
     | Annotated[EnvironmentAcquiredRunnerMessage, Tag("EnvironmentAcquiredRunnerMessage")]
     | Annotated[EnvironmentReleasedRunnerMessage, Tag("EnvironmentReleasedRunnerMessage")]
+    | Annotated[TerminalAgentSignalRunnerMessage, Tag("TerminalAgentSignalRunnerMessage")]
 )
 RunnerMessageUnion = PersistentRunnerMessageUnion | EphemeralRunnerMessageUnion
 
@@ -462,15 +487,37 @@ class PiAgentConfig(AgentConfig):
     object_type: str = "PiAgentConfig"
 
 
+class TerminalAgentConfig(AgentConfig):
+    object_type: str = "TerminalAgentConfig"
+
+
+class RegisteredTerminalAgentConfig(AgentConfig):
+    """A terminal agent that launches a registered program in its shell.
+
+    Launch parameters are stamped at creation from the registration so the
+    task stays self-describing even if the registration file later changes.
+    """
+
+    object_type: str = "RegisteredTerminalAgentConfig"
+    registration_id: str
+    display_name: str
+    launch_command: str
+    # May contain the literal placeholder `{session_id}`.
+    resume_command_template: str | None = None
+    accepts_automated_prompts: bool = False
+
+
 AgentConfigTypes = Annotated[
     Annotated[HelloAgentConfig, Tag("HelloAgentConfig")]
     | Annotated[ClaudeCodeSDKAgentConfig, Tag("ClaudeCodeSDKAgentConfig")]
-    | Annotated[PiAgentConfig, Tag("PiAgentConfig")],
+    | Annotated[PiAgentConfig, Tag("PiAgentConfig")]
+    | Annotated[TerminalAgentConfig, Tag("TerminalAgentConfig")]
+    | Annotated[RegisteredTerminalAgentConfig, Tag("RegisteredTerminalAgentConfig")],
     build_discriminator(),
 ]
 
+TERMINAL_AGENT_CONFIG_TYPES = (TerminalAgentConfig, RegisteredTerminalAgentConfig)
 
-# DELIBERATE-TEMPORARY: workspace-bound harness selection.
-class HarnessName(StrEnum):
-    CLAUDE = "claude"
-    PI = "pi"
+
+def is_terminal_agent_config(config: AgentConfigTypes) -> bool:
+    return isinstance(config, TERMINAL_AGENT_CONFIG_TYPES)

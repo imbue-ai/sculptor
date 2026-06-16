@@ -26,8 +26,8 @@ from playwright.sync_api import Playwright
 from playwright.sync_api import sync_playwright
 
 import sculptor.primitives.ids
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.sculptor.user_config import UserConfig
+from sculptor.config.user_config import UserConfig
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.frontend_utils import configure_page
 from sculptor.testing.mock_repo import MockRepoState

@@ -20,12 +20,12 @@ from packaging.version import InvalidVersion
 from packaging.version import Version
 from pydantic import PrivateAttr
 
-from imbue_core.concurrency_group import InvalidConcurrencyGroupStateError
-from imbue_core.processes.local_process import run_streaming
-from imbue_core.pydantic_serialization import FrozenModel
-from imbue_core.subprocess_utils import ProcessError
-from imbue_core.subprocess_utils import ProcessTimeoutError
-from imbue_core.thread_utils import ObservableThread
+from sculptor.foundation.concurrency_group import InvalidConcurrencyGroupStateError
+from sculptor.foundation.processes.local_process import run_streaming
+from sculptor.foundation.pydantic_serialization import FrozenModel
+from sculptor.foundation.subprocess_utils import ProcessError
+from sculptor.foundation.subprocess_utils import ProcessTimeoutError
+from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.primitives.service import Service
 from sculptor.services.managed_tools import CLAUDE_VERSION_RANGE
@@ -295,7 +295,7 @@ class DependencyManagementService(Service):
 
         Loops the ManagedTool registry; for every tool with a MANAGED binary mode that
         is not already installed-and-in-range, it spawns an install. Claude always
-        auto-installs when MANAGED. pi additionally requires the ``enable_multi_harness``
+        auto-installs when MANAGED. pi additionally requires the ``enable_pi_agent``
         experiment to be on, so a Claude-only user (the default) never auto-downloads pi.
         They can still trigger a manual install from the Pi settings section, which routes
         through ``install_managed`` and is not gated here.
@@ -314,9 +314,9 @@ class DependencyManagementService(Service):
                 mode, _ = _parse_dependency_config(config.dependency_paths.claude)
             elif tool == Dependency.PI:
                 # pi is dark-launched: only auto-provision it for users who opted into
-                # the multi-harness experiment. Without this gate every Claude-only user
+                # the pi-agent experiment. Without this gate every Claude-only user
                 # would download the pinned pi build on startup.
-                if not config.enable_multi_harness:
+                if not config.enable_pi_agent:
                     continue
                 mode, _ = _parse_dependency_config(config.dependency_paths.pi)
             else:

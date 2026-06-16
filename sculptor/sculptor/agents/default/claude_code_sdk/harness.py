@@ -24,13 +24,14 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from imbue_core.sculptor.state.chat_state import ContentBlock
-from imbue_core.sculptor.state.chat_state import ToolUseBlock
-from imbue_core.sculptor.state.chat_state import UserQuestion
 from sculptor.interfaces.agents.harness import Harness
 from sculptor.interfaces.agents.harness import HarnessCapabilities
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.services.dependency_management_service import Dependency
+from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.chat_state import ContentBlock
+from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.chat_state import UserQuestion
 
 _MCP_ASK_USER_QUESTION_TOOL_NAME: str = "mcp__sculptor__ask_user_question"
 _ASK_USER_QUESTION_TOOL_NAMES: frozenset[str] = frozenset({"AskUserQuestion", _MCP_ASK_USER_QUESTION_TOOL_NAME})
@@ -133,6 +134,7 @@ class ClaudeCodeHarness(Harness):
 
     def capabilities(self) -> HarnessCapabilities:
         return HarnessCapabilities(
+            supports_chat_interface=True,
             supports_interactive_backchannel=True,
             supports_skills=True,
             supports_sub_agents=True,
@@ -166,6 +168,13 @@ class ClaudeCodeHarness(Harness):
         except ValidationError:
             return False
         return True
+
+    def reconstruct_pending_ask_user_question(self, block: ToolUseBlock) -> AskUserQuestionData | None:
+        # Claude's MCP AskUserQuestion tool input already carries the
+        # `AskUserQuestionData` fields, so validate it as that shape directly.
+        if not self.is_valid_ask_user_question_input(block.name, block.input):
+            return None
+        return AskUserQuestionData.model_validate({**block.input, "tool_use_id": block.id}, strict=True)
 
     def get_plan_file_path_from_tool_use(self, block: ContentBlock) -> str | None:
         if not isinstance(block, ToolUseBlock):

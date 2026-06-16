@@ -7,10 +7,10 @@ from typing import Generator
 from loguru import logger
 from pydantic import AnyUrl
 
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.subprocess_utils import ProcessError
-from imbue_core.subprocess_utils import ProcessSetupError
 from sculptor.database.models import Project
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.subprocess_utils import ProcessError
+from sculptor.foundation.subprocess_utils import ProcessSetupError
 from sculptor.services.git_repo_service.api import GitRepoService
 from sculptor.services.git_repo_service.error_types import GitRepoError
 from sculptor.services.git_repo_service.git_commands import run_git_command_local

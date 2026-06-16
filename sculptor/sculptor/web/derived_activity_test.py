@@ -1,11 +1,5 @@
 """Tests for CodingAgentTaskView.current_activity and last_activity."""
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.ids import AssistantMessageID
-from imbue_core.sculptor.state.chat_state import TextBlock
-from imbue_core.sculptor.state.chat_state import ToolUseBlock
-from imbue_core.sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
@@ -13,9 +7,15 @@ from sculptor.database.models import Task
 from sculptor.database.models import TaskID
 from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
 from sculptor.interfaces.agents.tasks import TaskState
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import AssistantMessageID
 from sculptor.primitives.ids import OrganizationReference
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import UserReference
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.state.chat_state import TextBlock
+from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.web.derived import CodingAgentTaskView
 from sculptor.web.derived import create_initial_task_view
 

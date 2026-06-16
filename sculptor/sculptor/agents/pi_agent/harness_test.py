@@ -1,32 +1,91 @@
-"""Tests for `PiHarness`'s identity and capability set."""
+"""Tests for `PiHarness`'s identity, capability set, and gated methods."""
 
+from sculptor.agents.pi_agent.backchannel import ASK_USER_QUESTION_TOOL_NAME
+from sculptor.agents.pi_agent.backchannel import EXIT_PLAN_MODE_TOOL_NAME
 from sculptor.agents.pi_agent.harness import PI_HARNESS
 from sculptor.interfaces.agents.harness import HarnessCapabilities
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
+from sculptor.primitives.ids import ToolUseID
+from sculptor.state.chat_state import ToolUseBlock
 
 
 def test_pi_harness_capabilities() -> None:
-    # Pi is degraded, but three capabilities are true: file references (pi
-    # resolves @-mention paths through its own file-reading loop the same way
-    # Claude does), tool-use rendering (pi's tool-execution lane is adapted onto
-    # Sculptor's ToolUseBlock / ToolResultBlock contract), and session resume
-    # (pi persists a per-task JSONL session that a relaunched process resumes —
-    # see agent_wrapper.PiAgent).
+    # A capability is true only where Sculptor has a pi-side mechanism for it
+    # (see PiHarness.capabilities for the per-flag why). Pi now carries all but
+    # fast mode and background tasks.
     assert PI_HARNESS.capabilities() == HarnessCapabilities(
-        supports_interactive_backchannel=False,
-        supports_skills=False,
-        supports_sub_agents=False,
-        supports_image_input=False,
+        supports_chat_interface=True,
+        supports_interactive_backchannel=True,
+        supports_skills=True,
+        supports_sub_agents=True,
+        supports_image_input=True,
         supports_fast_mode=False,
-        supports_context_reset=False,
-        supports_compaction=False,
+        supports_context_reset=True,
+        supports_compaction=True,
         supports_background_tasks=False,
         supports_session_resume=True,
         supports_tool_use_rendering=True,
-        supports_file_attachments=False,
-        supports_interruption=False,
+        supports_file_attachments=True,
+        supports_interruption=True,
         supports_file_references=True,
     )
+
+
+def test_pi_harness_gated_methods_recognize_backchannel_tools() -> None:
+    assert PI_HARNESS.is_ask_user_question_tool(ASK_USER_QUESTION_TOOL_NAME) is True
+    assert PI_HARNESS.is_ask_user_question_tool("read") is False
+    assert PI_HARNESS.is_exit_plan_mode_tool(EXIT_PLAN_MODE_TOOL_NAME) is True
+    assert PI_HARNESS.is_exit_plan_mode_tool("write") is False
+
+
+def test_pi_harness_validates_ask_user_question_input() -> None:
+    # The AUQ tool's input is valid when it carries a non-empty question string.
+    assert (
+        PI_HARNESS.is_valid_ask_user_question_input(ASK_USER_QUESTION_TOOL_NAME, {"question": "Tea or coffee?"})
+        is True
+    )
+    assert PI_HARNESS.is_valid_ask_user_question_input(ASK_USER_QUESTION_TOOL_NAME, {}) is False
+    assert PI_HARNESS.is_valid_ask_user_question_input(ASK_USER_QUESTION_TOOL_NAME, {"question": ""}) is False
+    # Non-AUQ tools always pass (mirrors the Claude harness convention).
+    assert PI_HARNESS.is_valid_ask_user_question_input("read", {"path": "x"}) is True
+
+
+def test_pi_harness_classifies_tool_ui_role() -> None:
+    # The harness owns the name->role mapping; the conversion layer stamps the
+    # result onto the block so the frontend renders by role, not by tool name.
+    assert PI_HARNESS.classify_tool_ui_role(ASK_USER_QUESTION_TOOL_NAME) == "ask_user_question"
+    assert PI_HARNESS.classify_tool_ui_role(EXIT_PLAN_MODE_TOOL_NAME) == "exit_plan_mode"
+    assert PI_HARNESS.classify_tool_ui_role("read") is None
+
+
+def test_pi_harness_reconstructs_pending_question_from_flat_tool_input() -> None:
+    # Real pi persists the ask_user_question call as a tool block whose input is
+    # the extension's flat {question, options} shape — NOT AskUserQuestionData.
+    # The harness translates it back into the canonical question so a reloaded
+    # page re-pends it (the base harness would reject this shape).
+    block = ToolUseBlock(
+        id=ToolUseID("tu_auq"),
+        name=ASK_USER_QUESTION_TOOL_NAME,
+        input={"question": "Tea or coffee?", "options": ["tea", "coffee"]},
+    )
+    reconstructed = PI_HARNESS.reconstruct_pending_ask_user_question(block)
+    assert reconstructed is not None
+    assert reconstructed.tool_use_id == "tu_auq"
+    question = reconstructed.questions[0]
+    assert question.question == "Tea or coffee?"
+    assert [option.label for option in question.options] == ["tea", "coffee"]
+
+
+def test_pi_harness_reconstructs_free_form_question_without_options() -> None:
+    block = ToolUseBlock(id=ToolUseID("tu_free"), name=ASK_USER_QUESTION_TOOL_NAME, input={"question": "Your name?"})
+    reconstructed = PI_HARNESS.reconstruct_pending_ask_user_question(block)
+    assert reconstructed is not None
+    assert reconstructed.questions[0].options == []
+
+
+def test_pi_harness_skips_reconstruction_for_invalid_question_input() -> None:
+    block = ToolUseBlock(id=ToolUseID("tu_bad"), name=ASK_USER_QUESTION_TOOL_NAME, input={"not_a_question": 1})
+    assert PI_HARNESS.reconstruct_pending_ask_user_question(block) is None
 
 
 def test_pi_harness_identity() -> None:

@@ -38,14 +38,17 @@ from typing import Callable
 from pydantic import BaseModel
 from pydantic import ConfigDict
 
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.pydantic_serialization import SerializableModel
-from imbue_core.sculptor.state.chat_state import ContentBlock
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Project
+from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
+from sculptor.primitives.ids import TaskID
 from sculptor.services.workspace_service.api import WorkspaceService
+from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.chat_state import ContentBlock
+from sculptor.state.chat_state import ToolInteractiveRole
+from sculptor.state.chat_state import ToolUseBlock
 
 
 class HarnessCapabilities(SerializableModel):
@@ -68,8 +71,12 @@ class HarnessCapabilities(SerializableModel):
     `supports_context_reset` and `supports_compaction` are distinct: context
     reset is the `/clear` path that discards the session; compaction summarizes
     the session in place at a threshold. They gate different surfaces.
+
+    `supports_chat_interface` is the coarse main-panel switch (chat interface
+    vs terminal panel), distinct from the per-affordance bools below it.
     """
 
+    supports_chat_interface: bool
     supports_interactive_backchannel: bool
     supports_skills: bool
     supports_sub_agents: bool
@@ -119,6 +126,7 @@ class Harness(BaseModel, abc.ABC):
         truthfully.
         """
         return HarnessCapabilities(
+            supports_chat_interface=False,
             supports_interactive_backchannel=False,
             supports_skills=False,
             supports_sub_agents=False,
@@ -142,6 +150,36 @@ class Harness(BaseModel, abc.ABC):
 
     def is_valid_ask_user_question_input(self, tool_name: str, tool_input: dict) -> bool:
         return False
+
+    def classify_tool_ui_role(self, tool_name: str) -> ToolInteractiveRole | None:
+        """The interactive-backchannel role of a tool, or `None` for a regular one.
+
+        Composes the per-harness `is_ask_user_question_tool` /
+        `is_exit_plan_mode_tool` so each harness owns the name→role mapping in one
+        place; the conversion layer stamps the result onto the tool block so the
+        frontend renders by role, never by tool name.
+        """
+        if self.is_ask_user_question_tool(tool_name):
+            return "ask_user_question"
+        if self.is_exit_plan_mode_tool(tool_name):
+            return "exit_plan_mode"
+        return None
+
+    def reconstruct_pending_ask_user_question(self, block: ToolUseBlock) -> AskUserQuestionData | None:
+        """Rebuild the pending question from a persisted ask-user-question tool
+        block (page-reload support), or `None` when its input is not a valid
+        question.
+
+        Only reached once `is_ask_user_question_tool(block.name)` is True — i.e.
+        for a harness that has opted into ask-user-question — so the base has no
+        universal tool-input shape to assume. A harness whose
+        `is_ask_user_question_tool` can return True MUST override this to
+        translate its own tool-input shape into `AskUserQuestionData`.
+        """
+        raise NotImplementedError(
+            "a harness whose is_ask_user_question_tool can return True must override "
+            "reconstruct_pending_ask_user_question"
+        )
 
     def get_plan_file_path_from_tool_use(self, block: ContentBlock) -> str | None:
         return None

@@ -10,7 +10,6 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "imbue-core",
     "sculpt",
     "sculptor",
     "sculptor-workspace",
@@ -98,6 +97,15 @@ wheels = [
 ]
 
 [[package]]
+name = "astroid"
+version = "3.2.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9e/53/1067e1113ecaf58312357f2cd93063674924119d80d173adc3f6f2387aa2/astroid-3.2.4.tar.gz", hash = "sha256:0e14202810b30da1b735827f78f5157be2bbd4a7a59b7707ca0bfc2fb4c0063a", size = 397576, upload-time = "2024-07-20T12:57:43.26Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/80/96/b32bbbb46170a1c8b8b1f28c794202e25cfe743565e9d3469b8eb1e0cc05/astroid-3.2.4-py3-none-any.whl", hash = "sha256:413658a61eeca6202a59231abb473f932038fbcbf1666587f66d482083413a25", size = 276348, upload-time = "2024-07-20T12:57:40.886Z" },
+]
+
+[[package]]
 name = "asttokens"
 version = "2.2.1"
 source = { registry = "https://pypi.org/simple" }
@@ -137,6 +145,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/a2/40/764a663805d84deee23043e1426a9175567db89c8b3287b5c2ad9f71aa93/backcall-0.2.0.tar.gz", hash = "sha256:5cbdbf27be5e7cfadb448baf0aa95508f91f2bbc6c6437cd9cd06e2a4c215e1e", size = 18041, upload-time = "2020-06-09T15:11:32.931Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/4c/1c/ff6546b6c12603d8dd1070aa3c3d273ad4c07f5771689a7b69a550e8c951/backcall-0.2.0-py2.py3-none-any.whl", hash = "sha256:fbbce6a29f263178a1f7915c1940bde0ec2b2a967566fe1c65c1dfb7422bd255", size = 11157, upload-time = "2020-06-09T15:11:30.87Z" },
+]
+
+[[package]]
+name = "backoff"
+version = "2.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/47/d7/5bbeb12c44d7c4f2fb5b56abce497eb5ed9f34d85701de869acedd602619/backoff-2.2.1.tar.gz", hash = "sha256:03f829f5bb1923180821643f8753b0502c3b682293992485b0eef2807afa5cba", size = 17001, upload-time = "2022-10-05T19:19:32.061Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/df/73/b6e24bd22e6720ca8ee9a85a0c4a2971af8497d8f3193fa05390cbd46e09/backoff-2.2.1-py3-none-any.whl", hash = "sha256:63579f9a0628e06278f7e47b7d7d5b6ce20dc65c5e96a6f3ca99a6adca0396e8", size = 15148, upload-time = "2022-10-05T19:19:30.546Z" },
 ]
 
 [[package]]
@@ -236,18 +253,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/6c/81/3747dad6b14fa2cf53fcf10548cf5aea6913e96fab41a3c198676f8948a5/cachetools-5.5.2.tar.gz", hash = "sha256:1a661caa9175d26759571b2e19580f9d6393969e5dfca11fdb1f947a23e640d4", size = 28380, upload-time = "2025-02-20T21:01:19.524Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/72/76/20fa66124dbe6be5cafeb312ece67de6b61dd91a0247d1ea13db4ebb33c2/cachetools-5.5.2-py3-none-any.whl", hash = "sha256:d26a22bcc62eb95c3beabd9f1ee5e820d3d2704fe2967cbe350e20c8ffcd3f0a", size = 10080, upload-time = "2025-02-20T21:01:16.647Z" },
-]
-
-[[package]]
-name = "cattrs"
-version = "24.1.3"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "attrs" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/29/7b/da4aa2f95afb2f28010453d03d6eedf018f9e085bd001f039e15731aba89/cattrs-24.1.3.tar.gz", hash = "sha256:981a6ef05875b5bb0c7fb68885546186d306f10f0f6718fe9b96c226e68821ff", size = 426684, upload-time = "2025-03-25T15:01:00.325Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3c/ee/d68a3de23867a9156bab7e0a22fb9a0305067ee639032a22982cf7f725e7/cattrs-24.1.3-py3-none-any.whl", hash = "sha256:adf957dddd26840f27ffbd060a6c4dd3b2192c5b7c2c0525ef1bd8131d8a83f5", size = 66462, upload-time = "2025-03-25T15:00:58.663Z" },
 ]
 
 [[package]]
@@ -445,6 +450,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/da/93/84fa12f2dc341f8cf5f022ee09e109961055749df2d0c75c5f98746cfe6c/decorator-4.4.2.tar.gz", hash = "sha256:e3a62f0520172440ca0dcc823749319382e377f37f140a0b99ef45fecb84bfe7", size = 33629, upload-time = "2020-02-29T05:24:43.312Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ed/1b/72a1821152d07cf1d8b6fce298aeb06a7eb90f4d6d41acec9861e7cc6df0/decorator-4.4.2-py2.py3-none-any.whl", hash = "sha256:41fa54c2a0cc4ba648be4fd43cff00aedf5b9465c9bf18d64325bc225f08f760", size = 9239, upload-time = "2020-02-29T05:24:45.993Z" },
+]
+
+[[package]]
+name = "dill"
+version = "0.3.7"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c4/31/54dd222e02311c2dbc9e680d37cbd50f4494ce1ee9b04c69980e4ec26f38/dill-0.3.7.tar.gz", hash = "sha256:cc1c8b182eb3013e24bd475ff2e9295af86c1a38eb1aff128dac8962a9ce3c03", size = 183355, upload-time = "2023-07-22T22:18:46.449Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f5/3a/74a29b11cf2cdfcd6ba89c0cecd70b37cd1ba7b77978ce611eb7a146a832/dill-0.3.7-py3-none-any.whl", hash = "sha256:76b122c08ef4ce2eedcd4d1abd8e641114bfc6c2867f49f3c41facf65bf19f5e", size = 115254, upload-time = "2023-07-22T22:18:44.511Z" },
 ]
 
 [[package]]
@@ -657,73 +671,6 @@ wheels = [
 ]
 
 [[package]]
-name = "imbue-core"
-version = "0.0.9"
-source = { editable = "imbue_core" }
-dependencies = [
-    { name = "anyio" },
-    { name = "attrs" },
-    { name = "boto3" },
-    { name = "cachetools" },
-    { name = "cattrs" },
-    { name = "httpx" },
-    { name = "inline-snapshot" },
-    { name = "loguru" },
-    { name = "pathspec" },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "pygit2" },
-    { name = "pygments" },
-    { name = "pyhumps" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-mock" },
-    { name = "syrupy" },
-    { name = "tblib" },
-    { name = "tenacity" },
-    { name = "toml" },
-    { name = "traceback-with-variables" },
-    { name = "typeid-python" },
-    { name = "yasoo" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "moto" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "anyio" },
-    { name = "attrs" },
-    { name = "boto3", specifier = ">=1.38.27" },
-    { name = "cachetools" },
-    { name = "cattrs" },
-    { name = "httpx" },
-    { name = "inline-snapshot" },
-    { name = "loguru" },
-    { name = "pathspec" },
-    { name = "pydantic", specifier = ">=2.11.4" },
-    { name = "pydantic-settings" },
-    { name = "pygit2", specifier = ">=1.18.0" },
-    { name = "pygments", specifier = ">=2.0.0" },
-    { name = "pyhumps" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-mock" },
-    { name = "syrupy" },
-    { name = "tblib", specifier = "==2.0.0" },
-    { name = "tenacity", specifier = ">=8.2.2" },
-    { name = "toml" },
-    { name = "traceback-with-variables", specifier = ">=2.2.0" },
-    { name = "typeid-python" },
-    { name = "yasoo" },
-]
-
-[package.metadata.requires-dev]
-dev = [{ name = "moto", specifier = ">=4.1.12" }]
-
-[[package]]
 name = "iniconfig"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -781,6 +728,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/32/38/123155a40a0837c7627114995bf5f7a0d0b469cb903b9a27051198fad222/ipython-8.12.0.tar.gz", hash = "sha256:a950236df04ad75b5bc7f816f9af3d74dc118fd42f2ff7e80e8e60ca1f182e2d", size = 5465154, upload-time = "2023-03-30T12:10:37.017Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9d/1c/6001840eceb489e4a3e6ae9b012cb56b109dd6b8ee286d7771166b83d111/ipython-8.12.0-py3-none-any.whl", hash = "sha256:1c183bf61b148b00bcebfa5d9b39312733ae97f6dad90d7e9b4d86c8647f498c", size = 796407, upload-time = "2023-03-30T12:04:25.88Z" },
+]
+
+[[package]]
+name = "isort"
+version = "5.13.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/87/f9/c1eb8635a24e87ade2efce21e3ce8cd6b8630bb685ddc9cdaca1349b2eb5/isort-5.13.2.tar.gz", hash = "sha256:48fdfcb9face5d58a4f6dde2e72a1fb8dcaf8ab26f95ab49fab84c2ddefb0109", size = 175303, upload-time = "2023-12-13T20:37:26.124Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d1/b3/8def84f539e7d2289a02f0524b944b15d7c75dab7628bedf1c4f0992029c/isort-5.13.2-py3-none-any.whl", hash = "sha256:8ca5e72a8d85860d5a3fa69b8745237f2939afe12dbf656afbcb47fe72d947a6", size = 92310, upload-time = "2023-12-13T20:37:23.244Z" },
 ]
 
 [[package]]
@@ -1013,6 +969,15 @@ wheels = [
 ]
 
 [[package]]
+name = "mccabe"
+version = "0.7.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e7/ff/0ffefdcac38932a54d2b5eed4e0ba8a408f215002cd178ad1df0f2806ff8/mccabe-0.7.0.tar.gz", hash = "sha256:348e0240c33b60bbdf4e523192ef919f28cb2c3d7d5c7794f74009290f236325", size = 9658, upload-time = "2022-01-24T01:14:51.113Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/27/1a/1f68f9ba0c207934b35b86a8ca3aad8395a3d6dd7921c0686e23853ff5a9/mccabe-0.7.0-py2.py3-none-any.whl", hash = "sha256:6c2d30ab6be0e4a46919781807b4f0d834ebdd6c6e3dca0bda5a15f863427b6e", size = 7350, upload-time = "2022-01-24T01:14:49.62Z" },
+]
+
+[[package]]
 name = "mcp"
 version = "1.9.4"
 source = { registry = "https://pypi.org/simple" }
@@ -1039,15 +1004,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec958cb99bd3efefba235e65cdeb9c84d24a8293ba1d90/mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba", size = 8729, upload-time = "2022-08-14T12:40:10.846Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload-time = "2022-08-14T12:40:09.779Z" },
-]
-
-[[package]]
-name = "more-itertools"
-version = "10.7.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ce/a0/834b0cebabbfc7e311f30b46c8188790a37f89fc8d756660346fe5abfd09/more_itertools-10.7.0.tar.gz", hash = "sha256:9fddd5403be01a94b204faadcff459ec3568cf110265d3c54323e1e866ad29d3", size = 127671, upload-time = "2025-04-22T14:17:41.838Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/2b/9f/7ba6f94fc1e9ac3d2b853fdff3035fb2fa5afbed898c4a72b8a020610594/more_itertools-10.7.0-py3-none-any.whl", hash = "sha256:d43980384673cb07d2f7d2d918c616b30c659c089ee23953f601d6609c67510e", size = 65278, upload-time = "2025-04-22T14:17:40.49Z" },
 ]
 
 [[package]]
@@ -1272,6 +1228,22 @@ wheels = [
 ]
 
 [[package]]
+name = "posthog"
+version = "5.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "backoff" },
+    { name = "distro" },
+    { name = "python-dateutil" },
+    { name = "requests" },
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/48/20/60ae67bb9d82f00427946218d49e2e7e80fb41c15dc5019482289ec9ce8d/posthog-5.4.0.tar.gz", hash = "sha256:701669261b8d07cdde0276e5bc096b87f9e200e3b9589c5ebff14df658c5893c", size = 88076, upload-time = "2025-06-20T23:19:23.485Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4f/98/e480cab9a08d1c09b1c59a93dade92c1bb7544826684ff2acbfd10fcfbd4/posthog-5.4.0-py3-none-any.whl", hash = "sha256:284dfa302f64353484420b52d4ad81ff5c2c2d1d607c4e2db602ac72761831bd", size = 105364, upload-time = "2025-06-20T23:19:22.001Z" },
+]
+
+[[package]]
 name = "prompt-toolkit"
 version = "3.0.38"
 source = { registry = "https://pypi.org/simple" }
@@ -1484,15 +1456,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pyhumps"
-version = "3.8.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/c4/83/fa6f8fb7accb21f39e8f2b6a18f76f6d90626bdb0a5e5448e5cc9b8ab014/pyhumps-3.8.0.tar.gz", hash = "sha256:498026258f7ee1a8e447c2e28526c0bea9407f9a59c03260aee4bd6c04d681a3", size = 9018, upload-time = "2022-10-21T10:38:59.496Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/9e/11/a1938340ecb32d71e47ad4914843775011e6e9da59ba1229f181fef3119e/pyhumps-3.8.0-py3-none-any.whl", hash = "sha256:060e1954d9069f428232a1adda165db0b9d8dfdce1d265d36df7fbff540acfd6", size = 6095, upload-time = "2022-10-21T10:38:58.231Z" },
-]
-
-[[package]]
 name = "pyinstaller"
 version = "6.15.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1589,6 +1552,24 @@ wheels = [
 [package.optional-dependencies]
 crypto = [
     { name = "cryptography" },
+]
+
+[[package]]
+name = "pylint"
+version = "3.2.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "astroid" },
+    { name = "colorama" },
+    { name = "dill" },
+    { name = "isort" },
+    { name = "mccabe" },
+    { name = "platformdirs" },
+    { name = "tomlkit" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/30/10/abee071c1d52b2bca48be40fe9f64ca878a77e0beef6504597e8c9c1ed84/pylint-3.2.6.tar.gz", hash = "sha256:a5d01678349454806cff6d886fb072294f56a58c4761278c97fb557d708e1eb3", size = 1510167, upload-time = "2024-07-21T19:48:38.032Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/09/88/1a406dd0b17a4796f025d8c937d8d56f97869cffa55c21d9edb07f5a3912/pylint-3.2.6-py3-none-any.whl", hash = "sha256:03c8e3baa1d9fb995b12c1dbe00aa6c4bcef210c2a2634374aedeb22fb4a8f8f", size = 519798, upload-time = "2024-07-21T19:48:34.788Z" },
 ]
 
 [[package]]
@@ -2066,24 +2047,32 @@ dev = [
 
 [[package]]
 name = "sculptor"
-version = "0.35.0.dev0"
+version = "0.38.0.dev0"
 source = { editable = "sculptor" }
 dependencies = [
     { name = "alembic" },
     { name = "anthropic" },
+    { name = "anyio" },
+    { name = "attrs" },
     { name = "beautifulsoup4" },
     { name = "boto3" },
+    { name = "cachetools" },
     { name = "coolname" },
     { name = "dockerfile-parse" },
     { name = "email-validator" },
     { name = "fastapi" },
     { name = "filelock" },
+    { name = "httpx" },
     { name = "humanfriendly" },
-    { name = "imbue-core" },
     { name = "json5" },
     { name = "loguru" },
+    { name = "pathspec" },
+    { name = "posthog" },
     { name = "psutil" },
+    { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "pygit2" },
+    { name = "pygments" },
     { name = "pyjwt", extra = ["crypto"] },
     { name = "python-multipart" },
     { name = "python-slugify" },
@@ -2091,7 +2080,10 @@ dependencies = [
     { name = "requests" },
     { name = "splinter" },
     { name = "sqlalchemy" },
+    { name = "tblib" },
+    { name = "tenacity" },
     { name = "tomlkit" },
+    { name = "traceback-with-variables" },
     { name = "typeid-python" },
     { name = "typer" },
     { name = "uvicorn" },
@@ -2109,13 +2101,17 @@ packaging = [
 dev = [
     { name = "boto3-stubs" },
     { name = "filelock" },
+    { name = "inline-snapshot" },
     { name = "moto", extra = ["s3"] },
     { name = "pillow" },
     { name = "playwright" },
+    { name = "pylint" },
     { name = "pyre-check" },
     { name = "pytest" },
+    { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "pytest-metadata" },
+    { name = "pytest-mock" },
     { name = "pytest-performancetotal" },
     { name = "pytest-playwright" },
     { name = "pytest-repeat" },
@@ -2134,19 +2130,27 @@ dev = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.16.1" },
     { name = "anthropic", specifier = ">=0.38.0" },
+    { name = "anyio" },
+    { name = "attrs" },
     { name = "beautifulsoup4", specifier = ">=4.12.2" },
     { name = "boto3", specifier = ">=1.35.0" },
+    { name = "cachetools" },
     { name = "coolname", specifier = ">=2.2.0" },
     { name = "dockerfile-parse", specifier = ">=2.0.1" },
     { name = "email-validator" },
     { name = "fastapi" },
     { name = "filelock", specifier = ">=3.8.0" },
+    { name = "httpx" },
     { name = "humanfriendly", specifier = ">=10.0" },
-    { name = "imbue-core", editable = "imbue_core" },
     { name = "json5", specifier = ">=0.9.0" },
     { name = "loguru" },
+    { name = "pathspec" },
+    { name = "posthog", specifier = "==5.4.0" },
     { name = "psutil", specifier = ">=5.9.0" },
+    { name = "pydantic", specifier = ">=2.11.4" },
     { name = "pydantic-settings" },
+    { name = "pygit2", specifier = ">=1.18.0" },
+    { name = "pygments", specifier = ">=2.0.0" },
     { name = "pyinstaller", marker = "extra == 'packaging'", specifier = ">=6.15.0" },
     { name = "pyjwt", extras = ["crypto"] },
     { name = "python-multipart" },
@@ -2155,7 +2159,10 @@ requires-dist = [
     { name = "requests", specifier = ">=2.28.0" },
     { name = "splinter", specifier = ">=0.19.0" },
     { name = "sqlalchemy" },
+    { name = "tblib", specifier = "==2.0.0" },
+    { name = "tenacity", specifier = ">=8.2.2" },
     { name = "tomlkit", specifier = ">=0.13.0" },
+    { name = "traceback-with-variables", specifier = ">=2.2.0" },
     { name = "typeid-python" },
     { name = "typer" },
     { name = "uvicorn", specifier = ">=0.34.3" },
@@ -2169,13 +2176,17 @@ provides-extras = ["packaging"]
 dev = [
     { name = "boto3-stubs", specifier = ">=1.40.49" },
     { name = "filelock", specifier = ">=3.18.0" },
+    { name = "inline-snapshot" },
     { name = "moto", extras = ["s3"] },
     { name = "pillow", specifier = ">=11.0.0" },
     { name = "playwright", specifier = "==1.53.0" },
+    { name = "pylint", specifier = "==3.2.6" },
     { name = "pyre-check" },
     { name = "pytest", specifier = ">=8.4.1" },
+    { name = "pytest-asyncio" },
     { name = "pytest-cov", specifier = ">=6.2.1" },
     { name = "pytest-metadata", specifier = "==3.1.1" },
+    { name = "pytest-mock" },
     { name = "pytest-performancetotal", specifier = "==0.2.11" },
     { name = "pytest-playwright", specifier = "==0.7.0" },
     { name = "pytest-repeat", specifier = ">=0.9.3" },
@@ -2196,7 +2207,6 @@ version = "0.0.1"
 source = { virtual = "." }
 dependencies = [
     { name = "fastmcp" },
-    { name = "imbue-core" },
     { name = "junit2html" },
     { name = "mcp" },
     { name = "pydevd-pycharm" },
@@ -2204,9 +2214,6 @@ dependencies = [
 ]
 
 [package.dev-dependencies]
-control-plane = [
-    { name = "imbue-core" },
-]
 dev = [
     { name = "ipdb" },
     { name = "ipython" },
@@ -2221,7 +2228,6 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastmcp", specifier = ">=2.1.2" },
-    { name = "imbue-core", editable = "imbue_core" },
     { name = "junit2html", specifier = ">=31.0.2" },
     { name = "mcp", specifier = ">=1.9.1" },
     { name = "pydevd-pycharm", specifier = ">=251.23774.123" },
@@ -2229,7 +2235,6 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-control-plane = [{ name = "imbue-core", editable = "imbue_core" }]
 dev = [
     { name = "ipdb", specifier = ">=0.13.13" },
     { name = "ipython", specifier = ">=8.12.0" },
@@ -2447,15 +2452,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/ab/e2/e9a00f0ccb71718418230718b3d900e71a5d16e701a3dae079a21e9cd8f8/text-unidecode-1.3.tar.gz", hash = "sha256:bad6603bb14d279193107714b288be206cac565dfa49aa5b105294dd5c4aab93", size = 76885, upload-time = "2019-08-30T21:36:45.405Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a6/a5/c0b6468d3824fe3fde30dbb5e1f687b291608f9473681bbf7dabbf5a87d7/text_unidecode-1.3-py2.py3-none-any.whl", hash = "sha256:1311f10e8b895935241623731c2ba64f4c455287888b18189350b67134a822e8", size = 78154, upload-time = "2019-08-30T21:37:03.543Z" },
-]
-
-[[package]]
-name = "toml"
-version = "0.10.2"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/be/ba/1f744cdc819428fc6b5084ec34d9b30660f6f9daaf70eead706e3203ec3c/toml-0.10.2.tar.gz", hash = "sha256:b3bda1d108d5dd99f4a20d24d9c348e91c4db7ab1b749200bded2f839ccbe68f", size = 22253, upload-time = "2020-11-01T01:40:22.204Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/44/6f/7120676b6d73228c96e17f1f794d8ab046fc910d781c8d151120c3f1569e/toml-0.10.2-py2.py3-none-any.whl", hash = "sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b", size = 16588, upload-time = "2020-11-01T01:40:20.672Z" },
 ]
 
 [[package]]
@@ -2842,17 +2838,4 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/50/05/51dcca9a9bf5e1bce52582683ce50980bcadbc4fa5143b9f2b19ab99958f/xmltodict-0.14.2.tar.gz", hash = "sha256:201e7c28bb210e374999d1dde6382923ab0ed1a8a5faeece48ab525b7810a553", size = 51942, upload-time = "2024-10-16T06:10:29.683Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d6/45/fc303eb433e8a2a271739c98e953728422fa61a3c1f36077a49e395c972e/xmltodict-0.14.2-py2.py3-none-any.whl", hash = "sha256:20cc7d723ed729276e808f26fb6b3599f786cbc37e06c65e192ba77c40f20aac", size = 9981, upload-time = "2024-10-16T06:10:27.649Z" },
-]
-
-[[package]]
-name = "yasoo"
-version = "0.12.6"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "attrs" },
-    { name = "more-itertools" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/cf/00/a1ed9035b00254227c684161c3d4037f767ed53a1993b69c00c9d4d94f25/yasoo-0.12.6.tar.gz", hash = "sha256:aec81e790045198e8f51f92353f11923580f1c94f49eed2b543f286e4cc1c5cc", size = 13705, upload-time = "2022-10-22T10:05:39.619Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/68/21/cfd73fd9cc69855bffdda55cbeefa45ffd415f97704f67ceda1eb57141ad/yasoo-0.12.6-py3-none-any.whl", hash = "sha256:7400ff055c2153d670c04c82621fd4aeafc3f1fc7c0f99240831752357b67e1f", size = 14850, upload-time = "2022-10-22T10:05:38.4Z" },
 ]
