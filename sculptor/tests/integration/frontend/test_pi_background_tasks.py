@@ -76,3 +76,39 @@ def test_pi_background_task_yields_stays_interactive_then_completes(
     # The completion is surfaced out-of-band, live: the summary appears in the
     # conversation as its own assistant message.
     expect(chat_panel.get_messages().filter(has_text=summary_marker).first).to_be_visible(timeout=30000)
+
+
+@user_story(
+    "to see a background task that fails surface its failure under pi, rather than be silently dropped"
+)
+def test_pi_background_task_failure_surfaces(sculptor_instance_: SculptorInstance) -> None:
+    """A background command that exits non-zero surfaces its failure out-of-band: the
+    completion is reconciled into the conversation as a FAILED task (the "failed" header
+    plus the command's output), not silently dropped."""
+    page = sculptor_instance_.page
+    install_fake_pi_binary(sculptor_instance_.fake_bin_dir)
+    release_path = Path(tempfile.gettempdir()) / f"pi_background_fail_{uuid.uuid4().hex}"
+    summary_marker = "PI-BG-FAIL-80517"
+    try:
+        task_page = start_task_and_wait_for_ready(
+            sculptor_page=page,
+            workspace_name="Pi Background Task Failure",
+            model_name=None,
+            agent_type="pi",
+            # status="failed" + a non-zero exit code: the launch still yields
+            # immediately; the FAILED completion is surfaced out-of-band when released.
+            prompt=(
+                'fake_pi:background `{"command": "exit 1", "label": "build", "pgid": 0, '
+                + f'"status": "failed", "exit_code": 1, "summary": "{summary_marker}", "wait_path": "{release_path}"}}`'
+            ),
+            wait_for_agent_to_finish=True,
+        )
+        chat_panel = task_page.get_chat_panel()
+    finally:
+        # Release the held completion; harmless if the test already failed.
+        release_path.touch()
+
+    # The failure is surfaced live as its own assistant message: a "failed" header
+    # (exit code 1) together with the command's output summary.
+    expect(chat_panel.get_messages().filter(has_text=summary_marker).first).to_be_visible(timeout=30000)
+    expect(chat_panel.get_messages().filter(has_text="failed").first).to_be_visible(timeout=30000)
