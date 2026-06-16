@@ -505,6 +505,99 @@ def test_triggers_work_after_migration() -> None:
             )
 
 
+def test_drop_all_automanaged_triggers_unblocks_drop_column() -> None:
+    """Encodes the exact failure mode: a trigger referencing a column blocks DROP COLUMN.
+
+    SQLite validates trigger bodies during ALTER TABLE, so dropping a column that an
+    existing trigger references fails. drop_all_automanaged_triggers removes that hazard,
+    which is what makes the whole class of migration failures impossible.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.pool import StaticPool
+
+    from sculptor.database.alembic.utils import drop_all_automanaged_triggers
+
+    engine = create_engine(IN_MEMORY_SQLITE, poolclass=StaticPool, connect_args={"check_same_thread": False})
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE widget (id TEXT, doomed TEXT)"))
+        connection.execute(text("CREATE TABLE widget_latest (id TEXT PRIMARY KEY, doomed TEXT)"))
+        connection.execute(
+            text("""
+                CREATE TRIGGER widget_before_insert BEFORE INSERT ON widget BEGIN
+                    INSERT INTO widget_latest (id, doomed) VALUES (NEW.id, NEW.doomed)
+                    ON CONFLICT (id) DO UPDATE SET doomed = excluded.doomed;
+                END;
+            """)
+        )
+
+    # With the trigger present, dropping the referenced column fails — the exact bug.
+    with pytest.raises(OperationalError):
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE widget DROP COLUMN doomed"))
+
+    # After dropping triggers, the same statement succeeds and no triggers remain.
+    with engine.begin() as connection:
+        drop_all_automanaged_triggers(connection)
+        connection.execute(text("ALTER TABLE widget DROP COLUMN doomed"))
+        remaining = [row[0] for row in connection.execute(text("SELECT name FROM sqlite_master WHERE type='trigger'"))]
+    assert remaining == []
+
+
+def test_in_memory_migration_runner_drops_preexisting_triggers() -> None:
+    """The in-memory migration runner enforces the no-triggers-during-migration invariant.
+
+    Simulates a real upgrade: a database that already carries auto-managed triggers from a
+    prior startup. Running migrations through the production runner must drop them first
+    (they are recreated afterwards by initialize_db_from_connection, which the bare runner
+    does not do). Guards against the wiring being removed from override_run_env.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.pool import StaticPool
+
+    from sculptor.database.core import _run_migrations_on_connection
+    from sculptor.services.data_model_service.sql_implementation import register_all_tables
+
+    register_all_tables()
+
+    engine = create_engine(IN_MEMORY_SQLITE, poolclass=StaticPool, connect_args={"check_same_thread": False})
+    with engine.begin() as connection:
+        # Full init: migrate to head AND create all auto-managed triggers, as a prior startup would.
+        initialize_db_from_connection(connection, IN_MEMORY_SQLITE)
+        triggers_before = connection.execute(text("SELECT count(*) FROM sqlite_master WHERE type='trigger'")).scalar()
+        assert triggers_before is not None and triggers_before > 0, (
+            "expected auto-managed triggers to exist after initialization"
+        )
+
+        # Re-run migrations through the production runner (a no-op upgrade to head).
+        _run_migrations_on_connection(connection)
+        triggers_after = connection.execute(text("SELECT count(*) FROM sqlite_master WHERE type='trigger'")).scalar()
+    assert triggers_after == 0, "the migration runner must drop all triggers before running migrations"
+
+
+def test_file_migration_runner_drops_preexisting_triggers(tmp_path: Path) -> None:
+    """Same invariant for the file-database runner (the env.py path used in production)."""
+    from sculptor.database.alembic.utils import get_alembic_script_location
+    from sculptor.database.core import _run_migrations_on_database_url
+    from sculptor.database.core import initialize_db
+    from sculptor.services.data_model_service.sql_implementation import register_all_tables
+
+    register_all_tables()
+
+    url = f"sqlite:///{tmp_path / 'database.db'}"
+    engine = create_new_engine(url)
+    # Simulate a prior startup: migrate to head and create triggers.
+    initialize_db(engine)
+    with engine.connect() as connection:
+        before = connection.execute(text("SELECT count(*) FROM sqlite_master WHERE type='trigger'")).scalar()
+    assert before is not None and before > 0, "expected auto-managed triggers to exist after initialization"
+
+    # Run migrations through the file-database runner (env.py).
+    _run_migrations_on_database_url(url, get_alembic_script_location())
+    with engine.connect() as connection:
+        after = connection.execute(text("SELECT count(*) FROM sqlite_master WHERE type='trigger'")).scalar()
+    assert after == 0, "the migration runner must drop all triggers before running migrations"
+
+
 def _get_migration_fixtures() -> list[MigrationTestFixture]:
     """Discover all migration test fixtures for parametrized testing."""
     return discover_test_fixtures()

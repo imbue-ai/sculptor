@@ -77,6 +77,24 @@ def test_map_unknown_tool_passes_through_unmapped() -> None:
     assert input_ == {"foo": "bar"}
 
 
+def test_map_subagent_single_task_to_agent() -> None:
+    # The pi sub-agent tool renders as Claude's `Agent` so the frontend groups
+    # its children under the same subagent pill.
+    name, input_ = map_pi_tool_call("subagent", {"task": "find the auth code"})
+    assert name == "Agent"
+    assert input_ == {"subagent_type": "subagent", "prompt": "find the auth code"}
+
+
+def test_map_subagent_parallel_tasks_summarized() -> None:
+    name, input_ = map_pi_tool_call(
+        "subagent",
+        {"tasks": [{"task": "find models"}, {"task": "find providers"}]},
+    )
+    assert name == "Agent"
+    assert input_["subagent_type"] == "subagent (x2)"
+    assert input_["prompt"] == "find models\nfind providers"
+
+
 def test_map_is_defensive_about_missing_or_odd_args() -> None:
     # Missing keys yield empty values rather than raising.
     assert map_pi_tool_call("read", {}) == ("Read", {"file_path": ""})

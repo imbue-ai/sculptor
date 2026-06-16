@@ -207,7 +207,7 @@ describe("useTerminal — commandActions registration", () => {
   it("registers `terminal.clearActive` while isVisible=true", () => {
     expect(store.get(commandActionsAtom)["terminal.clearActive"]).toBeUndefined();
 
-    renderHook(() => useTerminal({ workspaceID: "ws_test", terminalIndex: 0, isVisible: true }), {
+    renderHook(() => useTerminal({ terminalPath: "/api/v1/workspaces/ws_test/terminal/0/ws", isVisible: true }), {
       wrapper: noopWrapper,
     });
 
@@ -215,16 +215,19 @@ describe("useTerminal — commandActions registration", () => {
   });
 
   it("does NOT register `terminal.clearActive` when isVisible=false", () => {
-    renderHook(() => useTerminal({ workspaceID: "ws_test", terminalIndex: 0, isVisible: false }), {
+    renderHook(() => useTerminal({ terminalPath: "/api/v1/workspaces/ws_test/terminal/0/ws", isVisible: false }), {
       wrapper: noopWrapper,
     });
     expect(store.get(commandActionsAtom)["terminal.clearActive"]).toBeUndefined();
   });
 
   it("unregisters on unmount", () => {
-    const { unmount } = renderHook(() => useTerminal({ workspaceID: "ws_test", terminalIndex: 0, isVisible: true }), {
-      wrapper: noopWrapper,
-    });
+    const { unmount } = renderHook(
+      () => useTerminal({ terminalPath: "/api/v1/workspaces/ws_test/terminal/0/ws", isVisible: true }),
+      {
+        wrapper: noopWrapper,
+      },
+    );
     expect(store.get(commandActionsAtom)["terminal.clearActive"]).toBeTypeOf("function");
     unmount();
     expect(store.get(commandActionsAtom)["terminal.clearActive"]).toBeUndefined();
@@ -235,7 +238,8 @@ describe("useTerminal — commandActions registration", () => {
     // another terminal tab, the previous tab's slot must be cleared so the
     // new tab can claim it.
     const { rerender } = renderHook(
-      ({ isVisible }: { isVisible: boolean }) => useTerminal({ workspaceID: "ws_test", terminalIndex: 0, isVisible }),
+      ({ isVisible }: { isVisible: boolean }) =>
+        useTerminal({ terminalPath: "/api/v1/workspaces/ws_test/terminal/0/ws", isVisible }),
       { wrapper: noopWrapper, initialProps: { isVisible: true } },
     );
     expect(store.get(commandActionsAtom)["terminal.clearActive"]).toBeTypeOf("function");
@@ -248,15 +252,21 @@ describe("useTerminal — commandActions registration", () => {
     // tab B registers (overwriting A), then A unmounts. A's cleanup must
     // NOT clear B's slot — otherwise switching tabs would leave the palette
     // command with no active receiver.
-    const a = renderHook(() => useTerminal({ workspaceID: "ws_test", terminalIndex: 0, isVisible: true }), {
-      wrapper: noopWrapper,
-    });
+    const a = renderHook(
+      () => useTerminal({ terminalPath: "/api/v1/workspaces/ws_test/terminal/0/ws", isVisible: true }),
+      {
+        wrapper: noopWrapper,
+      },
+    );
     const aCallback = store.get(commandActionsAtom)["terminal.clearActive"];
     expect(aCallback).toBeTypeOf("function");
 
-    const b = renderHook(() => useTerminal({ workspaceID: "ws_test", terminalIndex: 1, isVisible: true }), {
-      wrapper: noopWrapper,
-    });
+    const b = renderHook(
+      () => useTerminal({ terminalPath: "/api/v1/workspaces/ws_test/terminal/1/ws", isVisible: true }),
+      {
+        wrapper: noopWrapper,
+      },
+    );
     const bCallback = store.get(commandActionsAtom)["terminal.clearActive"];
     expect(bCallback).toBeTypeOf("function");
     expect(bCallback).not.toBe(aCallback);
@@ -293,7 +303,7 @@ describe("useTerminal — clear-terminal keydown listener lifecycle", () => {
     >;
 
   it("attaches a capture-phase keydown listener when isVisible=true", () => {
-    renderHook(() => useTerminal({ workspaceID: "ws_test", terminalIndex: 0, isVisible: true }));
+    renderHook(() => useTerminal({ terminalPath: "/api/v1/workspaces/ws_test/terminal/0/ws", isVisible: true }));
     const captureAdds = keydownAddCalls().filter((call) => {
       const opts = call[2];
       return typeof opts === "object" && opts != null && "capture" in opts && opts.capture === true;
@@ -305,7 +315,7 @@ describe("useTerminal — clear-terminal keydown listener lifecycle", () => {
   });
 
   it("does NOT attach the keydown listener when isVisible=false", () => {
-    renderHook(() => useTerminal({ workspaceID: "ws_test", terminalIndex: 0, isVisible: false }));
+    renderHook(() => useTerminal({ terminalPath: "/api/v1/workspaces/ws_test/terminal/0/ws", isVisible: false }));
     const captureAdds = keydownAddCalls().filter((call) => {
       const opts = call[2];
       return typeof opts === "object" && opts != null && "capture" in opts && opts.capture === true;
@@ -314,7 +324,9 @@ describe("useTerminal — clear-terminal keydown listener lifecycle", () => {
   });
 
   it("removes the listener on unmount", () => {
-    const { unmount } = renderHook(() => useTerminal({ workspaceID: "ws_test", terminalIndex: 0, isVisible: true }));
+    const { unmount } = renderHook(() =>
+      useTerminal({ terminalPath: "/api/v1/workspaces/ws_test/terminal/0/ws", isVisible: true }),
+    );
     const beforeUnmount = keydownRemoveCalls().length;
     unmount();
     const afterUnmount = keydownRemoveCalls().length;

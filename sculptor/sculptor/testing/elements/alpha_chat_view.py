@@ -243,7 +243,7 @@ class PlaywrightDebugChatViewElement(PlaywrightIntegrationTestElement):
         return self.get_by_test_id(ElementIDs.DEBUG_CHAT_BLOCK)
 
 
-def switch_to_debug_view(page: Page, agent_tab_name: str = "Agent 1") -> None:
+def switch_to_debug_view(page: Page, agent_tab_name: str = "Claude 1") -> None:
     """Toggle debug view on for an agent via the tab context menu.
 
     Right-clicks the agent tab, opens the Diagnostics submenu, and clicks

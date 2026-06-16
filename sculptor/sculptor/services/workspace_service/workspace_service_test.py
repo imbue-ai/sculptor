@@ -19,7 +19,6 @@ from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.git import get_repo_base_path
 from sculptor.foundation.progress_tracking.progress_tracking import RootProgressHandle
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.primitives.constants import ANONYMOUS_ORGANIZATION_REFERENCE
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import TaskID
@@ -131,53 +130,6 @@ def test_create_workspace_clone(
     assert workspace is not None
     assert workspace.initialization_strategy == WorkspaceInitializationStrategy.CLONE
     assert workspace.source_branch == "feature-branch"
-
-
-def test_create_workspace_defaults_harness_to_claude(
-    test_service_collection: CompleteServiceCollection,
-    test_project: Project,
-) -> None:
-    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
-        workspace = test_service_collection.workspace_service.create_workspace(
-            project=test_project,
-            initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
-            source_branch=None,
-            requested_branch_name=None,
-            description="Default-harness workspace",
-            transaction=transaction,
-        )
-        workspace_id = workspace.object_id
-
-    assert workspace.harness == HarnessName.CLAUDE
-
-    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
-        reloaded = transaction.get_workspace(workspace_id)
-    assert reloaded is not None
-    assert reloaded.harness == HarnessName.CLAUDE
-
-
-def test_create_workspace_persists_pi_harness(
-    test_service_collection: CompleteServiceCollection,
-    test_project: Project,
-) -> None:
-    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
-        workspace = test_service_collection.workspace_service.create_workspace(
-            project=test_project,
-            initialization_strategy=WorkspaceInitializationStrategy.IN_PLACE,
-            source_branch=None,
-            requested_branch_name=None,
-            description="Pi workspace",
-            transaction=transaction,
-            harness=HarnessName.PI,
-        )
-        workspace_id = workspace.object_id
-
-    assert workspace.harness == HarnessName.PI
-
-    with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
-        reloaded = transaction.get_workspace(workspace_id)
-    assert reloaded is not None
-    assert reloaded.harness == HarnessName.PI
 
 
 def test_create_workspace_generates_description_without_prefix(

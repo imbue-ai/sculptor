@@ -5,6 +5,37 @@
   flex-shrink: 0;
 }
 
-.addButton {
+.addButtonGroup {
+  // Standing pill: a faint always-on fill visually groups the two ghost
+  // segments into one split button even when nothing is hovered…
+  background-color: var(--gray-a2);
+  border-radius: var(--radius-2);
   flex-shrink: 0;
+
+  // …and the whole control brightens slightly on hover, while the hovered
+  // segment's own darker ghost background marks which half will fire.
+  &:hover {
+    background-color: var(--gray-a3);
+  }
+}
+
+.addButton {
+  // Joined split-button geometry: round only the outer corners.
+  border-radius: var(--radius-2) 0 0 var(--radius-2);
+  flex-shrink: 0;
+  // Radix ghost icon buttons carry negative margins (the reason for the
+  // repo's usual gap="2" rule); a split button needs true adjacency, so
+  // the margins are neutralized and the Flex uses gap="0".
+  margin: 0;
+}
+
+.addButtonChevron {
+  border-radius: 0 var(--radius-2) var(--radius-2) 0;
+  flex-shrink: 0;
+  margin: 0;
+  // The chevron is the secondary segment of the split button — narrower
+  // than the primary plus segment. The hovered half's darker tint is the
+  // segment boundary; a drawn divider reads as a bright artifact against
+  // the dark-theme hover tints.
+  width: var(--space-4);
 }

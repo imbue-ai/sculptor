@@ -72,6 +72,7 @@ def _task_response_dict(
         "isCompacting": False,
         "isClearingContext": False,
         "isAutoCompacting": False,
+        "acceptsAutomatedPrompts": False,
         "artifactNames": [],
         "initialPrompt": "Fix the bug",
         "titleOrSomethingLikeIt": "Fix the bug",
@@ -79,6 +80,7 @@ def _task_response_dict(
         "systemPrompt": None,
         "model": "CLAUDE-4-OPUS",
         "harnessCapabilities": {
+            "supportsChatInterface": True,
             "supportsInteractiveBackchannel": True,
             "supportsSkills": True,
             "supportsSubAgents": True,

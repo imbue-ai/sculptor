@@ -1,0 +1,42 @@
+# Registration for running the Claude Code TUI as a Sculptor terminal agent.
+# Sculptor installs this registration automatically on first run; the
+# installed copy in <sculptor folder>/terminal_agents/ is yours to edit or
+# delete (deleting it sticks — it is not re-installed). The registration id
+# is this file's name ("claude-code"); renaming the file changes the id.
+
+display_name = "Claude CLI"
+
+# The launch command runs in the agent's login shell. Two kinds of variables
+# are substituted in launch_command / resume_command_template:
+#   $SCULPT_* — shell env vars Sculptor injects into every terminal-agent
+#     shell, expanded by the shell at launch:
+#       SCULPT_CLAUDE_BIN  — Sculptor's managed Claude binary (falls back to
+#                            `claude` from PATH when unmanaged)
+#       SCULPT_PLUGINS_DIR — the directory holding the bundled Sculptor plugins
+#   {…} placeholders — substituted by Sculptor when it renders the command:
+#       {sculptor_directory}          — the Sculptor folder
+#       {terminal_agents_directory}   — where registrations + their companion
+#                                       files (like the hooks JSON) are installed
+#       {session_id}                  — resume_command_template only (see below)
+# Wrap path placeholders in double quotes (as below) so a space in the path is
+# safe. Unknown {…} tokens are rejected by the loader, so a typo fails loudly.
+# Flags mirror how Sculptor launches Claude for chat agents, minus the
+# SDK-only wire-protocol flags (stream-json, --permission-prompt-tool, the
+# sculptor MCP server / --disallowed-tools pair, --append-system-prompt) —
+# in the TUI the native equivalents are the point.
+# --settings points at the companion hooks fragment in {terminal_agents_directory}.
+# The hooks report busy/idle/waiting/files-changed and the session id to
+# Sculptor via the `sculpt signal` CLI (already on PATH inside agent
+# terminals); the settings also skip the bypass-permissions disclaimer.
+# CLAUDE_CODE_NO_FLICKER=1 forces the TUI's fullscreen alt-screen renderer
+# (flicker-free, virtualized scrollback) instead of the classic main-screen
+# renderer.
+launch_command = 'env CLAUDE_CODE_NO_FLICKER=1 "$SCULPT_CLAUDE_BIN" --dangerously-skip-permissions --settings "{terminal_agents_directory}/claude-code-hooks.json" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-plugin" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-workflow" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-experimental"'
+
+# Same env and flags as launch_command (a resumed session must come back
+# with the same renderer, hooks, and plugins), plus --resume: {session_id}
+# is replaced with the session id the hooks reported on the first prompt,
+# so a Sculptor restart resumes the same conversation.
+resume_command_template = 'env CLAUDE_CODE_NO_FLICKER=1 "$SCULPT_CLAUDE_BIN" --dangerously-skip-permissions --settings "{terminal_agents_directory}/claude-code-hooks.json" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-plugin" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-workflow" --plugin-dir "$SCULPT_PLUGINS_DIR/sculptor-experimental" --resume {session_id}'
+
+accepts_automated_prompts = true

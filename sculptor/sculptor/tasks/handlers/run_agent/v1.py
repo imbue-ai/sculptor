@@ -93,6 +93,7 @@ from sculptor.tasks.handlers.run_agent.setup import load_initial_task_state
 from sculptor.tasks.handlers.run_agent.setup import message_queue_subscription_context
 from sculptor.tasks.handlers.run_agent.setup import title_prediction_context
 from sculptor.tasks.handlers.run_agent.setup import wait_for_initial_message_and_process_queue
+from sculptor.utils.build import build_sculpt_backend_env
 from sculptor.utils.build import get_sculpt_bin_dir
 from sculptor.utils.build import is_packaged
 from sculptor.utils.shutdown import GLOBAL_SHUTDOWN_EVENT
@@ -256,10 +257,10 @@ def run_agent_task_v1(
                         )
     # handle ConcurrencyExceptionGroup as a general exception
     except ConcurrencyExceptionGroup as e:
-        _on_exception(e, task_id, user_reference, services, shutdown_event)
+        on_exception(e, task_id, user_reference, services, shutdown_event)
     # all other exceptions should be handled and turned into task failures
     except Exception as e:
-        _on_exception(e, task_id, user_reference, services, shutdown_event)
+        on_exception(e, task_id, user_reference, services, shutdown_event)
     return None
 
 
@@ -339,12 +340,12 @@ def _run_agent_in_environment(
             in_testing=in_testing,
             on_diff_needed=on_diff_needed,
         )
-        secrets: dict[str, str] = {
-            "SCULPT_API_PORT": str(settings.BACKEND_PORT),
-            "SCULPT_WORKSPACE_ID": str(task_state.workspace_id),
-            "SCULPT_PROJECT_ID": str(project.object_id),
-            "SCULPT_AGENT_ID": str(task.object_id),
-        }
+        secrets: dict[str, str] = build_sculpt_backend_env(
+            backend_port=settings.BACKEND_PORT,
+            workspace_id=task_state.workspace_id,
+            project_id=project.object_id,
+            agent_id=task.object_id,
+        )
         executable_parent = Path(sys.executable).parent
         secrets["PATH"] = _build_agent_path(
             is_packaged=is_packaged(),
@@ -428,8 +429,8 @@ def _run_agent_in_environment(
             kill_time_start = time.monotonic()
             try:
                 agent_wrapper.terminate(_MAX_HARD_SHUTDOWN_SECONDS)
-                remaining_shutdown_time = time.monotonic() - kill_time_start
-                if remaining_shutdown_time < 0:
+                remaining_shutdown_time = _MAX_HARD_SHUTDOWN_SECONDS - (time.monotonic() - kill_time_start)
+                if remaining_shutdown_time <= 0:
                     raise UncleanTerminationAgentError("No time left to call wait() on agent wrapper")
                 exit_code = agent_wrapper.wait(remaining_shutdown_time)
             except (UncleanTerminationAgentError, WaitTimeoutAgentError) as e:
@@ -652,7 +653,7 @@ def _send_user_input_message(
     return user_input_message_being_processed
 
 
-def _on_exception(
+def on_exception(
     e: Exception,
     task_id: TaskID,
     user_reference: UserReference,

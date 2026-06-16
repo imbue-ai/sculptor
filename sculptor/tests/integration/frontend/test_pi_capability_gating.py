@@ -1,14 +1,15 @@
 """Per-capability UI gating, parametrized over Claude and pi.
 
 Each test parametrizes the ``harness`` fixture across the two harnesses and
-asserts that a Claude-only affordance renders under Claude and is suppressed
-under pi. Tests that depend on backend interactions FakePi can't produce
-(e.g. an AskUserQuestion block, which requires the harness's interactive
-backchannel) are out of scope here — pi cannot emit them at all.
+asserts that a capability-gated affordance renders when the harness supports
+it and is suppressed when it does not. Most affordances here are still
+Claude-only under FakePi; the interactive-backchannel surfaces (plan-mode
+toggle) now render under pi too, since pi gained that capability via the
+pinned backchannel extension.
 
-The Claude branch of each test serves as the meaningful "this affordance
-renders under Claude" baseline; the pi branch is the "this affordance is
-suppressed by the harness gate" claim.
+The end-to-end backchannel flow itself (ask-user-question round-trip,
+plan-mode enter/approve) is exercised in ``test_pi_backchannel.py``; this
+file covers only the per-capability gate state.
 """
 
 import io
@@ -22,7 +23,6 @@ from PIL import Image
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.testing.elements.base import type_trigger_char
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
@@ -52,7 +52,7 @@ def _create_workspace_for_harness(
     deterministic behavior holds. The pi path skips model selection — no
     "Fake Pi" entry is registered in the LLMModel enum.
     """
-    if harness.workspace_harness == HarnessName.PI:
+    if harness.first_agent_type == "pi":
         install_fake_pi_binary(sculptor_instance_.fake_bin_dir)
         model_name = None
     else:
@@ -61,7 +61,7 @@ def _create_workspace_for_harness(
         sculptor_page=sculptor_instance_.page,
         workspace_name=workspace_name,
         model_name=model_name,
-        harness=harness.workspace_harness,
+        agent_type=harness.first_agent_type,
     )
 
 
@@ -74,7 +74,7 @@ def _start_busy_workspace_for_harness(
     deterministic busy window (no wall-clock) in which the Stop button and the
     queued-message interrupt affordance are present.
     """
-    if harness.workspace_harness == HarnessName.PI:
+    if harness.first_agent_type == "pi":
         install_fake_pi_binary(sculptor_instance_.fake_bin_dir)
         model_name = None
         prompt = f'fake_pi:wait_for_file `{{"path": "{release_path}"}}`'
@@ -85,30 +85,23 @@ def _start_busy_workspace_for_harness(
         sculptor_page=sculptor_instance_.page,
         workspace_name=workspace_name,
         model_name=model_name,
-        harness=harness.workspace_harness,
+        agent_type=harness.first_agent_type,
         prompt=prompt,
         wait_for_agent_to_finish=False,
     )
 
 
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
-@user_story("to disable the plan-mode toggle with a tooltip in harnesses without an interactive backchannel")
-def test_plan_mode_toggle_gated_on_interactive_backchannel(
+@user_story("to use the plan-mode toggle on every harness that supports the interactive backchannel")
+def test_plan_mode_toggle_enabled_on_interactive_backchannel(
     sculptor_instance_: SculptorInstance, harness: HarnessTestConfig
 ) -> None:
+    # Both Claude and pi now support the interactive backchannel (pi via the
+    # pinned backchannel extension), so the live plan-mode toggle renders and
+    # the disabled-with-tooltip placeholder never appears — for either harness.
     _create_workspace_for_harness(sculptor_instance_, harness, "Plan Mode Toggle Gate")
-    toggle = sculptor_instance_.page.get_by_test_id(ElementIDs.PLAN_MODE_TOGGLE)
-    disabled = sculptor_instance_.page.get_by_test_id(ElementIDs.CAPABILITY_DISABLED_PLAN_MODE)
-    if harness.workspace_harness == HarnessName.CLAUDE:
-        # Claude supports the interactive backchannel: the live toggle renders
-        # and the disabled placeholder never appears.
-        expect(toggle).to_be_visible()
-        expect(disabled).to_have_count(0)
-    else:
-        # Pi lacks it: the live toggle is replaced by the disabled-with-tooltip
-        # placeholder (visible, ElementID-bearing) — not hidden.
-        expect(toggle).to_have_count(0)
-        expect(disabled).to_be_visible()
+    expect(sculptor_instance_.page.get_by_test_id(ElementIDs.PLAN_MODE_TOGGLE)).to_be_visible()
+    expect(sculptor_instance_.page.get_by_test_id(ElementIDs.CAPABILITY_DISABLED_PLAN_MODE)).to_have_count(0)
 
 
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
@@ -120,19 +113,43 @@ def test_fast_mode_toggle_gated(sculptor_instance_: SculptorInstance, harness: H
     # picks does not necessarily advertise fast-mode, so a Claude-side
     # `to_be_visible` assertion would be model-dependent rather than gate-
     # dependent.
-    if harness.workspace_harness == HarnessName.PI:
+    if harness.first_agent_type == "pi":
         expect(sculptor_instance_.page.get_by_test_id(ElementIDs.FAST_MODE_TOGGLE)).to_have_count(0)
 
 
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
-@user_story("to suppress the sub-agent pill render path in harnesses without sub-agent support")
-def test_sub_agent_pill_render_path_gated(sculptor_instance_: SculptorInstance, harness: HarnessTestConfig) -> None:
-    _create_workspace_for_harness(sculptor_instance_, harness, "Sub-Agent Gate")
-    # Neither fake binary emits sub-agent tool blocks by default, so the
-    # rendered count is 0 in both branches. The assertion still has value as a
-    # regression guard against the pill leaking under pi if a future change
-    # accidentally seeds metadata for it.
-    expect(sculptor_instance_.page.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_PILL)).to_have_count(0)
+@user_story("to see a sub-agent's activity render as a nested attributed pill under both harnesses")
+def test_sub_agent_pill_renders_under_both_harnesses(
+    sculptor_instance_: SculptorInstance, harness: HarnessTestConfig
+) -> None:
+    """Sub-agents are now a shared capability: a scripted sub-agent call renders
+    as the AlphaSubagentPill (the parent entry with nested, attributed child
+    activity) under Claude AND pi.
+
+    This is the two-sided assertion for `supports_sub_agents` (REQ-TEST-4): the
+    render path was previously suppressed for pi (the gate hid the pill); pi now
+    spawns sub-agents through the pinned `sculptor_subagent` extension, whose
+    structured per-child progress the adapter maps onto the same
+    `parent_tool_use_id` grouping Claude uses. Pi's `fake_pi:subagent` directive
+    scripts the structured payload; FakeClaude's `subagent` directive scripts an
+    Agent tool call. Both surface the pill.
+    """
+    task_page = _create_workspace_for_harness(sculptor_instance_, harness, "Sub-Agent Render")
+    chat_panel = task_page.get_chat_panel()
+    if harness.first_agent_type == "pi":
+        prompt = 'fake_pi:subagent `{"children": [{"childId": "c0", "label": "scout", "task": "find files", "status": "done", "events": [{"seq": 0, "kind": "text", "text": "Found 10 files."}]}]}`'
+    else:
+        prompt = (
+            'fake_claude:subagent `{"description": "Find files", "prompt": "List files", '
+            + '"subagent_result": "Found 10 files.", "summary_text": "The sub-agent found 10 files."}`'
+        )
+    send_chat_message(chat_panel=chat_panel, message=prompt)
+
+    # The sub-agent activity renders as the pill under both harnesses (the gate
+    # no longer suppresses it for pi).
+    expect(sculptor_instance_.page.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_PILL).first).to_be_visible(
+        timeout=30000
+    )
 
 
 def _png_bytes(color: tuple[int, int, int] = (0, 0, 255)) -> bytes:
@@ -159,7 +176,7 @@ def test_tool_call_renders_under_both_harnesses(
     """
     task_page = _create_workspace_for_harness(sculptor_instance_, harness, "Tool Render")
     chat_panel = task_page.get_chat_panel()
-    if harness.workspace_harness == HarnessName.PI:
+    if harness.first_agent_type == "pi":
         prompt = 'fake_pi:tool_call `{"tool": "bash", "args": {"command": "echo TOOL-OK"}, "result": "TOOL-OK"}`'
     else:
         prompt = 'fake_claude:bash `{"command": "echo TOOL-OK"}`'
@@ -182,7 +199,7 @@ def test_pi_write_and_edit_render_completed_file_chips(sculptor_instance_: Sculp
         sculptor_page=page,
         workspace_name="Pi File Chips",
         model_name=None,
-        harness=HarnessName.PI,
+        agent_type="pi",
     )
     chat_panel = task_page.get_chat_panel()
     prompt = (
@@ -206,7 +223,7 @@ def test_uploads_usable_and_deliver_under_pi(sculptor_instance_: SculptorInstanc
     # Both harnesses keep a usable chat input with the upload input in the DOM.
     expect(page.get_by_test_id(ElementIDs.CHAT_INPUT)).to_be_visible()
     expect(page.get_by_test_id(ElementIDs.FILE_UPLOAD)).to_be_attached()
-    if harness.workspace_harness != HarnessName.PI:
+    if harness.first_agent_type != "pi":
         # Claude branch unchanged: the upload affordance has always been live.
         return
     # Flipped pi branch: attachments are no longer dropped. Deliver one image
@@ -337,24 +354,21 @@ def test_queued_interrupt_gated_on_interruption(
 
 
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
-@user_story("to refuse /clear in harnesses without context reset, visibly, instead of silently failing")
+@user_story("to reset context with /clear under any harness that supports it, instead of being refused")
 def test_clear_pseudo_skill_gated_on_context_reset(
     sculptor_instance_: SculptorInstance, harness: HarnessTestConfig
 ) -> None:
-    """Typing /clear under pi (no context-reset) is refused frontend-side with
-    the standard copy and never calls the clear endpoint; under Claude it is
-    accepted (no refusal copy)."""
+    """Typing /clear is accepted under both Claude and pi (no refusal copy) and the
+    workspace stays usable. This asserts only the gate; the reset round-trip is covered
+    by test_pi_basic.test_pi_clear_resets_conversation and the real_pi clear test."""
     page = sculptor_instance_.page
     task_page = _create_workspace_for_harness(sculptor_instance_, harness, "Clear Gate")
     send_chat_message(chat_panel=task_page.get_chat_panel(), message="/clear")
+    # Both harnesses support context reset: no refusal copy, the endpoint is called.
     refusal_toast = page.get_by_test_id(ElementIDs.TOAST).filter(has_text=_CAPABILITY_UNSUPPORTED_COPY)
-    if harness.workspace_harness == HarnessName.PI:
-        expect(refusal_toast).to_be_visible()
-        # The chat input stays usable — the workspace is intact, just the reset declined.
-        expect(page.get_by_test_id(ElementIDs.CHAT_INPUT)).to_be_visible()
-    else:
-        # Claude supports context reset: no refusal copy is shown.
-        expect(refusal_toast).to_have_count(0)
+    expect(refusal_toast).to_have_count(0)
+    # The chat input stays usable after the reset.
+    expect(page.get_by_test_id(ElementIDs.CHAT_INPUT)).to_be_visible()
 
 
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
@@ -370,7 +384,7 @@ def test_compaction_chrome_truthful_under_pi(sculptor_instance_: SculptorInstanc
     stuck-pill edges are covered at unit level in ``agent_wrapper_test``.)
     """
     page = sculptor_instance_.page
-    if harness.workspace_harness != HarnessName.PI:
+    if harness.first_agent_type != "pi":
         _create_workspace_for_harness(sculptor_instance_, harness, "Compaction Chrome")
         return
 
@@ -382,7 +396,7 @@ def test_compaction_chrome_truthful_under_pi(sculptor_instance_: SculptorInstanc
             sculptor_page=page,
             workspace_name="Compaction Chrome",
             model_name=None,
-            harness=HarnessName.PI,
+            agent_type="pi",
             # The compaction is held open on the sentinel so the Compacting pill
             # state is observable deterministically (no wall-clock race).
             prompt=f'fake_pi:compaction `{{"reason": "threshold", "wait_path": "{release_path}"}}`',

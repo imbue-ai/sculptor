@@ -10,7 +10,6 @@ import pytest
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.testing.elements.chat_panel import PlaywrightChatPanelElement
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
@@ -100,11 +99,14 @@ def create_pi_workspace_and_send(
     prompt: str,
     *,
     workspace_name: str = "Real Pi",
+    wait_for_finish: bool = True,
 ) -> PlaywrightTaskPage:
     """Create a real-pi workspace and send the first prompt.
 
-    Waits for the agent to finish the turn before returning. Pi's tool loop
-    runs inside the pi subprocess; Sculptor's file-watching layer reflects
+    With ``wait_for_finish`` (the default) waits for the turn to complete before
+    returning. Pass ``wait_for_finish=False`` for turns that block mid-way — e.g.
+    an ask-user-question or plan-approval dialog the test must answer. Pi's tool
+    loop runs inside the pi subprocess; Sculptor's file-watching layer reflects
     workspace mutations into the diff sidebar.
     """
     task_page = start_task_and_wait_for_ready(
@@ -112,12 +114,13 @@ def create_pi_workspace_and_send(
         workspace_name=workspace_name,
         prompt=prefixed(prompt),
         model_name=None,
-        harness=HarnessName.PI,
+        agent_type="pi",
+        wait_for_agent_to_finish=wait_for_finish,
     )
-    chat_panel = task_page.get_chat_panel()
-    wait_for_completed_message_count(
-        chat_panel=chat_panel,
-        expected_message_count=2,
-        timeout=RESPONSE_TIMEOUT_MS,
-    )
+    if wait_for_finish:
+        wait_for_completed_message_count(
+            chat_panel=task_page.get_chat_panel(),
+            expected_message_count=2,
+            timeout=RESPONSE_TIMEOUT_MS,
+        )
     return task_page

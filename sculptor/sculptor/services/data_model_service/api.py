@@ -87,4 +87,6 @@ class TaskDataModelService(DataModelService, ABC):
 
     @abstractmethod
     @contextmanager
-    def open_task_transaction(self) -> Generator[TaskAndDataModelTransaction, None, None]: ...
+    def open_task_transaction(
+        self, *, immediate: bool = False
+    ) -> Generator[TaskAndDataModelTransaction, None, None]: ...

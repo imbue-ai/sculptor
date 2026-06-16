@@ -53,10 +53,10 @@ from sculptor.testing.subprocess_utils import Forwarder
 from sculptor.testing.test_repo_factory import TestRepoFactory
 
 # Timeout for the initial SPA render after server startup (shared + factory instances).
-# Longer than the default 30s to allow headroom for Fly runners and cold Electron starts.
+# Longer than the default 30s to allow headroom for cold Electron starts on CI.
 # Cold Electron startup on the contended shared CI runners (the
 # ``integration_tests_electron`` job) regularly takes 50-60s — well past the
-# previous 45s ceiling — even though Fly's dedicated runners finish in 30-40s.
+# previous 45s ceiling.
 # Bumping to 90s eats one extra wall-second per failure but lets the slow path
 # pass instead of erroring in fixture setup.
 _INITIAL_RENDER_TIMEOUT_MS = 90_000

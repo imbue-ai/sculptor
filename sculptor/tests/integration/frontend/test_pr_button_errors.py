@@ -66,7 +66,7 @@ def _start_task_and_wait_for_pr_status(page: Page, prompt: str, expected_button:
     on it.
     """
     task_page = start_task_and_wait_for_ready(page, prompt)
-    # The backend poll cadence on slow CI runners (Fly / offload) plus the
+    # The backend poll cadence on slow CI runners (e.g. offload) plus the
     # clone-on-target-branch transient means the initial PR button can take
     # a non-trivial amount of time to reach its final state — give it a
     # generous budget before we conclude the status never arrived.

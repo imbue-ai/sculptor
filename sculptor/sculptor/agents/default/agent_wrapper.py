@@ -115,6 +115,10 @@ class DefaultAgentWrapper(Agent):
             case StopAgentUserMessage():
                 logger.info("Stopping agent")
                 with self._handle_user_message(message):
+                    # Mark the turn as stopping so the clean-exit branch of
+                    # _handle_user_message suppresses RequestSuccessAgentMessage: an
+                    # interrupted turn must not report success.
+                    self._is_stopping = True
                     self.terminate(DEFAULT_WAIT_TIMEOUT)
                     self._exit_code = AGENT_EXIT_CODE_CLEAN_SHUTDOWN_ON_INTERRUPT
                 logger.info("Finished stopping agent")

@@ -230,6 +230,9 @@ def _get_sqlite_triggers(
     # NOTE: The initialization code runs on every server startup, dropping and recreating these triggers.
     # This is only safe because we assume the sqlite database is not used by multiple processes at the
     # same time. Do not introduce concurrent writers without changing how trigger/DB state is managed.
+    # NOTE: These triggers reference every column, so they are also dropped before migrations run (see
+    # drop_all_automanaged_triggers in alembic/utils.py) and recreated afterwards. That invariant means a
+    # column-dropping migration never needs to drop triggers itself — do not rely on triggers mid-migration.
     drop_existing_before_insert_trigger = DDL(f"DROP TRIGGER IF EXISTS {table_name}_before_insert;")
     before_insert_trigger = DDL(
         f"""

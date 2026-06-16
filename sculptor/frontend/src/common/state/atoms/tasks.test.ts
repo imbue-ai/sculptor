@@ -32,6 +32,7 @@ const createMockTask = (overrides: Partial<CodingAgentTaskView> = {}): CodingAge
     systemPrompt: null,
     model: "CLAUDE_4_SONNET",
     harnessCapabilities: {
+      supportsChatInterface: true,
       supportsInteractiveBackchannel: true,
       supportsSkills: true,
       supportsSubAgents: true,
@@ -134,6 +135,7 @@ describe("taskSupportsInteractiveBackchannelAtomFamily", () => {
     const task = createMockTask({
       id: "task-1",
       harnessCapabilities: {
+        supportsChatInterface: true,
         supportsInteractiveBackchannel: true,
         supportsSkills: true,
         supportsSubAgents: true,
@@ -159,6 +161,7 @@ describe("taskSupportsInteractiveBackchannelAtomFamily", () => {
     const task = createMockTask({
       id: "task-1",
       harnessCapabilities: {
+        supportsChatInterface: true,
         supportsInteractiveBackchannel: false,
         supportsSkills: false,
         supportsSubAgents: false,
@@ -185,6 +188,7 @@ describe("taskSupportsInteractiveBackchannelAtomFamily", () => {
       id: "task-1",
       status: "RUNNING",
       harnessCapabilities: {
+        supportsChatInterface: true,
         supportsInteractiveBackchannel: true,
         supportsSkills: true,
         supportsSubAgents: true,
@@ -218,6 +222,7 @@ describe("taskSupportsInteractiveBackchannelAtomFamily", () => {
     const task = createMockTask({
       id: "task-1",
       harnessCapabilities: {
+        supportsChatInterface: true,
         supportsInteractiveBackchannel: true,
         supportsSkills: true,
         supportsSubAgents: true,

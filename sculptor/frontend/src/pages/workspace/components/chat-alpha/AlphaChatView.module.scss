@@ -336,6 +336,14 @@
   padding: var(--space-1) 0;
 }
 
+// Inline plan body for harnesses that pass the plan as the tool argument
+// (e.g. pi) rather than writing a plan file.
+.planInlineContent {
+  border-left: 1px solid var(--gray-a5);
+  margin-top: var(--space-1);
+  padding-left: var(--space-3);
+}
+
 // Tool group header
 .toolGroupHeader {
   align-items: baseline;

@@ -16,7 +16,6 @@ from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.foundation.pydantic_serialization import build_discriminator
 from sculptor.foundation.upper_case_str_enum import UpperCaseStrEnum
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.interfaces.agents.artifacts import DiffArtifact
 from sculptor.interfaces.agents.artifacts import TaskListArtifact
 from sculptor.primitives.ids import ProjectID
@@ -24,6 +23,7 @@ from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.data_model_service.api import CompletedTransaction
 from sculptor.services.task_service.api import TaskMessageContainer
+from sculptor.services.terminal_agent_registry.registry import TerminalAgentRegistration
 from sculptor.services.workspace_service.api import GitOperationResult
 from sculptor.state.chat_state import AskUserQuestionData
 from sculptor.state.messages import EffortLevel
@@ -34,6 +34,18 @@ from sculptor.state.messages import Message
 class TaskInterface(StrEnum):
     TERMINAL = "TERMINAL"
     API = "API"
+
+
+class AgentTypeName(StrEnum):
+    """The per-agent type chosen at creation time.
+
+    `REGISTERED` requires a `registration_id` alongside it.
+    """
+
+    CLAUDE = "claude"
+    PI = "pi"
+    TERMINAL = "terminal"
+    REGISTERED = "registered"
 
 
 class WorkspaceBranchInfo(SerializableModel):
@@ -121,6 +133,8 @@ class StartTaskRequest(RequestModel):
     fast_mode: bool = False
     effort: EffortLevel = EffortLevel.EXTRA_HIGH
     sent_via: str | None = None
+    # Prompt-ful creation is always a chat agent; terminal types are rejected (422).
+    agent_type: AgentTypeName = AgentTypeName.CLAUDE
 
 
 class CreateWorkspaceRequestV2(RequestModel):
@@ -135,8 +149,6 @@ class CreateWorkspaceRequestV2(RequestModel):
     # Diff/merge target branch. When None, the backend resolves a sensible default
     # from the repo (origin's default branch, else local main/master).
     target_branch: str | None = None
-    # DELIBERATE-TEMPORARY: workspace-bound harness selection.
-    harness: HarnessName = HarnessName.CLAUDE
 
 
 class UpdateWorkspaceRequest(RequestModel):
@@ -162,10 +174,42 @@ class CreateAgentRequest(RequestModel):
     fast_mode: bool = False
     effort: EffortLevel = EffortLevel.EXTRA_HIGH
     sent_via: str | None = None
+    agent_type: AgentTypeName = AgentTypeName.CLAUDE
+    # Required iff agent_type is REGISTERED.
+    registration_id: str | None = None
 
 
 class RenameAgentRequest(RequestModel):
     title: str
+
+
+class ListTerminalAgentRegistrationsResponse(SerializableModel):
+    """Current terminal-agent registrations (re-read from disk per request)."""
+
+    registrations: list[TerminalAgentRegistration]
+
+
+class SignalEventRequest(RequestModel):
+    """A terminal-agent signal.
+
+    `event` is a plain string so unknown events validate and reach the
+    handler (forward compatibility — a closed enum would 422 on additive
+    evolution). `session_id` accompanies the `session-id` event only.
+    """
+
+    event: str
+    session_id: str | None = None
+
+
+class TerminalInputRequest(RequestModel):
+    """An automated prompt for a registered terminal agent.
+
+    Smallest viable surface for v1: text plus whether to submit it — no
+    arbitrary key injection.
+    """
+
+    text: str
+    submit: bool = True
 
 
 class WorkspaceResponse(SerializableModel):
@@ -228,7 +272,6 @@ class RecentWorkspaceResponse(SerializableModel):
     agent_count: int
     is_open: bool
     last_activity_at: datetime.datetime
-    harness: HarnessName = HarnessName.CLAUDE
 
 
 class ListWorkspacesResponse(SerializableModel):

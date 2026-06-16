@@ -8,13 +8,13 @@ import type { ToolUseBlock } from "~/api";
 import { ElementIds } from "~/api";
 import { useImbueParams, useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { useTaskDetailWithDefaults } from "~/common/state/hooks/useTaskDetail";
+import { MarkdownBlock } from "~/components/MarkdownBlock";
 import { openFileViewTabAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
 
 import styles from "./AlphaChatView.module.scss";
 import { PulsingDot } from "./pill-animations";
 
 const DISMISSED_ANSWER = "[Dismissed]";
-const PLAN_APPROVAL_QUESTION = "Claude has finished planning. How would you like to proceed?";
 const APPROVE_PLAN_ANSWER = "Approve plan";
 
 export const AlphaExitPlanModeBlock = ({ toolBlock }: { toolBlock: ToolUseBlock }): ReactElement => {
@@ -44,6 +44,18 @@ export const AlphaExitPlanModeBlock = ({ toolBlock }: { toolBlock: ToolUseBlock 
     if (planFilePath) openFileViewTab({ workspaceId: workspaceID, filePath: planFilePath });
   }, [planFilePath, workspaceID, openFileViewTab]);
 
+  // Harnesses that present the plan inline (e.g. pi) pass it as the tool's
+  // `plan` argument rather than writing a plan file; render it here so the user
+  // can actually read the plan. Harnesses with a plan file (Claude) keep the
+  // click-to-open link instead.
+  const planText = typeof toolBlock.input?.plan === "string" ? toolBlock.input.plan : undefined;
+  const planContent =
+    planText && !planFilePath ? (
+      <div className={styles.planInlineContent}>
+        <MarkdownBlock content={planText} />
+      </div>
+    ) : null;
+
   if (isPending) {
     return (
       <div className={styles.planBlock} data-testid={ElementIds.EXIT_PLAN_MODE_TOOL_BLOCK}>
@@ -55,12 +67,17 @@ export const AlphaExitPlanModeBlock = ({ toolBlock }: { toolBlock: ToolUseBlock 
           <PulsingDot />
           <span className={styles.toolName}>Plan ready for review</span>
         </div>
+        {planContent}
       </div>
     );
   }
 
   if (matchingAnswers) {
-    const answerValue = matchingAnswers.answers[PLAN_APPROVAL_QUESTION] ?? "";
+    // Look the answer up by the question's OWN stored text (it varies by harness
+    // and has changed over time) rather than a hardcoded string, so historical
+    // plan turns resolve too.
+    const planQuestion = matchingAnswers.questionData.questions[0]?.question ?? "";
+    const answerValue = matchingAnswers.answers[planQuestion] ?? "";
     const isDismissed = answerValue === DISMISSED_ANSWER;
     const isApproved = answerValue === APPROVE_PLAN_ANSWER;
 
@@ -77,6 +94,7 @@ export const AlphaExitPlanModeBlock = ({ toolBlock }: { toolBlock: ToolUseBlock 
               Approved
             </Badge>
           </div>
+          {planContent}
         </div>
       );
     }
@@ -131,6 +149,7 @@ export const AlphaExitPlanModeBlock = ({ toolBlock }: { toolBlock: ToolUseBlock 
       >
         <span className={styles.toolName}>Plan reviewed</span>
       </div>
+      {planContent}
     </div>
   );
 };
