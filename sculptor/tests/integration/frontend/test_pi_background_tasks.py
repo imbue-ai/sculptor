@@ -112,3 +112,45 @@ def test_pi_background_task_failure_surfaces(sculptor_instance_: SculptorInstanc
     # (exit code 1) together with the command's output summary.
     expect(chat_panel.get_messages().filter(has_text=summary_marker).first).to_be_visible(timeout=30000)
     expect(chat_panel.get_messages().filter(has_text="failed").first).to_be_visible(timeout=30000)
+
+
+@user_story("to confirm a background task under pi survives the user stopping a later turn")
+def test_pi_background_task_survives_stop(sculptor_instance_: SculptorInstance) -> None:
+    """A backgrounded task is independent of the turn that launched it: stopping a LATER
+    turn must not kill it — once released, its completion still surfaces. This is the
+    deterministic guard for the regression where Stop wrongly killed a running task."""
+    page = sculptor_instance_.page
+    install_fake_pi_binary(sculptor_instance_.fake_bin_dir)
+    task_release = Path(tempfile.gettempdir()) / f"pi_bg_survive_task_{uuid.uuid4().hex}"
+    busy_release = Path(tempfile.gettempdir()) / f"pi_bg_survive_busy_{uuid.uuid4().hex}"
+    summary_marker = "PI-BG-SURVIVE-90613"
+    try:
+        task_page = start_task_and_wait_for_ready(
+            sculptor_page=page,
+            workspace_name="Pi Background Survives Stop",
+            model_name=None,
+            agent_type="pi",
+            prompt=(
+                'fake_pi:background `{"command": "sleep 1", "label": "build", "pgid": 0, '
+                + f'"summary": "{summary_marker}", "wait_path": "{task_release}"}}`'
+            ),
+            wait_for_agent_to_finish=True,
+        )
+        chat_panel = task_page.get_chat_panel()
+
+        # Start a second, cancellable turn (it blocks on a sentinel) and Stop it. The
+        # background task — held on its OWN sentinel — must survive that interrupt.
+        send_chat_message(chat_panel=chat_panel, message=f'fake_pi:wait_for_file `{{"path": "{busy_release}"}}`')
+        expect(chat_panel.get_thinking_indicator()).to_be_visible()
+        stop_button = chat_panel.get_stop_button()
+        expect(stop_button).to_be_visible()
+        stop_button.click()
+        expect(chat_panel.get_thinking_indicator()).not_to_be_visible()
+
+        # Release the background task: its completion still surfaces, proving the Stop
+        # did not kill it.
+        task_release.touch()
+        expect(chat_panel.get_messages().filter(has_text=summary_marker).first).to_be_visible(timeout=30000)
+    finally:
+        task_release.touch()
+        busy_release.touch()
