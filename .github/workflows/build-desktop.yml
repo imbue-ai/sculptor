@@ -99,18 +99,17 @@ jobs:
       id-token: write
       contents: read
     # The build binds a GitHub Environment so it can mint the matching Vault
-    # role — the dev and release roles are both bound on an `environment`
-    # claim (SCU-1407):
-    #   sculptor-v* tag push  -> release           (release role)
-    #   workflow_dispatch     -> dev-build-manual  (dev role; maintainer-gated)
-    #   main push (default)   -> dev-release       (dev role; automatic)
-    # Enforcement is the consuming repo's Environment config (deployment-branch
-    # policy / required reviewers), NOT this YAML. On the org's PRIVATE repos
-    # required-reviewers is unavailable (SCU-1423; the public imbue-ai/sculptor
-    # is unaffected), so on those repos `release` does NOT pause here — the Slack
-    # await-approval job is the interim gate, and `dev-build-manual` is likewise
-    # unenforced until the plan/Environment lands.
-    environment: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/sculptor-v')) && 'release' || (github.event_name == 'workflow_dispatch' && 'dev-build-manual') || 'dev-release' }}
+    # role (the role is bound on the `environment` OIDC claim):
+    #   sculptor-v* tag push  -> release-build      (release role; no reviewers)
+    #   workflow_dispatch     -> dev-build-manual   (dev role; maintainer-gated)
+    #   main push (default)   -> dev-release        (dev role; automatic)
+    # `release-build` has no required reviewers: the build runs on a maintainer's
+    # tag push (tag creation is restricted to sculptor-maintainers) and only
+    # writes the SHA-keyed builds bucket. Required reviewers live on `release`,
+    # which gates only the `release-desktop` publish job below. Both release envs
+    # restrict deployments to sculptor-v* tags; enforcement is the Environment
+    # config, not this YAML.
+    environment: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/sculptor-v')) && 'release-build' || (github.event_name == 'workflow_dispatch' && 'dev-build-manual') || 'dev-release' }}
     # linux-arm64 is non-blocking — arm64 runner preemption shouldn't block a
     # release — mirroring the non-blocking linux-arm64 packaged test. A failed
     # arm64 build reports success for `needs`, so the downstream release jobs
@@ -391,69 +390,14 @@ jobs:
   # The release jobs run `publish-build-artifacts --dry-run` in the practice
   # repo; `gh release create` is guarded by github.repository ==
   # 'imbue-ai/sculptor' and skipped here.
-  #
-  # There is no separate "build ready" Slack ping: the await-approval request
-  # message is the heads-up that everything is green and awaiting approval, and
-  # the "released" message confirms the final publish.
   # ---------------------------------------------------------------------------
-
-  # Stopgap manual gate while GitHub Environment required-reviewers is
-  # unavailable on the org's private-repo plan (SCU-1423). A maintainer must
-  # reply `approve` in the Slack thread before release-desktop publishes.
-  # OFF by default so dry-run / practice tag runs aren't blocked — flip the
-  # repo variable ENABLE_RELEASE_APPROVAL to 'true' once the Slack secrets are
-  # provisioned in Vault. When required-reviewers becomes available, delete
-  # this job; release-desktop already declares `environment: release`.
-  await-approval:
-    name: await release approval (Slack)
-    # Both build and the blocking packaged tests must succeed before we ask a
-    # maintainer to approve — no point pinging until everything's green.
-    needs: [build, packaged-tests]
-    if: ${{ vars.ENABLE_RELEASE_APPROVAL == 'true' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/sculptor-v') }}
-    runs-on: ubuntu-latest
-    # Must exceed the script's --timeout-minutes so it can post the red cross
-    # and exit cleanly before the runner is killed.
-    timeout-minutes: 70
-    permissions:
-      id-token: write
-      contents: read
-    environment: release
-    env:
-      VAULT_AUTH_ROLE: slim_sculptor_release_from_tag_gh
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Vault CLI
-        run: |
-          curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --batch --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list >/dev/null
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq vault
-
-      - name: Await maintainer approval in Slack
-        # TODO(SCU-1423): provision these Vault secrets before flipping
-        # ENABLE_RELEASE_APPROVAL on:
-        #   sculptor-release/SLACK_RELEASE_BOT_TOKEN  (xoxb-; chat:write + a
-        #                                       *:history scope; bot in channel)
-        #   sculptor-release/SLACK_CHANNEL_ID  (target channel id)
-        #   sculptor-release/SLACK_APPROVERS   (comma-separated workspace U… ids)
-        # export-vault-env names each var after the path's last component, so
-        # these land as SLACK_RELEASE_BOT_TOKEN / SLACK_CHANNEL_ID /
-        # SLACK_APPROVERS.
-        run: |
-          set -euo pipefail
-          eval "$(./scripts/export-vault-env sculptor-release/SLACK_RELEASE_BOT_TOKEN sculptor-release/SLACK_CHANNEL_ID sculptor-release/SLACK_APPROVERS)"
-          python3 scripts/await_release_approval.py --timeout-minutes 60
 
   release-desktop:
     name: release desktop (S3 publish + gh release)
-    needs: [build, packaged-tests, await-approval]
-    # build AND packaged-tests must genuinely succeed. Approval is gate-tolerant:
-    # proceeds when the gate passed OR is disabled (skipped); only a real
-    # reject / timeout (await-approval failure) blocks publish. !cancelled()
-    # forces evaluation even though await-approval may be skipped.
-    if: ${{ !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/sculptor-v') && needs.build.result == 'success' && needs.packaged-tests.result == 'success' && needs.await-approval.result != 'failure' }}
+    needs: [build, packaged-tests]
+    # Publishes only when the blocking build + packaged tests succeeded; gated
+    # by the `release` environment's required reviewers (declared below).
+    if: ${{ !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/sculptor-v') && needs.build.result == 'success' && needs.packaged-tests.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -629,7 +573,9 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    environment: release
+    # release-build mints the release role to read SLACK_WEBHOOK_URL; with no
+    # reviewer gate, the failure alert posts unattended.
+    environment: release-build
     env:
       VAULT_AUTH_ROLE: slim_sculptor_release_from_tag_gh
     steps:
