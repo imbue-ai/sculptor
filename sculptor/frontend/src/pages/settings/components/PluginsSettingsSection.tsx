@@ -116,6 +116,11 @@ const SourceRow = ({ source, state, store, setIsBusy }: SourceRowProps): ReactEl
       style={{ borderBottom: "1px solid var(--gray-4)" }}
       data-testid={ElementIds.SETTINGS_PLUGINS_SOURCE_ROW}
       data-source={source}
+      // A fresh source has no status entry yet; mirror the row's own loading
+      // fallback. `data-status`/`data-phase` give integration tests a stable
+      // hook to assert a source settled (loaded/error) and never hung loading.
+      data-status={state?.status ?? "loading"}
+      data-phase={state?.status === "error" ? state.phase : undefined}
     >
       <Flex justify="between" align="center" gap="3" py="3">
         <Flex direction="column" gap="1" style={{ minWidth: 0, flexGrow: 1 }}>

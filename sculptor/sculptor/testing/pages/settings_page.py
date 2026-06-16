@@ -12,6 +12,7 @@ from sculptor.testing.elements.settings_git import PlaywrightGitSettingsElement
 from sculptor.testing.elements.settings_keybindings import PlaywrightKeybindingsSettingsElement
 from sculptor.testing.elements.settings_panels import PlaywrightPanelsSettingsElement
 from sculptor.testing.elements.settings_pi import PlaywrightPiSettingsElement
+from sculptor.testing.elements.settings_plugins import PlaywrightPluginsSettingsElement
 from sculptor.testing.elements.settings_privacy import PlaywrightPrivacySettingsElement
 from sculptor.testing.elements.settings_repositories import PlaywrightRepositoriesSettingsElement
 from sculptor.testing.elements.settings_theme_builder import PlaywrightThemeBuilderSettingsElement
@@ -59,6 +60,15 @@ class PlaywrightSettingsPage(PlaywrightProjectLayoutPage):
         """Navigate to Pi (experimental) settings and return the section element."""
         self._get_pi_nav().click()
         return PlaywrightPiSettingsElement(locator=self._get_settings_content(), page=self._page)
+
+    def click_on_plugins(self) -> PlaywrightPluginsSettingsElement:
+        """Navigate to Plugins settings and return the section element.
+
+        The Plugins nav item is gated on the experimental frontend-plugins flag,
+        so this only works on an instance with that flag enabled.
+        """
+        self.get_plugins_nav().click()
+        return PlaywrightPluginsSettingsElement(locator=self._get_settings_content(), page=self._page)
 
     def click_on_privacy(self) -> PlaywrightPrivacySettingsElement:
         """Navigate to Privacy settings and return the section element."""
