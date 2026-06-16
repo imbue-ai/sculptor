@@ -12,9 +12,11 @@ import { pluginManager } from "./pluginManager.tsx";
  * app reads from (the app uses a Provider-scoped store, not the default one),
  * so panels and statuses the manager writes are visible to components.
  *
- * Gated behind the experimental frontend-plugins flag. Plugins load once per
- * page load, so flipping the flag takes effect on the next app reload —
- * turning it off mid-session does not unload already-loaded plugins.
+ * Gated behind the experimental frontend-plugins flag. Enabling takes effect
+ * immediately — this effect bootstraps plugins as soon as the flag turns on.
+ * Disabling is the reload-dependent case: already-loaded plugins are not
+ * unloaded mid-session, so turning the flag off only fully takes effect on the
+ * next app reload.
  */
 export const PluginLoader = (): null => {
   const store = useStore();

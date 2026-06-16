@@ -259,7 +259,7 @@ class UserConfig(SerializableModel):
     )
     enable_frontend_plugins: bool = Field(
         default=False,
-        description="When enabled, the frontend plugin system loads runtime plugins and shows the Plugins settings section. Off by default; toggling requires an app reload to take effect.",
+        description="When enabled, the frontend plugin system loads runtime plugins and shows the Plugins settings section. Off by default. Enabling applies immediately; disabling takes effect after an app reload (already-loaded plugins are not unloaded mid-session).",
     )
     default_fast_mode: bool = Field(
         default=False,

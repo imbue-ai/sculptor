@@ -9,9 +9,11 @@ No plugin ships bundled yet (`BUILTIN_SOURCES` is empty); this is the
 scaffolding the first plugins will target. The whole system sits behind the
 experimental **Frontend plugins** flag (Settings → Experimental): with the
 flag off (the default) nothing loads and the Plugins settings section is
-hidden from the sidebar and palette. Toggling the flag takes effect after an
-app reload. The section also stays reachable at `#/settings?section=PLUGINS`
-regardless of the flag, for plugin development.
+hidden from the sidebar and palette. Enabling the flag applies immediately
+(plugins bootstrap and the section appears); disabling takes effect after an
+app reload, since already-loaded plugins are not unloaded mid-session. The
+section also stays reachable at `#/settings?section=PLUGINS` regardless of the
+flag, for plugin development.
 
 ## How a plugin is built and loaded
 

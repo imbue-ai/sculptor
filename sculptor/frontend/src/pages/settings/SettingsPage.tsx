@@ -513,7 +513,7 @@ export const SettingsPage = (): ReactElement => {
                   </SettingRow>
                   <SettingRow
                     title="Frontend plugins"
-                    description="Load runtime frontend plugins and show the Plugins settings section. Takes effect after the app reloads."
+                    description="Load runtime frontend plugins and show the Plugins settings section. Enabling applies immediately; disabling takes effect after an app reload."
                   >
                     <Switch
                       checked={isFrontendPluginsEnabled}
