@@ -219,6 +219,17 @@ class PlaywrightChatPanelElement(PlaywrightFilePreviewAndUploadMixin, Playwright
         """Get all model options in the dropdown."""
         return self._page.get_by_test_id(ElementIDs.MODEL_OPTION)
 
+    def get_model_option_texts(self) -> list[str]:
+        """The display names of the currently-rendered model options.
+
+        Opens nothing — the caller must have the dropdown open. Returns the
+        option labels so a test can assert membership/absence by testid rather
+        than a non-testid text query.
+        """
+        options = self.get_model_options()
+        expect(options.first).to_be_visible()
+        return [text.strip() for text in options.all_inner_texts()]
+
     def get_fast_mode_toggle(self) -> Locator:
         return self.get_by_test_id(ElementIDs.FAST_MODE_TOGGLE)
 

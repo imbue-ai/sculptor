@@ -583,6 +583,78 @@ def test_fake_pi_get_state_reports_session_id_and_message_count(tmp_path: Path) 
     assert resumed_state["data"]["messageCount"] == 2
 
 
+def _get_state_command(command_id: str = "gs") -> str:
+    return json.dumps({"type": "get_state", "id": command_id}) + "\n"
+
+
+def test_fake_pi_get_available_models_returns_fixed_catalog() -> None:
+    """get_available_models answers with the FakePi catalog in pi's Model shape.
+
+    PiAgent reads `data.models` ({id, name, provider}) to populate the switcher.
+    """
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=json.dumps({"type": "get_available_models", "id": "gm"}) + "\n",
+    )
+    assert result.returncode == 0
+    response = next(e for e in _parse_jsonl(result.stdout) if e.get("command") == "get_available_models")
+    assert response["success"] is True
+    assert response["id"] == "gm"
+    models = response["data"]["models"]
+    assert [m["id"] for m in models] == ["fake-pi-opus-4-8", "fake-pi-sonnet-4-6", "fake-pi-haiku-4-5"]
+    # Each carries pi's Model fields the adapter maps to a ModelOption.
+    assert all({"id", "name", "provider"} <= set(m) for m in models)
+
+
+def test_fake_pi_get_state_reports_default_current_model() -> None:
+    """get_state carries the current model (the first catalog entry by default).
+
+    PiAgent surfaces this as the switcher's selected model.
+    """
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=_get_state_command(),
+    )
+    assert result.returncode == 0
+    state = next(e for e in _parse_jsonl(result.stdout) if e.get("command") == "get_state")
+    assert state["data"]["model"]["id"] == "fake-pi-opus-4-8"
+
+
+def test_fake_pi_set_model_acks_with_chosen_model_and_updates_current() -> None:
+    """set_model echoes the chosen model, and a following get_state reports it as current."""
+    set_model = json.dumps({"type": "set_model", "id": "sm", "provider": "anthropic", "modelId": "fake-pi-haiku-4-5"})
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=set_model + "\n" + _get_state_command("gs2"),
+    )
+    assert result.returncode == 0
+    events = _parse_jsonl(result.stdout)
+    ack = next(e for e in events if e.get("command") == "set_model")
+    assert ack["success"] is True
+    assert ack["id"] == "sm"
+    assert ack["data"]["id"] == "fake-pi-haiku-4-5"
+    # The switch persists: the later get_state now reports the chosen model.
+    state = next(e for e in events if e.get("command") == "get_state")
+    assert state["data"]["model"]["id"] == "fake-pi-haiku-4-5"
+
+
+def test_fake_pi_set_model_rejects_unknown_model() -> None:
+    """An unknown model id is rejected (pi's `Model not found` shape) and current is unchanged."""
+    set_model = json.dumps({"type": "set_model", "id": "sm", "provider": "anthropic", "modelId": "fake-pi-nope"})
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=set_model + "\n" + _get_state_command("gs2"),
+    )
+    assert result.returncode == 0
+    events = _parse_jsonl(result.stdout)
+    ack = next(e for e in events if e.get("command") == "set_model")
+    assert ack["success"] is False
+    assert "Model not found" in ack["error"]
+    # The current model is left on the default after a rejected switch.
+    state = next(e for e in events if e.get("command") == "get_state")
+    assert state["data"]["model"]["id"] == "fake-pi-opus-4-8"
+
+
 def test_fake_pi_rpc_rejects_non_rpc_mode_with_exit_2() -> None:
     result = _run_fake_pi(["--mode", "something-else"])
 

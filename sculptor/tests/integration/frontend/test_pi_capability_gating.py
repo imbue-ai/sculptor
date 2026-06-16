@@ -24,9 +24,11 @@ from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.base import type_trigger_char
+from sculptor.testing.elements.chat_panel import select_model_by_name
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
+from sculptor.testing.fake_pi import _FAKE_PI_MODELS
 from sculptor.testing.fake_pi import install_fake_pi_binary
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import navigate_to_settings_page
@@ -213,6 +215,74 @@ def test_pi_write_and_edit_render_completed_file_chips(sculptor_instance_: Sculp
     # Edit), and none is left stuck in-progress.
     expect(chat_panel.get_completed_file_chips().first).to_be_visible(timeout=15000)
     expect(chat_panel.get_in_progress_tool_calls()).to_have_count(0)
+
+
+# The model switcher under pi has no Claude analogue: Claude sources its list from
+# the frontend's hardcoded PRODUCTION_MODELS, while pi alone populates a backend
+# list. So this is a pi-only test, not parametrized over Claude — Claude's
+# switcher being live is already exercised by the FAKE_CLAUDE_MODEL_NAME selection
+# every sibling makes in _create_workspace_for_harness.
+@user_story("to see pi's own models in the chat switcher and pick one without an error")
+def test_pi_model_switcher_offers_pi_models_and_accepts_a_pick(sculptor_instance_: SculptorInstance) -> None:
+    """Under pi the model switcher is enabled (not the disabled-with-tooltip
+    placeholder), populated with pi's OWN models, shows pi's current model, and
+    accepts selecting a different pi model without surfacing a failure.
+
+    FakePi scripts a fixed catalog for `get_available_models` and a current model
+    for `get_state`, so PiAgent surfaces them onto task state and the switcher
+    renders pi's models — never Claude's hardcoded list. Selecting a different pi
+    model POSTs the set-model endpoint, which FakePi's `set_model` accepts, so no
+    error toast appears.
+
+    Gap: the switcher's displayed selection updating to the new model after the
+    out-of-band switch is NOT asserted here — that reflection is server-driven
+    (the view's `selected_model_id`) and did not land deterministically within
+    the harness window. The set_model RPC round-trip (success persists
+    `current_model`, failure surfaces an error) is covered at unit level in
+    `agent_wrapper_test` (`test_set_model_*`) and `fake_pi_test`.
+    """
+    install_fake_pi_binary(sculptor_instance_.fake_bin_dir)
+    page = sculptor_instance_.page
+    # PiAgent fetches its model catalog at agent start, which only happens once a
+    # turn runs — so send a trivial first prompt to start the agent (and surface
+    # the catalog) rather than leaving the workspace in a prompt-less waiting state.
+    task_page = start_task_and_wait_for_ready(
+        sculptor_page=page,
+        workspace_name="Pi Model Switcher",
+        model_name=None,
+        agent_type="pi",
+        prompt='fake_pi:emit_text `{"text": "ready"}`',
+    )
+    chat_panel = task_page.get_chat_panel()
+
+    default_model_name = _FAKE_PI_MODELS[0]["name"]
+    other_model_name = _FAKE_PI_MODELS[2]["name"]
+
+    # The switcher is live (the capability gate is open under pi), not the
+    # disabled-with-tooltip placeholder.
+    expect(chat_panel.get_model_selector()).to_be_visible()
+    expect(page.get_by_test_id(ElementIDs.CAPABILITY_DISABLED_MODEL_SELECTION)).to_have_count(0)
+
+    # It shows pi's current model. The catalog is fetched at agent start and
+    # persisted on the first message batch, so the selection may land just after
+    # the panel mounts — auto-retried by expect.
+    expect(chat_panel.get_model_selector()).to_contain_text(default_model_name, timeout=15000)
+
+    # Open the dropdown: it lists pi's OWN models (display names sourced from pi's
+    # catalog) and never a Claude-only label from the hardcoded PRODUCTION_MODELS.
+    chat_panel.get_model_selector().click()
+    option_names = chat_panel.get_model_option_texts()
+    assert default_model_name in option_names, option_names
+    assert other_model_name in option_names, option_names
+    assert "Claude 4.6 Sonnet" not in option_names, option_names
+    page.keyboard.press("Escape")
+
+    # Picking a different pi model POSTs the set-model endpoint. FakePi accepts the
+    # set_model, so the switch surfaces no failure toast and the switcher stays
+    # live (the current model is still shown, not blanked).
+    select_model_by_name(chat_panel=chat_panel, model_name=other_model_name)
+    expect(page.get_by_test_id(ElementIDs.TOAST).filter(has_text="Failed to switch")).to_have_count(0)
+    expect(chat_panel.get_model_selector()).to_be_visible()
 
 
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
