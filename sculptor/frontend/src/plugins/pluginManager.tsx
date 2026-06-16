@@ -43,9 +43,18 @@ const parseMajor = (range: string): number | null => {
   return match ? Number(match[1]) : null;
 };
 
-const validateManifest = (manifest: PluginManifest): Error | null => {
-  if (!manifest.id || !manifest.entry || !manifest.sdkVersion) {
-    return new Error("Manifest missing required fields (id, entry, sdkVersion)");
+/** Exported for unit testing; the loader calls it after fetching the manifest. */
+export const validateManifest = (manifest: PluginManifest): Error | null => {
+  // The manifest is parsed from untrusted JSON and only *cast* to the type, so
+  // re-check the required fields are non-empty strings at runtime. This both
+  // gives a clear "validate"-phase error for a malformed manifest and keeps a
+  // non-string `entry`/`sdkVersion` from throwing inside parseMajor/resolveEntryUrl
+  // (which would otherwise surface as the opaque catch-all "load" error).
+  const fields = manifest as unknown as Record<string, unknown>;
+  for (const key of ["id", "entry", "sdkVersion"] as const) {
+    if (typeof fields[key] !== "string" || fields[key] === "") {
+      return new Error(`Manifest field "${key}" must be a non-empty string`);
+    }
   }
   const major = parseMajor(manifest.sdkVersion);
   if (major === null) {

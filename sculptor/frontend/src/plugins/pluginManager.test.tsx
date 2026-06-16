@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { PanelDefinition } from "~/components/panels/types.ts";
 
-import { PluginManager, resolveEntryUrl } from "./pluginManager.tsx";
+import { PluginManager, resolveEntryUrl, validateManifest } from "./pluginManager.tsx";
 import {
   pluginPanelsAtom,
   pluginSettingsComponentsAtom,
@@ -229,5 +229,35 @@ describe("resolveEntryUrl", () => {
   it("honors a nested entry path in the manifest", () => {
     const url = resolveEntryUrl("https://cdn.example/p/v2/manifest.json", "dist/main.js");
     expect(url).toBe("https://cdn.example/p/v2/dist/main.js");
+  });
+});
+
+describe("validateManifest", () => {
+  const valid = (): PluginManifest => ({
+    id: "p",
+    name: "P",
+    version: "0.1.0",
+    entry: "main.js",
+    sdkVersion: "^1.0.0",
+  });
+
+  it("accepts a well-formed manifest", () => {
+    expect(validateManifest(valid())).toBeNull();
+  });
+
+  it("rejects a missing required field", () => {
+    const noEntry = { id: "p", name: "P", version: "0.1.0", sdkVersion: "^1.0.0" } as unknown as PluginManifest;
+    expect(validateManifest(noEntry)?.message).toContain("entry");
+  });
+
+  it("rejects a non-string field (untrusted JSON cast to the type)", () => {
+    // A plugin could serve `{ "sdkVersion": 1 }`; the cast lies, so the runtime
+    // check must catch it here rather than letting parseMajor throw downstream.
+    const bad = { ...valid(), sdkVersion: 1 } as unknown as PluginManifest;
+    expect(validateManifest(bad)?.message).toContain("sdkVersion");
+  });
+
+  it("rejects an SDK major the host does not provide", () => {
+    expect(validateManifest({ ...valid(), sdkVersion: "2.0.0" })?.message).toContain("SDK major");
   });
 });
