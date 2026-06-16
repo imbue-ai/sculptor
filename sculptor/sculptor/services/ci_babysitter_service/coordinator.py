@@ -152,6 +152,11 @@ class CIBabysitterWorkspaceStateView(SerializableModel):
     retry_count: int
     retired: bool
     at_cap: bool
+    # Why the babysitter is inert for this workspace, if it is. Persistent
+    # reasons (MRU non-driveable / pinned harness unavailable) are recomputed on
+    # every read so they appear before any failure and self-heal; the transient
+    # terminal-unreachable reason is surfaced from stored state.
+    disabled_reason: str | None = None
 
 
 class CIBabysitterCoordinator(Service):
@@ -207,17 +212,37 @@ class CIBabysitterCoordinator(Service):
             state.paused = paused
 
     def get_state_snapshot(self, workspace_id: WorkspaceID) -> CIBabysitterWorkspaceStateView | None:
+        config = get_user_config_instance()
         with self._lock:
             state = self._state.get(workspace_id)
             if state is None:
                 return None
-            config = get_user_config_instance()
-            return CIBabysitterWorkspaceStateView(
-                paused=state.paused,
-                retry_count=state.retry_count,
-                retired=state.retired,
-                at_cap=state.retry_count >= config.ci_babysitter.retry_cap,
-            )
+            paused = state.paused
+            retry_count = state.retry_count
+            retired = state.retired
+            project_id = state.project_id
+            transient_reason = state.transient_disabled_reason
+
+        # Recompute the persistent reason on every read (outside the lock — it
+        # does DB I/O) so it appears before any failure and self-heals when the
+        # user changes the MRU or fixes the registration.
+        disabled_reason: str | None = None
+        with self._data_model_service.open_transaction(RequestID()) as transaction:
+            resolved = self._resolve_babysitter_agent(workspace_id, project_id, config, transaction)
+        if isinstance(resolved, Disabled) and not resolved.transient:
+            disabled_reason = resolved.reason
+        elif transient_reason is not None:
+            # Only a driveable terminal accrues a transient reason, so persistent
+            # and transient are mutually exclusive in practice; persistent wins.
+            disabled_reason = transient_reason
+
+        return CIBabysitterWorkspaceStateView(
+            paused=paused,
+            retry_count=retry_count,
+            retired=retired,
+            at_cap=retry_count >= config.ci_babysitter.retry_cap,
+            disabled_reason=disabled_reason,
+        )
 
     def _consumer_loop(self) -> None:
         while not self._shutdown_event.is_set():

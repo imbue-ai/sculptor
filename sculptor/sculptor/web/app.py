@@ -1879,6 +1879,7 @@ class CIBabysitterWorkspaceStateResponse(SerializableModel):
     retry_cap: int
     retired: bool
     at_cap: bool
+    disabled_reason: str | None = None
 
 
 class CIBabysitterPauseRequest(SerializableModel):
@@ -1898,6 +1899,7 @@ def _build_ci_babysitter_state_response(
             retry_cap=config.ci_babysitter.retry_cap,
             retired=False,
             at_cap=False,
+            disabled_reason=None,
         )
     return CIBabysitterWorkspaceStateResponse(
         workspace_id=workspace_id,
@@ -1906,6 +1908,7 @@ def _build_ci_babysitter_state_response(
         retry_cap=config.ci_babysitter.retry_cap,
         retired=snapshot.retired,
         at_cap=snapshot.at_cap,
+        disabled_reason=snapshot.disabled_reason,
     )
 
 

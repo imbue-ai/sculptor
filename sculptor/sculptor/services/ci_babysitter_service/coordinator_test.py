@@ -290,6 +290,9 @@ class _FakeEnv:
             initialization_strategy=WorkspaceInitializationStrategy.CLONE,
         )
         self.tasks_by_id: dict[TaskID, Task] = {}
+        # Most-recent-first agent tasks the resolver sees through the coordinator's
+        # own transactions (used by get_state_snapshot's proactive resolve).
+        self.tasks: list[Task] = []
 
 
 class _FakeTransaction(_StubTransaction):
@@ -301,6 +304,10 @@ class _FakeTransaction(_StubTransaction):
 
     def get_workspace(self, workspace_id: WorkspaceID) -> Workspace | None:
         return self._env.workspace if workspace_id == self._env.workspace.object_id else None
+
+    def get_tasks_for_project(self, project_id: ProjectID, input_data_classes: Any = None) -> list[Task]:
+        del project_id, input_data_classes
+        return list(self._env.tasks)
 
     def get_project(self, project_id: ProjectID) -> Project | None:
         return self._env.project if project_id == self._env.project.object_id else None
@@ -1345,3 +1352,86 @@ def test_select_model_for_workspace_skips_terminal_agents(
         env.workspace_id, env.project_id, _make_user_config(), _TasksTransaction(env, tasks)
     )
     assert model == LLMModel.CLAUDE_4_OPUS
+
+
+# get_state_snapshot proactively recomputes the persistent disabled-reason on
+# every read and surfaces the stored transient reason.
+
+
+def test_snapshot_surfaces_persistent_reason_for_plain_terminal_mru(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    coordinator.set_paused(env.workspace_id, False)  # create per-workspace state
+    # Most-recent agent is a plain terminal — never driveable. No failure yet.
+    env.tasks = [_make_agent_task(env, TerminalAgentConfig(), "2026-01-01T00:00:00")]
+
+    snapshot = coordinator.get_state_snapshot(env.workspace_id)
+    assert snapshot is not None
+    assert snapshot.disabled_reason == coordinator_module._DISABLED_REASON_MRU_NON_DRIVEABLE
+
+
+def test_snapshot_reason_self_heals_when_mru_becomes_driveable(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    coordinator.set_paused(env.workspace_id, False)
+    env.tasks = [_make_agent_task(env, TerminalAgentConfig(), "2026-01-01T00:00:00")]
+    before = coordinator.get_state_snapshot(env.workspace_id)
+    assert before is not None
+    assert before.disabled_reason is not None
+
+    # The user opens a Claude chat agent — the reason is recomputed, not stored.
+    env.tasks = [_make_agent_task(env, ClaudeCodeSDKAgentConfig(), "2026-01-02T00:00:00")]
+    after = coordinator.get_state_snapshot(env.workspace_id)
+    assert after is not None
+    assert after.disabled_reason is None
+
+
+def test_snapshot_surfaces_pinned_unavailable_reason(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    patch_user_config.config = _make_config_with_agent(BabysitterAgentPi(), enable_pi_agent=False)
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    coordinator.set_paused(env.workspace_id, False)
+
+    snapshot = coordinator.get_state_snapshot(env.workspace_id)
+    assert snapshot is not None
+    assert snapshot.disabled_reason == coordinator_module._DISABLED_REASON_PINNED_UNAVAILABLE
+
+
+def test_snapshot_surfaces_transient_reason_for_driveable_terminal(
+    env: _FakeEnv,
+    patch_user_config: _ConfigSlot,
+    test_root_concurrency_group: ConcurrencyGroup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _opt_in_registration(_id))
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    coordinator.set_paused(env.workspace_id, False)
+    terminal_config = RegisteredTerminalAgentConfig(
+        registration_id="claude-code",
+        display_name="Claude Code",
+        launch_command="claude",
+        accepts_automated_prompts=True,
+    )
+    env.tasks = [_make_agent_task(env, terminal_config, "2026-01-01T00:00:00")]
+    coordinator._state[env.workspace_id].transient_disabled_reason = coordinator_module._TRANSIENT_REASON_UNREACHABLE
+
+    snapshot = coordinator.get_state_snapshot(env.workspace_id)
+    assert snapshot is not None
+    # The MRU resolves driveable (no persistent reason), so the stored transient
+    # reason is surfaced.
+    assert snapshot.disabled_reason == coordinator_module._TRANSIENT_REASON_UNREACHABLE
+
+
+def test_snapshot_has_no_reason_for_healthy_chat_mru(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    coordinator.set_paused(env.workspace_id, False)
+    env.tasks = [_make_agent_task(env, ClaudeCodeSDKAgentConfig(), "2026-01-01T00:00:00")]
+
+    snapshot = coordinator.get_state_snapshot(env.workspace_id)
+    assert snapshot is not None
+    assert snapshot.disabled_reason is None
