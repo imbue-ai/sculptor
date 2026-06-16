@@ -1,11 +1,7 @@
-"""Integration tests for the AskUserQuestion feature in the legacy (classic) chat view.
+"""Integration tests for the AskUserQuestion feature.
 
 Tests the full flow: agent invokes AskUserQuestion tool, Q&A panel appears,
 user selects answers and submits, agent receives the answers and continues.
-
-These tests run on the legacy (classic) chat view to maintain coverage of the
-classic rendering path.  The alpha-specific rendering is tested separately in
-``test_alpha_ask_user_question.py``.
 """
 
 import os
@@ -13,14 +9,13 @@ import re
 import subprocess
 import sys
 
-import pytest
-from playwright.sync_api import Locator
-from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
-from sculptor.testing.elements.alpha_chat_view import enable_legacy_chat_view
+from sculptor.testing.elements.ask_user_question import PlaywrightAskUserQuestionBlockElement
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
+from sculptor.testing.elements.ask_user_question import get_ask_user_question_tool_blocks
+from sculptor.testing.elements.ask_user_question import get_first_ask_user_question_tool_block
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
@@ -30,119 +25,6 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
-
-# ========== Fixtures ==========
-
-
-@pytest.fixture(autouse=True)
-def _use_legacy_chat_view(request: pytest.FixtureRequest) -> None:
-    """Enable legacy chat view so these tests exercise classic rendering."""
-    if "sculptor_instance_" in request.fixturenames:
-        instance = request.getfixturevalue("sculptor_instance_")
-        enable_legacy_chat_view(instance.page)
-
-
-# ========== Helper Functions ==========
-
-
-def get_first_tool_block(page: Page) -> Locator:
-    """Get the first AskUserQuestion tool block in the chat."""
-    return page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_TOOL_BLOCK).first
-
-
-def click_tool_block_header(tool_block: Locator) -> None:
-    """Click the tool block header to toggle expand/collapse.
-
-    The onClick handler for toggling is on the inner header Flex element, not
-    the outer Box, so we target the header via its data-testid.
-    """
-    tool_block.get_by_test_id(ElementIDs.ASK_USER_QUESTION_TOOL_BLOCK_HEADER).click()
-
-
-def expand_tool_block_if_collapsed(tool_block: Locator) -> None:
-    """Expand the tool block if it's currently collapsed.
-
-    Uses the data-expanded attribute on the outer Box to detect state,
-    avoiding accidental toggling when called on an already-expanded block.
-    """
-    if tool_block.get_attribute("data-expanded") != "true":
-        click_tool_block_header(tool_block)
-
-
-def verify_tool_block_question_text(tool_block: Locator, expected_question: str) -> None:
-    """Verify that the tool block displays the expected question text when expanded."""
-    expand_tool_block_if_collapsed(tool_block)
-    question_elements = tool_block.get_by_test_id(ElementIDs.ASK_USER_QUESTION_TEXT)
-    expect(question_elements.filter(has_text=expected_question).first).to_be_visible()
-
-
-def verify_tool_block_answer_text(tool_block: Locator, expected_answer: str) -> None:
-    """Verify that the tool block displays the expected answer text when expanded."""
-    expand_tool_block_if_collapsed(tool_block)
-    answer_elements = tool_block.get_by_test_id(ElementIDs.ASK_USER_QUESTION_ANSWER_TEXT)
-    expect(answer_elements.filter(has_text=expected_answer).first).to_be_visible()
-
-
-def verify_tool_block_multi_answers(tool_block: Locator, expected_answers: list[str]) -> None:
-    """Verify that the tool block displays multiple answers (for multi-select questions)."""
-    expand_tool_block_if_collapsed(tool_block)
-    answer_elements = tool_block.get_by_test_id(ElementIDs.ASK_USER_QUESTION_ANSWER_TEXT)
-    for answer in expected_answers:
-        expect(answer_elements.filter(has_text=answer).first).to_be_visible()
-
-
-def verify_tool_block_shows_submitted_state(tool_block: Locator) -> None:
-    """Verify that the tool block shows 'Submitted' state (not pending or dismissed)."""
-    header_label = tool_block.get_by_test_id(ElementIDs.ASK_USER_QUESTION_HEADER_LABEL)
-    expect(header_label).to_contain_text("Questions answered")
-    status_badge = tool_block.get_by_test_id(ElementIDs.ASK_USER_QUESTION_STATUS_BADGE)
-    expect(status_badge).to_contain_text("Submitted")
-
-
-def verify_tool_block_shows_dismissed_state(tool_block: Locator) -> None:
-    """Verify that the tool block shows 'Dismissed' state."""
-    header_label = tool_block.get_by_test_id(ElementIDs.ASK_USER_QUESTION_HEADER_LABEL)
-    expect(header_label).to_contain_text("Questions dismissed")
-    status_badge = tool_block.get_by_test_id(ElementIDs.ASK_USER_QUESTION_STATUS_BADGE)
-    expect(status_badge).to_contain_text("Dismissed")
-
-
-# The active Q&A panel is identical across the classic and alpha views, so
-# these helpers delegate to the shared ``PlaywrightAskUserQuestionPanelElement``
-# POM rather than re-reading the panel's test ids here. (The tool-block helpers
-# above stay local — the classic view renders the *answered* block with
-# different test ids than the alpha block POM models.)
-def navigate_to_next_question(page: Page) -> None:
-    """Click the Next button to navigate to the next question in multi-question flow."""
-    get_ask_user_question_panel(page).navigate_next()
-
-
-def navigate_to_previous_question(page: Page) -> None:
-    """Click the Previous button to navigate to the previous question in multi-question flow."""
-    get_ask_user_question_panel(page).navigate_previous()
-
-
-def select_option_by_text(page: Page, option_text: str) -> None:
-    """Select an option in the Q&A panel by clicking on it."""
-    get_ask_user_question_panel(page).select_option(option_text)
-
-
-def type_other_text(page: Page, text: str) -> None:
-    """Type custom text into the 'Other' input field."""
-    get_ask_user_question_panel(page).type_other_text(text)
-
-
-def submit_answers(page: Page) -> None:
-    """Click the Submit button to submit answers."""
-    get_ask_user_question_panel(page).submit()
-
-
-def dismiss_questions(page: Page) -> None:
-    """Click the Dismiss button instead of answering."""
-    get_ask_user_question_panel(page).dismiss()
-
-
-# ========== Tests ==========
 
 
 @user_story("to answer questions asked by the agent")
@@ -183,24 +65,24 @@ fake_claude:ask_user_question `{
     # take several seconds to spawn, so we use a generous timeout. We do NOT check
     # the thinking indicator first because it's a transient state that can appear
     # and disappear before the assertion runs (especially on warm repeated runs).
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
     # While the question is pending, there should be exactly one AskUserQuestion tool block
     # in the chat (no duplicates from streaming persistence).
-    ask_tool_blocks = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_TOOL_BLOCK)
+    ask_tool_blocks = get_ask_user_question_tool_blocks(page)
     expect(ask_tool_blocks).to_have_count(1)
 
     # Verify the question is displayed in the panel
-    question_text = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_TEXT)
+    question_text = ask_panel.get_question_text()
     expect(question_text).to_contain_text("programming language")
 
     # Verify at least one option is rendered
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     expect(options.first).to_be_visible()
 
     # The submit button should be disabled before an answer is selected
-    submit_button = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_SUBMIT)
+    submit_button = ask_panel.get_submit_button()
     expect(submit_button).to_be_disabled()
 
     # Select the first option (likely Python)
@@ -235,12 +117,12 @@ fake_claude:ask_user_question `{
     expect(ask_tool_blocks).to_have_count(1)
 
     # Verify the tool block shows the submitted state with the question and answer
-    tool_block = get_first_tool_block(page)
-    verify_tool_block_shows_submitted_state(tool_block)
-    verify_tool_block_question_text(tool_block, "programming language")
+    tool_block = get_first_ask_user_question_tool_block(page)
+    tool_block.expect_submitted_state()
+    tool_block.expect_question_visible("programming language")
     # The answer should be one of the options (Python, JavaScript, or Rust)
     # We know the first option was selected, which is likely Python
-    verify_tool_block_answer_text(tool_block, "Python")
+    tool_block.expect_answer_visible("Python")
 
 
 @user_story("to answer multiple questions in one prompt")
@@ -295,23 +177,23 @@ fake_claude:ask_user_question `{
     )
     chat_panel = task_page.get_chat_panel()
 
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
     # Verify we're on question 1
-    question_text = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_TEXT)
+    question_text = ask_panel.get_question_text()
     expect(question_text).to_contain_text("programming language")
 
     # Button should say "Next" (haven't answered all questions yet)
-    submit_button = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_SUBMIT)
+    submit_button = ask_panel.get_submit_button()
     expect(submit_button).to_have_text("Next")
 
     # Select an answer for question 1
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     options.first.click()
 
     # Navigate to question 2
-    navigate_to_next_question(page)
+    ask_panel.navigate_next()
 
     # Verify we're on question 2
     expect(question_text).to_contain_text("experience level")
@@ -320,11 +202,11 @@ fake_claude:ask_user_question `{
     expect(submit_button).to_have_text("Next")
 
     # Select an answer for question 2
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     options.first.click()
 
     # Navigate to question 3
-    navigate_to_next_question(page)
+    ask_panel.navigate_next()
 
     # Verify we're on question 3
     expect(question_text).to_contain_text("type of project")
@@ -334,15 +216,15 @@ fake_claude:ask_user_question `{
     expect(submit_button).to_be_disabled()
 
     # Test backward navigation
-    navigate_to_previous_question(page)
+    ask_panel.navigate_previous()
     expect(question_text).to_contain_text("experience level")
 
     # Go back to question 3
-    navigate_to_next_question(page)
+    ask_panel.navigate_next()
     expect(question_text).to_contain_text("type of project")
 
     # Select an answer for question 3
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     options.first.click()
 
     # Now all questions are answered, button should say "Submit"
@@ -357,11 +239,11 @@ fake_claude:ask_user_question `{
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
 
     # Verify the tool block shows all three questions and answers
-    tool_block = get_first_tool_block(page)
-    verify_tool_block_shows_submitted_state(tool_block)
-    verify_tool_block_question_text(tool_block, "programming language")
-    verify_tool_block_question_text(tool_block, "experience level")
-    verify_tool_block_question_text(tool_block, "type of project")
+    tool_block = get_first_ask_user_question_tool_block(page)
+    tool_block.expect_submitted_state()
+    tool_block.expect_question_visible("programming language")
+    tool_block.expect_question_visible("experience level")
+    tool_block.expect_question_visible("type of project")
 
 
 @user_story("to select multiple answers for a question")
@@ -397,16 +279,16 @@ fake_claude:ask_user_question `{
     )
     chat_panel = task_page.get_chat_panel()
 
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
     # Select multiple options
-    select_option_by_text(page, "Python")
-    select_option_by_text(page, "JavaScript")
-    select_option_by_text(page, "Rust")
+    ask_panel.select_option("Python")
+    ask_panel.select_option("JavaScript")
+    ask_panel.select_option("Rust")
 
     # Submit
-    submit_answers(page)
+    ask_panel.submit()
 
     # Wait for completion
     expect(ask_panel).not_to_be_visible(timeout=30_000)
@@ -414,9 +296,9 @@ fake_claude:ask_user_question `{
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
 
     # Verify the tool block shows all selected answers
-    tool_block = get_first_tool_block(page)
-    verify_tool_block_shows_submitted_state(tool_block)
-    verify_tool_block_multi_answers(tool_block, ["Python", "JavaScript", "Rust"])
+    tool_block = get_first_ask_user_question_tool_block(page)
+    tool_block.expect_submitted_state()
+    tool_block.expect_answers_visible(["Python", "JavaScript", "Rust"])
 
 
 @user_story("to provide custom text for 'Other' option")
@@ -452,23 +334,23 @@ fake_claude:ask_user_question `{
     )
     chat_panel = task_page.get_chat_panel()
 
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
     # Select 'Other' option
-    select_option_by_text(page, "Other")
+    ask_panel.select_option("Other")
 
     # Verify text input appears and is focused
-    other_input = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OTHER_INPUT)
+    other_input = ask_panel.get_other_input()
     expect(other_input).to_be_visible()
     expect(other_input).to_be_focused()
 
     # Submit should be disabled without text
-    submit_button = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_SUBMIT)
+    submit_button = ask_panel.get_submit_button()
     expect(submit_button).to_be_disabled()
 
     # Type custom text
-    type_other_text(page, "Haskell")
+    ask_panel.type_other_text("Haskell")
 
     # Now submit should be enabled
     expect(submit_button).to_be_enabled()
@@ -482,9 +364,9 @@ fake_claude:ask_user_question `{
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
 
     # Verify the tool block shows the custom answer
-    tool_block = get_first_tool_block(page)
-    verify_tool_block_shows_submitted_state(tool_block)
-    verify_tool_block_answer_text(tool_block, "Haskell")
+    tool_block = get_first_ask_user_question_tool_block(page)
+    tool_block.expect_submitted_state()
+    tool_block.expect_answer_visible("Haskell")
 
 
 @user_story("to select multiple options including 'Other'")
@@ -519,19 +401,19 @@ fake_claude:ask_user_question `{
     )
     chat_panel = task_page.get_chat_panel()
 
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
     # Select some predefined options
-    select_option_by_text(page, "Python")
-    select_option_by_text(page, "JavaScript")
+    ask_panel.select_option("Python")
+    ask_panel.select_option("JavaScript")
 
     # Select Other and type custom text
-    select_option_by_text(page, "Other")
-    type_other_text(page, "Elixir")
+    ask_panel.select_option("Other")
+    ask_panel.type_other_text("Elixir")
 
     # Submit
-    submit_answers(page)
+    ask_panel.submit()
 
     # Wait for completion
     expect(ask_panel).not_to_be_visible(timeout=30_000)
@@ -539,9 +421,9 @@ fake_claude:ask_user_question `{
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
 
     # Verify the tool block shows all answers including custom text
-    tool_block = get_first_tool_block(page)
-    verify_tool_block_shows_submitted_state(tool_block)
-    verify_tool_block_multi_answers(tool_block, ["Python", "JavaScript", "Elixir"])
+    tool_block = get_first_ask_user_question_tool_block(page)
+    tool_block.expect_submitted_state()
+    tool_block.expect_answers_visible(["Python", "JavaScript", "Elixir"])
 
 
 @user_story("to dismiss questions without answering")
@@ -577,11 +459,11 @@ fake_claude:ask_user_question `{
     )
     chat_panel = task_page.get_chat_panel()
 
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
     # Click Dismiss instead of answering
-    dismiss_questions(page)
+    ask_panel.dismiss()
 
     # Q&A panel should disappear
     expect(ask_panel).not_to_be_visible(timeout=30_000)
@@ -591,11 +473,11 @@ fake_claude:ask_user_question `{
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
 
     # Verify the tool block shows dismissed state
-    tool_block = get_first_tool_block(page)
-    verify_tool_block_shows_dismissed_state(tool_block)
+    tool_block = get_first_ask_user_question_tool_block(page)
+    tool_block.expect_dismissed_state()
 
     # Verify the question text is still visible when expanded
-    verify_tool_block_question_text(tool_block, "programming language")
+    tool_block.expect_question_visible("programming language")
 
 
 @user_story("to answer multiple sequential questions from the agent")
@@ -632,13 +514,13 @@ fake_claude:ask_user_question `{
     chat_panel = task_page.get_chat_panel()
 
     # Answer first question
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
-    expect(ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_TEXT)).to_contain_text("programming language")
+    expect(ask_panel.get_question_text()).to_contain_text("programming language")
 
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     options.first.click()
-    submit_answers(page)
+    ask_panel.submit()
 
     expect(ask_panel).not_to_be_visible(timeout=30_000)
 
@@ -668,12 +550,12 @@ fake_claude:ask_user_question `{
 
     # Second question should appear
     expect(ask_panel).to_be_visible(timeout=30_000)
-    expect(ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_TEXT)).to_contain_text("framework")
+    expect(ask_panel.get_question_text()).to_contain_text("framework")
 
     # Answer second question
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     options.first.click()
-    submit_answers(page)
+    ask_panel.submit()
 
     expect(ask_panel).not_to_be_visible(timeout=30_000)
 
@@ -684,17 +566,17 @@ fake_claude:ask_user_question `{
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=6)
 
     # Verify two separate tool blocks exist
-    ask_tool_blocks = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_TOOL_BLOCK)
+    ask_tool_blocks = get_ask_user_question_tool_blocks(page)
     expect(ask_tool_blocks).to_have_count(2)
 
     # Verify each tool block shows its respective question
-    first_block = ask_tool_blocks.nth(0)
-    verify_tool_block_shows_submitted_state(first_block)
-    verify_tool_block_question_text(first_block, "programming language")
+    first_block = PlaywrightAskUserQuestionBlockElement(locator=ask_tool_blocks.nth(0), page=page)
+    first_block.expect_submitted_state()
+    first_block.expect_question_visible("programming language")
 
-    second_block = ask_tool_blocks.nth(1)
-    verify_tool_block_shows_submitted_state(second_block)
-    verify_tool_block_question_text(second_block, "framework")
+    second_block = PlaywrightAskUserQuestionBlockElement(locator=ask_tool_blocks.nth(1), page=page)
+    second_block.expect_submitted_state()
+    second_block.expect_question_visible("framework")
 
 
 @user_story("to reload page while question is pending")
@@ -729,34 +611,26 @@ fake_claude:ask_user_question `{
     )
 
     # Wait for Q&A panel to appear
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
-    expect(ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_TEXT)).to_contain_text("programming language")
+    expect(ask_panel.get_question_text()).to_contain_text("programming language")
 
-    # Navigate away from the workspace and back using workspace tabs.
-    # Click the "+" button to open the new-workspace modal, close it,
-    # then click the workspace tab to navigate back. The overlay would
-    # otherwise intercept the workspace-tab click.
-    add_ws_button = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
-    add_ws_button.click()
-    expect(page.get_by_test_id(ElementIDs.START_TASK_BUTTON)).to_be_visible()
-    page.keyboard.press("Escape")
-    expect(page.get_by_test_id(ElementIDs.START_TASK_BUTTON)).to_be_hidden()
-    workspace_tab = page.get_by_test_id(ElementIDs.WORKSPACE_TAB).first
-    workspace_tab.click()
+    # Navigate away from the workspace and back to force Jotai store reinitialization.
+    navigate_away_and_back(page)
 
     # Question should still be pending and visible
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible()
-    expect(ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_TEXT)).to_contain_text("programming language")
+    expect(ask_panel.get_question_text()).to_contain_text("programming language")
 
     # Should be able to answer normally
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     options.first.click()
-    submit_answers(page)
+    ask_panel.submit()
 
     expect(ask_panel).not_to_be_visible(timeout=30_000)
-    expect(page.get_by_test_id(ElementIDs.THINKING_INDICATOR), "agent to finish").not_to_be_visible()
+    task_page = PlaywrightTaskPage(page=page)
+    expect(task_page.get_chat_panel().get_thinking_indicator(), "agent to finish").not_to_be_visible()
 
 
 @user_story("to see answered questions after page reload")
@@ -793,12 +667,12 @@ fake_claude:ask_user_question `{
     chat_panel = task_page.get_chat_panel()
 
     # Answer and complete
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     options.first.click()
-    submit_answers(page)
+    ask_panel.submit()
 
     expect(ask_panel).not_to_be_visible(timeout=30_000)
     expect(chat_panel.get_thinking_indicator(), "agent to finish").not_to_be_visible()
@@ -807,18 +681,15 @@ fake_claude:ask_user_question `{
     # Soft-reload to refresh state (direct reload causes ERR_INSUFFICIENT_RESOURCES on CI)
     soft_reload_page(page)
 
-    # Wait for the reloaded chat to re-render the submitted tool block (a
-    # positive signal that the page came back) instead of sleeping, then
-    # confirm the answered Q&A panel did NOT reappear.
-    tool_block = get_first_tool_block(page)
-    expect(tool_block).to_be_visible()
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    # Q&A panel should NOT reappear
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).not_to_be_visible()
 
     # Tool block should show submitted state with answers
-    verify_tool_block_shows_submitted_state(tool_block)
-    verify_tool_block_question_text(tool_block, "programming language")
-    verify_tool_block_answer_text(tool_block, "Python")
+    tool_block = get_first_ask_user_question_tool_block(page)
+    tool_block.expect_submitted_state()
+    tool_block.expect_question_visible("programming language")
+    tool_block.expect_answer_visible("Python")
 
 
 @user_story("to navigate through questions and answer out of order")
@@ -881,45 +752,45 @@ fake_claude:ask_user_question `{
     )
     chat_panel = task_page.get_chat_panel()
 
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
-    submit_button = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_SUBMIT)
+    submit_button = ask_panel.get_submit_button()
 
     # Navigate forward without answering
-    navigate_to_next_question(page)  # Q1 -> Q2
-    navigate_to_next_question(page)  # Q2 -> Q3
-    navigate_to_next_question(page)  # Q3 -> Q4
+    ask_panel.navigate_next()  # Q1 -> Q2
+    ask_panel.navigate_next()  # Q2 -> Q3
+    ask_panel.navigate_next()  # Q3 -> Q4
 
     # Answer Q4
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     options.first.click()
     expect(submit_button).to_have_text("Next")  # Still need Q1, Q2, Q3
 
     # Navigate back to Q1
-    navigate_to_previous_question(page)  # Q4 -> Q3
-    navigate_to_previous_question(page)  # Q3 -> Q2
-    navigate_to_previous_question(page)  # Q2 -> Q1
+    ask_panel.navigate_previous()  # Q4 -> Q3
+    ask_panel.navigate_previous()  # Q3 -> Q2
+    ask_panel.navigate_previous()  # Q2 -> Q1
 
     # Answer Q1
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     options.first.click()
     expect(submit_button).to_have_text("Next")  # Still need Q2, Q3
 
     # Navigate to Q3 (skipping Q2)
-    navigate_to_next_question(page)  # Q1 -> Q2
-    navigate_to_next_question(page)  # Q2 -> Q3
+    ask_panel.navigate_next()  # Q1 -> Q2
+    ask_panel.navigate_next()  # Q2 -> Q3
 
     # Answer Q3
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     options.first.click()
     expect(submit_button).to_have_text("Next")  # Still need Q2
 
     # Go back to Q2
-    navigate_to_previous_question(page)  # Q3 -> Q2
+    ask_panel.navigate_previous()  # Q3 -> Q2
 
     # Answer Q2
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     options.first.click()
 
     # Now all questions are answered, button should say "Submit"
@@ -983,25 +854,25 @@ fake_claude:ask_user_question `{
     )
     chat_panel = task_page.get_chat_panel()
 
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
-    question_text = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_TEXT)
-    submit_button = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_SUBMIT)
+    question_text = ask_panel.get_question_text()
+    submit_button = ask_panel.get_submit_button()
 
     # On Q1 with nothing answered: button says "Next"
     expect(question_text).to_contain_text("Pick a color")
     expect(submit_button).to_have_text("Next")
 
     # Answer Q1, then click Next — should go to Q2 (next unanswered)
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     options.first.click()
     expect(submit_button).to_have_text("Next")
     submit_button.click()
     expect(question_text).to_contain_text("Pick a size")
 
     # Answer Q2, then click Next — should go to Q3 (only remaining unanswered)
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     options.first.click()
     expect(submit_button).to_have_text("Next")
     submit_button.click()
@@ -1012,7 +883,7 @@ fake_claude:ask_user_question `{
     expect(submit_button).to_be_disabled()
 
     # Answer Q3 — button becomes enabled
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     options.first.click()
     expect(submit_button).to_have_text("Submit")
     expect(submit_button).to_be_enabled()
@@ -1026,11 +897,11 @@ fake_claude:ask_user_question `{
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
 
     # Verify tool block
-    tool_block = get_first_tool_block(page)
-    verify_tool_block_shows_submitted_state(tool_block)
-    verify_tool_block_answer_text(tool_block, "Red")
-    verify_tool_block_answer_text(tool_block, "Small")
-    verify_tool_block_answer_text(tool_block, "Circle")
+    tool_block = get_first_ask_user_question_tool_block(page)
+    tool_block.expect_submitted_state()
+    tool_block.expect_answer_visible("Red")
+    tool_block.expect_answer_visible("Small")
+    tool_block.expect_answer_visible("Circle")
 
 
 @user_story("to handle questions with very long text")
@@ -1067,20 +938,18 @@ fake_claude:ask_user_question `{
     chat_panel = task_page.get_chat_panel()
 
     # Question should appear despite long text
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
     # Verify the long question text is visible (at least part of it)
-    expect(ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_TEXT)).to_contain_text(
-        "preferred programming language"
-    )
+    expect(ask_panel.get_question_text()).to_contain_text("preferred programming language")
 
     # Should be able to interact normally
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     expect(options.first).to_be_visible()
     options.first.click()
 
-    submit_answers(page)
+    ask_panel.submit()
 
     # Wait for completion
     expect(ask_panel).not_to_be_visible(timeout=30_000)
@@ -1088,9 +957,9 @@ fake_claude:ask_user_question `{
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
 
     # Verify tool block shows the question (at least partially)
-    tool_block = get_first_tool_block(page)
-    verify_tool_block_shows_submitted_state(tool_block)
-    verify_tool_block_question_text(tool_block, "preferred programming language")
+    tool_block = get_first_ask_user_question_tool_block(page)
+    tool_block.expect_submitted_state()
+    tool_block.expect_question_visible("preferred programming language")
 
 
 @user_story("to handle questions with special characters")
@@ -1126,19 +995,17 @@ fake_claude:ask_user_question `{
     )
     chat_panel = task_page.get_chat_panel()
 
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
     # Verify special characters appear correctly
-    expect(ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_TEXT)).to_contain_text(
-        "favorite programming language"
-    )
+    expect(ask_panel.get_question_text()).to_contain_text("favorite programming language")
 
     # Select an option with special characters (e.g., C++)
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     options.first.click()
 
-    submit_answers(page)
+    ask_panel.submit()
 
     # Wait for completion
     expect(ask_panel).not_to_be_visible(timeout=30_000)
@@ -1146,9 +1013,9 @@ fake_claude:ask_user_question `{
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
 
     # Verify tool block shows the question and answer with special characters
-    tool_block = get_first_tool_block(page)
-    verify_tool_block_shows_submitted_state(tool_block)
-    verify_tool_block_question_text(tool_block, "favorite programming language")
+    tool_block = get_first_ask_user_question_tool_block(page)
+    tool_block.expect_submitted_state()
+    tool_block.expect_question_visible("favorite programming language")
 
 
 @user_story("to see no duplicate tool blocks after Sculptor restart")
@@ -1165,7 +1032,6 @@ def test_ask_user_question_no_duplicates_after_restart(
     # First Sculptor instance: create workspace, answer question, wait for completion
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
-        enable_legacy_chat_view(page)
 
         task_page = start_task_and_wait_for_ready(
             sculptor_page=page,
@@ -1189,29 +1055,28 @@ fake_claude:ask_user_question `{
         chat_panel = task_page.get_chat_panel()
 
         # Answer the question
-        ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+        ask_panel = get_ask_user_question_panel(page)
         expect(ask_panel).to_be_visible(timeout=30_000)
 
-        options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+        options = ask_panel.get_options()
         options.first.click()
-        submit_answers(page)
+        ask_panel.submit()
 
         expect(ask_panel).not_to_be_visible(timeout=30_000)
         expect(chat_panel.get_thinking_indicator(), "agent to finish").not_to_be_visible()
         wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
 
         # Before restart: verify only one tool block exists
-        ask_tool_blocks = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_TOOL_BLOCK)
+        ask_tool_blocks = get_ask_user_question_tool_blocks(page)
         expect(ask_tool_blocks).to_have_count(1)
 
         # Verify it shows "Questions answered" (not grouped under "Called Tools")
-        tool_block = get_first_tool_block(page)
-        verify_tool_block_shows_submitted_state(tool_block)
+        tool_block = get_first_ask_user_question_tool_block(page)
+        tool_block.expect_submitted_state()
 
     # Second Sculptor instance: restart and verify state persisted correctly
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
-        enable_legacy_chat_view(page)
 
         # The workspace still exists after restart.
         # Wait for the workspace tab to be visible, then click it.
@@ -1228,21 +1093,20 @@ fake_claude:ask_user_question `{
         wait_for_completed_message_count(chat_panel=chat_panel_after, expected_message_count=3)
 
         # After messages are loaded, verify only one tool block exists
-        ask_tool_blocks_after_restart = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_TOOL_BLOCK)
+        ask_tool_blocks_after_restart = get_ask_user_question_tool_blocks(page)
         expect(ask_tool_blocks_after_restart).to_have_count(1)
 
-        # CRITICAL: Check for the bug symptom - fail fast if "Called Tools" grouping appears.
-        # Bug symptom: tools are grouped with 2 children instead of a single "Questions answered" block.
-        # The TOOL_CALL elements should have data-is-grouped absent (not grouped).
-        tool_calls = page.get_by_test_id(ElementIDs.TOOL_CALL)
-        for tool_call in tool_calls.all():
-            assert tool_call.get_attribute("data-is-grouped") != "true", (
-                "Found grouped tool section — AskUserQuestion tool block should not be grouped"
-            )
+        # CRITICAL: Check for the bug symptom — the AUQ ToolUseBlock should
+        # render exclusively via AlphaAskUserQuestionBlock, not as a generic
+        # alpha tool pill. If the persistence path produced a duplicate
+        # ToolResultBlock outside the inline block, alpha would render a
+        # generic pill (with "AskUserQuestion" label) alongside the inline
+        # block — which is exactly the bug we're guarding against.
+        expect(chat_panel_after.get_tool_pills()).to_have_count(0)
 
         # Verify it still shows "Questions answered" (not grouped)
-        tool_block_after = get_first_tool_block(page)
-        verify_tool_block_shows_submitted_state(tool_block_after)
+        tool_block_after = get_first_ask_user_question_tool_block(page)
+        tool_block_after.expect_submitted_state()
 
 
 @user_story("to see Thinking indicator while agent processes a question answer")
@@ -1277,13 +1141,13 @@ fake_claude:ask_user_question `{
     chat_panel = task_page.get_chat_panel()
 
     # Wait for the Q&A panel to appear
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
     # Select an answer and submit
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     options.first.click()
-    submit_answers(page)
+    ask_panel.submit()
 
     # After submission, the Q&A panel should disappear
     expect(ask_panel).not_to_be_visible(timeout=30_000)
@@ -1329,25 +1193,22 @@ fake_claude:ask_user_question `{
     chat_panel = task_page.get_chat_panel()
 
     # Wait for the Q&A panel to appear
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
     # Answer and submit
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     options.first.click()
-    submit_answers(page)
+    ask_panel.submit()
 
     # Wait for completion
     expect(ask_panel).not_to_be_visible(timeout=30_000)
     expect(chat_panel.get_thinking_indicator(), "agent to finish").not_to_be_visible()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
 
-    # The tool block should be auto-expanded (data-expanded="true")
-    tool_block = get_first_tool_block(page)
-    expect(tool_block).to_have_attribute("data-expanded", "true")
-
-    # The answer text should be visible without needing to click anything
-    answer_text = tool_block.get_by_test_id(ElementIDs.ASK_USER_QUESTION_ANSWER_TEXT)
+    # The tool block renders answer content inline (alpha is always-expanded).
+    tool_block = get_first_ask_user_question_tool_block(page)
+    answer_text = tool_block.get_answer_text()
     expect(answer_text.first).to_be_visible()
 
 
@@ -1381,15 +1242,15 @@ fake_claude:ask_user_question `{
     )
 
     # Wait for the Q&A panel to appear
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
     # Select the "Provide an alternative" option and type custom text
-    select_option_by_text(page, "Other")
-    type_other_text(page, "Haskell is my favorite")
+    ask_panel.select_option("Other")
+    ask_panel.type_other_text("Haskell is my favorite")
 
     # The submit button should be enabled (answer provided)
-    submit_button = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_SUBMIT)
+    submit_button = ask_panel.get_submit_button()
     expect(submit_button).to_be_enabled()
 
     # Navigate away to the Add Workspace page and back
@@ -1399,7 +1260,7 @@ fake_claude:ask_user_question `{
     expect(ask_panel).to_be_visible()
 
     # The "Other" input should still be visible with the typed text preserved
-    other_input = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OTHER_INPUT)
+    other_input = ask_panel.get_other_input()
     expect(other_input).to_be_visible()
     expect(other_input).to_have_value("Haskell is my favorite")
 
@@ -1439,14 +1300,14 @@ fake_claude:ask_user_question `{
     )
 
     # Wait for the Q&A panel to appear
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
     # Select the first predefined option ("React")
-    select_option_by_text(page, "React")
+    ask_panel.select_option("React")
 
     # The submit button should be enabled
-    submit_button = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_SUBMIT)
+    submit_button = ask_panel.get_submit_button()
     expect(submit_button).to_be_enabled()
 
     # Navigate away and back
@@ -1459,16 +1320,16 @@ fake_claude:ask_user_question `{
     expect(submit_button).to_be_enabled()
 
     # Verify the selection was preserved by submitting and checking the answer
-    submit_answers(page)
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel.submit()
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).not_to_be_visible(timeout=30_000)
 
     chat_panel = task_page.get_chat_panel()
     expect(chat_panel.get_thinking_indicator(), "agent to finish").not_to_be_visible()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
 
-    tool_block = get_first_tool_block(page)
-    verify_tool_block_answer_text(tool_block, "React")
+    tool_block = get_first_ask_user_question_tool_block(page)
+    tool_block.expect_answer_visible("React")
 
 
 @user_story("to answer a single question after previously answering a multi-question batch")
@@ -1512,22 +1373,22 @@ fake_claude:ask_user_question `{
     chat_panel = task_page.get_chat_panel()
 
     # Wait for Q&A panel
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
     # Answer Q1
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     options.first.click()
 
     # Navigate to Q2 (sets currentIndex=1 in the draft atom)
-    navigate_to_next_question(page)
+    ask_panel.navigate_next()
 
     # Answer Q2
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     options.first.click()
 
     # Submit both answers
-    submit_answers(page)
+    ask_panel.submit()
     expect(ask_panel).not_to_be_visible(timeout=30_000)
 
     # Wait for agent to finish
@@ -1556,12 +1417,12 @@ fake_claude:ask_user_question `{
 
     # The single-question Q&A panel should appear without a TypeError
     expect(ask_panel).to_be_visible(timeout=30_000)
-    expect(ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_TEXT)).to_contain_text("framework")
+    expect(ask_panel.get_question_text()).to_contain_text("framework")
 
     # Should be able to answer and submit normally
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     options.first.click()
-    submit_answers(page)
+    ask_panel.submit()
 
     expect(ask_panel).not_to_be_visible(timeout=30_000)
     expect(chat_panel.get_thinking_indicator(), "agent to finish after batch 2").not_to_be_visible()
@@ -1578,7 +1439,8 @@ def test_queued_message_stays_queued_during_ask_user_question(sculptor_instance_
     agent — before the user has answered the question.
 
     Expected behavior:
-    - The queued message bar is hidden while the Q&A panel is visible.
+    - The queued message bar stays visible (showing the queued text) while the
+      Q&A panel is shown — the message stays queued, not flushed in as sent.
     - The queued message is NOT promoted into the chat while the question is pending.
     - After the user answers the question and the agent finishes processing the
       answer, the queued message is dequeued and processed normally.
@@ -1623,23 +1485,29 @@ fake_claude:multi_step `{
     expect(queued_bar).to_contain_text("this should stay queued")
 
     # Wait for the Q&A panel to appear (after the sleep finishes)
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
-    # REGRESSION CHECK 1: The queued message bar should be hidden while Q&A is visible.
-    # The chat input is replaced by the Q&A panel, so the queued bar should also hide.
-    expect(queued_bar, "queued bar should be hidden during Q&A").to_have_count(0)
+    # REGRESSION CHECK 1 (SCU-1319): the queued message must STAY in the queued
+    # bar while the Q&A panel is shown — not flushed into the transcript as an
+    # already-sent message. A pending question flips the task to WAITING, and
+    # AlphaChatInterface now keeps treating that as "busy" for queued-message
+    # promotion, so the bar persists (positioned above the Q&A card) until the
+    # question is answered and the turn resumes.
+    expect(queued_bar, "queued bar should stay visible during Q&A").to_have_count(1)
+    expect(queued_bar, "queued message text should still be in the bar").to_contain_text("this should stay queued")
 
-    # REGRESSION CHECK 2: The queued message must NOT appear as a sent message in the chat.
-    # Only the initial user message and the assistant response should be in the chat.
-    # If the bug is present, the queued message would be promoted and appear as message 2.
-    messages = chat_panel.get_messages()
-    expect(messages).to_have_count(2)  # user message + assistant response with tool use
+    # REGRESSION CHECK 2: the queued message must NOT have been promoted-and-
+    # processed mid-Q&A. The observable signature of that bug is the agent
+    # producing a response to the queued user message while the question is
+    # still pending — i.e. two assistant messages at this point instead of the
+    # one that called AskUserQuestion.
+    expect(chat_panel.get_assistant_messages(), "queued message must not be processed during Q&A").to_have_count(1)
 
     # Answer the question
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     options.first.click()
-    submit_answers(page)
+    ask_panel.submit()
 
     # After submission, the Q&A panel should disappear
     expect(ask_panel).not_to_be_visible(timeout=30_000)
@@ -1685,14 +1553,14 @@ fake_claude:ask_user_question `{
     )
     chat_panel = task_page.get_chat_panel()
 
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
     # Select 'Other' and type a long string that contains ", "
     long_text = "I prefer Go, because it has great concurrency, simple syntax, and fast compilation"
-    select_option_by_text(page, "Other")
-    type_other_text(page, long_text)
-    submit_answers(page)
+    ask_panel.select_option("Other")
+    ask_panel.type_other_text(long_text)
+    ask_panel.submit()
 
     # Wait for completion
     expect(ask_panel).not_to_be_visible(timeout=30_000)
@@ -1700,12 +1568,11 @@ fake_claude:ask_user_question `{
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
 
     # Verify the tool block shows the full custom answer as a single element
-    tool_block = get_first_tool_block(page)
-    verify_tool_block_shows_submitted_state(tool_block)
-    expand_tool_block_if_collapsed(tool_block)
+    tool_block = get_first_ask_user_question_tool_block(page)
+    tool_block.expect_submitted_state()
 
     # The answer should render as exactly 1 element, not split at commas
-    answer_elements = tool_block.get_by_test_id(ElementIDs.ASK_USER_QUESTION_ANSWER_TEXT)
+    answer_elements = tool_block.get_answer_text()
     expect(answer_elements).to_have_count(1)
     expect(answer_elements.first).to_contain_text(long_text)
 
@@ -1759,9 +1626,9 @@ fake_claude:ask_user_question `{
 }`""",
     )
 
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
-    expect(ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_TEXT)).to_contain_text("framework")
+    expect(ask_panel.get_question_text()).to_contain_text("framework")
 
     # Switch to agent 1 (agent 2's AUQ unmounts because agent 1 has no pending AUQ).
     agent_tabs.first.click()
@@ -1807,16 +1674,16 @@ fake_claude:ask_user_question `{
     expect(ask_panel).to_be_visible(timeout=30_000)
 
     # Answer Q1 and navigate to Q3 (currentIndex=2).
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     options.first.click()
-    navigate_to_next_question(page)  # now on Q2
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    ask_panel.navigate_next()  # now on Q2
+    options = ask_panel.get_options()
     options.first.click()
-    navigate_to_next_question(page)  # now on Q3 (currentIndex=2)
+    ask_panel.navigate_next()  # now on Q3 (currentIndex=2)
 
     # Also type a custom "Other" response on Q3 to populate otherTexts.
-    select_option_by_text(page, "Other")
-    type_other_text(page, "Emacs")
+    ask_panel.select_option("Other")
+    ask_panel.type_other_text("Emacs")
 
     # Verify we're on question 3 of 3.
     expect(ask_panel).to_contain_text("Question 3 of 3")
@@ -1826,12 +1693,12 @@ fake_claude:ask_user_question `{
     # carries over, but agent 2 only has 1 question → questions[2] is undefined → crash.
     agent_tabs.last.click()
     expect(ask_panel).to_be_visible()
-    expect(ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_TEXT)).to_contain_text("framework")
+    expect(ask_panel.get_question_text()).to_contain_text("framework")
 
     # Agent 2's AUQ should be answerable normally.
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     options.first.click()
-    submit_answers(page)
+    ask_panel.submit()
     expect(ask_panel).not_to_be_visible(timeout=30_000)
 
 
@@ -1888,7 +1755,7 @@ fake_claude:ask_user_question `{
     )
 
     # Wait for the Q&A panel to appear, confirming AUQ is pending.
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
     # Extract workspace and agent IDs from the URL.
@@ -1947,24 +1814,23 @@ fake_claude:ask_user_question `{
     )
     chat_panel = task_page.get_chat_panel()
 
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
-    options = ask_panel.get_by_test_id(ElementIDs.ASK_USER_QUESTION_OPTION)
+    options = ask_panel.get_options()
     options.first.click()
-    submit_answers(page)
+    ask_panel.submit()
 
     expect(ask_panel).not_to_be_visible(timeout=30_000)
     expect(chat_panel.get_thinking_indicator(), "agent to finish").not_to_be_visible()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
 
     # The AUQ block should be visible — that's the correct rendering.
-    auq_block = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_TOOL_BLOCK)
-    expect(auq_block).to_have_count(1)
+    auq_blocks = get_ask_user_question_tool_blocks(page)
+    expect(auq_blocks).to_have_count(1)
 
-    # No generic tool-call cards should be rendered. This prompt triggers
+    # No generic alpha tool pills should be rendered. This prompt triggers
     # exactly one tool (the AUQ); FakeClaude's follow-up is text only.
-    # The AUQ tool_result must NOT render as a separate ``TOOL_CALL`` —
+    # The AUQ tool_result must NOT render as a separate alpha pill —
     # the inline block above already shows the answer.
-    tool_calls = page.get_by_test_id(ElementIDs.TOOL_CALL)
-    expect(tool_calls).to_have_count(0)
+    expect(chat_panel.get_tool_pills()).to_have_count(0)
