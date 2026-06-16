@@ -103,3 +103,40 @@ def test_pi_subagent_failure_surfaces(sculptor_instance_: SculptorInstance) -> N
     # visible (the failed child + completion summary carry "failed").
     expect(page.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_PILL).first).to_be_visible(timeout=30000)
     expect(chat_panel.get_messages().filter(has_text="failed").first).to_be_visible(timeout=30000)
+
+
+@user_story("to confirm a sub-agent under pi survives the user stopping a later turn")
+def test_pi_subagent_survives_stop(sculptor_instance_: SculptorInstance) -> None:
+    """A running sub-agent is independent of the turn that launched it: stopping a
+    LATER turn must not kill it — once released, its completion still surfaces."""
+    page = sculptor_instance_.page
+    install_fake_pi_binary(sculptor_instance_.fake_bin_dir)
+    task_release = Path(tempfile.gettempdir()) / f"pi_sa_survive_task_{uuid.uuid4().hex}"
+    busy_release = Path(tempfile.gettempdir()) / f"pi_sa_survive_busy_{uuid.uuid4().hex}"
+    try:
+        task_page = start_task_and_wait_for_ready(
+            sculptor_page=page,
+            workspace_name="Pi Sub-Agent Survives Stop",
+            model_name=None,
+            agent_type="pi",
+            prompt=f'fake_pi:subagent `{{"children": [{_DONE_CHILD}], "wait_path": "{task_release}"}}`',
+            wait_for_agent_to_finish=True,
+        )
+        chat_panel = task_page.get_chat_panel()
+
+        # Start a second, cancellable turn (it blocks on a sentinel) and Stop it. The
+        # sub-agent — held on its own sentinel — must survive that interrupt.
+        send_chat_message(chat_panel=chat_panel, message=f'fake_pi:wait_for_file `{{"path": "{busy_release}"}}`')
+        expect(chat_panel.get_thinking_indicator()).to_be_visible()
+        stop_button = chat_panel.get_stop_button()
+        expect(stop_button).to_be_visible()
+        stop_button.click()
+        expect(chat_panel.get_thinking_indicator()).not_to_be_visible()
+
+        # Release the sub-agent: its nested pill still surfaces, proving the Stop did
+        # not kill it.
+        task_release.touch()
+        expect(page.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_PILL).first).to_be_visible(timeout=30000)
+    finally:
+        task_release.touch()
+        busy_release.touch()
