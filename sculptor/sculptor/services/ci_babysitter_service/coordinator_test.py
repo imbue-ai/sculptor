@@ -1102,7 +1102,7 @@ def test_terminal_drive_worker_delivers_and_clears_transient_reason(
 
     coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
     state = coordinator._state[env.workspace_id]
-    _wait_until(lambda: not state.terminal_drive_in_progress)
+    _wait_until(lambda: not state.is_terminal_drive_in_progress)
 
     assert calls == [("FAILED_PROMPT", True)]
     assert state.transient_disabled_reason is None
@@ -1131,7 +1131,7 @@ def test_terminal_drive_failure_sets_transient_reason_and_counts_retry(
 
     coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
     state = coordinator._state[env.workspace_id]
-    _wait_until(lambda: not state.terminal_drive_in_progress)
+    _wait_until(lambda: not state.is_terminal_drive_in_progress)
 
     assert state.transient_disabled_reason == coordinator_module._TRANSIENT_REASON_UNREACHABLE
     # A failed drive still counts against retry_cap.
@@ -1160,7 +1160,7 @@ def test_overlapping_terminal_drive_coalesces(
 
     # Simulate a drive already in flight: a second failure (new pipeline_id) must
     # not start a racing worker.
-    state.terminal_drive_in_progress = True
+    state.is_terminal_drive_in_progress = True
     coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
 
     assert calls == []
@@ -1189,8 +1189,8 @@ def test_terminal_drive_in_progress_clears_on_worker_exception(
         coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
         state = coordinator._state[env.workspace_id]
         # A worker exception must never park the workspace with the guard stuck on.
-        _wait_until(lambda: not state.terminal_drive_in_progress)
-    assert state.terminal_drive_in_progress is False
+        _wait_until(lambda: not state.is_terminal_drive_in_progress)
+    assert state.is_terminal_drive_in_progress is False
 
 
 def test_terminal_drive_in_progress_clears_on_spawn_failure(
@@ -1217,7 +1217,7 @@ def test_terminal_drive_in_progress_clears_on_spawn_failure(
     with expect_at_least_logged_errors({"CIBabysitterCoordinator: failed to start terminal drive for workspace="}):
         coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
     state = coordinator._state[env.workspace_id]
-    assert state.terminal_drive_in_progress is False
+    assert state.is_terminal_drive_in_progress is False
     assert state.retry_count == 0
 
 
@@ -1248,9 +1248,9 @@ def test_terminal_drive_does_not_block_consumer_loop(
     # The dispatch returned while the worker is still blocked inside the write.
     assert started.wait(timeout=2.0)
     state = coordinator._state[env.workspace_id]
-    assert state.terminal_drive_in_progress is True
+    assert state.is_terminal_drive_in_progress is True
     release.set()
-    _wait_until(lambda: not state.terminal_drive_in_progress)
+    _wait_until(lambda: not state.is_terminal_drive_in_progress)
 
 
 def test_terminal_drive_waits_for_idle_then_delivers(
@@ -1285,7 +1285,7 @@ def test_terminal_drive_waits_for_idle_then_delivers(
     for message in _ready_terminal_messages():
         queue.put(message)
 
-    _wait_until(lambda: not state.terminal_drive_in_progress)
+    _wait_until(lambda: not state.is_terminal_drive_in_progress)
     assert calls == ["FAILED_PROMPT"]
     assert state.transient_disabled_reason is None
 
@@ -1314,7 +1314,7 @@ def test_terminal_drive_never_ready_times_out(
 
     coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
     state = coordinator._state[env.workspace_id]
-    _wait_until(lambda: not state.terminal_drive_in_progress)
+    _wait_until(lambda: not state.is_terminal_drive_in_progress)
 
     # No write happened, but the attempt counted and the transient reason is set.
     assert calls == []
@@ -1344,9 +1344,9 @@ def test_terminal_drive_retries_reuse_same_task(
     state = coordinator._state[env.workspace_id]
 
     coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
-    _wait_until(lambda: not state.terminal_drive_in_progress)
+    _wait_until(lambda: not state.is_terminal_drive_in_progress)
     coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=2))
-    _wait_until(lambda: not state.terminal_drive_in_progress)
+    _wait_until(lambda: not state.is_terminal_drive_in_progress)
 
     assert len(task_service.create_task_calls) == 1  # one task reused across retries
     assert len(calls) == 2

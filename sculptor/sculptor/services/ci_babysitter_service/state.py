@@ -28,4 +28,4 @@ class CIBabysitterState(MutableModel):
     # Overlapping-drive guard: True while a terminal-drive worker is writing
     # this workspace's PTY, so a second near-simultaneous failure coalesces
     # instead of starting a racing worker.
-    terminal_drive_in_progress: bool = False
+    is_terminal_drive_in_progress: bool = False

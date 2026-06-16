@@ -376,7 +376,7 @@ class CIBabysitterCoordinator(Service):
             # loop stays responsive to every other workspace's PR updates (the
             # readiness wait can block for seconds).
             with self._lock:
-                if state.terminal_drive_in_progress:
+                if state.is_terminal_drive_in_progress:
                     # Coalesce onto the in-flight worker rather than racing a
                     # second one. That worker writes the prompt it was handed at
                     # its own dispatch, so a different transition's prompt
@@ -390,7 +390,7 @@ class CIBabysitterCoordinator(Service):
                         state.workspace_id,
                     )
                     return
-                state.terminal_drive_in_progress = True
+                state.is_terminal_drive_in_progress = True
             try:
                 self.concurrency_group.start_new_thread(
                     target=self._run_terminal_drive,
@@ -404,7 +404,7 @@ class CIBabysitterCoordinator(Service):
                 # Skip the retry bump — no drive was attempted; the next failure
                 # retries cleanly.
                 with self._lock:
-                    state.terminal_drive_in_progress = False
+                    state.is_terminal_drive_in_progress = False
                 logger.error(
                     "CIBabysitterCoordinator: failed to start terminal drive for workspace={}: {}",
                     state.workspace_id,
@@ -460,7 +460,7 @@ class CIBabysitterCoordinator(Service):
             )
         finally:
             with self._lock:
-                state.terminal_drive_in_progress = False
+                state.is_terminal_drive_in_progress = False
 
     def _wait_for_terminal_ready(self, task_id: TaskID) -> bool:
         """Block until the terminal program is at its prompt, or the backstop fires.
