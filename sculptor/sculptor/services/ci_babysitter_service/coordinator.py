@@ -12,6 +12,7 @@ is a regular Task row and is fully persistent.
 """
 
 import threading
+import time
 from dataclasses import dataclass
 from queue import Empty
 from queue import Queue
@@ -32,6 +33,7 @@ from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
 from sculptor.interfaces.agents.agent import PiAgentConfig
 from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
+from sculptor.interfaces.agents.agent import TerminalStatusSignal
 from sculptor.interfaces.agents.agent import is_terminal_agent_config
 from sculptor.primitives.constants import ANONYMOUS_USER_REFERENCE
 from sculptor.primitives.ids import AgentMessageID
@@ -51,8 +53,10 @@ from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import EffortLevel
 from sculptor.state.messages import LLMModel
+from sculptor.state.messages import Message
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import PrStatusInfo
+from sculptor.web.derived import scan_terminal_signal_state
 from sculptor.web.pr_polling_service import PrPollingService
 from sculptor.web.terminal_input import TerminalDeliveryResult
 from sculptor.web.terminal_input import deliver_prompt_to_terminal_agent
@@ -71,6 +75,13 @@ _DISABLED_REASON_PINNED_UNAVAILABLE = (
 # program's prompt. Cleared by the next successful drive or when the CI cycle
 # resolves; the attempt still counts against retry_cap.
 _TRANSIENT_REASON_UNREACHABLE = "Couldn't reach the terminal agent's prompt; will retry on the next failure."
+
+# A freshly-spawned terminal program needs a moment to reach its prompt. The
+# worker subscribes to the real readiness signal rather than guessing with
+# sleeps; this backstop only bounds the never-ready pathology. Overridable so
+# unit tests run fast.
+_TERMINAL_READINESS_BACKSTOP_SECONDS = 30.0
+_TERMINAL_READINESS_POLL_SECONDS = 0.5
 
 
 @dataclass(frozen=True)
@@ -376,6 +387,13 @@ class CIBabysitterCoordinator(Service):
                 task = self._task_service.get_task(task_id, transaction)
             if task is None:
                 return
+            if not self._wait_for_terminal_ready(task_id):
+                # Never-ready within the backstop (REQ-DRIVE-4): give up for this
+                # cycle only — no write — and retry on the next CI failure. The
+                # retry was already counted at dispatch.
+                with self._lock:
+                    state.transient_disabled_reason = _TRANSIENT_REASON_UNREACHABLE
+                return
             result = self.deliver_prompt_to_agent(task, prompt_text, config)
             with self._lock:
                 if result is TerminalDeliveryResult.DELIVERED:
@@ -389,6 +407,31 @@ class CIBabysitterCoordinator(Service):
         finally:
             with self._lock:
                 state.terminal_drive_in_progress = False
+
+    def _wait_for_terminal_ready(self, task_id: TaskID) -> bool:
+        """Block until the terminal program is at its prompt, or the backstop fires.
+
+        Subscribes to the task's message stream (seeded with current messages, so
+        an already-idle program is detected immediately) and returns True the
+        instant ``scan_terminal_signal_state`` reports the run started and the
+        latest signal is IDLE/WAITING. Returns False if the never-ready backstop
+        elapses or the coordinator is shutting down. Guard 2 re-checks readiness
+        at write time, so a stale signal still can't slip a write through.
+        """
+        deadline = time.monotonic() + _TERMINAL_READINESS_BACKSTOP_SECONDS
+        messages: list[Message] = []
+        with self._task_service.subscribe_to_task(task_id) as queue:
+            while True:
+                run_started, latest_signal = scan_terminal_signal_state(messages)
+                if run_started and latest_signal in (TerminalStatusSignal.IDLE, TerminalStatusSignal.WAITING):
+                    return True
+                if self._shutdown_event.is_set() or time.monotonic() >= deadline:
+                    return False
+                try:
+                    messages.append(queue.get(timeout=_TERMINAL_READINESS_POLL_SECONDS))
+                except Empty:
+                    continue
+        return False  # unreachable: the loop only exits via return
 
     def _resolve_babysitter_agent(
         self,

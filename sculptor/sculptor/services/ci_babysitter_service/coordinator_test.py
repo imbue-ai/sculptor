@@ -12,6 +12,7 @@ import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
+from queue import Queue
 from typing import Any
 from typing import Generator
 from typing import Literal
@@ -36,10 +37,14 @@ from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.async_monkey_patches_test import expect_at_least_logged_errors
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
+from sculptor.interfaces.agents.agent import EnvironmentAcquiredRunnerMessage
 from sculptor.interfaces.agents.agent import MessageTypes
 from sculptor.interfaces.agents.agent import PiAgentConfig
 from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.interfaces.agents.agent import TerminalAgentConfig
+from sculptor.interfaces.agents.agent import TerminalAgentSignalRunnerMessage
+from sculptor.interfaces.agents.agent import TerminalStatusSignal
+from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import OrganizationReference
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
@@ -61,6 +66,7 @@ from sculptor.services.terminal_agent_registry.registry import TerminalAgentRegi
 from sculptor.services.workspace_service.api import WorkspaceService
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
+from sculptor.state.messages import Message
 from sculptor.web.derived import PrStatusInfo
 from sculptor.web.pr_polling_service import PrPollingService
 
@@ -315,15 +321,30 @@ class _FakeDataModelService(_StubDataModelService):
         yield _FakeTransaction(self._env)
 
 
+def _ready_terminal_messages() -> list[Message]:
+    """Seed messages for which scan_terminal_signal_state reports run-started + IDLE."""
+    return [
+        EnvironmentAcquiredRunnerMessage.model_construct(message_id=AgentMessageID(), environment=None),
+        TerminalAgentSignalRunnerMessage(signal=TerminalStatusSignal.IDLE),
+    ]
+
+
 class _FakeTaskService(_StubTaskService):
     _env: _FakeEnv = PrivateAttr()
     _create_task_calls: list[Task] = PrivateAttr(default_factory=list)
     _create_message_calls: list[tuple[ChatInputUserMessage, TaskID]] = PrivateAttr(default_factory=list)
     _delete_task_calls: list[TaskID] = PrivateAttr(default_factory=list)
+    # Messages the terminal-readiness subscription is seeded with. Defaults to an
+    # already-at-prompt program so terminal-drive tests deliver; the never-ready
+    # test sets this to []. The live queue is exposed so a test can push more
+    # messages after the worker subscribes.
+    _seeded_terminal_messages: list[Message] = PrivateAttr(default_factory=list)
+    _live_terminal_queue: "Queue[Message] | None" = PrivateAttr(default=None)
 
     def __init__(self, env: _FakeEnv, concurrency_group: ConcurrencyGroup) -> None:
         super().__init__(concurrency_group=concurrency_group, task_sync_dir=Path("/tmp"))
         self._env = env
+        self._seeded_terminal_messages = _ready_terminal_messages()
 
     @property
     def create_task_calls(self) -> list[Task]:
@@ -355,6 +376,22 @@ class _FakeTaskService(_StubTaskService):
     def delete_task(self, task_id: TaskID, transaction: DataModelTransaction) -> None:
         del transaction
         self._delete_task_calls.append(task_id)
+
+    @property
+    def live_terminal_queue(self) -> "Queue[Message] | None":
+        return self._live_terminal_queue
+
+    @contextmanager
+    def subscribe_to_task(self, task_id: TaskID) -> Generator["Queue[Message]", None, None]:
+        del task_id
+        queue: "Queue[Message]" = Queue()
+        for message in self._seeded_terminal_messages:
+            queue.put(message)
+        self._live_terminal_queue = queue
+        try:
+            yield queue
+        finally:
+            self._live_terminal_queue = None
 
 
 class _FakeGitRepo(_StubGitRepo):
@@ -1179,6 +1216,106 @@ def test_terminal_drive_does_not_block_consumer_loop(
     assert state.terminal_drive_in_progress is True
     release.set()
     _wait_until(lambda: not state.terminal_drive_in_progress)
+
+
+def test_terminal_drive_waits_for_idle_then_delivers(
+    env: _FakeEnv,
+    patch_user_config: _ConfigSlot,
+    test_root_concurrency_group: ConcurrencyGroup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A freshly-spawned program is not at its prompt yet: the subscription is
+    # seeded empty, and the IDLE signal is pushed after the worker subscribes.
+    patch_user_config.config = _make_terminal_config()
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _opt_in_registration(_id))
+    calls: list[str] = []
+
+    def _fake(task: Task, text: str, *, submit: bool, task_service: Any) -> Any:
+        del task, submit, task_service
+        calls.append(text)
+        return coordinator_module.TerminalDeliveryResult.DELIVERED
+
+    monkeypatch.setattr(coordinator_module, "deliver_prompt_to_terminal_agent", _fake)
+    coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
+    task_service._seeded_terminal_messages = []  # program has not reached its prompt yet
+    _seed_baseline(coordinator, env.workspace_id)
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+    state = coordinator._state[env.workspace_id]
+
+    # The worker is now blocked in the readiness wait. Push the readiness signal.
+    _wait_until(lambda: task_service.live_terminal_queue is not None)
+    queue = task_service.live_terminal_queue
+    assert queue is not None
+    for message in _ready_terminal_messages():
+        queue.put(message)
+
+    _wait_until(lambda: not state.terminal_drive_in_progress)
+    assert calls == ["FAILED_PROMPT"]
+    assert state.transient_disabled_reason is None
+
+
+def test_terminal_drive_never_ready_times_out(
+    env: _FakeEnv,
+    patch_user_config: _ConfigSlot,
+    test_root_concurrency_group: ConcurrencyGroup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    patch_user_config.config = _make_terminal_config()
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _opt_in_registration(_id))
+    monkeypatch.setattr(coordinator_module, "_TERMINAL_READINESS_BACKSTOP_SECONDS", 0.3)
+    monkeypatch.setattr(coordinator_module, "_TERMINAL_READINESS_POLL_SECONDS", 0.05)
+    calls: list[str] = []
+
+    def _fake(task: Task, text: str, *, submit: bool, task_service: Any) -> Any:
+        del task, submit, task_service
+        calls.append(text)
+        return coordinator_module.TerminalDeliveryResult.DELIVERED
+
+    monkeypatch.setattr(coordinator_module, "deliver_prompt_to_terminal_agent", _fake)
+    coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
+    task_service._seeded_terminal_messages = []  # never reaches its prompt
+    _seed_baseline(coordinator, env.workspace_id)
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+    state = coordinator._state[env.workspace_id]
+    _wait_until(lambda: not state.terminal_drive_in_progress)
+
+    # No write happened, but the attempt counted and the transient reason is set.
+    assert calls == []
+    assert state.transient_disabled_reason == coordinator_module._TRANSIENT_REASON_UNREACHABLE
+    assert state.retry_count == 1
+
+
+def test_terminal_drive_retries_reuse_same_task(
+    env: _FakeEnv,
+    patch_user_config: _ConfigSlot,
+    test_root_concurrency_group: ConcurrencyGroup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Two failures (new pipeline_id each) within retry_cap reuse one terminal task.
+    patch_user_config.config = _make_terminal_config()
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _opt_in_registration(_id))
+    calls: list[str] = []
+
+    def _fake(task: Task, text: str, *, submit: bool, task_service: Any) -> Any:
+        del task, submit, task_service
+        calls.append(text)
+        return coordinator_module.TerminalDeliveryResult.DELIVERED
+
+    monkeypatch.setattr(coordinator_module, "deliver_prompt_to_terminal_agent", _fake)
+    coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
+    _seed_baseline(coordinator, env.workspace_id)
+    state = coordinator._state[env.workspace_id]
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+    _wait_until(lambda: not state.terminal_drive_in_progress)
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=2))
+    _wait_until(lambda: not state.terminal_drive_in_progress)
+
+    assert len(task_service.create_task_calls) == 1  # one task reused across retries
+    assert len(calls) == 2
+    assert state.retry_count == 2
 
 
 def test_transient_reason_clears_on_pipeline_passed(
