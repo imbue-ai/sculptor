@@ -157,6 +157,11 @@ class CIBabysitterWorkspaceStateView(SerializableModel):
     # every read so they appear before any failure and self-heal; the transient
     # terminal-unreachable reason is surfaced from stored state.
     disabled_reason: str | None = None
+    # True when disabled_reason is the transient terminal-unreachable reason (the
+    # babysitter will retry on the next failure), False for a persistent reason
+    # (the babysitter is inert until the user changes the MRU/config). Lets the
+    # UI keep the pause toggle usable for transient reasons but inert otherwise.
+    disabled_reason_is_transient: bool = False
 
 
 class CIBabysitterCoordinator(Service):
@@ -227,6 +232,7 @@ class CIBabysitterCoordinator(Service):
         # does DB I/O) so it appears before any failure and self-heals when the
         # user changes the MRU or fixes the registration.
         disabled_reason: str | None = None
+        disabled_reason_is_transient = False
         with self._data_model_service.open_transaction(RequestID()) as transaction:
             resolved = self._resolve_babysitter_agent(workspace_id, project_id, config, transaction)
         if isinstance(resolved, Disabled) and not resolved.transient:
@@ -235,6 +241,7 @@ class CIBabysitterCoordinator(Service):
             # Only a driveable terminal accrues a transient reason, so persistent
             # and transient are mutually exclusive in practice; persistent wins.
             disabled_reason = transient_reason
+            disabled_reason_is_transient = True
 
         return CIBabysitterWorkspaceStateView(
             paused=paused,
@@ -242,6 +249,7 @@ class CIBabysitterCoordinator(Service):
             retired=retired,
             at_cap=retry_count >= config.ci_babysitter.retry_cap,
             disabled_reason=disabled_reason,
+            disabled_reason_is_transient=disabled_reason_is_transient,
         )
 
     def _consumer_loop(self) -> None:

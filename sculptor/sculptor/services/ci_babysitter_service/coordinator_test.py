@@ -1369,6 +1369,7 @@ def test_snapshot_surfaces_persistent_reason_for_plain_terminal_mru(
     snapshot = coordinator.get_state_snapshot(env.workspace_id)
     assert snapshot is not None
     assert snapshot.disabled_reason == coordinator_module._DISABLED_REASON_MRU_NON_DRIVEABLE
+    assert snapshot.disabled_reason_is_transient is False
 
 
 def test_snapshot_reason_self_heals_when_mru_becomes_driveable(
@@ -1421,8 +1422,9 @@ def test_snapshot_surfaces_transient_reason_for_driveable_terminal(
     snapshot = coordinator.get_state_snapshot(env.workspace_id)
     assert snapshot is not None
     # The MRU resolves driveable (no persistent reason), so the stored transient
-    # reason is surfaced.
+    # reason is surfaced and flagged transient (the babysitter will retry).
     assert snapshot.disabled_reason == coordinator_module._TRANSIENT_REASON_UNREACHABLE
+    assert snapshot.disabled_reason_is_transient is True
 
 
 def test_snapshot_has_no_reason_for_healthy_chat_mru(

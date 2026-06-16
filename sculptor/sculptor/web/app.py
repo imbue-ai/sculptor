@@ -1880,6 +1880,7 @@ class CIBabysitterWorkspaceStateResponse(SerializableModel):
     retired: bool
     at_cap: bool
     disabled_reason: str | None = None
+    disabled_reason_is_transient: bool = False
 
 
 class CIBabysitterPauseRequest(SerializableModel):
@@ -1900,6 +1901,7 @@ def _build_ci_babysitter_state_response(
             retired=False,
             at_cap=False,
             disabled_reason=None,
+            disabled_reason_is_transient=False,
         )
     return CIBabysitterWorkspaceStateResponse(
         workspace_id=workspace_id,
@@ -1909,6 +1911,7 @@ def _build_ci_babysitter_state_response(
         retired=snapshot.retired,
         at_cap=snapshot.at_cap,
         disabled_reason=snapshot.disabled_reason,
+        disabled_reason_is_transient=snapshot.disabled_reason_is_transient,
     )
 
 
