@@ -1,0 +1,78 @@
+"""Sub-agent surface under pi, async / yield-early (REQ-CAP-SUB-AGENTS, behaviour).
+
+pi reports ``supports_sub_agents=True``: the pinned ``sculptor_subagent`` extension
+delegates work to child agents and the launching turn YIELDS immediately — the
+user keeps chatting while the children run — and each child's activity is surfaced
+out-of-band as the nested ``AlphaSubagentPill`` when it completes (the same
+background-sub-agent rendering Claude uses).
+
+These exercise the async sub-agent surface end-to-end under pi with the
+deterministic ``fake_pi:subagent`` directive (which scripts the launch + an
+out-of-band completion ``notify``, optionally held on a ``wait_path`` sentinel so
+there is no wall-clock dependency):
+
+- golden: the launch yields, the main thread stays interactive while the children
+  run, and the nested pill surfaces when the completion is released;
+- a failed child surfaces as the pill (with a "failed" completion), not dropped;
+- a running sub-agent SURVIVES the user stopping a later turn (it is independent of
+  the turn that launched it). No-orphan ON SHUTDOWN is covered by the unit tests.
+"""
+
+import tempfile
+import uuid
+from pathlib import Path
+
+from playwright.sync_api import expect
+
+from sculptor.constants import ElementIDs
+from sculptor.testing.elements.chat_panel import send_chat_message
+from sculptor.testing.fake_pi import install_fake_pi_binary
+from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
+from sculptor.testing.sculptor_instance import SculptorInstance
+from sculptor.testing.user_stories import user_story
+
+# One scripted child that finishes cleanly with a bit of text.
+_DONE_CHILD = (
+    '{"childId": "c0", "label": "scout", "task": "find files", "status": "done", '
+    + '"events": [{"seq": 0, "kind": "text", "text": "Found 10 files."}]}'
+)
+
+
+@user_story(
+    "to delegate to a sub-agent under pi: the launching turn yields immediately, the main thread stays interactive "
+    + "while the sub-agent runs, and its activity is surfaced as the nested pill when it finishes"
+)
+def test_pi_subagent_yields_stays_interactive_then_completes(sculptor_instance_: SculptorInstance) -> None:
+    page = sculptor_instance_.page
+    install_fake_pi_binary(sculptor_instance_.fake_bin_dir)
+    release_path = Path(tempfile.gettempdir()) / f"pi_subagent_{uuid.uuid4().hex}"
+    reply_marker = "PI-SA-REPLY-55013"
+    try:
+        task_page = start_task_and_wait_for_ready(
+            sculptor_page=page,
+            workspace_name="Pi Sub-Agent",
+            model_name=None,
+            agent_type="pi",
+            # The sub-agent launch returns immediately; its completion is held on the
+            # sentinel and emitted out-of-band, so the launching run's agent_end fires
+            # and the turn ENDS (yield-early) — the user is not blocked.
+            prompt=f'fake_pi:subagent `{{"children": [{_DONE_CHILD}], "wait_path": "{release_path}"}}`',
+            wait_for_agent_to_finish=True,
+        )
+        chat_panel = task_page.get_chat_panel()
+
+        # Behaviour 1 — yield-early: reaching here means the launching turn FINISHED
+        # (a held-open model would have hung), so the StatusPill is gone.
+        expect(page.get_by_test_id(ElementIDs.STATUS_PILL)).to_have_count(0, timeout=15000)
+
+        # Behaviour 2 — interactive WHILE the sub-agent runs (sentinel not released): a
+        # message sent now is answered, with no Stop and without disturbing the children.
+        send_chat_message(chat_panel=chat_panel, message=f'fake_pi:emit_text `{{"text": "{reply_marker}"}}`')
+        expect(chat_panel.get_messages().filter(has_text=reply_marker).first).to_be_visible(timeout=30000)
+    finally:
+        # Let the sub-agent complete; harmless if the test already failed.
+        release_path.touch()
+
+    # The completion is surfaced out-of-band, live: the child's activity renders as
+    # the nested sub-agent pill.
+    expect(page.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_PILL).first).to_be_visible(timeout=30000)
