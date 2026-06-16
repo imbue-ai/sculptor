@@ -324,11 +324,9 @@ class _TurnState:
 
     __slots__ = (
         "accumulated_text",
-        "agent_run_ended",
         "assistant_message_id",
         "compaction_open",
         "first_message_id",
-        "pending_background_tasks",
         "prompt_id",
         "tool_calls",
     )
@@ -345,20 +343,6 @@ class _TurnState:
         # death or a raised error mid-compaction), _consume_until_turn_end
         # emits the missing Done so is_auto_compacting cannot stick on True.
         self.compaction_open = False
-        # In-flight background tasks launched this turn, mapping background_task_id
-        # -> the child's process-group id. While non-empty the turn is HELD OPEN
-        # (the dispatcher keeps draining so the completion notify is seen and the
-        # StatusPill stays active) — mirroring Claude, whose turn stays open until
-        # background tasks complete. The pgid lets a mid-flight interrupt SIGTERM
-        # the child's group in the environment (pi has no extension abort hook for
-        # detached work). See `_emit_background_started` / `_handle_background_completion`.
-        self.pending_background_tasks: dict[str, int] = {}
-        # Set once the agent run reached `agent_end` while background tasks were
-        # still pending — i.e. we are now holding ONLY for background completion.
-        # Gates the release: a completion notify ends the turn only after the
-        # agent run itself has ended (so a task that finishes mid-run does not cut
-        # the run short — the run's own agent_end releases it then).
-        self.agent_run_ended = False
 
     def reset_accumulator(self) -> None:
         self.accumulated_text = ""
@@ -437,6 +421,16 @@ class PiAgent(DefaultAgentWrapper):
     # Serializes stdin writes: the prompt pump, the answer-delivery thread, and
     # `wait()`'s abort can all write to pi's stdin.
     _send_lock: Lock = PrivateAttr(default_factory=Lock)
+    # In-flight background tasks (background_task_id -> the detached child's
+    # process-group id), tracked at the AGENT level so they outlive the launching
+    # turn: a `background` tool yields its turn immediately (the user keeps
+    # chatting), and the task's completion is surfaced out-of-band later. The pgid
+    # lets `wait()` SIGTERM each child's group in the environment on shutdown (the
+    # child is detached, so it escapes pi's own group — `session_shutdown` in the
+    # extension is the other half of the no-orphan guarantee). Mutated only on the
+    # message-processing thread; the lock guards `wait()`'s cross-thread read.
+    _background_tasks: dict[str, int] = PrivateAttr(default_factory=dict)
+    _background_tasks_lock: Lock = PrivateAttr(default_factory=Lock)
 
     def start(self, secrets: Mapping[str, str | Secret]) -> None:
         # Resolve and validate the pi binary BEFORE super().start so the
@@ -618,6 +612,12 @@ class PiAgent(DefaultAgentWrapper):
             raise AgentCrashed("Agent crashed", exit_code=None, metadata=None) from self._exception
 
         self._shutdown_event.set()
+        # No orphans on shutdown: kill each background child's (detached) process
+        # group in the environment. The extension's `session_shutdown` handler is
+        # the other half; this is the belt-and-suspenders that does not depend on pi
+        # shutting down gracefully. Done before close_stdin so the kills are issued
+        # while the environment is still fully up.
+        self._cancel_all_background_tasks()
         process = self._process
         if process is not None:
             try:
@@ -953,8 +953,14 @@ class PiAgent(DefaultAgentWrapper):
     def _process_message_queue(self) -> None:
         while not self._shutdown_event.is_set():
             try:
-                message = self._input_agent_messages.get(timeout=0.5)
+                # A short poll so that, while background tasks are in flight, we
+                # promptly pick up their out-of-band completions between turns.
+                message = self._input_agent_messages.get(timeout=0.1)
             except queue.Empty:
+                # Sculptor only drains pi's stdout during a turn; when a background
+                # task is running, surface its completion live while we're idle.
+                if self._has_background_tasks():
+                    self._drain_idle_background_events()
                 continue
             if isinstance(message, ClearContextUserMessage):
                 # Between-turns reset: this loop processes one message at a time,
@@ -962,6 +968,10 @@ class PiAgent(DefaultAgentWrapper):
                 self._handle_clear_context(message)
                 continue
             self._run_prompt_turn(message)
+
+    def _has_background_tasks(self) -> bool:
+        with self._background_tasks_lock:
+            return bool(self._background_tasks)
 
     def _run_prompt_turn(self, message: ChatInputUserMessage) -> None:
         self._update_plan_mode_from_message(message)
@@ -1140,13 +1150,6 @@ class PiAgent(DefaultAgentWrapper):
             while not self._shutdown_event.is_set():
                 if process.is_finished() and out_queue.empty():
                     return
-                # An interrupt that arrives while the turn is held open ONLY for
-                # background tasks (the agent run already ended, so pi is idle and
-                # emits no further agent_end to release us) ends the turn here.
-                # Cancel the children first so none is orphaned.
-                if self._interrupt_pending.is_set() and state.agent_run_ended and state.pending_background_tasks:
-                    self._cancel_background_tasks(state)
-                    return
                 try:
                     line, is_stdout = out_queue.get(timeout=0.1)
                 except Empty:
@@ -1180,13 +1183,6 @@ class PiAgent(DefaultAgentWrapper):
             # agent_end, process exit, raised error, shutdown).
             if state.compaction_open:
                 self._output_messages.put(AutoCompactingDoneAgentMessage(message_id=AgentMessageID()))
-            # No-orphan safety net: never leave a background child running on any
-            # turn-exit path (raised error, shutdown, process death, an interrupt
-            # that did not route through the explicit cancels above). Idempotent —
-            # a clean completion already emptied the set, and killing a dead group
-            # is a no-op.
-            if state.pending_background_tasks:
-                self._cancel_background_tasks(state)
 
     def _handle_response_event(self, parsed: RpcResponse, state: _TurnState) -> None:
         """Process a top-level `response` envelope (correlated by `id`, RPC §5.1).
@@ -1224,9 +1220,11 @@ class PiAgent(DefaultAgentWrapper):
                 self._handle_response_event(parsed, state)
                 return False
             case ExtensionUiRequest():
-                # A background-task completion notify can end a held-open turn
-                # (its return); a backchannel dialog or other notify never does.
-                return self._handle_extension_ui_request(parsed, state)
+                # Backchannel dialogs and background-task completion notifies; never
+                # a turn boundary (dialogs hold the turn via the answer round-trip;
+                # a completion reconciles into the turn but `agent_end` ends it).
+                self._handle_extension_ui_request(parsed)
+                return False
             case ParsedAgentStart():
                 # Streaming begins; nothing to emit until text_delta arrives.
                 return False
@@ -1527,10 +1525,11 @@ class PiAgent(DefaultAgentWrapper):
                 self._emit_subagent_children(parsed.result, info, tool_call_id, include_running=True)
             if info.is_background:
                 # The `background` tool returned immediately with a launch
-                # snapshot; surface it as a started background task (and start
-                # holding the turn open for its completion). The normal result
-                # block below still renders the "Started …" acknowledgement.
-                self._emit_background_started(parsed.result, tool_call_id, state)
+                # snapshot; surface it as a started background task. The turn then
+                # ends normally (the user keeps chatting); the task's completion
+                # is surfaced out-of-band. The normal result block below still
+                # renders the "Started …" acknowledgement.
+                self._emit_background_started(parsed.result, tool_call_id)
         else:
             # No registration (no toolCall block and no start seen) — map the
             # name with empty input (the end event carries no args).
@@ -1598,20 +1597,22 @@ class PiAgent(DefaultAgentWrapper):
             )
         )
 
-    def _emit_background_started(self, result_payload: Any, parent_tool_call_id: str, state: _TurnState) -> None:
+    def _emit_background_started(self, result_payload: Any, parent_tool_call_id: str) -> None:
         """Turn a `background` tool's launch result into a started background task.
 
         Parses the structured launch snapshot (`background.py`); on success records
-        the task (with its child process-group id) in the turn's held-open set and
-        emits `BackgroundTaskStartedAgentMessage` — which message_conversion records
-        in `pending_background_task_ids` (keeping the StatusPill active until the
-        task completes). A malformed/absent snapshot degrades to no background
-        lifecycle (the call already rendered as an ordinary tool result).
+        the task (with its child process-group id) at the AGENT level so it outlives
+        this turn, and emits `BackgroundTaskStartedAgentMessage`. The launching turn
+        then ends normally (`_handle_agent_end`) — the user keeps chatting while the
+        task runs, and its completion is surfaced out-of-band
+        (`_drain_idle_background_events`). A malformed/absent snapshot degrades to no
+        background lifecycle (the call already rendered as an ordinary tool result).
         """
         started = parse_background_start(result_payload)
         if started is None:
             return
-        state.pending_background_tasks[started.task_id] = started.pgid
+        with self._background_tasks_lock:
+            self._background_tasks[started.task_id] = started.pgid
         self._output_messages.put(
             BackgroundTaskStartedAgentMessage(
                 message_id=AgentMessageID(),
@@ -1622,18 +1623,20 @@ class PiAgent(DefaultAgentWrapper):
             )
         )
 
-    def _handle_background_completion(self, completion: BackgroundTaskCompletion, state: _TurnState) -> bool:
-        """Reconcile a background task's out-of-band completion. Returns True to end the turn.
+    def _handle_background_completion(self, completion: BackgroundTaskCompletion) -> None:
+        """Reconcile a background task's completion into the conversation.
 
-        Emits `BackgroundTaskNotificationAgentMessage` (which clears the pending id,
-        releasing the StatusPill) and a plain assistant block carrying the summary
-        so the completion is visible in the conversation, then drops the task from
-        the held-open set. The turn ends (return True) only once the agent run has
-        already ended AND no background task remains — a task that finishes mid-run
-        is reconciled but the run's own `agent_end` is what releases the turn then,
-        so the agent's in-progress response is never cut short.
+        Drops the task from the agent-level set and emits
+        `BackgroundTaskNotificationAgentMessage` plus an assistant block carrying the
+        summary, so the completion (or failure) is visible. The summary is advertised
+        as a partial then the final block (paired ids), the way a streamed assistant
+        message is, so the LIVE stream reducer renders it (a lone final block with no
+        preceding partial renders only on reload — the live/reload divergence). Safe
+        to call inside a turn's drain OR out-of-band (the caller supplies the request
+        cycle in the latter case — see `_emit_background_completion_out_of_band`).
         """
-        state.pending_background_tasks.pop(completion.task_id, None)
+        with self._background_tasks_lock:
+            self._background_tasks.pop(completion.task_id, None)
         self._output_messages.put(
             BackgroundTaskNotificationAgentMessage(
                 message_id=AgentMessageID(),
@@ -1644,11 +1647,6 @@ class PiAgent(DefaultAgentWrapper):
                 duration_seconds=(completion.duration_ms / 1000.0) if completion.duration_ms is not None else None,
             )
         )
-        # Surface the completion as its own assistant message. It arrives after
-        # the agent run's `message_end`s, so it needs fresh ids; emit a partial
-        # then the final block (paired ids) the way a streamed assistant message
-        # does, so the LIVE stream reducer renders it (a lone final block with no
-        # preceding partial renders only on reload — the live/reload divergence).
         summary_message_id = AgentMessageID()
         summary_assistant_id = AssistantMessageID(generate_id())
         summary_blocks: tuple[ContentBlockTypes, ...] = (TextBlock(text=_format_background_completion(completion)),)
@@ -1667,20 +1665,77 @@ class PiAgent(DefaultAgentWrapper):
                 content=summary_blocks,
             )
         )
-        return state.agent_run_ended and not state.pending_background_tasks
 
-    def _cancel_background_tasks(self, state: _TurnState) -> None:
-        """SIGTERM every still-running background child by signalling its process group.
+    def _emit_background_completion_out_of_band(self, completion: BackgroundTaskCompletion) -> None:
+        """Surface a background completion that arrived between turns, live.
 
-        pi 0.78.0 exposes no extension hook to cancel detached work mid-flight, so
-        Sculptor kills the child's group directly INSIDE the environment (each child
-        is spawned as its own group leader, so the negative pgid targets just that
-        tree and never the pi process). Best-effort and idempotent: a child that
-        already exited is a no-op. Called on interrupt/stop and as a turn-exit safety
-        net so no background child is ever orphaned. Clears the held-open set.
+        Wraps the completion in its own minimal request cycle (RequestStarted →
+        notification + summary → RequestSuccess) so message_conversion renders it as a
+        standalone assistant message even though no user turn is in flight — the
+        out-of-band analogue of the in-turn path. The request id is fresh (the
+        completion is not a reply to a user message)."""
+        request_id = AgentMessageID()
+        self._output_messages.put(RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=request_id))
+        try:
+            self._handle_background_completion(completion)
+        finally:
+            self._output_messages.put(
+                RequestSuccessAgentMessage(message_id=AgentMessageID(), request_id=request_id, interrupted=False)
+            )
+
+    def _drain_idle_background_events(self) -> None:
+        """Between turns, dispatch background-task completions as they arrive.
+
+        Sculptor only drains pi's stdout during a turn, so a completion that fires
+        while the user is idle would otherwise sit unseen. When background tasks are
+        in flight, `_process_message_queue` calls this between user messages: it
+        consumes whatever pi has emitted and surfaces any background-completion
+        `notify` out-of-band. Runs on the message-processing thread (the sole stdout
+        reader), so it never races the in-turn drain. Non-completion events between
+        turns are not expected (pi is idle) and are ignored.
         """
         process = self._process
-        for task_id, pgid in list(state.pending_background_tasks.items()):
+        if process is None:
+            return
+        out_queue = process.get_queue()
+        while not self._shutdown_event.is_set():
+            try:
+                line, is_stdout = out_queue.get_nowait()
+            except Empty:
+                return
+            if not is_stdout:
+                continue
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                event = json.loads(stripped)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(event, dict):
+                continue
+            parsed = parse_rpc_message(event)
+            if isinstance(parsed, ExtensionUiRequest) and parsed.method == "notify":
+                completion = parse_background_completion(parsed.message)
+                if completion is not None:
+                    self._emit_background_completion_out_of_band(completion)
+
+    def _cancel_all_background_tasks(self) -> None:
+        """SIGTERM every still-running background child by signalling its process group.
+
+        Each child is spawned detached (its own group leader), so it escapes pi's
+        process group; killing the negative pgid INSIDE the environment tears down
+        just that child tree without touching pi. Called on shutdown (`wait`) as the
+        no-orphan guarantee, alongside the extension's `session_shutdown` handler.
+        Best-effort and idempotent — a child that already exited is a no-op. NOT
+        called on a turn interrupt: a backgrounded task runs independently of the
+        turn that launched it and must survive the user stopping a later turn.
+        """
+        process = self._process
+        with self._background_tasks_lock:
+            tasks = list(self._background_tasks.items())
+            self._background_tasks.clear()
+        for _task_id, pgid in tasks:
             if process is not None and pgid > 0:
                 try:
                     self.environment.run_process_to_completion(
@@ -1691,11 +1746,14 @@ class PiAgent(DefaultAgentWrapper):
                     )
                 except Exception as e:  # noqa: BLE001
                     logger.debug("PiAgent background-task cancel for pgid {} failed: {}", pgid, e)
-            state.pending_background_tasks.pop(task_id, None)
 
     def _handle_agent_end(self, parsed: ParsedAgentEnd, state: _TurnState) -> bool:
-        """Turn boundary — return True so the dispatcher yields control,
-        EXCEPT while background tasks launched this turn are still in flight.
+        """Turn boundary — return True so the dispatcher yields control.
+
+        A turn that launched a background task ends here like any other (the task
+        runs independently; its completion is surfaced out-of-band — see
+        `_drain_idle_background_events`), so the user is unblocked the moment the
+        task starts.
 
         Per-message finalization happens in `_handle_message_end`, which
         emits each `ResponseBlockAgentMessage` with the IDs its partials
@@ -1731,17 +1789,6 @@ class PiAgent(DefaultAgentWrapper):
                     content=(TextBlock(text=state.accumulated_text),),
                 )
             )
-        # Background tasks launched this turn hold it open (mirroring Claude,
-        # whose turn stays open until background tasks complete): keep draining so
-        # their completion notify is seen and the StatusPill stays active. An
-        # expected abort (interrupt / shutdown) instead ends the turn now and
-        # cancels the children, so an interrupt never hangs and leaves no orphan.
-        if state.pending_background_tasks:
-            if abort_expected:
-                self._cancel_background_tasks(state)
-                return True
-            state.agent_run_ended = True
-            return False
         return True
 
     def _handle_auto_retry_end(self, parsed: ParsedAutoRetryEnd, state: _TurnState) -> None:
@@ -1797,39 +1844,43 @@ class PiAgent(DefaultAgentWrapper):
             parsed.error,
         )
 
-    def _handle_extension_ui_request(self, parsed: ExtensionUiRequest, state: _TurnState) -> bool:
-        """Dispatch an extension UI request. Returns True only to END a held-open turn.
+    def _handle_extension_ui_request(self, parsed: ExtensionUiRequest) -> None:
+        """Dispatch an extension UI request (never a turn boundary).
 
         Two of our pinned extensions speak this lane:
         - The backchannel extension opens blocking `select` (multiple-choice /
           plan approval) and `input` (free-form) dialogs. Each becomes an
           `AskUserQuestionAgentMessage`, and the request id is recorded so
           `_deliver_question_answer` can post the matching `extension_ui_response`.
-          pi blocks until then (we never set a `timeout`), so the turn is not over
-          (return False).
+          pi blocks until then (we never set a `timeout`), so the turn stays open
+          while the consume loop keeps draining.
         - The background-task extension reports a task's completion as a
           fire-and-forget `notify` carrying our structured marker; that reconciles
-          the task and can end a turn held open for it (return its result).
+          the task into the current turn (the turn ends at its own `agent_end` — a
+          backgrounded task does not hold it open).
 
         Any other fire-and-forget method (`setStatus`/…) or a foreign `notify`
-        needs no response and is ignored (return False).
+        needs no response and is ignored.
         """
         if parsed.method == "notify":
             completion = parse_background_completion(parsed.message)
             if completion is not None:
-                return self._handle_background_completion(completion, state)
-            logger.debug("PiAgent ignoring non-background notify extension_ui_request")
-            return False
+                # A task that happens to complete while a user turn is in flight is
+                # reconciled into that turn; one that completes between turns is
+                # caught by `_drain_idle_background_events` instead.
+                self._handle_background_completion(completion)
+            else:
+                logger.debug("PiAgent ignoring non-background notify extension_ui_request")
+            return
         if parsed.method not in ("select", "input"):
             logger.debug("PiAgent ignoring non-dialog extension_ui_request method: {}", parsed.method)
-            return False
+            return
         question_data = self._build_question_data(parsed)
         with self._backchannel_lock:
             self._pending_ui_request_id = parsed.id
         self._output_messages.put(
             AskUserQuestionAgentMessage(message_id=AgentMessageID(), question_data=question_data)
         )
-        return False
 
     def _build_question_data(self, parsed: ExtensionUiRequest) -> AskUserQuestionData:
         """Build the AskUserQuestion payload from a backchannel dialog request.

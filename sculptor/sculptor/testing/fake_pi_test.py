@@ -651,11 +651,13 @@ def test_fake_pi_command_grammar_matches_fake_claude_shape(directive: str, expec
 
 
 def test_fake_pi_background_directive_emits_started_payload_agent_end_then_completion_notify() -> None:
-    """The `background` directive reproduces the held-open wire shape:
+    """The `background` directive reproduces the yield-early wire shape:
 
     a `background` tool launch (tool_execution_end carrying the versioned
-    `{task}` payload), the launching run's `agent_end`, then a fire-and-forget
-    completion `notify` carrying the structured marker — and NO second agent_end.
+    `{task}` payload), the launching run's `agent_end` (the turn ends there), then a
+    fire-and-forget completion `notify` carrying the structured marker — and NO
+    second agent_end. With no `wait_path` the notify is emitted inline right after
+    agent_end (out-of-band from Sculptor's view, since it has yielded the turn).
     """
     result = _run_fake_pi(
         ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],

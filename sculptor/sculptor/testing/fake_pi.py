@@ -141,8 +141,8 @@ class _TurnBuilder:
     images: list[dict] = field(default_factory=list)
     _ui_counter: int = 0
     # Set by the `background` directive: it emits the launching run's `agent_end`
-    # itself (so a later completion notify can follow it, the held-open shape), so
-    # `_run_turn` must NOT emit its own trailing message_end / agent_end.
+    # itself (the launch yields immediately; the completion fires out-of-band on a
+    # daemon thread), so `_run_turn` must NOT emit its own trailing agent_end.
     suppress_turn_end: bool = False
 
     def emit(self, text: str) -> None:
@@ -576,23 +576,23 @@ def _handle_subagent(args: dict, builder: _TurnBuilder, abort_event: Event, stat
 
 
 def _handle_background(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
-    """Script a background-task tool call and its out-of-band completion.
+    """Script a background-task tool call and its out-of-band completion (yield-early).
 
     Reproduces the wire shape `sculptor_background.ts` emits, without spawning a
     real process: the `background` toolCall block + tool-execution lane whose
     `result.details` carry the versioned launch payload (`{v, task}`, parsed by
-    `background.py`), then the launching run's `agent_end` — at which point
-    Sculptor HOLDS the turn open while the task is pending (the StatusPill stays
-    active). After an optional hold (`wait_path`, like `wait_for_file`), emits the
-    completion `notify` carrying the structured marker, which Sculptor reconciles
-    into a BackgroundTaskNotification and which ENDS the held-open turn. Because
-    this directive emits the run's `agent_end` itself, it sets
-    ``builder.suppress_turn_end`` so `_run_turn` does not emit a second end.
+    `background.py`), then the launching run's `agent_end`. The launching turn ENDS
+    there — the user is unblocked and keeps chatting while the task runs (the agent
+    does not hold the turn open). Because this directive emits the run's `agent_end`
+    itself, it sets ``builder.suppress_turn_end`` so `_run_turn` does not emit a
+    second end.
 
-    A test can drive both behaviours with one directive: with a `wait_path` the
-    turn stays open (surface observable, main thread still accepts input) until
-    the sentinel file appears, then completes; with no `wait_path` it completes
-    immediately.
+    The completion `notify` (the structured marker Sculptor maps to a
+    BackgroundTaskNotification) is emitted OUT-OF-BAND on a daemon thread — after an
+    optional `wait_path` hold — so fake pi stays responsive to the user's next
+    prompt while the task "runs". Sculptor surfaces it via its idle-drain. With no
+    `wait_path` the completion fires after a brief delay (still after the launch
+    turn's `agent_end`, so it is genuinely out-of-band).
 
     Args (all optional): `id` (tool-call id), `command`, `label`, `pgid`,
     `status` ("completed"/"failed"), `exit_code`, `summary`, `duration_ms`,
@@ -637,23 +637,10 @@ def _handle_background(args: dict, builder: _TurnBuilder, abort_event: Event, st
         }
     )
 
-    # The agent does not block on the task: end the launching run now (Sculptor
-    # holds the turn open while pending). Suppress _run_turn's trailing end.
+    # End the launching run NOW (yield-early): the user is unblocked while the task
+    # runs. Suppress _run_turn's trailing end (we emitted agent_end ourselves).
     _emit_agent_end(builder.full_text)
     builder.suppress_turn_end = True
-
-    # Optional hold so a test can observe the held-open surface and send a
-    # mid-flight message before the task completes (abortable like wait_for_file).
-    wait_path = args.get("wait_path")
-    if wait_path:
-        sentinel = Path(wait_path)
-        deadline = time.monotonic() + float(args.get("timeout_seconds", 120))
-        while not sentinel.exists():
-            if abort_event.is_set():
-                raise _TurnAborted()
-            if time.monotonic() >= deadline:
-                raise RuntimeError(f"fake_pi:background timed out waiting for {sentinel}")
-            time.sleep(0.05)
 
     status = str(args.get("status", "completed"))
     # `"sculptorBackgroundTask"` MUST match BACKGROUND_NOTIFY_MARKER (background.py).
@@ -666,15 +653,37 @@ def _handle_background(args: dict, builder: _TurnBuilder, abort_event: Event, st
         "summary": str(args.get("summary", "background task done")),
         "durationMs": int(args.get("duration_ms", 1000)),
     }
-    _emit(
-        {
-            "type": "extension_ui_request",
-            "id": builder.next_ui_request_id(),
-            "method": "notify",
-            "notifyType": "info" if status == "completed" else "warning",
-            "message": json.dumps({"sculptorBackgroundTask": completion}, separators=(",", ":")),
-        }
-    )
+    notify_event = {
+        "type": "extension_ui_request",
+        "id": builder.next_ui_request_id(),
+        "method": "notify",
+        "notifyType": "info" if status == "completed" else "warning",
+        "message": json.dumps({"sculptorBackgroundTask": completion}, separators=(",", ":")),
+    }
+    wait_path = args.get("wait_path")
+    if wait_path:
+        # Hold the completion on a daemon thread until a sentinel file appears, so a
+        # test can send a mid-flight prompt (which fake pi answers, since this turn
+        # already returned) before the task "completes". `_emit` serializes on
+        # _STDOUT_LOCK, so the out-of-band notify never interleaves a later turn.
+        timeout_seconds = float(args.get("timeout_seconds", 120))
+
+        def _emit_completion_when_ready() -> None:
+            sentinel = Path(wait_path)
+            deadline = time.monotonic() + timeout_seconds
+            while not sentinel.exists():
+                if time.monotonic() >= deadline:
+                    return  # give up; the test's completion assertion will fail loudly
+                time.sleep(0.05)
+            _emit(notify_event)
+
+        threading.Thread(target=_emit_completion_when_ready, name="fake-pi-bg-completion", daemon=True).start()
+    else:
+        # No hold: emit right after the launch run's agent_end. Sculptor has already
+        # yielded the turn there, so this is still genuinely out-of-band (its
+        # idle-drain surfaces it) — but synchronous, so a one-shot headless run
+        # observes it before exiting on EOF.
+        _emit(notify_event)
 
 
 def _handle_sleep(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:

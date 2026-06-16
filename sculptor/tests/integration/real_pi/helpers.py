@@ -161,3 +161,18 @@ def wait_for_process_count(
             return last
         time.sleep(0.5)
     return last
+
+
+def kill_processes_matching(predicate: Callable[[Sequence[str]], bool]) -> None:
+    """Best-effort SIGTERM of live processes whose argv satisfies ``predicate``.
+
+    Test cleanup for a deliberately-orphaned child (e.g. a test that proves Stop
+    does NOT kill a background task leaves it running). Defensive — a process can
+    exit, or be inaccessible, between iteration and signalling.
+    """
+    for proc in psutil.process_iter(["cmdline"]):
+        try:
+            if predicate(proc.info["cmdline"] or []):
+                proc.terminate()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
