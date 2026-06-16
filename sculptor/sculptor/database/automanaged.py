@@ -57,6 +57,7 @@ AUTOMANAGED_MODEL_CLASSES: set[type["DatabaseModel"]] = set()
 
 SQLAlchemyTypes = type[String] | type[JSON] | type[Integer] | type[Float] | DateTime
 
+# pyrefly: ignore [bad-assignment]
 _PYDANTIC_TO_SQLALCHEMY_TYPES: dict[type, SQLAlchemyTypes] = {
     ObjectID: String,
     SerializableModel: JSON,

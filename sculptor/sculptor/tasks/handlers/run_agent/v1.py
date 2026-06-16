@@ -610,6 +610,8 @@ def _get_is_killed_request(message: Message) -> int:
         if isinstance(causal_error, AgentClientError) and causal_error.exit_code in (
             SIGTERM_EXIT_CODES | SIGINT_EXIT_CODES
         ):
+            # exit_code is a member of a set of ints here, so it cannot be None
+            # pyrefly: ignore [bad-return]
             return causal_error.exit_code
     return 0
 

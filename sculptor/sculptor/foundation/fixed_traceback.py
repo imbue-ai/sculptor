@@ -31,5 +31,4 @@ class FixedTraceback(Traceback):
 
     @classmethod
     def from_dict(cls, dct: dict[str, Any]) -> Self:
-        # pyre-fixme[11]: pyre seems to have some trouble with Self in some specific cases, including cast
         return cast(cls, super().from_dict(dct))

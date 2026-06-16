@@ -307,9 +307,9 @@ def _get_or_create_shared_instance(
     )
 
     # Cache on config for session reuse
-    config._sculptor_instance = instance  # pyre-ignore[16]
+    config._sculptor_instance = instance
     if use_electron:
-        config._electron_frontend = electron_frontend  # pyre-ignore[16]
+        config._electron_frontend = electron_frontend
 
     # Register session-level teardown via pytest finalizer (not atexit) so it
     # runs while Playwright's session fixtures are still alive.

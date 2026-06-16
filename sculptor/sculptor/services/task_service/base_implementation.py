@@ -343,7 +343,8 @@ class BaseTaskService(TaskService, ABC):
             # otherwise there is a race condition where the listener might not see some messages that are being committed
             # or they might arrive out of order (both of which are bad)
             with self.data_model_service.open_transaction(RequestID()) as transaction:
-                tasks = transaction.get_tasks_for_user(user_reference)  # pyre-fixme[16]
+                # pyrefly: ignore [missing-attribute]
+                tasks = transaction.get_tasks_for_user(user_reference)
                 task_ids = {task.object_id for task in tasks}
             latest_tasks = tuple(
                 self._latest_task_by_task_id[task_id]
@@ -425,7 +426,8 @@ class BaseTaskService(TaskService, ABC):
         with self._subscription_lock:
             registry.setdefault(registry_key, []).append(listener)
             with self.data_model_service.open_transaction(RequestID()) as transaction:
-                tasks = transaction.get_tasks_for_user(user_reference)  # pyre-fixme[16]
+                # pyrefly: ignore [missing-attribute]
+                tasks = transaction.get_tasks_for_user(user_reference)
                 matching_task_ids = {task.object_id for task in tasks if task_filter(task)}
             latest_tasks = tuple(
                 self._latest_task_by_task_id[task_id]

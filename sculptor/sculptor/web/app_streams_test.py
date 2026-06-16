@@ -82,13 +82,13 @@ def server_url(server_app: FastAPI) -> Generator[str, None, None]:
     server._ready_event.wait()
 
     # figure out what port was bound
-    # pyre-ignore[16]: pyre doesn't understand the way server is initialized and it's a third-party library so we can't fix it
     server_port = only(only(server.servers).sockets).getsockname()[-1]
 
     # Now make requests using the actual port
     yield f"http://127.0.0.1:{server_port}"
 
-    server_app.shutdown_event.set()  # pyre-fixme[16]: the source of shutdown_event is unknown
+    # pyrefly: ignore [missing-attribute]
+    server_app.shutdown_event.set()
     server.should_exit = True
     server_thread.join()
 

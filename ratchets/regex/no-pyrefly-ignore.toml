@@ -1,0 +1,9 @@
+[rule]
+id = "no-pyrefly-ignore"
+description = "Disallow '# pyrefly: ignore' suppressions; fewer of these over time is the goal"
+severity = "error"
+
+[match]
+pattern = '#\s*pyrefly:\s*ignore'
+languages = ["python"]
+include = ["**/*.py"]

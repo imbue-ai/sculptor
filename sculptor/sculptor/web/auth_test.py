@@ -31,7 +31,7 @@ def _settings_with_token() -> SculptorSettings:
 
 def _make_app(settings_factory) -> FastAPI:
     app = FastAPI()
-    app.add_middleware(SessionTokenMiddleware, settings_factory=settings_factory)  # pyre-ignore[6]
+    app.add_middleware(SessionTokenMiddleware, settings_factory=settings_factory)
 
     @app.get("/api/v1/items")
     def items() -> dict:

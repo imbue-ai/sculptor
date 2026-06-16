@@ -66,6 +66,7 @@ if TYPE_CHECKING:
 
 class LocalEnvironment(Environment):
     object_type: str = "LocalEnvironment"
+    # pyrefly: ignore [bad-override-mutable-attribute]
     environment_id: LocalEnvironmentID
     concurrency_group: ConcurrencyGroup
     # The repo host path - points directly to the user's repository.

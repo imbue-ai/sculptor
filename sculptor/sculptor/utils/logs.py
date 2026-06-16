@@ -75,7 +75,7 @@ def setup_loggers(
     default_handler_id = 0
 
     # Remove only the default handler if it exists - do not remove other custom handlers
-    # pyre-ignore[16]: Accessing private field _core
+    # pyrefly: ignore [missing-attribute]
     if default_handler_id in logger._core.handlers:
         logger.remove(default_handler_id)
 

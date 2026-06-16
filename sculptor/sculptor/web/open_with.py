@@ -163,7 +163,7 @@ def _get_macos_launch_info(app: ExternalApp, target_path: Path) -> tuple[list[st
         case ExternalApp.PYCHARM:
             return _macos_launch_editor(app, target_path)
         case _ as unreachable:
-            assert_never(unreachable)  # pyre-fixme[6]: Pyre cannot narrow enum values through match/case
+            assert_never(unreachable)
 
 
 def _macos_launch_editor(app: ExternalApp, target_path: Path) -> tuple[list[str], Path | None] | None:
@@ -199,7 +199,7 @@ def _get_linux_launch_info(app: ExternalApp, target_path: Path) -> tuple[list[st
         case ExternalApp.GHOSTTY:
             return _linux_launch_cli_app(app, target_path)
         case _ as unreachable:
-            assert_never(unreachable)  # pyre-fixme[6]: Pyre cannot narrow enum values through match/case
+            assert_never(unreachable)
 
 
 def _linux_launch_cli_app(app: ExternalApp, target_path: Path) -> tuple[list[str], Path | None] | None:

@@ -19,7 +19,9 @@ dependencies = [
     # The block from anyio through traceback-with-variables was absorbed from the former
     # imbue_core library when it was folded into sculptor.foundation; keep it sorted in.
     "anyio",
-    "attrs",
+    # Pyrefly understands @attr.s classes only with the PEP 681 dataclass_transform
+    # stubs introduced in attrs 26; older stubs leave it unable to see generated __init__s.
+    "attrs>=26.1.0",
     "beautifulsoup4>=4.12.2",
     "boto3>=1.35.0",
     "cachetools",
@@ -114,7 +116,7 @@ dev = [
     "pillow>=11.0.0",
     "playwright==1.53.0",
     "pylint==3.2.6",
-    "pyre-check",
+    "pyrefly>=1.0.0",
     "pytest-asyncio",
     "pytest-cov>=6.2.1",
     "pytest-metadata==3.1.1",

@@ -33,7 +33,7 @@ def _make_service() -> PrPollingService:
 
     Uses __new__ to bypass __init__ (which requires real services) and
     sets private attrs directly. Fields that would be typed services are
-    set to MagicMock via ``object.__setattr__`` to avoid Pyre errors
+    set to MagicMock via ``object.__setattr__`` to avoid type checker errors
     about attribute types.
     """
     svc = PrPollingService.__new__(PrPollingService)
