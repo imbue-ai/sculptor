@@ -377,8 +377,14 @@ class CIBabysitterCoordinator(Service):
             # readiness wait can block for seconds).
             with self._lock:
                 if state.terminal_drive_in_progress:
-                    # Coalesce: the in-flight worker will write the prompt. Don't
-                    # start a racing worker or bump bookkeeping for this cycle.
+                    # Coalesce onto the in-flight worker rather than racing a
+                    # second one. That worker writes the prompt it was handed at
+                    # its own dispatch, so a different transition's prompt
+                    # arriving mid-drive is dropped for this cycle — but it is
+                    # not lost: this branch returns before marking the
+                    # transition dispatched, so the next poll re-dispatches it
+                    # once the in-progress flag clears. Don't bump bookkeeping
+                    # for the coalesced attempt.
                     logger.info(
                         "CIBabysitterCoordinator: terminal drive already in progress for workspace={}, coalescing",
                         state.workspace_id,
