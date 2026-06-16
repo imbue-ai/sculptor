@@ -284,8 +284,7 @@ def _model_sort_key(model: ModelOption) -> tuple[int, int, str]:
     """Newest-first sort key: descending (major, minor), then id for stability.
 
     Parses the trailing `-<major>-<minor>` of the model id (e.g. claude-opus-4-8
-    → (4, 8)). Ids without that shape sort last (version (-1, -1)). The negation
-    yields newest-first under an ascending sort; the id tiebreaker keeps the order
+    → (4, 8)); ids without that shape sort last. The id tiebreaker keeps the order
     deterministic across same-version families.
     """
     match = _MODEL_VERSION_RE.search(model.model_id)
@@ -580,10 +579,9 @@ class PiAgent(DefaultAgentWrapper):
     _awaiting_reaction_count: int = PrivateAttr(default=0)
     _awaiting_reaction_deadline: float = PrivateAttr(default=0.0)
     # The curated model catalog surfaced at start (`_fetch_models_into_state`),
-    # cached so a `set_model` switch can re-emit the same `available_models` with
-    # the new current model in its `ModelsAvailableAgentMessage` carrier (the
-    # catalog itself does not change when only the selection changes). Set and
-    # read on the message-processing thread only.
+    # cached so a `set_model` switch can re-emit it with the new current model in
+    # its `ModelsAvailableAgentMessage` carrier. Set and read on the
+    # message-processing thread only.
     _available_models: tuple[ModelOption, ...] = PrivateAttr(default=())
 
     def start(self, secrets: Mapping[str, str | Secret]) -> None:
@@ -1095,7 +1093,7 @@ class PiAgent(DefaultAgentWrapper):
             logger.info("PiAgent get_available_models returned no usable models; switcher will fall back to defaults")
             return
         # Cache the catalog so a later set_model can re-emit it with the new
-        # current model (only the selection changes, not the list).
+        # current model.
         self._available_models = tuple(curated)
         self._output_messages.put(
             ModelsAvailableAgentMessage(

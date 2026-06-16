@@ -24,8 +24,7 @@ export const getModelLongName = (model: LlmModel): string => modelNames[model]?.
  * With a non-empty backend list (pi) the chosen `ModelOption` is applied
  * out-of-band via `onBackendModelChange`; otherwise the value is a Claude
  * `LlmModel` applied per-turn via `onModelChange`. A backend value with no
- * matching option is ignored (the list and the value are always in sync in
- * practice).
+ * matching option is ignored.
  */
 export const routeModelChange = (
   next: string,
