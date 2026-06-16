@@ -78,9 +78,7 @@ def test_pi_background_task_yields_stays_interactive_then_completes(
     expect(chat_panel.get_messages().filter(has_text=summary_marker).first).to_be_visible(timeout=30000)
 
 
-@user_story(
-    "to see a background task that fails surface its failure under pi, rather than be silently dropped"
-)
+@user_story("to see a background task that fails surface its failure under pi, rather than be silently dropped")
 def test_pi_background_task_failure_surfaces(sculptor_instance_: SculptorInstance) -> None:
     """A background command that exits non-zero surfaces its failure out-of-band: the
     completion is reconciled into the conversation as a FAILED task (the "failed" header
