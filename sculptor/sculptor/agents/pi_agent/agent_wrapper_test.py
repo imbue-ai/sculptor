@@ -39,6 +39,7 @@ from sculptor.agents.pi_agent.output_processor import ParsedAgentEnd
 from sculptor.agents.pi_agent.output_processor import ParsedUnknownEvent
 from sculptor.agents.pi_agent.output_processor import extract_tool_call_blocks
 from sculptor.agents.pi_agent.output_processor import parse_rpc_message
+from sculptor.agents.pi_agent.subagent import SUBAGENT_NOTIFY_MARKER
 from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingAgentMessage
@@ -165,7 +166,13 @@ def _tool_execution_end(tool_call_id: str, name: str, result: Any = None, is_err
 
 def _tool_use_blocks(messages: list) -> list[ToolUseBlock]:
     """Every ToolUseBlock across all emitted partial/response messages, in order."""
-    return [block for m in messages for block in m.content if isinstance(block, ToolUseBlock)]
+    return [
+        block
+        for m in messages
+        if isinstance(m, (ResponseBlockAgentMessage, PartialResponseBlockAgentMessage))
+        for block in m.content
+        if isinstance(block, ToolUseBlock)
+    ]
 
 
 def _tool_result_blocks(messages: list) -> list[ToolResultBlock]:
@@ -2095,17 +2102,16 @@ def test_render_synthesized_skill_escapes_frontmatter() -> None:
     assert rendered.endswith("Body text")
 
 
-# --- Sub-agents (structured per-child progress → nested child messages) ------
+# --- Sub-agents (yield-early launch → out-of-band nested completion) ---------
+
+_SA_TOOL_CALL_ID = "sa1"
+_SA_TASK_ID = f"sat_{_SA_TOOL_CALL_ID}"
+_SA_PGIDS = (5151, 5252)
 
 
 def _subagent_child(child_id: str, status: str, events: list[dict[str, Any]], label: str = "subagent") -> dict:
     """One child entry in the wire shape sculptor_subagent.ts emits."""
     return {"childId": child_id, "label": label, "task": "do a thing", "status": status, "events": events}
-
-
-def _subagent_envelope(children: list[dict]) -> dict:
-    """The {content, details} result envelope carrying the structured payload."""
-    return {"content": [{"type": "text", "text": "summary"}], "details": {"v": 1, "children": children}}
 
 
 def _read_child_events() -> list[dict[str, Any]]:
@@ -2116,111 +2122,244 @@ def _read_child_events() -> list[dict[str, Any]]:
     ]
 
 
+def _subagent_start_result(
+    task_id: str = _SA_TASK_ID,
+    tool_call_id: str = _SA_TOOL_CALL_ID,
+    label: str = "2 sub-agents",
+    pgids: tuple[int, ...] = _SA_PGIDS,
+    count: int = 2,
+) -> dict[str, Any]:
+    """The {content, details} envelope the `subagent` tool returns on launch."""
+    return {
+        "content": [{"type": "text", "text": f"Started {count} sub-agent(s)"}],
+        "details": {
+            "v": 1,
+            "task": {
+                "taskId": task_id,
+                "toolCallId": tool_call_id,
+                "label": label,
+                "pgids": list(pgids),
+                "count": count,
+                "status": "running",
+            },
+        },
+    }
+
+
+def _subagent_notify(
+    children: list[dict],
+    task_id: str = _SA_TASK_ID,
+    tool_call_id: str = _SA_TOOL_CALL_ID,
+    status: str = "completed",
+) -> dict[str, Any]:
+    """The fire-and-forget completion notify the extension emits out-of-band."""
+    return {
+        "type": "extension_ui_request",
+        "id": "uireq-sa-1",
+        "method": "notify",
+        "notifyType": "info" if status == "completed" else "warning",
+        "message": json.dumps(
+            {
+                SUBAGENT_NOTIFY_MARKER: {
+                    "v": 1,
+                    "taskId": task_id,
+                    "toolCallId": tool_call_id,
+                    "status": status,
+                    "children": children,
+                }
+            }
+        ),
+    }
+
+
 def _child_messages(emitted: list) -> list[ResponseBlockAgentMessage]:
     return [m for m in emitted if isinstance(m, ResponseBlockAgentMessage) and m.parent_tool_use_id is not None]
 
 
-def _run_subagent_turn(updates: list[dict], end_payload: dict) -> list:
-    """Drive one sub-agent tool call (toolCall block → lane updates → end)."""
-    agent = _make_agent()
-    events = [
+def _subagent_launch_events() -> list:
+    """The launch run: toolCall block → tool_execution_end with the launch payload → agent_end."""
+    return [
         _event({"type": "agent_start"}),
         _event(
             {
                 "type": "message_end",
-                "message": _assistant_msg_with_content([_tool_call_block("sa1", "subagent", {"task": "investigate"})]),
+                "message": _assistant_msg_with_content(
+                    [_tool_call_block(_SA_TOOL_CALL_ID, "subagent", {"task": "investigate"})]
+                ),
             }
         ),
-        _event(_tool_execution_start("sa1", "subagent", {"task": "investigate"})),
+        _event(_tool_execution_start(_SA_TOOL_CALL_ID, "subagent", {"task": "investigate"})),
+        _event(_tool_execution_end(_SA_TOOL_CALL_ID, "subagent", result=_subagent_start_result())),
+        _event({"type": "agent_end", "messages": [], "willRetry": False}),
     ]
-    for payload in updates:
-        events.append(
-            _event(
-                {
-                    "type": "tool_execution_update",
-                    "toolCallId": "sa1",
-                    "toolName": "subagent",
-                    "args": {"task": "investigate"},
-                    "partialResult": payload,
-                }
-            )
-        )
-    events.append(_event(_tool_execution_end("sa1", "subagent", result=end_payload)))
-    events.append(_event({"type": "agent_end", "messages": [], "willRetry": False}))
-    agent._process = _make_process(events)
+
+
+def test_subagent_launch_yields_turn_immediately() -> None:
+    """A `subagent` call surfaces as a started task and the launch turn ENDS right away
+    (yield-early): the user is unblocked while the children run. The task is tracked at
+    the agent level, and a completion that arrives AFTER agent_end is NOT consumed by
+    the launch turn (it is surfaced out-of-band later)."""
+    agent = _make_agent()
+    agent._process = _make_process(
+        _subagent_launch_events() + [_event(_subagent_notify([_subagent_child("c0", "done", _read_child_events())]))]
+    )
     agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
-    return _drain(agent._output_messages)
+    emitted = _drain(agent._output_messages)
+
+    started = _bg_started(emitted)
+    assert len(started) == 1
+    assert started[0].background_task_id == _SA_TASK_ID
+    assert started[0].tool_use_id == _SA_TOOL_CALL_ID
+    # The launch turn ended at agent_end without draining the completion.
+    assert _bg_notifications(emitted) == []
+    assert _child_messages(emitted) == []
+    assert agent._subagent_tasks.get(_SA_TASK_ID) == _SA_PGIDS
 
 
-def test_subagent_parent_renders_as_agent_block() -> None:
-    """The pi `subagent` tool maps to Claude's `Agent` so the frontend pills it."""
-    payload = _subagent_envelope([_subagent_child("c0", "done", _read_child_events())])
-    emitted = _run_subagent_turn(updates=[payload], end_payload=payload)
+def test_subagent_parent_renders_as_agent_block_with_launch_ack() -> None:
+    """The pi `subagent` tool maps to Claude's `Agent` (so the frontend pills it); the
+    launch turn renders the parent block and its "Started …" result acknowledgement."""
+    agent = _make_agent()
+    agent._process = _make_process(_subagent_launch_events())
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+    emitted = _drain(agent._output_messages)
+
     use_blocks = _tool_use_blocks(emitted)
-    assert any(b.id == "sa1" and b.name == "Agent" for b in use_blocks)
+    assert any(b.id == _SA_TOOL_CALL_ID and b.name == "Agent" for b in use_blocks)
+    results = [
+        b
+        for m in emitted
+        if isinstance(m, ResponseBlockAgentMessage)
+        for b in m.content
+        if isinstance(b, ToolResultBlock)
+    ]
+    assert any(str(b.tool_use_id) == _SA_TOOL_CALL_ID for b in results)
 
 
-def test_subagent_emits_nested_child_message_with_parent_attribution() -> None:
-    """A finished child becomes its own ChatMessage carrying parent_tool_use_id =
-    the parent Agent tool id, with the child's own tool call + text nested."""
-    payload = _subagent_envelope([_subagent_child("c0", "done", _read_child_events())])
-    emitted = _run_subagent_turn(updates=[payload], end_payload=payload)
+def test_subagent_completion_in_turn_reconciles() -> None:
+    """A task that completes while a user turn is in flight is reconciled into that turn
+    (nested children + notification), and stops being tracked."""
+    agent = _make_agent()
+    agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event(_subagent_notify([_subagent_child("c0", "done", _read_child_events())])),
+            _event({"type": "agent_end", "messages": [_assistant_msg("done")], "willRetry": False}),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+    emitted = _drain(agent._output_messages)
+
+    children = _child_messages(emitted)
+    assert len(children) == 1
+    assert children[0].parent_tool_use_id == _SA_TOOL_CALL_ID
+    notes = _bg_notifications(emitted)
+    assert len(notes) == 1
+    assert notes[0].tool_use_id == _SA_TOOL_CALL_ID
+    assert _SA_TASK_ID not in agent._subagent_tasks
+
+
+def test_subagent_idle_drain_surfaces_completion_out_of_band() -> None:
+    """Between turns, a sub-agent completion is surfaced in its own request cycle
+    (RequestStarted → nested children + notification → RequestSuccess) so it renders
+    live while the user is idle."""
+    agent = _make_agent()
+    agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
+    agent._process = _make_process([_event(_subagent_notify([_subagent_child("c0", "done", _read_child_events())]))])
+
+    agent._drain_idle_background_events()
+    emitted = _drain(agent._output_messages)
+
+    assert any(isinstance(m, RequestStartedAgentMessage) for m in emitted)
+    assert any(isinstance(m, RequestSuccessAgentMessage) for m in emitted)
+    assert len(_child_messages(emitted)) == 1
+    notes = _bg_notifications(emitted)
+    assert len(notes) == 1
+    types = [type(m).__name__ for m in emitted]
+    assert types.index("RequestStartedAgentMessage") < types.index("BackgroundTaskNotificationAgentMessage")
+    assert types.index("BackgroundTaskNotificationAgentMessage") < types.index("RequestSuccessAgentMessage")
+    assert _SA_TASK_ID not in agent._subagent_tasks
+
+
+def test_subagent_completion_emits_nested_child_with_parent_attribution() -> None:
+    """A completed child becomes its own ChatMessage carrying parent_tool_use_id = the
+    parent Agent tool id, with the child's own tool call + result + text nested."""
+    agent = _make_agent()
+    agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
+    agent._process = _make_process([_event(_subagent_notify([_subagent_child("c0", "done", _read_child_events())]))])
+    agent._drain_idle_background_events()
+    emitted = _drain(agent._output_messages)
 
     children = _child_messages(emitted)
     assert len(children) == 1
     child_msg = children[0]
-    assert child_msg.parent_tool_use_id == "sa1"
-    # The child's own read renders nested: a Read tool block + its result + text.
+    assert child_msg.parent_tool_use_id == _SA_TOOL_CALL_ID
     names = [b.name for b in child_msg.content if isinstance(b, ToolUseBlock)]
     results = [b for b in child_msg.content if isinstance(b, ToolResultBlock)]
     texts = [b.text for b in child_msg.content if isinstance(b, TextBlock)]
     assert names == ["Read"]
-    assert results and results[0].tool_use_id == "sa1:c0:ct1"
+    assert results and str(results[0].tool_use_id) == "sa1:c0:ct1"
     assert "It has one line." in texts
 
 
-def test_subagent_child_emitted_exactly_once_across_accumulated_updates() -> None:
-    """partialResult is accumulated and re-sent; a done child whose snapshot
-    repeats on every update (and again at end) is emitted only once."""
-    payload = _subagent_envelope([_subagent_child("c0", "done", _read_child_events())])
-    # Same done child snapshot three times (two updates + end).
-    emitted = _run_subagent_turn(updates=[payload, payload], end_payload=payload)
-    assert len(_child_messages(emitted)) == 1
-
-
-def test_subagent_streams_child_when_it_finishes_mid_run() -> None:
-    """A child that is still running in the first snapshot, then done in the
-    next, is emitted as soon as it reaches a terminal status."""
-    running = _subagent_envelope([_subagent_child("c0", "running", [])])
-    done = _subagent_envelope([_subagent_child("c0", "done", _read_child_events())])
-    emitted = _run_subagent_turn(updates=[running, done], end_payload=done)
-    children = _child_messages(emitted)
-    assert len(children) == 1
-    assert children[0].parent_tool_use_id == "sa1"
-
-
-def test_subagent_running_child_flushed_at_parent_end() -> None:
-    """A child still 'running' when the parent tool ends (e.g. aborted) is still
-    flushed as an attributed message so no sub-agent work silently vanishes."""
-    running = _subagent_envelope([_subagent_child("c0", "running", [])])
-    emitted = _run_subagent_turn(updates=[running], end_payload=running)
-    children = _child_messages(emitted)
-    assert len(children) == 1
-    assert children[0].parent_tool_use_id == "sa1"
-
-
-def test_subagent_emits_one_child_message_per_child_in_parallel() -> None:
+def test_subagent_completion_emits_one_child_message_per_child_in_parallel() -> None:
     """Two parallel children each become their own attributed nested message."""
-    payload = _subagent_envelope(
+    agent = _make_agent()
+    agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
+    agent._process = _make_process(
         [
-            _subagent_child("c0", "done", _read_child_events(), label="subagent 1"),
-            _subagent_child("c1", "done", _read_child_events(), label="subagent 2"),
+            _event(
+                _subagent_notify(
+                    [
+                        _subagent_child("c0", "done", _read_child_events(), label="subagent 1"),
+                        _subagent_child("c1", "done", _read_child_events(), label="subagent 2"),
+                    ]
+                )
+            )
         ]
     )
-    emitted = _run_subagent_turn(updates=[payload], end_payload=payload)
+    agent._drain_idle_background_events()
+    emitted = _drain(agent._output_messages)
+
     children = _child_messages(emitted)
-    assert {m.parent_tool_use_id for m in children} == {"sa1"}
+    assert {m.parent_tool_use_id for m in children} == {_SA_TOOL_CALL_ID}
     assert len(children) == 2
+
+
+def test_shutdown_cancels_subagent_tasks() -> None:
+    """`_cancel_all_background_tasks` SIGTERMs each sub-agent child's group in-environment."""
+    agent = _make_agent()
+    agent._process = _make_process([])
+    agent._subagent_tasks["sat_x"] = (777, 888)
+    agent._cancel_all_background_tasks()
+    assert agent._subagent_tasks == {}
+    _assert_killed_pgid(agent, 777)
+    _assert_killed_pgid(agent, 888)
+
+
+def test_interrupt_does_not_kill_subagent_task() -> None:
+    """Stopping a turn must NOT kill a running sub-agent task: it is independent of the
+    turn that launched it, so it survives the interrupt (matches background tasks)."""
+    agent = _make_agent()
+    agent._interrupt_pending.set()
+    agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event(_text_delta_update("typing", "typing")),
+            _event(
+                {
+                    "type": "agent_end",
+                    "messages": [_assistant_msg("typing", stop_reason="aborted")],
+                    "willRetry": False,
+                }
+            ),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+    _assert_no_kill(agent)
+    assert _SA_TASK_ID in agent._subagent_tasks
 
 
 # --- Background tasks (yield-early launch → out-of-band completion) ----------

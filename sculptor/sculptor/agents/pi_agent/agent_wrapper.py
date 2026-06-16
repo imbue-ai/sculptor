@@ -24,13 +24,14 @@ finished file-mutating tool (`edit`/`write`/`bash`) additionally triggers
 `on_diff_needed` so the workspace diff is regenerated — pi runs the tools
 against the workspace itself and emits no other signal that files changed.
 
-Sub-agents (`supports_sub_agents=True`) ride the same tool-execution lane: the
-pinned `sculptor_subagent` extension's `subagent` tool (mapped to Claude's
-`Agent`) streams a structured per-child payload in its accumulated
-`partialResult`, which the adapter (`_emit_subagent_children` + `subagent.py`)
-parses into nested child `ResponseBlockAgentMessage`s carrying
-`parent_tool_use_id`, so children group under the parent exactly as Claude's
-sub-agents do.
+Sub-agents (`supports_sub_agents=True`) yield immediately, like background tasks:
+the pinned `sculptor_subagent` extension's `subagent` tool (mapped to Claude's
+`Agent`) returns a launch snapshot and reports a structured per-child payload
+out-of-band on completion. The adapter (`_emit_subagent_started` +
+`_handle_subagent_completion` + `subagent.py`) records the task, then surfaces the
+children as nested `ResponseBlockAgentMessage`s carrying `parent_tool_use_id` plus
+a completion notification, so children group under the parent exactly as Claude's
+background sub-agents do.
 
 Wire-protocol reference: the pi RPC protocol notes (pi 0.78.0).
 """
@@ -44,7 +45,6 @@ import re
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
-from dataclasses import field
 from pathlib import Path
 from queue import Empty
 from queue import Queue
@@ -102,8 +102,10 @@ from sculptor.agents.pi_agent.prompt_assembly import build_image_block
 from sculptor.agents.pi_agent.prompt_assembly import save_attachments_to_environment
 from sculptor.agents.pi_agent.prompt_assembly import split_image_and_path_attachments
 from sculptor.agents.pi_agent.subagent import SubagentChild
+from sculptor.agents.pi_agent.subagent import SubagentCompletion
 from sculptor.agents.pi_agent.subagent import build_child_content_blocks
-from sculptor.agents.pi_agent.subagent import parse_subagent_progress
+from sculptor.agents.pi_agent.subagent import parse_subagent_completion
+from sculptor.agents.pi_agent.subagent import parse_subagent_start
 from sculptor.agents.pi_agent.tool_rendering import BACKGROUND_TOOL_NAME
 from sculptor.agents.pi_agent.tool_rendering import SUBAGENT_DISPLAY_NAME
 from sculptor.agents.pi_agent.tool_rendering import build_tool_result_content
@@ -199,8 +201,9 @@ _INTERRUPT_ESCALATION_GRACE_SECONDS: float = 5.0
 # build as well as a repo checkout, then written into the environment at launch.
 _BACKCHANNEL_EXTENSION_FILENAME: str = "sculptor_backchannel.ts"
 # The sub-agent extension shipped with Sculptor (package data; see pyproject.toml).
-# Registers the `subagent` tool that spawns child `pi` processes and streams
-# structured per-child progress the adapter renders nested (see subagent.py).
+# Registers the `subagent` tool that spawns child `pi` processes, yields
+# immediately, and reports its lifecycle out-of-band, rendered nested (see
+# subagent.py).
 _SUBAGENT_EXTENSION_FILENAME: str = "sculptor_subagent.ts"
 # The background-task extension shipped with Sculptor (package data; see
 # pyproject.toml). Registers the `background` tool that starts a shell command
@@ -252,17 +255,15 @@ class _ToolCall:
     # Accumulated (not delta) tool output from the latest `tool_execution_update`,
     # used as the result text if `tool_execution_end` carries no result body.
     partial_text: str = ""
-    # True for the sub-agent tool (mapped to Claude's `Agent`): its lane events
-    # carry a structured per-child payload the adapter renders as nested child
-    # messages instead of a single result. See `_emit_subagent_children`.
+    # True for the sub-agent tool (mapped to Claude's `Agent`): its result carries
+    # a structured launch payload (`subagent.py`); like the background tool it
+    # yields immediately, and the children's nested rendering + completion is
+    # surfaced out-of-band. See `_emit_subagent_started`.
     is_subagent: bool = False
     # True for the background tool: its result carries a structured launch
     # payload (`background.py`) the adapter turns into a BackgroundTaskStarted
     # message + a tracked pending task, instead of a one-shot result.
     is_background: bool = False
-    # Child ids whose nested ChatMessage has already been emitted, so the
-    # accumulated (re-sent-every-update) payload emits each child exactly once.
-    emitted_child_ids: set[str] = field(default_factory=set)
 
 
 # Matches a leading slash-command token (`/name`) and captures the remainder
@@ -364,6 +365,20 @@ def _format_background_completion(completion: BackgroundTaskCompletion) -> str:
     return f"{header}\n\n{summary}" if summary else header
 
 
+def _format_subagent_completion(completion: SubagentCompletion) -> str:
+    """The summary surfaced when a sub-agent task finishes.
+
+    Rides the completion `BackgroundTaskNotificationAgentMessage`; for an `Agent`
+    parent, message_conversion turns it into the synthetic completion child that
+    settles the sub-agent pill.
+    """
+    done = sum(1 for child in completion.children if child.status == "done")
+    failed = sum(1 for child in completion.children if child.status == "error")
+    total = len(completion.children)
+    verb = "completed" if completion.status == "completed" else completion.status
+    return f"Sub-agents {verb}: {done} done, {failed} failed (of {total})."
+
+
 class PiAgent(DefaultAgentWrapper):
     # Narrows the inherited `harness: Harness` field — the registry owns
     # construction, so no agent↔harness import cycle exists.
@@ -430,6 +445,12 @@ class PiAgent(DefaultAgentWrapper):
     # extension is the other half of the no-orphan guarantee). Mutated only on the
     # message-processing thread; the lock guards `wait()`'s cross-thread read.
     _background_tasks: dict[str, int] = PrivateAttr(default_factory=dict)
+    # In-flight sub-agent tasks (task_id -> the detached children's process-group
+    # ids), tracked at the AGENT level like `_background_tasks` so they outlive the
+    # launching turn: the `subagent` tool yields immediately and the children's
+    # nested rendering is surfaced out-of-band on completion. Guarded by
+    # `_background_tasks_lock` (it protects both task dicts).
+    _subagent_tasks: dict[str, tuple[int, ...]] = PrivateAttr(default_factory=dict)
     _background_tasks_lock: Lock = PrivateAttr(default_factory=Lock)
 
     def start(self, secrets: Mapping[str, str | Secret]) -> None:
@@ -953,12 +974,12 @@ class PiAgent(DefaultAgentWrapper):
     def _process_message_queue(self) -> None:
         while not self._shutdown_event.is_set():
             try:
-                # A short poll so that, while background tasks are in flight, we
-                # promptly pick up their out-of-band completions between turns.
+                # A short poll so that, while background or sub-agent tasks are in
+                # flight, we promptly pick up their out-of-band completions between turns.
                 message = self._input_agent_messages.get(timeout=0.1)
             except queue.Empty:
-                # Sculptor only drains pi's stdout during a turn; when a background
-                # task is running, surface its completion live while we're idle.
+                # Sculptor only drains pi's stdout during a turn; when a background or
+                # sub-agent task is running, surface its completion live while we're idle.
                 if self._has_background_tasks():
                     self._drain_idle_background_events()
                 continue
@@ -971,7 +992,7 @@ class PiAgent(DefaultAgentWrapper):
 
     def _has_background_tasks(self) -> bool:
         with self._background_tasks_lock:
-            return bool(self._background_tasks)
+            return bool(self._background_tasks) or bool(self._subagent_tasks)
 
     def _run_prompt_turn(self, message: ChatInputUserMessage) -> None:
         self._update_plan_mode_from_message(message)
@@ -1490,9 +1511,6 @@ class PiAgent(DefaultAgentWrapper):
         if info is None:
             return
         info.partial_text = extract_text_from_tool_payload(parsed.partial_result)
-        if info.is_subagent:
-            # Stream each child's nested activity as it finishes.
-            self._emit_subagent_children(parsed.partial_result, info, parsed.tool_call_id, include_running=False)
 
     def _handle_tool_execution_end(self, parsed: ParsedToolExecutionEnd, state: _TurnState) -> None:
         """Finish a tool call: refresh the workspace diff, then emit its result block."""
@@ -1520,9 +1538,12 @@ class PiAgent(DefaultAgentWrapper):
             assistant_message_id = info.assistant_message_id
             fallback_text = info.partial_text
             if info.is_subagent:
-                # Flush any child not yet emitted (including one still running at
-                # an aborted parent end) before the parent's result block lands.
-                self._emit_subagent_children(parsed.result, info, tool_call_id, include_running=True)
+                # The `subagent` tool returned immediately with a launch snapshot;
+                # surface it as a started sub-agent task (tracked at the agent
+                # level) and yield. The children's nested rendering + completion is
+                # surfaced out-of-band (`_handle_subagent_completion`). The result
+                # block below still renders the "Started …" launch acknowledgement.
+                self._emit_subagent_started(parsed.result, tool_call_id)
             if info.is_background:
                 # The `background` tool returned immediately with a launch
                 # snapshot; surface it as a started background task. The turn then
@@ -1552,36 +1573,32 @@ class PiAgent(DefaultAgentWrapper):
             )
         )
 
-    def _emit_subagent_children(
-        self,
-        result_payload: Any,
-        info: _ToolCall,
-        parent_tool_call_id: str,
-        include_running: bool,
-    ) -> None:
-        """Emit each finished child of a sub-agent call as a nested ChatMessage.
+    def _emit_subagent_started(self, result_payload: Any, parent_tool_call_id: str) -> None:
+        """Turn a `subagent` tool's launch result into a started sub-agent task.
 
-        The extension re-sends the full `{v, children}` snapshot on every
-        `tool_execution_update` (and at `_end`), so this parses the accumulated
-        value and emits each child exactly once (tracked by
-        `info.emitted_child_ids`). Each child becomes its own
-        `ResponseBlockAgentMessage` carrying `parent_tool_use_id =
-        parent_tool_call_id`, which message_conversion groups under the parent
-        `Agent` tool block — the same attribution Claude's sub-agents use.
-
-        With `include_running=False` only terminal children are emitted; at the
-        parent's end (`include_running=True`) any remaining child is flushed too.
+        Parses the structured launch snapshot (`subagent.py`); on success records the
+        task (with its children's process-group ids) at the AGENT level so it outlives
+        this turn, and emits `BackgroundTaskStartedAgentMessage` against the parent
+        `Agent` tool-use id (the frontend's background-sub-agent pill). The launching
+        turn then ends — the user keeps chatting while the children run, and their
+        nested rendering + completion is surfaced out-of-band
+        (`_handle_subagent_completion`). A malformed/absent snapshot degrades to no
+        sub-agent lifecycle (the call already rendered as an ordinary tool result).
         """
-        progress = parse_subagent_progress(result_payload)
-        if progress is None:
+        started = parse_subagent_start(result_payload)
+        if started is None:
             return
-        for child in progress.children:
-            if child.child_id in info.emitted_child_ids:
-                continue
-            if not include_running and not child.is_terminal:
-                continue
-            info.emitted_child_ids.add(child.child_id)
-            self._emit_child_message(child, parent_tool_call_id)
+        with self._background_tasks_lock:
+            self._subagent_tasks[started.task_id] = started.pgids
+        self._output_messages.put(
+            BackgroundTaskStartedAgentMessage(
+                message_id=AgentMessageID(),
+                background_task_id=started.task_id,
+                tool_use_id=started.tool_call_id or parent_tool_call_id,
+                description=f"{started.count} sub-agent(s)" if started.count else started.label,
+                task_type=started.label,
+            )
+        )
 
     def _emit_child_message(self, child: SubagentChild, parent_tool_call_id: str) -> None:
         # A fresh message id and assistant_message_id per child so each renders
@@ -1596,6 +1613,49 @@ class PiAgent(DefaultAgentWrapper):
                 parent_tool_use_id=parent_tool_call_id,
             )
         )
+
+    def _handle_subagent_completion(self, completion: SubagentCompletion) -> None:
+        """Reconcile a sub-agent task's completion into the conversation.
+
+        Drops the task from the agent-level set, emits each child nested under the
+        parent `Agent` tool block (`parent_tool_use_id`), and emits
+        `BackgroundTaskNotificationAgentMessage` to clear the started indicator — for
+        an `Agent` parent, message_conversion turns that into the synthetic
+        completion child that settles the sub-agent pill. Safe to call inside a
+        turn's drain OR out-of-band (the caller supplies the request cycle in the
+        latter case — see `_emit_subagent_completion_out_of_band`).
+        """
+        with self._background_tasks_lock:
+            self._subagent_tasks.pop(completion.task_id, None)
+        for child in completion.children:
+            self._emit_child_message(child, completion.tool_call_id)
+        self._output_messages.put(
+            BackgroundTaskNotificationAgentMessage(
+                message_id=AgentMessageID(),
+                background_task_id=completion.task_id,
+                tool_use_id=completion.tool_call_id,
+                status=completion.status,
+                summary=_format_subagent_completion(completion),
+            )
+        )
+
+    def _emit_subagent_completion_out_of_band(self, completion: SubagentCompletion) -> None:
+        """Surface a sub-agent completion that arrived between turns, live.
+
+        Wraps the completion in its own minimal request cycle (RequestStarted →
+        children + notification → RequestSuccess) so message_conversion renders the
+        nested children as standalone assistant messages even though no user turn is
+        in flight — the out-of-band analogue of the in-turn path. The request id is
+        fresh (the completion is not a reply to a user message).
+        """
+        request_id = AgentMessageID()
+        self._output_messages.put(RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=request_id))
+        try:
+            self._handle_subagent_completion(completion)
+        finally:
+            self._output_messages.put(
+                RequestSuccessAgentMessage(message_id=AgentMessageID(), request_id=request_id, interrupted=False)
+            )
 
     def _emit_background_started(self, result_payload: Any, parent_tool_call_id: str) -> None:
         """Turn a `background` tool's launch result into a started background task.
@@ -1719,9 +1779,13 @@ class PiAgent(DefaultAgentWrapper):
                 completion = parse_background_completion(parsed.message)
                 if completion is not None:
                     self._emit_background_completion_out_of_band(completion)
+                    continue
+                sub_completion = parse_subagent_completion(parsed.message)
+                if sub_completion is not None:
+                    self._emit_subagent_completion_out_of_band(sub_completion)
 
     def _cancel_all_background_tasks(self) -> None:
-        """SIGTERM every still-running background child by signalling its process group.
+        """SIGTERM every still-running background and sub-agent child by signalling its process group.
 
         Each child is spawned detached (its own group leader), so it escapes pi's
         process group; killing the negative pgid INSIDE the environment tears down
@@ -1733,9 +1797,12 @@ class PiAgent(DefaultAgentWrapper):
         """
         process = self._process
         with self._background_tasks_lock:
-            tasks = list(self._background_tasks.items())
+            pgids = list(self._background_tasks.values())
             self._background_tasks.clear()
-        for _task_id, pgid in tasks:
+            for group in self._subagent_tasks.values():
+                pgids.extend(group)
+            self._subagent_tasks.clear()
+        for pgid in pgids:
             if process is not None and pgid > 0:
                 try:
                     self.environment.run_process_to_completion(
@@ -1745,7 +1812,7 @@ class PiAgent(DefaultAgentWrapper):
                         is_checked_after=False,
                     )
                 except Exception as e:  # noqa: BLE001
-                    logger.debug("PiAgent background-task cancel for pgid {} failed: {}", pgid, e)
+                    logger.debug("PiAgent async-task cancel for pgid {} failed: {}", pgid, e)
 
     def _handle_agent_end(self, parsed: ParsedAgentEnd, state: _TurnState) -> bool:
         """Turn boundary — return True so the dispatcher yields control.
@@ -1869,8 +1936,12 @@ class PiAgent(DefaultAgentWrapper):
                 # reconciled into that turn; one that completes between turns is
                 # caught by `_drain_idle_background_events` instead.
                 self._handle_background_completion(completion)
-            else:
-                logger.debug("PiAgent ignoring non-background notify extension_ui_request")
+                return
+            sub_completion = parse_subagent_completion(parsed.message)
+            if sub_completion is not None:
+                self._handle_subagent_completion(sub_completion)
+                return
+            logger.debug("PiAgent ignoring non-task notify extension_ui_request")
             return
         if parsed.method not in ("select", "input"):
             logger.debug("PiAgent ignoring non-dialog extension_ui_request method: {}", parsed.method)
