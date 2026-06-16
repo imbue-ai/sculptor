@@ -111,6 +111,8 @@ run on `HEAD~1..HEAD`. Verbatim findings:
 > **Frontend (`use_derived_atoms`)** — MEDIUM: `useNewWorkspaceModal` reads the
 > whole `workspacesArrayAtom` but only needs emptiness; widens re-renders of all
 > hook consumers. Consider a derived emptiness atom.
+> **RESOLVED** in `3a789c885d` — added `isWorkspaceListEmptyAtom` and switched
+> the hook to it, so consumers re-render only when emptiness flips.
 >
 > **Integration tests** — LOW `use_pom_hierarchy`: new home test mixes POM and
 > raw `get_by_test_id`. LOW `no_lowered_timeouts`: the added inline-form
@@ -118,6 +120,21 @@ run on `HEAD~1..HEAD`. Verbatim findings:
 > render-dependent wait is safer at the 30s default. LOW: `.first` is used in the
 > navigate helper but not in the SPA-ready beacons — a latent strict-mode trap if
 > both elements ever co-render at boot.
+> **RESOLVED** (committed alongside this `review.md` update):
+> - `use_pom_hierarchy`: the home test now drives creation via
+>   `PlaywrightAddWorkspacePage.get_workspace_name_input()/get_submit_button()`.
+> - `no_lowered_timeouts`: rather than relax the timeout, the fragile inline-form
+>   assertion was **removed** from `test_restart_with_no_mru_lands_on_home` — that
+>   test's subject is the no-MRU routing (the `/home` URL); coupling it to the
+>   recent-workspaces fetch latency added no coverage (the inline form is covered
+>   by `test_inline_new_workspace_form_shown_and_creates_for_new_user`) and made
+>   it flaky under load.
+> - `.first` asymmetry: investigated and the finding's premise was a false
+>   positive — the "+" and the inline form's submit button are mutually exclusive
+>   on `/home`, so the beacons never match two elements. Adding `.first` actually
+>   broke `expect_app_not_onboarding` (which composes its own `.or_(onboarding)`),
+>   so it was reverted; a clarifying comment now records why no `.first` belongs
+>   there. The navigate helper keeps its `.first` (it genuinely can see both).
 >
 > **Git hygiene** — LOW: commit bundles the feature + the branch-name flash fix
 > (thematically related).
@@ -125,10 +142,10 @@ run on `HEAD~1..HEAD`. Verbatim findings:
 ## Overall Assessment
 
 Ready to merge. The change is correct, tested at unit and integration level, and
-clean on all configured gates. The biggest non-blocking item is the
-`use_derived_atoms` re-render widening in `useNewWorkspaceModal` (a small,
-optional perf refinement). The one item that must not be lost is documenting the
-CLI/API greeting-removal as an intentional behavior change in the PR
-description. The three LOW integration-test notes (POM mixing, the 10s timeout on
-a render-dependent wait, and the `.first` asymmetry) are good follow-up polish
-but do not block.
+clean on all configured gates. The `use_derived_atoms` re-render widening in
+`useNewWorkspaceModal` is **resolved** (commit `3a789c885d`), and the three LOW
+integration-test notes are **resolved** in a follow-up commit (POM getters in the
+home test; the fragile inline-form assertion removed from the restart routing
+test; the `.first` "asymmetry" investigated, found to be a false positive, and
+reverted). The one remaining item — non-blocking — is documenting the CLI/API
+greeting-removal as an intentional behavior change in the PR description.

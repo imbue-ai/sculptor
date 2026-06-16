@@ -283,6 +283,10 @@ def _get_or_create_shared_instance(
     # Beacon for "shell mounted": the topbar "+" OR the inline new-workspace
     # form's submit button. On an empty Home the "+" is hidden and the inline
     # form is the create surface, so either one means the app rendered.
+    # The "+" and the inline form's submit button are mutually exclusive on
+    # /home, so this never matches two elements — no `.first` needed (and it
+    # must not be added: `expect_app_not_onboarding` composes its own
+    # `.or_(onboarding)`, which a trailing `.first` breaks).
     app_ready = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).or_(
         page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
     )
@@ -431,6 +435,10 @@ def _create_packaged_instance(
     # Beacon is the topbar "+" OR the inline form's submit button (the "+" is
     # hidden on an empty Home, where the inline form is the create surface).
     logger.info("Waiting for SPA to render (checking for create surface or onboarding)")
+    # The "+" and the inline form's submit button are mutually exclusive on
+    # /home, so this never matches two elements — no `.first` needed (and it
+    # must not be added: `expect_app_not_onboarding` composes its own
+    # `.or_(onboarding)`, which a trailing `.first` breaks).
     app_ready = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).or_(
         page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
     )
@@ -542,7 +550,9 @@ def _create_custom_command_instance(
         ]
     )
 
-    # Wait for the React SPA to render.
+    # Wait for the React SPA to render. The "+" and the inline form's submit
+    # button are mutually exclusive on /home, so this never matches two
+    # elements (no `.first` needed).
     try:
         expect(
             page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).or_(page.get_by_test_id(ElementIDs.START_TASK_BUTTON))

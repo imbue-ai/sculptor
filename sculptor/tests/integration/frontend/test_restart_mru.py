@@ -113,12 +113,19 @@ def test_restart_clears_pointer_when_workspace_deleted(
         assert all(entry["tabId"] != bogus_ws_id for entry in tabs["order"]), tabs
 
 
-@user_story("to land on /home with the inline new-workspace form on a fresh install")
+@user_story("to land on /home on a fresh install with no MRU")
 def test_restart_with_no_mru_lands_on_home(
     sculptor_instance_factory_: SculptorInstanceFactory,
 ) -> None:
-    """Cold start with empty localStorage should land on /home, where an empty
-    workspace list renders the inline new-workspace form."""
+    """Cold start with empty localStorage should route to /home.
+
+    This test's subject is the no-MRU *routing* — that the rootLoader lands on
+    /home rather than a stale workspace URL. What /home renders there (the
+    inline new-workspace form on an empty list) is covered by
+    ``test_home_page.py::test_inline_new_workspace_form_shown_and_creates_for_new_user``;
+    asserting it here would couple this routing test to the recent-workspaces
+    fetch latency for no added coverage.
+    """
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
         # Wipe sculptor-tabs to simulate a truly fresh install (spawn_instance
@@ -127,7 +134,6 @@ def test_restart_with_no_mru_lands_on_home(
         page.evaluate("() => window.localStorage.removeItem('sculptor-tabs')")
         trigger_root_loader(page)
         expect(page).to_have_url(re.compile(r"#/home$"), timeout=_RESTART_TIMEOUT_MS)
-        expect(page.get_by_test_id(ElementIDs.HOME_NEW_WORKSPACE_FORM)).to_be_visible(timeout=_RESTART_TIMEOUT_MS)
 
 
 @user_story("to keep my tab list when upgrading from the prior build")

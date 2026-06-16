@@ -10,7 +10,7 @@ Tests verify:
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
+from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.pages.home_page import PlaywrightHomePage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import navigate_to_home_page
@@ -62,8 +62,9 @@ def test_inline_new_workspace_form_shown_and_creates_for_new_user(
 
     # Create a workspace directly from the inline form. Wait for the submit
     # button to enable (repo info + worktree branch-name preview settled).
-    page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT).fill("My First Workspace")
-    submit_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
+    add_workspace = PlaywrightAddWorkspacePage(page=page)
+    add_workspace.get_workspace_name_input().fill("My First Workspace")
+    submit_button = add_workspace.get_submit_button()
     expect(submit_button).to_be_enabled()
     submit_button.click()
 

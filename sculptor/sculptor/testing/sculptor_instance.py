@@ -319,7 +319,10 @@ class SculptorInstance:
         # instead (no shared-instance test should trigger onboarding). The
         # beacon is the topbar "+" OR the inline new-workspace form's submit
         # button: on an empty Home the "+" is hidden and the inline form is
-        # the create surface, so either one means the shell mounted.
+        # the create surface, so either one means the shell mounted. The two
+        # are mutually exclusive on /home, so no `.first` is needed (and it
+        # must not be added — `expect_app_not_onboarding` composes its own
+        # `.or_(onboarding)`, which a trailing `.first` breaks).
         app_ready = self.page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).or_(
             self.page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
         )
