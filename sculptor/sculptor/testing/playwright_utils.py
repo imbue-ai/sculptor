@@ -91,30 +91,34 @@ def navigate_to_home_page(page: Page) -> None:
         page.goto(f"{base_url}/#/home")
 
     workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
-    empty_state = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_EMPTY_STATE)
-    expect(workspace_rows.first.or_(empty_state)).to_be_visible(timeout=10000)
+    inline_new_workspace_form = page.get_by_test_id(ElementIDs.HOME_NEW_WORKSPACE_FORM)
+    expect(workspace_rows.first.or_(inline_new_workspace_form)).to_be_visible(timeout=10000)
 
 
 def navigate_to_add_workspace_page(page: Page) -> None:
-    """Open the new-workspace modal (with the workspace name input ready).
+    """Ensure the new-workspace form is visible with its inputs ready.
 
-    Clicks the topbar "+" button to open the modal, or is a no-op if the
-    submit button is already visible (i.e. the modal is already open).
+    No-op when the submit button is already visible — either the modal is
+    open, or (on an empty Home) the inline form is already rendered.
+    Otherwise clicks the topbar "+" to open the modal.
+
+    The "+" is intentionally hidden on an empty Home (the inline form is the
+    create surface there), so we wait for *either* the create form or the
+    "+" and only click the "+" when the form isn't already showing.
     """
     submit_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
+    add_workspace_button = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
+
+    # Wait for either the create form (inline on an empty Home, or an
+    # already-open modal) or the topbar "+".  The early ``is_visible()`` check
+    # below doesn't wait, so on a freshly-spawned instance the SPA may still be
+    # on the loading spinner — polling on the union avoids racing the mount.
+    # ``.first`` keeps the assertion single-element (Playwright strict mode) for
+    # the brief windows where both a topbar "+" and a form submit button can be
+    # in the DOM at once (e.g. the "+" plus an open modal).
+    expect(submit_button.or_(add_workspace_button).first).to_be_visible(timeout=45_000)
     if submit_button.is_visible():
         return
-
-    # Wait for the topbar + button to render before clicking.  The early
-    # ``is_visible()`` check above doesn't wait, so on a freshly-spawned
-    # instance the SPA may still be on the loading spinner — we'd fall
-    # through to here before the topbar mounts.  Using ``to_be_visible``
-    # (which polls) avoids the previous fallback that re-navigated to the
-    # bare URL: that hit the rootLoader, which redirects to
-    # ``/home?firstLoad=true`` and auto-opens the new-workspace modal —
-    # whose overlay then intercepts this very click.
-    add_workspace_button = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
-    expect(add_workspace_button).to_be_visible(timeout=45_000)
     add_workspace_button.click()
     expect(submit_button).to_be_visible(timeout=45_000)
 
@@ -482,11 +486,10 @@ def soft_reload_page(page: Page, wait_until: str | None = None) -> None:
 def trigger_root_loader(page: Page) -> None:
     """Navigate to the bare URL so the SPA's rootLoader fires.
 
-    ``spawn_instance`` lands directly on ``/#/home`` to avoid the
-    rootLoader's ``firstLoad=true`` auto-modal-open path. Restart-style
-    tests that want to exercise the loader's MRU / no-MRU routing logic
-    (the actual subject under test) can call this helper to navigate
-    through ``/`` and let the loader take them where it would.
+    ``spawn_instance`` lands directly on ``/#/home`` to skip the rootLoader.
+    Restart-style tests that want to exercise the loader's MRU / no-MRU
+    routing logic (the actual subject under test) can call this helper to
+    navigate through ``/`` and let the loader take them where it would.
     """
     base_url = page.url.split("#")[0].rstrip("/")
     page.goto(base_url)
@@ -511,7 +514,12 @@ def navigate_away_and_back(page: Page) -> None:
     current_url = page.url
     base_url = current_url.split("#")[0].rstrip("/")
     page.goto(f"{base_url}/#/home")
-    expect(page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)).to_be_visible()
+    # Confirm Home rendered before going back. The beacon is the topbar "+" OR
+    # the inline form's submit button — the "+" is hidden on an empty Home,
+    # where the inline new-workspace form is shown instead.
+    expect(
+        page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).or_(page.get_by_test_id(ElementIDs.START_TASK_BUTTON))
+    ).to_be_visible()
     page.goto(current_url)
 
 

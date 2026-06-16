@@ -70,10 +70,9 @@ def test_full_onboarding_flow(sculptor_instance_factory_: SculptorInstanceFactor
         expect(add_repo_step).to_be_visible()
         add_repo_step.complete_step(str(sculptor_instance_factory_.base_repo.base_path))
 
-        # After onboarding, the user can reach the new-workspace modal
-        # via the topbar + (the modal flow no longer auto-renders the
-        # form on /home).
-        page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).click()
+        # After onboarding the user lands on an empty Home, which renders the
+        # new-workspace form inline — its submit button should be visible
+        # without any extra navigation (the topbar "+" is hidden there).
         submit_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
         expect(submit_button).to_be_visible(timeout=30000)
 
@@ -401,19 +400,22 @@ def test_installation_step_skips_add_repo_when_project_exists(
         # Complete the installation step
         installation_step.complete_step()
 
-        # The main app should appear — not the add-repo step. The
-        # topbar "+" is the broadest "main app rendered" affordance in
-        # the modal flow (the new-workspace form is no longer always-on).
-        add_workspace_button = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
-        expect(add_workspace_button).to_be_visible(timeout=30000)
+        # The main app should appear — not the add-repo step. The "main app
+        # rendered" beacon is the topbar "+" OR the inline new-workspace form's
+        # submit button (on an empty Home the "+" is hidden and the inline form
+        # is shown instead).
+        app_ready = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).or_(
+            page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
+        )
+        expect(app_ready).to_be_visible(timeout=30000)
 
         # The add-repo step should not have appeared
         add_repo_step = page.get_by_test_id(ElementIDs.ONBOARDING_ADD_REPO_STEP)
         expect(add_repo_step).not_to_be_visible()
 
-        # And the new-workspace modal should be reachable from the main
-        # app (clicking "+" opens it).
-        add_workspace_button.click()
+        # And the new-workspace form should be usable: on the empty Home it
+        # renders inline, so its submit button is directly reachable without a
+        # "+" click (the "+" is hidden in that initial state).
         start_task_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
         expect(start_task_button).to_be_visible()
 

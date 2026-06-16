@@ -58,10 +58,10 @@ const entryToUrl = (entry: TabEntry): string | null => {
 /**
  * No saved active tab (or it points at something we no longer route to —
  * e.g. a stale `__new_workspace_*__` draft tab from a pre-modal session).
- * Land on /home with `?firstLoad=true` so HomePage knows to pop the
- * new-workspace modal on top.
+ * Land on /home, where an empty workspace list renders the inline
+ * new-workspace form so the user can get started immediately.
  */
-const FALLBACK_REDIRECT = "/home?firstLoad=true";
+const FALLBACK_REDIRECT = "/home";
 
 const rootLoader = (): Response => {
   const tabs = readSculptorTabs();

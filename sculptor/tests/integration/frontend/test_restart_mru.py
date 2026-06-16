@@ -2,16 +2,14 @@
 
 Cold start should reproduce the user's last-active tab synchronously from
 the sculptor-tabs localStorage entry: workspace + agent URL, or fall back
-to /home (with the new-workspace modal auto-opened via firstLoad=true)
-when no MRU was ever recorded or the saved workspace was deleted between
-sessions. Also covers the legacy sculptor-tab-order → sculptor-tabs
-migration.
+to /home when no MRU was ever recorded or the saved workspace was deleted
+between sessions. On /home an empty workspace list renders the inline
+new-workspace form. Also covers the legacy sculptor-tab-order →
+sculptor-tabs migration.
 
-``spawn_instance`` lands directly on ``/#/home`` to bypass the
-rootLoader (its firstLoad=true auto-modal would intercept pointer events
-for any test that needs to interact with the topbar). These tests fire
-the loader explicitly via ``trigger_root_loader`` to exercise the
-restoration logic that is the actual subject under test.
+``spawn_instance`` lands directly on ``/#/home`` to bypass the rootLoader.
+These tests fire the loader explicitly via ``trigger_root_loader`` to
+exercise the restoration logic that is the actual subject under test.
 """
 
 import json
@@ -62,9 +60,9 @@ def test_restart_restores_active_workspace_and_agent(
 
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
-        # spawn_instance lands on /#/home to avoid the firstLoad modal — fire
-        # the rootLoader explicitly so it can read sculptor-tabs.activeIndex
-        # and redirect to the saved workspace URL.
+        # spawn_instance lands on /#/home — fire the rootLoader explicitly so
+        # it can read sculptor-tabs.activeIndex and redirect to the saved
+        # workspace URL.
         trigger_root_loader(page)
         expect(page).to_have_url(
             re.compile(re.escape(first_url_hash) + "$"),
@@ -77,8 +75,8 @@ def test_restart_restores_active_workspace_and_agent(
 # ``test_restart_restores_draft_tab`` was removed with the modal migration.
 # Draft pseudo-tabs (``__new_workspace_<id>__`` mapped to ``/ws/new/<id>``)
 # no longer exist — the modal is a true overlay that doesn't persist as a
-# tab entry. ``test_restart_with_no_mru_lands_on_home_with_first_load_marker``
-# below covers the empty-MRU equivalent.
+# tab entry. ``test_restart_with_no_mru_lands_on_home`` below covers the
+# empty-MRU equivalent.
 
 
 @user_story("to land on /home when my last workspace was deleted between sessions")
@@ -104,7 +102,7 @@ def test_restart_clears_pointer_when_workspace_deleted(
         page = instance.page
         # spawn_instance lands on /#/home; trigger the rootLoader explicitly
         # so it can attempt to restore the bogus workspace, fail, and fall
-        # back to /home?firstLoad=true.
+        # back to /home.
         trigger_root_loader(page)
         # The rootLoader optimistically redirects to the saved workspace, then
         # WorkspacePage's validation effect splices the bogus entry and
@@ -115,11 +113,12 @@ def test_restart_clears_pointer_when_workspace_deleted(
         assert all(entry["tabId"] != bogus_ws_id for entry in tabs["order"]), tabs
 
 
-@user_story("to land on /home with the new-workspace modal on a fresh install")
-def test_restart_with_no_mru_lands_on_home_with_first_load_marker(
+@user_story("to land on /home with the inline new-workspace form on a fresh install")
+def test_restart_with_no_mru_lands_on_home(
     sculptor_instance_factory_: SculptorInstanceFactory,
 ) -> None:
-    """Cold start with empty localStorage should land on /home?firstLoad=true."""
+    """Cold start with empty localStorage should land on /home, where an empty
+    workspace list renders the inline new-workspace form."""
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
         # Wipe sculptor-tabs to simulate a truly fresh install (spawn_instance
@@ -127,7 +126,8 @@ def test_restart_with_no_mru_lands_on_home_with_first_load_marker(
         # from any prior test in the same factory unless we clear it).
         page.evaluate("() => window.localStorage.removeItem('sculptor-tabs')")
         trigger_root_loader(page)
-        expect(page).to_have_url(re.compile(r"#/home\?firstLoad=true"), timeout=_RESTART_TIMEOUT_MS)
+        expect(page).to_have_url(re.compile(r"#/home$"), timeout=_RESTART_TIMEOUT_MS)
+        expect(page.get_by_test_id(ElementIDs.HOME_NEW_WORKSPACE_FORM)).to_be_visible(timeout=_RESTART_TIMEOUT_MS)
 
 
 @user_story("to keep my tab list when upgrading from the prior build")

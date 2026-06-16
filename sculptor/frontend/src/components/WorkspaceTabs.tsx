@@ -58,7 +58,16 @@ export const WorkspaceTabs = (): ReactElement => {
   const newWorkspaceShortcut = useKeybindingDisplayText("new_workspace");
   const agentIdsByWorkspace = useAtomValue(agentIdsByWorkspaceAtom);
   const keybindingsMap = useAtomValue(keybindingsMapAtom);
-  const { isSettingsRoute, isComponentGalleryRoute } = useImbueLocation();
+  const { isHomeRoute, isSettingsRoute, isComponentGalleryRoute } = useImbueLocation();
+
+  // The empty Home renders the new-workspace form inline, so the topbar "+"
+  // would be a redundant second entry point — hide it in that initial state
+  // only. Once workspaces exist (or anywhere off Home) the "+" is the way in.
+  // `?? 0` treats the not-yet-loaded atom as empty: the recent-workspaces list
+  // is fetched separately (HTTP) and often resolves to "empty → inline form"
+  // before the workspace stream populates the atom, so keying the "+" off a
+  // bare `=== 0` would briefly show it *alongside* the inline form.
+  const isHomeEmptyState = isHomeRoute && (workspaces?.length ?? 0) === 0;
 
   const { handleClose, handleCloseOthers, handleCloseAll, navigateToNextTab } = useWorkspaceTabActions();
 
@@ -484,23 +493,27 @@ export const WorkspaceTabs = (): ReactElement => {
         alwaysCloseable={true}
         contextMenuContent={contextMenuContent}
       >
-        <Tooltip
-          content={
-            <>New workspace {newWorkspaceShortcut && <kbd className={styles.tooltipKbd}>{newWorkspaceShortcut}</kbd>}</>
-          }
-        >
-          <IconButton
-            variant="ghost"
-            size="1"
-            color="gray"
-            className={styles.addButton}
-            onClick={() => openNewWorkspaceModal("topbar")}
-            aria-label="New workspace"
-            data-testid={ElementIds.ADD_WORKSPACE_BUTTON}
+        {!isHomeEmptyState && (
+          <Tooltip
+            content={
+              <>
+                New workspace {newWorkspaceShortcut && <kbd className={styles.tooltipKbd}>{newWorkspaceShortcut}</kbd>}
+              </>
+            }
           >
-            <PlusIcon size={14} />
-          </IconButton>
-        </Tooltip>
+            <IconButton
+              variant="ghost"
+              size="1"
+              color="gray"
+              className={styles.addButton}
+              onClick={() => openNewWorkspaceModal("topbar")}
+              aria-label="New workspace"
+              data-testid={ElementIds.ADD_WORKSPACE_BUTTON}
+            >
+              <PlusIcon size={14} />
+            </IconButton>
+          </Tooltip>
+        )}
       </TabBar>
       <WorkspacePeekOverlay onNavigate={handleWorkspacePeekNavigate} />
       <DeleteConfirmationDialog

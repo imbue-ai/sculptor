@@ -119,12 +119,16 @@ def test_inplace_bootstrap_and_workspace_operations(
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
 
-        # Open the new-workspace modal — the form lives behind the topbar +
-        # in the modal flow rather than auto-rendering on /home — and
-        # verify the submit button shows, confirming bootstrap succeeded.
+        # Verify the create surface is reachable, confirming bootstrap
+        # succeeded: the topbar "+" (when workspaces exist) or the inline
+        # new-workspace form's submit button (on an empty Home, where the "+"
+        # is hidden).
         try:
-            page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).click()
-            expect(page.get_by_test_id(ElementIDs.START_TASK_BUTTON)).to_be_visible(timeout=45_000)
+            expect(
+                page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).or_(
+                    page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
+                )
+            ).to_be_visible(timeout=45_000)
         except AssertionError:
             _dump_diagnostics(page, instance.sculptor_folder, "bootstrap")
             raise
@@ -182,11 +186,15 @@ def test_full_migration_script_then_frontend(
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
 
-        # Open the new-workspace modal (see equivalent comment in the
-        # bootstrap test above) and verify the submit button is reachable.
+        # Verify the create surface is reachable (see equivalent comment in
+        # the bootstrap test above): the topbar "+" when workspaces exist, or
+        # the inline form's submit button on an empty Home.
         try:
-            page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).click()
-            expect(page.get_by_test_id(ElementIDs.START_TASK_BUTTON)).to_be_visible(timeout=45_000)
+            expect(
+                page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).or_(
+                    page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
+                )
+            ).to_be_visible(timeout=45_000)
         except AssertionError:
             _dump_diagnostics(page, migrated_folder, "migration")
             raise

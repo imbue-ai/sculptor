@@ -71,9 +71,9 @@ def test_worktree_mode_collision_blocks_creation(sculptor_instance_: SculptorIns
     add_workspace.get_submit_button().click()
 
     # Submit should fail — the chat panel should NOT appear (we stay on the
-    # modal) and no worktree metadata should be left behind.
+    # inline create form) and no worktree metadata should be left behind.
     expect(add_workspace.get_chat_panel()).not_to_be_visible()
-    expect(add_workspace.get_new_workspace_modal()).to_be_visible()
+    expect(add_workspace.get_inline_new_workspace_form()).to_be_visible()
 
     assert _no_new_worktree_metadata(sculptor_instance_.project_path), (
         "failed submit should not leave a stale worktree metadata entry"
@@ -100,4 +100,4 @@ def test_clone_mode_collision_blocks_creation(sculptor_instance_: SculptorInstan
     add_workspace.get_submit_button().click()
 
     expect(add_workspace.get_chat_panel()).not_to_be_visible()
-    expect(add_workspace.get_new_workspace_modal()).to_be_visible()
+    expect(add_workspace.get_inline_new_workspace_form()).to_be_visible()

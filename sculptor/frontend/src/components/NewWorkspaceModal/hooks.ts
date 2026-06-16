@@ -1,8 +1,11 @@
-import { useAtom, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback } from "react";
 
+import { useImbueLocation } from "../../common/NavigateUtils.ts";
+import { workspacesArrayAtom } from "../../common/state/atoms/workspaces.ts";
 import { commandPaletteOpenAtom } from "../CommandPalette/atoms.ts";
 import {
+  homePromptFocusRequestAtom,
   type NewWorkspaceModalEntrySource,
   newWorkspaceModalEntrySourceAtom,
   newWorkspaceModalOpenAtom,
@@ -32,19 +35,31 @@ export const useNewWorkspaceModal = (): UseNewWorkspaceModal => {
   const [isOpen, setIsOpen] = useAtom(newWorkspaceModalOpenAtom);
   const setEntrySource = useSetAtom(newWorkspaceModalEntrySourceAtom);
   const setCommandPaletteOpen = useSetAtom(commandPaletteOpenAtom);
+  const workspaces = useAtomValue(workspacesArrayAtom);
+  const { isHomeRoute } = useImbueLocation();
+  const requestHomePromptFocus = useSetAtom(homePromptFocusRequestAtom);
 
   const open = useCallback(
     (source: NewWorkspaceModalEntrySource): void => {
-      setEntrySource(source);
-      // Always close the palette when the modal opens — only one of the
-      // two surfaces is visible at a time. For the "palette" source,
-      // the modal's back-arrow / Esc-once handlers re-open the palette,
-      // creating the "swap in place" feel without rendering two
-      // overlapping dimmed overlays.
+      // Always close the palette first — only one create surface is visible
+      // at a time. For the "palette" source, the modal's back-arrow / Esc-once
+      // handlers re-open the palette, creating the "swap in place" feel
+      // without rendering two overlapping dimmed overlays.
       setCommandPaletteOpen(false);
+      // On an empty Home the inline form *is* the create surface (and the
+      // topbar "+" is hidden there), so there's no modal to open — focus its
+      // prompt instead. Anywhere else (off Home, or once workspaces exist) the
+      // modal opens normally. `?? 0` treats the not-yet-loaded atom as empty so
+      // this stays consistent with the inline form (and the hidden "+") during
+      // the initial load window.
+      if (isHomeRoute && (workspaces?.length ?? 0) === 0) {
+        requestHomePromptFocus((nonce) => nonce + 1);
+        return;
+      }
+      setEntrySource(source);
       setIsOpen(true);
     },
-    [setEntrySource, setCommandPaletteOpen, setIsOpen],
+    [isHomeRoute, workspaces, setEntrySource, setCommandPaletteOpen, setIsOpen, requestHomePromptFocus],
   );
 
   const close = useCallback((): void => {

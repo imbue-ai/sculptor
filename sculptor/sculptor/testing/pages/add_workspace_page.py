@@ -21,6 +21,15 @@ class PlaywrightAddWorkspacePage(PlaywrightProjectLayoutPage):
         """The modal container — visible only while the modal is open."""
         return self.get_by_test_id(ElementIDs.NEW_WORKSPACE_MODAL)
 
+    def get_inline_new_workspace_form(self) -> Locator:
+        """The inline form rendered on an empty Home page (no modal chrome).
+
+        At zero workspaces the create surface is this inline form rather than
+        the modal, so count-0 tests assert against this instead of
+        ``get_new_workspace_modal``.
+        """
+        return self.get_by_test_id(ElementIDs.HOME_NEW_WORKSPACE_FORM)
+
     def get_project_selector(self) -> Locator:
         return self.get_by_test_id(ElementIDs.PROJECT_SELECTOR)
 

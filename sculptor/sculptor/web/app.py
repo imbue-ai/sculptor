@@ -1697,16 +1697,6 @@ def create_workspace_agent(
         task_name = agent_request.name or _compute_next_agent_name(workspace_tasks)
         task_id = TaskID()
 
-        # Check if this is the user's very first agent ever (including deleted ones).
-        # get_all_tasks() includes deleted tasks, so this stays False once any agent
-        # has ever been created — even if all workspaces were later deleted.
-        # Skip during integration tests to avoid injecting unexpected messages.
-        is_first_agent = (
-            not settings.TESTING.INTEGRATION_ENABLED
-            and len(workspace_tasks) == 0
-            and len(transaction.get_all_tasks()) == 0  # pyre-fixme[16]
-        )
-
         agent_config = _agent_config_for_workspace(workspace)
 
         with services.git_repo_service.open_local_user_git_repo_for_read(project) as repo:
@@ -1733,30 +1723,14 @@ def create_workspace_agent(
         )
 
     root_concurrency_group = get_root_concurrency_group(request)
-    intro_message = None
     with (
         root_concurrency_group.make_concurrency_group(name="create_agent") as _concurrency_group,
         user_session.open_transaction(services) as transaction,
     ):
         inserted_task = services.task_service.create_task(task, transaction)
 
-        # Auto-send intro help message for first-time users
-        if is_first_agent:
-            intro_message = ChatInputUserMessage(
-                text="/sculptor:help I just set up Sculptor for the first time. What should I know to get started?",
-                message_id=AgentMessageID(),
-                model_name=agent_request.model or LLMModel.CLAUDE_4_OPUS,
-            )
-            services.task_service.create_message(
-                message=intro_message,
-                task_id=inserted_task.object_id,
-                transaction=transaction,
-            )
-
     task_view = create_initial_task_view(inserted_task, settings)
     assert isinstance(task_view, CodingAgentTaskView)
-    if intro_message is not None:
-        task_view.add_message(intro_message)
     return task_view
 
 

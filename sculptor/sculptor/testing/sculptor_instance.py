@@ -298,13 +298,10 @@ class SculptorInstance:
 
         # Navigate through about:blank to fully unload the SPA before
         # loading it fresh.  Land directly on /home (skipping the
-        # rootLoader at "/") so we don't trigger the firstLoad=true
-        # auto-open of the new-workspace modal — its overlay would
-        # intercept pointer events for the rest of the next test.
-        # The old flow relied on a /ws/new route with an embedded form,
-        # but the new modal flow has no such page; the topbar's "+"
-        # button is universally visible after the SPA mounts, so wait
-        # on that.
+        # rootLoader at "/").  On /home an empty workspace list renders the
+        # inline new-workspace form (no overlay), and the topbar's "+"
+        # button is universally visible after the SPA mounts, so wait on
+        # that.
         self.page.goto("about:blank")
 
         # Reset persistent user-config flags only after the previous SPA
@@ -318,10 +315,15 @@ class SculptorInstance:
 
         self.page.goto(f"{self.base_url}#/home")
 
-        # Wait for the topbar to render — raise if onboarding shows
-        # instead (no shared-instance test should trigger onboarding).
-        add_workspace_button = self.page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
-        expect_app_not_onboarding(self.page, add_workspace_button)
+        # Wait for the app shell to render — raise if onboarding shows
+        # instead (no shared-instance test should trigger onboarding). The
+        # beacon is the topbar "+" OR the inline new-workspace form's submit
+        # button: on an empty Home the "+" is hidden and the inline form is
+        # the create surface, so either one means the shell mounted.
+        app_ready = self.page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).or_(
+            self.page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
+        )
+        expect_app_not_onboarding(self.page, app_ready)
 
         # Verify no workspace tabs leaked through via stale WebSocket updates.
         workspace_tabs = self.page.get_by_test_id(ElementIDs.WORKSPACE_TAB)

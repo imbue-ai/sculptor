@@ -75,12 +75,13 @@ def test_chats_persist_on_restart(sculptor_instance_factory_: SculptorInstanceFa
 # ``test_restart_reuses_existing_new_workspace_tab`` was removed with the
 # modal migration. It asserted that an "Open Workspace" pseudo-tab in the
 # tab bar persisted across restarts — but the modal flow has no such
-# pseudo-tab. The new equivalent (firstLoad=true auto-opens the modal on a
-# fresh boot when no workspaces exist) is exercised implicitly any time a
-# spawn_instance test starts from an empty state and navigates to "/".
+# pseudo-tab. The new equivalent (a fresh boot with no workspaces lands on
+# /home, which renders the inline new-workspace form) is exercised
+# implicitly any time a spawn_instance test starts from an empty state and
+# navigates to "/".
 #
 # ``test_restart_opens_existing_workspace_when_mru_missing`` was also
 # removed: it relied on the backend MRU file (now superseded by the
 # localStorage-based ``sculptor-tabs`` state), and the rootLoader no
 # longer falls back to "list recent workspaces" — it redirects empty
-# sessions to /home with the firstLoad marker instead.
+# sessions to /home (where the inline new-workspace form renders) instead.

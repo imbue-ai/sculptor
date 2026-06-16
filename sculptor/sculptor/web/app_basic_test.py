@@ -42,7 +42,6 @@ from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.web.auth import SESSION_TOKEN_HEADER_NAME
 from sculptor.web.auth import UserSession
 from sculptor.web.auth import authenticate_anonymous
-from sculptor.web.data_types import CreateAgentRequest
 from sculptor.web.data_types import SendMessageRequest
 from sculptor.web.data_types import StartTaskRequest
 
@@ -772,61 +771,6 @@ def test_mark_unread_returns_404_if_agent_does_not_exist(
         f"/api/v1/workspaces/{workspace.object_id}/agents/{TaskID()}/mark-unread",
     )
     assert response.status_code == 404
-
-
-# --- Auto-send intro help message tests ---
-
-
-def test_create_agent_sends_intro_message_for_first_agent(
-    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
-) -> None:
-    """First-time users (no existing workspaces/agents) should get an auto-sent /sculptor:help message."""
-    user_session = authenticate_anonymous(test_services, RequestID())
-
-    with user_session.open_transaction(test_services) as transaction:
-        workspace = _create_workspace(transaction, test_services, test_project)
-
-    response = client.post(
-        f"/api/v1/workspaces/{workspace.object_id}/agents",
-        json=model_dump(CreateAgentRequest(model=LLMModel.CLAUDE_4_SONNET), is_camel_case=True),
-    )
-    assert response.status_code == 200
-    agent_id = response.json()["id"]
-
-    # Verify the intro message was persisted in the DB
-    with user_session.open_transaction(test_services) as transaction:
-        saved_messages = test_services.task_service.get_saved_messages_for_task(TaskID(agent_id), transaction)
-    assert len(saved_messages) == 1
-    intro_msg = saved_messages[0]
-    assert isinstance(intro_msg, ChatInputUserMessage)
-    assert "/sculptor:help" in intro_msg.text
-
-
-def test_create_agent_does_not_send_intro_message_when_agents_exist(
-    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
-) -> None:
-    """Users with existing agents should not get an auto-sent intro message."""
-    user_session = authenticate_anonymous(test_services, RequestID())
-
-    # Create a workspace with an existing agent
-    with user_session.open_transaction(test_services) as transaction:
-        workspace = _create_workspace(transaction, test_services, test_project)
-        _create_task_in_workspace(transaction, user_session, test_project, test_services, workspace)
-
-    # Create a second agent in the same workspace
-    response = client.post(
-        f"/api/v1/workspaces/{workspace.object_id}/agents",
-        json=model_dump(CreateAgentRequest(model=LLMModel.CLAUDE_4_SONNET), is_camel_case=True),
-    )
-    assert response.status_code == 200
-    agent_id = response.json()["id"]
-
-    # No intro message should be in the DB for the new agent
-    with user_session.open_transaction(test_services) as transaction:
-        saved_messages = test_services.task_service.get_saved_messages_for_task(TaskID(agent_id), transaction)
-    assert len(saved_messages) == 0
-
-
 # Telemetry consent endpoints.
 
 

@@ -22,6 +22,33 @@
   min-height: 80px;
 }
 
+// Empty Home: the new-workspace form is rendered inline (in place of the old
+// empty-state placeholder), centered in the available space.
+.emptyState {
+  align-items: center;
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  min-height: 0;
+  width: 100%;
+}
+
+// Card chrome for the inline form — mirrors the modal's panel (solid fill,
+// hairline border, soft elevation) so the surface reads the same whether it
+// appears inline or in the dialog. The form's own `.shell` provides the
+// internal layout.
+.inlineForm {
+  background: var(--color-panel-solid);
+  border: 1px solid var(--gray-a5);
+  border-radius: var(--radius-4);
+  box-shadow: var(--shadow-xl);
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  overflow: hidden;
+  width: min(720px, 100%);
+}
+
 .noResults {
   color: var(--gray-8);
   font-size: var(--font-size-1-5);

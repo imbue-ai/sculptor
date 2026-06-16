@@ -4,11 +4,14 @@ import { WorkspaceInitializationStrategy } from "../../api";
 import type { ToastContent } from "../Toast.tsx";
 
 /**
- * The user's path into the modal — only "palette" gets the back-arrow
- * affordance and Esc-once-pops-back behavior; "keybinding" / "topbar" /
- * "auto" treat the modal as a destination, so Esc closes immediately.
+ * The user's path into the new-workspace form. Only "palette" gets the
+ * back-arrow affordance and Esc-once-pops-back behavior; "keybinding" /
+ * "topbar" treat the modal as a destination, so Esc closes immediately.
+ * "home" is the inline form rendered in place of the empty Home state —
+ * it has no modal chrome (the close button and "Keep open" toggle are
+ * hidden) and owns the editable help prefill.
  */
-export type NewWorkspaceModalEntrySource = "palette" | "keybinding" | "topbar" | "auto";
+export type NewWorkspaceModalEntrySource = "palette" | "keybinding" | "topbar" | "home";
 
 export const newWorkspaceModalOpenAtom = atom<boolean>(false);
 
@@ -58,11 +61,13 @@ export const resetDraftAtom = atom(null, (_get, set): void => {
 });
 
 /**
- * True after the first-load auto-open has fired this app boot. Stops
- * the auto-open effect from re-popping the modal if the user closes
- * it without creating a workspace and then navigates around.
+ * Bumped by `useNewWorkspaceModal().open()` when there are zero workspaces:
+ * the other create entry points (topbar "+", command palette, keybinding)
+ * have no modal to open in that state, so instead they ask the inline Home
+ * form to focus its prompt. A monotonically increasing nonce so repeated
+ * requests each re-focus even when the value would otherwise be unchanged.
  */
-export const newWorkspaceModalAutoOpenedAtom = atom<boolean>(false);
+export const homePromptFocusRequestAtom = atom<number>(0);
 
 /**
  * Transient toast for the modal (success / error). Lives in an atom — not

@@ -280,9 +280,14 @@ def _get_or_create_shared_instance(
     # Use a longer timeout than the default 30s for this initial check to
     # allow headroom for cold Electron starts on CI.
     t2 = time.monotonic()
-    add_ws_button = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
+    # Beacon for "shell mounted": the topbar "+" OR the inline new-workspace
+    # form's submit button. On an empty Home the "+" is hidden and the inline
+    # form is the create surface, so either one means the app rendered.
+    app_ready = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).or_(
+        page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
+    )
     try:
-        expect_app_not_onboarding(page, add_ws_button, timeout=_INITIAL_RENDER_TIMEOUT_MS)
+        expect_app_not_onboarding(page, app_ready, timeout=_INITIAL_RENDER_TIMEOUT_MS)
     except Exception:
         logger.warning("[timing] SPA render failed after {:.2f}s", time.monotonic() - t2)
         if electron_frontend is not None:
@@ -416,19 +421,21 @@ def _create_packaged_instance(
     packaged_frontend.register_project(repo_path)
 
     # Full-reload directly to /home so the SPA mounts on a known route
-    # without going through the rootLoader at "/" — the loader's no-MRU
-    # path appends ?firstLoad=true and that triggers HomePage to auto-open
-    # the new-workspace modal, whose overlay then intercepts pointer
-    # events for the rest of the test. Tests that need the project-picker
-    # flow can navigate explicitly afterwards.
+    # without going through the rootLoader at "/". On an empty Home the
+    # inline new-workspace form renders (no overlay); tests that need the
+    # project-picker flow can navigate explicitly afterwards.
     base_url = page.url.split("#")[0].rstrip("/")
     page.goto(f"{base_url}/#/home", wait_until="networkidle")
 
     # Wait for the SPA to render — raise if onboarding shows instead of the main app.
-    logger.info("Waiting for SPA to render (checking for ADD_WORKSPACE_BUTTON or onboarding)")
-    add_ws_button = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
+    # Beacon is the topbar "+" OR the inline form's submit button (the "+" is
+    # hidden on an empty Home, where the inline form is the create surface).
+    logger.info("Waiting for SPA to render (checking for create surface or onboarding)")
+    app_ready = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).or_(
+        page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
+    )
     try:
-        expect_app_not_onboarding(page, add_ws_button, timeout=_INITIAL_RENDER_TIMEOUT_MS)
+        expect_app_not_onboarding(page, app_ready, timeout=_INITIAL_RENDER_TIMEOUT_MS)
     except Exception:
         logger.error("SPA render failed. Page URL: {}", page.url)
         logger.error("Page content preview: {}", page.content()[:2000])

@@ -16,6 +16,7 @@ import {
 } from "../../api";
 import { HTTPException } from "../../common/Errors.ts";
 import { useImbueNavigate } from "../../common/NavigateUtils.ts";
+import { sculptorSettingsAtom } from "../../common/state/atoms/sculptorSettings.ts";
 import {
   defaultEffortLevelAtom,
   defaultModelAtom,
@@ -38,6 +39,8 @@ import {
   draftSelectedProjectIdAtom,
   draftUserSelectedBranchAtom,
   draftWorkspaceNameAtom,
+  homePromptFocusRequestAtom,
+  type NewWorkspaceModalEntrySource,
   newWorkspaceModalEntrySourceAtom,
   newWorkspaceSubmittingAtom,
   newWorkspaceToastAtom,
@@ -45,6 +48,7 @@ import {
 } from "./atoms.ts";
 import { BranchNameField } from "./BranchNameField.tsx";
 import { validateBranchName } from "./branchNameValidation.ts";
+import { HOME_PROMPT_PREFILL, shouldPrefillHomePrompt } from "./homePromptPrefill.ts";
 import { useNewWorkspaceModal } from "./hooks.ts";
 import styles from "./NewWorkspaceModal.module.scss";
 import { useBranchNamePreview } from "./useBranchNamePreview.ts";
@@ -64,10 +68,21 @@ import { useBranchNamePreview } from "./useBranchNamePreview.ts";
  *
  * Draft field values live in atoms (see ./atoms.ts), so they survive the
  * unmount on close and restore on the next open.
+ *
+ * The same form also renders inline on an empty Home page. That caller passes
+ * `entrySource="home"`, which drops the modal-only chrome (close button, "Keep
+ * open" toggle) and owns the editable help prefill. The modal omits the prop
+ * and reads the entry source from the atom set by `open(source)`.
  */
-export const NewWorkspaceForm = (): ReactElement => {
+type NewWorkspaceFormProps = {
+  entrySource?: NewWorkspaceModalEntrySource;
+};
+
+export const NewWorkspaceForm = ({ entrySource: entrySourceProp }: NewWorkspaceFormProps): ReactElement => {
   const { close, returnToPalette } = useNewWorkspaceModal();
-  const entrySource = useAtomValue(newWorkspaceModalEntrySourceAtom);
+  const entrySourceFromAtom = useAtomValue(newWorkspaceModalEntrySourceAtom);
+  const entrySource = entrySourceProp ?? entrySourceFromAtom;
+  const isHomeForm = entrySource === "home";
   const { navigateToAgent } = useImbueNavigate();
 
   const isInPlaceEnabled = useAtomValue(isInPlaceWorkspacesEnabledAtom);
@@ -122,12 +137,39 @@ export const NewWorkspaceForm = (): ReactElement => {
 
   const isManuallyEditedBranch = branchNameOverride !== null;
 
-  // Land focus on the title input when the form mounts (i.e. when the modal
-  // opens). The shell's onOpenAutoFocus prevents Radix's default
-  // first-focusable autofocus, leaving the field clear for us.
+  // Focus management. The modal lands focus on the title input — the shell's
+  // onOpenAutoFocus suppresses Radix's default first-focusable autofocus,
+  // leaving the field clear for us. The inline Home form is prompt-first: it
+  // focuses the (optionally prefilled) prompt instead, and re-focuses it
+  // whenever an entry point asks (the topbar "+", palette, or keybinding bump
+  // `homePromptFocusRequestAtom` at zero workspaces since there's no modal to
+  // open). The modal never sees that nonce change — focus requests only fire
+  // while the inline form is the only create surface.
+  const homePromptFocusRequest = useAtomValue(homePromptFocusRequestAtom);
   useEffect(() => {
+    if (isHomeForm) {
+      promptTextareaRef.current?.focus();
+      return;
+    }
     nameInputRef.current?.focus();
-  }, []);
+  }, [isHomeForm, homePromptFocusRequest]);
+
+  // First-run help prefill for the inline Home form. One-shot per mount via
+  // the ref guard, so once the user edits or clears the prompt it stays that
+  // way — we deliberately don't re-apply just because the field is empty.
+  // Gated off under integration tests; we wait for `settings` to load before
+  // deciding, because prefilling while it's still null would wrongly fire in
+  // the deterministic suites (which set INTEGRATION_ENABLED once settings
+  // stream in).
+  const settings = useAtomValue(sculptorSettingsAtom);
+  const hasPrefilledPromptRef = useRef(false);
+  useEffect(() => {
+    if (!shouldPrefillHomePrompt({ entrySource, settings, hasAlreadyPrefilled: hasPrefilledPromptRef.current })) {
+      return;
+    }
+    hasPrefilledPromptRef.current = true;
+    setInitialPrompt(HOME_PROMPT_PREFILL);
+  }, [entrySource, settings, setInitialPrompt]);
 
   // Fetch the MRU project once, to seed the default repo. Genuinely HTTP-only
   // (the MRU isn't streamed), so a request-id-free one-shot with a cancel flag
@@ -504,10 +546,14 @@ export const NewWorkspaceForm = (): ReactElement => {
   // were enabled during the loading window a click would be swallowed and the
   // workspace never created.
   const isBranchNameMissing = mode === WorkspaceInitializationStrategy.WORKTREE && effectiveBranchName.trim() === "";
-  // Visual-only: suppress the required-error border/caption while the auto-fill
-  // preview is still loading — `effectiveBranchName` is `""` during that window
-  // and we don't want a red flash before the suggested name lands.
-  const isBranchNameRequired = isBranchNameMissing && !isBranchNamePreviewLoading;
+  // Visual-only: the "required" red border/caption should appear only once the
+  // user has taken the field over and emptied it — never during the initial
+  // auto-fill. In auto mode (no manual override) an empty value just means the
+  // preview hasn't landed yet, and that window spans before a project is even
+  // selected — where `isBranchNamePreviewLoading` is still false, so gating on
+  // it alone flashed red on first load (most visible on the inline Home form).
+  const isAwaitingAutoFillBranch = !isManuallyEditedBranch && effectiveBranchName.trim() === "";
+  const isBranchNameRequired = isBranchNameMissing && !isAwaitingAutoFillBranch;
   // Branch-name validation per git's ref-format rules. Drives both the inline
   // error message in the field and the disabled submit — without this, an
   // invalid name (e.g. trailing `/`) silently makes it to the API and fails
@@ -544,20 +590,24 @@ export const NewWorkspaceForm = (): ReactElement => {
 
   return (
     <div className={styles.shell} onKeyDownCapture={handleKeyDown}>
-      <Tooltip content="Close">
-        <IconButton
-          type="button"
-          variant="ghost"
-          size="1"
-          color="gray"
-          className={styles.closeButton}
-          onClick={(): void => close()}
-          disabled={isSubmitting}
-          aria-label="Close"
-        >
-          <X size={12} />
-        </IconButton>
-      </Tooltip>
+      {/* The inline Home form has no overlay to dismiss, so it omits the
+          close affordance entirely. */}
+      {!isHomeForm && (
+        <Tooltip content="Close">
+          <IconButton
+            type="button"
+            variant="ghost"
+            size="1"
+            color="gray"
+            className={styles.closeButton}
+            onClick={(): void => close()}
+            disabled={isSubmitting}
+            aria-label="Close"
+          >
+            <X size={12} />
+          </IconButton>
+        </Tooltip>
+      )}
       <div className={styles.context}>
         <RepoSelector
           projects={projects}
@@ -720,12 +770,18 @@ export const NewWorkspaceForm = (): ReactElement => {
       )}
       <div className={styles.foot}>
         <div className={styles.footLeft}>
-          <Tooltip content="Keep this dialog open after creating, so you can start another right away.">
-            <label className={styles.createMore}>
-              <Switch size="1" checked={isCreateMore} onCheckedChange={setIsCreateMore} disabled={isSubmitting} />
-              Keep open
-            </label>
-          </Tooltip>
+          {/* "Keep open" only makes sense for the modal — the inline Home form
+              navigates to the new agent on create, so there's no dialog to keep
+              open. The empty footLeft preserves the footer's space-between so
+              the Create button stays right-aligned. */}
+          {!isHomeForm && (
+            <Tooltip content="Keep this dialog open after creating, so you can start another right away.">
+              <label className={styles.createMore}>
+                <Switch size="1" checked={isCreateMore} onCheckedChange={setIsCreateMore} disabled={isSubmitting} />
+                Keep open
+              </label>
+            </Tooltip>
+          )}
         </div>
         <div className={styles.footRight}>
           {!isSubmitting && !isSubmitDisabled ? (
