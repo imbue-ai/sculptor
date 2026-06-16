@@ -735,6 +735,12 @@ def sculptor_instance_factory_(
         sculptor_folder=sculptor_folder,
         base_repo=base_repo,
         fake_bin_dir=fake_bin_dir,
+        # browser (default) keeps the Chromium ``page`` path; electron /
+        # electron-custom-command launch a real, non-packaged Electron shell per
+        # spawned instance. playwright / port_manager are only used in those modes.
+        launch_mode=launch_mode,
+        playwright=playwright,
+        port_manager=port_manager,
     )
 
     yield factory
