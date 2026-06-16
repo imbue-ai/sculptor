@@ -105,6 +105,21 @@ class ClearContextUserMessage(PersistentUserMessage):
     object_type: str = Field(default="ClearContextUserMessage")
 
 
+class SetModelUserMessage(PersistentUserMessage):
+    """Switch the running agent's model out-of-band (the pi `set_model` path).
+
+    Persistent like `ClearContextUserMessage` so the harness picks it up through
+    the task runner and runs it between turns. Carries the `(provider, model_id)`
+    of the chosen `ModelOption`; the pi adapter issues pi's `set_model` RPC and,
+    on success, updates the persisted current model. Claude never receives this —
+    its model rides each turn as `ChatInputUserMessage.model_name`.
+    """
+
+    object_type: str = Field(default="SetModelUserMessage")
+    provider: str = Field(description="The chosen model's provider (e.g. 'anthropic')")
+    model_id: str = Field(description="The chosen model's id (pi's `modelId`)")
+
+
 class UserQuestionAnswerMessage(PersistentUserMessage):
     object_type: str = Field(default="UserQuestionAnswerMessage")
     answers: dict[str, str] = Field(description="Map from question text to answer text")
@@ -132,6 +147,7 @@ class RemoveQueuedMessageUserMessage(EphemeralUserMessage):
 PersistentUserMessageUnion = (
     Annotated[ChatInputUserMessage, Tag("ChatInputUserMessage")]
     | Annotated[ClearContextUserMessage, Tag("ClearContextUserMessage")]
+    | Annotated[SetModelUserMessage, Tag("SetModelUserMessage")]
     | Annotated[UserQuestionAnswerMessage, Tag("UserQuestionAnswerMessage")]
 )
 EphemeralUserMessageUnion = (

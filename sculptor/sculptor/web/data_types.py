@@ -304,6 +304,13 @@ class BtwRequest(RequestModel):
     request_id: str
 
 
+class SetModelRequest(RequestModel):
+    # The chosen ModelOption's identity. Sent only for harnesses with a backend
+    # model list (pi); the pi adapter issues pi's `set_model` RPC with these.
+    provider: str
+    model_id: str
+
+
 class WorkspaceSetupCommandRequest(RequestModel):
     # None resets to the current default; "" means the user explicitly wants no command.
     workspace_setup_command: str | None

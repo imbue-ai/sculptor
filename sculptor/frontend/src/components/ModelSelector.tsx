@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 
 import type { LlmModel, ModelOption } from "~/api";
 import { ElementIds } from "~/api";
-import { getModelShortName } from "~/common/modelConstants.ts";
+import { getModelShortName, routeModelChange } from "~/common/modelConstants.ts";
 import { ModelSelectOptions } from "~/components/ModelSelectOptions.tsx";
 import { useCapabilityGate } from "~/components/useCapabilityGate.ts";
 
@@ -11,6 +11,8 @@ import styles from "./ModelSelector.module.scss";
 
 type ModelSelectorProps = {
   model: LlmModel;
+  /** The Claude per-turn change handler. Called when no backend model list is
+   *  present (Claude); the selected model rides the next turn. */
   onModelChange: (model: LlmModel) => void;
   /** The active task's `supports_model_selection` capability. When false the
    *  switcher renders disabled-with-tooltip (the current model still shows). */
@@ -21,6 +23,10 @@ type ModelSelectorProps = {
   backendModels?: ReadonlyArray<ModelOption>;
   /** The model_id to show selected when `backendModels` is present (pi). */
   selectedModelId?: string;
+  /** The out-of-band change handler for a backend model list (pi). Called with
+   *  the chosen `ModelOption` so the caller can apply it via the set-model
+   *  endpoint; the value stays server-driven (selectedModelId) until it lands. */
+  onBackendModelChange?: (option: ModelOption) => void;
 };
 
 export const ModelSelector = ({
@@ -29,9 +35,14 @@ export const ModelSelector = ({
   capabilityValue,
   backendModels,
   selectedModelId,
+  onBackendModelChange,
 }: ModelSelectorProps): ReactElement => {
   const gate = useCapabilityGate(capabilityValue, ElementIds.CAPABILITY_DISABLED_MODEL_SELECTION);
   const hasBackendModels = backendModels !== undefined && backendModels.length > 0;
+  // A backend list with a single model has nothing to switch to, so the switcher
+  // renders disabled (still showing the current model). The capability gate above
+  // takes precedence over this.
+  const isSingleBackendModel = hasBackendModels && backendModels.length <= 1;
 
   // The Select value and trigger label diverge by source: a backend list (pi) is
   // keyed and labelled by model_id / display_name; the Claude path keeps its
@@ -60,14 +71,25 @@ export const ModelSelector = ({
     );
   }
 
-  // Phase 3 is read-only for pi: selecting a backend model is a local no-op until
-  // set_model is wired (phase 4). The Claude path keeps routing through
-  // onModelChange so today's behavior is unchanged.
+  if (isSingleBackendModel) {
+    // Nothing to switch to: render a disabled trigger showing the current model,
+    // with no dropdown. No tooltip — this is not a capability denial.
+    return (
+      <Select.Root size="1" value={value} disabled>
+        <Select.Trigger className={styles.trigger} data-testid={ElementIds.MODEL_SELECTOR} variant="ghost">
+          <Flex align="center">
+            <Text size="1">{triggerLabel}</Text>
+          </Flex>
+        </Select.Trigger>
+      </Select.Root>
+    );
+  }
+
+  // A backend list (pi) applies out-of-band via onBackendModelChange and stays
+  // server-driven (value follows selectedModelId). The Claude path routes through
+  // onModelChange and applies the model on the next turn.
   const onValueChange = (next: string): void => {
-    if (hasBackendModels) {
-      return;
-    }
-    onModelChange(next as LlmModel);
+    routeModelChange(next, backendModels, onModelChange, onBackendModelChange);
   };
 
   return (

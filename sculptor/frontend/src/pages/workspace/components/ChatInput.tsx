@@ -30,7 +30,9 @@ import {
   ElementIds,
   interruptWorkspaceAgent,
   LlmModel,
+  type ModelOption,
   sendWorkspaceAgentMessages,
+  setWorkspaceAgentModel,
 } from "../../../api";
 import { CHAT_INPUT_ELEMENT_ID } from "../../../common/Constants.ts";
 import { useWorkspacePageParams } from "../../../common/NavigateUtils.ts";
@@ -409,6 +411,27 @@ export const ChatInput = ({
     }
   }, [promptDraft, taskID, sendMessage, isAgentBusy, workspaceID]);
 
+  // Out-of-band model switch for a harness with a backend model list (pi). The
+  // value stays server-driven (selectedModelId), so on success the persisted
+  // current model propagates and the Select updates; on failure the endpoint
+  // surfaces pi's error (e.g. "Model not found") and we toast, leaving the
+  // selection on the actual current model. The Claude path uses setStoredModel
+  // (per-turn) instead and never reaches here.
+  const handleBackendModelChange = useCallback(
+    async (option: ModelOption): Promise<void> => {
+      if (!taskID) return;
+      try {
+        await setWorkspaceAgentModel({
+          path: { workspace_id: workspaceID, agent_id: taskID },
+          body: { provider: option.provider, modelId: option.modelId },
+        });
+      } catch {
+        setToast({ title: `Failed to switch to ${option.displayName}`, type: ToastType.ERROR });
+      }
+    },
+    [taskID, workspaceID],
+  );
+
   const handleMentionPicker = useCallback((): void => {
     if (!editorRef.current) return;
     const editor = editorRef.current;
@@ -679,6 +702,7 @@ export const ChatInput = ({
                   capabilityValue={canSelectModel}
                   backendModels={backendModels}
                   selectedModelId={selectedModelId}
+                  onBackendModelChange={handleBackendModelChange}
                 />
               </Flex>
               <SendButton

@@ -62,6 +62,7 @@ from sculptor.interfaces.agents.agent import RequestSkippedAgentMessage
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
 from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
+from sculptor.interfaces.agents.agent import SetModelUserMessage
 from sculptor.interfaces.agents.agent import StopAgentUserMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
 from sculptor.interfaces.agents.errors import PiBinaryNotFoundError
@@ -1487,6 +1488,131 @@ def test_clear_context_runs_after_an_in_flight_chat_turn() -> None:
         agent._shutdown_event.set()
         worker.join(timeout=5.0)
     assert order == ["turn", "clear"]
+
+
+def test_push_message_enqueues_set_model_returns_true() -> None:
+    """A SetModelUserMessage goes on the same FIFO as chat turns — handled, not dead-lettered."""
+    agent = _make_agent()
+    set_model = SetModelUserMessage(message_id=AgentMessageID(), provider="anthropic", model_id="claude-haiku-4-5")
+    with expect_exact_logged_errors([]):
+        handled = agent._push_message(set_model)
+    assert handled is True
+    assert agent._input_agent_messages.get_nowait() is set_model
+
+
+def test_set_model_success_emits_new_current_model_and_resolves() -> None:
+    """A successful set_model sends the RPC, re-emits the catalog with the new current model, and RequestSuccess."""
+    agent = _make_agent()
+    agent._available_models = (
+        ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="Claude Opus 4.8"),
+        ModelOption(provider="anthropic", model_id="claude-haiku-4-5", display_name="Claude Haiku 4.5"),
+    )
+    process = _make_process(
+        [
+            _event(
+                {
+                    "type": "response",
+                    "command": "set_model",
+                    "success": True,
+                    "id": "cmd-set",
+                    "data": {"id": "claude-haiku-4-5", "name": "Claude Haiku 4.5", "provider": "anthropic"},
+                }
+            )
+        ]
+    )
+    agent._process = process
+    with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-set"]):
+        agent._handle_set_model(
+            SetModelUserMessage(message_id=AgentMessageID(), provider="anthropic", model_id="claude-haiku-4-5")
+        )
+
+    # set_model was written to pi's stdin, id-correlated, carrying provider + modelId.
+    writes = [call.args[0] for call in process.write_stdin.call_args_list]
+    assert any('"type":"set_model"' in w and '"cmd-set"' in w and '"claude-haiku-4-5"' in w for w in writes)
+
+    emitted = _drain(agent._output_messages)
+    carriers = [m for m in emitted if isinstance(m, ModelsAvailableAgentMessage)]
+    assert len(carriers) == 1
+    carrier = carriers[0]
+    # The catalog is unchanged; only the current model follows the switch.
+    assert [option.model_id for option in carrier.available_models] == ["claude-opus-4-8", "claude-haiku-4-5"]
+    assert carrier.current_model is not None
+    assert carrier.current_model.model_id == "claude-haiku-4-5"
+    # Terminal RequestSuccess, no failure.
+    assert any(isinstance(m, RequestSuccessAgentMessage) for m in emitted)
+    assert not any(isinstance(m, RequestFailureAgentMessage) for m in emitted)
+
+
+def test_set_model_failure_on_success_false_surfaces_error_without_mutation() -> None:
+    """set_model success:false → RequestFailure, no current-model carrier, handler does not raise."""
+    agent = _make_agent()
+    agent._available_models = (ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="Opus"),)
+    agent._process = _make_process(
+        [
+            _event(
+                {
+                    "type": "response",
+                    "command": "set_model",
+                    "success": False,
+                    "id": "cmd-set",
+                    "error": "Model not found: anthropic/claude-nope",
+                }
+            )
+        ]
+    )
+    with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-set"]):
+        # Must NOT raise out of the handler — the AgentClientError path reports and continues.
+        agent._handle_set_model(
+            SetModelUserMessage(message_id=AgentMessageID(), provider="anthropic", model_id="claude-nope")
+        )
+    emitted = _drain(agent._output_messages)
+    failures = [m for m in emitted if isinstance(m, RequestFailureAgentMessage)]
+    assert len(failures) == 1
+    # The failure carries pi's error so the frontend can toast it.
+    assert "Model not found" in str(failures[0].error.args[0])
+    # No current-model mutation on failure.
+    assert not any(isinstance(m, ModelsAvailableAgentMessage) for m in emitted)
+
+
+def test_set_model_failure_on_no_response_surfaces_error() -> None:
+    """No set_model ack (process exited / timeout) → failed request, no carrier, no crash."""
+    agent = _make_agent()
+    # Empty queue + is_finished True ⇒ _consume_until_command_response returns None at once.
+    agent._process = _make_process([])
+    with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-set"]):
+        agent._handle_set_model(
+            SetModelUserMessage(message_id=AgentMessageID(), provider="anthropic", model_id="claude-haiku-4-5")
+        )
+    emitted = _drain(agent._output_messages)
+    assert any(isinstance(m, RequestFailureAgentMessage) for m in emitted)
+    assert not any(isinstance(m, ModelsAvailableAgentMessage) for m in emitted)
+
+
+def test_set_model_runs_after_an_in_flight_chat_turn() -> None:
+    """FIFO ordering: a set_model queued behind a chat turn runs after the turn ends.
+
+    Same one-at-a-time guarantee as the context reset, so the set_model RPC's
+    response is consumed only between turns.
+    """
+    agent = _make_agent()
+    agent._process = MagicMock()
+    order: list[str] = []
+    with (
+        patch.object(agent, "_consume_until_turn_end", side_effect=lambda prompt_id="": order.append("turn")),
+        patch.object(agent, "_handle_set_model", side_effect=lambda message: order.append("set_model")),
+    ):
+        agent._input_agent_messages.put(ChatInputUserMessage(text="hi"))
+        agent._input_agent_messages.put(
+            SetModelUserMessage(message_id=AgentMessageID(), provider="anthropic", model_id="claude-haiku-4-5")
+        )
+        worker = threading.Thread(target=agent._process_message_queue)
+        worker.start()
+        deadline = time.monotonic() + 5.0
+        while len(order) < 2 and time.monotonic() < deadline:
+            time.sleep(0.02)
+        agent._shutdown_event.set()
+        worker.join(timeout=5.0)
+    assert order == ["turn", "set_model"]
 
 
 def _make_start_env(persisted_session_id: str | None = None) -> MagicMock:

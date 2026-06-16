@@ -2,9 +2,10 @@ import { Select, Theme } from "@radix-ui/themes";
 import { cleanup, render, screen } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import type { ReactElement, ReactNode } from "react";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ElementIds, LlmModel, type ModelOption } from "~/api";
+import { routeModelChange } from "~/common/modelConstants.ts";
 
 import { ModelSelectOptions } from "./ModelSelectOptions";
 import { ModelSelector } from "./ModelSelector";
@@ -95,5 +96,53 @@ describe("ModelSelector", () => {
     );
     expect(screen.getByTestId(ElementIds.CAPABILITY_DISABLED_MODEL_SELECTION)).toBeInTheDocument();
     expect(screen.queryByTestId(ElementIds.MODEL_SELECTOR)).not.toBeInTheDocument();
+  });
+
+  it("disables the switcher when the backend list has a single model", () => {
+    render(
+      withStore(
+        <ModelSelector
+          model={LlmModel.CLAUDE_4_OPUS_200K}
+          onModelChange={() => {}}
+          capabilityValue={true}
+          backendModels={[PI_MODELS[0]]}
+          selectedModelId="claude-opus-4-8"
+        />,
+      ),
+    );
+    // Still shows the current model, but the trigger is disabled (nothing to
+    // switch to) and not the capability-denial treatment.
+    const trigger = screen.getByTestId(ElementIds.MODEL_SELECTOR);
+    expect(trigger).toHaveTextContent("Claude Opus 4.8");
+    expect(trigger).toBeDisabled();
+    expect(screen.queryByTestId(ElementIds.CAPABILITY_DISABLED_MODEL_SELECTION)).not.toBeInTheDocument();
+  });
+});
+
+describe("routeModelChange", () => {
+  it("routes a pi change to onBackendModelChange with the chosen ModelOption", () => {
+    const onBackendModelChange = vi.fn();
+    const onModelChange = vi.fn();
+    routeModelChange("claude-sonnet-4-6", PI_MODELS, onModelChange, onBackendModelChange);
+    expect(onBackendModelChange).toHaveBeenCalledTimes(1);
+    expect(onBackendModelChange).toHaveBeenCalledWith(PI_MODELS[1]);
+    // The Claude per-turn handler must NOT fire on the pi path.
+    expect(onModelChange).not.toHaveBeenCalled();
+  });
+
+  it("routes a Claude change to onModelChange when no backend list is present", () => {
+    const onBackendModelChange = vi.fn();
+    const onModelChange = vi.fn();
+    routeModelChange(LlmModel.CLAUDE_4_SONNET, undefined, onModelChange, onBackendModelChange);
+    expect(onModelChange).toHaveBeenCalledWith(LlmModel.CLAUDE_4_SONNET);
+    expect(onBackendModelChange).not.toHaveBeenCalled();
+  });
+
+  it("ignores a backend value with no matching option", () => {
+    const onBackendModelChange = vi.fn();
+    const onModelChange = vi.fn();
+    routeModelChange("claude-nope", PI_MODELS, onModelChange, onBackendModelChange);
+    expect(onBackendModelChange).not.toHaveBeenCalled();
+    expect(onModelChange).not.toHaveBeenCalled();
   });
 });

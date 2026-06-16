@@ -130,6 +130,7 @@ from sculptor.interfaces.agents.agent import RequestSkippedAgentMessage
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
 from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
+from sculptor.interfaces.agents.agent import SetModelUserMessage
 from sculptor.interfaces.agents.agent import StopAgentUserMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
 from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_SHUTDOWN_DUE_TO_EXCEPTION
@@ -137,6 +138,7 @@ from sculptor.interfaces.agents.errors import AgentCrashed
 from sculptor.interfaces.agents.errors import PiBinaryNotFoundError
 from sculptor.interfaces.agents.errors import PiContextResetError
 from sculptor.interfaces.agents.errors import PiCrashError
+from sculptor.interfaces.agents.errors import PiSetModelError
 from sculptor.interfaces.agents.errors import PiVersionMismatchError
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.primitives.ids import AgentMessageID
@@ -500,9 +502,13 @@ class PiAgent(DefaultAgentWrapper):
     harness: PiHarness
     config: PiAgentConfig
     git_hash: str
-    # Carries chat turns AND between-turns context resets through one FIFO so a
-    # `/clear` runs strictly after any in-flight turn (see _process_message_queue).
-    _input_agent_messages: Queue[ChatInputUserMessage | ClearContextUserMessage] = PrivateAttr(default_factory=Queue)
+    # Carries chat turns AND between-turns control messages (context reset,
+    # model switch) through one FIFO so each runs strictly after any in-flight
+    # turn — the sole-reader window where the control RPCs' responses can be
+    # consumed safely (see _process_message_queue).
+    _input_agent_messages: Queue[ChatInputUserMessage | ClearContextUserMessage | SetModelUserMessage] = PrivateAttr(
+        default_factory=Queue
+    )
     _shutdown_event: Event = PrivateAttr(default_factory=Event)
     _message_processing_thread: ObservableThread | None = PrivateAttr(default=None)
     # The pi session id this process resumes / creates (pinned via --session-id);
@@ -573,6 +579,12 @@ class PiAgent(DefaultAgentWrapper):
     # message-processing thread.
     _awaiting_reaction_count: int = PrivateAttr(default=0)
     _awaiting_reaction_deadline: float = PrivateAttr(default=0.0)
+    # The curated model catalog surfaced at start (`_fetch_models_into_state`),
+    # cached so a `set_model` switch can re-emit the same `available_models` with
+    # the new current model in its `ModelsAvailableAgentMessage` carrier (the
+    # catalog itself does not change when only the selection changes). Set and
+    # read on the message-processing thread only.
+    _available_models: tuple[ModelOption, ...] = PrivateAttr(default=())
 
     def start(self, secrets: Mapping[str, str | Secret]) -> None:
         # Resolve and validate the pi binary BEFORE super().start so the
@@ -685,6 +697,12 @@ class PiAgent(DefaultAgentWrapper):
         if isinstance(message, ClearContextUserMessage):
             # Enqueued on the same FIFO as chat turns so the reset runs strictly
             # between turns (see _handle_clear_context); supports_context_reset.
+            self._input_agent_messages.put(message)
+            return True
+        if isinstance(message, SetModelUserMessage):
+            # Enqueued on the same FIFO as chat turns so the set_model RPC runs
+            # strictly between turns (see _handle_set_model), where consuming its
+            # response is safe; supports_model_selection.
             self._input_agent_messages.put(message)
             return True
         if isinstance(message, ResumeAgentResponseRunnerMessage):
@@ -1076,10 +1094,13 @@ class PiAgent(DefaultAgentWrapper):
         if not curated and current_model is None:
             logger.info("PiAgent get_available_models returned no usable models; switcher will fall back to defaults")
             return
+        # Cache the catalog so a later set_model can re-emit it with the new
+        # current model (only the selection changes, not the list).
+        self._available_models = tuple(curated)
         self._output_messages.put(
             ModelsAvailableAgentMessage(
                 message_id=AgentMessageID(),
-                available_models=tuple(curated),
+                available_models=self._available_models,
                 current_model=current_model,
             )
         )
@@ -1166,6 +1187,11 @@ class PiAgent(DefaultAgentWrapper):
                 # Between-turns reset: this loop processes one message at a time,
                 # so reaching here means any prior turn already ended.
                 self._handle_clear_context(message)
+                continue
+            if isinstance(message, SetModelUserMessage):
+                # Between-turns model switch: same one-at-a-time guarantee as the
+                # reset above, so the set_model RPC's response can be consumed safely.
+                self._handle_set_model(message)
                 continue
             self._run_prompt_turn(message)
 
@@ -1350,6 +1376,57 @@ class PiAgent(DefaultAgentWrapper):
             new_session_id,
         )
         logger.info("PiAgent persisted post-clear pi session id {}", new_session_id)
+
+    def _handle_set_model(self, message: SetModelUserMessage) -> None:
+        """Switch pi's model in-process via the `set_model` RPC (supports_model_selection).
+
+        Routed through the `_input_agent_messages` FIFO like chat turns and the
+        context reset, so it runs between turns — the sole-reader window where
+        `_consume_until_command_response` is safe. The set-model endpoint blocks
+        on the terminal request message `_handle_user_message` emits —
+        RequestSuccess on a clean switch, RequestFailure on the error path below
+        (which the endpoint surfaces so the frontend toasts).
+
+        `set_model` is session-level and persists for later turns. On success pi
+        returns the new Model in `data`; we re-emit a `ModelsAvailableAgentMessage`
+        carrier (same catalog, new current model) so the persisted current model —
+        and the switcher's selection — follows. A `success:false` response (e.g.
+        `Model not found`) or no acknowledgement within the budget is raised as
+        `PiSetModelError` (an `AgentClientError`, so the agent keeps running) and
+        the current model is left untouched.
+        """
+        with self._handle_user_message(message):
+            command_id = generate_id()
+            self._send_rpc(
+                {"type": "set_model", "id": command_id, "provider": message.provider, "modelId": message.model_id}
+            )
+            response = self._consume_until_command_response(
+                "set_model", command_id, timeout=_MODEL_FETCH_TIMEOUT_SECONDS
+            )
+            if response is None:
+                raise PiSetModelError(
+                    "pi did not acknowledge set_model within the timeout", exit_code=None, metadata=None
+                )
+            if not response.success:
+                raise PiSetModelError(
+                    response.error or f"pi rejected set_model for {message.provider}/{message.model_id}",
+                    exit_code=None,
+                    metadata=None,
+                )
+            # Prefer pi's returned Model (authoritative id/display name); fall back
+            # to the requested identity if pi omits it.
+            new_model = _model_option_from_pi(response.data) if isinstance(response.data, dict) else None
+            if new_model is None:
+                new_model = ModelOption(
+                    provider=message.provider, model_id=message.model_id, display_name=message.model_id
+                )
+            self._output_messages.put(
+                ModelsAvailableAgentMessage(
+                    message_id=AgentMessageID(),
+                    available_models=self._available_models,
+                    current_model=new_model,
+                )
+            )
 
     def _consume_until_turn_end(self, prompt_id: str = "") -> None:
         """Drive pi's stdout until the current agent run terminates.
