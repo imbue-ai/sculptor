@@ -70,6 +70,57 @@ export const Authenticating: Story = {
   },
 };
 
+// SCU-1502: headless/remote sign-in. After "Sign in" the backend returns a URL
+// and leaves the CLI waiting on stdin; the card shows the link to open plus a
+// field to paste the code back (instead of relying on a localhost browser
+// loopback that can't reach the user in a remote container).
+export const NeedsAuthAwaitingCode: Story = {
+  args: {
+    status: {
+      state: "needs-auth",
+      path: "/Users/dev/.local/bin/claude",
+      version: "2.1.89",
+    },
+    onAuthenticate: () => console.log("authenticate clicked"),
+    authUrl: "https://claude.ai/oauth/authorize?client=sculptor&scope=sign-in",
+    onSubmitAuthCode: async (code: string) => console.log("submit code", code),
+    onApplyOverride: async () => {},
+  },
+};
+
+// SCU-1502: the pasted code was rejected (or the CLI errored on submit) — the
+// inline error is shown beneath the paste-a-code field.
+export const NeedsAuthCodeError: Story = {
+  args: {
+    status: {
+      state: "needs-auth",
+      path: "/Users/dev/.local/bin/claude",
+      version: "2.1.89",
+    },
+    onAuthenticate: () => console.log("authenticate clicked"),
+    authUrl: "https://claude.ai/oauth/authorize?client=sculptor&scope=sign-in",
+    authError: "invalid code",
+    onSubmitAuthCode: async (code: string) => console.log("submit code", code),
+    onApplyOverride: async () => {},
+  },
+};
+
+// SCU-1502: starting sign-in failed before a URL was produced — the error is
+// surfaced and the "Sign in" button remains available to retry.
+export const NeedsAuthStartError: Story = {
+  args: {
+    status: {
+      state: "needs-auth",
+      path: "/Users/dev/.local/bin/claude",
+      version: "2.1.89",
+    },
+    onAuthenticate: () => console.log("authenticate clicked"),
+    authError: "Sign-in failed. Please try again.",
+    onSubmitAuthCode: async (code: string) => console.log("submit code", code),
+    onApplyOverride: async () => {},
+  },
+};
+
 export const WrongVersion: Story = {
   args: {
     status: {
