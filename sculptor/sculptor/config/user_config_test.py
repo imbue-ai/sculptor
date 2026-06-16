@@ -25,7 +25,7 @@ def test_ci_babysitter_defaults() -> None:
 
 
 def test_ci_babysitter_agent_defaults_to_mru() -> None:
-    # REQ-SET-2: a fresh config selects the MRU variant.
+    # A fresh config selects the MRU variant.
     config = CIBabysitterConfig()
     assert isinstance(config.agent, BabysitterAgentMRU)
 

@@ -966,8 +966,8 @@ def test_mru_no_prior_task_resolves_chat_claude(env: _FakeEnv, test_root_concurr
 def test_mru_does_not_skip_terminal_to_reach_older_chat(
     env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup
 ) -> None:
-    # REQ-AGENT-2: most-recent is a plain terminal, older is Claude. The resolver
-    # must NOT skip the terminal to reach the older chat agent — it goes Disabled.
+    # Most-recent is a plain terminal, older is Claude. The resolver must NOT
+    # skip the terminal to reach the older chat agent — it goes Disabled.
     coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
     tasks = [
         _make_agent_task(env, ClaudeCodeSDKAgentConfig(), "2026-01-01T00:00:00"),
@@ -1134,7 +1134,7 @@ def test_terminal_drive_failure_sets_transient_reason_and_counts_retry(
     _wait_until(lambda: not state.terminal_drive_in_progress)
 
     assert state.transient_disabled_reason == coordinator_module._TRANSIENT_REASON_UNREACHABLE
-    # A failed drive still counts against retry_cap (REQ-DRIVE-4).
+    # A failed drive still counts against retry_cap.
     assert state.retry_count == 1
 
 

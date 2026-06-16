@@ -65,7 +65,7 @@ export const CIBabysitterSettingsSection = ({ onSettingChange }: CIBabysitterSet
   useEffect(() => setRetryCapValue(String(retryCap)), [retryCap]);
 
   // Only registered terminal agents that opted into automated prompts can be
-  // driven by the babysitter (REQ-SET-4); plain terminals never appear.
+  // driven by the babysitter; plain terminals never appear.
   const driveableRegistrations = registrations.filter((registration) => registration.acceptsAutomatedPrompts);
 
   // Backend stores all babysitter settings in a single nested `ciBabysitter`

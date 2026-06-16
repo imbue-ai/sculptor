@@ -66,7 +66,7 @@ _CONSUMER_QUEUE_TIMEOUT_SECONDS = 1.0
 
 # Persistent disabled reasons surfaced when the MRU is a terminal that can't
 # receive automated prompts, or when a pinned harness is no longer available.
-# Defined here so Phase 4's proactive surfacing and the tests use identical copy.
+# Defined here so the proactive status surfacing and the tests use identical copy.
 _DISABLED_REASON_MRU_NON_DRIVEABLE = "Your most-recent agent is a terminal that can't receive automated prompts, so the CI Babysitter can't act here. Pick a specific agent in CI Babysitter settings, or use a chat or prompt-enabled terminal agent."
 _DISABLED_REASON_PINNED_UNAVAILABLE = (
     "The CI Babysitter's selected agent is no longer available. Choose another in CI Babysitter settings."
@@ -103,8 +103,8 @@ class Disabled:
     """Resolution result: the babysitter cannot act; surface ``reason``.
 
     ``transient`` distinguishes a persistent reason (MRU non-driveable /
-    pinned-unavailable) from a runtime one (set in Phase 3). Only persistent
-    reasons arise from the resolver.
+    pinned-unavailable) from a runtime one (set by the terminal-drive worker).
+    Only persistent reasons arise from the resolver.
     """
 
     reason: str
@@ -358,8 +358,8 @@ class CIBabysitterCoordinator(Service):
         with self._data_model_service.open_transaction(RequestID()) as transaction:
             resolved = self._resolve_babysitter_agent(state.workspace_id, state.project_id, config, transaction)
         if isinstance(resolved, Disabled):
-            # No spawn, no task. Surfacing the reason to the UI is Phase 4,
-            # which recomputes persistent reasons on every status read.
+            # No spawn, no task. The reason surfaces to the UI on every status
+            # read, which recomputes persistent reasons proactively.
             logger.info(
                 "CIBabysitterCoordinator: not dispatching for workspace={} — {}",
                 state.workspace_id,
@@ -374,7 +374,7 @@ class CIBabysitterCoordinator(Service):
         if isinstance(resolved, DriveableTerminal):
             # Offload the PTY drive to a worker so the single-threaded consumer
             # loop stays responsive to every other workspace's PR updates (the
-            # readiness wait added in Task 3.2 can block for seconds).
+            # readiness wait can block for seconds).
             with self._lock:
                 if state.terminal_drive_in_progress:
                     # Coalesce: the in-flight worker will write the prompt. Don't
@@ -399,7 +399,7 @@ class CIBabysitterCoordinator(Service):
 
         with self._lock:
             # The attempt counts against retry_cap whether or not the terminal
-            # worker ultimately delivers (REQ-DRIVE-4).
+            # worker ultimately delivers.
             state.retry_count += 1
             if transition is Transition.PIPELINE_FAILED:
                 state.last_dispatched_pipeline_failed_id = new.pipeline_id
@@ -421,9 +421,9 @@ class CIBabysitterCoordinator(Service):
             if task is None:
                 return
             if not self._wait_for_terminal_ready(task_id):
-                # Never-ready within the backstop (REQ-DRIVE-4): give up for this
-                # cycle only — no write — and retry on the next CI failure. The
-                # retry was already counted at dispatch.
+                # Never-ready within the backstop: give up for this cycle only —
+                # no write — and retry on the next CI failure. The retry was
+                # already counted at dispatch.
                 with self._lock:
                     state.transient_disabled_reason = _TRANSIENT_REASON_UNREACHABLE
                 return
@@ -477,14 +477,14 @@ class CIBabysitterCoordinator(Service):
 
         Either a pinned harness (Claude / Pi / a specific registered terminal)
         or the workspace's single most-recently-used agent type. MRU never skips
-        the most-recent agent to reach an older one (REQ-AGENT-2).
+        the most-recent agent to reach an older one.
         """
         choice = config.ci_babysitter.agent
         if isinstance(choice, BabysitterAgentClaude):
             return ChatAgent(ClaudeCodeSDKAgentConfig())
         if isinstance(choice, BabysitterAgentPi):
-            # A pinned Pi while Pi is disabled goes Disabled — no silent fallback
-            # (REQ-SET-5). This differs from an MRU Pi, which falls back to Claude.
+            # A pinned Pi while Pi is disabled goes Disabled — no silent
+            # fallback. This differs from an MRU Pi, which falls back to Claude.
             if config.enable_pi_agent:
                 return ChatAgent(PiAgentConfig())
             return Disabled(_DISABLED_REASON_PINNED_UNAVAILABLE)
@@ -495,11 +495,11 @@ class CIBabysitterCoordinator(Service):
             return Disabled(_DISABLED_REASON_PINNED_UNAVAILABLE)
 
         # MRU: take the single most-recent non-babysitter task; do NOT iterate
-        # past it (REQ-AGENT-2 forbids skipping a terminal MRU to reach an older
-        # chat agent).
+        # past it — skipping a terminal MRU to reach an older chat agent is
+        # exactly the tool-switch this feature removes.
         tasks = self._workspace_agent_tasks_most_recent_first(workspace_id, project_id, transaction)
         if not tasks:
-            return ChatAgent(ClaudeCodeSDKAgentConfig())  # REQ-AGENT-6: no prior agent → Claude
+            return ChatAgent(ClaudeCodeSDKAgentConfig())  # no prior agent → Claude
         input_data = tasks[0].input_data
         assert isinstance(input_data, AgentTaskInputsV2)
         agent_config = input_data.agent_config
@@ -526,15 +526,15 @@ class CIBabysitterCoordinator(Service):
 
         Dispatches on the task's own agent config. Chat agents receive a queued
         ChatInputUserMessage (today's flow, verbatim); registered terminal agents
-        get a guarded PTY write via the shared Task 1.1 helper.
+        get a guarded PTY write via the shared deliver_prompt_to_terminal_agent
+        helper.
         """
         input_data = task.input_data
         assert isinstance(input_data, AgentTaskInputsV2)
         if isinstance(input_data.agent_config, RegisteredTerminalAgentConfig):
-            # Single guarded write. Called from the terminal-drive worker
-            # (Task 3.1) so it never blocks the consumer loop. For a freshly
-            # created task the program usually hasn't reached its prompt yet, so
-            # this returns NOT_AT_PROMPT until Task 3.2 adds the readiness wait.
+            # Single guarded write. Called from the terminal-drive worker so it
+            # never blocks the consumer loop, and only after the worker's
+            # readiness wait confirms the program is at its prompt.
             return deliver_prompt_to_terminal_agent(task, prompt_text, submit=True, task_service=self._task_service)
         with self._data_model_service.open_transaction(RequestID()) as transaction:
             model = self._select_model_for_task(task.object_id, config, transaction)
