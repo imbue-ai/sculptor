@@ -228,6 +228,14 @@ const OpenPrButton = ({ prStatus, isDropdownOpen, gitProvider }: OpenPrButtonPro
           <Tooltip content={getReviewTooltip(prStatus)}>
             <span className={`${styles.statusDot} ${getReviewDotClass(prStatus)}`} />
           </Tooltip>
+          {prStatus.isInMergeQueue && (
+            <Tooltip content="Merge queued">
+              <span
+                className={`${styles.statusDot} ${styles.dotMergeQueued}`}
+                data-testid={ElementIds.PR_BUTTON_MERGE_QUEUED}
+              />
+            </Tooltip>
+          )}
         </button>
       </Tooltip>
       <Popover.Trigger>

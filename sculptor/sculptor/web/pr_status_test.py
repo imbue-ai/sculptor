@@ -39,6 +39,7 @@ def _pr_node(
     reviews: list[dict] | None = None,
     threads: list[dict] | None = None,
     mergeable: str | None = None,
+    is_in_merge_queue: bool = False,
 ) -> dict:
     """Build one graphql ``pullRequests.nodes`` entry in the given GitHub state.
 
@@ -47,6 +48,8 @@ def _pr_node(
     detail (``statusCheckRollup`` is null when no checks have run). ``mergeable``
     is GitHub's ``MERGEABLE`` / ``CONFLICTING`` / ``UNKNOWN`` merge-conflict enum;
     it is included only when provided so unrelated tests keep their minimal shape.
+    ``isInMergeQueue`` reports merge-queue membership and is always present, just
+    as the live query returns it.
     """
     rollup = {"state": check_state} if check_state is not None else None
     node = {
@@ -55,6 +58,7 @@ def _pr_node(
         "url": f"https://github.com/org/repo/pull/{number}",
         "state": state,
         "baseRefName": base_ref,
+        "isInMergeQueue": is_in_merge_queue,
         "commits": {"nodes": [{"commit": {"statusCheckRollup": rollup}}]},
         "latestReviews": {"nodes": reviews or []},
         "reviewThreads": {"nodes": threads or []},
@@ -225,10 +229,25 @@ def test_open_pr_details_fetched_in_single_graphql_call() -> None:
     assert [a.name for a in result.approvals] == ["alice"]
     assert len(result.unresolved_comments) == 1
     assert result.unresolved_comments[0].author == "bob"
+    assert result.is_in_merge_queue is False
     # Exactly one CLI call, and it is a `gh api graphql` request (not the old
     # `gh pr list` + `gh pr view` pair).
     assert len(calls) == 1
     assert calls[0][:3] == ["gh", "api", "graphql"]
+
+
+# ---------------------------------------------------------------------------
+# Open PR sitting in the merge queue → is_in_merge_queue=True.
+# ---------------------------------------------------------------------------
+
+
+def test_open_pr_in_merge_queue() -> None:
+    with _patch_cli(_graphql_handler([_open_node(55, is_in_merge_queue=True)])):
+        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+
+    assert result.pr_state == "open"
+    assert result.pr_iid == 55
+    assert result.is_in_merge_queue is True
 
 
 # ---------------------------------------------------------------------------
@@ -334,6 +353,7 @@ def test_graphql_query_requests_the_fields_the_parser_reads() -> None:
         "reviewThreads",
         "commits",
         "mergeable",
+        "isInMergeQueue",
     ):
         assert field in query, f"query is missing field {field!r}"
     # `reviewThreads` is requested directly (it is a valid GraphQL PullRequest
@@ -541,7 +561,14 @@ def test_fetch_open_prs_for_token_single_page() -> None:
     assert "state:open" in search_string
     assert "sort:updated" in search_string
     query = _captured_query(cmd)
-    for field in ("mergeable", "nameWithOwner", "headRefName", "reviewThreads(first: 10)", "rateLimit"):
+    for field in (
+        "mergeable",
+        "isInMergeQueue",
+        "nameWithOwner",
+        "headRefName",
+        "reviewThreads(first: 10)",
+        "rateLimit",
+    ):
         assert field in query, f"search query is missing {field!r}"
 
 
@@ -650,6 +677,17 @@ def test_build_status_from_open_nodes_conflicting_sets_has_conflicts() -> None:
 
     assert result.pr_state == "open"
     assert result.has_conflicts is True
+
+
+def test_build_status_from_open_nodes_in_merge_queue_sets_flag() -> None:
+    # An open PR surfaced through the token-wide search path (the primary path)
+    # must carry its merge-queue membership through to is_in_merge_queue.
+    node = _search_node(410, base_ref="main", is_in_merge_queue=True)
+
+    result = build_status_from_open_nodes(WORKSPACE_ID, [node], "origin/main")
+
+    assert result.pr_state == "open"
+    assert result.is_in_merge_queue is True
 
 
 # ---------------------------------------------------------------------------
