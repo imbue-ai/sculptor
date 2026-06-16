@@ -18,6 +18,10 @@ from typing import cast
 import pytest
 from pydantic import PrivateAttr
 
+from sculptor.config.user_config import BabysitterAgentClaude
+from sculptor.config.user_config import BabysitterAgentMRU
+from sculptor.config.user_config import BabysitterAgentPi
+from sculptor.config.user_config import BabysitterAgentRegistered
 from sculptor.config.user_config import CIBabysitterConfig
 from sculptor.config.user_config import UserConfig
 from sculptor.database.models import AgentTaskInputsV2
@@ -31,6 +35,7 @@ from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
 from sculptor.interfaces.agents.agent import MessageTypes
 from sculptor.interfaces.agents.agent import PiAgentConfig
+from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.interfaces.agents.agent import TerminalAgentConfig
 from sculptor.primitives.ids import OrganizationReference
 from sculptor.primitives.ids import ProjectID
@@ -40,12 +45,16 @@ from sculptor.primitives.ids import UserReference
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.ci_babysitter_service import coordinator as coordinator_module
 from sculptor.services.ci_babysitter_service.coordinator import CIBabysitterCoordinator
+from sculptor.services.ci_babysitter_service.coordinator import ChatAgent
+from sculptor.services.ci_babysitter_service.coordinator import Disabled
+from sculptor.services.ci_babysitter_service.coordinator import DriveableTerminal
 from sculptor.services.ci_babysitter_service.transitions import Transition
 from sculptor.services.data_model_service.api import DataModelService
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.git_repo_service.api import GitRepoService
 from sculptor.services.git_repo_service.git_repos import ReadOnlyGitRepo
 from sculptor.services.task_service.api import TaskService
+from sculptor.services.terminal_agent_registry.registry import TerminalAgentRegistration
 from sculptor.services.workspace_service.api import WorkspaceService
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
@@ -747,9 +756,9 @@ def test_pipeline_failed_dispatch_dedupes_per_pipeline_id(
     assert state.last_dispatched_pipeline_failed_id == 2
 
 
-# Chat-agent config inheritance for babysitter tasks:
-# the babysitter inherits the config TYPE of the workspace's most recent chat
-# agent; terminal agents are skipped; fallback is Claude.
+# Agent resolution for babysitter tasks: _resolve_babysitter_agent maps the
+# user's setting (MRU or a pinned harness) + the workspace's most-recent agent
+# to a ChatAgent / DriveableTerminal / Disabled result.
 
 
 class _TasksTransaction(_FakeTransaction):
@@ -786,44 +795,214 @@ def _make_agent_task(
     )
 
 
-def test_babysitter_inherits_pi_config_from_most_recent_chat_agent(
+def _make_config_with_agent(agent: Any, enable_pi_agent: bool = False) -> UserConfig:
+    return UserConfig(
+        user_email="test@example.com",
+        user_id="u",
+        organization_id="o",
+        instance_id="i",
+        enable_pi_agent=enable_pi_agent,
+        ci_babysitter=CIBabysitterConfig(enabled=True, agent=agent),
+    )
+
+
+def _opt_in_registration(registration_id: str = "claude-code") -> TerminalAgentRegistration:
+    return TerminalAgentRegistration(
+        registration_id=registration_id,
+        display_name="Claude Code",
+        launch_command="claude",
+        accepts_automated_prompts=True,
+    )
+
+
+def _revoked_registration(registration_id: str = "claude-code") -> TerminalAgentRegistration:
+    return TerminalAgentRegistration(
+        registration_id=registration_id,
+        display_name="Claude Code",
+        launch_command="claude",
+        accepts_automated_prompts=False,
+    )
+
+
+def _resolve(coordinator: CIBabysitterCoordinator, env: _FakeEnv, config: UserConfig, tasks: list[Task]) -> Any:
+    return coordinator._resolve_babysitter_agent(
+        env.workspace_id, env.project_id, config, _TasksTransaction(env, tasks)
+    )
+
+
+def test_mru_most_recent_claude_resolves_chat_claude(
     env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup
 ) -> None:
     coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
-    tasks = [
-        _make_agent_task(env, ClaudeCodeSDKAgentConfig(), "2026-01-01T00:00:00"),
-        _make_agent_task(env, PiAgentConfig(), "2026-01-02T00:00:00"),
-    ]
-    config = coordinator._select_chat_agent_config_for_workspace(
-        env.workspace_id, env.project_id, _TasksTransaction(env, tasks)
-    )
-    assert isinstance(config, PiAgentConfig)
+    tasks = [_make_agent_task(env, ClaudeCodeSDKAgentConfig(), "2026-01-01T00:00:00")]
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentMRU()), tasks)
+    assert isinstance(result, ChatAgent)
+    assert isinstance(result.config, ClaudeCodeSDKAgentConfig)
 
 
-def test_babysitter_skips_terminal_agents_when_inheriting_config(
+def test_mru_most_recent_pi_resolves_pi_when_enabled(
     env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup
 ) -> None:
     coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
-    # Terminal agent is the most recent — it must be skipped, so pi wins.
-    tasks = [
-        _make_agent_task(env, PiAgentConfig(), "2026-01-01T00:00:00"),
-        _make_agent_task(env, TerminalAgentConfig(), "2026-01-02T00:00:00"),
-    ]
-    config = coordinator._select_chat_agent_config_for_workspace(
-        env.workspace_id, env.project_id, _TasksTransaction(env, tasks)
+    tasks = [_make_agent_task(env, PiAgentConfig(), "2026-01-01T00:00:00")]
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentMRU(), enable_pi_agent=True), tasks)
+    assert isinstance(result, ChatAgent)
+    assert isinstance(result.config, PiAgentConfig)
+
+
+def test_mru_most_recent_pi_falls_back_to_claude_when_pi_disabled(
+    env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    # MRU is best-effort: an MRU Pi while Pi is disabled must not brick the
+    # babysitter — fall back to Claude (unlike a *pinned* Pi, which goes Disabled).
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    tasks = [_make_agent_task(env, PiAgentConfig(), "2026-01-01T00:00:00")]
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentMRU(), enable_pi_agent=False), tasks)
+    assert isinstance(result, ChatAgent)
+    assert isinstance(result.config, ClaudeCodeSDKAgentConfig)
+
+
+def test_mru_most_recent_driveable_terminal_resolves_driveable(
+    env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _opt_in_registration(_id))
+    terminal_config = RegisteredTerminalAgentConfig(
+        registration_id="claude-code",
+        display_name="Claude Code",
+        launch_command="claude",
+        accepts_automated_prompts=True,
     )
-    assert isinstance(config, PiAgentConfig)
+    tasks = [_make_agent_task(env, terminal_config, "2026-01-01T00:00:00")]
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentMRU()), tasks)
+    assert isinstance(result, DriveableTerminal)
+    assert result.config.registration_id == "claude-code"
+    assert result.config.accepts_automated_prompts is True
 
 
-def test_babysitter_falls_back_to_claude_with_only_terminal_agents(
+def test_mru_most_recent_plain_terminal_is_disabled(
     env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup
 ) -> None:
     coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
     tasks = [_make_agent_task(env, TerminalAgentConfig(), "2026-01-01T00:00:00")]
-    config = coordinator._select_chat_agent_config_for_workspace(
-        env.workspace_id, env.project_id, _TasksTransaction(env, tasks)
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentMRU()), tasks)
+    assert isinstance(result, Disabled)
+    assert result.reason == coordinator_module._DISABLED_REASON_MRU_NON_DRIVEABLE
+    assert result.transient is False
+
+
+def test_mru_most_recent_registered_with_revoked_opt_in_is_disabled(
+    env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The task's stamped opt-in may be stale; the live registration revoked it.
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _revoked_registration(_id))
+    terminal_config = RegisteredTerminalAgentConfig(
+        registration_id="claude-code",
+        display_name="Claude Code",
+        launch_command="claude",
+        accepts_automated_prompts=True,
     )
-    assert isinstance(config, ClaudeCodeSDKAgentConfig)
+    tasks = [_make_agent_task(env, terminal_config, "2026-01-01T00:00:00")]
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentMRU()), tasks)
+    assert isinstance(result, Disabled)
+    assert result.reason == coordinator_module._DISABLED_REASON_MRU_NON_DRIVEABLE
+
+
+def test_mru_no_prior_task_resolves_chat_claude(env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup) -> None:
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentMRU()), [])
+    assert isinstance(result, ChatAgent)
+    assert isinstance(result.config, ClaudeCodeSDKAgentConfig)
+
+
+def test_mru_does_not_skip_terminal_to_reach_older_chat(
+    env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    # REQ-AGENT-2: most-recent is a plain terminal, older is Claude. The resolver
+    # must NOT skip the terminal to reach the older chat agent — it goes Disabled.
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    tasks = [
+        _make_agent_task(env, ClaudeCodeSDKAgentConfig(), "2026-01-01T00:00:00"),
+        _make_agent_task(env, TerminalAgentConfig(), "2026-01-02T00:00:00"),
+    ]
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentMRU()), tasks)
+    assert isinstance(result, Disabled)
+    assert result.reason == coordinator_module._DISABLED_REASON_MRU_NON_DRIVEABLE
+
+
+def test_pinned_claude_resolves_chat_claude(env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup) -> None:
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    # A most-recent Pi must be ignored when Claude is pinned.
+    tasks = [_make_agent_task(env, PiAgentConfig(), "2026-01-01T00:00:00")]
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentClaude()), tasks)
+    assert isinstance(result, ChatAgent)
+    assert isinstance(result.config, ClaudeCodeSDKAgentConfig)
+
+
+def test_pinned_pi_resolves_pi_when_enabled(env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup) -> None:
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentPi(), enable_pi_agent=True), [])
+    assert isinstance(result, ChatAgent)
+    assert isinstance(result.config, PiAgentConfig)
+
+
+def test_pinned_pi_is_disabled_when_pi_disabled(env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup) -> None:
+    # A *pinned* Pi while Pi is disabled goes Disabled — no silent fallback.
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentPi(), enable_pi_agent=False), [])
+    assert isinstance(result, Disabled)
+    assert result.reason == coordinator_module._DISABLED_REASON_PINNED_UNAVAILABLE
+
+
+def test_pinned_registered_available_resolves_driveable(
+    env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _opt_in_registration(_id))
+    result = _resolve(
+        coordinator, env, _make_config_with_agent(BabysitterAgentRegistered(registration_id="claude-code")), []
+    )
+    assert isinstance(result, DriveableTerminal)
+    assert result.config.registration_id == "claude-code"
+
+
+def test_pinned_registered_unavailable_is_disabled(
+    env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: None)
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentRegistered(registration_id="gone")), [])
+    assert isinstance(result, Disabled)
+    assert result.reason == coordinator_module._DISABLED_REASON_PINNED_UNAVAILABLE
+
+
+def test_deliver_prompt_to_agent_writes_to_terminal_via_helper(
+    env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The seam dispatches a registered-terminal task through the Task 1.1 helper.
+    coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
+    terminal_config = RegisteredTerminalAgentConfig(
+        registration_id="claude-code",
+        display_name="Claude Code",
+        launch_command="claude",
+        accepts_automated_prompts=True,
+    )
+    task = _make_agent_task(env, terminal_config, "2026-01-01T00:00:00")
+    calls: list[tuple[TaskID, str, bool]] = []
+
+    def _fake_deliver(received_task: Task, text: str, *, submit: bool, task_service: Any) -> Any:
+        del task_service
+        calls.append((received_task.object_id, text, submit))
+        return coordinator_module.TerminalDeliveryResult.DELIVERED
+
+    monkeypatch.setattr(coordinator_module, "deliver_prompt_to_terminal_agent", _fake_deliver)
+    result = coordinator.deliver_prompt_to_agent(task, "fix the pipeline", _make_user_config())
+
+    assert result is coordinator_module.TerminalDeliveryResult.DELIVERED
+    assert calls == [(task.object_id, "fix the pipeline", True)]
+    # No chat message was queued for the terminal path.
+    assert task_service.create_message_calls == []
 
 
 def test_select_model_for_workspace_skips_terminal_agents(

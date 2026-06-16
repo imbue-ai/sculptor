@@ -12,12 +12,16 @@ is a regular Task row and is fully persistent.
 """
 
 import threading
+from dataclasses import dataclass
 from queue import Empty
 from queue import Queue
 
 from loguru import logger
 from pydantic import PrivateAttr
 
+from sculptor.config.user_config import BabysitterAgentClaude
+from sculptor.config.user_config import BabysitterAgentPi
+from sculptor.config.user_config import BabysitterAgentRegistered
 from sculptor.config.user_config import UserConfig
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
@@ -27,6 +31,7 @@ from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
 from sculptor.interfaces.agents.agent import PiAgentConfig
+from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.interfaces.agents.agent import is_terminal_agent_config
 from sculptor.primitives.constants import ANONYMOUS_USER_REFERENCE
 from sculptor.primitives.ids import AgentMessageID
@@ -41,6 +46,7 @@ from sculptor.services.data_model_service.api import DataModelService
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.git_repo_service.api import GitRepoService
 from sculptor.services.task_service.api import TaskService
+from sculptor.services.terminal_agent_registry.registry import get_registration
 from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import EffortLevel
@@ -48,9 +54,71 @@ from sculptor.state.messages import LLMModel
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import PrStatusInfo
 from sculptor.web.pr_polling_service import PrPollingService
+from sculptor.web.terminal_input import TerminalDeliveryResult
+from sculptor.web.terminal_input import deliver_prompt_to_terminal_agent
 
 _BABYSITTER_TITLE = "CI Babysitter"
 _CONSUMER_QUEUE_TIMEOUT_SECONDS = 1.0
+
+# Persistent disabled reasons surfaced when the MRU is a terminal that can't
+# receive automated prompts, or when a pinned harness is no longer available.
+# Defined here so Phase 4's proactive surfacing and the tests use identical copy.
+_DISABLED_REASON_MRU_NON_DRIVEABLE = "Your most-recent agent is a terminal that can't receive automated prompts, so the CI Babysitter can't act here. Pick a specific agent in CI Babysitter settings, or use a chat or prompt-enabled terminal agent."
+_DISABLED_REASON_PINNED_UNAVAILABLE = (
+    "The CI Babysitter's selected agent is no longer available. Choose another in CI Babysitter settings."
+)
+
+
+@dataclass(frozen=True)
+class ChatAgent:
+    """Resolution result: drive a chat agent via the message queue."""
+
+    config: ClaudeCodeSDKAgentConfig | PiAgentConfig
+
+
+@dataclass(frozen=True)
+class DriveableTerminal:
+    """Resolution result: drive a registered, opt-in terminal agent's PTY."""
+
+    config: RegisteredTerminalAgentConfig
+
+
+@dataclass(frozen=True)
+class Disabled:
+    """Resolution result: the babysitter cannot act; surface ``reason``.
+
+    ``transient`` distinguishes a persistent reason (MRU non-driveable /
+    pinned-unavailable) from a runtime one (set in Phase 3). Only persistent
+    reasons arise from the resolver.
+    """
+
+    reason: str
+    transient: bool = False
+
+
+ResolvedBabysitterAgent = ChatAgent | DriveableTerminal | Disabled
+
+
+def _driveable_terminal_from_registration(registration_id: str) -> DriveableTerminal | None:
+    """A DriveableTerminal stamped from the *live* registration, or None when the
+    registration is gone or has revoked automated-prompt opt-in.
+
+    Re-reads the registration from disk so a since-revoked opt-in (or a stale
+    stamped config) is never trusted. Fields are copied the same way
+    ``_agent_config_for_request`` stamps a creation request (app.py).
+    """
+    registration = get_registration(registration_id)
+    if registration is None or not registration.accepts_automated_prompts:
+        return None
+    return DriveableTerminal(
+        RegisteredTerminalAgentConfig(
+            registration_id=registration.registration_id,
+            display_name=registration.display_name,
+            launch_command=registration.launch_command,
+            resume_command_template=registration.resume_command_template,
+            accepts_automated_prompts=registration.accepts_automated_prompts,
+        )
+    )
 
 
 def _model_from_config_or_fallback(config: UserConfig) -> LLMModel:
@@ -232,20 +300,31 @@ class CIBabysitterCoordinator(Service):
             logger.error("CIBabysitterCoordinator: _dispatch_prompt called with non-actionable {}", transition)
             return
 
-        task_id = self._ensure_babysitter_task(state)
+        # Resolve which agent to drive (MRU or a pinned harness). All policy
+        # gates above stay here; only delivery differs per agent kind, via the
+        # single deliver_prompt_to_agent seam below.
+        with self._data_model_service.open_transaction(RequestID()) as transaction:
+            resolved = self._resolve_babysitter_agent(state.workspace_id, state.project_id, config, transaction)
+        if isinstance(resolved, Disabled):
+            # No spawn, no task. Surfacing the reason to the UI is Phase 4,
+            # which recomputes persistent reasons on every status read.
+            logger.info(
+                "CIBabysitterCoordinator: not dispatching for workspace={} — {}",
+                state.workspace_id,
+                resolved.reason,
+            )
+            return
+
+        task_id = self._ensure_babysitter_task(state, resolved)
         if task_id is None:
             return
 
         with self._data_model_service.open_transaction(RequestID()) as transaction:
-            model = self._select_model_for_task(task_id, config, transaction)
-            message = ChatInputUserMessage(
-                text=prompt_text,
-                message_id=AgentMessageID(),
-                model_name=model,
-                fast_mode=config.default_fast_mode,
-                effort=EffortLevel(config.default_effort_level),
-            )
-            self._task_service.create_message(message, task_id, transaction)
+            task = self._task_service.get_task(task_id, transaction)
+        if task is None:
+            return
+
+        self.deliver_prompt_to_agent(task, prompt_text, config)
 
         with self._lock:
             state.retry_count += 1
@@ -254,7 +333,91 @@ class CIBabysitterCoordinator(Service):
             elif transition is Transition.MERGE_CONFLICT:
                 state.last_dispatched_merge_conflict = True
 
-    def _ensure_babysitter_task(self, state: CIBabysitterState) -> TaskID | None:
+    def _resolve_babysitter_agent(
+        self,
+        workspace_id: WorkspaceID,
+        project_id: ProjectID,
+        config: UserConfig,
+        transaction: DataModelTransaction,
+    ) -> ResolvedBabysitterAgent:
+        """Decide which agent the babysitter drives for this workspace.
+
+        Either a pinned harness (Claude / Pi / a specific registered terminal)
+        or the workspace's single most-recently-used agent type. MRU never skips
+        the most-recent agent to reach an older one (REQ-AGENT-2).
+        """
+        choice = config.ci_babysitter.agent
+        if isinstance(choice, BabysitterAgentClaude):
+            return ChatAgent(ClaudeCodeSDKAgentConfig())
+        if isinstance(choice, BabysitterAgentPi):
+            # A pinned Pi while Pi is disabled goes Disabled — no silent fallback
+            # (REQ-SET-5). This differs from an MRU Pi, which falls back to Claude.
+            if config.enable_pi_agent:
+                return ChatAgent(PiAgentConfig())
+            return Disabled(_DISABLED_REASON_PINNED_UNAVAILABLE)
+        if isinstance(choice, BabysitterAgentRegistered):
+            driveable = _driveable_terminal_from_registration(choice.registration_id)
+            if driveable is not None:
+                return driveable
+            return Disabled(_DISABLED_REASON_PINNED_UNAVAILABLE)
+
+        # MRU: take the single most-recent non-babysitter task; do NOT iterate
+        # past it (REQ-AGENT-2 forbids skipping a terminal MRU to reach an older
+        # chat agent).
+        tasks = self._workspace_agent_tasks_most_recent_first(workspace_id, project_id, transaction)
+        if not tasks:
+            return ChatAgent(ClaudeCodeSDKAgentConfig())  # REQ-AGENT-6: no prior agent → Claude
+        input_data = tasks[0].input_data
+        assert isinstance(input_data, AgentTaskInputsV2)
+        agent_config = input_data.agent_config
+        if isinstance(agent_config, ClaudeCodeSDKAgentConfig):
+            return ChatAgent(ClaudeCodeSDKAgentConfig())
+        if isinstance(agent_config, PiAgentConfig):
+            # MRU is a best-effort inherit: an MRU Pi while Pi is disabled should
+            # not brick the babysitter — fall back to Claude.
+            if config.enable_pi_agent:
+                return ChatAgent(PiAgentConfig())
+            return ChatAgent(ClaudeCodeSDKAgentConfig())
+        if isinstance(agent_config, RegisteredTerminalAgentConfig):
+            # Re-resolve against the live registration: the task's stamped
+            # accepts_automated_prompts may be stale.
+            driveable = _driveable_terminal_from_registration(agent_config.registration_id)
+            if driveable is not None:
+                return driveable
+            return Disabled(_DISABLED_REASON_MRU_NON_DRIVEABLE)
+        # plain TerminalAgentConfig (a bare shell) — never driveable.
+        return Disabled(_DISABLED_REASON_MRU_NON_DRIVEABLE)
+
+    def deliver_prompt_to_agent(self, task: Task, prompt_text: str, config: UserConfig) -> TerminalDeliveryResult:
+        """The single delivery seam: how a prompt physically reaches the agent.
+
+        Dispatches on the task's own agent config. Chat agents receive a queued
+        ChatInputUserMessage (today's flow, verbatim); registered terminal agents
+        get a guarded PTY write via the shared Task 1.1 helper.
+        """
+        input_data = task.input_data
+        assert isinstance(input_data, AgentTaskInputsV2)
+        if isinstance(input_data.agent_config, RegisteredTerminalAgentConfig):
+            # Minimal inline single guarded write. For a freshly created task the
+            # program usually hasn't reached its prompt yet, so this returns
+            # NOT_AT_PROMPT on the first failure cycle — expected here; Phase 3
+            # adds the readiness wait + worker thread that make it deliver.
+            return deliver_prompt_to_terminal_agent(task, prompt_text, submit=True, task_service=self._task_service)
+        with self._data_model_service.open_transaction(RequestID()) as transaction:
+            model = self._select_model_for_task(task.object_id, config, transaction)
+            message = ChatInputUserMessage(
+                text=prompt_text,
+                message_id=AgentMessageID(),
+                model_name=model,
+                fast_mode=config.default_fast_mode,
+                effort=EffortLevel(config.default_effort_level),
+            )
+            self._task_service.create_message(message, task.object_id, transaction)
+        return TerminalDeliveryResult.DELIVERED
+
+    def _ensure_babysitter_task(
+        self, state: CIBabysitterState, resolved: ChatAgent | DriveableTerminal
+    ) -> TaskID | None:
         with self._lock:
             existing_task_id = state.babysitter_task_id
         if existing_task_id is not None:
@@ -265,13 +428,17 @@ class CIBabysitterCoordinator(Service):
             with self._lock:
                 state.babysitter_task_id = None
 
-        task_id = self._create_babysitter_task(state)
+        task_id = self._create_babysitter_task(state, resolved.config)
         if task_id is not None:
             with self._lock:
                 state.babysitter_task_id = task_id
         return task_id
 
-    def _create_babysitter_task(self, state: CIBabysitterState) -> TaskID | None:
+    def _create_babysitter_task(
+        self,
+        state: CIBabysitterState,
+        agent_config: ClaudeCodeSDKAgentConfig | PiAgentConfig | RegisteredTerminalAgentConfig,
+    ) -> TaskID | None:
         # v1 limitation: babysitter tasks are created under
         # ANONYMOUS_USER_REFERENCE. Sculptor is currently single-user
         # desktop where this matches the auth fallback; multi-user
@@ -293,9 +460,6 @@ class CIBabysitterCoordinator(Service):
             model = self._select_model_for_workspace(state.workspace_id, workspace.project_id, config, transaction)
             with self._git_repo_service.open_local_user_git_repo_for_read(project) as repo:
                 initial_commit_hash = repo.get_current_commit_hash()
-            agent_config = self._select_chat_agent_config_for_workspace(
-                state.workspace_id, workspace.project_id, transaction
-            )
             task = Task(
                 object_id=TaskID(),
                 max_seconds=None,
@@ -352,29 +516,6 @@ class CIBabysitterCoordinator(Service):
             and task.current_state.title != _BABYSITTER_TITLE
         ]
         return sorted(workspace_agent_tasks, key=lambda t: t.created_at, reverse=True)
-
-    def _select_chat_agent_config_for_workspace(
-        self,
-        workspace_id: WorkspaceID,
-        project_id: ProjectID,
-        transaction: DataModelTransaction,
-    ) -> ClaudeCodeSDKAgentConfig | PiAgentConfig:
-        """Inherit the chat-agent config type from the workspace's most recent
-        chat agent, falling back to Claude.
-
-        Terminal agents are skipped — the babysitter is always a chat agent
-        (it is driven by prompts) and a terminal config carries nothing to
-        inherit.
-        """
-        for task in self._workspace_agent_tasks_most_recent_first(workspace_id, project_id, transaction):
-            input_data = task.input_data
-            assert isinstance(input_data, AgentTaskInputsV2)
-            if is_terminal_agent_config(input_data.agent_config):
-                continue
-            if isinstance(input_data.agent_config, PiAgentConfig):
-                return PiAgentConfig()
-            return ClaudeCodeSDKAgentConfig()
-        return ClaudeCodeSDKAgentConfig()
 
     def _select_model_for_workspace(
         self,
