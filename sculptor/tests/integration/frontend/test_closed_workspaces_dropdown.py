@@ -123,7 +123,7 @@ def test_delete_workspace_from_dropdown(
 
     # Wait for the dropdown's open animation to settle before hovering.  A
     # row that's technically "visible" mid-transform has a moving hit target,
-    # and hover() retries on instability — that's been timing out on Fly.
+    # and hover() retries on instability — that's been timing out on slow CI.
     dropdown_element = layout.get_closed_workspaces_dropdown()
     expect(dropdown_element).to_be_visible()
     row = dropdown_element.get_rows()
