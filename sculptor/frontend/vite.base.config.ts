@@ -2,7 +2,7 @@
 // through the same plugin pipeline (resolves PROD-2161). Only the genuinely
 // target-specific knobs are left to each entry config:
 //
-//   - vite.config.ts          (web / OpenHost):  base "/",  outDir dist,
+//   - vite.web.config.ts      (web / OpenHost):  base "/",  outDir dist,
 //                                                 API_URL_BASE "" (same-origin)
 //   - vite.renderer.config.ts (Electron renderer): base "./", outDir
 //                                                 .vite/build/renderer,

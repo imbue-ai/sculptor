@@ -40,7 +40,7 @@ export default tseslint.config(
       "src/views/tasks_deprecated/**",
       "tailwind.config.js",
       "vite.base.config.ts",
-      "vite.config.ts",
+      "vite.web.config.ts",
       "out/**",
       "storybook-static/**",
     ],

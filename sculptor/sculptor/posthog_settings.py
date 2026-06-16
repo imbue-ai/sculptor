@@ -9,7 +9,7 @@ How the production token reaches the FE bundle:
   3. The justfile's ``build-desktop-app`` and ``package-desktop-installer``
      recipes ``eval $(uv run ... builder setup-build-vars ...)`` so those
      ``export`` lines populate the shell env before ``npm run electron:*``.
-  4. Vite (``vite.config.ts`` and ``vite.renderer.config.ts``) reads
+  4. Vite (``vite.web.config.ts`` and ``vite.renderer.config.ts``) reads
      ``SCULPTOR_FRONTEND_POSTHOG_TOKEN`` via ``loadEnv`` and bakes it as a
      compile-time ``define`` constant named ``FRONTEND_POSTHOG_TOKEN``.
   5. ``sculptor/frontend/src/common/Telemetry.ts`` reads

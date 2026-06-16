@@ -11,7 +11,7 @@
     "src/globals.d.ts",
     "babel.config.ts",
     "forge.config.ts",
-    "vite.config.ts",
+    "vite.web.config.ts",
     "vite.main.config.ts",
     "vite.preload.config.ts",
     "vite.renderer.config.ts",
