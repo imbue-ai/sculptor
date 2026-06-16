@@ -41,6 +41,8 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 )
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import make_agent_terminal_id
 from sculptor.web.auth import authenticate_anonymous
+from sculptor.web.terminal_input import TerminalDeliveryResult
+from sculptor.web.terminal_input import deliver_prompt_to_terminal_agent
 
 _OPT_IN_CONFIG = RegisteredTerminalAgentConfig(
     registration_id="claude-code",
@@ -333,3 +335,70 @@ def test_chat_and_unknown_agents_are_404(
     assert _post_input(client, chat_task, {"text": "hello"}).status_code == 404
 
     assert client.post(f"/api/v1/agents/{TaskID()}/terminal/input", json={"text": "hello"}).status_code == 404
+
+
+# Direct unit tests for the shared helper that both the endpoint above and the
+# CI Babysitter call. The endpoint tests exercise the helper through HTTP; these
+# pin the helper's result enum and bytes directly, so the babysitter caller
+# (which maps results to a transient reason, not an HTTP status) is covered too.
+
+
+def test_helper_rejects_non_opt_in_config(
+    test_already_started_services: CompleteServiceCollection,
+    test_project: Project,
+    tmp_path: Path,
+) -> None:
+    services = test_already_started_services
+    task = _create_task(services, test_project, _NO_OPT_IN_CONFIG)
+    _seed_run_start(services, task.object_id)
+    _seed_signal(services, task.object_id, TerminalStatusSignal.IDLE)
+
+    with _registered_manager(task.object_id, tmp_path) as manager:
+        result = deliver_prompt_to_terminal_agent(task, "hello", task_service=services.task_service)
+        assert result is TerminalDeliveryResult.NOT_OPT_IN
+        assert manager.written == []
+
+
+def test_helper_rejects_when_not_at_prompt(
+    test_already_started_services: CompleteServiceCollection,
+    test_project: Project,
+    tmp_path: Path,
+) -> None:
+    services = test_already_started_services
+    task = _create_task(services, test_project, _OPT_IN_CONFIG)
+    _seed_run_start(services, task.object_id)
+    _seed_signal(services, task.object_id, TerminalStatusSignal.BUSY)
+
+    with _registered_manager(task.object_id, tmp_path) as manager:
+        result = deliver_prompt_to_terminal_agent(task, "hello", task_service=services.task_service)
+        assert result is TerminalDeliveryResult.NOT_AT_PROMPT
+        assert manager.written == []
+
+
+def test_helper_reports_no_pty_when_terminal_missing(
+    test_already_started_services: CompleteServiceCollection,
+    test_project: Project,
+) -> None:
+    services = test_already_started_services
+    task = _create_task(services, test_project, _OPT_IN_CONFIG)
+    _seed_run_start(services, task.object_id)
+    _seed_signal(services, task.object_id, TerminalStatusSignal.IDLE)
+
+    result = deliver_prompt_to_terminal_agent(task, "hello", task_service=services.task_service)
+    assert result is TerminalDeliveryResult.NO_PTY
+
+
+def test_helper_delivers_multiline_with_bracketed_paste(
+    test_already_started_services: CompleteServiceCollection,
+    test_project: Project,
+    tmp_path: Path,
+) -> None:
+    services = test_already_started_services
+    task = _create_task(services, test_project, _OPT_IN_CONFIG)
+    _seed_run_start(services, task.object_id)
+    _seed_signal(services, task.object_id, TerminalStatusSignal.IDLE)
+
+    with _registered_manager(task.object_id, tmp_path) as manager:
+        result = deliver_prompt_to_terminal_agent(task, "line one\nline two", task_service=services.task_service)
+        assert result is TerminalDeliveryResult.DELIVERED
+        assert manager.written == [b"\x1b[200~line one\nline two\x1b[201~", b"\r"]
