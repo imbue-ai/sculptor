@@ -381,6 +381,32 @@ def test_transient_cli_failure_surfaces_error() -> None:
 
 
 # ---------------------------------------------------------------------------
+# An open PR whose node is missing its check/review/queue detail still yields a
+# bare open PR rather than crashing.
+# ---------------------------------------------------------------------------
+
+
+def test_open_pr_with_missing_detail_degrades_gracefully() -> None:
+    # A node carrying only identity fields (no checks / reviews / threads /
+    # merge-queue) still yields a bare open PR rather than crashing.
+    node = {
+        "number": 65,
+        "title": "PR #65",
+        "url": "https://github.com/org/repo/pull/65",
+        "state": "OPEN",
+        "baseRefName": "main",
+    }
+    with _patch_cli(_graphql_handler([node])):
+        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+
+    assert result.pr_state == "open"
+    assert result.pr_iid == 65
+    assert result.pipeline_status is None
+    assert result.is_in_merge_queue is False
+    assert result.error_category is None
+
+
+# ---------------------------------------------------------------------------
 # An unknown-field / usage error is NOT misclassified as not_authenticated.
 # gh's help text lists "author", which used to match the loose 'auth' check.
 # ---------------------------------------------------------------------------
