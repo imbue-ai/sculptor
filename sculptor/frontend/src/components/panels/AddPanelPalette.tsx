@@ -1,11 +1,20 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { Select, VisuallyHidden } from "@radix-ui/themes";
+import { IconButton, Select, VisuallyHidden } from "@radix-ui/themes";
 import { Command } from "cmdk";
-import { useAtom } from "jotai";
+import { useAtom, useAtomValue } from "jotai";
 import { ChevronRight, MessageSquarePlus, Search, SquareTerminal, X } from "lucide-react";
 import type { KeyboardEvent, ReactElement, ReactNode, RefObject } from "react";
 import { useCallback, useRef, useState } from "react";
 
+import { type AgentTypeName, ElementIds } from "~/api";
+import {
+  AGENT_TYPE_LABELS,
+  encodeRegisteredAgentType,
+  parseStoredAgentType,
+  type StoredAgentType,
+} from "~/common/state/atoms/agentTabs.ts";
+import { isPiAgentEnabledAtom } from "~/common/state/atoms/userConfig.ts";
+import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
 import { PaletteFooter } from "~/components/CommandPalette/PaletteFooter.tsx";
 import { addPanelTargetZoneAtom } from "~/components/panels/addPanelAtoms.ts";
 import { inSentence, useDestinationSections } from "~/components/panels/destinations.ts";
@@ -14,11 +23,25 @@ import { useAddPanelMenu } from "~/pages/workspace/panels/useAddPanelMenu.ts";
 
 import styles from "./AddPanelPalette.module.scss";
 
-type PalettePage = "root" | "agents" | "terminals";
+type PalettePage = "root" | "agents" | "terminals" | "new-agent";
 
 const PAGE_BREADCRUMB: Record<Exclude<PalettePage, "root">, string> = {
   agents: "Agents",
   terminals: "Terminals",
+  "new-agent": "Choose agent",
+};
+
+/** The minimal registration shape the palette needs to label and create. */
+type Registration = { registrationId: string; displayName: string };
+
+/** Human label for the recently-used agent type shown in the root "New … agent"
+ * row. Registered agents resolve to their registration's display name. */
+const labelForStoredAgentType = (stored: StoredAgentType, registrations: ReadonlyArray<Registration>): string => {
+  const { agentType, registrationId } = parseStoredAgentType(stored);
+  if (agentType === "registered") {
+    return registrations.find((r) => r.registrationId === registrationId)?.displayName ?? "agent";
+  }
+  return AGENT_TYPE_LABELS[agentType as Exclude<AgentTypeName, "registered">];
 };
 
 /**
@@ -55,6 +78,8 @@ const PaletteBody = ({ initialZone, onClose }: { initialZone: ZoneId; onClose: (
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const menu = useAddPanelMenu(zone);
+  const { registrations, refetch: refreshRegistrations } = useTerminalAgentRegistrations();
+  const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
   const destinations = useDestinationSections();
   const currentLabel = destinations.find((d) => d.zone === zone)?.label ?? "section";
 
@@ -78,16 +103,36 @@ const PaletteBody = ({ initialZone, onClose }: { initialZone: ZoneId; onClose: (
     setSearch("");
   }, []);
 
-  // Backspace on an empty search inside a sub-page returns to the root page —
-  // mirrors the command palette's sub-page back behavior.
+  // Re-read the registrations directory before showing the harness picker so
+  // it tracks the filesystem without a restart (same as the old + menu).
+  const openChooseAgent = useCallback((): void => {
+    refreshRegistrations();
+    openPage("new-agent");
+  }, [refreshRegistrations, openPage]);
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLDivElement>): void => {
+      // Backspace on an empty search inside a sub-page returns to the root page
+      // — mirrors the command palette's sub-page back behavior.
       if (e.key === "Backspace" && search === "" && page !== "root") {
         e.preventDefault();
         goBack();
+        return;
+      }
+
+      // ArrowRight on the root "New … agent" row drills into the harness picker
+      // — the same affordance as its trailing chevron. Gated on an empty search
+      // so it doesn't hijack text-cursor movement; cmdk marks the active row
+      // with data-selected, and only that row's value carries "new-agent".
+      if (e.key === "ArrowRight" && page === "root" && search === "") {
+        const active = document.querySelector('[cmdk-item][data-selected="true"]');
+        if ((active?.getAttribute("data-value") ?? "").toLowerCase().startsWith("new-agent")) {
+          e.preventDefault();
+          openChooseAgent();
+        }
       }
     },
-    [search, page, goBack],
+    [search, page, goBack, openChooseAgent],
   );
 
   const placeholder =
@@ -95,7 +140,9 @@ const PaletteBody = ({ initialZone, onClose }: { initialZone: ZoneId; onClose: (
       ? "Filter agents…"
       : page === "terminals"
         ? "Filter terminals…"
-        : `Add a panel to the ${inSentence(currentLabel)} section…`;
+        : page === "new-agent"
+          ? "Choose an agent…"
+          : `Add a panel to the ${inSentence(currentLabel)} section…`;
 
   return (
     <Dialog.Content
@@ -149,7 +196,9 @@ const PaletteBody = ({ initialZone, onClose }: { initialZone: ZoneId; onClose: (
           {page === "root" && (
             <RootPage
               menu={menu}
-              onCreateAgent={() => run(menu.createAgent)}
+              registrations={registrations}
+              onCreateAgent={() => run(() => menu.createAgent())}
+              onChooseAgent={openChooseAgent}
               onCreateTerminal={() => run(menu.createTerminal)}
               onOpenPanel={(id) => run(() => menu.openPanel(id))}
               onOpenPage={openPage}
@@ -160,6 +209,14 @@ const PaletteBody = ({ initialZone, onClose }: { initialZone: ZoneId; onClose: (
           )}
           {page === "terminals" && (
             <ExistingPage panels={menu.existingTerminals} onOpenPanel={(id) => run(() => menu.openPanel(id))} />
+          )}
+          {page === "new-agent" && (
+            <ChooseAgentPage
+              defaultAgentType={menu.defaultAgentType}
+              registrations={registrations}
+              isPiAgentEnabled={isPiAgentEnabled}
+              onCreate={(harness, registrationId) => run(() => menu.createAgent(harness, registrationId))}
+            />
           )}
         </Command.List>
 
@@ -179,25 +236,50 @@ const PaletteBody = ({ initialZone, onClose }: { initialZone: ZoneId; onClose: (
 
 const RootPage = ({
   menu,
+  registrations,
   onCreateAgent,
+  onChooseAgent,
   onCreateTerminal,
   onOpenPanel,
   onOpenPage,
 }: {
   menu: ReturnType<typeof useAddPanelMenu>;
+  registrations: ReadonlyArray<Registration>;
   onCreateAgent: () => void;
+  onChooseAgent: () => void;
   onCreateTerminal: () => void;
   onOpenPanel: (id: string) => void;
   onOpenPage: (page: Exclude<PalettePage, "root">) => void;
 }): ReactElement => (
   <>
     <Command.Group heading="Create" className={styles.group}>
+      {/* One-keystroke fast path: Enter creates the recently-used agent type;
+          → (or the chevron) opens the "Choose agent" sub-page to pick another. */}
       <Row
-        value="new-agent New agent side chat conversation"
+        value="new-agent New agent side chat conversation claude pi cli"
         icon={<MessageSquarePlus size={17} />}
-        title="New agent"
-        subtitle="Start a side conversation"
+        title={`New ${labelForStoredAgentType(menu.defaultAgentType, registrations)} agent`}
+        subtitle="Press → to choose a different agent"
+        trailing={
+          <IconButton
+            variant="ghost"
+            size="1"
+            color="gray"
+            aria-label="Choose a different agent"
+            data-testid={ElementIds.ADD_AGENT_CHEVRON_BUTTON}
+            // Stop the click/pointer from reaching the cmdk row (whose select
+            // creates the recently-used agent) so the chevron only drills in.
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onChooseAgent();
+            }}
+          >
+            <ChevronRight size={15} />
+          </IconButton>
+        }
         onSelect={onCreateAgent}
+        testId={ElementIds.ADD_AGENT_BUTTON}
       />
       <Row
         value="new-terminal New terminal shell command line"
@@ -286,6 +368,8 @@ const Row = ({
   subtitle,
   trailing,
   onSelect,
+  testId,
+  dataRegistrationId,
 }: {
   value: string;
   icon: ReactNode;
@@ -293,8 +377,16 @@ const Row = ({
   subtitle?: string;
   trailing?: ReactNode;
   onSelect: () => void;
+  testId?: string;
+  dataRegistrationId?: string;
 }): ReactElement => (
-  <Command.Item value={value} onSelect={onSelect} className={styles.item}>
+  <Command.Item
+    value={value}
+    onSelect={onSelect}
+    className={styles.item}
+    data-testid={testId}
+    data-registration-id={dataRegistrationId}
+  >
     <span className={styles.itemIcon}>{icon}</span>
     <span className={styles.itemBody}>
       <span className={styles.itemTitle}>{title}</span>
@@ -303,6 +395,91 @@ const Row = ({
     {trailing != null && <span className={styles.itemTrailing}>{trailing}</span>}
   </Command.Item>
 );
+
+/**
+ * The "Choose agent" sub-page: pick the harness for a new agent. Lists Claude,
+ * pi (gated behind pi-agent), and each registered terminal agent (e.g. the
+ * bundled Claude Code CLI) by its display name. The bare login-shell terminal
+ * agent is intentionally absent — the root "New terminal" row covers raw
+ * shells. The recently-used type is ordered first and tagged.
+ */
+const ChooseAgentPage = ({
+  defaultAgentType,
+  registrations,
+  isPiAgentEnabled,
+  onCreate,
+}: {
+  defaultAgentType: StoredAgentType;
+  registrations: ReadonlyArray<Registration>;
+  isPiAgentEnabled: boolean;
+  onCreate: (harness: AgentTypeName, registrationId?: string) => void;
+}): ReactElement => {
+  type AgentOption = {
+    key: string;
+    stored: StoredAgentType;
+    harness: AgentTypeName;
+    registrationId?: string;
+    label: string;
+    icon: ReactNode;
+    testId: string;
+  };
+
+  const options: Array<AgentOption> = [
+    {
+      key: "claude",
+      stored: "claude",
+      harness: "claude",
+      label: AGENT_TYPE_LABELS.claude,
+      icon: <MessageSquarePlus size={17} />,
+      testId: ElementIds.AGENT_TYPE_MENU_ITEM_CLAUDE,
+    },
+  ];
+  if (isPiAgentEnabled) {
+    options.push({
+      key: "pi",
+      stored: "pi",
+      harness: "pi",
+      label: AGENT_TYPE_LABELS.pi,
+      icon: <MessageSquarePlus size={17} />,
+      testId: ElementIds.AGENT_TYPE_MENU_ITEM_PI,
+    });
+  }
+
+  for (const r of registrations) {
+    options.push({
+      key: `registered:${r.registrationId}`,
+      stored: encodeRegisteredAgentType(r.registrationId),
+      harness: "registered",
+      registrationId: r.registrationId,
+      label: r.displayName,
+      icon: <SquareTerminal size={17} />,
+      testId: ElementIds.AGENT_TYPE_MENU_ITEM_REGISTERED,
+    });
+  }
+
+  // Recently-used first, tagged with a pill.
+  const ordered = [
+    ...options.filter((o) => o.stored === defaultAgentType),
+    ...options.filter((o) => o.stored !== defaultAgentType),
+  ];
+
+  return (
+    <Command.Group className={styles.group} data-testid={ElementIds.AGENT_TYPE_MENU}>
+      {ordered.map((opt) => (
+        <Row
+          key={opt.key}
+          value={`agent-type ${opt.key} ${opt.label}`}
+          icon={opt.icon}
+          title={opt.label}
+          trailing={opt.stored === defaultAgentType ? <span className={styles.pill}>Recently used</span> : undefined}
+          onSelect={() => onCreate(opt.harness, opt.registrationId)}
+          testId={opt.testId}
+          dataRegistrationId={opt.registrationId}
+        />
+      ))}
+    </Command.Group>
+  );
+};
 
 const DestinationSelect = ({
   zone,

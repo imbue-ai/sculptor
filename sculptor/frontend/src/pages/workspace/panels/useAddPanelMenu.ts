@@ -34,6 +34,13 @@ type AddPanelMenu = {
   createAgent: (harness?: AgentTypeName, registrationId?: string) => void;
   /** Create a fresh terminal here. */
   createTerminal: () => void;
+  /**
+   * The recently-used agent type, resolved for display and the one-keystroke
+   * default: pi falls back to Claude when pi-agent is off, and (since the
+   * picker no longer offers a bare terminal agent) a stored "terminal" also
+   * maps to Claude.
+   */
+  defaultAgentType: StoredAgentType;
 };
 
 /**
@@ -65,9 +72,13 @@ export const useAddPanelMenu = (zone: ZoneId): AddPanelMenu => {
     [tasks, workspaceID],
   );
 
-  // A stored "pi" is unusable once pi-agent is turned off — fall back to Claude.
+  // A stored "pi" is unusable once pi-agent is turned off, and the bare
+  // "terminal" agent is no longer offered in the picker — both fall back to
+  // Claude for the displayed label and the one-keystroke default.
   const defaultAgentType: StoredAgentType =
-    lastUsedAgentType === "pi" && !isPiAgentEnabled ? "claude" : lastUsedAgentType;
+    (lastUsedAgentType === "pi" && !isPiAgentEnabled) || lastUsedAgentType === "terminal"
+      ? "claude"
+      : lastUsedAgentType;
 
   const createAgent = useCallback(
     (harness?: AgentTypeName, registrationId?: string): void => {
@@ -157,5 +168,13 @@ export const useAddPanelMenu = (zone: ZoneId): AddPanelMenu => {
     movePanel(panelId, zone);
   }, [addTerminal, workspaceID, movePanel, zone]);
 
-  return { staticPanels, existingAgents, existingTerminals, openPanel, createAgent, createTerminal };
+  return {
+    staticPanels,
+    existingAgents,
+    existingTerminals,
+    openPanel,
+    createAgent,
+    createTerminal,
+    defaultAgentType,
+  };
 };
