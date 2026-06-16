@@ -87,6 +87,30 @@ def _verify_image_in_message(
     return image_in_message
 
 
+@pytest.mark.browser_and_electron
+@user_story("to attach an image and see its preview in the web (non-Electron) build")
+def test_image_attach_preview_renders_over_http(sculptor_instance_: SculptorInstance, test_image_red_: str) -> None:
+    """Attaching an image renders its preview without relying on Electron IPC.
+
+    In the browser/web build (e.g. self-hosted/OpenHost) there is no
+    ``window.sculptor``, so the upload and preview must go over HTTP
+    (``POST /api/v1/upload-file`` then ``GET /api/v1/uploaded-file/<id>``).
+    A rendered ``FILE_PREVIEW`` <img> only exists once both succeed, so this
+    is the regression guard for the web-mode capability selection. The
+    ``browser_and_electron`` marker runs it in both browser and Electron
+    modes, since the other tests in this file are Electron-only.
+
+    No message is sent, so no agent turn is required.
+    """
+    page = sculptor_instance_.page
+    task_page = start_task_and_wait_for_ready(page, workspace_name="Web Image Preview Test")
+    chat_panel = task_page.get_chat_panel()
+
+    # _attach_image_and_verify_preview asserts the FILE_PREVIEW <img> appears,
+    # which proves the HTTP upload + download round-trip worked.
+    _attach_image_and_verify_preview(chat_panel, test_image_red_)
+
+
 @pytest.mark.electron
 @pytest.mark.electron_custom_command
 @user_story("to attach images from the chat input")
