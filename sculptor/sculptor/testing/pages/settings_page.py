@@ -5,6 +5,7 @@ from sculptor.constants import ElementIDs
 from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
 from sculptor.testing.elements.settings_actions import PlaywrightActionsSettingsElement
 from sculptor.testing.elements.settings_agent import PlaywrightAgentSettingsElement
+from sculptor.testing.elements.settings_ci_babysitter import PlaywrightCIBabysitterSettingsElement
 from sculptor.testing.elements.settings_claude_cli import PlaywrightClaudeCliSettingsElement
 from sculptor.testing.elements.settings_env_vars import PlaywrightEnvVarsSettingsElement
 from sculptor.testing.elements.settings_experimental import PlaywrightExperimentalSettingsElement
@@ -90,6 +91,11 @@ class PlaywrightSettingsPage(PlaywrightProjectLayoutPage):
         self._get_git_nav().click()
         return PlaywrightGitSettingsElement(locator=self._get_settings_content(), page=self._page)
 
+    def click_on_ci(self) -> PlaywrightCIBabysitterSettingsElement:
+        """Navigate to CI Babysitter settings and return the section element."""
+        self._get_ci_nav().click()
+        return PlaywrightCIBabysitterSettingsElement(locator=self._get_settings_content(), page=self._page)
+
     def click_on_env_vars(self) -> PlaywrightEnvVarsSettingsElement:
         """Navigate to Environment Variables settings and return the section element."""
         self._get_env_vars_nav().click()
@@ -152,6 +158,10 @@ class PlaywrightSettingsPage(PlaywrightProjectLayoutPage):
     def _get_git_nav(self) -> Locator:
         """Get the Git navigation item."""
         return self.get_by_test_id(ElementIDs.SETTINGS_NAV_GIT)
+
+    def _get_ci_nav(self) -> Locator:
+        """Get the CI Babysitter navigation item."""
+        return self.get_by_test_id(ElementIDs.SETTINGS_NAV_CI)
 
     def _get_env_vars_nav(self) -> Locator:
         """Get the Environment Variables navigation item."""
