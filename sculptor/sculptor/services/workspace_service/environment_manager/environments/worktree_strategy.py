@@ -37,7 +37,7 @@ def create_worktree(
         WorktreeError: If `git worktree add` fails (e.g. missing base ref,
             branch already exists, destination already exists).
     """
-    logger.info(
+    logger.debug(
         "Creating worktree at {} on branch {} from base {} (user repo: {})",
         destination,
         new_branch,
@@ -60,7 +60,7 @@ def create_worktree(
         concurrency_group=concurrency_group,
         error_message=f"Failed to create worktree at {destination} on branch {new_branch} from base {base_ref}",
     )
-    logger.info("Successfully created worktree at {} on branch {}", destination, new_branch)
+    logger.debug("Successfully created worktree at {} on branch {}", destination, new_branch)
 
 
 def remove_worktree(
@@ -77,7 +77,7 @@ def remove_worktree(
     branch deletion (e.g. unmerged branch under `delete_if_safe`) are logged
     and swallowed.
     """
-    logger.info(
+    logger.debug(
         "Removing worktree at {} (branch {}, policy {}, user repo: {})",
         destination,
         branch_name,
@@ -92,7 +92,7 @@ def remove_worktree(
             error_message=f"Failed to remove worktree at {destination}",
         )
     except WorktreeError as e:
-        logger.info("git worktree remove failed, continuing: {}", e)
+        logger.debug("git worktree remove failed, continuing: {}", e)
 
     if deletion_policy == "never":
         return
@@ -106,7 +106,7 @@ def remove_worktree(
             error_message=f"Failed to delete branch {branch_name} with policy {deletion_policy}",
         )
     except WorktreeError as e:
-        logger.info("Branch deletion failed (policy {}), continuing: {}", deletion_policy, e)
+        logger.debug("Branch deletion failed (policy {}), continuing: {}", deletion_policy, e)
 
 
 def _run_git_command(

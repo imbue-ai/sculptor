@@ -12,7 +12,6 @@ import time
 import uuid
 from collections import deque
 from pathlib import Path
-from threading import Event
 from typing import Callable
 from typing import Literal
 from typing import Protocol
@@ -100,7 +99,7 @@ class RunnerSlot:
         self.tail_buffer: deque[bytes] = deque()
         self.tail_size: int = 0
         self.seq: int = 0
-        self.cancel_event: Event = Event()
+        self.cancel_event: threading.Event = threading.Event()
         self.lock: threading.Lock = threading.Lock()
         self.pid: int | None = None
         self.pid_ready: threading.Event = threading.Event()
@@ -246,7 +245,7 @@ class SetupCommandRunner:
         on_persist: Callable[[SetupStateChanged], None],
     ) -> None:
         combined = CompoundEvent([slot.cancel_event, shutdown_event_source])
-        chunk_handler = _make_chunk_handler(self, slot)
+        chunk_handler = _ChunkHandler(self, slot)
         pid_handler = _PidHandler(self, slot, on_persist)
 
         exit_code: int | None = None
@@ -392,10 +391,6 @@ class _ChunkHandler:
         self._runner._notify_output(event)
 
 
-def _make_chunk_handler(runner: "SetupCommandRunner", slot: RunnerSlot) -> Callable[[bytes], None]:
-    return _ChunkHandler(runner, slot)
-
-
 class DefaultSetupStateProvider:
     def __init__(self, runner: "SetupCommandRunner", workspace_id: str) -> None:
         self._runner = runner
@@ -475,7 +470,7 @@ def _write_log_file(slot: RunnerSlot, state_dir: Path) -> None:
     if slot.log_truncated:
         payload += TRUNCATION_MARKER
     payload += b"".join(slot.tail_buffer)
-    with open(tmp_path, "wb") as f:
+    with tmp_path.open("wb") as f:
         f.write(payload)
         f.flush()
         os.fsync(f.fileno())

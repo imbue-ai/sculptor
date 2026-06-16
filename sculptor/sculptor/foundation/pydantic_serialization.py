@@ -88,13 +88,13 @@ class SerializableModel(EvolvableModel, BaseModel, Serializable):
     )
 
     # this is a place where we might way to do any backwards compatibility related logic
-    def model_post_init(self, __context: Any) -> None:
+    def model_post_init(self, context: Any) -> None:
         pydantic_extra = self.__pydantic_extra__
         assert pydantic_extra is not None
         pydantic_extra.clear()
 
 
-def model_dump(obj: BaseModel, is_camel_case: bool = False) -> dict:
+def model_dump(obj: BaseModel, is_camel_case: bool = False) -> dict[str, Any]:
     return obj.model_dump(by_alias=is_camel_case)
 
 
@@ -109,15 +109,11 @@ def build_discriminator(
     field_name: str = "object_type", additional_types_and_string_representations: tuple[tuple[type, str], ...] = ()
 ) -> Discriminator:
     """
-    Build a discriminator function for a Pydantic model.
+    Build a discriminator for a Pydantic tagged union.
 
     Args:
-        field_name (str): The name of the field to use as the discriminator.
-        additional_types_and_string_representations (Tuple[Tuple[Type, str], ...]): Register additional types to the discriminator.
-
-    Returns:
-        Callable[[T | dict], str]: A function that takes an instance of T or a dictionary and returns the value of the
-            specified field.
+        field_name: The name of the field to use as the discriminator tag.
+        additional_types_and_string_representations: Register additional types to the discriminator.
     """
 
     def discriminator(obj: T | dict) -> str:

@@ -295,7 +295,7 @@ def wait_for_completed_message_count(
     expect(chat_panel.get_thinking_indicator()).not_to_be_visible(**kwargs)
 
 
-def send_chat_message(chat_panel, message: str) -> None:
+def send_chat_message(chat_panel: PlaywrightChatPanelElement, message: str) -> None:
     """Send a message in chat and verify input is cleared."""
     chat_input = chat_panel.get_chat_input()
     type_into_tiptap(chat_panel._page, chat_input, message)

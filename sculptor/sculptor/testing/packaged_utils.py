@@ -8,11 +8,15 @@ from pathlib import Path
 import httpx
 from loguru import logger
 from tenacity import retry
-from tenacity import retry_if_exception_type
+from tenacity import retry_if_not_exception_type
 from tenacity import stop_after_delay
 from tenacity import wait_fixed
 
 from sculptor.testing.subprocess_utils import Forwarder
+
+
+class PackagedProcessExitedError(RuntimeError):
+    """Raised when a packaged process exits before its backend becomes healthy."""
 
 
 def register_project(backend_port: int, session_token: str, project_path: Path) -> None:
@@ -34,7 +38,7 @@ def _poll_backend_health(
     if process is not None:
         ret = process.poll()
         if ret is not None:
-            raise RuntimeError(f"Packaged process exited with code {ret} before becoming healthy")
+            raise PackagedProcessExitedError(f"Packaged process exited with code {ret} before becoming healthy")
     response = httpx.get(health_url, timeout=5)
     response.raise_for_status()
 
@@ -49,7 +53,7 @@ def wait_for_backend_health(
     retry_poll = retry(
         stop=stop_after_delay(timeout_seconds),
         wait=wait_fixed(1),
-        retry=retry_if_exception_type(Exception),
+        retry=retry_if_not_exception_type(PackagedProcessExitedError),
         reraise=True,
     )(_poll_backend_health)
     retry_poll(health_url, process)
@@ -95,7 +99,7 @@ def kill_process_tree(
     try:
         if process.stdout:
             process.stdout.close()
-    except Exception:
+    except OSError:
         pass
 
     try:

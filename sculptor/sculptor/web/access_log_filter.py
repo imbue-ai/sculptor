@@ -1,5 +1,7 @@
 import re
 
+_HTTP_STATUS_OK = 200
+
 FREQUENTLY_POLLED_ROUTES: tuple[str | re.Pattern[str], ...] = (
     "/api/sync/global_singleton_state",
     "/api/v1/health",
@@ -59,4 +61,4 @@ def should_suppress_access_log(message: str) -> bool:
     status_code = _extract_status_code(message)
     if status_code is None:
         return False
-    return status_code == 200
+    return status_code == _HTTP_STATUS_OK

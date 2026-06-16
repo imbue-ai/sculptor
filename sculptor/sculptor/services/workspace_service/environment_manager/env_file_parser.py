@@ -35,6 +35,11 @@ def atomic_copy_env_file(source: Path, dest: Path) -> None:
 
 
 def parse_env_file(path: Path) -> dict[str, str]:
+    """Parse a ``.env`` file into a mapping of variable names to values.
+
+    Supports ``export`` prefixes, single/double quoted values, and inline
+    comments. Returns an empty mapping if the file does not exist.
+    """
     if not path.exists():
         return {}
 

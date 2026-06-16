@@ -16,7 +16,6 @@ Examples of errors avoided by these wrappers:
 from __future__ import annotations
 
 import contextvars
-import logging
 import signal
 import subprocess
 from pathlib import Path
@@ -42,7 +41,10 @@ from sculptor.foundation.subprocess_utils import send_shutdown_signal
 from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.foundation.thread_utils import is_exception_irrecoverable
 
-_logger = logging.getLogger(__name__)
+# Sentinel return code reported by ``poll()`` when the worker thread died
+# without recording an exception and without a completed process, so a real
+# exit code is unavailable.
+_THREAD_DIED_WITHOUT_EXCEPTION_RETURN_CODE = 1007
 
 
 def run_blocking(
@@ -258,7 +260,7 @@ class RunningProcess:
             if thread.exception_raw is not None:
                 thread.join()
             # this died without an exception
-            return 1007
+            return _THREAD_DIED_WITHOUT_EXCEPTION_RETURN_CODE
 
         return None
 
@@ -303,7 +305,7 @@ class RunningProcess:
         """Capture the live Popen handle (fired via ``on_popen_ready`` at spawn)."""
         self._popen = popen
 
-    def start(self, kwargs: dict) -> None:
+    def start(self, kwargs: Mapping[str, Any]) -> None:
         # Spawning a thread is an implementation detail of this class.
         # The caller should not have to worry about contextvars (e.g the loguru logging context).
         context = contextvars.copy_context()
@@ -330,7 +332,7 @@ class RunningProcess:
     def _get_name(self) -> str:
         return f"RunningProcess: {' '.join(self._command)}"
 
-    def run(self, kwargs: dict) -> None:
+    def run(self, kwargs: Mapping[str, Any]) -> None:
         # SCU-1265: catch any exception raised inside the inner subprocess
         # wrapper thread. If we let it propagate out of `threading.Thread`,
         # `threading.excepthook` fires (the literal "Exception in thread
@@ -423,7 +425,7 @@ class RunningProcess:
                 pipe.write(item.encode("utf-8"))
                 pipe.flush()
         except OSError as exc:
-            _logger.debug("stdin writer stopped: %s", exc)
+            logger.debug("stdin writer stopped: {}", exc)
         finally:
             try:
                 pipe.close()

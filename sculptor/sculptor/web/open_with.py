@@ -54,6 +54,9 @@ _MACOS_APP_PATHS: dict[ExternalApp, list[str]] = {
     ],
 }
 
+# Maximum time to wait for a Spotlight (mdfind) bundle lookup before giving up.
+_MDFIND_TIMEOUT_SECONDS = 5
+
 # Terminal emulators to try on Linux, in preference order.
 _LINUX_TERMINAL_EXECUTABLES: list[str] = [
     "ghostty",
@@ -91,7 +94,7 @@ def _find_macos_app_bundle(app: ExternalApp) -> str | None:
         try:
             result = run_blocking(
                 ["mdfind", f"kMDItemCFBundleIdentifier == '{bundle_id}'"],
-                timeout=5,
+                timeout=_MDFIND_TIMEOUT_SECONDS,
                 is_checked=False,
             )
             paths = [p.strip() for p in result.stdout.strip().splitlines() if p.strip()]

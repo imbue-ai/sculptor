@@ -1687,7 +1687,7 @@ def handle_multi_step(args: dict, cwd: str, emit_streaming: bool, plugin_dir: st
         if command_name in _INLINE_EMITTING_COMMANDS and messages:
             _emit_messages_to_stdout(messages)
             messages = []
-        messages.extend(_dispatch_handler(handler, step_args, cwd, emit_streaming, plugin_dir=plugin_dir))
+        messages.extend(dispatch_handler(handler, step_args, cwd, emit_streaming, plugin_dir=plugin_dir))
 
     return messages
 
@@ -1839,7 +1839,7 @@ def _execute_tool_side_effect(tool_name: str, tool_input: dict, cwd: str) -> tup
         return f"Tool {tool_name} executed.", False
 
 
-def _dispatch_handler(
+def dispatch_handler(
     handler: Callable[..., list[dict]],
     args: dict,
     cwd: str,
@@ -2069,9 +2069,8 @@ def handle_error_then_hang(args: dict, emit_streaming: bool, cwd: str) -> list[d
     pid_file = args.get("pid_file", ".error_then_hang.pid")
 
     # Write our PID so the test can verify whether we were terminated.
-    pid_path = Path(pid_file) if os.path.isabs(pid_file) else Path(cwd) / pid_file
-    with open(pid_path, "w") as f:
-        f.write(str(os.getpid()))
+    pid_path = Path(pid_file) if Path(pid_file).is_absolute() else Path(cwd) / pid_file
+    pid_path.write_text(str(os.getpid()))
 
     # Write the error end message directly to stdout (bypassing the normal
     # main() flow which would append a non-error end message after we return).
@@ -2106,9 +2105,8 @@ def handle_succeed_then_hang(args: dict, emit_streaming: bool, cwd: str) -> list
     pid_file = args.get("pid_file", ".succeed_then_hang.pid")
 
     # Write our PID so the test can verify whether we were terminated.
-    pid_path = Path(pid_file) if os.path.isabs(pid_file) else Path(cwd) / pid_file
-    with open(pid_path, "w") as f:
-        f.write(str(os.getpid()))
+    pid_path = Path(pid_file) if Path(pid_file).is_absolute() else Path(cwd) / pid_file
+    pid_path.write_text(str(os.getpid()))
 
     # Build a complete response: assistant message + end message.
     message_id = generate_id("msg")
@@ -2162,7 +2160,7 @@ def handle_spawn_subprocess_and_hang(args: dict, emit_streaming: bool, cwd: str)
         stderr=subprocess.DEVNULL,
     )
 
-    pid_path = Path(pid_file) if os.path.isabs(pid_file) else Path(cwd) / pid_file
+    pid_path = Path(pid_file) if Path(pid_file).is_absolute() else Path(cwd) / pid_file
     pid_path.write_text(str(proc.pid))
 
     # Stay alive so the agent appears to still be working when the test clicks
@@ -2210,7 +2208,7 @@ def handle_spawn_sigterm_immune_subprocess_and_hang(args: dict, emit_streaming: 
         stderr=subprocess.DEVNULL,
     )
 
-    pid_path = Path(pid_file) if os.path.isabs(pid_file) else Path(cwd) / pid_file
+    pid_path = Path(pid_file) if Path(pid_file).is_absolute() else Path(cwd) / pid_file
     pid_path.write_text(str(proc.pid))
 
     # Hang without reading stdin so the stdin-interrupt path is a no-op and Stop

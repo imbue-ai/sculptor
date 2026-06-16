@@ -484,7 +484,7 @@ class AgentConfig(SerializableModel):
 
 class HelloAgentConfig(AgentConfig):
     object_type: str = "HelloAgentConfig"
-    command: str = "echo"  # Default command to run
+    command: str = "echo"
 
 
 class ClaudeCodeSDKAgentConfig(AgentConfig):

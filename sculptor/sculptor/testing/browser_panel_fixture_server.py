@@ -6,7 +6,6 @@ Used to drive navigation, cookie, and popup behavior in the Electron
 
 from __future__ import annotations
 
-import dataclasses
 import functools
 import http.server
 import random
@@ -15,6 +14,9 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from pydantic import ConfigDict
+
+from sculptor.foundation.pydantic_serialization import FrozenModel
 
 FIXTURE_PAGES_DIR: Path = Path(__file__).parent / "browser_panel_fixture_pages"
 
@@ -27,18 +29,23 @@ _SAFE_PORT_MAX: int = 60999
 
 _MAX_PORT_RETRIES: int = 8
 
+_THREAD_JOIN_TIMEOUT_SECONDS: float = 2.0
 
-@dataclasses.dataclass(frozen=True)
-class BrowserPanelFixtureServer:
+
+class BrowserPanelFixtureServer(FrozenModel):
+    # The server and thread are live runtime objects with no serializable form,
+    # so this immutable container must allow arbitrary field types.
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     base_url: str
     port: int
-    _server: http.server.HTTPServer
-    _thread: threading.Thread
+    server: http.server.HTTPServer
+    thread: threading.Thread
 
     def shutdown(self) -> None:
-        self._server.shutdown()
-        self._server.server_close()
-        self._thread.join(timeout=2)
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=_THREAD_JOIN_TIMEOUT_SECONDS)
 
 
 def _build_handler_class() -> type[http.server.SimpleHTTPRequestHandler]:
@@ -64,8 +71,8 @@ def _start_server() -> BrowserPanelFixtureServer:
         return BrowserPanelFixtureServer(
             base_url=f"http://127.0.0.1:{port}",
             port=port,
-            _server=server,
-            _thread=thread,
+            server=server,
+            thread=thread,
         )
     raise RuntimeError(
         f"Could not bind a port in [{_SAFE_PORT_MIN}, {_SAFE_PORT_MAX}] after {_MAX_PORT_RETRIES} attempts"

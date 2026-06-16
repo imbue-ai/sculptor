@@ -1,4 +1,5 @@
 from playwright.sync_api import Locator
+from playwright.sync_api import Page
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
@@ -75,7 +76,7 @@ class PlaywrightWelcomeStepElement(PlaywrightIntegrationTestElement):
 class PlaywrightDependencyCardElement:
     """Element for a dependency card, scoped by data-dependency attribute."""
 
-    def __init__(self, page: Locator, dependency_name: str) -> None:
+    def __init__(self, page: Page, dependency_name: str) -> None:
         self._card = page.locator(f'[data-dependency="{dependency_name}"]')
 
     @property

@@ -5,6 +5,7 @@ import typer
 
 from sculpt.auth import get_authenticated_client
 from sculpt.auth import get_default_base_url
+from sculpt.client import Client
 from sculpt.client.api.default import create_workspace_v2
 from sculpt.client.api.default import delete_workspace
 from sculpt.client.api.default import list_recent_workspaces
@@ -12,6 +13,7 @@ from sculpt.client.api.default import list_workspaces
 from sculpt.client.api.default import update_workspace
 from sculpt.client.models.create_workspace_request_v2 import CreateWorkspaceRequestV2
 from sculpt.client.models.http_validation_error import HTTPValidationError
+from sculpt.client.models.recent_workspace_response import RecentWorkspaceResponse
 from sculpt.client.models.update_workspace_request import UpdateWorkspaceRequest
 from sculpt.commands._workspace_helpers import STRATEGY_MAPPING
 from sculpt.commands._workspace_helpers import resolve_requested_branch_name
@@ -35,6 +37,12 @@ workspace_app = typer.Typer(
     name="workspace",
     help="Manage workspaces.",
 )
+
+# Column truncation widths for table output. The cross-repo listing packs more
+# columns into a row, so it truncates more aggressively than the per-project one.
+_RECENT_REPO_DISPLAY_MAX_LENGTH = 30
+_RECENT_DESCRIPTION_DISPLAY_MAX_LENGTH = 30
+_PROJECT_DESCRIPTION_DISPLAY_MAX_LENGTH = 40
 
 
 @workspace_app.command("create")
@@ -142,7 +150,7 @@ def list_cmd(
         _list_for_project(client, project_id, json_output)
 
 
-def _list_all(client: object, json_output: bool) -> None:
+def _list_all(client: Client, json_output: bool) -> None:
     workspaces = _fetch_recent_workspaces(client, json_output)
     repo_lookup = fetch_repo_path_lookup(client)  # type: ignore[arg-type]
 
@@ -173,18 +181,18 @@ def _list_all(client: object, json_output: bool) -> None:
     rows = [
         [
             w.object_id,
-            truncate(repo_lookup.get(w.project_id, w.project_name), 30),
+            truncate(repo_lookup.get(w.project_id, w.project_name), _RECENT_REPO_DISPLAY_MAX_LENGTH),
             w.initialization_strategy.value,
             w.source_branch or "-",
             str(w.agent_count),
-            truncate(w.description, 30),
+            truncate(w.description, _RECENT_DESCRIPTION_DISPLAY_MAX_LENGTH),
         ]
         for w in workspaces
     ]
     typer.echo(format_table(headers, rows))
 
 
-def _fetch_recent_workspaces(client: object, json_output: bool) -> list:
+def _fetch_recent_workspaces(client: Client, json_output: bool) -> list[RecentWorkspaceResponse]:
     try:
         result = list_recent_workspaces.sync(client=client)  # type: ignore[arg-type]
     except httpx.ConnectError:
@@ -196,7 +204,7 @@ def _fetch_recent_workspaces(client: object, json_output: bool) -> list:
     return result.workspaces
 
 
-def _list_for_project(client: object, project_id: str, json_output: bool) -> None:
+def _list_for_project(client: Client, project_id: str, json_output: bool) -> None:
     try:
         result = list_workspaces.sync(project_id=project_id, client=client)  # type: ignore[arg-type]
     except httpx.ConnectError:
@@ -233,7 +241,7 @@ def _list_for_project(client: object, project_id: str, json_output: bool) -> Non
             w.object_id,
             w.initialization_strategy.value,
             w.source_branch or "-",
-            truncate(w.description, 40),
+            truncate(w.description, _PROJECT_DESCRIPTION_DISPLAY_MAX_LENGTH),
         ]
         for w in result
     ]

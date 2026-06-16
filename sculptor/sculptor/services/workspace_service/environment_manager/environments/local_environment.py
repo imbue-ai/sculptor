@@ -55,6 +55,11 @@ LOCAL_WORKSPACE_DIR = get_workspaces_folder()
 _SETUP_PGID_CONVERGE_TIMEOUT_S = 0.2
 _SETUP_PGID_POLL_INTERVAL_S = 0.005
 
+# Cancel ladder for the setup subprocess: escalate SIGINT -> SIGTERM -> SIGKILL,
+# giving the process group a grace period at each step to exit on its own.
+_CANCEL_SIGTERM_DELAY_S = 2.0
+_CANCEL_SIGKILL_DELAY_S = 5.0
+
 # https://github.com/python/typeshed/tree/main/stdlib/_typeshed
 if TYPE_CHECKING:
     # for proper file mode typing
@@ -568,8 +573,8 @@ def _drain_setup_stdout(process: subprocess.Popen, on_chunk: Callable[[bytes], N
     finally:
         try:
             stdout.close()
-        except Exception:
-            pass
+        except OSError as exc:
+            logger.debug("Failed to close setup subprocess stdout: {}", exc)
 
 
 class _CancelLadderState:
@@ -594,7 +599,7 @@ class _CancelLadderState:
             self.cancel_started_at = now
             return
         elapsed = now - self.cancel_started_at
-        if not self.sent_sigterm and elapsed >= 2.0:
+        if not self.sent_sigterm and elapsed >= _CANCEL_SIGTERM_DELAY_S:
             logger.info("Cancel ladder: SIGTERM to pgid {}", pgid)
             try:
                 os.killpg(pgid, signal.SIGTERM)
@@ -602,7 +607,7 @@ class _CancelLadderState:
                 return
             self.sent_sigterm = True
             return
-        if self.sent_sigterm and elapsed >= 5.0:
+        if self.sent_sigterm and elapsed >= _CANCEL_SIGKILL_DELAY_S:
             logger.info("Cancel ladder: SIGKILL to pgid {}", pgid)
             try:
                 os.killpg(pgid, signal.SIGKILL)

@@ -9,10 +9,7 @@ class PlaywrightHotkeyFieldElement(PlaywrightIntegrationTestElement):
 
     def set_hotkey(self, keys: str) -> None:
         """Set the hotkey by simulating key press."""
-        # Click the set button to start recording
         self._get_set_button().click()
-
-        # Simulate the key combination
         self._page.keyboard.press(keys)
 
     def clear_hotkey(self) -> None:

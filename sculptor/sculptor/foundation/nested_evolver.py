@@ -2,8 +2,6 @@
 
 One of the design goals is that mypy, autocomplete, and automatic refactoring work for the assignments made into these nested structures.
 
-See internal Slack discussion for design context.
-
 If you make changes here and then the tests fail with:
 ```
 E   RecursionError: maximum recursion depth exceeded
@@ -150,7 +148,7 @@ class _Evolver(Generic[_T]):
             return value.tuple_evolvers[key]
         elif isinstance(value, _FrozenDictValue):
             if key not in value.frozen_dict_evolvers:
-                # Presumably we're going to evolver_assign to this very soon.
+                # Presumably we're going to assign to this very soon.
                 cast(_FrozenDictValue, self._value).frozen_dict_evolvers[key] = _Evolver(_RegularValue(None))
             return cast(_FrozenDictValue, self._value).frozen_dict_evolvers[key]
         raise TypeError(

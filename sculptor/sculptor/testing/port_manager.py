@@ -4,6 +4,7 @@ import random
 import socket
 import tempfile
 from pathlib import Path
+from typing import TextIO
 
 from filelock import FileLock
 
@@ -11,15 +12,12 @@ from filelock import FileLock
 def _get_free_port(min_port: int = 24576, max_port: int = 32768) -> int:
     """Get a random free port from within the given range [min, max).
 
-    Why 24576 to 32768? By default, s.bind(("", 0)) will return a port from the range [49152, 65536),
-    which is the IANA-designated ephemeral port range.
-    That means when tests are run locally, other processes may also be grabbing ports from within the same range.
-    When I look at ports in use locally, I see some ports in use at lower ranges too, so I'm going lower still.
+    The default range 24576-32768 sits below the IANA-designated ephemeral port range [49152, 65536)
+    that s.bind(("", 0)) draws from, reducing the chance of colliding with ports other local processes
+    grab from the ephemeral range.
 
-    There's also a mild TOCTTOU with the free-check: we must release the port between this check and
-    giving it to the caller. In the meantime someone else could grab it.
-
-    So moving to a less-used port range MAY decrease conflict frequency."""
+    There is a mild TOCTTOU with the free-check: the port is released between this check and being
+    handed to the caller, so another process could claim it in the meantime."""
     while True:
         port_to_try = random.randint(min_port, max_port)
         if is_port_free(port_to_try):
@@ -52,7 +50,7 @@ class PortManager:
         self.ports_used_file_path = Path(root_tmp_dir) / "ports_used.json"
         self.lock_file_path = Path(str(self.ports_used_file_path) + ".lock")
 
-    def _get_ports_in_use(self, f) -> list[int]:
+    def _get_ports_in_use(self, f: TextIO) -> list[int]:
         content = f.read().strip()
         if content:
             try:
@@ -89,10 +87,8 @@ class PortManager:
             with open(self.ports_used_file_path, "r") as f:
                 ports_in_use = self._get_ports_in_use(f)
 
-            try:
+            if port in ports_in_use:
                 ports_in_use.remove(port)
-            except ValueError:
-                pass
             with open(self.ports_used_file_path, "w") as f:
                 json.dump(ports_in_use, f)
 

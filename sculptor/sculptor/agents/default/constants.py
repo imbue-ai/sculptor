@@ -3,8 +3,8 @@ from typing import Final
 from sculptor.interfaces.agents.tool_names import AgentToolName
 from sculptor.state.messages import LLMModel
 
-DEFAULT_WAIT_TIMEOUT = 30.0
-REMOVED_MESSAGE_IDS_STATE_FILE = "removed_message_ids"
+DEFAULT_WAIT_TIMEOUT: Final[float] = 30.0
+REMOVED_MESSAGE_IDS_STATE_FILE: Final[str] = "removed_message_ids"
 
 
 FILE_CHANGE_TOOL_NAMES: Final[tuple[AgentToolName, ...]] = (
@@ -14,7 +14,7 @@ FILE_CHANGE_TOOL_NAMES: Final[tuple[AgentToolName, ...]] = (
 )
 
 
-MODEL_SHORTNAME_MAP = {
+MODEL_SHORTNAME_MAP: Final[dict[LLMModel, str]] = {
     LLMModel.CLAUDE_4_OPUS: "opus[1m]",
     LLMModel.CLAUDE_4_OPUS_200K: "opus",
     LLMModel.CLAUDE_4_7_OPUS: "claude-opus-4-7[1m]",
@@ -28,7 +28,7 @@ MODEL_SHORTNAME_MAP = {
 }
 
 
-ENTITY_MENTIONS_SYSTEM_PROMPT = """
+ENTITY_MENTIONS_SYSTEM_PROMPT: Final[str] = """
 <Entity mentions>
 When a user message contains text of the form %[type:id|display_name], it refers
 to a Sculptor entity:
@@ -47,7 +47,7 @@ use the id.
 """
 
 # Mode-specific system prompt content
-IN_PLACE_MODE_PROMPT = """
+IN_PLACE_MODE_PROMPT: Final[str] = """
 <Environment mode>
 You are working directly in the user's repository (in-place mode).
 Changes you make appear immediately in their IDE and filesystem.
@@ -55,7 +55,7 @@ You have full access to git remotes and can push/pull normally, but NEVER push w
 </Environment mode>
 """
 
-CLONE_MODE_PROMPT = """
+CLONE_MODE_PROMPT: Final[str] = """
 <Environment mode>
 You are working in an isolated clone of the user's repository (clone mode).
 
@@ -78,7 +78,7 @@ Never push without explicit permission from the user.
 </Environment mode>
 """
 
-WORKTREE_MODE_PROMPT = """
+WORKTREE_MODE_PROMPT: Final[str] = """
 <Environment mode>
 You are working in a git worktree of the user's local repository (worktree mode).
 

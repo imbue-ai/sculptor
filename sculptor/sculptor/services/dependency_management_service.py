@@ -69,6 +69,9 @@ PI_VERSION_RANGE = VersionRange(
 DEPENDENCIES_DIR_NAME = "dependencies"
 _VERSION_DIR_PREFIX = "version-"
 _TEMP_DIR_PREFIX = "tmp-"
+_DOWNLOAD_CHUNK_SIZE_BYTES = 65536
+# Versions to keep when a tool has no ManagedTool conformer to override it.
+_DEFAULT_RETENTION_KEEP = 2
 
 
 def _is_valid_custom_binary(value: str) -> bool:
@@ -171,7 +174,7 @@ def _retention_keep_for_tool(tool: Dependency) -> int:
     managed_tool = get_managed_tool(tool)
     if managed_tool is not None:
         return managed_tool.retention_keep
-    return 2
+    return _DEFAULT_RETENTION_KEEP
 
 
 def _is_version_dir(name: str) -> bool:
@@ -205,7 +208,9 @@ class _AuthUrlTracker:
             try:
                 webbrowser.open(self.auth_url)
             except Exception:
-                pass
+                # Opening the browser is best-effort: the auth URL is still surfaced
+                # in the AuthResult, so the user can open it manually.
+                logger.opt(exception=True).debug("Failed to open auth URL in browser")
 
 
 def _do_auth_login(binary: str) -> AuthResult:
@@ -879,7 +884,7 @@ class DependencyManagementService(Service):
                     stream.raise_for_status()
                     total_bytes = int(stream.headers.get("content-length", 0)) or distribution.size
                     with open(downloaded, "wb") as f:
-                        for chunk in stream.iter_bytes(chunk_size=65536):
+                        for chunk in stream.iter_bytes(chunk_size=_DOWNLOAD_CHUNK_SIZE_BYTES):
                             if self._stop_requested.is_set():
                                 return InstallResult(success=False, error="Install cancelled during shutdown")
                             f.write(chunk)
@@ -893,7 +898,7 @@ class DependencyManagementService(Service):
             # no activation and (for a tarball) no extraction of untrusted bytes.
             sha256 = hashlib.sha256()
             with open(downloaded, "rb") as f:
-                for chunk in iter(lambda: f.read(65536), b""):
+                for chunk in iter(lambda: f.read(_DOWNLOAD_CHUNK_SIZE_BYTES), b""):
                     sha256.update(chunk)
             actual_checksum = sha256.hexdigest()
             if actual_checksum != distribution.checksum_sha256:
@@ -962,12 +967,15 @@ class DependencyManagementService(Service):
 
         version_dirs.sort(key=lambda x: x[0], reverse=True)
 
-        # Determine active version to protect it
-        active_path = self.resolve_binary_path(tool)
+        # Determine the active version dir to protect it. Compare on path ancestry
+        # (not substring) so e.g. an active "version-2.1.81" doesn't shield the
+        # distinct "version-2.1.8" dir, whose path is a string prefix of it.
+        active_binary = self.resolve_binary_path(tool)
+        active_dir = Path(active_binary) if active_binary else None
 
         for _, dir_path in version_dirs[keep:]:
-            # Never delete the active version
-            if active_path and str(dir_path) in active_path:
+            # Never delete the version dir that contains the active binary.
+            if active_dir is not None and dir_path in active_dir.parents:
                 continue
             shutil.rmtree(dir_path, ignore_errors=True)
 

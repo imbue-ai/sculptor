@@ -1,7 +1,7 @@
 """Remove MessageFeedbackUserMessage from PersistentUserMessageUnion
 
 Revision ID: ad24ef11df19
-Revises: 811610e55bae
+Revises: a53ed60690f5
 Create Date: 2026-02-10 08:38:43.353572
 
 """

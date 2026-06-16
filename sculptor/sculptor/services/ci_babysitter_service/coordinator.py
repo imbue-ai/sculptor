@@ -146,8 +146,8 @@ class CIBabysitterCoordinator(Service):
                 continue
             try:
                 self._handle_status(item)
-            except Exception as exc:
-                logger.error("CIBabysitterCoordinator: error handling PrStatusInfo for {}: {}", item.workspace_id, exc)
+            except Exception:
+                logger.exception("CIBabysitterCoordinator: error handling PrStatusInfo for {}", item.workspace_id)
 
     def _handle_status(self, new: PrStatusInfo) -> None:
         with self._lock:
@@ -413,7 +413,7 @@ class CIBabysitterCoordinator(Service):
                 return message.model_name
         return None
 
-    def _lookup_workspace_project_id(self, workspace_id: WorkspaceID):
+    def _lookup_workspace_project_id(self, workspace_id: WorkspaceID) -> ProjectID | None:
         with self._data_model_service.open_transaction(RequestID()) as transaction:
             workspace = transaction.get_workspace(workspace_id)
             if workspace is None:

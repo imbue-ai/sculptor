@@ -6,6 +6,13 @@ from pydantic import Field
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.pydantic_serialization import SerializableModel
 
+# How long to wait for the claude CLI to produce a title before giving up.
+_CLAUDE_CLI_TIMEOUT_SECONDS = 30
+# How much of the CLI output to include in log messages, to avoid huge log lines.
+_MAX_LOGGED_OUTPUT_CHARS = 500
+# Maximum number of words to keep when falling back to a title derived from the prompt.
+_MAX_FALLBACK_TITLE_WORD_COUNT = 8
+
 
 class TaskTitle(SerializableModel):
     """Structured output for LLM-generated task title."""
@@ -53,23 +60,23 @@ Respond with ONLY the title, nothing else.
 """
 
     try:
-        logger.info("Invoking claude CLI to generate title")
+        logger.debug("Invoking claude CLI to generate title")
         process = concurrency_group.run_process_in_background(
             command=["claude", "-p", prompt, "--system-prompt", system_prompt],
-            timeout=30,
+            timeout=_CLAUDE_CLI_TIMEOUT_SECONDS,
         )
-        returncode = process.wait(timeout=30)
+        returncode = process.wait(timeout=_CLAUDE_CLI_TIMEOUT_SECONDS)
         stdout = process.read_stdout()
         stderr = process.read_stderr()
-        logger.info(
+        logger.debug(
             "Claude CLI completed: returncode={}, stdout={!r}, stderr={!r}",
             returncode,
-            stdout[:500] if stdout else None,
-            stderr[:500] if stderr else None,
+            stdout[:_MAX_LOGGED_OUTPUT_CHARS] if stdout else None,
+            stderr[:_MAX_LOGGED_OUTPUT_CHARS] if stderr else None,
         )
         if returncode == 0 and stdout.strip():
             title = stdout.strip()
-            logger.info("Generated title from claude: {!r}", title)
+            logger.debug("Generated title from claude: {!r}", title)
             return TaskTitle(title=title)
         else:
             logger.warning(
@@ -84,11 +91,11 @@ Respond with ONLY the title, nothing else.
         logger.warning("Unexpected error invoking claude: {}", e)
 
     # Fallback: use first few words of the prompt
-    logger.info("Using fallback title generation")
+    logger.debug("Using fallback title generation")
     words = initial_prompt.split()
-    if len(words) <= 8:
+    if len(words) <= _MAX_FALLBACK_TITLE_WORD_COUNT:
         title = initial_prompt
     else:
-        title = " ".join(words[:8]) + "..."
+        title = " ".join(words[:_MAX_FALLBACK_TITLE_WORD_COUNT]) + "..."
 
     return TaskTitle(title=title)

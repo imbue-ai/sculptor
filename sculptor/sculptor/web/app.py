@@ -384,7 +384,7 @@ for logger_name in loggers:
 
 APP = App(title="Sculptor V1 API", lifespan=lifespan)
 
-NUM_WORKER_THREADS = 40
+WORKER_THREAD_COUNT = 40
 
 
 def on_startup():
@@ -396,7 +396,7 @@ def on_startup():
     # I found this to verify the number of workers we actually have (defaults to 40)
     # and ensure that we're not going to run out under load from long-running requests.
     limiter = anyio.to_thread.current_default_thread_limiter()
-    limiter.total_tokens = NUM_WORKER_THREADS
+    limiter.total_tokens = WORKER_THREAD_COUNT
 
     # Verify that the Sculptor data directory is writable
     if not check_sculptor_directory_writable():
@@ -2317,10 +2317,10 @@ def btw_agent(
     # message picked a fake-claude model, fork using FakeClaude instead of the
     # real binary so integration tests exercise the /btw path end-to-end.
     latest_model: LLMModel | None = None
-    main_agent_started = False
+    is_main_agent_started = False
     for saved in reversed(saved_messages):
         if isinstance(saved, ChatInputUserMessage):
-            main_agent_started = True
+            is_main_agent_started = True
             latest_model = saved.model_name
             break
     if latest_model is None and isinstance(task.input_data, AgentTaskInputsV2):
@@ -2335,7 +2335,7 @@ def btw_agent(
             question=btw_request.question,
             request_id=btw_request.request_id,
             is_fake_claude=is_fake_claude,
-            main_agent_started=main_agent_started,
+            is_main_agent_started=is_main_agent_started,
         )
     except NoBtwSessionAvailable as exc:
         raise HTTPException(status_code=409, detail={"reason": "no_session_yet"}) from exc
@@ -2570,8 +2570,8 @@ def install_dependency(
     """Trigger installation of a managed dependency binary."""
     try:
         dependency = Dependency(tool)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}") from e
 
     services = get_services_from_request_or_websocket(request)
     return services.dependency_management_service.install_managed(dependency)
@@ -2586,8 +2586,8 @@ def authenticate_dependency(
     """Trigger dependency authentication via browser login."""
     try:
         dependency = Dependency(tool)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}") from e
 
     services = get_services_from_request_or_websocket(request)
     return services.dependency_management_service.run_auth_login(dependency)
@@ -2608,7 +2608,7 @@ def complete_onboarding(request: Request, user_session: UserSession = Depends(ge
 
     # Ensure privacy consent and telemetry level are set for returning users
     # who may have created their account before these fields were added.
-    updates: dict = {}
+    updates: dict[str, Any] = {}
     if not user_config.is_privacy_policy_consented:
         updates["is_privacy_policy_consented"] = True
     if not user_config.is_telemetry_level_set:
@@ -2960,10 +2960,10 @@ def get_current_branch(
                     current_branch = repo.get_current_git_branch()
                 except GitRepoNotFoundError as e:
                     raise HTTPException(status_code=500, detail=f"Could not find repository: {e}") from e
-                except ProcessSetupError:
+                except ProcessSetupError as e:
                     if project.is_path_accessible:
                         raise
-                    raise HTTPException(status_code=404, detail="Project path has become inaccessible")
+                    raise HTTPException(status_code=404, detail="Project path has become inaccessible") from e
                 except Exception:
                     if attempt < _REPO_ACCESS_MAX_RETRIES - 1:
                         time.sleep(_REPO_ACCESS_RETRY_DELAY_SECONDS)
@@ -2978,10 +2978,10 @@ def get_current_branch(
         raise
     except subprocess.CalledProcessError as e:
         log_exception(e, "Failed to get current branch", priority=ExceptionPriority.LOW_PRIORITY)
-        raise HTTPException(status_code=404, detail="Failed to get current branch information")
+        raise HTTPException(status_code=404, detail="Failed to get current branch information") from e
     except Exception as e:
         log_exception(e, "Unexpected error getting current branch", priority=ExceptionPriority.LOW_PRIORITY)
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.get("/api/v1/projects/{project_id}/branch-exists")
@@ -3043,14 +3043,16 @@ def get_repo_info(
                     current_branch = repo.get_current_git_branch()
                 except GitRepoNotFoundError as e:
                     raise HTTPException(status_code=500, detail=f"Could not find repository: {e}") from e
-                except ProcessSetupError:
+                except ProcessSetupError as e:
                     # The is_path_accessible attribute is set in _check_and_update_project_accessibility, which
                     # used to fail when the project repo is a remote mounted directory which got disconnected.
                     # Properly catching the OSError there should prevent an unnecessary re-raise here, preventing
                     # Sentry spam and hopefully preventing the backend from crashing.
                     if project.is_path_accessible:
                         raise
-                    raise HTTPException(status_code=404, detail=f"Project path {repo_path} has become inaccessible")
+                    raise HTTPException(
+                        status_code=404, detail=f"Project path {repo_path} has become inaccessible"
+                    ) from e
                 except Exception:
                     if attempt < _REPO_ACCESS_MAX_RETRIES - 1:
                         time.sleep(_REPO_ACCESS_RETRY_DELAY_SECONDS)
@@ -3083,10 +3085,10 @@ def get_repo_info(
         raise
     except subprocess.CalledProcessError as e:
         log_exception(e, "Failed to get repo info", priority=ExceptionPriority.LOW_PRIORITY)
-        raise HTTPException(status_code=500, detail="Failed to get repository information")
+        raise HTTPException(status_code=500, detail="Failed to get repository information") from e
     except Exception as e:
         log_exception(e, "Unexpected error getting repo info", priority=ExceptionPriority.LOW_PRIORITY)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @APP.websocket("/api/v1/stream/ws")
@@ -3564,6 +3566,7 @@ async def to_websocket_stream(
             raise
     try:
         itr = iter(generator)
+        empty_kwargs: dict[str, Any] = {}
         while True:
             loop = asyncio.get_event_loop()
             to_yield = await loop.run_in_executor(
@@ -3571,7 +3574,7 @@ async def to_websocket_stream(
                 run_sync_function_with_debugging_support_if_enabled,
                 _get_next_elem_for_websocket,
                 (itr, user_session),
-                {},
+                empty_kwargs,
             )
             if to_yield is None:
                 with logger.contextualize(**user_session.logger_kwargs):
@@ -4044,7 +4047,7 @@ def upload_file(
 
     settings = get_settings()
     upload_dir = settings.upload_path
-    os.makedirs(upload_dir, exist_ok=True)
+    upload_dir.mkdir(parents=True, exist_ok=True)
     (upload_dir / file_id).write_bytes(content)
 
     return UploadFileResponse(file_id=file_id)

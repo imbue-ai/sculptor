@@ -9,6 +9,8 @@ from sculptor.state.messages import Message
 
 
 class EphemeralMessage(Message):
+    """Base class for messages that are logged but not saved to the database."""
+
     @property
     def is_ephemeral(self) -> bool:
         return True

@@ -4,6 +4,8 @@ import itertools
 import json
 import re
 from collections.abc import Callable
+from collections.abc import Mapping
+from collections.abc import Sequence
 from typing import TypeVar
 
 import playwright
@@ -162,7 +164,7 @@ def delete_all_workspaces_via_ui(page: Page) -> None:
     confirm_dialog = page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_DIALOG)
 
     # Phase 1: Delete all open workspace tabs.
-    for i in range(_MAX_WORKSPACE_DELETE_ITERATIONS):
+    for _ in range(_MAX_WORKSPACE_DELETE_ITERATIONS):
         if workspace_tabs.count() == 0:
             break
         workspace_tabs.first.click(button="right")
@@ -212,7 +214,7 @@ def delete_all_workspaces_via_ui(page: Page) -> None:
     # navigate_to_home_page already waits for workspace rows or empty state.
     workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
 
-    for i in range(_MAX_WORKSPACE_DELETE_ITERATIONS):
+    for _ in range(_MAX_WORKSPACE_DELETE_ITERATIONS):
         if workspace_rows.count() == 0:
             break
         delete_button = workspace_rows.first.get_by_test_id(ElementIDs.WORKSPACE_ROW_CONTEXT_MENU_DELETE)
@@ -503,7 +505,7 @@ def upload_file_via_api(page: Page, *, name: str, mime_type: str, content: bytes
 
 
 def send_message_via_api(
-    page: Page, *, message: str, files: list[str], model: LLMModel = LLMModel.CLAUDE_4_OPUS_200K
+    page: Page, *, message: str, files: Sequence[str], model: LLMModel = LLMModel.CLAUDE_4_OPUS_200K
 ) -> None:
     """Send a chat message (with attached upload ids) to the active agent via the API.
 
@@ -576,7 +578,7 @@ def full_spa_reload(page: Page, target_hash: str = "/#/") -> None:
     page.wait_for_load_state("domcontentloaded")
 
 
-def set_local_storage_items(page: Page, items: dict[str, str]) -> None:
+def set_local_storage_items(page: Page, items: Mapping[str, str]) -> None:
     """Set multiple localStorage key-value pairs in the browser.
 
     Used to simulate pre-existing user state (e.g. panel layouts saved by a

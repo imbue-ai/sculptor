@@ -25,11 +25,19 @@ down_revision: str | None = "b9e29dc159f6"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
+TABLE_NAMES = ("workspace", "workspace_latest")
+SETUP_COMMAND_TRIGGERED = True
+
 
 def upgrade() -> None:
+    """Mark all pre-existing workspaces as already set up so the toggle only affects later workspaces."""
     connection = op.get_bind()
-    connection.execute(sa.text("UPDATE workspace SET setup_command_triggered = 1"))
-    connection.execute(sa.text("UPDATE workspace_latest SET setup_command_triggered = 1"))
+    for table_name in TABLE_NAMES:
+        connection.execute(
+            sa.text(f"UPDATE {table_name} SET setup_command_triggered = :is_triggered").bindparams(
+                sa.bindparam("is_triggered", SETUP_COMMAND_TRIGGERED)
+            )
+        )
 
 
 def downgrade() -> None:

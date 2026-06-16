@@ -178,7 +178,6 @@ class LimitedBaseTaskView(SerializableModel, Generic[TaskInputType, TaskStateTyp
     def _maybe_get_status_from_outcome(self) -> TaskStatus | None:
         """
         NOTE: This is almost always None because outcome is never set while task is running.
-        I Extracted it when I thought we were caching task status on state.
         """
         if self.task.outcome == TaskState.FAILED:
             return TaskStatus.ERROR
@@ -494,9 +493,9 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
         chat_input_messages = [
             x for x in self._messages if isinstance(x, (ChatInputUserMessage, UserQuestionAnswerMessage))
         ]
-        request_finished_messages = set(
-            [x.request_id for x in self._messages if isinstance(x, PersistentRequestCompleteAgentMessage)]
-        )
+        request_finished_messages = {
+            x.request_id for x in self._messages if isinstance(x, PersistentRequestCompleteAgentMessage)
+        }
         # NOTE: this used to exclude ``RequestStoppedAgentMessage`` as a workaround
         # for an older bug — interrupted/SIGTERM'd chats were re-delivered to
         # Claude on the next agent run, and the exclusion kept status pinned at

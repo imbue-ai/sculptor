@@ -75,13 +75,14 @@ import time
 import uuid
 from collections.abc import Callable
 from collections.abc import Iterable
-from dataclasses import dataclass
-from dataclasses import field
 from pathlib import Path
 from queue import Empty
 from queue import Queue
 from threading import Event
 
+from pydantic import Field
+
+from sculptor.foundation.pydantic_serialization import MutableModel
 from sculptor.services.dependency_management_service import PI_VERSION_RANGE
 
 # Mirrors FakeClaude's ``fake_claude:`` directive prefix; keeps the grammar
@@ -91,6 +92,11 @@ _FAKE_PI_PREFIX = "fake_pi:"
 _COMMAND_REGEX = re.compile(r"fake_pi:\S+(?:\s+`[^`]*`)?")
 
 _DEFAULT_RESPONSE_TEXT = "[FakePi] Task completed."
+
+# Polling cadence (seconds) for abort-preemptible waits and the main command
+# loop: directive handlers re-check the abort flag and the loop re-checks for
+# stdin EOF at this interval, so neither blocks indefinitely.
+_POLL_INTERVAL_SECONDS = 0.05
 
 # A prompt rewritten to pi's skill-invocation shape (`/skill:<name> [args]`).
 # When such a prompt carries no `fake_pi:` directive, FakePi echoes that it
@@ -114,6 +120,10 @@ class _TurnAborted(Exception):
     """Raised inside a directive when an ``abort`` preempts the running turn."""
 
 
+class FakePiWaitTimeoutError(RuntimeError):
+    """Raised when a ``fake_pi:wait_for_file`` directive's sentinel never appears."""
+
+
 # stdout is written from two threads (the stdin reader emits the abort ack; the
 # main loop emits turn events), so serialize whole lines to avoid interleaving.
 _STDOUT_LOCK = threading.Lock()
@@ -126,8 +136,7 @@ _STDOUT_LOCK = threading.Lock()
 _UI_RESPONSE_QUEUE: "Queue[dict]" = Queue()
 
 
-@dataclass
-class _TurnBuilder:
+class _TurnBuilder(MutableModel):
     """Accumulates the text emitted by directives in a single turn.
 
     Carries the turn's received inputs (the prompt text and any `images[]`
@@ -136,9 +145,9 @@ class _TurnBuilder:
     """
 
     prompt_id: str | None = None
-    chunks: list[str] = field(default_factory=list)
+    chunks: list[str] = Field(default_factory=list)
     prompt_text: str = ""
-    images: list[dict] = field(default_factory=list)
+    images: list[dict] = Field(default_factory=list)
     _ui_counter: int = 0
 
     def emit(self, text: str) -> None:
@@ -179,8 +188,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parsed
 
 
-@dataclass
-class _SessionState:
+class _SessionState(MutableModel):
     """FakePi's on-disk session, keyed by ``session_id`` within ``--session-dir``.
 
     A relaunched FakePi given the same dir + id reloads this, so a
@@ -192,7 +200,7 @@ class _SessionState:
     session_id: str
     session_file: Path | None
     message_count: int = 0
-    user_messages: list[str] = field(default_factory=list)
+    user_messages: list[str] = Field(default_factory=list)
 
     @classmethod
     def load(cls, session_dir: Path | None, session_id: str) -> "_SessionState":
@@ -580,7 +588,7 @@ def _handle_sleep(args: dict, builder: _TurnBuilder, abort_event: Event, state: 
     while time.monotonic() < deadline:
         if abort_event.is_set():
             raise _TurnAborted()
-        time.sleep(0.05)
+        time.sleep(_POLL_INTERVAL_SECONDS)
 
 
 def _handle_report_inputs(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
@@ -607,8 +615,10 @@ def _handle_wait_for_file(args: dict, builder: _TurnBuilder, abort_event: Event,
         if abort_event.is_set():
             raise _TurnAborted()
         if time.monotonic() >= deadline:
-            raise RuntimeError(f"fake_pi:wait_for_file timed out after {timeout_seconds}s waiting for {sentinel}")
-        time.sleep(0.05)
+            raise FakePiWaitTimeoutError(
+                f"fake_pi:wait_for_file timed out after {timeout_seconds}s waiting for {sentinel}"
+            )
+        time.sleep(_POLL_INTERVAL_SECONDS)
 
 
 def _handle_recall(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
@@ -851,7 +861,7 @@ def _run_rpc_loop(system_prompt: str, session_dir: Path | None, session_id: str)
     exit_code = 0
     while True:
         try:
-            payload = command_queue.get(timeout=0.05)
+            payload = command_queue.get(timeout=_POLL_INTERVAL_SECONDS)
         except Empty:
             if stdin_closed.is_set() and command_queue.empty():
                 break

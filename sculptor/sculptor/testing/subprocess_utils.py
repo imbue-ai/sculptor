@@ -18,7 +18,7 @@ class Forwarder(threading.Thread):
         super().__init__(daemon=True)
         self.prefix = prefix
         self.sculptor_server = sculptor_server
-        self.first_failure_line = None
+        self.first_failure_line: str | None = None
         self.known_harmless_func = known_harmless_func
         self._stop_event = threading.Event()
 
@@ -40,7 +40,6 @@ class Forwarder(threading.Thread):
                 if "|ERROR" in line or "Cache miss" in line:
                     # note that we do NOT blow up here -- that's because we want to capture all the output
                     self.first_failure_line = line.rstrip()
-                    # raise RuntimeError(line.strip())
         except ValueError:
             # stdout was closed; exit gracefully
             pass
@@ -64,8 +63,7 @@ def print_colored_line(
         # Cyan
         print(f"\033[36m{line}\033[0m")
     elif "|TRACE" in line or level == "TRACE":
-        # Gray
-        # print(f"\033[90m{line}\033[0m")
+        # Trace lines are matched here but intentionally not printed (too verbose).
         pass
     else:
         print(line)

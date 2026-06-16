@@ -265,16 +265,7 @@ class _WorkspaceRemoteBranchesPollingCallback:
                 concurrency_group=self._concurrency_group,
                 log_command=False,
             )
-            output = repo._run_git(["branch", "-r", "--format=%(refname:short)"])
-            branches: list[str] = []
-            for line in output.splitlines():
-                branch = line.strip()
-                if not branch:
-                    continue
-                # Skip HEAD pointer entries like "origin/HEAD -> origin/main" or "origin/HEAD".
-                if branch.endswith("/HEAD") or "HEAD ->" in line:
-                    continue
-                branches.append(branch)
+            branches = repo.get_remote_branches()
             self._first_failure_since_last_success = None
             return WorkspaceRemoteBranchesInfo(
                 workspace_id=self._workspace_id,

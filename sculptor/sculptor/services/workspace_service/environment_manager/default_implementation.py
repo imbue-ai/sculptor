@@ -31,7 +31,7 @@ def _create_workspace_path(workspace_path_id: str) -> Path:
 def _cleanup_workspace(workspace_path: Path) -> None:
     """Remove a specific workspace directory."""
     if workspace_path.exists() and workspace_path.is_dir():
-        logger.info("Cleaning up workspace: {}", workspace_path)
+        logger.debug("Cleaning up workspace: {}", workspace_path)
         shutil.rmtree(workspace_path, ignore_errors=True)
 
 
@@ -139,7 +139,7 @@ class DefaultEnvironmentManager(MutableModel, EnvironmentManager):
         """
         workspace_path = Path(environment_id)
         if workspace_path.exists():
-            logger.info("Deleting environment workspace: {}", workspace_path)
+            logger.debug("Deleting environment workspace: {}", workspace_path)
             _cleanup_workspace(workspace_path)
         else:
             logger.debug("Environment workspace already deleted or doesn't exist: {}", workspace_path)
@@ -167,7 +167,7 @@ class DefaultEnvironmentManager(MutableModel, EnvironmentManager):
             if workspace_dir.is_dir() and not workspace_dir.name.startswith("."):
                 workspace_path_str = str(workspace_dir)
                 if workspace_path_str not in active_environment_ids:
-                    logger.info("Cleaning up stale workspace: {}", workspace_dir)
+                    logger.debug("Cleaning up stale workspace: {}", workspace_dir)
                     _cleanup_workspace(workspace_dir)
                 else:
                     logger.debug("Preserving active workspace: {}", workspace_dir)

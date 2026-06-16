@@ -51,8 +51,8 @@ class ObservableThread(threading.Thread):
     def __init__(
         self,
         target: Callable[..., Any],
-        args: tuple = (),
-        kwargs: dict | None = None,
+        args: tuple[Any, ...] = (),
+        kwargs: dict[str, Any] | None = None,
         name: str | None = None,
         daemon: bool = True,
         silenced_exceptions: tuple[type[BaseException], ...] | None = None,

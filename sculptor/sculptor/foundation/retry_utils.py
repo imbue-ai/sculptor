@@ -10,7 +10,7 @@ def _log_before_sleep(retry_state: RetryCallState, log_fn: Callable[[str], None]
     outcome = retry_state.outcome
     if outcome is not None:
         exception = outcome.exception()
-        error_message = type(exception).__name__ + ": " + str(exception)
+        error_message = f"{type(exception).__name__}: {exception}"
     else:
         error_message = "unknown"
     log_fn(

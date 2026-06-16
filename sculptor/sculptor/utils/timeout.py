@@ -1,5 +1,6 @@
 import threading
 import time
+from collections.abc import Mapping
 from contextlib import contextmanager
 from enum import Enum
 from functools import wraps
@@ -27,7 +28,7 @@ def format_timing_log(
     function_name: str,
     duration: float,
     is_operation_successful: bool = True,
-    attributes: dict[str, Any] | None = None,
+    attributes: Mapping[str, Any] | None = None,
 ) -> str:
     """
     Format a timing log message in a machine-parseable format.
@@ -59,7 +60,7 @@ class TimingAttributes(MutableModel):
     _attributes: dict[str, bool | float | int | Enum] = PrivateAttr(default_factory=dict)
 
 
-def monitor_thread(timeout: float, finished_event: threading.Event, on_timeout: Callable[[float], None]) -> None:
+def _monitor_thread(timeout: float, finished_event: threading.Event, on_timeout: Callable[[float], None]) -> None:
     if not finished_event.wait(timeout):
         on_timeout(timeout)
 
@@ -73,7 +74,7 @@ def timeout_monitor(
     concurrency_group: ConcurrencyGroup, timeout: float, on_timeout: Callable[[float], None] = raise_timeout_exception
 ) -> Generator[None, None, None]:
     finished_event = threading.Event()
-    monitor = concurrency_group.start_new_thread(target=monitor_thread, args=(timeout, finished_event, on_timeout))
+    monitor = concurrency_group.start_new_thread(target=_monitor_thread, args=(timeout, finished_event, on_timeout))
     try:
         yield
     finally:

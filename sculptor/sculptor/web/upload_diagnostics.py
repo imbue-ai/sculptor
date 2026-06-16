@@ -27,14 +27,17 @@ from sculptor.web.data_types import UploadDiagnosticsResponse
 REPORT_BUCKET = "traceback-uploads-production"
 REPORT_S3_PREFIX = "error-reports"
 
+_BYTES_PER_GIBIBYTE = 1024 * 1024 * 1024
+# When disk usage is unavailable, assume ample free space so diagnostics never block on it.
+_ASSUMED_FREE_BYTES_WHEN_UNKNOWN = 1_000_000_000_000
+
 
 def _collect_server_diagnostics(
-    settings: SculptorSettings,
     server_start_time: float,
     dependency_management_service: DependencyManagementService | None = None,
 ) -> dict[str, str | float | int | None]:
     """Collect diagnostics from the server side."""
-    free_gb = (_get_disk_bytes_free(settings) or 1_000_000_000_000) / (1024 * 1024 * 1024)
+    free_gb = (_get_disk_bytes_free() or _ASSUMED_FREE_BYTES_WHEN_UNKNOWN) / _BYTES_PER_GIBIBYTE
 
     result: dict[str, str | float | int | None] = {
         "version": str(version.__version__),
@@ -61,7 +64,7 @@ def _collect_server_diagnostics(
     return result
 
 
-def _get_disk_bytes_free(settings: SculptorSettings) -> int | None:
+def _get_disk_bytes_free() -> int | None:
     """Get free disk space in bytes. Duplicated from app.py to avoid circular imports."""
     data_dir = build_utils.get_sculptor_folder()
     try:
@@ -108,7 +111,7 @@ def upload_diagnostics(
     s3_key = f"{REPORT_S3_PREFIX}/{report_id}.zip"
 
     # Merge server-collected diagnostics with any frontend extras
-    diagnostics = _collect_server_diagnostics(settings, server_start_time, dependency_management_service)
+    diagnostics = _collect_server_diagnostics(server_start_time, dependency_management_service)
     for key, value in request_body.frontend_diagnostics.items():
         diagnostics[f"frontend.{key}"] = value
 

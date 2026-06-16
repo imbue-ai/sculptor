@@ -2,7 +2,11 @@ import os
 from functools import lru_cache
 
 
-# by calling this early in the life of the program, you can be more likely to get the actual parent
 @lru_cache(maxsize=1)
-def get_original_parent_pid():
+def get_original_parent_pid() -> int:
+    """Return this process's parent PID, captured on the first call.
+
+    Call this early in the program's life to be more likely to capture the
+    actual parent before the process is reparented.
+    """
     return os.getppid()

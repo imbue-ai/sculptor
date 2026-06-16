@@ -37,6 +37,10 @@ class Section(contextlib.ContextDecorator):
     def __init__(self, message: str, log_level: int | str = "INFO") -> None:
         self.message = message
         self.log_level = log_level
+        self.header: str = ""
+        self.start_monotonic_time: float = 0.0
+        self.section: dict[str, str | int | float] = {}
+        self.elapsed: float = 0.0
 
     def __enter__(self) -> "Section":
         level = _thread_local.next_section_level

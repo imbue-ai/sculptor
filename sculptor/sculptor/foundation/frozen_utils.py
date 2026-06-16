@@ -6,7 +6,6 @@ from typing import Any
 from typing import Iterable
 from typing import Mapping
 from typing import NoReturn
-from typing import Protocol
 from typing import TYPE_CHECKING
 from typing import TypeAlias
 from typing import TypeVar
@@ -15,13 +14,8 @@ if TYPE_CHECKING:
     from _typeshed import SupportsKeysAndGetItem
 
 
-class _SupportsLessThan(Protocol):
-    def __lt__(self, __other: Any) -> bool: ...
-
-
 T = TypeVar("T")
 TV = TypeVar("TV")
-TK = TypeVar("TK", bound=_SupportsLessThan)
 
 
 class FrozenMapping(Mapping[T, TV], ABC):
@@ -42,7 +36,7 @@ class FrozenDict(dict[T, TV], FrozenMapping[T, TV]):
         return self._hash
 
     def _mutation_error(self, method: str) -> RuntimeError:
-        return RuntimeError(f"Cannot call mutation method {method} on _FrozenDict {self}")
+        return RuntimeError(f"Cannot call mutation method {method} on FrozenDict {self}")
 
     def __setitem__(self, __name: T, __value: TV) -> NoReturn:
         raise self._mutation_error("__setitem__")
@@ -66,7 +60,7 @@ class FrozenDict(dict[T, TV], FrozenMapping[T, TV]):
         raise self._mutation_error("clear")
 
     def __repr__(self) -> str:
-        return f"_FrozenDict({super().__repr__()})"
+        return f"FrozenDict({super().__repr__()})"
 
     def __copy__(self) -> "FrozenDict":
         return type(self)(self)

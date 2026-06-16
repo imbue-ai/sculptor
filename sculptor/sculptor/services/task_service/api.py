@@ -95,7 +95,7 @@ class TaskService(Service, ABC):
         self, user_reference: UserReference
     ) -> Generator[Queue[TaskMessageContainer], None, None]:
         """
-        Returns a queue that receives all task messages some user's tasks.
+        Returns a queue that receives all task messages for some user's tasks.
 
         Note that for efficiency, only the Message objects used by SimpleAgentView are returned.
         """

@@ -11,7 +11,7 @@ from importlib import resources
 from packaging.version import Version
 
 
-def dev_git_sha(short=True) -> str:
+def dev_git_sha(is_short: bool = True) -> str:
     """Return the Git SHA that this version came from.
 
     Can only be run in dev mode!
@@ -21,7 +21,7 @@ def dev_git_sha(short=True) -> str:
     #       this wouldn't even be run during product runtime!
 
     cmd = ["git", "rev-parse"]
-    if short:
+    if is_short:
         cmd.append("--short")
     cmd.append("HEAD")
 
