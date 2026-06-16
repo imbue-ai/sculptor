@@ -55,7 +55,9 @@ import { useInterruptAgent } from "../../../common/state/hooks/useInterruptAgent
 import { usePromptDraft } from "../../../common/state/hooks/usePromptDraft.ts";
 import { useTaskDetailWithDefaults } from "../../../common/state/hooks/useTaskDetail";
 import {
+  useTaskAvailableModels,
   useTaskModel,
+  useTaskSelectedModelId,
   useTaskSupportsContextReset,
   useTaskSupportsFastMode,
   useTaskSupportsFileAttachments,
@@ -112,6 +114,10 @@ export const ChatInput = ({
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const { workspaceID, agentID: taskID } = useWorkspacePageParams();
   const taskModel = useTaskModel(taskID ?? "");
+  // Harness-supplied model list + selection (pi); empty/undefined for Claude, in
+  // which case the switcher falls back to its built-in list and localModel.
+  const backendModels = useTaskAvailableModels(taskID ?? "");
+  const selectedModelId = useTaskSelectedModelId(taskID ?? "");
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
   const userConfig = useAtomValue(userConfigAtom);
@@ -667,7 +673,13 @@ export const ChatInput = ({
               )}
               <EffortSelector effort={effort} onEffortChange={setEffort} />
               <Flex pr="1">
-                <ModelSelector model={localModel} onModelChange={handleModelChange} capabilityValue={canSelectModel} />
+                <ModelSelector
+                  model={localModel}
+                  onModelChange={handleModelChange}
+                  capabilityValue={canSelectModel}
+                  backendModels={backendModels}
+                  selectedModelId={selectedModelId}
+                />
               </Flex>
               <SendButton
                 onClick={handleSend}

@@ -39,6 +39,7 @@ from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import EffortLevel
 from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
+from sculptor.state.messages import ModelOption
 from sculptor.state.messages import PersistentAgentMessage
 from sculptor.state.messages import PersistentMessage
 from sculptor.state.messages import PersistentUserMessage
@@ -427,6 +428,21 @@ class AutoCompactingDoneAgentMessage(EphemeralAgentMessage):
     object_type: str = "AutoCompactingDoneAgentMessage"
 
 
+class ModelsAvailableAgentMessage(EphemeralAgentMessage):
+    """Carries the harness's model catalog + current selection onto task state.
+
+    A harness with a dynamic catalog (pi) emits this once at agent start; the
+    run-agent handler maps it onto `AgentTaskStateV2.available_models` /
+    `current_model` (which the harness's `get_available_models` /
+    `get_selected_model_id` then read). Ephemeral: the durable record is the
+    persisted task state, re-derived on each agent start, not the message log.
+    """
+
+    object_type: str = "ModelsAvailableAgentMessage"
+    available_models: tuple[ModelOption, ...] = ()
+    current_model: ModelOption | None = None
+
+
 class AskUserQuestionAgentMessage(EphemeralAgentMessage):
     object_type: str = "AskUserQuestionAgentMessage"
     question_data: AskUserQuestionData
@@ -462,6 +478,7 @@ EphemeralAgentMessageUnion = (
     | Annotated[PlanModeAgentMessage, Tag("PlanModeAgentMessage")]
     | Annotated[AutoCompactingAgentMessage, Tag("AutoCompactingAgentMessage")]
     | Annotated[AutoCompactingDoneAgentMessage, Tag("AutoCompactingDoneAgentMessage")]
+    | Annotated[ModelsAvailableAgentMessage, Tag("ModelsAvailableAgentMessage")]
 )
 AgentMessageUnion = PersistentAgentMessageUnion | EphemeralAgentMessageUnion
 # this is necessary because pydantic won't let us use PersistentMessageTypes, which already has a discriminator, to make MessageTypes

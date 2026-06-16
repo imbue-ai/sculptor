@@ -121,6 +121,7 @@ from sculptor.interfaces.agents.agent import BackgroundTaskStartedAgentMessage
 from sculptor.interfaces.agents.agent import ClearContextUserMessage
 from sculptor.interfaces.agents.agent import ContextClearedMessage
 from sculptor.interfaces.agents.agent import InterruptProcessUserMessage
+from sculptor.interfaces.agents.agent import ModelsAvailableAgentMessage
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import PiAgentConfig
 from sculptor.interfaces.agents.agent import PlanModeAgentMessage
@@ -153,6 +154,7 @@ from sculptor.state.chat_state import make_plan_approval_question
 from sculptor.state.claude_state import get_tool_invocation_string
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import Message
+from sculptor.state.messages import ModelOption
 from sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.web.skills import SkillSourceKind
 from sculptor.web.skills import discover_skills
@@ -241,6 +243,100 @@ _STDOUT_QUEUE_POLL_SECONDS: float = 0.1
 # either way, and the longer wait bounds shutdown latency).
 _TASK_POLL_SECONDS: float = 0.1
 _IDLE_WAIT_SECONDS: float = 1.0
+
+# How long the start-time model fetch waits for pi's get_available_models /
+# get_state responses before giving up. Best-effort: a miss leaves the catalog
+# empty (the frontend falls back to its built-in list), it never blocks the agent.
+_MODEL_FETCH_TIMEOUT_SECONDS: float = 10.0
+
+# Obsolete model ids pi's get_available_models returns that the switcher must not
+# offer — the whole pre-4 `claude-3-*` family (the live Anthropic catalog still
+# lists these). Curation drops any id in this set (_curate_models).
+_PI_MODEL_BLACKLIST: frozenset[str] = frozenset(
+    {
+        "claude-3-5-haiku-20241022",
+        "claude-3-5-haiku-latest",
+        "claude-3-5-sonnet-20240620",
+        "claude-3-5-sonnet-20241022",
+        "claude-3-5-sonnet-latest",
+        "claude-3-7-sonnet-20250219",
+        "claude-3-7-sonnet-latest",
+        "claude-3-haiku-20240307",
+        "claude-3-opus-20240229",
+        "claude-3-opus-latest",
+        "claude-3-sonnet-20240229",
+    }
+)
+
+# A "dated pin" model id ends in an 8-digit date (e.g. claude-opus-4-1-20250805).
+# pi lists these alongside the friendly alias for the same model (claude-opus-4-1),
+# so curation drops the dated duplicate and keeps the alias.
+_DATED_PIN_SUFFIX_RE = re.compile(r"-\d{8}$")
+
+# Captures the trailing major.minor version of a pi model id (e.g. the (4, 8) in
+# claude-opus-4-8, the (4, 0) in claude-opus-4-0) for the newest-first sort.
+_MODEL_VERSION_RE = re.compile(r"-(\d+)-(\d+)$")
+
+
+def _model_sort_key(model: ModelOption) -> tuple[int, int, str]:
+    """Newest-first sort key: descending (major, minor), then id for stability.
+
+    Parses the trailing `-<major>-<minor>` of the model id (e.g. claude-opus-4-8
+    → (4, 8)). Ids without that shape sort last (version (-1, -1)). The negation
+    yields newest-first under an ascending sort; the id tiebreaker keeps the order
+    deterministic across same-version families.
+    """
+    match = _MODEL_VERSION_RE.search(model.model_id)
+    if match is None:
+        return (1, 0, model.model_id)
+    major, minor = int(match.group(1)), int(match.group(2))
+    return (-major, -minor, model.model_id)
+
+
+def _curate_models(models: list[ModelOption], current_model: ModelOption | None) -> list[ModelOption]:
+    """Trim pi's raw catalog to the models the switcher should offer, newest-first.
+
+    Drops the obsolete `_PI_MODEL_BLACKLIST` ids and dated-pin duplicates
+    (`_DATED_PIN_SUFFIX_RE`), then sorts newest-first (`_model_sort_key`). The
+    current model is always kept even if a rule would drop it, so the switcher
+    never shows an empty selection. Duplicate ids are de-duplicated, first-wins.
+    """
+    kept: list[ModelOption] = []
+    seen_ids: set[str] = set()
+    current_id = current_model.model_id if current_model is not None else None
+    for model in models:
+        if model.model_id in seen_ids:
+            continue
+        is_current = model.model_id == current_id
+        if not is_current and model.model_id in _PI_MODEL_BLACKLIST:
+            continue
+        if not is_current and _DATED_PIN_SUFFIX_RE.search(model.model_id):
+            continue
+        seen_ids.add(model.model_id)
+        kept.append(model)
+    # The current model must be offered even if pi did not list it in the catalog.
+    if current_model is not None and current_id not in seen_ids:
+        kept.append(current_model)
+    return sorted(kept, key=_model_sort_key)
+
+
+def _model_option_from_pi(raw: Mapping[str, Any]) -> ModelOption | None:
+    """Map one pi Model dict (`{id, name, provider, …}`) to a `ModelOption`.
+
+    Returns None when the required `id` is missing/empty. `provider` defaults to
+    "anthropic" (Sculptor launches pi against the Anthropic catalog) and the
+    display name falls back to the id when pi omits `name`.
+    """
+    model_id = raw.get("id")
+    if not isinstance(model_id, str) or not model_id:
+        return None
+    provider = raw.get("provider")
+    name = raw.get("name")
+    return ModelOption(
+        provider=provider if isinstance(provider, str) and provider else "anthropic",
+        model_id=model_id,
+        display_name=name if isinstance(name, str) and name else model_id,
+    )
 
 
 def _pi_version_in_range(version: str) -> bool:
@@ -573,6 +669,11 @@ class PiAgent(DefaultAgentWrapper):
             # processing thread (the only other reader of the process queue) is
             # not started until after this returns.
             self._verify_resumed_session(self._session_id)
+        # Fetch pi's model catalog + current model and surface them onto task
+        # state for the switcher. Done here, the sole reader of the process queue
+        # before the message-processing thread starts (same constraint as the
+        # resume verification above); best-effort, never blocks the agent.
+        self._fetch_models_into_state()
         self._message_processing_thread = self.concurrency_group.start_new_thread(
             target=self._process_message_queue,
         )
@@ -930,6 +1031,58 @@ class PiAgent(DefaultAgentWrapper):
             )
         else:
             logger.info("PiAgent resumed pi session {} (messageCount={})", expected_session_id, message_count)
+
+    def _request_available_models_blocking(
+        self, timeout: float = _MODEL_FETCH_TIMEOUT_SECONDS
+    ) -> list[dict[str, Any]]:
+        """Send `get_available_models` and return pi's raw `data.models` list.
+
+        Returns `[]` on timeout / process exit / a malformed payload. Shares the
+        sole-reader safety constraint of `_consume_until_command_response`.
+        """
+        if self._process is None:
+            return []
+        request_id = generate_id()
+        self._send_rpc({"type": "get_available_models", "id": request_id})
+        response = self._consume_until_command_response("get_available_models", request_id, timeout)
+        if response is None or not isinstance(response.data, dict):
+            return []
+        models = response.data.get("models")
+        if not isinstance(models, list):
+            return []
+        return [m for m in models if isinstance(m, dict)]
+
+    def _fetch_models_into_state(self) -> None:
+        """Fetch pi's model catalog + current model and surface them onto task state.
+
+        Issues `get_available_models` and `get_state` (sole reader of the process
+        queue, before the message thread starts), maps the raw Model dicts to
+        `ModelOption`s, curates them (`_curate_models`), and emits a
+        `ModelsAvailableAgentMessage` the run-agent handler maps onto
+        `AgentTaskStateV2.available_models` / `current_model`. Best-effort: an empty
+        catalog leaves the switcher to the frontend's built-in fallback list and
+        never blocks the agent.
+        """
+        raw_models = self._request_available_models_blocking()
+        state = self._request_state_blocking()
+        current_raw = state.get("model") if isinstance(state, dict) else None
+        current_model = _model_option_from_pi(current_raw) if isinstance(current_raw, dict) else None
+        options: list[ModelOption] = []
+        for raw in raw_models:
+            option = _model_option_from_pi(raw)
+            if option is not None:
+                options.append(option)
+        curated = _curate_models(options, current_model)
+        if not curated and current_model is None:
+            logger.info("PiAgent get_available_models returned no usable models; switcher will fall back to defaults")
+            return
+        self._output_messages.put(
+            ModelsAvailableAgentMessage(
+                message_id=AgentMessageID(),
+                available_models=tuple(curated),
+                current_model=current_model,
+            )
+        )
 
     def _request_interrupt(self) -> None:
         """Halt the in-flight pi turn via pi's `abort` command (supports_interruption).

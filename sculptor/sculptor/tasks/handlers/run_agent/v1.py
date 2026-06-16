@@ -46,6 +46,7 @@ from sculptor.interfaces.agents.agent import EnvironmentReleasedRunnerMessage
 from sculptor.interfaces.agents.agent import EnvironmentTypes
 from sculptor.interfaces.agents.agent import KilledAgentRunnerMessage
 from sculptor.interfaces.agents.agent import MessageTypes
+from sculptor.interfaces.agents.agent import ModelsAvailableAgentMessage
 from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessage
 from sculptor.interfaces.agents.agent import PersistentRunnerMessageUnion
 from sculptor.interfaces.agents.agent import PersistentUserMessageUnion
@@ -510,6 +511,10 @@ def _run_agent_in_environment(
         # user_input_message_being_processed (cleared at v1.py:600 by design).
         task_state = _record_latest_completion_in_state(new_messages, task.object_id, task_state, services)
 
+        # Persist any model catalog the agent surfaced this batch (pi emits one at
+        # start) onto task state so the harness's get_available_models reads it.
+        task_state = _record_available_models_in_state(new_messages, task.object_id, task_state, services)
+
         # Did the currently-pending in-flight message complete? Drives the dispatch
         # decision below — distinct from the cursor advance above, which fires for
         # any completion in this batch (including ones for messages other than the
@@ -973,6 +978,49 @@ def _record_latest_completion_in_state(
         task_state=task_state,
         services=services,
     )
+
+
+def _record_available_models_in_state(
+    new_messages: Sequence[Message],
+    task_id: TaskID,
+    task_state: AgentTaskStateV2,
+    services: ServiceCollectionForTask,
+) -> AgentTaskStateV2:
+    """Persist the latest model catalog the agent surfaced this batch onto task state.
+
+    A harness with a dynamic catalog (pi) emits a `ModelsAvailableAgentMessage`
+    at agent start; this writes its `available_models` / `current_model` onto
+    `AgentTaskStateV2` (which the harness's `get_available_models` /
+    `get_selected_model_id` read). The last message in the batch wins. No-op when
+    the batch carries none. Preserves the DB title like `_update_task_state`, so a
+    concurrent rename is not clobbered.
+    """
+    latest: ModelsAvailableAgentMessage | None = None
+    for message in new_messages:
+        if isinstance(message, ModelsAvailableAgentMessage):
+            latest = message
+    if latest is None:
+        return task_state
+
+    available_models = list(latest.available_models)
+    current_model = latest.current_model
+    if task_state.available_models == available_models and task_state.current_model == current_model:
+        return task_state
+
+    with services.data_model_service.open_task_transaction() as transaction:
+        task_row = transaction.get_task(task_id)
+        assert task_row is not None
+        # Read the current DB title so we don't clobber a concurrent rename.
+        db_state = AgentTaskStateV2.model_validate(task_row.current_state)
+        mutable_task_state = evolver(task_state)
+        assign(mutable_task_state.available_models, lambda: available_models)
+        assign(mutable_task_state.current_model, lambda: current_model)
+        assign(mutable_task_state.title, lambda: db_state.title)
+        updated_task_state = chill(mutable_task_state)
+        task_row = task_row.evolve(task_row.ref().current_state, updated_task_state.model_dump())
+        transaction.upsert_task(task_row)
+
+    return updated_task_state
 
 
 def _update_task_state(

@@ -3,7 +3,7 @@ import { atom } from "jotai";
 import { atomFamily } from "jotai/utils";
 import { isEqual } from "lodash";
 
-import type { CodingAgentTaskView, TaskStatus } from "../../../api";
+import type { CodingAgentTaskView, ModelOption, TaskStatus } from "../../../api";
 import { removeTaskSettings } from "./draftAgentSettings.ts";
 
 export const taskAtomFamily = atomFamily<string, PrimitiveAtom<CodingAgentTaskView | null>>(() =>
@@ -98,6 +98,20 @@ export const taskStatusAtomFamily = atomFamily<string, Atom<TaskStatus | undefin
 
 export const taskModelAtomFamily = atomFamily<string, Atom<string | undefined>>((taskId) =>
   atom((get) => get(taskAtomFamily(taskId))?.model),
+);
+
+// The harness's backend-sourced model catalog (pi). A non-capability view field,
+// so the no-direct-harness-capability-read ratchet does not apply. Empty for
+// harnesses that source no list (Claude) — the switcher then falls back to its
+// built-in PRODUCTION_MODELS.
+export const taskAvailableModelsAtomFamily = atomFamily<string, Atom<ReadonlyArray<ModelOption>>>((taskId) =>
+  atom((get) => get(taskAtomFamily(taskId))?.availableModels ?? []),
+);
+
+// The model_id the switcher should show as selected for a backend-sourced list
+// (pi), or undefined when the harness tracks no per-task selection.
+export const taskSelectedModelIdAtomFamily = atomFamily<string, Atom<string | undefined>>((taskId) =>
+  atom((get) => get(taskAtomFamily(taskId))?.selectedModelId ?? undefined),
 );
 
 export const taskIsAutoCompactingAtomFamily = atomFamily<string, Atom<boolean>>((taskId) =>
