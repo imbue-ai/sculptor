@@ -391,11 +391,26 @@ class CIBabysitterCoordinator(Service):
                     )
                     return
                 state.terminal_drive_in_progress = True
-            self.concurrency_group.start_new_thread(
-                target=self._run_terminal_drive,
-                args=(state, task_id, prompt_text, config),
-                name="ci-babysitter-terminal-drive",
-            )
+            try:
+                self.concurrency_group.start_new_thread(
+                    target=self._run_terminal_drive,
+                    args=(state, task_id, prompt_text, config),
+                    name="ci-babysitter-terminal-drive",
+                )
+            except Exception as exc:
+                # The worker normally clears the in-progress flag in its finally;
+                # if the spawn itself fails the worker never runs, so clear it
+                # here to avoid latching the guard on and parking the workspace.
+                # Skip the retry bump — no drive was attempted; the next failure
+                # retries cleanly.
+                with self._lock:
+                    state.terminal_drive_in_progress = False
+                logger.error(
+                    "CIBabysitterCoordinator: failed to start terminal drive for workspace={}: {}",
+                    state.workspace_id,
+                    exc,
+                )
+                return
         else:
             with self._data_model_service.open_transaction(RequestID()) as transaction:
                 task = self._task_service.get_task(task_id, transaction)

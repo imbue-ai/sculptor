@@ -1193,6 +1193,34 @@ def test_terminal_drive_in_progress_clears_on_worker_exception(
     assert state.terminal_drive_in_progress is False
 
 
+def test_terminal_drive_in_progress_clears_on_spawn_failure(
+    env: _FakeEnv,
+    patch_user_config: _ConfigSlot,
+    test_root_concurrency_group: ConcurrencyGroup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # If the worker thread can't even be spawned, the worker's finally never
+    # runs, so dispatch must clear the in-progress guard itself — otherwise the
+    # workspace is parked forever — and must not bump the retry count (no drive
+    # was attempted).
+    patch_user_config.config = _make_terminal_config()
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _opt_in_registration(_id))
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+
+    def _raise(group: Any, *, target: Any, args: Any, name: str) -> None:
+        del group, target, args, name
+        raise RuntimeError("thread pool exhausted")
+
+    monkeypatch.setattr(type(coordinator.concurrency_group), "start_new_thread", _raise)
+    _seed_baseline(coordinator, env.workspace_id)
+
+    with expect_at_least_logged_errors({"CIBabysitterCoordinator: failed to start terminal drive for workspace="}):
+        coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+    state = coordinator._state[env.workspace_id]
+    assert state.terminal_drive_in_progress is False
+    assert state.retry_count == 0
+
+
 def test_terminal_drive_does_not_block_consumer_loop(
     env: _FakeEnv,
     patch_user_config: _ConfigSlot,
