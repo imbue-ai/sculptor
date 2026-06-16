@@ -92,8 +92,8 @@ def test_claude_paste_code_sign_in_succeeds(sculptor_instance_factory_: Sculptor
         claude_card.get_authenticate_button().click()
 
         # The paste-a-code panel appears: a sign-in link plus a code field.
-        # (Default 30s timeout covers the backend round-trip that reads the URL.)
-        expect(claude_card.get_auth_url_link()).to_be_visible(timeout=30000)
+        # (The default 30s expect timeout covers the backend round-trip that reads the URL.)
+        expect(claude_card.get_auth_url_link()).to_be_visible()
         expect(claude_card.get_auth_code_input()).to_be_visible()
 
         # Paste the code the (stub) sign-in page would have shown, then submit it.
@@ -102,7 +102,7 @@ def test_claude_paste_code_sign_in_succeeds(sculptor_instance_factory_: Sculptor
 
         # The CLI exits cleanly, auth re-checks as authenticated, and the step
         # unblocks. The paste-a-code panel is dismissed.
-        expect(complete_button).to_contain_text("Continue", timeout=30000)
+        expect(complete_button).to_contain_text("Continue")
         expect(claude_card.get_auth_panel()).not_to_be_visible()
 
 
@@ -122,13 +122,13 @@ def test_claude_paste_code_invalid_code_shows_error(sculptor_instance_factory_: 
         installation_step, claude_card = _reach_claude_card(onboarding_page)
 
         claude_card.get_authenticate_button().click()
-        expect(claude_card.get_auth_code_input()).to_be_visible(timeout=30000)
+        expect(claude_card.get_auth_code_input()).to_be_visible()
 
         # A wrong code makes the (stub) CLI exit non-zero; the error surfaces inline.
         claude_card.get_auth_code_input().fill("definitely-not-the-code")
         claude_card.get_auth_code_submit().click()
 
-        expect(claude_card.get_auth_error()).to_be_visible(timeout=30000)
+        expect(claude_card.get_auth_error()).to_be_visible()
 
         # Sign-in did not complete, so the step stays blocked.
         expect(installation_step.get_complete_button()).to_be_disabled()
