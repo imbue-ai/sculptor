@@ -2327,6 +2327,29 @@ def test_subagent_completion_emits_one_child_message_per_child_in_parallel() -> 
     assert len(children) == 2
 
 
+def test_subagent_completion_failed_surfaces_error_status_and_child() -> None:
+    """A sub-agent that finishes failed surfaces status="failed" on the completion
+    notification and still renders the (failed) child nested under the parent — so a
+    failure is visible, not silently dropped."""
+    agent = _make_agent()
+    agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
+    error_child = _subagent_child("c0", "error", [], label="scout")
+    agent._process = _make_process([_event(_subagent_notify([error_child], status="failed"))])
+
+    agent._drain_idle_background_events()
+    emitted = _drain(agent._output_messages)
+
+    notes = _bg_notifications(emitted)
+    assert len(notes) == 1
+    assert notes[0].status == "failed"
+    children = _child_messages(emitted)
+    assert len(children) == 1
+    # An error child with no events still surfaces as an attributed "failed" bubble.
+    texts = [b.text for b in children[0].content if isinstance(b, TextBlock)]
+    assert any("failed" in text.lower() for text in texts)
+    assert _SA_TASK_ID not in agent._subagent_tasks
+
+
 def test_shutdown_cancels_subagent_tasks() -> None:
     """`_cancel_all_background_tasks` SIGTERMs each sub-agent child's group in-environment."""
     agent = _make_agent()
