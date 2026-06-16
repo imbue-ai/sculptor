@@ -2,7 +2,7 @@ import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback } from "react";
 
 import { useImbueLocation } from "../../common/NavigateUtils.ts";
-import { workspacesArrayAtom } from "../../common/state/atoms/workspaces.ts";
+import { isWorkspaceListEmptyAtom } from "../../common/state/atoms/workspaces.ts";
 import { commandPaletteOpenAtom } from "../CommandPalette/atoms.ts";
 import {
   homePromptFocusRequestAtom,
@@ -35,7 +35,7 @@ export const useNewWorkspaceModal = (): UseNewWorkspaceModal => {
   const [isOpen, setIsOpen] = useAtom(newWorkspaceModalOpenAtom);
   const setEntrySource = useSetAtom(newWorkspaceModalEntrySourceAtom);
   const setCommandPaletteOpen = useSetAtom(commandPaletteOpenAtom);
-  const workspaces = useAtomValue(workspacesArrayAtom);
+  const isWorkspaceListEmpty = useAtomValue(isWorkspaceListEmptyAtom);
   const { isHomeRoute } = useImbueLocation();
   const requestHomePromptFocus = useSetAtom(homePromptFocusRequestAtom);
 
@@ -49,17 +49,16 @@ export const useNewWorkspaceModal = (): UseNewWorkspaceModal => {
       // On an empty Home the inline form *is* the create surface (and the
       // topbar "+" is hidden there), so there's no modal to open — focus its
       // prompt instead. Anywhere else (off Home, or once workspaces exist) the
-      // modal opens normally. `?? 0` treats the not-yet-loaded atom as empty so
-      // this stays consistent with the inline form (and the hidden "+") during
-      // the initial load window.
-      if (isHomeRoute && (workspaces?.length ?? 0) === 0) {
+      // modal opens normally. `isWorkspaceListEmptyAtom` treats the not-yet-
+      // loaded window as empty, matching the inline form (and the hidden "+").
+      if (isHomeRoute && isWorkspaceListEmpty) {
         requestHomePromptFocus((nonce) => nonce + 1);
         return;
       }
       setEntrySource(source);
       setIsOpen(true);
     },
-    [isHomeRoute, workspaces, setEntrySource, setCommandPaletteOpen, setIsOpen, requestHomePromptFocus],
+    [isHomeRoute, isWorkspaceListEmpty, setEntrySource, setCommandPaletteOpen, setIsOpen, requestHomePromptFocus],
   );
 
   const close = useCallback((): void => {

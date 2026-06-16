@@ -34,6 +34,18 @@ export const workspacesArrayAtom = atom<ReadonlyArray<Workspace> | undefined>((g
 });
 
 /**
+ * Whether there are no (non-deleted) workspaces — the not-yet-loaded window is
+ * treated as empty (`?? 0`) so it stays consistent with the empty-Home inline
+ * form and the hidden topbar "+". Derived so consumers that only care about the
+ * empty state (the new-workspace entry-point gate) re-render only when the
+ * emptiness flips, not on every workspace add / remove / status change.
+ */
+export const isWorkspaceListEmptyAtom = atom<boolean>((get) => {
+  const workspaces = get(workspacesArrayAtom);
+  return (workspaces?.length ?? 0) === 0;
+});
+
+/**
  * IDs of workspaces the backend considers open, derived from workspace models.
  * This is the source of truth for the open/closed SET — the backend owns it.
  */
