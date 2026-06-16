@@ -229,6 +229,11 @@ class PackagedElectronFactory:
         self.default_timeout_ms = default_timeout_ms
         self.extra_env = extra_env or {}
 
+    @property
+    def is_electron(self) -> bool:
+        """Spawned instances always render in the packaged Electron shell."""
+        return True
+
     @contextmanager
     def spawn_sculptor_instance(
         self,
