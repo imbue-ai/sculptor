@@ -87,6 +87,7 @@ function makeTask(overrides: Partial<CodingAgentTaskView> & { id: string }): Cod
       supportsFileAttachments: true,
       supportsInterruption: true,
       supportsFileReferences: true,
+      supportsModelSelection: true,
     },
     isSmoothStreamingSupported: false,
     fastMode: false,

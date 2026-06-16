@@ -28,6 +28,7 @@ def test_pi_harness_capabilities() -> None:
         supports_file_attachments=True,
         supports_interruption=True,
         supports_file_references=True,
+        supports_model_selection=True,
     )
 
 

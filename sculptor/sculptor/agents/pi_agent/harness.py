@@ -150,6 +150,10 @@ class PiHarness(Harness):
             # Pi resolves @-mention path references via its own file-reading loop,
             # the same as Claude — true.
             supports_file_references=True,
+            # Pi switches models in-session: get_available_models lists pi's own
+            # catalog and set_model honors a pick (see the get_available_models
+            # override and agent_wrapper's set_model handling).
+            supports_model_selection=True,
         )
 
     def is_ask_user_question_tool(self, tool_name: str) -> bool:

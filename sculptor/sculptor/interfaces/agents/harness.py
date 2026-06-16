@@ -91,6 +91,7 @@ class HarnessCapabilities(SerializableModel):
     supports_file_attachments: bool
     supports_interruption: bool
     supports_file_references: bool
+    supports_model_selection: bool
 
 
 class AgentRunContext(BaseModel):
@@ -141,6 +142,7 @@ class Harness(BaseModel, abc.ABC):
             supports_file_attachments=False,
             supports_interruption=False,
             supports_file_references=False,
+            supports_model_selection=False,
         )
 
     def is_ask_user_question_tool(self, tool_name: str) -> bool:

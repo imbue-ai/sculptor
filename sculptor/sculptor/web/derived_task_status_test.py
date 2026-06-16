@@ -471,6 +471,7 @@ def test_harness_capabilities_for_claude_task_advertises_all_true() -> None:
         supports_file_attachments=True,
         supports_interruption=True,
         supports_file_references=True,
+        supports_model_selection=True,
     )
 
 
@@ -533,6 +534,7 @@ def test_harness_capabilities_for_hello_task_are_all_false() -> None:
         supports_file_attachments=False,
         supports_interruption=False,
         supports_file_references=False,
+        supports_model_selection=False,
     )
 
 

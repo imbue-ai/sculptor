@@ -62,6 +62,7 @@ import {
   useTaskSupportsImageInput,
   useTaskSupportsInteractiveBackchannel,
   useTaskSupportsInterruption,
+  useTaskSupportsModelSelection,
 } from "../../../common/state/hooks/useTaskHelpers.ts";
 import { Editor } from "../../../components/Editor.tsx";
 import type { FileUploadHandle } from "../../../components/FileUpload.tsx";
@@ -188,6 +189,9 @@ export const ChatInput = ({
   const canResetContext = useTaskSupportsContextReset(taskID ?? "") ?? true;
   const canHarnessAttachFiles = useTaskSupportsFileAttachments(taskID ?? "") ?? true;
   const canUseImageInput = useTaskSupportsImageInput(taskID ?? "") ?? true;
+  // Claude and pi both switch models; harnesses that can't (hello/terminal) get
+  // the disabled-with-tooltip switcher. `?? true` keeps it live until the task loads.
+  const canSelectModel = useTaskSupportsModelSelection(taskID ?? "") ?? true;
   // The `+` prefilter popover's "Images" category opens the same file
   // picker the toolbar's image button uses. Owning the ref here lets us
   // route both paths through one validated upload pipeline.
@@ -663,7 +667,7 @@ export const ChatInput = ({
               )}
               <EffortSelector effort={effort} onEffortChange={setEffort} />
               <Flex pr="1">
-                <ModelSelector model={localModel} onModelChange={handleModelChange} />
+                <ModelSelector model={localModel} onModelChange={handleModelChange} capabilityValue={canSelectModel} />
               </Flex>
               <SendButton
                 onClick={handleSend}

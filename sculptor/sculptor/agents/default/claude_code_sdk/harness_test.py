@@ -113,6 +113,7 @@ def test_claude_harness_capabilities() -> None:
         supports_file_attachments=True,
         supports_interruption=True,
         supports_file_references=True,
+        supports_model_selection=True,
     )
 
 
@@ -134,6 +135,7 @@ def test_hello_harness_capabilities_are_all_false() -> None:
         supports_file_attachments=False,
         supports_interruption=False,
         supports_file_references=False,
+        supports_model_selection=False,
     )
 
 

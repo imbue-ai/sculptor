@@ -17,6 +17,7 @@ import {
   taskSupportsImageInputAtomFamily,
   taskSupportsInteractiveBackchannelAtomFamily,
   taskSupportsInterruptionAtomFamily,
+  taskSupportsModelSelectionAtomFamily,
   taskSupportsSessionResumeAtomFamily,
   taskSupportsSkillsAtomFamily,
   taskSupportsSubAgentsAtomFamily,
@@ -92,6 +93,10 @@ export const useTaskSupportsToolUseRendering = (taskId: string): boolean | undef
  * the coarse main-panel switch (chat interface vs terminal panel). */
 export const useTaskSupportsChatInterface = (taskId: string): boolean | undefined =>
   useAtomValue(taskSupportsChatInterfaceAtomFamily(taskId));
+
+/** Subscribe to only the task's `supports_model_selection` capability. */
+export const useTaskSupportsModelSelection = (taskId: string): boolean | undefined =>
+  useAtomValue(taskSupportsModelSelectionAtomFamily(taskId));
 
 /** Subscribe to only the task's `accepts_automated_prompts` field — true
  * only for registered terminal agents whose registration opted in. */

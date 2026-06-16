@@ -160,6 +160,10 @@ export const taskSupportsChatInterfaceAtomFamily = atomFamily<string, Atom<boole
   atom((get) => get(taskAtomFamily(taskId))?.harnessCapabilities.supportsChatInterface),
 );
 
+export const taskSupportsModelSelectionAtomFamily = atomFamily<string, Atom<boolean | undefined>>((taskId) =>
+  atom((get) => get(taskAtomFamily(taskId))?.harnessCapabilities.supportsModelSelection),
+);
+
 export const taskAcceptsAutomatedPromptsAtomFamily = atomFamily<string, Atom<boolean | undefined>>((taskId) =>
   atom((get) => get(taskAtomFamily(taskId))?.acceptsAutomatedPrompts),
 );
