@@ -455,16 +455,16 @@ def test_browser_panel_in_page_state_preserved_across_route_detour(
     enable_browser_panel_: Callable[[], None],
 ) -> None:
     """In-page DOM state on a workspace's Browser panel must survive a
-    detour through a non-workspace route (e.g. /settings, /ws/new).  The
+    detour through a non-workspace route (e.g. /settings).  The
     PageLayout element used by /ws/:workspaceID is a different React element
     than the one used by /settings, so react-router unmounts the entire
     workspace subtree on detour — taking the <webview> with it under the
     current "mount-and-hide" approach.
 
-    The user-observed reproducer: open a workspace's Browser panel, click
-    "+ New Workspace" (route changes to /ws/new/<draftId>), then click back
-    to the original workspace.  In-page state is gone because the original
-    webContents was destroyed.
+    The user-observed reproducer: open a workspace's Browser panel, navigate
+    to Settings (a non-workspace route), then click back to the original
+    workspace.  In-page state is gone because the original webContents was
+    destroyed.
     """
     page = sculptor_instance_.page
     base = browser_panel_fixture_server_.base_url

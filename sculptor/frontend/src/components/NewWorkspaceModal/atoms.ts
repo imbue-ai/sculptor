@@ -20,9 +20,9 @@ export const newWorkspaceModalEntrySourceAtom = atom<NewWorkspaceModalEntrySourc
 // ── Draft form fields ──────────────────────────────────────────────────
 //
 // All fields persist across modal open/close within a session and are
-// cleared together on successful workspace creation. The legacy
-// `/ws/new/:draftId` URL carried this state via React Router; the modal
-// keeps it in atoms instead so it survives mount/unmount.
+// cleared together on successful workspace creation. They live in atoms
+// (rather than component state) so they survive the form's mount/unmount
+// as the modal opens and closes.
 
 export const draftWorkspaceNameAtom = atom<string>("");
 

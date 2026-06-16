@@ -10,7 +10,7 @@ import { BrowserViewSlot } from "./BrowserViewSlot";
 
 // Rendered once at the app root, above the router. Hosts every workspace's
 // browser <webview> for the lifetime of the app session, so route changes
-// (workspace ↔ /settings ↔ /ws/new) never tear down the webContents.
+// (workspace ↔ /settings ↔ home) never tear down the webContents.
 export const BrowserViewHost = (): ReactElement | null => {
   if (!isElectron()) return null;
   return <BrowserViewHostElectron />;
