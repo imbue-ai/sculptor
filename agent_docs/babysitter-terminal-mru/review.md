@@ -1,5 +1,22 @@
 # Preserve Terminal-Agent Type When Auto-Creating Agents (SCU-1504) — Review
 
+## Status: findings addressed
+
+All findings below were fixed in this tab, one commit per issue, after the
+review was written:
+
+- `859448a` — drop REQ-ID / plan-phase pointers from comments (Comments, MEDIUM)
+- `877dd59` — clarify the overlapping-drive coalescing comment (Correctness, LOW)
+- `9a215e3` — clear the in-progress guard if the terminal-drive spawn fails, with
+  a regression test (Correctness, LOW)
+- `3d28a45` — prefix the in-progress guard boolean with `is_` (Style, LOW)
+
+The one remaining finding (the `wait_for_timeout` in
+`test_plain_terminal_mru_shows_disabled_reason`) was left as-is: its assertions
+are retrying `expect()` calls and it mirrors the existing convention in that
+file — see the note below. Full `just check` and `just test-unit` are green
+after the fixes.
+
 ## Summary
 
 - **The implementation meets the spec.** All 24 requirements across the six
@@ -105,7 +122,7 @@ Output of the configured `/code-review-checklist` skill, run over
 
 ### Correctness
 
-**LOW** — `coordinator.py` `_dispatch_prompt` (DriveableTerminal coalescing
+**LOW — RESOLVED (`877dd59`).** `coordinator.py` `_dispatch_prompt` (DriveableTerminal coalescing
 branch) and `_run_terminal_drive`. The architecture's risk note says a coalesced
 overlapping drive will "write the latest prompt," but the in-flight worker
 captured `prompt_text` at its own dispatch, so a *different* transition's prompt
@@ -117,12 +134,12 @@ next poll re-dispatches once the in-progress flag clears. Worth a one-line code
 comment reconciling the implementation with the design note, or upgrading the
 worker to re-read the latest prompt before writing.
 
-**LOW** — `coordinator.py` `_dispatch_prompt`. `terminal_drive_in_progress` is set
-to `True` under the lock immediately before `start_new_thread`. If thread spawn
-ever raised, the flag would latch on and park the workspace. The
-`concurrency_group` spawn is very unlikely to raise, so this is defensive-only,
-but a `try/except` around the spawn that clears the flag on failure would close
-the gap.
+**LOW — RESOLVED (`9a215e3`).** `coordinator.py` `_dispatch_prompt`.
+`is_terminal_drive_in_progress` is set to `True` under the lock immediately
+before `start_new_thread`. If thread spawn ever raised, the flag would latch on
+and park the workspace. Fixed by wrapping the spawn in a guarded block that
+clears the flag and logs on failure (skipping the retry bump, since no drive was
+attempted), with a regression test (`test_terminal_drive_in_progress_clears_on_spawn_failure`).
 
 No other correctness issues found. Resource lifecycle is sound: the
 `subscribe_to_task` context manager closes on every path, and the worker's
@@ -161,7 +178,7 @@ check` is green). No debug prints, commented-out code, or stray TODOs.
 
 ### Comments
 
-**MEDIUM** — multiple files. Ten added comment/docstring lines embed `REQ-*`
+**MEDIUM — RESOLVED (`859448a`).** Multiple files. Ten added comment/docstring lines embed `REQ-*`
 requirement IDs (`REQ-DRIVE-4` ×3, `REQ-AGENT-2` ×3, `REQ-SET-2/4/5`,
 `REQ-AGENT-6`) in `coordinator.py`, and the integration test references
 `_DISABLED_REASON_MRU_NON_DRIVEABLE` by name. The Comments review rule
@@ -246,9 +263,9 @@ flakes, prefer waiting on an observable signal over a fixed delay.
 `just check` (which runs `ratchets`, `lint`, `typecheck`) is green, so no ratchet
 regressions and no import/structure violations.
 
-**LOW** — `state.py` `terminal_drive_in_progress`. The boolean isn't prefixed
-`is_`/`has_`/`should_` per the style guide's boolean-naming convention (it reads
-naturally as a noun phrase, and lint doesn't enforce it, so this is a nit only).
+**LOW — RESOLVED (`3d28a45`).** `state.py` `terminal_drive_in_progress`. The boolean wasn't
+prefixed `is_`/`has_`/`should_` per the style guide's boolean-naming convention.
+Renamed to `is_terminal_drive_in_progress` (field + all references).
 
 ### Git hygiene
 
