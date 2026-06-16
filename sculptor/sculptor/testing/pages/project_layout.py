@@ -95,6 +95,12 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
     def get_delete_confirmation_dialog(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_DIALOG)
 
+    def confirm_delete(self) -> None:
+        """Click the confirm button in the delete-confirmation dialog."""
+        confirm_button = self._page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_CONFIRM)
+        expect(confirm_button).to_be_visible()
+        confirm_button.click()
+
     def get_inline_rename_input(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.INLINE_RENAME_INPUT)
 
