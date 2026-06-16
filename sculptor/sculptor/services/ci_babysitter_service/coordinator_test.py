@@ -8,6 +8,8 @@ implemented.
 """
 
 import datetime
+import threading
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -31,6 +33,7 @@ from sculptor.database.models import Task
 from sculptor.database.models import TaskID
 from sculptor.database.models import Workspace
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.async_monkey_patches_test import expect_at_least_logged_errors
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
 from sculptor.interfaces.agents.agent import MessageTypes
@@ -1003,6 +1006,191 @@ def test_deliver_prompt_to_agent_writes_to_terminal_via_helper(
     assert calls == [(task.object_id, "fix the pipeline", True)]
     # No chat message was queued for the terminal path.
     assert task_service.create_message_calls == []
+
+
+# Terminal-drive worker: the babysitter offloads a registered-terminal drive to
+# a worker thread, tracks a transient disabled-reason, and coalesces overlapping
+# drives. Tests pin a registered agent so resolution returns DriveableTerminal.
+
+
+def _make_terminal_config(failed_prompt: str = "FAILED_PROMPT", retry_cap: int = 3) -> UserConfig:
+    return UserConfig(
+        user_email="test@example.com",
+        user_id="u",
+        organization_id="o",
+        instance_id="i",
+        ci_babysitter=CIBabysitterConfig(
+            enabled=True,
+            retry_cap=retry_cap,
+            pipeline_failed_prompt=failed_prompt,
+            agent=BabysitterAgentRegistered(registration_id="claude-code"),
+        ),
+    )
+
+
+def _wait_until(predicate: Any, timeout: float = 2.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return
+        time.sleep(0.01)
+    assert predicate(), "condition not met within timeout"
+
+
+def test_terminal_drive_worker_delivers_and_clears_transient_reason(
+    env: _FakeEnv,
+    patch_user_config: _ConfigSlot,
+    test_root_concurrency_group: ConcurrencyGroup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    patch_user_config.config = _make_terminal_config()
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _opt_in_registration(_id))
+    calls: list[tuple[str, bool]] = []
+
+    def _fake(task: Task, text: str, *, submit: bool, task_service: Any) -> Any:
+        del task, task_service
+        calls.append((text, submit))
+        return coordinator_module.TerminalDeliveryResult.DELIVERED
+
+    monkeypatch.setattr(coordinator_module, "deliver_prompt_to_terminal_agent", _fake)
+    coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
+    _seed_baseline(coordinator, env.workspace_id)
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+    state = coordinator._state[env.workspace_id]
+    _wait_until(lambda: not state.terminal_drive_in_progress)
+
+    assert calls == [("FAILED_PROMPT", True)]
+    assert state.transient_disabled_reason is None
+    assert state.retry_count == 1
+    # A terminal task was created and driven via the PTY, not a chat message.
+    assert len(task_service.create_task_calls) == 1
+    assert task_service.create_message_calls == []
+
+
+def test_terminal_drive_failure_sets_transient_reason_and_counts_retry(
+    env: _FakeEnv,
+    patch_user_config: _ConfigSlot,
+    test_root_concurrency_group: ConcurrencyGroup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    patch_user_config.config = _make_terminal_config()
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _opt_in_registration(_id))
+
+    def _fake(task: Task, text: str, *, submit: bool, task_service: Any) -> Any:
+        del task, text, submit, task_service
+        return coordinator_module.TerminalDeliveryResult.NOT_AT_PROMPT
+
+    monkeypatch.setattr(coordinator_module, "deliver_prompt_to_terminal_agent", _fake)
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    _seed_baseline(coordinator, env.workspace_id)
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+    state = coordinator._state[env.workspace_id]
+    _wait_until(lambda: not state.terminal_drive_in_progress)
+
+    assert state.transient_disabled_reason == coordinator_module._TRANSIENT_REASON_UNREACHABLE
+    # A failed drive still counts against retry_cap (REQ-DRIVE-4).
+    assert state.retry_count == 1
+
+
+def test_overlapping_terminal_drive_coalesces(
+    env: _FakeEnv,
+    patch_user_config: _ConfigSlot,
+    test_root_concurrency_group: ConcurrencyGroup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    patch_user_config.config = _make_terminal_config()
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _opt_in_registration(_id))
+    calls: list[str] = []
+
+    def _fake(task: Task, text: str, *, submit: bool, task_service: Any) -> Any:
+        del task, submit, task_service
+        calls.append(text)
+        return coordinator_module.TerminalDeliveryResult.DELIVERED
+
+    monkeypatch.setattr(coordinator_module, "deliver_prompt_to_terminal_agent", _fake)
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    _seed_baseline(coordinator, env.workspace_id)
+    state = coordinator._state[env.workspace_id]
+
+    # Simulate a drive already in flight: a second failure (new pipeline_id) must
+    # not start a racing worker.
+    state.terminal_drive_in_progress = True
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+
+    assert calls == []
+    # Coalesced dispatch does not bump retry/dedup bookkeeping for this cycle.
+    assert state.retry_count == 0
+
+
+def test_terminal_drive_in_progress_clears_on_worker_exception(
+    env: _FakeEnv,
+    patch_user_config: _ConfigSlot,
+    test_root_concurrency_group: ConcurrencyGroup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    patch_user_config.config = _make_terminal_config()
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _opt_in_registration(_id))
+
+    def _boom(task: Task, text: str, *, submit: bool, task_service: Any) -> Any:
+        del task, text, submit, task_service
+        raise RuntimeError("pty exploded")
+
+    monkeypatch.setattr(coordinator_module, "deliver_prompt_to_terminal_agent", _boom)
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    _seed_baseline(coordinator, env.workspace_id)
+
+    with expect_at_least_logged_errors({"CIBabysitterCoordinator: terminal drive failed for workspace="}):
+        coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+        state = coordinator._state[env.workspace_id]
+        # A worker exception must never park the workspace with the guard stuck on.
+        _wait_until(lambda: not state.terminal_drive_in_progress)
+    assert state.terminal_drive_in_progress is False
+
+
+def test_terminal_drive_does_not_block_consumer_loop(
+    env: _FakeEnv,
+    patch_user_config: _ConfigSlot,
+    test_root_concurrency_group: ConcurrencyGroup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # _dispatch_prompt must return promptly even when the write blocks; the
+    # write happens on the worker, not the consumer thread.
+    patch_user_config.config = _make_terminal_config()
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _opt_in_registration(_id))
+    release = threading.Event()
+    started = threading.Event()
+
+    def _blocking(task: Task, text: str, *, submit: bool, task_service: Any) -> Any:
+        del task, text, submit, task_service
+        started.set()
+        release.wait(timeout=5.0)
+        return coordinator_module.TerminalDeliveryResult.DELIVERED
+
+    monkeypatch.setattr(coordinator_module, "deliver_prompt_to_terminal_agent", _blocking)
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    _seed_baseline(coordinator, env.workspace_id)
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+    # The dispatch returned while the worker is still blocked inside the write.
+    assert started.wait(timeout=2.0)
+    state = coordinator._state[env.workspace_id]
+    assert state.terminal_drive_in_progress is True
+    release.set()
+    _wait_until(lambda: not state.terminal_drive_in_progress)
+
+
+def test_transient_reason_clears_on_pipeline_passed(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    _seed_baseline(coordinator, env.workspace_id)
+    state = coordinator._state[env.workspace_id]
+    state.transient_disabled_reason = "stale hiccup"
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="passed", pipeline_id=1))
+    assert state.transient_disabled_reason is None
 
 
 def test_select_model_for_workspace_skips_terminal_agents(

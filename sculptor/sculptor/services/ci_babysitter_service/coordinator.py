@@ -67,6 +67,10 @@ _DISABLED_REASON_MRU_NON_DRIVEABLE = "Your most-recent agent is a terminal that 
 _DISABLED_REASON_PINNED_UNAVAILABLE = (
     "The CI Babysitter's selected agent is no longer available. Choose another in CI Babysitter settings."
 )
+# Transient (runtime) reason: the most recent terminal drive couldn't reach the
+# program's prompt. Cleared by the next successful drive or when the CI cycle
+# resolves; the attempt still counts against retry_cap.
+_TRANSIENT_REASON_UNREACHABLE = "Couldn't reach the terminal agent's prompt; will retry on the next failure."
 
 
 @dataclass(frozen=True)
@@ -253,9 +257,13 @@ class CIBabysitterCoordinator(Service):
             if transition is Transition.PIPELINE_PASSED:
                 with self._lock:
                     state.retry_count = 0
+                    # The transient reason reflects a one-off hiccup; once the
+                    # cycle resolves it no longer applies.
+                    state.transient_disabled_reason = None
             elif transition in (Transition.MR_MERGED, Transition.MR_CLOSED):
                 with self._lock:
                     state.retired = True
+                    state.transient_disabled_reason = None
         for transition in transitions:
             if transition in (Transition.PIPELINE_FAILED, Transition.MERGE_CONFLICT):
                 self._dispatch_prompt(state, transition, new)
@@ -319,19 +327,68 @@ class CIBabysitterCoordinator(Service):
         if task_id is None:
             return
 
-        with self._data_model_service.open_transaction(RequestID()) as transaction:
-            task = self._task_service.get_task(task_id, transaction)
-        if task is None:
-            return
-
-        self.deliver_prompt_to_agent(task, prompt_text, config)
+        if isinstance(resolved, DriveableTerminal):
+            # Offload the PTY drive to a worker so the single-threaded consumer
+            # loop stays responsive to every other workspace's PR updates (the
+            # readiness wait added in Task 3.2 can block for seconds).
+            with self._lock:
+                if state.terminal_drive_in_progress:
+                    # Coalesce: the in-flight worker will write the prompt. Don't
+                    # start a racing worker or bump bookkeeping for this cycle.
+                    logger.info(
+                        "CIBabysitterCoordinator: terminal drive already in progress for workspace={}, coalescing",
+                        state.workspace_id,
+                    )
+                    return
+                state.terminal_drive_in_progress = True
+            self.concurrency_group.start_new_thread(
+                target=self._run_terminal_drive,
+                args=(state, task_id, prompt_text, config),
+                name="ci-babysitter-terminal-drive",
+            )
+        else:
+            with self._data_model_service.open_transaction(RequestID()) as transaction:
+                task = self._task_service.get_task(task_id, transaction)
+            if task is None:
+                return
+            self.deliver_prompt_to_agent(task, prompt_text, config)
 
         with self._lock:
+            # The attempt counts against retry_cap whether or not the terminal
+            # worker ultimately delivers (REQ-DRIVE-4).
             state.retry_count += 1
             if transition is Transition.PIPELINE_FAILED:
                 state.last_dispatched_pipeline_failed_id = new.pipeline_id
             elif transition is Transition.MERGE_CONFLICT:
                 state.last_dispatched_merge_conflict = True
+
+    def _run_terminal_drive(
+        self, state: CIBabysitterState, task_id: TaskID, prompt_text: str, config: UserConfig
+    ) -> None:
+        """Worker: drive a registered terminal agent's PTY off the consumer loop.
+
+        Sets the transient disabled-reason on a failed write and clears it on
+        success; always clears the in-progress flag so a crash can't park the
+        workspace with the guard stuck on.
+        """
+        try:
+            with self._data_model_service.open_transaction(RequestID()) as transaction:
+                task = self._task_service.get_task(task_id, transaction)
+            if task is None:
+                return
+            result = self.deliver_prompt_to_agent(task, prompt_text, config)
+            with self._lock:
+                if result is TerminalDeliveryResult.DELIVERED:
+                    state.transient_disabled_reason = None
+                else:
+                    state.transient_disabled_reason = _TRANSIENT_REASON_UNREACHABLE
+        except Exception as exc:
+            logger.error(
+                "CIBabysitterCoordinator: terminal drive failed for workspace={}: {}", state.workspace_id, exc
+            )
+        finally:
+            with self._lock:
+                state.terminal_drive_in_progress = False
 
     def _resolve_babysitter_agent(
         self,
@@ -398,10 +455,10 @@ class CIBabysitterCoordinator(Service):
         input_data = task.input_data
         assert isinstance(input_data, AgentTaskInputsV2)
         if isinstance(input_data.agent_config, RegisteredTerminalAgentConfig):
-            # Minimal inline single guarded write. For a freshly created task the
-            # program usually hasn't reached its prompt yet, so this returns
-            # NOT_AT_PROMPT on the first failure cycle — expected here; Phase 3
-            # adds the readiness wait + worker thread that make it deliver.
+            # Single guarded write. Called from the terminal-drive worker
+            # (Task 3.1) so it never blocks the consumer loop. For a freshly
+            # created task the program usually hasn't reached its prompt yet, so
+            # this returns NOT_AT_PROMPT until Task 3.2 adds the readiness wait.
             return deliver_prompt_to_terminal_agent(task, prompt_text, submit=True, task_service=self._task_service)
         with self._data_model_service.open_transaction(RequestID()) as transaction:
             model = self._select_model_for_task(task.object_id, config, transaction)
