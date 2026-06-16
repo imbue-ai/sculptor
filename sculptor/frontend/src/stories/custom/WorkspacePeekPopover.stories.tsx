@@ -89,6 +89,8 @@ function makeTask(overrides: Partial<CodingAgentTaskView> & { id: string }): Cod
       supportsFileReferences: true,
       supportsModelSelection: true,
     },
+    availableModels: [],
+    selectedModelId: null,
     isSmoothStreamingSupported: false,
     fastMode: false,
     effort: null,
