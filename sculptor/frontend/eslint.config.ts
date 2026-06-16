@@ -39,6 +39,7 @@ export default tseslint.config(
       "src/quarantine/**",
       "src/views/tasks_deprecated/**",
       "tailwind.config.js",
+      "vite.base.config.ts",
       "vite.config.ts",
       "out/**",
       "storybook-static/**",
