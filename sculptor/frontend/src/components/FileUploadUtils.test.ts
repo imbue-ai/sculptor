@@ -1,4 +1,6 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { initBackendCapabilities } from "~/common/state/atoms/backendCapabilities.ts";
 
 import {
   ALLOWED_EXTENSIONS,
@@ -26,6 +28,7 @@ beforeAll(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   delete (window as unknown as Record<string, unknown>).sculptor;
 });
 
@@ -265,6 +268,81 @@ describe("saveFiles", () => {
 
   it("returns empty array when window.sculptor is not available", async () => {
     delete (window as unknown as Record<string, unknown>).sculptor;
+
+    const file = createFileWithContent("photo.png", PNG_HEADER, "image/png");
+    const result = await saveFiles([file]);
+
+    expect(result).toEqual([]);
+  });
+});
+
+describe("saveFiles (http mode)", () => {
+  // In the web/OpenHost build there is no window.sculptor; capabilities are
+  // REMOTE so uploads go over HTTP to the backend instead of Electron IPC.
+  beforeEach(() => {
+    initBackendCapabilities(true);
+  });
+
+  afterEach(() => {
+    // Restore the default (electron-ipc) capabilities for the rest of the suite.
+    initBackendCapabilities(false);
+  });
+
+  it("uploads files over HTTP and returns the backend file ids", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async (): Promise<{ fileId: string }> => ({ fileId: "abc123.png" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const file = createFileWithContent("photo.png", PNG_HEADER, "image/png");
+    const result = await saveFiles([file]);
+
+    expect(result).toEqual(["abc123.png"]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/api/v1/upload-file");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeInstanceOf(FormData);
+  });
+
+  it("does not call window.sculptor.saveFile in http mode", async () => {
+    const mockSaveFile = vi.fn();
+    window.sculptor = { saveFile: mockSaveFile } as unknown as typeof window.sculptor;
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async (): Promise<{ fileId: string }> => ({ fileId: "abc123.png" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const file = createFileWithContent("photo.png", PNG_HEADER, "image/png");
+    await saveFiles([file]);
+
+    expect(mockSaveFile).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("filters out uploads that the backend rejects", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async (): Promise<{ fileId: string }> => ({ fileId: "first.png" }) })
+      .mockResolvedValueOnce({ ok: false, status: 413 })
+      .mockResolvedValueOnce({ ok: true, json: async (): Promise<{ fileId: string }> => ({ fileId: "third.png" }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const files = [
+      createFileWithContent("first.png", PNG_HEADER, "image/png"),
+      createFileWithContent("second.png", PNG_HEADER, "image/png"),
+      createFileWithContent("third.png", PNG_HEADER, "image/png"),
+    ];
+    const result = await saveFiles(files);
+
+    expect(result).toEqual(["first.png", "third.png"]);
+  });
+
+  it("filters out uploads that throw a network error", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("network down"));
+    vi.stubGlobal("fetch", fetchMock);
 
     const file = createFileWithContent("photo.png", PNG_HEADER, "image/png");
     const result = await saveFiles([file]);

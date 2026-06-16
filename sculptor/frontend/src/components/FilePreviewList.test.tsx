@@ -5,6 +5,7 @@ import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ElementIds } from "~/api";
+import { initBackendCapabilities } from "~/common/state/atoms/backendCapabilities.ts";
 
 import { FilePreviewList } from "./FilePreviewList";
 
@@ -31,6 +32,10 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  // Reset back to the default (electron-ipc) capabilities; the http-mode tests
+  // below flip this to REMOTE.
+  initBackendCapabilities(false);
   delete (window as unknown as Record<string, unknown>).sculptor;
 });
 
@@ -389,6 +394,55 @@ describe("FilePreviewList", () => {
 
       await waitFor(() => {
         expect(screen.getByAltText("Attachment: vacation.png")).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe("http mode (remote backend)", () => {
+    // In the web/OpenHost build there is no window.sculptor; capabilities are
+    // REMOTE so previews are fetched over HTTP from the backend instead of
+    // through Electron IPC.
+    beforeEach(() => {
+      initBackendCapabilities(true);
+      // jsdom does not implement URL.createObjectURL; stub it so the http path
+      // can turn the fetched blob into an <img> src.
+      (URL as unknown as { createObjectURL: unknown }).createObjectURL = vi.fn(() => "blob:mock-url");
+    });
+
+    afterEach(() => {
+      delete (URL as unknown as Record<string, unknown>).createObjectURL;
+    });
+
+    it("loads previews over HTTP from the uploaded-file endpoint", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        blob: async (): Promise<Blob> => new Blob(["png-bytes"], { type: "image/png" }),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      renderList({ files: ["abc123.png"] });
+
+      await waitFor(() => {
+        const img = screen.getByAltText("Attachment: abc123.png");
+        expect(img).toHaveAttribute("src", "blob:mock-url");
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [url] = fetchMock.mock.calls[0] as [string];
+      expect(url).toContain("/api/v1/uploaded-file/abc123.png");
+      // The Electron IPC path must not be used in http mode.
+      expect(mockGetFileData).not.toHaveBeenCalled();
+    });
+
+    it("marks the file as failed when the HTTP request is not ok", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404 });
+      vi.stubGlobal("fetch", fetchMock);
+
+      renderList({ files: ["missing.png"] });
+
+      await waitFor(() => {
+        expect(screen.getByTestId(ElementIds.FILE_PREVIEW_CONTAINER)).toBeInTheDocument();
+        expect(screen.queryByAltText("Attachment: missing.png")).not.toBeInTheDocument();
       });
     });
   });
