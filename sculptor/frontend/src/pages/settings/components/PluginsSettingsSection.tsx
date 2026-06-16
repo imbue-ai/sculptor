@@ -165,6 +165,7 @@ const SourceRow = ({ source, state, store, setIsBusy }: SourceRowProps): ReactEl
                 variant={isSettingsOpen ? "soft" : "ghost"}
                 size="1"
                 color="gray"
+                aria-label={`Settings for ${source}`}
                 onClick={() => setIsSettingsOpen((open) => !open)}
                 data-testid={ElementIds.SETTINGS_PLUGINS_SOURCE_SETTINGS}
               >
@@ -177,6 +178,7 @@ const SourceRow = ({ source, state, store, setIsBusy }: SourceRowProps): ReactEl
               variant="ghost"
               size="1"
               color="gray"
+              aria-label={`Reload ${source}`}
               onClick={() => void handleReload()}
               data-testid={ElementIds.SETTINGS_PLUGINS_SOURCE_RELOAD}
             >
@@ -189,6 +191,7 @@ const SourceRow = ({ source, state, store, setIsBusy }: SourceRowProps): ReactEl
                 variant="ghost"
                 size="1"
                 color="gray"
+                aria-label={`Remove ${source}`}
                 onClick={() => pluginManager.removeSource(store, source)}
                 data-testid={ElementIds.SETTINGS_PLUGINS_SOURCE_REMOVE}
               >

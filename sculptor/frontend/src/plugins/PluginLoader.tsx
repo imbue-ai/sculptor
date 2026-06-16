@@ -1,5 +1,5 @@
 import { useAtomValue, useStore } from "jotai";
-import { useEffect } from "react";
+import { type ReactElement, useEffect } from "react";
 
 import { isFrontendPluginsEnabledAtom } from "~/common/state/atoms/userConfig.ts";
 
@@ -18,7 +18,7 @@ import { pluginManager } from "./pluginManager.tsx";
  * unloaded mid-session, so turning the flag off only fully takes effect on the
  * next app reload.
  */
-export const PluginLoader = (): null => {
+export const PluginLoader = (): ReactElement | null => {
   const store = useStore();
   const isEnabled = useAtomValue(isFrontendPluginsEnabledAtom);
   useEffect(() => {
