@@ -1,18 +1,46 @@
-import { Switch, Text, TextField } from "@radix-ui/themes";
+import { Select, Switch, Text, TextField } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 
 import { type CiBabysitterConfig, ElementIds, UserConfigField } from "../../../api";
 import {
+  ciBabysitterAgentAtom,
   ciBabysitterMergeConflictPromptAtom,
   ciBabysitterPipelineFailedPromptAtom,
   ciBabysitterRetryCapAtom,
   isCiBabysitterEnabledAtom,
+  isPiAgentEnabledAtom,
 } from "../../../common/state/atoms/userConfig.ts";
+import { useTerminalAgentRegistrations } from "../../../common/state/hooks/useTerminalAgentRegistrations.ts";
 import { SettingRow } from "./SettingRow.tsx";
 import { SettingsSectionLayout } from "./SettingsSection.tsx";
 import { TextAreaSettingRow } from "./TextAreaSettingRow.tsx";
+
+type BabysitterAgentChoice = NonNullable<CiBabysitterConfig["agent"]>;
+
+const REGISTERED_VALUE_PREFIX = "registered:";
+
+// Encode the current discriminated-union choice as a Select string value, and
+// decode a Select value back into the union variant object the backend expects.
+const agentChoiceToSelectValue = (agent: BabysitterAgentChoice | null): string => {
+  const objectType = agent?.objectType;
+  if (objectType === "registered" && typeof agent?.registrationId === "string") {
+    return `${REGISTERED_VALUE_PREFIX}${agent.registrationId}`;
+  }
+
+  if (objectType === "claude" || objectType === "pi") {
+    return objectType;
+  }
+  return "mru";
+};
+
+const selectValueToAgentChoice = (value: string): BabysitterAgentChoice => {
+  if (value.startsWith(REGISTERED_VALUE_PREFIX)) {
+    return { objectType: "registered", registrationId: value.slice(REGISTERED_VALUE_PREFIX.length) };
+  }
+  return { objectType: value };
+};
 
 const DEFAULT_PIPELINE_FAILED_PROMPT =
   "Investigate the failing pipeline for this MR, identify the root cause, fix the code, commit, and push.";
@@ -28,10 +56,17 @@ export const CIBabysitterSettingsSection = ({ onSettingChange }: CIBabysitterSet
   const retryCap = useAtomValue(ciBabysitterRetryCapAtom);
   const pipelineFailedPrompt = useAtomValue(ciBabysitterPipelineFailedPromptAtom);
   const mergeConflictPrompt = useAtomValue(ciBabysitterMergeConflictPromptAtom);
+  const agent = useAtomValue(ciBabysitterAgentAtom);
+  const isPiEnabled = useAtomValue(isPiAgentEnabledAtom);
+  const { registrations, refetch } = useTerminalAgentRegistrations();
 
   const [retryCapValue, setRetryCapValue] = useState(String(retryCap));
 
   useEffect(() => setRetryCapValue(String(retryCap)), [retryCap]);
+
+  // Only registered terminal agents that opted into automated prompts can be
+  // driven by the babysitter (REQ-SET-4); plain terminals never appear.
+  const driveableRegistrations = registrations.filter((registration) => registration.acceptsAutomatedPrompts);
 
   // Backend stores all babysitter settings in a single nested `ciBabysitter`
   // object. Each edit on this page builds a new full config from the current
@@ -42,6 +77,7 @@ export const CIBabysitterSettingsSection = ({ onSettingChange }: CIBabysitterSet
       retryCap,
       pipelineFailedPrompt,
       mergeConflictPrompt,
+      ...(agent != null ? { agent } : {}),
       ...overrides,
     };
     return onSettingChange(UserConfigField.CI_BABYSITTER, next);
@@ -70,6 +106,37 @@ export const CIBabysitterSettingsSection = ({ onSettingChange }: CIBabysitterSet
           onCheckedChange={(checked) => void commit({ enabled: checked })}
           data-testid={ElementIds.SETTINGS_CI_BABYSITTER_ENABLED_TOGGLE}
         />
+      </SettingRow>
+
+      <SettingRow
+        title="Babysitter agent"
+        description="Which agent the babysitter uses: most recently used (inherits the workspace's most recent driveable agent), or a specific harness. Only agents that can receive automated prompts are listed."
+      >
+        <Select.Root
+          value={agentChoiceToSelectValue(agent)}
+          onValueChange={(value) => void commit({ agent: selectValueToAgentChoice(value) })}
+          onOpenChange={(open) => {
+            if (open) {
+              void refetch();
+            }
+          }}
+          disabled={!isEnabled}
+        >
+          <Select.Trigger variant="soft" data-testid={ElementIds.SETTINGS_CI_BABYSITTER_AGENT_SELECT} />
+          <Select.Content>
+            <Select.Item value="mru">Most recently used</Select.Item>
+            <Select.Item value="claude">Claude</Select.Item>
+            {isPiEnabled && <Select.Item value="pi">Pi</Select.Item>}
+            {driveableRegistrations.map((registration) => (
+              <Select.Item
+                key={registration.registrationId}
+                value={`${REGISTERED_VALUE_PREFIX}${registration.registrationId}`}
+              >
+                {registration.displayName}
+              </Select.Item>
+            ))}
+          </Select.Content>
+        </Select.Root>
       </SettingRow>
 
       <SettingRow
