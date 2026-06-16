@@ -6,6 +6,11 @@ upstream model. Helpers keep the per-test surface small.
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
+from collections.abc import Sequence
+
+import psutil
 import pytest
 from playwright.sync_api import expect
 
@@ -124,3 +129,35 @@ def create_pi_workspace_and_send(
             timeout=RESPONSE_TIMEOUT_MS,
         )
     return task_page
+
+
+def count_processes_matching(predicate: Callable[[Sequence[str]], bool]) -> int:
+    """Count live processes whose argv satisfies ``predicate``.
+
+    Backs the no-orphan assertions: see a spawned child appear and confirm it is
+    gone (killed, not orphaned). Reads ``cmdline`` defensively — a process can
+    exit between iteration and inspection.
+    """
+    count = 0
+    for proc in psutil.process_iter(["cmdline"]):
+        try:
+            cmdline = proc.info["cmdline"] or []
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+        if predicate(cmdline):
+            count += 1
+    return count
+
+
+def wait_for_process_count(
+    predicate: Callable[[Sequence[str]], bool], target: int, *, at_least: bool, timeout_s: float
+) -> int:
+    """Poll ``count_processes_matching`` until it reaches ``target`` (or timeout)."""
+    deadline = time.monotonic() + timeout_s
+    last = count_processes_matching(predicate)
+    while time.monotonic() < deadline:
+        last = count_processes_matching(predicate)
+        if (at_least and last >= target) or (not at_least and last <= target):
+            return last
+        time.sleep(0.5)
+    return last

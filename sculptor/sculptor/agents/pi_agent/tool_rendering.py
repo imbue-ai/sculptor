@@ -59,6 +59,18 @@ SUBAGENT_TOOL_NAME: str = "subagent"
 # under the parent exactly as Claude's sub-agents render.
 SUBAGENT_DISPLAY_NAME: str = "Agent"
 
+# The tool name pi exposes for the Sculptor-pinned background-task extension
+# (`extensions/sculptor_background.ts`); MUST match the `name` that extension
+# registers. The adapter (`agent_wrapper` + `background.py`) keys on this to
+# detect the launching tool call and parse its structured lifecycle payloads.
+# It is deliberately NOT mapped onto a Claude name: it passes through
+# `map_pi_tool_call` unchanged so the frontend renders the launch call
+# generically (name + command + "started" result), while the background-task
+# lifecycle is surfaced through the harness-agnostic BackgroundTask* contracts.
+# Mapping it onto "Agent" would mis-route it into the sub-agent child-synthesis
+# path (message_conversion only synthesizes children for Agent/Task parents).
+BACKGROUND_TOOL_NAME: str = "background"
+
 
 def _summarize_subagent_tasks(pi_args: dict[str, Any]) -> tuple[str, str]:
     """Derive `(subagent_type, prompt)` for the Claude-shaped `Agent` input.

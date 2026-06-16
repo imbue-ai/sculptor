@@ -25,11 +25,15 @@ import pytest
 from sculptor.agents.pi_agent.agent_wrapper import PI_SESSION_DIR_NAME
 from sculptor.agents.pi_agent.agent_wrapper import PI_SESSION_ID_STATE_FILE
 from sculptor.agents.pi_agent.agent_wrapper import PiAgent
+from sculptor.agents.pi_agent.agent_wrapper import _TurnState
 from sculptor.agents.pi_agent.agent_wrapper import _render_synthesized_skill
 from sculptor.agents.pi_agent.agent_wrapper import _rewrite_skill_invocation
 from sculptor.agents.pi_agent.backchannel import DISMISSED_ANSWER_VALUE
 from sculptor.agents.pi_agent.backchannel import PLAN_APPROVAL_DIALOG_TITLE
 from sculptor.agents.pi_agent.backchannel import PLAN_APPROVAL_HEADER
+from sculptor.agents.pi_agent.background import BACKGROUND_NOTIFY_MARKER
+from sculptor.agents.pi_agent.background import BACKGROUND_PAYLOAD_VERSION
+from sculptor.agents.pi_agent.background import BackgroundTaskCompletion
 from sculptor.agents.pi_agent.harness import PI_HARNESS
 from sculptor.agents.pi_agent.output_processor import AgentMessage
 from sculptor.agents.pi_agent.output_processor import ParsedUnknownEvent
@@ -39,6 +43,8 @@ from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_er
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingDoneAgentMessage
+from sculptor.interfaces.agents.agent import BackgroundTaskNotificationAgentMessage
+from sculptor.interfaces.agents.agent import BackgroundTaskStartedAgentMessage
 from sculptor.interfaces.agents.agent import ClearContextUserMessage
 from sculptor.interfaces.agents.agent import ContextClearedMessage
 from sculptor.interfaces.agents.agent import EphemeralUserMessage
@@ -2215,3 +2221,231 @@ def test_subagent_emits_one_child_message_per_child_in_parallel() -> None:
     children = _child_messages(emitted)
     assert {m.parent_tool_use_id for m in children} == {"sa1"}
     assert len(children) == 2
+
+
+# --- Background tasks (start → hold-open → completion notify) ----------------
+
+_BG_TOOL_CALL_ID = "bgtc1"
+_BG_TASK_ID = f"bgt_{_BG_TOOL_CALL_ID}"
+_BG_PGID = 4242
+
+
+def _background_start_result(
+    task_id: str = _BG_TASK_ID,
+    tool_call_id: str = _BG_TOOL_CALL_ID,
+    command: str = "sleep 1",
+    label: str = "build",
+    pgid: int = _BG_PGID,
+) -> dict[str, Any]:
+    """The {content, details} envelope the `background` tool returns on launch."""
+    return {
+        "content": [{"type": "text", "text": f"Started background task {label} (pid {pgid}): {command}"}],
+        "details": {
+            "v": BACKGROUND_PAYLOAD_VERSION,
+            "task": {
+                "taskId": task_id,
+                "toolCallId": tool_call_id,
+                "label": label,
+                "command": command,
+                "pgid": pgid,
+                "status": "running",
+            },
+        },
+    }
+
+
+def _background_notify(
+    task_id: str = _BG_TASK_ID,
+    tool_call_id: str = _BG_TOOL_CALL_ID,
+    status: str = "completed",
+    exit_code: int = 0,
+    summary: str = "build ok",
+    duration_ms: int = 1500,
+) -> dict[str, Any]:
+    """The fire-and-forget completion notify the extension emits out-of-band."""
+    return {
+        "type": "extension_ui_request",
+        "id": "uireq-1",
+        "method": "notify",
+        "notifyType": "info" if status == "completed" else "warning",
+        "message": json.dumps(
+            {
+                BACKGROUND_NOTIFY_MARKER: {
+                    "v": BACKGROUND_PAYLOAD_VERSION,
+                    "taskId": task_id,
+                    "toolCallId": tool_call_id,
+                    "status": status,
+                    "exitCode": exit_code,
+                    "summary": summary,
+                    "durationMs": duration_ms,
+                }
+            }
+        ),
+    }
+
+
+def _bg_started(messages: list) -> list[BackgroundTaskStartedAgentMessage]:
+    return [m for m in messages if isinstance(m, BackgroundTaskStartedAgentMessage)]
+
+
+def _bg_notifications(messages: list) -> list[BackgroundTaskNotificationAgentMessage]:
+    return [m for m in messages if isinstance(m, BackgroundTaskNotificationAgentMessage)]
+
+
+def _assert_killed_pgid(agent: PiAgent, pgid: int) -> None:
+    """Assert Sculptor issued an in-environment SIGTERM to the child's process group."""
+    env = agent.environment
+    assert isinstance(env, MagicMock)
+    calls = env.run_process_to_completion.call_args_list
+    commands = [c.args[0] for c in calls if c.args and isinstance(c.args[0], list)]
+    assert any(f"kill -TERM -{pgid}" in part for cmd in commands for part in cmd), commands
+
+
+def test_background_task_starts_holds_open_then_completes() -> None:
+    """A `background` call surfaces as a started task, holds the turn open until
+    its completion notify, then the notify reconciles the completion and ends the turn."""
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event(_tool_execution_start(_BG_TOOL_CALL_ID, "background", {"command": "sleep 1", "label": "build"})),
+            _event(_tool_execution_end(_BG_TOOL_CALL_ID, "background", result=_background_start_result())),
+            _event({"type": "agent_end", "messages": [_assistant_msg("on it")], "willRetry": False}),
+            _event(_background_notify()),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+    emitted = _drain(agent._output_messages)
+
+    started = _bg_started(emitted)
+    assert len(started) == 1
+    assert started[0].background_task_id == _BG_TASK_ID
+    assert started[0].tool_use_id == _BG_TOOL_CALL_ID
+    assert started[0].description == "sleep 1"
+    assert started[0].task_type == "build"
+
+    notifications = _bg_notifications(emitted)
+    assert len(notifications) == 1
+    assert notifications[0].background_task_id == _BG_TASK_ID
+    assert notifications[0].status == "completed"
+    assert notifications[0].duration_seconds == 1.5
+
+    # The completion is reconciled into the conversation as a plain assistant
+    # block (the background tool is not a sub-agent, so message_conversion
+    # synthesizes no child for it).
+    summaries = [
+        block.text
+        for m in emitted
+        if isinstance(m, ResponseBlockAgentMessage)
+        for block in m.content
+        if isinstance(block, TextBlock) and "Background task" in block.text
+    ]
+    assert any("completed" in s for s in summaries)
+    # The summary must ALSO stream as a partial (paired with the final block), or
+    # the live stream reducer never builds it — it would render only on reload.
+    partial_summaries = [
+        block.text
+        for m in emitted
+        if isinstance(m, PartialResponseBlockAgentMessage)
+        for block in m.content
+        if isinstance(block, TextBlock) and "Background task" in block.text
+    ]
+    assert partial_summaries, "completion summary must be advertised as a partial for live rendering"
+
+
+def test_background_completion_before_agent_end_waits_for_run_end() -> None:
+    """A task that finishes mid-run is reconciled, but the run's own agent_end is
+    what ends the turn — the in-progress agent response is never cut short."""
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event(_tool_execution_start(_BG_TOOL_CALL_ID, "background", {"command": "true"})),
+            _event(
+                _tool_execution_end(_BG_TOOL_CALL_ID, "background", result=_background_start_result(command="true"))
+            ),
+            # Completion arrives BEFORE the agent run ends.
+            _event(_background_notify()),
+            _event({"type": "agent_end", "messages": [_assistant_msg("done")], "willRetry": False}),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+    emitted = _drain(agent._output_messages)
+    assert len(_bg_started(emitted)) == 1
+    assert len(_bg_notifications(emitted)) == 1
+
+
+def test_background_interrupt_during_run_cancels_child() -> None:
+    """An interrupt during the launching run cancels the background child (no orphan)."""
+    agent = _make_agent()
+    agent._interrupt_pending.set()
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event(_tool_execution_start(_BG_TOOL_CALL_ID, "background", {"command": "sleep 100"})),
+            _event(
+                _tool_execution_end(
+                    _BG_TOOL_CALL_ID, "background", result=_background_start_result(command="sleep 100")
+                )
+            ),
+            _event({"type": "agent_end", "messages": [_assistant_msg("", stop_reason="aborted")], "willRetry": False}),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+    _assert_killed_pgid(agent, _BG_PGID)
+
+
+def test_background_no_completion_cancels_child_on_turn_exit() -> None:
+    """A held-open turn that exits without a completion (process died) still cancels
+    the child via the safety net, so no background process is orphaned."""
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event(_tool_execution_start(_BG_TOOL_CALL_ID, "background", {"command": "sleep 100"})),
+            _event(
+                _tool_execution_end(
+                    _BG_TOOL_CALL_ID, "background", result=_background_start_result(command="sleep 100")
+                )
+            ),
+            _event({"type": "agent_end", "messages": [_assistant_msg("launched")], "willRetry": False}),
+            # No completion notify; the process then finishes and the turn unwinds.
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+    _assert_killed_pgid(agent, _BG_PGID)
+
+
+def test_cancel_background_tasks_signals_process_group() -> None:
+    """_cancel_background_tasks SIGTERMs each child's group in the environment and clears the set."""
+    agent = _make_agent()
+    agent._process = _make_process([])
+    state = _TurnState(prompt_id=_PROMPT_ID)
+    state.pending_background_tasks = {"bgt_x": 999}
+    agent._cancel_background_tasks(state)
+    assert state.pending_background_tasks == {}
+    _assert_killed_pgid(agent, 999)
+
+
+def test_handle_background_completion_releases_only_after_run_ended() -> None:
+    """A completion ends the turn once the agent run has ended; mid-run it reconciles but waits."""
+    agent = _make_agent()
+    completion = BackgroundTaskCompletion(
+        task_id="bgt_x", tool_call_id="tcx", status="completed", exit_code=0, summary="ok", duration_ms=2000
+    )
+
+    # Mid-run: reconcile but do not release.
+    mid_run = _TurnState(prompt_id=_PROMPT_ID)
+    mid_run.pending_background_tasks = {"bgt_x": 1}
+    mid_run.agent_run_ended = False
+    assert agent._handle_background_completion(completion, mid_run) is False
+    assert mid_run.pending_background_tasks == {}
+
+    # After the run ended and with the last task done: release.
+    after_run = _TurnState(prompt_id=_PROMPT_ID)
+    after_run.pending_background_tasks = {"bgt_x": 1}
+    after_run.agent_run_ended = True
+    assert agent._handle_background_completion(completion, after_run) is True
+    notes = _bg_notifications(_drain(agent._output_messages))
+    assert len(notes) == 2  # one per call above
+    assert notes[0].duration_seconds == 2.0

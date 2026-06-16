@@ -21,9 +21,8 @@ the abort test below mirrors for the nested pi case.
 
 from __future__ import annotations
 
-import time
+from collections.abc import Sequence
 
-import psutil
 import pytest
 from playwright.sync_api import expect
 
@@ -31,42 +30,22 @@ from sculptor.constants import ElementIDs
 from sculptor.testing.sculptor_instance import SculptorInstance
 from tests.integration.real_pi.helpers import RESPONSE_TIMEOUT_MS
 from tests.integration.real_pi.helpers import assert_no_errors
+from tests.integration.real_pi.helpers import count_processes_matching
 from tests.integration.real_pi.helpers import create_pi_workspace_and_send
 from tests.integration.real_pi.helpers import interrupt_agent
 from tests.integration.real_pi.helpers import real_pi
 from tests.integration.real_pi.helpers import send_no_wait
+from tests.integration.real_pi.helpers import wait_for_process_count
 
 
-def _child_pi_process_count() -> int:
-    """Count live child sub-agent processes (``pi --mode json``).
+def _is_child_pi(cmdline: Sequence[str]) -> bool:
+    """A live child sub-agent process: ``pi --mode json -p --no-session``.
 
-    The extension spawns each child as ``pi --mode json -p --no-session``; the
-    long-lived parent agent is ``--mode rpc``, so matching ``--mode json``
-    isolates children. Used to assert children exit (clean run) and are killed
-    on abort (no orphans).
+    The long-lived parent agent is ``--mode rpc``, so matching ``--mode json``
+    isolates children. Used to assert children exit (clean run) and are killed on
+    abort (no orphans).
     """
-    count = 0
-    for proc in psutil.process_iter(["cmdline"]):
-        try:
-            cmdline = proc.info["cmdline"] or []
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            continue
-        joined = " ".join(cmdline)
-        if "--mode" in cmdline and "json" in cmdline and "pi" in joined:
-            count += 1
-    return count
-
-
-def _wait_for_child_pi_processes(target: int, *, at_least: bool, timeout_s: float) -> int:
-    """Poll until the child-process count reaches ``target`` (or timeout)."""
-    deadline = time.monotonic() + timeout_s
-    last = _child_pi_process_count()
-    while time.monotonic() < deadline:
-        last = _child_pi_process_count()
-        if (at_least and last >= target) or (not at_least and last <= target):
-            return last
-        time.sleep(0.5)
-    return last
+    return "--mode" in cmdline and "json" in cmdline and "pi" in " ".join(cmdline)
 
 
 @real_pi
@@ -74,7 +53,7 @@ def _wait_for_child_pi_processes(target: int, *, at_least: bool, timeout_s: floa
 def test_pi_subagent_renders_nested_group_and_completes_cleanly(sculptor_instance_: SculptorInstance) -> None:
     """One parent, one child: the child's activity renders as the subagent pill,
     the turn completes without error, and no child pi process is left running."""
-    baseline_children = _child_pi_process_count()
+    baseline_children = count_processes_matching(_is_child_pi)
     prompt = (
         "Use your subagent tool to delegate exactly one task to a single sub-agent. "
         + 'Pass this as the task: "Run the shell command: echo PI-SUBAGENT-CHILD-50231". '
@@ -93,7 +72,7 @@ def test_pi_subagent_renders_nested_group_and_completes_cleanly(sculptor_instanc
     expect(chat_panel.get_in_progress_tool_calls()).to_have_count(0)
 
     # No orphan child processes: the children exited when the tool finished.
-    remaining = _wait_for_child_pi_processes(baseline_children, at_least=False, timeout_s=20)
+    remaining = wait_for_process_count(_is_child_pi, baseline_children, at_least=False, timeout_s=20)
     assert remaining <= baseline_children, (
         f"orphan child pi processes after clean run: {remaining} > {baseline_children}"
     )
@@ -104,7 +83,7 @@ def test_pi_subagent_renders_nested_group_and_completes_cleanly(sculptor_instanc
 def test_pi_subagent_abort_leaves_no_orphan_children(sculptor_instance_: SculptorInstance) -> None:
     """Stopping a turn while a sub-agent child is mid-run kills the child — no
     orphan ``pi`` process survives the interrupt (abort composition, §10.1.2)."""
-    baseline_children = _child_pi_process_count()
+    baseline_children = count_processes_matching(_is_child_pi)
     task_page = create_pi_workspace_and_send(
         sculptor_instance_,
         "Reply with exactly the text PI-READY-50232. Do not add any other text.",
@@ -120,11 +99,11 @@ def test_pi_subagent_abort_leaves_no_orphan_children(sculptor_instance_: Sculpto
         + "Delegate it via the subagent tool; do not run it yourself.",
     )
     # Wait until the child sub-agent process is actually running.
-    appeared = _wait_for_child_pi_processes(baseline_children + 1, at_least=True, timeout_s=120)
+    appeared = wait_for_process_count(_is_child_pi, baseline_children + 1, at_least=True, timeout_s=120)
     assert appeared > baseline_children, "sub-agent child process never started"
 
     interrupt_agent(chat_panel)
 
     # The child process tree is torn down by the extension's abort handler.
-    remaining = _wait_for_child_pi_processes(baseline_children, at_least=False, timeout_s=30)
+    remaining = wait_for_process_count(_is_child_pi, baseline_children, at_least=False, timeout_s=30)
     assert remaining <= baseline_children, f"orphan child pi processes after Stop: {remaining} > {baseline_children}"

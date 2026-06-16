@@ -140,6 +140,10 @@ class _TurnBuilder:
     prompt_text: str = ""
     images: list[dict] = field(default_factory=list)
     _ui_counter: int = 0
+    # Set by the `background` directive: it emits the launching run's `agent_end`
+    # itself (so a later completion notify can follow it, the held-open shape), so
+    # `_run_turn` must NOT emit its own trailing message_end / agent_end.
+    suppress_turn_end: bool = False
 
     def emit(self, text: str) -> None:
         self.chunks.append(text)
@@ -571,6 +575,108 @@ def _handle_subagent(args: dict, builder: _TurnBuilder, abort_event: Event, stat
     )
 
 
+def _handle_background(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
+    """Script a background-task tool call and its out-of-band completion.
+
+    Reproduces the wire shape `sculptor_background.ts` emits, without spawning a
+    real process: the `background` toolCall block + tool-execution lane whose
+    `result.details` carry the versioned launch payload (`{v, task}`, parsed by
+    `background.py`), then the launching run's `agent_end` — at which point
+    Sculptor HOLDS the turn open while the task is pending (the StatusPill stays
+    active). After an optional hold (`wait_path`, like `wait_for_file`), emits the
+    completion `notify` carrying the structured marker, which Sculptor reconciles
+    into a BackgroundTaskNotification and which ENDS the held-open turn. Because
+    this directive emits the run's `agent_end` itself, it sets
+    ``builder.suppress_turn_end`` so `_run_turn` does not emit a second end.
+
+    A test can drive both behaviours with one directive: with a `wait_path` the
+    turn stays open (surface observable, main thread still accepts input) until
+    the sentinel file appears, then completes; with no `wait_path` it completes
+    immediately.
+
+    Args (all optional): `id` (tool-call id), `command`, `label`, `pgid`,
+    `status` ("completed"/"failed"), `exit_code`, `summary`, `duration_ms`,
+    `wait_path`, `timeout_seconds`.
+    """
+    tool_call_id = str(args.get("id") or "bgtc1")
+    task_id = f"bgt_{tool_call_id}"
+    command = str(args.get("command", "sleep 1"))
+    label = str(args.get("label", "background"))
+    pgid = int(args.get("pgid", 0))
+    arguments = {"command": command, "label": label}
+
+    # Launch: close the issuing assistant message with the toolCall block, then
+    # the tool-execution lane carrying the structured launch payload.
+    content: list[dict] = []
+    if builder.full_text:
+        content.append({"type": "text", "text": builder.full_text})
+    content.append({"type": "toolCall", "id": tool_call_id, "name": "background", "arguments": arguments})
+    _emit({"type": "message_end", "message": {"role": "assistant", "content": content, "stopReason": "toolUse"}})
+    builder.chunks.clear()
+    _emit({"type": "tool_execution_start", "toolCallId": tool_call_id, "toolName": "background", "args": arguments})
+    start_result = _tool_text_payload(f"Started background task {label} (pid {pgid}): {command}")
+    # `"v": 1` MUST match BACKGROUND_PAYLOAD_VERSION (background.py / sculptor_background.ts).
+    start_result["details"] = {
+        "v": 1,
+        "task": {
+            "taskId": task_id,
+            "toolCallId": tool_call_id,
+            "label": label,
+            "command": command,
+            "pgid": pgid,
+            "status": "running",
+        },
+    }
+    _emit(
+        {
+            "type": "tool_execution_end",
+            "toolCallId": tool_call_id,
+            "toolName": "background",
+            "result": start_result,
+            "isError": False,
+        }
+    )
+
+    # The agent does not block on the task: end the launching run now (Sculptor
+    # holds the turn open while pending). Suppress _run_turn's trailing end.
+    _emit_agent_end(builder.full_text)
+    builder.suppress_turn_end = True
+
+    # Optional hold so a test can observe the held-open surface and send a
+    # mid-flight message before the task completes (abortable like wait_for_file).
+    wait_path = args.get("wait_path")
+    if wait_path:
+        sentinel = Path(wait_path)
+        deadline = time.monotonic() + float(args.get("timeout_seconds", 120))
+        while not sentinel.exists():
+            if abort_event.is_set():
+                raise _TurnAborted()
+            if time.monotonic() >= deadline:
+                raise RuntimeError(f"fake_pi:background timed out waiting for {sentinel}")
+            time.sleep(0.05)
+
+    status = str(args.get("status", "completed"))
+    # `"sculptorBackgroundTask"` MUST match BACKGROUND_NOTIFY_MARKER (background.py).
+    completion = {
+        "v": 1,
+        "taskId": task_id,
+        "toolCallId": tool_call_id,
+        "status": status,
+        "exitCode": int(args.get("exit_code", 0)),
+        "summary": str(args.get("summary", "background task done")),
+        "durationMs": int(args.get("duration_ms", 1000)),
+    }
+    _emit(
+        {
+            "type": "extension_ui_request",
+            "id": builder.next_ui_request_id(),
+            "method": "notify",
+            "notifyType": "info" if status == "completed" else "warning",
+            "message": json.dumps({"sculptorBackgroundTask": completion}, separators=(",", ":")),
+        }
+    )
+
+
 def _handle_sleep(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
     seconds = float(args.get("seconds", 0))
     if seconds <= 0:
@@ -689,6 +795,7 @@ _COMMAND_REGISTRY: dict[str, Callable[[dict, _TurnBuilder, Event, _SessionState]
     "stream_text": _handle_stream_text,
     "tool_call": _handle_tool_call,
     "subagent": _handle_subagent,
+    "background": _handle_background,
     "sleep": _handle_sleep,
     "wait_for_file": _handle_wait_for_file,
     "recall": _handle_recall,
@@ -783,6 +890,12 @@ def _run_turn(
     except _TurnAborted:
         # Record the (partial) turn for resume, like a completed one.
         _emit_aborted_agent_end(builder.full_text)
+        state.record_turn(prompt_text)
+        return
+    if builder.suppress_turn_end:
+        # The `background` directive already emitted the launching run's
+        # `agent_end` and the completion notify (the held-open shape); do not
+        # emit a second end.
         state.record_turn(prompt_text)
         return
     if not builder.has_text:
