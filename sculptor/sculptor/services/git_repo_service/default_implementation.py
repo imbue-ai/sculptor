@@ -13,6 +13,7 @@ from sculptor.foundation.subprocess_utils import ProcessError
 from sculptor.foundation.subprocess_utils import ProcessSetupError
 from sculptor.services.git_repo_service.api import GitRepoService
 from sculptor.services.git_repo_service.error_types import GitRepoError
+from sculptor.services.git_repo_service.error_types import GitRepoNotFoundError
 from sculptor.services.git_repo_service.git_commands import run_git_command_local
 from sculptor.services.git_repo_service.git_errors import GitCommandFailure
 from sculptor.services.git_repo_service.git_repos import ReadOnlyGitRepo
@@ -103,11 +104,11 @@ class LocalReadOnlyGitRepo(_ReadOnlyGitRepoSharedMethods):
                 log_command=self.log_command,
             )
             return result_stdout
-        except FileNotFoundError:
-            raise
+        except FileNotFoundError as e:
+            raise GitRepoNotFoundError(self.repo_path) from e
         except (GitCommandFailure, ProcessError) as e:
             if not self.repo_path.exists():
-                raise FileNotFoundError(f"Repository path does not exist: {self.repo_path}") from e
+                raise GitRepoNotFoundError(self.repo_path) from e
             branch_name = None
             message = "Git command failed"
             try:
@@ -122,9 +123,9 @@ class LocalReadOnlyGitRepo(_ReadOnlyGitRepoSharedMethods):
                 branch_name = result_stdout.strip()
             except Exception as e2:
                 if isinstance(e2, FileNotFoundError):
-                    raise
+                    raise GitRepoNotFoundError(self.repo_path) from e2
                 if isinstance(e2, ProcessSetupError) and not self.repo_path.exists():
-                    raise FileNotFoundError(f"Repository path does not exist: {self.repo_path}") from e
+                    raise GitRepoNotFoundError(self.repo_path) from e
                 if isinstance(e2, ProcessError) and "unknown revision or path not in the working tree" in e.stderr:
                     message += " (repository appears to be empty, no commits yet)"
                 else:

@@ -147,7 +147,8 @@ class SessionTokenMiddleware:
         factory = self.settings_factory
         if starlette_app is not None:
             factory = starlette_app.dependency_overrides.get(self.settings_factory, self.settings_factory)
-        return factory().SESSION_TOKEN
+        token = factory().SESSION_TOKEN
+        return token.get_secret_value() if token is not None else None
 
     @staticmethod
     def _is_protected_path(path: str) -> bool:

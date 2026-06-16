@@ -158,7 +158,6 @@ def cut_release(
         help="Pass --dry-run (-n) to skip uploading or --no-dry-run to force the actual upload.",
     ),
     bypass_checks: bool = typer.Option(False, "--bypass-checks", help="Bypass branch protection checks"),
-    dist_dir: Path = typer.Option("../dist", help="Directory that holds build artefacts."),
 ) -> None:
     """Cut a new release branch from main and tag it.
 
@@ -258,7 +257,6 @@ def fixup_release(
         help="Pass --dry-run (-n) to skip uploading or --no-dry-run to force the actual upload.",
     ),
     bypass_checks: bool = typer.Option(False, "--bypass-checks", help="Bypass branch protection checks"),
-    dist_dir: Path = typer.Option("../dist", help="Directory that holds build artefacts."),
 ) -> None:
     """Cut a new release branch from main and tag it."""
     if not bypass_checks:
@@ -301,7 +299,6 @@ def hotfix_release(
         help="Pass --dry-run (-n) to skip uploading or --no-dry-run to force the actual upload.",
     ),
     bypass_checks: bool = typer.Option(False, "--bypass-checks", help="Bypass branch protection checks"),
-    dist_dir: Path = typer.Option("../dist", help="Directory that holds build artefacts."),
 ) -> None:
     """Patches a release that was promoted to production.
 
@@ -356,7 +353,6 @@ def promote_release(
         help="Pass --dry-run (-n) to skip uploading or --no-dry-run to force the actual upload.",
     ),
     bypass_checks: bool = typer.Option(False, "--bypass-checks", help="Bypass branch protection checks"),
-    dist_dir: Path = typer.Option("../dist", help="Directory that holds build artefacts."),
 ) -> None:
     """Promotes this release candidate version to a full release, and tags it.
 
@@ -410,7 +406,6 @@ def publish_build_artifacts(
         help="Pass --dry-run (-n) to skip uploading or --no-dry-run to force the actual upload.",
     ),
     bypass_checks: bool = typer.Option(False, "--bypass-checks", help="Bypass branch protection checks"),
-    dist_dir: Path = typer.Option("../dist", help="Directory that holds build artefacts."),
 ) -> None:
     """This command publishes _already built_ artifacts from s3 to the deployed buckets.
 

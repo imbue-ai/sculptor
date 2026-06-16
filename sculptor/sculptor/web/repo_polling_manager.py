@@ -21,6 +21,7 @@ from sculptor.services.data_model_service.api import CompletedTransaction
 from sculptor.services.git_repo_service.api import ReadOnlyGitRepo
 from sculptor.services.git_repo_service.default_implementation import LocalReadOnlyGitRepo
 from sculptor.services.git_repo_service.error_types import GitRepoError
+from sculptor.services.git_repo_service.error_types import GitRepoNotFoundError
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import WorkspaceBranchInfo
 from sculptor.web.derived import WorkspaceRemoteBranchesInfo
@@ -29,7 +30,7 @@ from sculptor.web.derived import WorkspaceRemoteBranchesInfo
 def _get_branch_unless_repo_missing(repo: ReadOnlyGitRepo) -> str | None:
     try:
         return repo.get_current_git_branch()
-    except FileNotFoundError as e:
+    except GitRepoNotFoundError as e:
         logger.debug("Failed to get current git branch because the repo doesn't exist: {}", e)
         return None
     except GitRepoError as e:

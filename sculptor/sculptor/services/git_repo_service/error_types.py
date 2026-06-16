@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pydantic import AnyUrl
 
 
@@ -33,3 +35,18 @@ class GitRepoError(Exception):
         if self.stderr:
             details.append(f"Stderr: {self.stderr}")
         return "\n".join(details)
+
+
+class GitRepoNotFoundError(GitRepoError):
+    """Raised when the git repository path does not exist.
+
+    A dedicated domain exception so callers can distinguish "repo is gone" from
+    other git failures without catching the builtin ``FileNotFoundError`` (which
+    the style guide forbids raising as a handled signal).
+    """
+
+    def __init__(self, repo_path: Path) -> None:
+        super().__init__(
+            message=f"Repository path does not exist: {repo_path}",
+            operation="access_repository",
+        )

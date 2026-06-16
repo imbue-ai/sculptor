@@ -11,7 +11,7 @@ class ReadOnlyGitRepo(MutableModel, ABC):
     """
     All read operations on a git repository should be done through this interface.
 
-    Should all raise FileNotFoundError if the repository does not exist.
+    Should all raise GitRepoNotFoundError if the repository does not exist.
     """
 
     @abstractmethod

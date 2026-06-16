@@ -105,6 +105,7 @@ from sculptor.services.dependency_management_service import InstallResult
 from sculptor.services.git_repo_service.default_implementation import LocalReadOnlyGitRepo
 from sculptor.services.git_repo_service.default_implementation import LocalWritableGitRepo
 from sculptor.services.git_repo_service.error_types import GitRepoError
+from sculptor.services.git_repo_service.error_types import GitRepoNotFoundError
 from sculptor.services.git_repo_service.git_commands import run_git_command_local
 from sculptor.services.project_service.default_implementation import get_most_recently_used_project_id
 from sculptor.services.project_service.default_implementation import update_most_recently_used_project
@@ -463,7 +464,7 @@ def set_session_token_cookie(
 ) -> None:
     response.set_cookie(
         key=SESSION_TOKEN_HEADER_NAME,
-        value=settings.SESSION_TOKEN or "",
+        value=settings.SESSION_TOKEN.get_secret_value() if settings.SESSION_TOKEN is not None else "",
         samesite="strict",
         httponly=True,
     )
@@ -870,23 +871,23 @@ def list_recent_workspaces(
     services = get_services_from_request_or_websocket(request)
 
     with user_session.open_transaction(services) as transaction:
-        workspace_dicts = transaction.get_all_workspaces()
+        workspace_rows = transaction.get_all_workspaces()
 
     workspaces = [
         RecentWorkspaceResponse(
-            object_id=row["object_id"],
-            project_id=row["project_id"],
-            description=row["description"],
-            initialization_strategy=row["initialization_strategy"],
-            source_branch=row["source_branch"],
-            is_deleted=row["is_deleted"],
-            created_at=row["created_at"],
-            project_name=row["project_name"],
-            agent_count=row["agent_count"],
-            is_open=row["is_open"],
-            last_activity_at=row["last_activity_at"],
+            object_id=row.object_id,
+            project_id=row.project_id,
+            description=row.description,
+            initialization_strategy=row.initialization_strategy,
+            source_branch=row.source_branch,
+            is_deleted=row.is_deleted,
+            created_at=row.created_at,
+            project_name=row.project_name,
+            agent_count=row.agent_count,
+            is_open=row.is_open,
+            last_activity_at=row.last_activity_at,
         )
-        for row in workspace_dicts
+        for row in workspace_rows
     ]
 
     return ListWorkspacesResponse(workspaces=workspaces)
@@ -1072,21 +1073,21 @@ def get_workspace_commits(
         return CommitHistoryResponse(
             commits=[
                 CommitInfo(
-                    hash=c["hash"],
-                    short_hash=c["short_hash"],
-                    message=c["message"],
-                    author_name=c["author_name"],
-                    timestamp=c["timestamp"],
-                    parent_hashes=c.get("parent_hashes", []),
+                    hash=c.hash,
+                    short_hash=c.short_hash,
+                    message=c.message,
+                    author_name=c.author_name,
+                    timestamp=c.timestamp,
+                    parent_hashes=c.parent_hashes,
                     files=[
                         CommitFileInfo(
-                            path=f["path"],
-                            status=f["status"],
-                            old_path=f["old_path"],
-                            additions=f["additions"],
-                            deletions=f["deletions"],
+                            path=f.path,
+                            status=f.status,
+                            old_path=f.old_path,
+                            additions=f.additions,
+                            deletions=f.deletions,
                         )
-                        for f in c["files"]
+                        for f in c.files
                     ],
                 )
                 for c in commits
@@ -2957,7 +2958,7 @@ def get_current_branch(
             with services.git_repo_service.open_local_user_git_repo_for_read(project, log_command=False) as repo:
                 try:
                     current_branch = repo.get_current_git_branch()
-                except FileNotFoundError as e:
+                except GitRepoNotFoundError as e:
                     raise HTTPException(status_code=500, detail=f"Could not find repository: {e}") from e
                 except ProcessSetupError:
                     if project.is_path_accessible:
@@ -3008,7 +3009,7 @@ def branch_exists(
     try:
         with services.git_repo_service.open_local_user_git_repo_for_read(project, log_command=False) as repo:
             return BranchExistsResponse(exists=repo.is_branch_ref(trimmed))
-    except FileNotFoundError:
+    except GitRepoNotFoundError:
         return BranchExistsResponse(exists=False)
 
 
@@ -3040,7 +3041,7 @@ def get_repo_info(
                 try:
                     branches = repo.get_all_branches()
                     current_branch = repo.get_current_git_branch()
-                except FileNotFoundError as e:
+                except GitRepoNotFoundError as e:
                     raise HTTPException(status_code=500, detail=f"Could not find repository: {e}") from e
                 except ProcessSetupError:
                     # The is_path_accessible attribute is set in _check_and_update_project_accessibility, which
