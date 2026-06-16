@@ -970,6 +970,24 @@ class TestAuthLogin:
                 assert start.needs_code is False
                 assert service._auth_session is None
 
+    @patch("sculptor.services.dependency_management_service.webbrowser")
+    def test_stop_terminates_in_flight_session(self, mock_browser: MagicMock, tmp_path: Path) -> None:
+        # A sign-in left waiting for a pasted code must not outlive the service:
+        # stop() tears down the still-running `auth login` subprocess.
+        fake = self._make_fake_claude(tmp_path, accept_code="good")
+        with ConcurrencyGroup(name="test") as cg:
+            service = DependencyManagementService(concurrency_group=cg)
+            with patch.object(DependencyManagementService, "resolve_binary_path", return_value=fake):
+                start = service.start_auth_login(Dependency.CLAUDE)
+                assert start.needs_code is True
+                session = service._auth_session
+                assert session is not None and not session.is_finished()
+
+                service.stop()
+
+                assert service._auth_session is None
+                assert session.is_finished()
+
     def test_submit_without_active_session(self) -> None:
         with ConcurrencyGroup(name="test") as cg:
             service = DependencyManagementService(concurrency_group=cg)

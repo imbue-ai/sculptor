@@ -288,6 +288,19 @@ class DependencyManagementService(Service):
             if thread.is_alive():
                 logger.warning("Thread {} did not stop within timeout during shutdown", thread.name)
 
+        # Tear down any in-flight Claude sign-in so its `auth login` subprocess
+        # doesn't outlive the service. Left running it idles on stdin until its
+        # process timeout, and its isolated process group shields it from the
+        # signals that take down the rest of the app. Bounded acquire so a
+        # sign-in that is mid-start can't block shutdown.
+        if self._claude_auth_lock.acquire(timeout=4.0):
+            try:
+                self._terminate_auth_session_locked()
+            finally:
+                self._claude_auth_lock.release()
+        else:
+            logger.warning("Could not acquire auth lock during shutdown; sign-in subprocess may linger")
+
     def _auto_install_if_needed(self) -> None:
         """Auto-install each managed tool whose pinned binary is missing or out of range.
 
