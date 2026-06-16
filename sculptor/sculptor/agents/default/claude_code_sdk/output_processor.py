@@ -94,6 +94,15 @@ _DEFERRED_COMPLETION_TOOLS: frozenset[str] = frozenset({"Monitor"})
 # when Monitor completes while a foreground tool is also executing).
 _DEFERRED_CLEANUP_GRACE_SECONDS: float = 5.0
 
+# Interval between diagnostic logs emitted while the output loop waits, after the
+# final message, for still-pending background tasks or a scheduled wakeup turn.
+_BACKGROUND_TASK_WAIT_LOG_INTERVAL_SECONDS: float = 10.0
+
+# After the main loop exits with a get_context_usage request still pending, how
+# long to keep draining the queue for the matching control response before giving
+# up and flushing turn metrics without a context snapshot.
+_CONTEXT_USAGE_DRAIN_TIMEOUT_SECONDS: float = 2.0
+
 # Claude Code built-in commands that require an interactive terminal (TUI) and
 # are not available when running in print mode (which is how Sculptor invokes
 # Claude Code). When one of these is sent, Claude Code returns "Unknown skill: X"
@@ -451,7 +460,7 @@ class ClaudeOutputProcessor:
                     # tasks or a scheduled wakeup after the final message.
                     if (
                         self._pending_background_tasks or self._pending_wakeup
-                    ) and now - self._last_bg_task_log_time >= 10.0:
+                    ) and now - self._last_bg_task_log_time >= _BACKGROUND_TASK_WAIT_LOG_INTERVAL_SECONDS:
                         self._last_bg_task_log_time = now
                         elapsed = now - (self._final_message_time or now)
                         logger.info(
@@ -728,7 +737,7 @@ class ClaudeOutputProcessor:
         # response. Without this, found_final_message causes the loop to exit before
         # the control response arrives, leaving the indicator with stale data.
         if self._pending_context_request_id is not None:
-            deadline = time.monotonic() + 2.0
+            deadline = time.monotonic() + _CONTEXT_USAGE_DRAIN_TIMEOUT_SECONDS
             while time.monotonic() < deadline:
                 try:
                     line, is_stdout = self.queue.get(timeout=0.1)
@@ -1579,9 +1588,8 @@ class ClaudeOutputProcessor:
             PartialResponseBlockAgentMessage(
                 message_id=AgentMessageID(),
                 content=tuple(content),
-                # pyre-ignore[6] pyre thinks these could be None even though we assert that they are not None above
                 assistant_message_id=self.current_turn_id,
-                first_response_message_id=self._first_response_message_id,  # pyre-ignore[6]
+                first_response_message_id=self._first_response_message_id,
                 parent_tool_use_id=self._current_parent_tool_use_id,
             )
         )

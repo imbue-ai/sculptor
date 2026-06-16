@@ -12,6 +12,7 @@ def get_git_repo_service_collection(
     concurrency_group: ConcurrencyGroup,
     settings: SculptorSettings,
 ) -> GitRepoServiceCollection:
+    """Build the service collection that the git repo service depends on."""
     data_model_service = SQLDataModelService.build_from_settings(
         settings, concurrency_group.make_concurrency_group("data_model_service")
     )

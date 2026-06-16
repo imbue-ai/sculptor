@@ -45,7 +45,7 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo) -> Gener
     outcome = yield
     report = outcome.get_result()
     if report.when == "call":
-        item.report_call = report  # pyre-ignore[16]
+        item.report_call = report
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:

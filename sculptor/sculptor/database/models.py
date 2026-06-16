@@ -2,6 +2,7 @@ import datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
+from typing import Any
 
 from pydantic import Tag
 
@@ -281,7 +282,7 @@ class SavedAgentMessage(DatabaseModel):
     # it's here so that we can not bother to include partial messages in some queries.
     is_partial: bool
 
-    def model_post_init(self, __context) -> None:
+    def model_post_init(self, context: Any) -> None:
         if self.object_id != self.message.message_id:
             raise ValueError(
                 f"SavedAgentMessage object_id {self.object_id} does not match message ID {self.message.message_id}."

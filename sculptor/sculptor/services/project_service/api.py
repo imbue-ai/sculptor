@@ -12,7 +12,7 @@ class ProjectService(Service, ABC):
     """
     Handle initialization, retrieval and the lifecycle of the server project in the current sculptor session.
 
-    Note: Workspace methods have been moved to WorkspaceService.
+    Workspace methods live on WorkspaceService.
     """
 
     @abstractmethod

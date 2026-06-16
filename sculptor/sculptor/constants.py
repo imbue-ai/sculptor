@@ -79,8 +79,6 @@ class ElementIDs(StrEnum):
     REPO_PATH_DROPDOWN_SHORTCUT_HINT = "REPO_PATH_DROPDOWN_SHORTCUT_HINT"
     REPO_PATH_DROPDOWN_ALERT_OK = "REPO_PATH_DROPDOWN_ALERT_OK"
 
-    # BACK_TO_HOME_BUTTON removed - navigation now happens via sidebar
-
     # Task Modal
 
     # Command Palette (replaces the legacy Search Modal; Cmd+K)

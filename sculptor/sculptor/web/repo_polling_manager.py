@@ -21,6 +21,7 @@ from sculptor.services.data_model_service.api import CompletedTransaction
 from sculptor.services.git_repo_service.api import ReadOnlyGitRepo
 from sculptor.services.git_repo_service.default_implementation import LocalReadOnlyGitRepo
 from sculptor.services.git_repo_service.error_types import GitRepoError
+from sculptor.services.git_repo_service.error_types import GitRepoNotFoundError
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import WorkspaceBranchInfo
 from sculptor.web.derived import WorkspaceRemoteBranchesInfo
@@ -29,7 +30,7 @@ from sculptor.web.derived import WorkspaceRemoteBranchesInfo
 def _get_branch_unless_repo_missing(repo: ReadOnlyGitRepo) -> str | None:
     try:
         return repo.get_current_git_branch()
-    except FileNotFoundError as e:
+    except GitRepoNotFoundError as e:
         logger.debug("Failed to get current git branch because the repo doesn't exist: {}", e)
         return None
     except GitRepoError as e:
@@ -264,16 +265,7 @@ class _WorkspaceRemoteBranchesPollingCallback:
                 concurrency_group=self._concurrency_group,
                 log_command=False,
             )
-            output = repo._run_git(["branch", "-r", "--format=%(refname:short)"])
-            branches: list[str] = []
-            for line in output.splitlines():
-                branch = line.strip()
-                if not branch:
-                    continue
-                # Skip HEAD pointer entries like "origin/HEAD -> origin/main" or "origin/HEAD".
-                if branch.endswith("/HEAD") or "HEAD ->" in line:
-                    continue
-                branches.append(branch)
+            branches = repo.get_remote_branches()
             self._first_failure_since_last_success = None
             return WorkspaceRemoteBranchesInfo(
                 workspace_id=self._workspace_id,

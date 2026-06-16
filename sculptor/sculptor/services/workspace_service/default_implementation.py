@@ -35,6 +35,7 @@ from sculptor.interfaces.environments.base import Environment
 from sculptor.interfaces.environments.base import TASKS_SUBDIRECTORY
 from sculptor.interfaces.environments.errors import EnvironmentConfigurationChangedError
 from sculptor.interfaces.environments.errors import EnvironmentNotFoundError
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
@@ -47,6 +48,8 @@ from sculptor.services.git_repo_service.git_commands import run_git_command_loca
 from sculptor.services.git_repo_service.git_errors import GitCommandFailure
 from sculptor.services.project_service.api import ProjectService
 from sculptor.services.user_config.user_config import get_user_config_instance
+from sculptor.services.workspace_service.api import CommitFileChange
+from sculptor.services.workspace_service.api import CommitRecord
 from sculptor.services.workspace_service.api import FileAtRefResult
 from sculptor.services.workspace_service.api import FileNotFoundAtRefError
 from sculptor.services.workspace_service.api import GitOperationResult
@@ -78,6 +81,11 @@ from sculptor.utils.type_utils import extract_leaf_types
 _ENVIRONMENT_CREATION_TIMEOUT_SECONDS = 60
 _DIFF_METADATA_FILENAME = "DIFF.meta.json"
 _GIT_COMMAND_TIMEOUT = 30.0
+
+# Number of unchanged context lines shown around each diff hunk by default, and
+# the maximum a caller is allowed to request.
+_DEFAULT_DIFF_CONTEXT_LINES = 3
+_MAX_DIFF_CONTEXT_LINES = 50
 
 # Shell snippet that produces a unified diff for every untracked file.
 # Used by both the uncommitted diff and the target-branch diff so that new
@@ -129,7 +137,7 @@ class DefaultWorkspaceService(WorkspaceService):
         """
         with self.data_model_service.open_transaction(request_id=RequestID()) as transaction:
             workspaces = list(transaction.get_workspaces())
-            projects_by_id: dict[object, Project] = {p.object_id: p for p in transaction.get_projects()}
+            projects_by_id: dict[ProjectID, Project] = {p.object_id: p for p in transaction.get_projects()}
 
         for workspace in workspaces:
             if workspace.is_deleted:
@@ -638,7 +646,7 @@ class DefaultWorkspaceService(WorkspaceService):
                     )
                 logger.debug("Created new environment {} for workspace {}", environment.environment_id, workspace_id)
 
-            # Type narrowing for pycharm/pyre
+            # Type narrowing for pycharm/the type checker
             assert isinstance(environment, extract_leaf_types(EnvironmentTypes))
             environment = cast(EnvironmentTypes, environment)
 
@@ -884,7 +892,7 @@ class DefaultWorkspaceService(WorkspaceService):
         self,
         base_ref: str,
         working_dir: Path,
-        context_lines: int = 3,
+        context_lines: int = _DEFAULT_DIFF_CONTEXT_LINES,
         target_branch: str | None = None,
     ) -> DiffArtifact:
         """Create a diff artifact using local git commands.
@@ -1028,7 +1036,10 @@ class DefaultWorkspaceService(WorkspaceService):
             logger.debug("Diff generation already in progress for workspace {}, skipping", workspace_id)
             return
 
-        effective_context_lines = min(max(context_lines or 3, 0), 50)
+        # Honor an explicit context_lines=0 (zero context); only None means "use
+        # the default". Clamp the result into the supported range.
+        context_lines_or_default = _DEFAULT_DIFF_CONTEXT_LINES if context_lines is None else context_lines
+        effective_context_lines = min(max(context_lines_or_default, 0), _MAX_DIFF_CONTEXT_LINES)
 
         try:
             # Capture timestamp at the start for staleness detection: if the repo
@@ -1343,7 +1354,7 @@ class DefaultWorkspaceService(WorkspaceService):
         self,
         workspace_id: WorkspaceID,
         transaction: DataModelTransaction,
-    ) -> tuple[list, str | None]:
+    ) -> tuple[list[CommitRecord], str | None]:
         """Get the commit history for the workspace branch."""
         workspace = transaction.get_workspace(workspace_id)
         if workspace is None:
@@ -1405,7 +1416,7 @@ class DefaultWorkspaceService(WorkspaceService):
         )
 
         # Combine into final commit list
-        commits = []
+        commits: list[CommitRecord] = []
         for meta in commit_meta:
             commit_hash = meta["hash"]
             numstat = numstat_by_hash.get(commit_hash, {})
@@ -1417,17 +1428,27 @@ class DefaultWorkspaceService(WorkspaceService):
                 stats = numstat.get(path, (0, 0))
                 status_info = statuses.get(path, ("M", None))
                 files.append(
-                    {
-                        "path": path,
-                        "status": status_info[0],
-                        "old_path": status_info[1],
-                        "additions": stats[0],
-                        "deletions": stats[1],
-                    }
+                    CommitFileChange(
+                        path=path,
+                        status=status_info[0],
+                        old_path=status_info[1],
+                        additions=stats[0],
+                        deletions=stats[1],
+                    )
                 )
 
-            meta["files"] = files
-            commits.append(meta)
+            commits.append(
+                CommitRecord(
+                    hash=meta["hash"],
+                    short_hash=meta["short_hash"],
+                    message=meta["message"],
+                    author_name=meta["author_name"],
+                    author_email=meta["author_email"],
+                    timestamp=meta["timestamp"],
+                    parent_hashes=meta["parent_hashes"],
+                    files=files,
+                )
+            )
 
         return (commits, fork_point)
 

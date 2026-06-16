@@ -293,7 +293,7 @@ class SendMessageRequest(RequestModel):
 
 class AnswerQuestionRequest(RequestModel):
     answers: dict[str, str]
-    notes: dict[str, str] = {}
+    notes: dict[str, str] = Field(default_factory=dict)
     question_data: AskUserQuestionData
     tool_use_id: str
     model: LLMModel

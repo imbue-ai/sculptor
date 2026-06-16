@@ -1,8 +1,10 @@
+from pathlib import Path
+
 from pydantic import AnyUrl
 
 
 class GitRepoError(Exception):
-    """Exception raised when git operations"""
+    """Exception raised when a git operation fails."""
 
     def __init__(
         self,
@@ -13,7 +15,8 @@ class GitRepoError(Exception):
         exit_code: int | None = None,
         stderr: str | bytes | None = None,
     ) -> None:
-        # TODO these inits result in SerializedException.build(e).construct_instance() not working
+        # The required positional constructor args prevent
+        # SerializedException.build(e).construct_instance() from reconstructing this exception.
         super().__init__(message)
         self.operation = operation
         self.repo_url = repo_url
@@ -33,3 +36,18 @@ class GitRepoError(Exception):
         if self.stderr:
             details.append(f"Stderr: {self.stderr}")
         return "\n".join(details)
+
+
+class GitRepoNotFoundError(GitRepoError):
+    """Raised when the git repository path does not exist.
+
+    A dedicated domain exception so callers can distinguish "repo is gone" from
+    other git failures without catching the builtin ``FileNotFoundError`` (which
+    the style guide forbids raising as a handled signal).
+    """
+
+    def __init__(self, repo_path: Path) -> None:
+        super().__init__(
+            message=f"Repository path does not exist: {repo_path}",
+            operation="access_repository",
+        )

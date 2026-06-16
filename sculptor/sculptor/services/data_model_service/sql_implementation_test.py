@@ -460,6 +460,7 @@ def test_triggers_work_after_migration() -> None:
             # Build column values from the model's field definitions
             field_values: dict[str, Any] = {}
             for field_name, field in model_cls.model_fields.items():
+                assert field.annotation is not None
                 field_values[field_name] = _generate_synthetic_value(field_name, field.annotation)
 
             # Insert a row into the snapshots table
@@ -502,6 +503,99 @@ def test_triggers_work_after_migration() -> None:
             assert len(rows) == 1, (
                 f"Expected 1 row in {latest_table_name} after second insert into {table_name}, got {len(rows)}"
             )
+
+
+def test_drop_all_automanaged_triggers_unblocks_drop_column() -> None:
+    """Encodes the exact failure mode: a trigger referencing a column blocks DROP COLUMN.
+
+    SQLite validates trigger bodies during ALTER TABLE, so dropping a column that an
+    existing trigger references fails. drop_all_automanaged_triggers removes that hazard,
+    which is what makes the whole class of migration failures impossible.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.pool import StaticPool
+
+    from sculptor.database.alembic.utils import drop_all_automanaged_triggers
+
+    engine = create_engine(IN_MEMORY_SQLITE, poolclass=StaticPool, connect_args={"check_same_thread": False})
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE widget (id TEXT, doomed TEXT)"))
+        connection.execute(text("CREATE TABLE widget_latest (id TEXT PRIMARY KEY, doomed TEXT)"))
+        connection.execute(
+            text("""
+                CREATE TRIGGER widget_before_insert BEFORE INSERT ON widget BEGIN
+                    INSERT INTO widget_latest (id, doomed) VALUES (NEW.id, NEW.doomed)
+                    ON CONFLICT (id) DO UPDATE SET doomed = excluded.doomed;
+                END;
+            """)
+        )
+
+    # With the trigger present, dropping the referenced column fails — the exact bug.
+    with pytest.raises(OperationalError):
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE widget DROP COLUMN doomed"))
+
+    # After dropping triggers, the same statement succeeds and no triggers remain.
+    with engine.begin() as connection:
+        drop_all_automanaged_triggers(connection)
+        connection.execute(text("ALTER TABLE widget DROP COLUMN doomed"))
+        remaining = [row[0] for row in connection.execute(text("SELECT name FROM sqlite_master WHERE type='trigger'"))]
+    assert remaining == []
+
+
+def test_in_memory_migration_runner_drops_preexisting_triggers() -> None:
+    """The in-memory migration runner enforces the no-triggers-during-migration invariant.
+
+    Simulates a real upgrade: a database that already carries auto-managed triggers from a
+    prior startup. Running migrations through the production runner must drop them first
+    (they are recreated afterwards by initialize_db_from_connection, which the bare runner
+    does not do). Guards against the wiring being removed from override_run_env.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.pool import StaticPool
+
+    from sculptor.database.core import _run_migrations_on_connection
+    from sculptor.services.data_model_service.sql_implementation import register_all_tables
+
+    register_all_tables()
+
+    engine = create_engine(IN_MEMORY_SQLITE, poolclass=StaticPool, connect_args={"check_same_thread": False})
+    with engine.begin() as connection:
+        # Full init: migrate to head AND create all auto-managed triggers, as a prior startup would.
+        initialize_db_from_connection(connection, IN_MEMORY_SQLITE)
+        triggers_before = connection.execute(text("SELECT count(*) FROM sqlite_master WHERE type='trigger'")).scalar()
+        assert triggers_before is not None and triggers_before > 0, (
+            "expected auto-managed triggers to exist after initialization"
+        )
+
+        # Re-run migrations through the production runner (a no-op upgrade to head).
+        _run_migrations_on_connection(connection)
+        triggers_after = connection.execute(text("SELECT count(*) FROM sqlite_master WHERE type='trigger'")).scalar()
+    assert triggers_after == 0, "the migration runner must drop all triggers before running migrations"
+
+
+def test_file_migration_runner_drops_preexisting_triggers(tmp_path: Path) -> None:
+    """Same invariant for the file-database runner (the env.py path used in production)."""
+    from sculptor.database.alembic.utils import get_alembic_script_location
+    from sculptor.database.core import _run_migrations_on_database_url
+    from sculptor.database.core import initialize_db
+    from sculptor.services.data_model_service.sql_implementation import register_all_tables
+
+    register_all_tables()
+
+    url = f"sqlite:///{tmp_path / 'database.db'}"
+    engine = create_new_engine(url)
+    # Simulate a prior startup: migrate to head and create triggers.
+    initialize_db(engine)
+    with engine.connect() as connection:
+        before = connection.execute(text("SELECT count(*) FROM sqlite_master WHERE type='trigger'")).scalar()
+    assert before is not None and before > 0, "expected auto-managed triggers to exist after initialization"
+
+    # Run migrations through the file-database runner (env.py).
+    _run_migrations_on_database_url(url, get_alembic_script_location())
+    with engine.connect() as connection:
+        after = connection.execute(text("SELECT count(*) FROM sqlite_master WHERE type='trigger'")).scalar()
+    assert after == 0, "the migration runner must drop all triggers before running migrations"
 
 
 def _get_migration_fixtures() -> list[MigrationTestFixture]:
@@ -1467,7 +1561,7 @@ def test_update_project_fields_rejects_bad_inputs(
     # These runtime tests exercise the defense-in-depth belt inside
     # ``_update_model_fields`` for callers that might bypass static typing
     # (e.g. dynamic dict unpacking from untyped sources).  We drive the
-    # internal helper directly so no pyre-ignore is needed.
+    # internal helper directly so no type suppression is needed.
     with service.open_transaction(RequestID()) as transaction:
         assert isinstance(transaction, SQLTransaction)
         with pytest.raises(ValueError, match="at least one field"):
@@ -1544,7 +1638,9 @@ def test_update_project_fields_writes_exactly_one_snapshot_row(
             text("SELECT COUNT(*) FROM project WHERE object_id = :oid"), {"oid": str(project.object_id)}
         ).scalar()
 
+    # pyrefly: ignore [unsupported-operation]
     assert after_rows == before_rows + 1, (
+        # pyrefly: ignore [unsupported-operation]
         f"Expected exactly one new snapshot row; got delta={after_rows - before_rows}"
     )
 
@@ -1637,6 +1733,8 @@ def test_update_project_fields_stress_disjoint_concurrent_writers(
             barrier.wait(timeout=10)
             for i in range(iterations):
                 with service.open_transaction(RequestID()) as transaction:
+                    # dynamic per-thread field names can't be statically typed against the TypedDict kwargs
+                    # pyrefly: ignore [bad-argument-type]
                     transaction.update_project_fields(project.object_id, **{field_name: f"{field_name}_iter_{i}"})
         except BaseException as e:
             with errors_lock:
@@ -1948,7 +2046,9 @@ def test_update_workspace_fields_writes_exactly_one_snapshot_row(
             text("SELECT COUNT(*) FROM workspace WHERE object_id = :oid"), {"oid": str(workspace_id)}
         ).scalar()
 
+    # pyrefly: ignore [unsupported-operation]
     assert after_rows == before_rows + 1, (
+        # pyrefly: ignore [unsupported-operation]
         f"Expected exactly one new snapshot row; got delta={after_rows - before_rows}"
     )
 

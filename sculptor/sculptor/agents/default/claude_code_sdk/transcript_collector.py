@@ -3,14 +3,18 @@ from __future__ import annotations
 import json
 import time
 from io import TextIOWrapper
+from typing import Any
 from typing import Literal
 
 from loguru import logger
 
+# Number of fractional digits kept when recording a turn's duration in seconds.
+_DURATION_PRECISION_DIGITS: int = 3
+
 
 class TranscriptCollector:
-    def __init__(self, verbose: bool, file: TextIOWrapper) -> None:
-        self._verbose = verbose
+    def __init__(self, is_verbose: bool, file: TextIOWrapper) -> None:
+        self._is_verbose = is_verbose
         self._file = file
         self._sequence_counter: int = 0
         self._turn_index: int = 0
@@ -23,14 +27,14 @@ class TranscriptCollector:
         msg_type = "non_json"
         subtype: str | None = None
         detail: str | None = None
-        payload: dict | None = None
+        payload: dict[str, Any] | None = None
 
         try:
             data = json.loads(line)
         except json.JSONDecodeError:
             detail = f"len={len(line)}"
             logger.debug(f"[pipe] [stdin] non_json len={len(line)}")
-            if self._verbose:
+            if self._is_verbose:
                 logger.debug(f"[pipe-verbose] [stdin] {line}")
             self._write_entry("IN", msg_type, subtype, detail, payload)
             return
@@ -39,12 +43,12 @@ class TranscriptCollector:
             msg_type = "non_object"
             detail = f"type={type(data).__name__}"
             logger.debug(f"[pipe] [stdin] non_object type={type(data).__name__}")
-            if self._verbose:
+            if self._is_verbose:
                 logger.debug(f"[pipe-verbose] [stdin] {line}")
             self._write_entry("IN", msg_type, subtype, detail, payload)
             return
 
-        if self._verbose:
+        if self._is_verbose:
             payload = data
 
         raw_type = data.get("type", "unknown")
@@ -63,7 +67,7 @@ class TranscriptCollector:
         if subtype:
             log_parts.append(f"subtype={subtype}")
         logger.debug(f"[pipe] [stdin] {' '.join(log_parts)}")
-        if self._verbose:
+        if self._is_verbose:
             logger.debug(f"[pipe-verbose] [stdin] {line}")
 
         self._write_entry("IN", msg_type, subtype, detail, payload)
@@ -72,14 +76,14 @@ class TranscriptCollector:
         msg_type = "non_json"
         subtype: str | None = None
         detail: str | None = None
-        payload: dict | None = None
+        payload: dict[str, Any] | None = None
 
         try:
             data = json.loads(line)
         except json.JSONDecodeError:
             detail = f"len={len(line)}"
             logger.debug(f"[pipe] [stdout] non_json len={len(line)}")
-            if self._verbose:
+            if self._is_verbose:
                 logger.debug(f"[pipe-verbose] [stdout] {line}")
             self._write_entry("OUT", msg_type, subtype, detail, payload)
             return
@@ -88,12 +92,12 @@ class TranscriptCollector:
             msg_type = "non_object"
             detail = f"type={type(data).__name__}"
             logger.debug(f"[pipe] [stdout] non_object type={type(data).__name__}")
-            if self._verbose:
+            if self._is_verbose:
                 logger.debug(f"[pipe-verbose] [stdout] {line}")
             self._write_entry("OUT", msg_type, subtype, detail, payload)
             return
 
-        if self._verbose:
+        if self._is_verbose:
             payload = data
 
         raw_type = data.get("type", "unknown")
@@ -139,7 +143,7 @@ class TranscriptCollector:
         if detail:
             log_parts.append(detail)
         logger.debug(f"[pipe] [stdout] {' '.join(log_parts)}")
-        if self._verbose:
+        if self._is_verbose:
             logger.debug(f"[pipe-verbose] [stdout] {line}")
 
         self._write_entry("OUT", msg_type, subtype, detail, payload)
@@ -165,7 +169,7 @@ class TranscriptCollector:
                 "total_count": self._turn_entry_count,
                 "stdin_count": self._turn_stdin_count,
                 "stdout_count": self._turn_entry_count - self._turn_stdin_count,
-                "duration_seconds": round(duration, 3),
+                "duration_seconds": round(duration, _DURATION_PRECISION_DIGITS),
                 "cost_usd": cost_usd,
                 "subagent_count": self._turn_subagent_count,
             },
@@ -185,13 +189,13 @@ class TranscriptCollector:
         msg_type: str,
         subtype: str | None,
         detail: str | None,
-        payload: dict | None,
+        payload: dict[str, Any] | None,
     ) -> None:
         now = time.monotonic()
         if self._turn_start_time is None:
             self._turn_start_time = now
 
-        entry: dict = {
+        entry: dict[str, Any] = {
             "sequence": self._sequence_counter,
             "direction": direction,
             "timestamp": now,

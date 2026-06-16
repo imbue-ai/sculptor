@@ -1,6 +1,6 @@
 from enum import StrEnum
 
-from sculptor.web.derived import PrStatusInfo
+from sculptor.web.data_types import PrStatusInfo
 
 
 class Transition(StrEnum):

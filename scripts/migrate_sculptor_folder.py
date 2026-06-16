@@ -281,7 +281,6 @@ def migrate(
         print(f"No old directory found at {old_path}, nothing to migrate.")
         return
 
-
     if old_exists and migrating_exists:
         print(
             f"Error: Both {old_path} and {migrating_path} exist. This is an unexpected state. Please remove one and re-run.",
@@ -397,7 +396,7 @@ def main() -> None:
             print("Error: --path and --dev are mutually exclusive.", file=sys.stderr)
             sys.exit(1)
         target = args.path.resolve()
-        print(f"Sculptor data directory in-place migration")
+        print("Sculptor data directory in-place migration")
         print(f"  Path: {target}")
         if args.dry_run:
             print("  (dry run — no changes will be made)")

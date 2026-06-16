@@ -57,6 +57,7 @@ AUTOMANAGED_MODEL_CLASSES: set[type["DatabaseModel"]] = set()
 
 SQLAlchemyTypes = type[String] | type[JSON] | type[Integer] | type[Float] | DateTime
 
+# pyrefly: ignore [bad-assignment]
 _PYDANTIC_TO_SQLALCHEMY_TYPES: dict[type, SQLAlchemyTypes] = {
     ObjectID: String,
     SerializableModel: JSON,
@@ -154,7 +155,6 @@ def create_tables(
             assert not is_nullable
             base_columns.append(Column(field_name, column_type, nullable=False, default=field.default_factory))
         else:
-            # If we ever need nulls, we'll need to add support for them.
             base_columns.append(Column(field_name, column_type, nullable=is_nullable))
 
     # when this is a dual table, the constraints are applied to the latest table.
@@ -164,7 +164,7 @@ def create_tables(
     # If this is not a dual table, the constraints are applied to the main table.
     else:
         full_table_constraints = constraints
-        latest_table_constraints = []
+        latest_table_constraints = ()
 
     snapshots_table = Table(
         table_name,
@@ -179,7 +179,7 @@ def create_tables(
             column.type,
             primary_key=column.primary_key,
             nullable=column.nullable,
-            default=column.default if column.default is not None else None,
+            default=column.default,
         )
         for column in base_columns
     ]
@@ -229,6 +229,9 @@ def _get_sqlite_triggers(
     # NOTE: The initialization code runs on every server startup, dropping and recreating these triggers.
     # This is only safe because we assume the sqlite database is not used by multiple processes at the
     # same time. Do not introduce concurrent writers without changing how trigger/DB state is managed.
+    # NOTE: These triggers reference every column, so they are also dropped before migrations run (see
+    # drop_all_automanaged_triggers in alembic/utils.py) and recreated afterwards. That invariant means a
+    # column-dropping migration never needs to drop triggers itself — do not rely on triggers mid-migration.
     drop_existing_before_insert_trigger = DDL(f"DROP TRIGGER IF EXISTS {table_name}_before_insert;")
     before_insert_trigger = DDL(
         f"""

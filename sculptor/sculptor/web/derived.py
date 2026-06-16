@@ -147,12 +147,12 @@ class LimitedBaseTaskView(SerializableModel, Generic[TaskInputType, TaskStateTyp
 
     @property
     def task_input(self) -> TaskInputType:
-        # pyre-fixme[7]: self.task.input_data is a union type, but the return value is a type variable, which could be a fixed variant. Maybe make the Task type generic in its input_data type.
+        # pyrefly: ignore [bad-return]
         return self.task.input_data
 
     @property
     def task_state(self) -> TaskStateType | None:
-        # pyre-fixme[7]: self.task.current_state is a union type, but the return value is a type variable, which could be a fixed variant. Maybe make the Task type generic in its current_state type.
+        # pyrefly: ignore [bad-return]
         return self.task.current_state
 
     @computed_field
@@ -178,7 +178,6 @@ class LimitedBaseTaskView(SerializableModel, Generic[TaskInputType, TaskStateTyp
     def _maybe_get_status_from_outcome(self) -> TaskStatus | None:
         """
         NOTE: This is almost always None because outcome is never set while task is running.
-        I Extracted it when I thought we were caching task status on state.
         """
         if self.task.outcome == TaskState.FAILED:
             return TaskStatus.ERROR
@@ -494,9 +493,9 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
         chat_input_messages = [
             x for x in self._messages if isinstance(x, (ChatInputUserMessage, UserQuestionAnswerMessage))
         ]
-        request_finished_messages = set(
-            [x.request_id for x in self._messages if isinstance(x, PersistentRequestCompleteAgentMessage)]
-        )
+        request_finished_messages = {
+            x.request_id for x in self._messages if isinstance(x, PersistentRequestCompleteAgentMessage)
+        }
         # NOTE: this used to exclude ``RequestStoppedAgentMessage`` as a workaround
         # for an older bug — interrupted/SIGTERM'd chats were re-delivered to
         # Claude on the next agent run, and the exclusion kept status pinned at
@@ -813,10 +812,8 @@ def create_initial_task_view(
     task: Task,
     settings: SculptorSettings,
 ) -> TaskViewTypes:
-    # Matching on task.input_data directly makes Pyre fail the exhaustiveness check
-    input_data = task.input_data
     task_view_class: type[TaskViewTypes]
-    match input_data:
+    match task.input_data:
         case AgentTaskInputsV2():
             task_view_class = CodingAgentTaskView
         case NoOpTaskInputsV1():

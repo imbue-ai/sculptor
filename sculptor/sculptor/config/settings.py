@@ -4,6 +4,7 @@ from typing import Final
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 from pydantic_settings import SettingsConfigDict
 
@@ -38,7 +39,7 @@ class SculptorSettings(BaseSettings):
     # Add the validation aliases for compatibility with existing code.
     BIND_HOST: str = Field(default="127.0.0.1", validation_alias="SCULPTOR_BIND_HOST")
     BACKEND_PORT: int = Field(default=DEFAULT_BACKEND_PORT, validation_alias="SCULPTOR_API_PORT")
-    DATABASE_URL: str = str("sqlite:///" + str(get_internal_folder() / "database.db"))
+    DATABASE_URL: str = "sqlite:///" + str(get_internal_folder() / "database.db")
     LOG_LEVEL: str = "DEBUG"
     TASK_SYNC_DIR: str = str(get_internal_folder() / "artifacts" / "task_sync")
     WORKSPACE_SYNC_DIR: str = str(get_internal_folder() / "artifacts" / "workspace_sync")
@@ -48,7 +49,9 @@ class SculptorSettings(BaseSettings):
 
     # When provided, all requests are expected to have this exact key in the `x-session-token` header (or GET param or cookie).
     # That way, we can prevent unauthorized access to the API (csrf and similar attacks).
-    SESSION_TOKEN: str | None = None
+    # SecretStr so the token is masked in logs/reprs of the settings object; unwrap
+    # with .get_secret_value() at the (single) comparison/serialization sites.
+    SESSION_TOKEN: SecretStr | None = None
 
     @property
     def task_sync_path(self) -> Path:

@@ -363,7 +363,9 @@ def test_run_background_compound_shutdown_event() -> None:
     # RemoteRunningProcess lets shutdown_event be a ReadOnlyEvent, including CompoundEvent, but RunningProcess only allows MutableEvent
     proc: RunningProcess = run_background(
         ["sleep", "10"],
-        shutdown_event=compound_event,  # pyre-fixme[6]
+        # exercises the read-only CompoundEvent path; the MutableEvent annotation exists for terminate()
+        # pyrefly: ignore [bad-argument-type]
+        shutdown_event=compound_event,
         shutdown_timeout_sec=1.0,
     )
 

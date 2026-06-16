@@ -16,6 +16,8 @@ from sculptor.foundation.thread_utils import ObservableThread
 
 T = TypeVar("T")
 
+_POLL_THREAD_SHUTDOWN_TIMEOUT_IN_SECONDS = 10.0
+
 
 class StopGapBackgroundPollingStreamSource(Generic[T]):
     """
@@ -41,8 +43,6 @@ class StopGapBackgroundPollingStreamSource(Generic[T]):
 
     def _poll_into_queue(self) -> None:
         # Wait at the beginning rather than end so that we don't race with stream tests
-        # NOTE: This is a fragile way of kicking the can down the road and only OK because this code will be deleted soon
-        # This is a fragile workaround and this code will be deleted soon.
         while not self.stop_event.wait(self.check_interval_in_seconds):
             next_value = self.polling_callback()
             if next_value is not None and next_value != self.last_seen:
@@ -54,6 +54,6 @@ class StopGapBackgroundPollingStreamSource(Generic[T]):
 
     def stop(self) -> None:
         self.stop_event.set()
-        self.thread.join()
+        self.thread.join(_POLL_THREAD_SHUTDOWN_TIMEOUT_IN_SECONDS)
         if self.thread.is_alive():
             logger.error("Polling thread did not shut down in time.")

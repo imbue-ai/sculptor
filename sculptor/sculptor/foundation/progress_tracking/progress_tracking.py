@@ -71,9 +71,6 @@ def start_finish_context(
         handle.finish()
 
 
-T = TypeVar("T")
-
-
 class ProgressHandle(StartFinishHandle):
     """Handle for overall progress of multiple operations."""
 

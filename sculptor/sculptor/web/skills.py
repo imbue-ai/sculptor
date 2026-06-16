@@ -10,11 +10,11 @@ from collections.abc import Sequence
 from enum import Enum
 from pathlib import Path
 from typing import Literal
-from typing import NamedTuple
 
 import yaml
 from loguru import logger
 
+from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.web.data_types import SkillInfo
 
 
@@ -166,7 +166,7 @@ class SkillSourceKind(Enum):
     COMMAND_FILES = "command_files"
 
 
-class SkillSourceDirectory(NamedTuple):
+class SkillSourceDirectory(FrozenModel):
     """One directory Sculptor looks in for skills, plus how to read it.
 
     ``namespace`` is the plugin-name prefix applied to discovered skill names
@@ -201,12 +201,26 @@ def get_skill_source_directories(
     directories: list[SkillSourceDirectory] = []
     for plugin_dir in plugin_dirs:
         directories.append(
-            SkillSourceDirectory(plugin_dir / "skills", SkillSourceKind.SKILL_DIR, _get_plugin_namespace(plugin_dir))
+            SkillSourceDirectory(
+                path=plugin_dir / "skills",
+                kind=SkillSourceKind.SKILL_DIR,
+                namespace=_get_plugin_namespace(plugin_dir),
+            )
         )
-    directories.append(SkillSourceDirectory(repo_path / ".claude" / "skills", SkillSourceKind.SKILL_DIR, None))
-    directories.append(SkillSourceDirectory(repo_path / ".claude" / "commands", SkillSourceKind.COMMAND_FILES, None))
-    directories.append(SkillSourceDirectory(home / ".claude" / "skills", SkillSourceKind.SKILL_DIR, None))
-    directories.append(SkillSourceDirectory(home / ".claude" / "commands", SkillSourceKind.COMMAND_FILES, None))
+    directories.append(
+        SkillSourceDirectory(path=repo_path / ".claude" / "skills", kind=SkillSourceKind.SKILL_DIR, namespace=None)
+    )
+    directories.append(
+        SkillSourceDirectory(
+            path=repo_path / ".claude" / "commands", kind=SkillSourceKind.COMMAND_FILES, namespace=None
+        )
+    )
+    directories.append(
+        SkillSourceDirectory(path=home / ".claude" / "skills", kind=SkillSourceKind.SKILL_DIR, namespace=None)
+    )
+    directories.append(
+        SkillSourceDirectory(path=home / ".claude" / "commands", kind=SkillSourceKind.COMMAND_FILES, namespace=None)
+    )
     return directories
 
 

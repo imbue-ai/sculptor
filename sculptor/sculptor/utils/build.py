@@ -111,7 +111,7 @@ def build_sculpt_backend_env(
 
 
 def is_dev_build() -> bool:
-    # If the version is a dev release, then we are in a dev build, otherwise we are in a production build.
+    """Return True when running a dev release rather than a production build."""
     return Version(version.__version__).is_devrelease
 
 
@@ -175,6 +175,7 @@ def get_install_path() -> Path:
 
 @cache
 def get_sculptor_folder() -> Path:
+    """Return the root Sculptor data folder for the current build and environment."""
     # NOTE: The Electron shell of the packaged version of sculptor sometimes reads from this folder. Please keep any
     # changes you make here consistent with sculptor/frontend/src/electron/logger.ts getSculptorFolder
     path_from_env = os.environ.get(SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG)
@@ -200,10 +201,12 @@ def get_sculptor_folder() -> Path:
 
 
 def get_internal_folder() -> Path:
+    """Return the internal data folder used for Sculptor-managed state."""
     return get_sculptor_folder() / "internal"
 
 
 def get_workspaces_folder() -> Path:
+    """Return the folder under which agent workspaces are created."""
     # Workspace paths are persisted in the DB, so this override should stay stable across
     # launches of the same instance — pointing it elsewhere will leave existing workspace
     # rows referencing the previous location. Primary use case: nested dev Sculptor

@@ -119,7 +119,7 @@ def _generate_test_stub() -> None:
     module_name = f"sculptor.database.alembic.versions.{newest_path.stem}"
     module = importlib.import_module(module_name)
     revision_id: str = module.revision
-    down_revision = module.down_revision
+    down_revision: str | tuple[str, ...] | None = module.down_revision
 
     # Format the down_revision for the test stub.
     if down_revision is None:

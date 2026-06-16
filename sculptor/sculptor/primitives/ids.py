@@ -11,7 +11,6 @@ from typeid.constants import SUFFIX_LEN as TYPEID_SUFFIX_LEN
 
 
 class NonEmptyStr(str):
-    # pyre-fixme[11]: pyre seems to have some trouble with Self in some specific cases, including type[Self]
     def __new__(cls: type[Self], *args: Any, **kwargs: Any) -> Self:
         value = str.__new__(cls, *args, **kwargs)
         if len(value) == 0:
@@ -21,7 +20,7 @@ class NonEmptyStr(str):
     @classmethod
     def __get_pydantic_core_schema__(cls, source_type: type, handler: GetCoreSchemaHandler) -> core_schema.CoreSchema:
         """
-        Support transparently deserializing strings into ObjectID instances and vice versa.
+        Support transparently deserializing strings into NonEmptyStr instances and vice versa.
         """
         return core_schema.no_info_before_validator_function(
             lambda raw_value: cls(raw_value) if isinstance(raw_value, str) else raw_value,
@@ -129,8 +128,6 @@ class ObjectSnapshotID(ObjectID):
 
 class LocalEnvironmentID(ExternalID):
     """ID for a local environment (sandbox path)."""
-
-    pass
 
 
 class UserReference(ExternalID):

@@ -6,6 +6,9 @@ from typing import Any
 
 from sculpt.formatting import truncate
 
+# Max length for a Bash command shown in a one-line tool-use summary.
+_BASH_COMMAND_MAX_LENGTH = 60
+
 
 def _format_tool_use(block: Mapping[str, Any]) -> str:
     """Format a ToolUseBlock as a one-line summary."""
@@ -27,7 +30,7 @@ def _format_tool_use(block: Mapping[str, Any]) -> str:
     elif name == "Bash":
         command = tool_input.get("command", "")
         if command:
-            return f"[{name}] {truncate(command, max_length=60)}"
+            return f"[{name}] {truncate(command, max_length=_BASH_COMMAND_MAX_LENGTH)}"
     elif name == "Agent":
         description = tool_input.get("description", "")
         if description:

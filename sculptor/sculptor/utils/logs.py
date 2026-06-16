@@ -27,6 +27,14 @@ FANCY_FORMAT = "{time:HH:mm:ss.SSS} |<level>{level: <7}</level>| <cyan>{extra[fu
 LOG_EXTENSION = "jsonl"
 COMPRESSED_LOG_EXTENSION = "gz"
 
+# how many rotated log files to keep around; we retain 10x as many in dev/test as in production
+_PRODUCTION_LOG_RETENTION_COUNT = 10
+_DEV_LOG_RETENTION_COUNT = 100
+
+# maximum number of concurrent task-specific log file handles to keep open; balances the risk of
+# running out of file handles against the number of concurrent tasks before performance degrades
+_MAX_OPEN_TASK_LOG_FILES = 200
+
 # the type that loguru callable expects is undocumented
 FileObject = Any
 
@@ -75,12 +83,12 @@ def setup_loggers(
     default_handler_id = 0
 
     # Remove only the default handler if it exists - do not remove other custom handlers
-    # pyre-ignore[16]: Accessing private field _core
+    # pyrefly: ignore [missing-attribute]
     if default_handler_id in logger._core.handlers:
         logger.remove(default_handler_id)
 
     # add the stderr handler
-    _stderr_log_handler = logger.add(sys.__stderr__, level=required_level, format=format, diagnose=False)  # type: ignore
+    logger.add(sys.__stderr__, level=required_level, format=format, diagnose=False)  # type: ignore
 
     # install internal log levels for exception reporting
     ensure_core_log_levels_configured()
@@ -88,7 +96,9 @@ def setup_loggers(
     # retain extra logs if we are developers
     is_dev = is_dev_build() or is_running_within_a_pytest_tree()
     if retention is None:
-        retention = (100 if is_dev else 10) if is_rotation_enabled else None
+        retention = (
+            (_DEV_LOG_RETENTION_COUNT if is_dev else _PRODUCTION_LOG_RETENTION_COUNT) if is_rotation_enabled else None
+        )
     # note that we write all lines to the main log file, and all task-specific logs are also written to their own files
     # add the structured local file logger
     log_writer = LogWriter(
@@ -112,7 +122,7 @@ def setup_loggers(
 class LogWriter(FileSink):
     def __init__(
         self,
-        path,
+        path: str | Path,
         *,
         rotation: int
         | datetime.time
@@ -122,13 +132,13 @@ class LogWriter(FileSink):
         | None = None,
         retention: int | datetime.timedelta | str | Callable[[list[str]], None] | None = None,
         compression: str | Callable[[str | Path], None] | None = None,
-        delay=False,
-        watch=False,
-        mode="a",
-        buffering=1,
-        encoding="utf8",
-        **kwargs,
-    ):
+        delay: bool = False,
+        watch: bool = False,
+        mode: str = "a",
+        buffering: int = 1,
+        encoding: str = "utf8",
+        **kwargs: Any,
+    ) -> None:
         assert watch is False, "watch=True is not supported in this wrapper"
         super().__init__(
             path,
@@ -143,11 +153,8 @@ class LogWriter(FileSink):
             **kwargs,
         )
         self.log_file_path = Path(path)
-        # LRU cache to store file handles for task-specific logs
-        # so that we can close them when they are no longer needed
-        # note that the 200 is a balance between the risk of running out of file handles
-        # and the maximum number of concurrent tasks you can have before performance degrades
-        self.task_file_cache = _LRUCacheThatClosesFiles(maxsize=200)
+        # LRU cache of file handles for task-specific logs, so we can close them when they are evicted
+        self.task_file_cache = _LRUCacheThatClosesFiles(maxsize=_MAX_OPEN_TASK_LOG_FILES)
 
     def write(self, message: "Message") -> None:
         # Since the formatted text already includes the message (via FANCY_FORMAT),

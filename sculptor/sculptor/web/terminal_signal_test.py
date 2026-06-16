@@ -125,7 +125,7 @@ def test_files_changed_refreshes_workspace_diff(
         refreshed.append(workspace_id)
 
     original = DefaultWorkspaceService.maybe_refresh_workspace_diff
-    DefaultWorkspaceService.maybe_refresh_workspace_diff = fake_refresh  # pyre-ignore[8]
+    DefaultWorkspaceService.maybe_refresh_workspace_diff = fake_refresh
     try:
         response = _post_signal(client, task, {"event": "files-changed"})
     finally:

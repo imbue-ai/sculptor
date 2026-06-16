@@ -37,13 +37,13 @@ class MockRepoState:
         return self.repo.base_path
 
     def write_file(self, path: Path | str, content: str | None) -> None:
-        logger.info("Writing file {} with content {}", path, content)
+        logger.debug("Writing file {} with content {}", path, content)
+        full_path = self.repo.base_path / path
         if content is None:
-            Path(self.repo.base_path / path).unlink()
+            full_path.unlink()
         else:
-            Path(self.repo.base_path / path).parent.mkdir(parents=True, exist_ok=True)
-            Path(self.repo.base_path / path).write_text(content)
-        logger.info("Wrote file {} with content {}", path, content)
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+            full_path.write_text(content)
 
     def commit(self, message: str, commit_time: str | datetime | CommitTimestamp | None = None) -> None:
         make_commit(self.repo, commit_message=message, allow_empty=True, commit_time=commit_time)
@@ -54,7 +54,7 @@ class MockRepoState:
     def create_reset_and_checkout_branch(self, branch_name: str) -> None:
         create_reset_and_checkout_branch(self.repo, branch_name)
 
-    def get_current_branch_name(self):
+    def get_current_branch_name(self) -> str:
         return get_branch_name(self.repo)
 
     def checkout_branch(self, branch_name: str) -> None:

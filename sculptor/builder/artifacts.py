@@ -5,7 +5,7 @@ the Package type and the locations in S3 where these can be found.
 
 The key function of this module is:
 
-`targets_for_target_and_stage()` which returns the targets as a list of ArtifactFiles.
+`artifacts_for_target_and_stage()` which returns the targets as a list of ArtifactFiles.
 
 An ArtifactFile specifies an origin file to a list of destination files. Once
 the build process completes, this module can be used to determine which local
@@ -25,13 +25,6 @@ from sculptor.version import pep_440_to_semver
 from sculptor.version import pyproject_version
 
 DIST_DIR = "../dist"
-
-
-class FileExtension(enum.Enum):
-    DMG = ".dmg"
-    ZIP = ".zip"
-    APPIMAGE = ".AppImage"
-    YML = ".yml"
 
 
 class Target(enum.StrEnum):
@@ -73,7 +66,7 @@ class ArtifactFile(SerializableModel):
       * the object key of the file as uploaded to s3 previously
 
     The Output paths are the names of the files as stored in S3, which may differ from the input filename. If there
-    are mulitple names, it means that the file will be duplicated in S3.
+    are multiple names, it means that the file will be duplicated in S3.
     """
 
     # The path to the filename, including extension. You may include format string specifiers such as {platform}, {arch} and {version}.
@@ -208,7 +201,7 @@ def artifacts_for_target_and_stage(
         git_sha = git_sha_override
     else:
         version = pyproject_version()
-        git_sha = dev_git_sha(short=False)
+        git_sha = dev_git_sha(is_short=False)
 
     return [
         artifact_file.interpolate_paths(

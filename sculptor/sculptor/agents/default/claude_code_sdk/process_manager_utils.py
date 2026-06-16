@@ -428,7 +428,7 @@ def is_session_id_valid(
     path_exists = claude_session_file_path.exists()
     logger.debug("Checking path {} exists={}", claude_session_file_path, path_exists)
     if not path_exists:
-        logger.info(
+        logger.debug(
             "Session id {} is not valid because the file {} does not exist", session_id, claude_session_file_path
         )
         return False
@@ -497,14 +497,14 @@ def _create_synthetic_write_diff(file_path: str, content: str) -> str:
     in the format expected by the frontend's parseDiff (split on 'diff --git').
     """
     lines = content.split("\n")
-    num_lines = len(lines)
+    line_count = len(lines)
     additions = "\n".join("+" + line for line in lines)
     return (
         f"diff --git a/{file_path} b/{file_path}\n"
         f"new file mode 100644\n"
         f"--- /dev/null\n"
         f"+++ b/{file_path}\n"
-        f"@@ -0,0 +1,{num_lines} @@\n"
+        f"@@ -0,0 +1,{line_count} @@\n"
         f"{additions}\n"
     )
 

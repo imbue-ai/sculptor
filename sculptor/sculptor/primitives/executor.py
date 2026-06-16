@@ -12,7 +12,7 @@ if sys.version_info[:2] != (3, 12) and sys.version_info[:2] != (3, 11):
 
 
 class ObservableThreadPoolExecutor(thread_executor_module.ThreadPoolExecutor):
-    def __init__(self, concurrency_group: ConcurrencyGroup, *args, **kwargs):
+    def __init__(self, concurrency_group: ConcurrencyGroup, *args, **kwargs) -> None:
         self._concurrency_group = concurrency_group
         super().__init__(*args, **kwargs)
 
@@ -24,16 +24,20 @@ class ObservableThreadPoolExecutor(thread_executor_module.ThreadPoolExecutor):
         # When the executor gets lost, the weakref callback will wake up
         # the worker threads.
         def weakref_cb(_, q=self._work_queue):
+            # None is the shutdown sentinel in CPython's own ThreadPoolExecutor; typeshed types the queue too narrowly
+            # pyrefly: ignore [bad-argument-type]
             q.put(None)
 
-        num_threads = len(self._threads)
-        if num_threads < self._max_workers:
-            thread_name = "%s_%d" % (self._thread_name_prefix or self, num_threads)
+        count_threads = len(self._threads)
+        if count_threads < self._max_workers:
+            thread_name = "%s_%d" % (self._thread_name_prefix or self, count_threads)
             t = ObservableThread(
                 name=thread_name,
                 target=thread_executor_module._worker,
                 args=(weakref.ref(self, weakref_cb), self._work_queue, self._initializer, self._initargs),
             )
             self._concurrency_group.start_thread(t)
+            # pyrefly: ignore [missing-attribute]
             self._threads.add(t)
+            # pyrefly: ignore [unsupported-operation]
             thread_executor_module._threads_queues[t] = self._work_queue

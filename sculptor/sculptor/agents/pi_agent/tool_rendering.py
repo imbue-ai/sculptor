@@ -25,6 +25,7 @@ Wire-protocol reference: the pi RPC protocol notes (pi 0.78.0).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from sculptor.state.chat_state import DiffToolContent
@@ -72,7 +73,7 @@ SUBAGENT_DISPLAY_NAME: str = "Agent"
 BACKGROUND_TOOL_NAME: str = "background"
 
 
-def _summarize_subagent_tasks(pi_args: dict[str, Any]) -> tuple[str, str]:
+def _summarize_subagent_tasks(pi_args: Mapping[str, Any]) -> tuple[str, str]:
     """Derive `(subagent_type, prompt)` for the Claude-shaped `Agent` input.
 
     The pi sub-agent tool takes either a single `{task}` or a parallel
@@ -91,7 +92,7 @@ def _summarize_subagent_tasks(pi_args: dict[str, Any]) -> tuple[str, str]:
     return "subagent", _first_str(pi_args, "task", "prompt")
 
 
-def _first_str(args: dict[str, Any], *keys: str) -> str:
+def _first_str(args: Mapping[str, Any], *keys: str) -> str:
     """Return the first string value present under `keys`, else ""."""
     for key in keys:
         value = args.get(key)
@@ -117,7 +118,7 @@ def _adapt_edits(raw_edits: Any) -> list[dict[str, str]]:
     return adapted
 
 
-def map_pi_tool_call(pi_tool_name: str, pi_args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+def map_pi_tool_call(pi_tool_name: str, pi_args: Mapping[str, Any]) -> tuple[str, dict[str, Any]]:
     """Map a pi tool name + args onto a Claude tool name + input.
 
     Returns `(claude_name, claude_input)`. The four core tools are adapted onto
@@ -238,7 +239,7 @@ def _git_diff_from_pi_patch(file_path: str, patch: str) -> str:
 
 
 def build_tool_result_content(
-    claude_name: str, claude_input: dict[str, Any], result_payload: Any, fallback_text: str = ""
+    claude_name: str, claude_input: Mapping[str, Any], result_payload: Any, fallback_text: str = ""
 ) -> GenericToolContent | DiffToolContent:
     """Build the rendered result content for a finished tool call.
 
@@ -251,7 +252,7 @@ def build_tool_result_content(
     when the end event carries no result body.
     """
     if claude_name in _FILE_DIFF_TOOL_NAMES:
-        file_path = claude_input.get("file_path", "") if isinstance(claude_input, dict) else ""
+        file_path = claude_input.get("file_path", "") if isinstance(claude_input, Mapping) else ""
         patch = None
         if isinstance(result_payload, dict):
             details = result_payload.get("details")
@@ -260,7 +261,7 @@ def build_tool_result_content(
         if patch:
             diff = _git_diff_from_pi_patch(file_path, patch)
         elif claude_name == "Write":
-            content = claude_input.get("content", "") if isinstance(claude_input, dict) else ""
+            content = claude_input.get("content", "") if isinstance(claude_input, Mapping) else ""
             diff = _synthetic_new_file_diff(file_path, content if isinstance(content, str) else "")
         else:
             # An edit with no patch (not expected from real pi): a header-only

@@ -34,6 +34,7 @@ test behaviour.
 from __future__ import annotations
 
 from collections.abc import Generator
+from collections.abc import Mapping
 
 import pytest
 from playwright.sync_api import Page
@@ -135,6 +136,10 @@ if (localStorage.getItem("__sculptor_mock_enabled") === "true") {
 # and gate activation on localStorage.
 _pages_with_init_script: set[int] = set()
 
+# How long ``install()`` waits for the mock to register its callback and for the
+# initial status pull to flow through React's commit phase.
+_READY_PREDICATE_TIMEOUT_MS = 10_000
+
 
 class MockSculptorElectronAPI:
     """Controls a mock ``window.sculptor`` injected into a Playwright page.
@@ -183,7 +188,7 @@ class MockSculptorElectronAPI:
             + " && typeof window.sculptor._autoUpdateCallback === 'function'"
             + " && window.sculptor._initialStatusHydrated === true"
         )
-        self._page.wait_for_function(ready_predicate, timeout=10_000)
+        self._page.wait_for_function(ready_predicate, timeout=_READY_PREDICATE_TIMEOUT_MS)
 
     def uninstall(self) -> None:
         """Remove the mock and reload so subsequent tests get a clean page.
@@ -199,14 +204,14 @@ class MockSculptorElectronAPI:
     # Pushing status events (simulates main → renderer)
     # ------------------------------------------------------------------
 
-    def push_status(self, status: dict[str, object]) -> None:
+    def push_status(self, status: Mapping[str, object]) -> None:
         """Invoke the callback registered by ``useAutoUpdateListener``."""
         self._page.evaluate(
             "status => window.sculptor._autoUpdateCallback(status)",
             status,
         )
 
-    def push_backend_status(self, status: dict[str, object]) -> None:
+    def push_backend_status(self, status: Mapping[str, object]) -> None:
         """Invoke the callback registered by ``BackendStatusBoundary``.
 
         Drives the React boundary as if the Electron main process pushed a

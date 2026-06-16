@@ -13,14 +13,14 @@ class ImbueItertoolsValueError(ImbueError, ValueError):
     """This value error is thrown when the assumptions of the itertools module are violated."""
 
 
-def only(x: Iterable[T]) -> T:
+def only(iterable: Iterable[T]) -> T:
     try:
-        (value,) = x
+        (value,) = iterable
     except ValueError as e:
         message = "Expected exactly one value"
-        if isinstance(x, Sequence):
-            with contextlib.suppress():
-                message += f" but got {len(x)} {x[:3]=}"
+        if isinstance(iterable, Sequence):
+            with contextlib.suppress(Exception):
+                message += f" but got {len(iterable)} {iterable[:3]=}"
         raise ImbueItertoolsValueError(message) from e
 
     return value

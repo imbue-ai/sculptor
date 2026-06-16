@@ -77,6 +77,7 @@ from sculptor.services.data_model_service.api import TaskDataModelService
 from sculptor.services.data_model_service.data_types import BaseDataModelTransaction
 from sculptor.services.data_model_service.data_types import ProjectFieldUpdate
 from sculptor.services.data_model_service.data_types import WorkspaceFieldUpdate
+from sculptor.services.data_model_service.data_types import WorkspaceListingRow
 from sculptor.utils.process_utils import get_original_parent_pid
 from sculptor.utils.type_utils import extract_leaf_types
 
@@ -312,7 +313,7 @@ class SQLTransaction(BaseDataModelTransaction):
         )
 
     @overwrite_missing_table_error_for_sentry
-    def get_all_workspaces(self) -> list[dict[str, Any]]:
+    def get_all_workspaces(self) -> list[WorkspaceListingRow]:
         """Get cross-project workspace listing with denormalized fields, ordered by recent activity."""
         rows = self.connection.execute(
             text("""
@@ -350,7 +351,7 @@ class SQLTransaction(BaseDataModelTransaction):
             """)
         ).all()
 
-        return [{str(k): v for k, v in row._mapping.items()} for row in rows]
+        return [WorkspaceListingRow(**{str(k): v for k, v in row._mapping.items()}) for row in rows]
 
     @overwrite_missing_table_error_for_sentry
     def upsert_task(self, task: Task) -> Task:
@@ -465,7 +466,7 @@ class SQLTransaction(BaseDataModelTransaction):
             .order_by(TASK_LATEST_TABLE.c.created_at.desc())
         )
         result = self.connection.execute(query)
-        return tuple(_row_to_pydantic_model(row, Task, prefix="task_latest_") for row in result.all())
+        return tuple(_row_to_pydantic_model(row, Task) for row in result.all())
 
     def _insert_model(self, obj: DatabaseModel, table: Table) -> DatabaseModel:
         """
@@ -590,11 +591,11 @@ def _get_serializable_fields(model_cls: type) -> frozenset[str]:
     return frozen
 
 
-def _row_to_pydantic_model(row: sqlalchemy.Row, model_cls: type[T2], prefix: str = "") -> T2:
+def _row_to_pydantic_model(row: sqlalchemy.Row, model_cls: type[T2]) -> T2:
     serializable_fields = _get_serializable_fields(model_cls)
     values = {}
     for field_name in model_cls.model_fields:
-        row_value = getattr(row, f"{prefix}{field_name}")
+        row_value = getattr(row, field_name)
         if row_value is not None and field_name in serializable_fields:
             values[field_name] = row_value
             continue
@@ -625,6 +626,7 @@ def _pydantic_value_to_row_value(value: Any) -> Any:
         return value.model_dump(mode="json")
     if isinstance(value, ObjectID):
         return str(value)
+    # pyrefly: ignore [invalid-argument]
     if isinstance(value, EmailStr):
         return str(value)
     return value
@@ -931,6 +933,7 @@ class SQLDataModelService(TaskDataModelService, Generic[TQ]):
         return transaction_summary
 
     @contextmanager
+    # pyrefly: ignore [bad-override]
     def observe_user_changes(
         self, user_reference: UserReference, organization_reference: OrganizationReference, queue: TQ
     ) -> Generator[TQ, None, None]:

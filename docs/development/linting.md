@@ -5,7 +5,7 @@
 ```bash
 just format     # Auto-fix formatting (ruff, eslint, stylelint)
 just lint       # Lint Python (ruff) and JS/TS (eslint) and SCSS (stylelint)
-just typecheck  # Type check Python (pyre) and JS/TS (tsc)
+just typecheck  # Type check Python (pyrefly) and JS/TS (tsc)
 just ratchets   # Run the ratchets binary to enforce specific code styles
 just check      # Run everything: lint, typecheck, ratchets, file hygiene
 ```
@@ -15,12 +15,12 @@ just check      # Run everything: lint, typecheck, ratchets, file hygiene
 | Tool | Language | What it does |
 |---|---|---|
 | `ruff` | Python | Formatting + linting |
-| `pyre` | Python | Type checking |
+| `pyrefly` | Python | Type checking |
 | `eslint` | JS/TS | Linting + formatting |
 | `tsc` | JS/TS | Type checking |
 | `stylelint` | SCSS | Style linting (including design token enforcement) |
 
-### Python (ruff, pyre)
+### Python (ruff, pyrefly)
 
 Common suppression comments:
 
@@ -28,6 +28,11 @@ Common suppression comments:
 - `# noqa: E731` — intentional lambda assignments (don't convert to functions)
 - `# noqa: E402` — intentional late imports
 - `# noqa: E712` — SQLAlchemy comparisons like `column == False`
+
+Pyrefly type errors can be suppressed with a `# pyrefly: ignore [rule-name]`
+comment on the line above the error (config lives in `pyrefly.toml` at the repo
+root). Always name the suppressed rule — bare `# pyrefly: ignore` comments and
+module-wide `# pyrefly: ignore-errors` are banned by ratchets.
 
 ### Frontend (eslint)
 

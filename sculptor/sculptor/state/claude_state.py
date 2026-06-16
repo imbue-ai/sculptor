@@ -20,7 +20,7 @@ from sculptor.state.chat_state import ToolResultBlock
 from sculptor.state.chat_state import ToolResultBlockSimple
 from sculptor.state.chat_state import ToolUseBlock
 
-RE_STRIP_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[mGKHfABCDhls]|\x1b\[[?][0-9;]*[hlHLdcE]|\x1b[=>]")
+_RE_STRIP_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[mGKHfABCDhls]|\x1b\[[?][0-9;]*[hlHLdcE]|\x1b[=>]")
 
 _RE_IMG_TAG = re.compile(r'<img\s[^>]*src=["\']([^"\']+)["\'][^>]*/?>(?:\s*</img>)?', re.IGNORECASE | re.DOTALL)
 _RE_VIDEO_TAG = re.compile(
@@ -539,11 +539,12 @@ def parse_claude_code_json_lines_simple(
 ) -> tuple[str, ParsedAgentResponseTypeSimple | None] | None:
     """Parse a JSON line from Claude Code SDK.
 
-    Returns a ParsedAgentMessage subtype or None for unknown message types.
-    For tool results, only ever returns GenericToolContent, never DiffToolContent,
-    since DiffToolContent requires the diff tracker to be passed in.
+    Returns a ``(message_type, parsed_response)`` tuple, or None for blank lines
+    and unknown message types. For tool results this only ever produces
+    SimpleToolContent, never the rich DiffToolContent, since DiffToolContent
+    requires the diff tracker to be passed in.
     """
-    line = RE_STRIP_ANSI_ESCAPE.sub("", line).strip()
+    line = _RE_STRIP_ANSI_ESCAPE.sub("", line).strip()
 
     if line == "":
         return None
