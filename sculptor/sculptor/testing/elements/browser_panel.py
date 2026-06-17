@@ -16,7 +16,15 @@ from playwright.sync_api import expect
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
 
-_WEBVIEW_ATTACH_TIMEOUT_SECONDS: float = 10.0
+# Waits that depend on the <webview> guest actually attaching and committing a
+# navigation (vs. the address bar, which just mirrors the typed URL instantly).
+# Under the offload electron lane's heavy parallelism (xvfb + software
+# rendering, up to 200 sandboxes at once) the guest can take well over 10s to
+# attach and load — the fixture server is hit and returns 200, but only after
+# the old 10s budget had already expired, surfacing as a flaky "Webview
+# location did not reach ...; last value was ''". Give these a generous budget.
+_WEBVIEW_ATTACH_TIMEOUT_SECONDS: float = 30.0
+_WEBVIEW_LOAD_TIMEOUT_SECONDS: float = 30.0
 _URL_POLL_INTERVAL_SECONDS: float = 0.1
 _DEFAULT_ADDRESS_BAR_TIMEOUT_SECONDS: float = 10.0
 _PNG_MAGIC: bytes = b"\x89PNG\r\n\x1a\n"
@@ -150,7 +158,7 @@ class PlaywrightBrowserPanelElement(PlaywrightIntegrationTestElement):
         raise AssertionError(f"Address bar did not contain {needle!r}; last value was {last_value!r}")
 
     def _wait_for_webview_location_contains(
-        self, needle: str, *, timeout_seconds: float = _DEFAULT_ADDRESS_BAR_TIMEOUT_SECONDS
+        self, needle: str, *, timeout_seconds: float = _WEBVIEW_LOAD_TIMEOUT_SECONDS
     ) -> None:
         """Wait until the webview's live ``document.location`` reflects ``needle``.
 
