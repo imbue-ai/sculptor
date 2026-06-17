@@ -1,7 +1,10 @@
+import type { Plugin } from "vite";
 import { describe, expect, it } from "vitest";
 
 import {
+  HOST_VERSIONS_MODULE_ID,
   parseSdkValueExports,
+  pluginRuntimeStubs,
   renderStub,
   renderVersionsModule,
   type RuntimeModuleConfig,
@@ -9,6 +12,15 @@ import {
 
 const keys = (entries: Record<string, ReadonlyArray<string>>): ReadonlyMap<string, ReadonlyArray<string>> =>
   new Map(Object.entries(entries));
+
+/** Invoke a Vite hook that may be defined as a bare function or an object hook. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const callHook = (hook: unknown, ...args: ReadonlyArray<unknown>): any => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handler = typeof hook === "function" ? hook : (hook as any).handler;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (handler as (...a: ReadonlyArray<unknown>) => any)(...args);
+};
 
 describe("renderStub", () => {
   it("emits a default + sorted named exports for a single-source module", () => {
@@ -126,6 +138,29 @@ describe("parseSdkValueExports", () => {
   it("handles inline type specifiers and aliases", () => {
     const source = 'export { value, type AType, original as renamed } from "./mod.ts";';
     expect(parseSdkValueExports(source)).toEqual(["renamed", "value"]);
+  });
+});
+
+describe("pluginRuntimeStubs (host-versions virtual module)", () => {
+  it("resolves and loads the virtual module with the real installed versions", async () => {
+    const plugin: Plugin = pluginRuntimeStubs();
+    // Point package resolution at this frontend project.
+    callHook(plugin.configResolved, { root: process.cwd() });
+
+    const resolved = callHook(plugin.resolveId, HOST_VERSIONS_MODULE_ID) as string;
+    expect(resolved).toBe("\0" + HOST_VERSIONS_MODULE_ID);
+
+    const code = (await callHook(plugin.load, resolved)) as string;
+    expect(code).toContain("export const hostPackageVersions = Object.freeze({");
+    // Reads each package's actual installed version (assert shape, not the exact
+    // value, so a routine dep bump doesn't break the test).
+    expect(code).toMatch(/"react":\s*"\d+\.\d+\.\d+"/);
+    expect(code).toMatch(/"@radix-ui\/themes":\s*"\d+\.\d+\.\d+"/);
+  });
+
+  it("ignores unrelated module ids", () => {
+    const plugin: Plugin = pluginRuntimeStubs();
+    expect(callHook(plugin.resolveId, "some-other-module")).toBeUndefined();
   });
 });
 
