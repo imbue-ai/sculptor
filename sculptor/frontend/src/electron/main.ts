@@ -2,13 +2,27 @@ import { execSync, spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as readline from "node:readline";
+import { pathToFileURL } from "node:url";
 
 import { randomBytes } from "crypto";
 import type { MenuItemConstructorOptions } from "electron";
-import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, shell, webContents } from "electron";
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  globalShortcut,
+  ipcMain,
+  Menu,
+  net,
+  protocol,
+  shell,
+  webContents,
+} from "electron";
 import Store from "electron-store";
 
 import type { AnyBackendStatus, SculptorDevInfo } from "../shared/types";
+import { APP_SCHEME, getAppRendererUrl, resolveRequestToFilePath, shouldFallbackToIndex } from "./appProtocol";
 import { initAutoUpdater } from "./autoUpdater";
 import type { ZoomCommand } from "./constants";
 import {
@@ -50,6 +64,18 @@ const IS_MAC = process.platform === "darwin";
 const IS_LINUX = process.platform === "linux";
 
 /* eslint-enable @typescript-eslint/naming-convention */
+
+// Mark the custom app scheme as a standard, secure, fetch-capable origin. This
+// must run before the app's "ready" event, so it lives at module top level.
+// The handler that actually serves files is registered after the app is ready
+// (see registerAppProtocolHandler). In development the renderer is still loaded
+// over http from the Vite dev server, so this scheme goes unused there.
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: APP_SCHEME,
+    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true },
+  },
+]);
 
 // When running from source, SCULPTOR_ICON_LABEL controls the large text at the
 // top of the dev icon (e.g. "src", "pytest") and SCULPTOR_FRONTEND_PORT is
@@ -746,8 +772,12 @@ const createWindow = async (): Promise<void> => {
       // we construct the frontend URL using SCULPTOR_FRONTEND_PORT, which is populated at runtime,
       // so different dev instances will open their corresponding frontend URLs correctly.
       `http://localhost:${process.env.SCULPTOR_FRONTEND_PORT || "5173"}`
-    : // Note: we load the built frontend from a file in production which requires us to circumvent CORS in the backend.
-      `file://${path.join(app.getAppPath(), ".vite/build/renderer/index.html")}`;
+    : // In production we serve the built frontend from a custom, secure origin
+      // (sculptor://app) via the registered app protocol instead of file://. A
+      // real origin makes absolute paths, fetch, dynamic import, and CSP behave
+      // like a normal web page. The backend CORS allowlist accepts this origin
+      // (see sculptor/web/app.py).
+      getAppRendererUrl();
 
   logger.info("[main] Initial URL:", appUrl);
   await window.loadURL(appUrl);
@@ -911,7 +941,36 @@ const createWindow = async (): Promise<void> => {
   });
 };
 
+/**
+ * Serve the built renderer bundle over the custom `sculptor://app` scheme.
+ * Maps each request to a file inside the bundle directory (with a path-
+ * traversal guard) and streams it back via `net.fetch`, which infers the MIME
+ * type from the extension. Extensionless misses fall back to the SPA shell.
+ * Only meaningful for packaged builds; in development the renderer is loaded
+ * from the Vite dev server and this handler is never hit.
+ */
+const registerAppProtocolHandler = (): void => {
+  const bundleDir = path.join(app.getAppPath(), ".vite/build/renderer");
+  protocol.handle(APP_SCHEME, async (request) => {
+    const resolved = resolveRequestToFilePath(bundleDir, request.url);
+    if (resolved === null) {
+      return new Response("Bad request", { status: 400 });
+    }
+    let target = resolved;
+    if (!fs.existsSync(target)) {
+      if (shouldFallbackToIndex(target)) {
+        target = path.join(bundleDir, "index.html");
+      } else {
+        return new Response("Not found", { status: 404 });
+      }
+    }
+    return net.fetch(pathToFileURL(target).toString());
+  });
+};
+
 app.whenReady().then(async () => {
+  // Register the app-scheme file handler before any window loads from it.
+  registerAppProtocolHandler();
   traceMark("electron.app_ready");
   // Create application menu
   createApplicationMenu();
