@@ -15,11 +15,12 @@ export type PluginManifest = {
   entry: string;
   /**
    * Semver range of @sculptor/plugin-sdk the plugin was built against. The
-   * loader only enforces the major. Note there is deliberately no peer
+   * loader only enforces the major. There is still deliberately no peer
    * dependency declaration: shared libraries resolve to host singletons via
-   * the import map, and unenforced version ranges would be false confidence.
-   * Versioned peers can return once the runtime stubs are generated from the
-   * host's actual module namespaces.
+   * the import map. Enforceable peer ranges are now unblocked — the host's
+   * real package versions are embedded at build time and exposed on
+   * `window.__SCULPTOR_HOST__.versions` (see hostRuntime.ts) — but the
+   * manifest field and loader check are left for a follow-up.
    */
   sdkVersion: string;
 };

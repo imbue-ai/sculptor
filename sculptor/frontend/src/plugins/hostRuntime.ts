@@ -6,16 +6,22 @@ import * as React from "react";
 import * as ReactJsxRuntime from "react/jsx-runtime";
 import * as ReactDOM from "react-dom";
 import * as ReactDOMClient from "react-dom/client";
+// Installed versions of the shared packages, embedded at build time by the
+// plugin-runtime-stubs Vite plugin (the same plugin that generates the stubs).
+import { hostPackageVersions } from "virtual:sculptor/plugin-host-versions";
 
 import * as sdk from "./sdk/index.ts";
 
 /**
- * Populates `window.__SCULPTOR_HOST__` with the singleton instances that
- * plugin runtime stubs (`public/plugin-runtime/*.js`) re-export. Must be
- * called once, before any plugin is loaded. Doing this in module scope
+ * Populates `window.__SCULPTOR_HOST__` with the singleton instances that the
+ * generated plugin runtime stubs (served at `/plugin-runtime/*.js`) re-export.
+ * Must be called once, before any plugin is loaded. Doing this in module scope
  * (rather than inside React) means the singletons are available as soon
  * as the host bundle finishes evaluating, which matches the lifetime the
  * plugin loader actually needs.
+ *
+ * `versions` carries the host's installed version of each shared package so the
+ * loader can validate a plugin manifest's declared peer ranges against reality.
  */
 export const installHostRuntime = (): void => {
   if (typeof window === "undefined") return;
@@ -31,5 +37,6 @@ export const installHostRuntime = (): void => {
     radixThemes: RadixThemes,
     lucideReact: LucideReact,
     sdk,
+    versions: hostPackageVersions,
   };
 };
