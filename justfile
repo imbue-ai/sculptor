@@ -629,12 +629,6 @@ storybook:
 [group("dev")]
 backend repo_path=".":
     #!/usr/bin/env bash
-    # Migrate the dev data folder to the new internal/ layout if needed.
-    dev_folder="{{justfile_directory()}}/.dev_sculptor"
-    if [ -d "$dev_folder" ] && [ ! -f "$dev_folder/.format_version" ]; then
-      echo "Migrating dev data folder to new layout..."
-      uv run --project sculptor python "{{justfile_directory()}}/scripts/migrate_sculptor_folder.py" --path "$dev_folder"
-    fi
     # Generate the source-built sculpt CLI client so `.venv/bin/sculpt` actually
     # imports and runs (digest-cached; a no-op when the API schema is unchanged).
     # Together with sculpt being a dev dependency of sculptor, this guarantees dev
@@ -995,11 +989,6 @@ sidecar python_key="": dist
 sculpt-binary python_key="": generate-sculpt-client
     /usr/bin/env bash "{{justfile_directory()}}/sculptor/builder/build-sculpt.sh" {{ python_key }}
 
-# Builds a standalone binary for the data folder migration script.
-[group("build")]
-migrate-binary python_key="":
-    /usr/bin/env bash "{{justfile_directory()}}/sculptor/builder/build-migrate.sh" {{ python_key }}
-
 # Resizes and reformats icons for packaging based on an original
 [group("build")]
 icons:
@@ -1024,7 +1013,7 @@ electron-assets: icons
 The one-stop shop to clean, rebuild all intermediate targets from source, download all dependencies from remotes, and
 prepare for a clean build. Prefix your electron build targets for ease of use, e.g. `just refresh app` or `just refresh pkg`")]
 [group("build")]
-refresh-assets: clean build-frontend sidecar sculpt-binary migrate-binary electron-assets
+refresh-assets: clean build-frontend sidecar sculpt-binary electron-assets
 
 # Uses electron forge to create an executable application for MacOS on Arm64. This app will not be bundled into an installer.
 [group("build")]
