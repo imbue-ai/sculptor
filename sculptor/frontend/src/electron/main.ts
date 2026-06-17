@@ -77,6 +77,21 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
+// In production the renderer always loads from the custom sculptor://app
+// origin. In development it normally loads straight from the Vite dev server
+// over http (HMR, fast iteration), but integration tests set
+// SCULPTOR_USE_APP_SCHEME=1 to exercise the real app-scheme origin without a
+// packaged build: the handler then proxies every request to the Vite dev
+// server (injected here as its origin), so Vite still transforms and serves
+// the renderer while each request rides sculptor://app.
+const APP_SCHEME_DEV_SERVER_ORIGIN =
+  IS_DEVELOPMENT && process.env.SCULPTOR_USE_APP_SCHEME === "1"
+    ? `http://127.0.0.1:${process.env.SCULPTOR_FRONTEND_PORT || "5173"}`
+    : null;
+
+/** Whether the renderer is loaded from sculptor://app (vs. the dev server URL). */
+const shouldUseAppScheme = !IS_DEVELOPMENT || APP_SCHEME_DEV_SERVER_ORIGIN !== null;
+
 // When running from source, SCULPTOR_ICON_LABEL controls the large text at the
 // top of the dev icon (e.g. "src", "pytest") and SCULPTOR_FRONTEND_PORT is
 // shown at the bottom.  The app name in the macOS menu bar/dock is handled
@@ -759,25 +774,20 @@ const createWindow = async (): Promise<void> => {
     });
   }
 
-  const appUrl = IS_DEVELOPMENT
-    ? // The standard way to get the dev server URL is using MAIN_WINDOW_VITE_DEV_SERVER_URL,
-      // populated by Vite using its define mechanism.
-      // However, defines are substituted during compilation and reflected in the compiled JavaScript,
-      // so this creates a race condition when launching multiple dev instances at the same time,
-      // which is exactly what we do during integration tests:
-      // different instances will compete to write their respective frontend URLs to the compiled file,
-      // so other instances may load an Electron window with the wrong URL.
-      //
-      // So instead,
-      // we construct the frontend URL using SCULPTOR_FRONTEND_PORT, which is populated at runtime,
-      // so different dev instances will open their corresponding frontend URLs correctly.
-      `http://localhost:${process.env.SCULPTOR_FRONTEND_PORT || "5173"}`
-    : // In production we serve the built frontend from a custom, secure origin
-      // (sculptor://app) via the registered app protocol instead of file://. A
-      // real origin makes absolute paths, fetch, dynamic import, and CSP behave
-      // like a normal web page. The backend CORS allowlist accepts this origin
-      // (see sculptor/web/app.py).
-      getAppRendererUrl();
+  // In production (and tests that opt in via SCULPTOR_USE_APP_SCHEME) the
+  // renderer loads from the custom, secure sculptor://app origin served by the
+  // app protocol instead of file://. A real origin makes absolute paths, fetch,
+  // dynamic import, and CSP behave like a normal web page; the backend CORS
+  // allowlist accepts it (see sculptor/web/app.py). In plain development it
+  // loads straight from the Vite dev server over http.
+  //
+  // We construct the dev server URL from SCULPTOR_FRONTEND_PORT (populated at
+  // runtime) rather than MAIN_WINDOW_VITE_DEV_SERVER_URL: that Vite define is
+  // substituted at compile time, so concurrent dev instances (as in integration
+  // tests) would race to write it and could open the wrong URL.
+  const appUrl = shouldUseAppScheme
+    ? getAppRendererUrl()
+    : `http://localhost:${process.env.SCULPTOR_FRONTEND_PORT || "5173"}`;
 
   logger.info("[main] Initial URL:", appUrl);
   await window.loadURL(appUrl);
@@ -952,6 +962,14 @@ const createWindow = async (): Promise<void> => {
 const registerAppProtocolHandler = (): void => {
   const bundleDir = path.join(app.getAppPath(), ".vite/build/renderer");
   protocol.handle(APP_SCHEME, async (request) => {
+    if (APP_SCHEME_DEV_SERVER_ORIGIN !== null) {
+      // Test/dev: proxy to the Vite dev server, preserving path + query so its
+      // on-the-fly module transforms and asset requests resolve there. (The
+      // app's API/WebSocket traffic goes straight to the backend via absolute
+      // URLs, so it never reaches this handler.)
+      const { pathname, search } = new URL(request.url);
+      return net.fetch(`${APP_SCHEME_DEV_SERVER_ORIGIN}${pathname}${search}`);
+    }
     const resolved = resolveRequestToFilePath(bundleDir, request.url);
     if (resolved === null) {
       return new Response("Bad request", { status: 400 });
