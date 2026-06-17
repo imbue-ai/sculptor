@@ -89,6 +89,36 @@ describe("useRepoInfo", () => {
     expect(result.current.repoInfo?.repoPath).toBe("/tmp/test-repo");
   });
 
+  it("fetchCurrentBranch preserves the origin flags and remoteBranches", async () => {
+    // Regression: the partial current-branch refresh used to rebuild RepoInfo
+    // by enumerating fields, dropping isGitlabOrigin / isGithubOrigin and
+    // remoteBranches. The WorkspaceBanner derives "show the target branch"
+    // from those flags, so losing them flickered the target branch out and
+    // back. Spreading the existing RepoInfo keeps them intact.
+    const repoInfoWithOrigin: RepoInfo = {
+      ...MOCK_REPO_INFO,
+      isGitlabOrigin: true,
+      isGithubOrigin: false,
+      remoteBranches: ["origin/main", "origin/develop"],
+    };
+    store.set(repoInfoAtomFamily(PROJECT_ID), repoInfoWithOrigin);
+
+    mockGetCurrentBranch.mockResolvedValue({
+      data: { currentBranch: "feature-branch" },
+    });
+
+    const { result } = renderHook(() => useRepoInfo(PROJECT_ID), { wrapper });
+
+    await act(async () => {
+      await result.current.fetchCurrentBranch();
+    });
+
+    expect(result.current.repoInfo?.currentBranch).toBe("feature-branch");
+    expect(result.current.repoInfo?.isGitlabOrigin).toBe(true);
+    expect(result.current.repoInfo?.isGithubOrigin).toBe(false);
+    expect(result.current.repoInfo?.remoteBranches).toEqual(["origin/main", "origin/develop"]);
+  });
+
   it("retries when repoInfo is null after fetchRepoInfo failure", async () => {
     vi.useFakeTimers();
 

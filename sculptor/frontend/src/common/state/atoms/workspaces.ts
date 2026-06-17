@@ -77,6 +77,29 @@ const isValidTabsState = (value: unknown): value is TabsState => {
 };
 
 /**
+ * Prefix of the legacy `__new_workspace_<draftId>__` pseudo-tab IDs. The
+ * pseudo-tab system was replaced by the New Workspace modal; pre-modal
+ * sessions can still leave these dead IDs in the persisted tab order, so the
+ * storage boundary strips them on load (see `scrubDeadTabIds`). Module-private
+ * — nothing downstream should produce or match these IDs anymore.
+ */
+const NEW_WORKSPACE_TAB_PREFIX = "__new_workspace_";
+
+/**
+ * Drop dead `__new_workspace_<draftId>__` pseudo-tab IDs from a persisted
+ * TabsState, keeping `activeIndex` pointed at the same surviving entry.
+ * Returns the input unchanged when there is nothing to strip.
+ */
+const scrubDeadTabIds = (state: TabsState): TabsState => {
+  const order = state.order.filter((e) => !e.tabId.startsWith(NEW_WORKSPACE_TAB_PREFIX));
+  if (order.length === state.order.length) return state;
+  const activeTabId =
+    state.activeIndex >= 0 && state.activeIndex < state.order.length ? state.order[state.activeIndex].tabId : null;
+  const activeIndex = activeTabId === null ? INVALID_ACTIVE_INDEX : order.findIndex((e) => e.tabId === activeTabId);
+  return { order, activeIndex };
+};
+
+/**
  * Storage wrapper for `tabsAtom` that performs a one-time migration from the
  * legacy flat `sculptor-tab-order` array to the new `sculptor-tabs` shape on
  * the first read.  After migration, the legacy key is removed.  All other
@@ -93,7 +116,15 @@ export const createMigratingTabsStorage = (): ReturnType<typeof createJSONStorag
         if (raw !== null) {
           try {
             const parsed: unknown = JSON.parse(raw);
-            if (isValidTabsState(parsed)) return parsed;
+            if (isValidTabsState(parsed)) {
+              // Strip any dead `__new_workspace_*__` IDs left by pre-modal
+              // sessions, and persist the cleaned order so they never resurface.
+              const scrubbed = scrubDeadTabIds(parsed);
+              if (scrubbed !== parsed) {
+                localStorage.setItem(key, JSON.stringify(scrubbed));
+              }
+              return scrubbed;
+            }
           } catch (e) {
             console.warn("[tabsAtom] sculptor-tabs is malformed, falling back to legacy key:", e);
           }
@@ -106,7 +137,7 @@ export const createMigratingTabsStorage = (): ReturnType<typeof createJSONStorag
               const order: Array<TabEntry> = legacy
                 .filter((id): id is string => typeof id === "string")
                 .map((tabId) => ({ tabId, agentId: null }));
-              const migrated: TabsState = { order, activeIndex: INVALID_ACTIVE_INDEX };
+              const migrated: TabsState = scrubDeadTabIds({ order, activeIndex: INVALID_ACTIVE_INDEX });
               localStorage.setItem(key, JSON.stringify(migrated));
               localStorage.removeItem(LEGACY_TAB_ORDER_KEY);
               return migrated;
@@ -633,49 +664,6 @@ export const rollbackDeleteWorkspaceAtom = atom(
     set(tabsAtom, applyOpen(get(tabsAtom), { tabId: workspaceId, agentId: null }, { setActive: false }));
   },
 );
-
-/**
- * Prefix for the legacy new-workspace pseudo-tab IDs: `__new_workspace_<draftId>__`.
- * The pseudo-tab system was replaced by the New Workspace modal; the prefix is
- * retained so `useHomeToggle.isVisibleTabId` (and unit tests that exercise it)
- * can keep filtering stale entries left in localStorage by pre-modal sessions.
- */
-export const NEW_WORKSPACE_TAB_PREFIX = "__new_workspace_";
-
-/** Build a legacy new-workspace pseudo-tab ID from a draft ID (test helper). */
-export const newWorkspaceTabId = (draftId: string): string => `${NEW_WORKSPACE_TAB_PREFIX}${draftId}__`;
-
-/**
- * Replace the Home pseudo-tab with a real workspace tab in-place,
- * so clicking a workspace from the home page loads it where the Home tab was.
- */
-export const convertHomeTabToWorkspaceAtom = atom(null, (get, set, workspaceId: string): void => {
-  const homeTabId = "__home__";
-  const current = get(tabsAtom);
-  const hasHomeTab = current.order.some((e) => e.tabId === homeTabId);
-
-  if (hasHomeTab) {
-    // Remove any duplicate workspace entry, then replace the home entry in-place.
-    const deduped = applyClose(current, workspaceId);
-    const homeIdx = deduped.order.findIndex((e) => e.tabId === homeTabId);
-    const order = deduped.order.slice();
-    order[homeIdx] = { tabId: workspaceId, agentId: null };
-    set(tabsAtom, { ...deduped, order });
-  } else {
-    // Home tab wasn't found — just open the workspace normally (no-op if already open).
-    set(tabsAtom, applyOpen(current, { tabId: workspaceId, agentId: null }, { setActive: false }));
-  }
-
-  // Ensure the workspace is open on the backend (it may have been closed).
-  const workspace = get(workspaceAtomFamily(workspaceId));
-  if (workspace !== null && workspace.isOpen === false) {
-    // Drop any prior close intent and record the open intent so the tab
-    // appears immediately and stays visible through any stale snapshot.
-    set(clearPendingCloseAtom, [workspaceId]);
-    set(markPendingOpenAtom, [workspaceId]);
-    void updateWorkspaceApi({ path: { workspace_id: workspaceId }, body: { isOpen: true } });
-  }
-});
 
 /** Per-workspace last-viewed agent ID, derived from `tabsAtom.order`. */
 export const agentIdForWorkspaceAtomFamily = atomFamily<string, Atom<string | null>>((wsId) =>

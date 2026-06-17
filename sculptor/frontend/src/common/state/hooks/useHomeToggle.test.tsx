@@ -2,14 +2,15 @@
  * Unit tests for ``useHomeToggle``.
  *
  * The hook gates "toggle off /home" on whether there is at least one
- * *visible* tab to land on. Invisible pseudo-tabs (``__home__`` and stale
- * ``__new_workspace_<draftId>__``) must NOT count, because they have no
- * TabDefinition in WorkspaceTabs and the user can't see them — counting
- * them would let a stale localStorage entry slip past the safety check
- * and silently navigate the user to a defunct ``lastNonHomeLocation``.
+ * *visible* tab to land on. The invisible ``__home__`` pseudo-tab must NOT
+ * count, because it has no TabDefinition in WorkspaceTabs and the user can't
+ * see it — counting it would let a stale localStorage entry slip past the
+ * safety check and silently navigate the user to a defunct
+ * ``lastNonHomeLocation``. (Legacy ``__new_workspace_<draftId>__`` ids are
+ * scrubbed at the storage boundary, so they never reach the predicate.)
  *
- * These tests pin the predicate down across all the tab-id shapes the
- * codebase produces, plus the obvious golden-path cases.
+ * These tests pin the predicate down across the tab-id shapes the codebase
+ * produces, plus the obvious golden-path cases.
  */
 
 import { renderHook } from "@testing-library/react";
@@ -70,7 +71,7 @@ vi.mock("~/common/NavigateUtils.ts", () => ({
   }),
 }));
 
-import { effectiveOpenTabIdsAtom, lastNonHomeLocationAtom, newWorkspaceTabId } from "../atoms/workspaces";
+import { effectiveOpenTabIdsAtom, lastNonHomeLocationAtom } from "../atoms/workspaces";
 import { useHomeToggle } from "./useHomeToggle";
 
 // ── Wrapper ─────────────────────────────────────────────────────────────
@@ -138,10 +139,10 @@ describe("useHomeToggle", () => {
       expect(mockNavigate).not.toHaveBeenCalled();
     });
 
-    it("navigates to /home even when invisible pseudo-tabs are present", () => {
+    it("navigates to /home even when the invisible __home__ pseudo-tab is present", () => {
       const { toggle } = renderToggle({
         onHome: false,
-        tabIds: ["__home__", newWorkspaceTabId("draft-xyz")],
+        tabIds: ["__home__"],
         lastNonHome: "/ws/ws-1",
       });
 
@@ -175,34 +176,6 @@ describe("useHomeToggle", () => {
       const { toggle } = renderToggle({
         onHome: true,
         tabIds: ["__home__"],
-        lastNonHome: "/ws/ws-stale",
-      });
-
-      act(() => toggle());
-
-      expect(mockNavigate).not.toHaveBeenCalled();
-      expect(mockNavigateToHome).not.toHaveBeenCalled();
-    });
-
-    it("is a no-op when only a stale __new_workspace_<draftId>__ pseudo-tab is in tabOrder", () => {
-      // The other invisible-tab variety: a stale draft pseudo-tab
-      // left over from a pre-modal session. Same reasoning as above.
-      const { toggle } = renderToggle({
-        onHome: true,
-        tabIds: [newWorkspaceTabId("draft-abc-123")],
-        lastNonHome: "/ws/ws-stale",
-      });
-
-      act(() => toggle());
-
-      expect(mockNavigate).not.toHaveBeenCalled();
-      expect(mockNavigateToHome).not.toHaveBeenCalled();
-    });
-
-    it("is a no-op when tabOrder contains only invisible pseudo-tabs in any combination", () => {
-      const { toggle } = renderToggle({
-        onHome: true,
-        tabIds: ["__home__", newWorkspaceTabId("d1"), newWorkspaceTabId("d2")],
         lastNonHome: "/ws/ws-stale",
       });
 
@@ -266,12 +239,12 @@ describe("useHomeToggle", () => {
       expect(mockNavigate).toHaveBeenCalledExactlyOnceWith("/component-gallery");
     });
 
-    it("ignores invisible pseudo-tabs when at least one visible tab is also present", () => {
+    it("ignores the invisible __home__ pseudo-tab when at least one visible tab is also present", () => {
       // Mixed state: stale __home__ alongside a real workspace.
       // The visible workspace gates the toggle through.
       const { toggle } = renderToggle({
         onHome: true,
-        tabIds: ["__home__", "ws-1", newWorkspaceTabId("stale-draft")],
+        tabIds: ["__home__", "ws-1"],
         lastNonHome: "/ws/ws-1/agent/agent-1",
       });
 

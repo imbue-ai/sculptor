@@ -114,10 +114,10 @@ class SculptorFactory:
         page: "Page" = self.request.getfixturevalue("page")
         configure_page(page, timeout_ms=self.default_timeout_ms)
         # Land on /home directly. The bare URL would route through the
-        # rootLoader at "/", which redirects to /home?firstLoad=true and
-        # triggers HomePage to auto-open the new-workspace modal — its
-        # overlay then intercepts pointer events for every test using
-        # spawn_instance (test_restarts/persistence/etc.).
+        # rootLoader at "/", which restores the persisted MRU tab and could
+        # drop the test onto a workspace route instead of a deterministic
+        # Home; going straight to /#/home keeps every spawn starting from the
+        # same place (test_restarts/persistence/etc. rely on that).
         #
         # Going through about:blank first forces a full SPA reload between
         # spawns. Hash-only navigation (e.g. from /#/ws/<id> to /#/home)

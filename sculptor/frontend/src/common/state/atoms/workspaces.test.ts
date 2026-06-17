@@ -452,4 +452,42 @@ describe("createMigratingTabsStorage", () => {
       activeIndex: INVALID_ACTIVE_INDEX,
     });
   });
+
+  it("strips stale __new_workspace_<draftId>__ ids from an existing sculptor-tabs value and writes it back", () => {
+    localStorage.setItem(
+      "sculptor-tabs",
+      JSON.stringify({
+        order: [
+          { tabId: "__new_workspace_legacy-draft__", agentId: null },
+          { tabId: "ws_a", agentId: "agent-1" },
+        ],
+        activeIndex: 1,
+      }),
+    );
+
+    const storage = createMigratingTabsStorage();
+    const state = storage.getItem("sculptor-tabs", DEFAULT_STATE);
+
+    // The dead draft id is gone and activeIndex still points at ws_a.
+    expect(state).toEqual({
+      order: [{ tabId: "ws_a", agentId: "agent-1" }],
+      activeIndex: 0,
+    });
+    // The scrubbed order is persisted so it can never resurface.
+    expect(JSON.parse(localStorage.getItem("sculptor-tabs") ?? "null")).toEqual(state);
+  });
+
+  it("strips stale __new_workspace_<draftId>__ ids while migrating the legacy key", () => {
+    localStorage.setItem("sculptor-tab-order", JSON.stringify(["__new_workspace_legacy-draft__", "__home__", "ws_x"]));
+
+    const storage = createMigratingTabsStorage();
+    expect(storage.getItem("sculptor-tabs", DEFAULT_STATE)).toEqual({
+      order: [
+        { tabId: "__home__", agentId: null },
+        { tabId: "ws_x", agentId: null },
+      ],
+      activeIndex: INVALID_ACTIVE_INDEX,
+    });
+    expect(localStorage.getItem("sculptor-tab-order")).toBeNull();
+  });
 });

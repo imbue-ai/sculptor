@@ -33,6 +33,7 @@ from sculptor.testing.mock_repo import MockRepoState
 from sculptor.testing.packaged_electron_frontend import PackagedElectronFactory
 from sculptor.testing.playwright_utils import delete_all_workspaces_via_ui
 from sculptor.testing.playwright_utils import expect_app_not_onboarding
+from sculptor.testing.playwright_utils import get_app_ready_beacon
 from sculptor.testing.playwright_utils import reset_active_panel_to_files
 from sculptor.testing.port_manager import PortManager
 from sculptor.testing.repo_resources import get_test_project_state
@@ -316,16 +317,8 @@ class SculptorInstance:
         self.page.goto(f"{self.base_url}#/home")
 
         # Wait for the app shell to render — raise if onboarding shows
-        # instead (no shared-instance test should trigger onboarding). The
-        # beacon is the topbar "+" OR the inline new-workspace form's submit
-        # button: on an empty Home the "+" is hidden and the inline form is
-        # the create surface, so either one means the shell mounted. The two
-        # are mutually exclusive on /home, so no `.first` is needed (and it
-        # must not be added — `expect_app_not_onboarding` composes its own
-        # `.or_(onboarding)`, which a trailing `.first` breaks).
-        app_ready = self.page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).or_(
-            self.page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
-        )
+        # instead (no shared-instance test should trigger onboarding).
+        app_ready = get_app_ready_beacon(self.page)
         expect_app_not_onboarding(self.page, app_ready)
 
         # Verify no workspace tabs leaked through via stale WebSocket updates.

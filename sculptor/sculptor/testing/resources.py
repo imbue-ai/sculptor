@@ -21,7 +21,6 @@ from imbue_core.concurrency_group import ConcurrencyGroup
 from imbue_core.concurrency_group import ConcurrencyGroupState
 from imbue_core.sculptor.user_config import DependencyPaths
 from imbue_core.sculptor.user_config import UserConfig
-from sculptor.constants import ElementIDs
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.dependency_stubs import apply_stubs_from_request
@@ -37,6 +36,7 @@ from sculptor.testing.mock_repo import MockRepoState
 from sculptor.testing.packaged_backend_frontend import PackagedBackendFrontend
 from sculptor.testing.packaged_electron_frontend import PackagedElectronFrontend
 from sculptor.testing.playwright_utils import expect_app_not_onboarding
+from sculptor.testing.playwright_utils import get_app_ready_beacon
 from sculptor.testing.playwright_utils import navigate_to_frontend
 from sculptor.testing.port_manager import PortManager
 from sculptor.testing.repo_resources import get_test_project_state
@@ -280,16 +280,7 @@ def _get_or_create_shared_instance(
     # Use a longer timeout than the default 30s for this initial check to
     # allow headroom for cold Electron starts on CI.
     t2 = time.monotonic()
-    # Beacon for "shell mounted": the topbar "+" OR the inline new-workspace
-    # form's submit button. On an empty Home the "+" is hidden and the inline
-    # form is the create surface, so either one means the app rendered.
-    # The "+" and the inline form's submit button are mutually exclusive on
-    # /home, so this never matches two elements — no `.first` needed (and it
-    # must not be added: `expect_app_not_onboarding` composes its own
-    # `.or_(onboarding)`, which a trailing `.first` breaks).
-    app_ready = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).or_(
-        page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
-    )
+    app_ready = get_app_ready_beacon(page)
     try:
         expect_app_not_onboarding(page, app_ready, timeout=_INITIAL_RENDER_TIMEOUT_MS)
     except Exception:
@@ -435,13 +426,7 @@ def _create_packaged_instance(
     # Beacon is the topbar "+" OR the inline form's submit button (the "+" is
     # hidden on an empty Home, where the inline form is the create surface).
     logger.info("Waiting for SPA to render (checking for create surface or onboarding)")
-    # The "+" and the inline form's submit button are mutually exclusive on
-    # /home, so this never matches two elements — no `.first` needed (and it
-    # must not be added: `expect_app_not_onboarding` composes its own
-    # `.or_(onboarding)`, which a trailing `.first` breaks).
-    app_ready = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).or_(
-        page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
-    )
+    app_ready = get_app_ready_beacon(page)
     try:
         expect_app_not_onboarding(page, app_ready, timeout=_INITIAL_RENDER_TIMEOUT_MS)
     except Exception:
@@ -550,13 +535,9 @@ def _create_custom_command_instance(
         ]
     )
 
-    # Wait for the React SPA to render. The "+" and the inline form's submit
-    # button are mutually exclusive on /home, so this never matches two
-    # elements (no `.first` needed).
+    # Wait for the React SPA to render.
     try:
-        expect(
-            page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).or_(page.get_by_test_id(ElementIDs.START_TASK_BUTTON))
-        ).to_be_visible()
+        expect(get_app_ready_beacon(page)).to_be_visible()
     except Exception:
         electron_frontend.__exit__(None, None, None)
         raise

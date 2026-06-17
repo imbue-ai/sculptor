@@ -2,8 +2,8 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback } from "react";
 
 import type { RecentWorkspaceResponse } from "../../../api";
-import { useImbueLocation, useImbueNavigate } from "../../NavigateUtils.ts";
-import { agentIdsByWorkspaceAtom, convertHomeTabToWorkspaceAtom, openWorkspaceTabAtom } from "../atoms/workspaces.ts";
+import { useImbueNavigate } from "../../NavigateUtils.ts";
+import { agentIdsByWorkspaceAtom, openWorkspaceTabAtom } from "../atoms/workspaces.ts";
 
 type WorkspaceNavigationResult = {
   handleWorkspaceClick: (workspace: RecentWorkspaceResponse) => void;
@@ -17,19 +17,16 @@ type WorkspaceNavigationResult = {
  */
 export const useWorkspaceNavigation = (): WorkspaceNavigationResult => {
   const { navigateToAgent, navigateToWorkspace } = useImbueNavigate();
-  const { isHomeRoute } = useImbueLocation();
   const agentIdsByWorkspace = useAtomValue(agentIdsByWorkspaceAtom);
   const openTab = useSetAtom(openWorkspaceTabAtom);
-  const convertHomeTab = useSetAtom(convertHomeTabToWorkspaceAtom);
   const handleWorkspaceClick = useCallback(
     (workspace: RecentWorkspaceResponse): void => {
-      // When navigating from the home page, replace the home tab with the workspace tab.
-      if (isHomeRoute) {
-        convertHomeTab(workspace.objectId);
-      } else {
-        // Ensure the workspace has an open tab (re-opens closed tabs)
-        openTab(workspace.objectId);
-      }
+      // Ensure the workspace has an open tab (re-opens closed tabs).
+      // openWorkspaceTabAtom always issues the open PATCH and records the
+      // pending-open intent — even before the workspace model has loaded — so
+      // reopening a closed workspace from a freshly-reloaded all-closed Home
+      // succeeds instead of momentarily reverting to closed.
+      openTab(workspace.objectId);
 
       // Use the saved agent id from tabsAtom if available for instant navigation.
       const savedAgentId = agentIdsByWorkspace.get(workspace.objectId);
@@ -42,7 +39,7 @@ export const useWorkspaceNavigation = (): WorkspaceNavigationResult => {
       // WorkspacePage's validation effect pick a fallback agent.
       navigateToWorkspace(workspace.objectId);
     },
-    [isHomeRoute, openTab, convertHomeTab, agentIdsByWorkspace, navigateToAgent, navigateToWorkspace],
+    [openTab, agentIdsByWorkspace, navigateToAgent, navigateToWorkspace],
   );
 
   const handleOpenInNewTab = useCallback(

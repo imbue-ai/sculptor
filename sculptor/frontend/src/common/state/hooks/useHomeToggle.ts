@@ -3,26 +3,18 @@ import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useImbueLocation, useImbueNavigate } from "~/common/NavigateUtils.ts";
-import {
-  effectiveOpenTabIdsAtom,
-  lastNonHomeLocationAtom,
-  NEW_WORKSPACE_TAB_PREFIX,
-} from "~/common/state/atoms/workspaces.ts";
+import { effectiveOpenTabIdsAtom, lastNonHomeLocationAtom } from "~/common/state/atoms/workspaces.ts";
 import { HOME_TAB_ID } from "~/components/workspaceTabIds.ts";
 
 /**
  * A tab id is "visible" if WorkspaceTabs renders a pill for it: real
- * workspace ids, ``__settings__``, and ``__component_gallery__``. The
- * two excluded ids — ``__home__`` and the legacy
- * ``__new_workspace_<draftId>__`` from pre-modal sessions — have no
- * TabDefinition, so a stale entry in tabOrderAtom would be invisible
- * to the user and must not gate a navigation.
- *
- * Note: ``effectiveOpenTabIdsAtom`` already filters out the legacy
- * ``__new_workspace_*__`` IDs upstream, but we re-check here to defend
- * the safety guard against any future caller that bypasses the filter.
+ * workspace ids, ``__settings__``, and ``__component_gallery__``. Only
+ * ``__home__`` is excluded — it has no TabDefinition, so a stale entry in
+ * tabOrderAtom would be invisible to the user and must not gate a
+ * navigation. (Legacy ``__new_workspace_<draftId>__`` ids from pre-modal
+ * sessions are scrubbed at the storage boundary, so they never reach here.)
  */
-const isVisibleTabId = (id: string): boolean => id !== HOME_TAB_ID && !id.startsWith(NEW_WORKSPACE_TAB_PREFIX);
+const isVisibleTabId = (id: string): boolean => id !== HOME_TAB_ID;
 
 type UseHomeToggle = {
   /** Toggle between `/home` and the most recent non-home pathname. */

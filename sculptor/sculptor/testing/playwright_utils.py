@@ -59,9 +59,18 @@ def expect_app_not_onboarding(page: Page, app_element: Locator, *, timeout: int 
         )
 
 
-def read_branch_name_field(page: Page) -> str:
-    """Return the full branch name visible in the New Workspace branch field."""
-    return page.get_by_test_id(ElementIDs.BRANCH_NAME_INPUT).input_value()
+def get_app_ready_beacon(page: Page) -> Locator:
+    """Locator that resolves once the SPA shell has finished its initial render.
+
+    The beacon is the topbar "+" (``ADD_WORKSPACE_BUTTON``) OR the inline
+    new-workspace form's submit button (``START_TASK_BUTTON``): the "+" is
+    hidden on an empty Home, where the inline form is the create surface, so
+    either one means the app rendered. The two are mutually exclusive on
+    /home, so the union never matches two elements — do NOT append ``.first``
+    when handing this to ``expect_app_not_onboarding``, which composes its own
+    ``.or_(onboarding)`` that a trailing ``.first`` would break.
+    """
+    return page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).or_(page.get_by_test_id(ElementIDs.START_TASK_BUTTON))
 
 
 def navigate_to_home_page(page: Page) -> None:
@@ -235,9 +244,10 @@ def start_task_and_wait_for_ready(
 ) -> PlaywrightTaskPage:
     """Create a workspace and agent through the new-workspace modal.
 
-    Opens the modal via the topbar "+" button (or the auto-open if no
-    workspaces exist), fills in the workspace name, clicks submit, then
-    waits for the agent chat page to appear.
+    Opens the new-workspace form — the topbar "+" modal, or the inline form
+    shown on an empty Home when no workspaces exist yet — fills in the
+    workspace name, clicks submit, then waits for the agent chat page to
+    appear.
 
     The modal does not expose a model selector, so the model is switched
     on the chat panel once the workspace is ready.
@@ -514,12 +524,8 @@ def navigate_away_and_back(page: Page) -> None:
     current_url = page.url
     base_url = current_url.split("#")[0].rstrip("/")
     page.goto(f"{base_url}/#/home")
-    # Confirm Home rendered before going back. The beacon is the topbar "+" OR
-    # the inline form's submit button — the "+" is hidden on an empty Home,
-    # where the inline new-workspace form is shown instead.
-    expect(
-        page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).or_(page.get_by_test_id(ElementIDs.START_TASK_BUTTON))
-    ).to_be_visible()
+    # Confirm Home rendered before going back.
+    expect(get_app_ready_beacon(page)).to_be_visible()
     page.goto(current_url)
 
 
@@ -532,10 +538,10 @@ def full_spa_reload(page: Page, target_hash: str = "/#/home") -> None:
     the page, clearing all in-memory state.
 
     The default ``target_hash`` lands on ``/home`` directly (skipping the
-    ``/`` rootLoader) so the firstLoad=true auto-open of the new-workspace
-    modal does NOT fire — its overlay would intercept pointer events for
-    the rest of the test. Callers that want a specific route (a workspace
-    URL, settings, etc.) should pass it explicitly.
+    ``/`` rootLoader's MRU redirect) so the reload deterministically returns
+    to Home and re-runs its once-on-mount recent-workspaces fetch. Callers
+    that want a specific route (a workspace URL, settings, etc.) should pass
+    it explicitly.
     """
     base_url = page.url.split("#")[0].rstrip("/")
     page.goto("about:blank")
@@ -558,36 +564,6 @@ def set_local_storage_items(page: Page, items: dict[str, str]) -> None:
     page.evaluate(f"""() => {{
         {js_body}
     }}""")
-
-
-def set_local_storage_item_with_storage_event(page: Page, key: str, value: str) -> None:
-    """Set a localStorage value and dispatch a synthetic ``storage`` event.
-
-    Same-tab ``localStorage.setItem`` does NOT fire a ``storage`` event by
-    default — that event only fires for OTHER tabs in the same origin.
-    Jotai's ``atomWithStorage`` subscribes to ``storage`` events to keep
-    its in-memory value in sync with localStorage, so without dispatching
-    the event manually, atoms backed by ``atomWithStorage`` won't notice
-    same-tab updates until the next page load.
-
-    Use this helper when you want to inject a localStorage value into a
-    running SPA session and have the corresponding atom pick it up live,
-    without a full reload that would also reset other in-memory state
-    (e.g. ``lastNonHomeLocationAtom``).
-    """
-    page.evaluate(
-        """({ key, value }) => {
-            const oldValue = localStorage.getItem(key);
-            localStorage.setItem(key, value);
-            window.dispatchEvent(new StorageEvent("storage", {
-                key: key,
-                newValue: value,
-                oldValue: oldValue,
-                storageArea: localStorage,
-            }));
-        }""",
-        {"key": key, "value": value},
-    )
 
 
 def get_local_storage_item(page: Page, key: str) -> str | None:
