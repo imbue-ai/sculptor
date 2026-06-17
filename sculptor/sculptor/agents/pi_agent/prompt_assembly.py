@@ -21,7 +21,6 @@ The file-saving step mirrors Claude's
 from __future__ import annotations
 
 import base64
-import os
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -62,16 +61,17 @@ def save_attachments_to_environment(environment: AgentExecutionEnvironment, file
     """
     saved_paths: list[str] = []
     for local_file_path in files:
-        filename = local_file_path.split("/")[-1]
-        if os.path.isabs(local_file_path):
-            source = Path(local_file_path)
+        local_path = Path(local_file_path)
+        filename = local_path.name
+        if local_path.is_absolute():
+            source = local_path
         else:
             source = get_internal_folder() / "uploads" / local_file_path
 
         try:
             file_content = source.read_bytes()
         except FileNotFoundError:
-            logger.info("Skipping missing file attachment: {}", source)
+            logger.warning("Skipping missing file attachment: {}", source)
             continue
 
         destination = environment.get_attachments_path() / filename

@@ -19,20 +19,21 @@ from __future__ import annotations
 import sys
 import xml.etree.ElementTree as ET
 from collections import defaultdict
+from collections.abc import Sequence
 from pathlib import Path
 
 DEFAULT_JUNIT_PATH = Path("test-results/junit-integration.xml")
+_BANNER_WIDTH = 72
 
 
-def main(argv: list[str]) -> int:
+def main(argv: Sequence[str]) -> int:
     junit_path = Path(argv[1]) if len(argv) > 1 else DEFAULT_JUNIT_PATH
-
-    if not junit_path.exists():
-        print(f"[offload-summary] No JUnit at {junit_path} — offload may have failed before writing results.")
-        return 0
 
     try:
         root = ET.parse(junit_path).getroot()
+    except FileNotFoundError:
+        print(f"[offload-summary] No JUnit at {junit_path} — offload may have failed before writing results.")
+        return 0
     except ET.ParseError as exc:
         print(f"[offload-summary] Could not parse {junit_path}: {exc}")
         return 0
@@ -53,9 +54,9 @@ def main(argv: list[str]) -> int:
     failed = sorted(name for name, c in runs.items() if c["fail"] > 0 and c["pass"] == 0)
     flaky = sorted(name for name, c in runs.items() if c["fail"] > 0 and c["pass"] > 0)
 
-    print("=" * 72)
+    print("=" * _BANNER_WIDTH)
     print(f"Offload test outcomes (parsed from {junit_path})")
-    print("=" * 72)
+    print("=" * _BANNER_WIDTH)
 
     if not failed and not flaky:
         print("All tests passed (no failures, no flakes).")

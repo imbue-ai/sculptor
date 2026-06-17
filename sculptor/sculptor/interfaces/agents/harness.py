@@ -47,6 +47,7 @@ from sculptor.primitives.ids import TaskID
 from sculptor.services.workspace_service.api import WorkspaceService
 from sculptor.state.chat_state import AskUserQuestionData
 from sculptor.state.chat_state import ContentBlock
+from sculptor.state.chat_state import ToolInput
 from sculptor.state.chat_state import ToolInteractiveRole
 from sculptor.state.chat_state import ToolUseBlock
 
@@ -148,7 +149,7 @@ class Harness(BaseModel, abc.ABC):
     def is_exit_plan_mode_tool(self, tool_name: str) -> bool:
         return False
 
-    def is_valid_ask_user_question_input(self, tool_name: str, tool_input: dict) -> bool:
+    def is_valid_ask_user_question_input(self, tool_name: str, tool_input: ToolInput) -> bool:
         return False
 
     def classify_tool_ui_role(self, tool_name: str) -> ToolInteractiveRole | None:

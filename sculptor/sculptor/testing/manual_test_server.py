@@ -72,8 +72,8 @@ def main() -> None:
 
     try:
         harness.start()
-    except Exception:
-        logger.error("Failed to start harness")
+    except Exception as e:
+        logger.error("Failed to start harness: {}", e)
         harness.stop()
         port_manager.release_port(control_port)
         sys.exit(1)

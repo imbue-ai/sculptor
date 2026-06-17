@@ -1,4 +1,5 @@
 import time
+from collections.abc import Sequence
 from threading import Event
 from threading import Lock
 
@@ -6,6 +7,9 @@ from pydantic import PrivateAttr
 
 from sculptor.foundation.errors import ExpectedError
 from sculptor.foundation.pydantic_serialization import MutableModel
+
+# Interval between checks while polling an event that has no native wait primitive.
+_POLL_INTERVAL_SECONDS: float = 0.01
 
 
 class ShutdownEvent(MutableModel):
@@ -50,7 +54,7 @@ class ShutdownEvent(MutableModel):
             while timeout is None or time.monotonic() - start < timeout:
                 if self.is_set():
                     return True
-                time.sleep(0.01)
+                time.sleep(_POLL_INTERVAL_SECONDS)
             return False
         finally:
             self._wait_lock.release()
@@ -77,19 +81,19 @@ class ShutdownEvent(MutableModel):
 class CompoundEvent:
     """Has the read-only interface of an Event, but is set if any child event is set."""
 
-    def __init__(self, events: list["ReadOnlyEvent"]) -> None:
+    def __init__(self, events: Sequence["ReadOnlyEvent"]) -> None:
         assert len(events) >= 1
         self.events = events
 
     def is_set(self) -> bool:
-        return any([event.is_set() for event in self.events])
+        return any(event.is_set() for event in self.events)
 
     def wait(self, timeout: float | None = None) -> bool:
         start = time.monotonic()
         while timeout is None or time.monotonic() - start < timeout:
             if self.is_set():
                 return True
-            time.sleep(0.01)
+            time.sleep(_POLL_INTERVAL_SECONDS)
         return False
 
 
@@ -97,6 +101,5 @@ class CancelledByEventError(ExpectedError):
     """A generic cancellation error to signal event-triggered cancellations."""
 
 
-# Define some convenience type aliases.
 MutableEvent = Event | ShutdownEvent
 ReadOnlyEvent = Event | ShutdownEvent | CompoundEvent

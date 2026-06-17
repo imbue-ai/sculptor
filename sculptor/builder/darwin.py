@@ -3,6 +3,7 @@
 import os
 import re
 import subprocess
+from pathlib import Path
 from shutil import which
 
 import typer
@@ -72,7 +73,7 @@ def _extract_min_macos(otool_out: str) -> str | None:
 
 
 def validate_binary(
-    binary_path: str,
+    binary_path: Path,
     arch: str,  # expected architecture, e.g. "x86_64" or "arm64"
     *,
     lipo: str | None = None,
@@ -91,10 +92,10 @@ def validate_binary(
     otool = otool or os.environ.get("OTOOL") or "otool"
     codesign_bin = codesign_bin or os.environ.get("CODESIGN") or "codesign"
 
-    ok = True
+    is_valid = True
 
     # Existence & executability
-    if not (os.path.isfile(binary_path) and os.access(binary_path, os.X_OK)):
+    if not (binary_path.is_file() and os.access(binary_path, os.X_OK)):
         typer.secho(f" File not found at {binary_path}")
         return False
 
@@ -103,22 +104,22 @@ def validate_binary(
     # Architectures (prefer lipo, fallback to file)
     archs: list[str] = []
     if which(lipo):
-        rc, out, err = _run([lipo, "-info", binary_path])
+        rc, out, err = _run([lipo, "-info", str(binary_path)])
         if rc == 0:
             archs = _parse_archs_from_lipo(out or err)
 
     if not archs and which(file_bin):
-        rc, out, err = _run([file_bin, "-b", binary_path])
+        rc, out, err = _run([file_bin, "-b", str(binary_path)])
         if rc == 0:
             desc = out or err
             archs = _parse_archs_from_file_output(desc)
-            print(f"   file: {desc.strip()}")
+            typer.echo(f"   file: {desc.strip()}")
+
+    if archs:
+        typer.echo(f"   Archs: {' '.join(archs)}")
     else:
-        if archs:
-            print(f"   Archs: {' '.join(archs)}")
-        else:
-            typer.secho("   Unable to determine architectures.")
-            ok = False
+        typer.secho("   Unable to determine architectures.")
+        is_valid = False
 
     # Policy checks:
     #  - Required slice must be present
@@ -126,18 +127,18 @@ def validate_binary(
     if archs:
         if arch not in archs:
             typer.secho(f"   Missing {arch} slice (required).")
-            ok = False
+            is_valid = False
         else:
             typer.secho(f"   {arch} present", fg=typer.colors.GREEN)
 
         if arch == "x86_64" and "arm64" in archs:
             typer.secho("   Contains arm64 slice (unexpected for Intel-only).")
-            ok = False
+            is_valid = False
 
     # Find min macOS version via otool -l.
     # Informational only at this point.
     if which(otool):
-        rc, out, err = _run([otool, "-l", binary_path])
+        rc, out, err = _run([otool, "-l", str(binary_path)])
         if rc == 0:
             min_os = _extract_min_macos(out or err)
             if min_os:
@@ -152,13 +153,13 @@ def validate_binary(
 
     # codesign -dv --verbose=2
     if which(codesign_bin):
-        rc, out, err = _run([codesign_bin, "-dv", "--verbose=2", binary_path])
+        rc, out, err = _run([codesign_bin, "-dv", "--verbose=2", str(binary_path)])
         if rc == 0:
             typer.secho("   signature: PRESENT", fg=typer.colors.GREEN)
         else:
             typer.secho("   signature: ABSENT (likely unsigned as expected)", fg=typer.colors.YELLOW)
     else:
-        typer.secho("   codesign not found on PATH; failingsignature check", fg=typer.colors.RED)
+        typer.secho("   codesign not found on PATH; failing signature check", fg=typer.colors.RED)
         raise typer.Exit(code=1)
 
-    return ok
+    return is_valid

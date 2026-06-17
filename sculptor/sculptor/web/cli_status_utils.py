@@ -40,16 +40,29 @@ def classify_cli_error(stderr: str) -> CliErrorCategory:
     works for both providers.
     """
     lower = stderr.lower()
-    # Rate limits are checked first: GitHub returns them as an HTTP 403 ("API
+    # Usage errors are checked first: an unknown ``--json`` field, an unknown
+    # flag, or a malformed query makes gh/glab print a help blurb listing valid
+    # field names. That list contains tokens like "author" that would otherwise
+    # trip the auth check below and mislabel a programming error as
+    # "not authenticated". A usage error fails identically on retry and is
+    # neither an auth, network, nor rate problem, so classify it as a
+    # non-actionable transient failure rather than letting the help text decide.
+    if any(keyword in lower for keyword in ("unknown json field", "unknown flag", "available fields:")):
+        return "transient"
+    # Rate limits are checked next: GitHub returns them as an HTTP 403 ("API
     # rate limit exceeded") and the secondary-limit message mentions neither
     # "auth" nor a bare status code, so without this they'd be misclassified
     # as "no_access" (permanent, shown to the user as an access problem) when
     # they are really a temporary throttle to wait out.
     if any(keyword in lower for keyword in ("rate limit", "ratelimit", "secondary rate")):
         return "rate_limited"
-    if any(
+    # Match authentication failures without matching the literal field name
+    # "author" (gh lists it in its --json help text): a bare "auth" token, the
+    # "authentic"/"authoriz" stems (authentication, authorization, unauthorized),
+    # an explicit 401, a token problem, or a "log in" prompt.
+    if re.search(r"\bauth\b", lower) or any(
         keyword in lower
-        for keyword in ("auth", "not logged into", "not logged", "log in", "authentication", "token", "401")
+        for keyword in ("authentic", "authoriz", "not logged into", "not logged", "log in", "token", "401")
     ):
         return "not_authenticated"
     if any(keyword in lower for keyword in ("403", "forbidden", "access denied", "permission")):

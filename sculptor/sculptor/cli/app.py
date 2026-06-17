@@ -35,6 +35,10 @@ from sculptor.web.middleware import register_on_startup
 # block would introduce.
 _LATE_START_ERROR_MESSAGE = "--trace-to must be passed at the sculptor CLI entry point so the bootstrap in cli/main.py can start viztracer before the backend imports run. Passing it through the typer callback alone is not supported."
 
+# Fallback frontend (vite) port used only when SCULPTOR_FRONTEND_PORT is unset;
+# in dev mode the launcher normally sets that variable explicitly.
+_DEFAULT_FRONTEND_PORT = 5174
+
 
 typer_cli = typer.Typer(
     name="sculptor",
@@ -141,7 +145,7 @@ def main(
     # We bind to 127.0.0.1 to avoid exposing the server to the network by default.
     # (In theory, we could use "localhost" to also support IPv6 [::1] but we'd need to handle ipv6 in docker port binding setup then.)
     server = SyncCloseServer(config=Config(APP, host=settings.BIND_HOST, port=port, log_config=None, log_level=None))
-    frontend_port = int(os.environ.get("SCULPTOR_FRONTEND_PORT", 5174))
+    frontend_port = int(os.environ.get("SCULPTOR_FRONTEND_PORT", _DEFAULT_FRONTEND_PORT))
 
     if not serve_static:
         port = frontend_port

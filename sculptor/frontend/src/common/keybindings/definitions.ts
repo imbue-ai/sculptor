@@ -37,6 +37,13 @@ export const KEYBINDING_DEFINITIONS: ReadonlyArray<KeybindingDefinition> = [
     defaultBinding: "Meta+W",
   },
   {
+    id: "delete_workspace",
+    name: "Delete workspace",
+    description: "Delete the current workspace and all of its agents",
+    category: "workspaces",
+    defaultBinding: "Meta+Shift+W",
+  },
+  {
     id: "next_tab",
     name: "Next tab",
     description: "Switch to the next workspace tab",

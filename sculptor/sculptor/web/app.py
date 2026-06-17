@@ -105,6 +105,7 @@ from sculptor.services.dependency_management_service import InstallResult
 from sculptor.services.git_repo_service.default_implementation import LocalReadOnlyGitRepo
 from sculptor.services.git_repo_service.default_implementation import LocalWritableGitRepo
 from sculptor.services.git_repo_service.error_types import GitRepoError
+from sculptor.services.git_repo_service.error_types import GitRepoNotFoundError
 from sculptor.services.git_repo_service.git_commands import run_git_command_local
 from sculptor.services.project_service.default_implementation import get_most_recently_used_project_id
 from sculptor.services.project_service.default_implementation import update_most_recently_used_project
@@ -385,7 +386,7 @@ for logger_name in loggers:
 
 APP = App(title="Sculptor V1 API", lifespan=lifespan)
 
-NUM_WORKER_THREADS = 40
+WORKER_THREAD_COUNT = 40
 
 
 def on_startup():
@@ -397,7 +398,7 @@ def on_startup():
     # I found this to verify the number of workers we actually have (defaults to 40)
     # and ensure that we're not going to run out under load from long-running requests.
     limiter = anyio.to_thread.current_default_thread_limiter()
-    limiter.total_tokens = NUM_WORKER_THREADS
+    limiter.total_tokens = WORKER_THREAD_COUNT
 
     # Verify that the Sculptor data directory is writable
     if not check_sculptor_directory_writable():
@@ -422,8 +423,7 @@ is_integration_testing = os.environ.get("TESTING__INTEGRATION_ENABLED", "false")
 
 # Add CORS middleware to allow requests from file:// origins and localhost
 APP.add_middleware(
-    # pyre doesn't understand the typing here
-    CORSMiddleware,  # pyre-ignore[6]
+    CORSMiddleware,
     allow_origins=[
         f"http://localhost:{frontend_port}",  # Vite dev server
         f"http://127.0.0.1:{frontend_port}",  # Vite dev server
@@ -453,7 +453,6 @@ async def irrecoverable_exception_handler(request: Request, exception: Exception
 
 
 # Add GZip middleware for compression
-# pyre-ignore[6]:
 # The signature for middleware classes defined by Starlette (_MiddlewareFactory.__call__) is wrong.
 APP.add_middleware(GZipMiddleware, minimum_size=1000)
 
@@ -467,7 +466,7 @@ def set_session_token_cookie(
 ) -> None:
     response.set_cookie(
         key=SESSION_TOKEN_HEADER_NAME,
-        value=settings.SESSION_TOKEN or "",
+        value=settings.SESSION_TOKEN.get_secret_value() if settings.SESSION_TOKEN is not None else "",
         samesite="strict",
         httponly=True,
     )
@@ -874,23 +873,23 @@ def list_recent_workspaces(
     services = get_services_from_request_or_websocket(request)
 
     with user_session.open_transaction(services) as transaction:
-        workspace_dicts = transaction.get_all_workspaces()
+        workspace_rows = transaction.get_all_workspaces()
 
     workspaces = [
         RecentWorkspaceResponse(
-            object_id=row["object_id"],
-            project_id=row["project_id"],
-            description=row["description"],
-            initialization_strategy=row["initialization_strategy"],
-            source_branch=row["source_branch"],
-            is_deleted=row["is_deleted"],
-            created_at=row["created_at"],
-            project_name=row["project_name"],
-            agent_count=row["agent_count"],
-            is_open=row["is_open"],
-            last_activity_at=row["last_activity_at"],
+            object_id=row.object_id,
+            project_id=row.project_id,
+            description=row.description,
+            initialization_strategy=row.initialization_strategy,
+            source_branch=row.source_branch,
+            is_deleted=row.is_deleted,
+            created_at=row.created_at,
+            project_name=row.project_name,
+            agent_count=row.agent_count,
+            is_open=row.is_open,
+            last_activity_at=row.last_activity_at,
         )
-        for row in workspace_dicts
+        for row in workspace_rows
     ]
 
     return ListWorkspacesResponse(workspaces=workspaces)
@@ -1076,21 +1075,21 @@ def get_workspace_commits(
         return CommitHistoryResponse(
             commits=[
                 CommitInfo(
-                    hash=c["hash"],
-                    short_hash=c["short_hash"],
-                    message=c["message"],
-                    author_name=c["author_name"],
-                    timestamp=c["timestamp"],
-                    parent_hashes=c.get("parent_hashes", []),
+                    hash=c.hash,
+                    short_hash=c.short_hash,
+                    message=c.message,
+                    author_name=c.author_name,
+                    timestamp=c.timestamp,
+                    parent_hashes=c.parent_hashes,
                     files=[
                         CommitFileInfo(
-                            path=f["path"],
-                            status=f["status"],
-                            old_path=f["old_path"],
-                            additions=f["additions"],
-                            deletions=f["deletions"],
+                            path=f.path,
+                            status=f.status,
+                            old_path=f.old_path,
+                            additions=f.additions,
+                            deletions=f.deletions,
                         )
-                        for f in c["files"]
+                        for f in c.files
                     ],
                 )
                 for c in commits
@@ -1337,7 +1336,8 @@ def workspace_read_file(
             raise HTTPException(status_code=404, detail=f"Workspace {workspace_id} not found")
 
         # Find any task in this workspace to get the environment
-        tasks = transaction.get_tasks_for_project(workspace.project_id)  # pyre-fixme[16]
+        # pyrefly: ignore [missing-attribute]
+        tasks = transaction.get_tasks_for_project(workspace.project_id)
         workspace_task = None
         for task in tasks:
             if (
@@ -1637,7 +1637,8 @@ def _get_tasks_for_workspace(
     transaction: DataModelTransaction,
 ) -> list[Task]:
     """Get all tasks belonging to a workspace."""
-    all_tasks = transaction.get_tasks_for_project(workspace.project_id)  # pyre-fixme[16]
+    # pyrefly: ignore [missing-attribute]
+    all_tasks = transaction.get_tasks_for_project(workspace.project_id)
     return [
         t
         for t in all_tasks
@@ -1784,7 +1785,8 @@ def create_workspace_agent(
             not settings.TESTING.INTEGRATION_ENABLED
             and not is_terminal_agent_config(agent_config)
             and len(workspace_tasks) == 0
-            and len(transaction.get_all_tasks()) == 0  # pyre-fixme[16]
+            # pyrefly: ignore [missing-attribute]
+            and len(transaction.get_all_tasks()) == 0
         )
 
         with services.git_repo_service.open_local_user_git_repo_for_read(project) as repo:
@@ -1851,7 +1853,8 @@ def resolve_agent_by_prefix(
     """Resolve a TaskID prefix to a unique full agent id for the authenticated user."""
     services = get_services_from_request_or_websocket(request)
     with user_session.open_transaction(services) as transaction:
-        tasks = transaction.get_tasks_for_user(user_session.user_reference)  # pyre-fixme[16]
+        # pyrefly: ignore [missing-attribute]
+        tasks = transaction.get_tasks_for_user(user_session.user_reference)
     matches = [
         t.object_id
         for t in tasks
@@ -2000,7 +2003,8 @@ def rename_workspace_agent(
         assert isinstance(task.current_state, AgentTaskStateV2)
         updated_state = task.current_state.evolve(task.current_state.ref().title, rename_request.title)
         updated_task = task.evolve(task.ref().current_state, updated_state)
-        transaction.upsert_task(updated_task)  # pyre-fixme[16]
+        # pyrefly: ignore [missing-attribute]
+        transaction.upsert_task(updated_task)
 
         task_view = create_initial_task_view(updated_task, settings)
         assert isinstance(task_view, CodingAgentTaskView)
@@ -2315,10 +2319,10 @@ def btw_agent(
     # message picked a fake-claude model, fork using FakeClaude instead of the
     # real binary so integration tests exercise the /btw path end-to-end.
     latest_model: LLMModel | None = None
-    main_agent_started = False
+    is_main_agent_started = False
     for saved in reversed(saved_messages):
         if isinstance(saved, ChatInputUserMessage):
-            main_agent_started = True
+            is_main_agent_started = True
             latest_model = saved.model_name
             break
     if latest_model is None and isinstance(task.input_data, AgentTaskInputsV2):
@@ -2333,7 +2337,7 @@ def btw_agent(
             question=btw_request.question,
             request_id=btw_request.request_id,
             is_fake_claude=is_fake_claude,
-            main_agent_started=main_agent_started,
+            is_main_agent_started=is_main_agent_started,
         )
     except NoBtwSessionAvailable as exc:
         raise HTTPException(status_code=409, detail={"reason": "no_session_yet"}) from exc
@@ -2568,8 +2572,8 @@ def install_dependency(
     """Trigger installation of a managed dependency binary."""
     try:
         dependency = Dependency(tool)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}") from e
 
     services = get_services_from_request_or_websocket(request)
     return services.dependency_management_service.install_managed(dependency)
@@ -2589,8 +2593,8 @@ def start_dependency_auth(
     """
     try:
         dependency = Dependency(tool)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}") from e
 
     services = get_services_from_request_or_websocket(request)
     return services.dependency_management_service.start_auth_login(dependency)
@@ -2627,7 +2631,7 @@ def complete_onboarding(request: Request, user_session: UserSession = Depends(ge
 
     # Ensure privacy consent and telemetry level are set for returning users
     # who may have created their account before these fields were added.
-    updates: dict = {}
+    updates: dict[str, Any] = {}
     if not user_config.is_privacy_policy_consented:
         updates["is_privacy_policy_consented"] = True
     if not user_config.is_telemetry_level_set:
@@ -2977,12 +2981,12 @@ def get_current_branch(
             with services.git_repo_service.open_local_user_git_repo_for_read(project, log_command=False) as repo:
                 try:
                     current_branch = repo.get_current_git_branch()
-                except FileNotFoundError as e:
+                except GitRepoNotFoundError as e:
                     raise HTTPException(status_code=500, detail=f"Could not find repository: {e}") from e
-                except ProcessSetupError:
+                except ProcessSetupError as e:
                     if project.is_path_accessible:
                         raise
-                    raise HTTPException(status_code=404, detail="Project path has become inaccessible")
+                    raise HTTPException(status_code=404, detail="Project path has become inaccessible") from e
                 except Exception:
                     if attempt < _REPO_ACCESS_MAX_RETRIES - 1:
                         time.sleep(_REPO_ACCESS_RETRY_DELAY_SECONDS)
@@ -2997,10 +3001,10 @@ def get_current_branch(
         raise
     except subprocess.CalledProcessError as e:
         log_exception(e, "Failed to get current branch", priority=ExceptionPriority.LOW_PRIORITY)
-        raise HTTPException(status_code=404, detail="Failed to get current branch information")
+        raise HTTPException(status_code=404, detail="Failed to get current branch information") from e
     except Exception as e:
         log_exception(e, "Unexpected error getting current branch", priority=ExceptionPriority.LOW_PRIORITY)
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.get("/api/v1/projects/{project_id}/branch-exists")
@@ -3028,7 +3032,7 @@ def branch_exists(
     try:
         with services.git_repo_service.open_local_user_git_repo_for_read(project, log_command=False) as repo:
             return BranchExistsResponse(exists=repo.is_branch_ref(trimmed))
-    except FileNotFoundError:
+    except GitRepoNotFoundError:
         return BranchExistsResponse(exists=False)
 
 
@@ -3060,16 +3064,18 @@ def get_repo_info(
                 try:
                     branches = repo.get_all_branches()
                     current_branch = repo.get_current_git_branch()
-                except FileNotFoundError as e:
+                except GitRepoNotFoundError as e:
                     raise HTTPException(status_code=500, detail=f"Could not find repository: {e}") from e
-                except ProcessSetupError:
+                except ProcessSetupError as e:
                     # The is_path_accessible attribute is set in _check_and_update_project_accessibility, which
                     # used to fail when the project repo is a remote mounted directory which got disconnected.
                     # Properly catching the OSError there should prevent an unnecessary re-raise here, preventing
                     # Sentry spam and hopefully preventing the backend from crashing.
                     if project.is_path_accessible:
                         raise
-                    raise HTTPException(status_code=404, detail=f"Project path {repo_path} has become inaccessible")
+                    raise HTTPException(
+                        status_code=404, detail=f"Project path {repo_path} has become inaccessible"
+                    ) from e
                 except Exception:
                     if attempt < _REPO_ACCESS_MAX_RETRIES - 1:
                         time.sleep(_REPO_ACCESS_RETRY_DELAY_SECONDS)
@@ -3102,10 +3108,10 @@ def get_repo_info(
         raise
     except subprocess.CalledProcessError as e:
         log_exception(e, "Failed to get repo info", priority=ExceptionPriority.LOW_PRIORITY)
-        raise HTTPException(status_code=500, detail="Failed to get repository information")
+        raise HTTPException(status_code=500, detail="Failed to get repository information") from e
     except Exception as e:
         log_exception(e, "Unexpected error getting repo info", priority=ExceptionPriority.LOW_PRIORITY)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @APP.websocket("/api/v1/stream/ws")
@@ -3292,7 +3298,9 @@ def post_agent_signal(
             # the read-then-write atomic against a concurrent state writer.
             updated_state = current_state.evolve(current_state.ref().terminal_session_id, session_id)
             updated_task = task.evolve(task.ref().current_state, updated_state)
-            transaction.upsert_task(updated_task)  # pyre-fixme[16]
+            # upsert_task lives on TaskAndDataModelTransaction; the declared DataModelTransaction is narrower
+            # pyrefly: ignore [missing-attribute]
+            transaction.upsert_task(updated_task)
         else:
             logger.info("ignoring unknown terminal signal event {} for task {}", event, task.object_id)
     if diff_workspace_id is not None:
@@ -3581,6 +3589,7 @@ async def to_websocket_stream(
             raise
     try:
         itr = iter(generator)
+        empty_kwargs: dict[str, Any] = {}
         while True:
             loop = asyncio.get_event_loop()
             to_yield = await loop.run_in_executor(
@@ -3588,7 +3597,7 @@ async def to_websocket_stream(
                 run_sync_function_with_debugging_support_if_enabled,
                 _get_next_elem_for_websocket,
                 (itr, user_session),
-                {},
+                empty_kwargs,
             )
             if to_yield is None:
                 with logger.contextualize(**user_session.logger_kwargs):
@@ -3753,7 +3762,7 @@ def get_health_check(request: Request) -> HealthCheckResponse:
     user_config = get_user_config_instance()
     free_gb = (_get_disk_bytes_free(services.settings) or 1_000_000_000_000) / (1024 * 1024 * 1024)
 
-    # pyre-fixme[16]: CompleteServiceCollection.data_model_service is TaskDataModelService at runtime
+    # pyrefly: ignore [missing-attribute]
     with services.data_model_service.open_task_transaction() as transaction:
         active_task_count = len(transaction.get_active_tasks())
 
@@ -4061,7 +4070,7 @@ def upload_file(
 
     settings = get_settings()
     upload_dir = settings.upload_path
-    os.makedirs(upload_dir, exist_ok=True)
+    upload_dir.mkdir(parents=True, exist_ok=True)
     (upload_dir / file_id).write_bytes(content)
 
     return UploadFileResponse(file_id=file_id)
@@ -4139,9 +4148,8 @@ def _ws_type_streaming_update() -> StreamingUpdate:
     raise HTTPException(status_code=501, detail="This endpoint exists only for OpenAPI schema generation")
 
 
-# we generate UserConfigField at runtime so pyre doesn't like it as an annotation
 @router.get("/_types/user_config_field")
-def _type_user_config_field() -> UserConfigField:  # pyre-ignore[11]
+def _type_user_config_field() -> UserConfigField:
     """Include UserConfigField enum in schema"""
     raise HTTPException(status_code=501, detail="This endpoint exists only for OpenAPI schema generation")
 
@@ -4154,8 +4162,7 @@ def _element_tags() -> ElementIDs:
 
 APP.include_router(router)
 
-# pyre doesn't understand the typing here
-APP.add_middleware(SessionTokenMiddleware, settings_factory=get_settings)  # pyre-ignore[6]
+APP.add_middleware(SessionTokenMiddleware, settings_factory=get_settings)
 
 
 # TODO (PROD-2161): either we can remove this or leave it for debugging, it might fail depending on what we change with the build process

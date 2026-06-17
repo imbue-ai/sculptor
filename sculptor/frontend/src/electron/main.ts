@@ -1,6 +1,5 @@
-import { execFileSync, execSync, spawn } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import * as fs from "node:fs";
-import os from "node:os";
 import * as path from "node:path";
 import * as readline from "node:readline";
 
@@ -32,7 +31,7 @@ import {
 } from "./constants";
 import { createDevIcon } from "./devIcon";
 import { PORT } from "./electronOnlyUtils";
-import { finalizeLogger, getSculptorFolder, logger, TEMP_LOG_PATH } from "./logger";
+import { finalizeLogger, getSculptorFolder, logger } from "./logger";
 import { registerTestIpcHandlers } from "./testIpcHandlers";
 import {
   flushTracingBeforeExit,
@@ -503,113 +502,6 @@ const resourcesPath = (): string => {
   // In development, Electron Forge doesn't copy those files,
   // but we can find them relative to SCULPTOR_FRONTEND_DIR (set in electron:start script in package.json).
   return app.isPackaged ? process.resourcesPath : path.join(process.env.SCULPTOR_FRONTEND_DIR!, "../dist");
-};
-
-/**
- * Return the command and arguments to run the migration.
- *
- * In packaged builds, uses the PyInstaller binary bundled as a resource.
- * In development, falls back to running the Python script from source
- * when the binary hasn't been built.
- */
-const migrationCommand = (): { cmd: string; baseArgs: Array<string> } => {
-  const bin = path.join(resourcesPath(), "sculptor_migrate/sculptor_migrate");
-  if (fs.existsSync(bin)) {
-    return { cmd: bin, baseArgs: [] };
-  }
-  // Fall back to the Python script for development.
-  const script = path.join(process.env.SCULPTOR_FRONTEND_DIR!, "../../scripts/migrate_sculptor_folder.py");
-  return { cmd: "python", baseArgs: [script] };
-};
-
-/**
- * Run the sculptor_migrate binary (or script) with the given arguments.
- * Sends a loading status message before running, and an error status on failure.
- * Returns true on success, false on failure (after setting error state on the UI).
- */
-const runMigration = (args: Array<string>): boolean => {
-  sendBackendState({ status: "loading", payload: { message: "Running folder migration..." } });
-
-  const { cmd, baseArgs } = migrationCommand();
-  const fullArgs = [...baseArgs, ...args];
-  logger.info(`[main] running migration: ${cmd} ${fullArgs.join(" ")}`);
-
-  try {
-    const output = execFileSync(cmd, fullArgs, {
-      encoding: "utf8",
-      timeout: 120_000,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    logger.info(`[main] migration output:\n${output}`);
-    logger.info("[main] migration completed successfully");
-    return true;
-  } catch (err) {
-    const message = `Data folder migration failed: ${(err as Error).message}\nLogs: ${TEMP_LOG_PATH}`;
-    logger.error(`[main] ${message}`);
-    sendBackendState({
-      status: "error",
-      payload: { message, stack: (err as Error).stack },
-    });
-    return false;
-  }
-};
-
-/**
- * Run the data folder migration if needed.
- *
- * Two migration modes:
- * 1. Relocate: old-path (~/.sculptor_data) exists, new-path (~/.sculptor) has no
- *    format version marker. Moves data from old to new location.
- * 2. In-place: SCULPTOR_FOLDER is set to a custom path that exists but has no
- *    format version marker. Restructures the folder without relocating it.
- *
- * Skipped when running unpackaged from source (dev folder lives in the repo).
- */
-/**
- * Returns true if startup should continue, false if migration failed.
- */
-const runMigrationIfNeeded = (): boolean => {
-  const sculptorFolder = getSculptorFolder();
-  const formatVersionPath = path.join(sculptorFolder, ".format_version");
-  const hasFormatVersion = fs.existsSync(formatVersionPath);
-
-  if (hasFormatVersion) {
-    logger.info("[main] format version marker found, no migration needed");
-    return true;
-  }
-
-  // When SCULPTOR_FOLDER is set, do an in-place migration of the custom path.
-  // This check runs before the isPackaged guard so that custom-path users
-  // always get migration, even in dev mode.
-  if (process.env.SCULPTOR_FOLDER) {
-    if (!fs.existsSync(sculptorFolder)) {
-      logger.info("[main] SCULPTOR_FOLDER set but folder does not exist yet, skipping migration");
-      return true;
-    }
-    logger.info(`[main] in-place migration needed for custom path: ${sculptorFolder}`);
-    return runMigration(["--path", sculptorFolder]);
-  }
-
-  // In unpackaged dev mode, the data folder is <repo>/.dev_sculptor — no migration needed
-  if (!app.isPackaged) {
-    logger.info("[main] unpackaged dev mode, skipping migration check");
-    return true;
-  }
-
-  // Standard relocate: check if the old folder exists
-  const version = app.getVersion();
-  const isDev = version.includes("-dev.");
-  const oldFolder = isDev ? path.join(os.homedir(), ".dev-sculptor_data") : path.join(os.homedir(), ".sculptor_data");
-
-  const hasOldFolder = fs.existsSync(oldFolder);
-
-  if (!hasOldFolder) {
-    logger.info("[main] no old folder found, no migration needed");
-    return true;
-  }
-
-  logger.info(`[main] relocate migration needed: ${oldFolder} -> ${sculptorFolder}`);
-  return runMigration(isDev ? ["--dev"] : []);
 };
 
 /**
@@ -1162,14 +1054,8 @@ app.whenReady().then(async () => {
     return autoUpdaterManager ? autoUpdaterManager.getStatus() : { type: "disabled" };
   });
 
-  // Run data folder migration before starting the backend.
-  // If migration fails, error state is already set on the UI -- don't proceed.
-  if (!runMigrationIfNeeded()) {
-    return;
-  }
-
-  // Now that migration is complete (or was skipped), switch the logger from
-  // the temp file to the final location inside the sculptor folder.
+  // Switch the logger from the temp file to the final location inside the
+  // sculptor folder now that the data folder is known.
   finalizeLogger();
 
   const startTime = performance.now();

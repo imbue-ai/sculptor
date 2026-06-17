@@ -1,5 +1,6 @@
 import json
 import types
+from collections.abc import Mapping
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -46,7 +47,7 @@ def drop_all_automanaged_triggers(connection: Connection) -> None:
 
 
 @contextmanager
-def override_run_env(context_kwargs: dict[str, Any]) -> Generator[Config, None, None]:
+def override_run_env(context_kwargs: Mapping[str, Any]) -> Generator[Config, None, None]:
     """
     Create an Alembic Config with a given script location and run the specified run_env function instead of the env.py script.
 

@@ -1487,6 +1487,11 @@ def _make_start_env(persisted_session_id: str | None = None) -> MagicMock:
     env.run_process_to_completion.return_value = version_result
     env.get_state_path.return_value = Path("/fake/state")
     env.get_system_prompt.return_value = ""
+    # start() discovers skills under the working dir + home dir; give both real
+    # Paths so the skill-source models validate (the dirs need not exist —
+    # discovery finds none).
+    env.get_working_directory.return_value = Path("/fake/working_dir")
+    env.get_user_home_directory.return_value = Path("/fake/home")
 
     def _read_file(path: str, mode: str = "r") -> str:
         if path.endswith(PI_SESSION_ID_STATE_FILE) and persisted_session_id is not None:

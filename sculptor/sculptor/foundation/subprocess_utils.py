@@ -91,7 +91,7 @@ class HasStdoutAndStderr(Protocol):
 
 def log_subprocess_output_line(
     output_line: str,
-    relog_loguru_lines: bool = False,
+    should_relog_loguru_lines: bool = False,
     is_logging_without_loguru_formatting: bool = False,
     # TODO: remove this -- Sculptor code should not be calling this function. Will be fixed in a followup PR.
     is_logging_traced: bool = False,
@@ -101,7 +101,7 @@ def log_subprocess_output_line(
     # very brittle parsing of log format for recursive logging: ef460144-072f-4b74-a712-0f728fdd3f50
     if len(output_line) >= 36 and output_line[4] == "-" and output_line[7] == "-" and output_line[34:36] == "Tuple ":
         # these lines have already been logged in the child; only relog them if we really want to.
-        if relog_loguru_lines:
+        if should_relog_loguru_lines:
             logger.opt(raw=True).log(log_level, output_line.rstrip("\n") + "\n")
     else:
         if is_logging_without_loguru_formatting:
@@ -780,16 +780,16 @@ def run_local_command_modern_version(
     return result
 
 
-def truncate_command(command: str, num_chars: int = 2000) -> str:
-    """Truncates a command to include just the first `num_chars` of the first line."""
+def truncate_command(command: str, count_chars: int = 2000) -> str:
+    """Truncates a command to include just the first `count_chars` of the first line."""
     truncated = False
     split_command = command.split("\n")
     if len(split_command) > 1:
         truncated = True
         command = split_command[0]
-    if len(command) > num_chars:
+    if len(command) > count_chars:
         truncated = True
-        command = command[:num_chars]
+        command = command[:count_chars]
     if truncated:
         command += "... (truncated)"
     return command

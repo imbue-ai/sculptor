@@ -39,7 +39,6 @@ from __future__ import annotations
 
 import json
 import os
-import queue
 import re
 import time
 from collections.abc import Sequence
@@ -214,6 +213,10 @@ The user's request follows:
 # (ChatInput.tsx `wsTimeout`) so a wedged `new_session` fails rather than hanging the UI.
 _CLEAR_CONTEXT_TIMEOUT_SECONDS: float = 10.0
 
+# How long each blocking read of pi's stdout queue waits before the drain loop
+# re-checks shutdown / process-exit; small so an exit is noticed promptly.
+_STDOUT_QUEUE_POLL_SECONDS: float = 0.1
+
 
 def _pi_version_in_range(version: str) -> bool:
     try:
@@ -234,6 +237,9 @@ class _ToolCall:
     is the id of the segment that issued the call, so the result block attaches
     to the right assistant message even though the lane events arrive after the
     issuing message's `message_end` reset the accumulator.
+
+    Mutable transient state (`partial_text` accumulates across
+    `tool_execution_update`s); it is never serialized, mirroring `_TurnState`.
     """
 
     claude_name: str
@@ -339,6 +345,7 @@ class _TurnState:
 class PiAgent(DefaultAgentWrapper):
     # Narrows the inherited `harness: Harness` field — the registry owns
     # construction, so no agent↔harness import cycle exists.
+    # pyrefly: ignore [bad-override-mutable-attribute]
     harness: PiHarness
     config: PiAgentConfig
     git_hash: str
@@ -729,7 +736,7 @@ class PiAgent(DefaultAgentWrapper):
             )
         return version
 
-    def _send_rpc(self, payload: dict[str, Any]) -> None:
+    def _send_rpc(self, payload: Mapping[str, Any]) -> None:
         process = self._process
         if process is None:
             return
@@ -763,7 +770,7 @@ class PiAgent(DefaultAgentWrapper):
             if process.is_finished() and out_queue.empty():
                 return None
             try:
-                line, is_stdout = out_queue.get(timeout=0.1)
+                line, is_stdout = out_queue.get(timeout=_STDOUT_QUEUE_POLL_SECONDS)
             except Empty:
                 continue
             if not is_stdout:
@@ -899,7 +906,7 @@ class PiAgent(DefaultAgentWrapper):
         while not self._shutdown_event.is_set():
             try:
                 message = self._input_agent_messages.get(timeout=0.5)
-            except queue.Empty:
+            except Empty:
                 continue
             if isinstance(message, ClearContextUserMessage):
                 # Between-turns reset: this loop processes one message at a time,
@@ -1086,7 +1093,7 @@ class PiAgent(DefaultAgentWrapper):
                 if process.is_finished() and out_queue.empty():
                     return
                 try:
-                    line, is_stdout = out_queue.get(timeout=0.1)
+                    line, is_stdout = out_queue.get(timeout=_STDOUT_QUEUE_POLL_SECONDS)
                 except Empty:
                     continue
                 if not is_stdout:

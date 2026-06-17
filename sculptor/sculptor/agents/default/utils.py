@@ -23,7 +23,7 @@ def get_warning_message(
     error: BaseException | None,
     task_id: TaskID,
 ) -> WarningAgentMessage:
-    logger.bind(exc_info=error).warning(message)
+    logger.bind(task_id=task_id).opt(exception=error).warning(message)
     warning_message = WarningAgentMessage(
         message_id=AgentMessageID(),
         message=message,

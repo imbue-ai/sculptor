@@ -171,8 +171,12 @@ export const PathAutocomplete = ({
         // Strip trailing slashes so consumers get a clean path (e.g. ~/code/repo, not ~/code/repo/)
         const submittedPath = inputValue.trim().replace(/\/+$/, "");
         if (isModifierPressed(e) && submittedPath) {
-          // Cmd+Enter (Mac) / Ctrl+Enter (non-Mac) submits regardless of dropdown state
+          // Cmd+Enter (Mac) / Ctrl+Enter (non-Mac) submits regardless of dropdown state.
+          // stopPropagation keeps the keystroke from bubbling to page-level Cmd+Enter
+          // handlers (e.g. NewWorkspaceForm's "submit from anywhere" listener), which
+          // would otherwise also fire and create the workspace (SCU-1450).
           e.preventDefault();
+          e.stopPropagation();
           closeDropdown();
           onSubmit(submittedPath);
         } else if (!isOpen && submittedPath) {

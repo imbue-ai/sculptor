@@ -13,8 +13,6 @@ class GitRepoService(Service, ABC):
     Provides an interface to the user's local git repository.
 
     All interactions with that repository should be done through this service.
-
-    The two different context managers are mostly for convention, to declare your intent when accessing the repository.
     """
 
     @abstractmethod

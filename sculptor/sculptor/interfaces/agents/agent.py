@@ -319,26 +319,34 @@ class PersistentRequestCompleteAgentMessage(PersistentAgentMessage, RequestCompl
 
 class RequestSkippedAgentMessage(PersistentRequestCompleteAgentMessage):
     object_type: str = "RequestSkippedAgentMessage"
+    # pyrefly: ignore [bad-override]
     request_id: AgentMessageID
+    # pyrefly: ignore [bad-override]
     error: None = None
 
 
 class RequestSuccessAgentMessage(PersistentRequestCompleteAgentMessage):
     object_type: str = "RequestSuccessAgentMessage"
+    # pyrefly: ignore [bad-override]
     request_id: AgentMessageID
+    # pyrefly: ignore [bad-override]
     error: None = None
     interrupted: bool = False
 
 
 class RequestFailureAgentMessage(PersistentRequestCompleteAgentMessage, ErrorMessage):
     object_type: str = "RequestFailureAgentMessage"
+    # pyrefly: ignore [bad-override]
     request_id: AgentMessageID
+    # pyrefly: ignore [bad-override]
     error: SerializedException
 
 
 class RequestStoppedAgentMessage(PersistentRequestCompleteAgentMessage):
     object_type: str = "RequestStoppedAgentMessage"
+    # pyrefly: ignore [bad-override]
     request_id: AgentMessageID
+    # pyrefly: ignore [bad-override]
     error: SerializedException
 
 
@@ -476,7 +484,7 @@ class AgentConfig(SerializableModel):
 
 class HelloAgentConfig(AgentConfig):
     object_type: str = "HelloAgentConfig"
-    command: str = "echo"  # Default command to run
+    command: str = "echo"
 
 
 class ClaudeCodeSDKAgentConfig(AgentConfig):

@@ -13,6 +13,7 @@ import subprocess
 import time
 from contextlib import contextmanager
 from pathlib import Path
+from types import TracebackType
 from typing import Generator
 from typing import Sequence
 
@@ -83,7 +84,9 @@ def _teardown_timeout_seconds(args: Sequence[str]) -> int:
     return _DEFAULT_TEARDOWN_TIMEOUT_SECONDS
 
 
-def _reraise_unless_file_not_found(_func: object, _path: str, exc_info: tuple) -> None:
+def _reraise_unless_file_not_found(
+    _func: object, _path: str, exc_info: tuple[type[BaseException], BaseException, TracebackType | None]
+) -> None:
     """``shutil.rmtree`` ``onerror`` handler that swallows only missing-file errors.
 
     Used by :func:`_rmtree_tolerating_concurrent_deletion`.  A file that is
@@ -495,7 +498,7 @@ class SculptorInstance:
         if call_report is not None and call_report.failed:
             logger.warning("Test {} failed — tearing down shared instance for recreation", request.node.nodeid)
             self._teardown()
-            request.config._sculptor_instance = None  # pyre-ignore[16]
+            request.config._sculptor_instance = None
 
     def hard_kill(self) -> None:
         """SIGKILL the backend process tree with no graceful shutdown.

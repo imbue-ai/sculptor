@@ -66,8 +66,11 @@ rules = [
     "no-integration-page-reload",
     "no-integration-time-sleep",
     "no-integration-type-method",
+    "no-pyrefly-ignore",
+    "no-pyrefly-ignore-errors",
     "no-raw-html-button",
     "no-sculptor-copytree",
     "no-sculptor-subprocess",
+    "no-unlabeled-pyrefly-ignore",
     "no-direct-harness-capability-read",
 ]

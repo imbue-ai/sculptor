@@ -16,6 +16,7 @@ import sys
 import tarfile
 from abc import ABC
 from abc import abstractmethod
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Literal
 
@@ -138,7 +139,7 @@ class UnsupportedManagedPlatformError(Exception):
     """The running platform has no pinned distribution for a managed tool."""
 
 
-def _resolve_platform_key(platform_map: dict[tuple[str, str], str], label: str) -> str:
+def _resolve_platform_key(platform_map: Mapping[tuple[str, str], str], label: str) -> str:
     """Map the running platform to a managed tool's release platform key, or raise.
 
     Shared lookup boilerplate; each tool passes its own (Claude/pi differ in which
@@ -216,13 +217,16 @@ class PiManagedTool(ManagedTool):
         binary = version_dir / "pi" / "pi"
         # The archive's mode bits aren't guaranteed across mirrors; ensure the
         # entrypoint is runnable before the orchestrator gates on ``--version``.
-        binary.chmod(binary.stat().st_mode | 0o111)
+        binary.chmod(binary.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
         return binary
 
 
 GCP_BUCKET_BASE_URL = (
     "https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases"
 )
+
+# Timeout for the single HTTP fetch of Claude's release manifest.
+_CLAUDE_MANIFEST_FETCH_TIMEOUT_SECONDS = 30.0
 
 # Claude's supported version window. Defined here (not in the dependency service) so
 # ``ClaudeManagedTool`` can read it without importing the service — the reverse of
@@ -296,7 +300,7 @@ class ClaudeManagedTool(ManagedTool):
         manifest_url = f"{GCP_BUCKET_BASE_URL}/{version}/manifest.json"
 
         try:
-            resp = httpx.get(manifest_url, timeout=30.0)
+            resp = httpx.get(manifest_url, timeout=_CLAUDE_MANIFEST_FETCH_TIMEOUT_SECONDS)
             resp.raise_for_status()
             manifest_data = resp.json()
         except (httpx.HTTPError, ValueError) as e:

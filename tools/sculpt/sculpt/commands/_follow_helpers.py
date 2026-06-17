@@ -2,6 +2,7 @@
 
 import json
 from typing import Any
+from typing import assert_never
 
 import httpx
 import typer
@@ -32,16 +33,17 @@ def handle_exit_reason(reason: ExitReason, json_output: bool) -> None:
     if json_output:
         typer.echo(json.dumps({"type": "exit", "data": {"reason": reason.value}}, default=str))
 
-    if reason == ExitReason.TERMINAL_STATE:
-        raise typer.Exit(code=0)
-    elif reason == ExitReason.WAITING:
-        raise typer.Exit(code=2)
-    elif reason == ExitReason.CTRL_C:
-        raise typer.Exit(code=0)
-    elif reason == ExitReason.RETRY_EXHAUSTED:
-        cli_error("Connection lost: reconnection retries exhausted", json_output=json_output)
-    else:
-        raise typer.Exit(code=0)
+    match reason:
+        case ExitReason.TERMINAL_STATE:
+            raise typer.Exit(code=0)
+        case ExitReason.WAITING:
+            raise typer.Exit(code=2)
+        case ExitReason.CTRL_C:
+            raise typer.Exit(code=0)
+        case ExitReason.RETRY_EXHAUSTED:
+            cli_error("Connection lost: reconnection retries exhausted", json_output=json_output)
+        case _ as unreachable:
+            assert_never(unreachable)
 
 
 def on_status_json(snapshot: AgentSnapshot) -> None:
@@ -115,10 +117,12 @@ def on_messages_json_with_limit(
 
 
 def noop_status(_snapshot: AgentSnapshot) -> None:
+    """Ignore status snapshots (used when status output is not wanted)."""
     pass
 
 
 def noop_messages(_msgs: list[dict[str, Any]]) -> None:
+    """Ignore message batches (used when message output is not wanted)."""
     pass
 
 

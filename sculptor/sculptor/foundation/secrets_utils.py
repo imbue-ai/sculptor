@@ -10,4 +10,5 @@ class Secret(SecretStr):
     __repr__ = __str__
 
     def unwrap(self) -> str:
+        """Return the underlying secret value in plaintext."""
         return self.get_secret_value()

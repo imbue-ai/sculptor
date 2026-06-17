@@ -200,8 +200,8 @@ class DiffTracker:
                 resolved_code_dir += "/"
             if resolved_file.startswith(resolved_code_dir):
                 return resolved_file[len(resolved_code_dir) :]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to normalize {} to a git-relative path, returning it unchanged: {}", file_path, e)
         return file_path
 
     def compute_diff_for_tool(self, tool_name: str, tool_input: ToolInput) -> str | None:
@@ -209,9 +209,10 @@ class DiffTracker:
         if tool_name not in FILE_CHANGE_TOOL_NAMES:
             return None
 
-        file_path = str(tool_input.get("file_path"))
-        if not file_path:
+        raw_file_path = tool_input.get("file_path")
+        if not raw_file_path:
             return None
+        file_path = str(raw_file_path)
 
         # Claude typically emits absolute paths, but handle relative paths
         # gracefully by resolving them against the code directory.

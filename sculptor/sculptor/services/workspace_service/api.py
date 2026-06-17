@@ -58,6 +58,29 @@ class FileAtRefResult(FrozenModel):
     encoding: Literal["utf-8", "base64"]
 
 
+class CommitFileChange(FrozenModel):
+    """Per-file change within a single commit."""
+
+    path: str
+    status: Literal["M", "A", "D", "R"]
+    old_path: str | None
+    additions: int
+    deletions: int
+
+
+class CommitRecord(FrozenModel):
+    """A single commit in a workspace branch's history."""
+
+    hash: str
+    short_hash: str
+    message: str
+    author_name: str
+    author_email: str
+    timestamp: str
+    parent_hashes: list[str]
+    files: list[CommitFileChange]
+
+
 class WorkspaceNotFoundError(ExpectedError):
     """Raised when a workspace is not found."""
 
@@ -425,7 +448,7 @@ class WorkspaceService(Service, ABC):
         self,
         workspace_id: WorkspaceID,
         transaction: DataModelTransaction,
-    ) -> tuple[list, str | None]:
+    ) -> tuple[list[CommitRecord], str | None]:
         """Get the commit history for the workspace branch.
 
         Returns commits from HEAD back to the fork point (source_git_hash) where

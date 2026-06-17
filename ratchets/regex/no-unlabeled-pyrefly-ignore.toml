@@ -1,0 +1,9 @@
+[rule]
+id = "no-unlabeled-pyrefly-ignore"
+description = "'# pyrefly: ignore' must name the suppressed rule, e.g. '# pyrefly: ignore [bad-return]'"
+severity = "error"
+
+[match]
+pattern = '(?m)#\s*pyrefly:\s*ignore\s*(#.*)?$'
+languages = ["python"]
+include = ["**/*.py"]

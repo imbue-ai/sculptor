@@ -11,6 +11,10 @@ from pydantic.alias_generators import to_camel
 from sculptor.config.custom_actions import CustomActionsConfig
 from sculptor.foundation.pydantic_serialization import SerializableModel
 
+# The free-disk warning threshold is this multiple of the hard minimum, so warnings
+# fire before tasks are blocked outright.
+_FREE_DISK_GB_WARN_LIMIT_MULTIPLIER: float = 3.0
+
 
 class UpdateChannel(StrEnum):
     """Update channel for receiving Sculptor updates."""
@@ -253,16 +257,21 @@ class UserConfig(SerializableModel):
         default=False,
         description="When enabled, the agent-type menus offer the experimental pi agent. Off by default. Gates only the creation entry point — an existing pi agent keeps running regardless.",
     )
+    enable_frontend_plugins: bool = Field(
+        default=False,
+        description="When enabled, the frontend plugin system loads runtime plugins and shows the Plugins settings section. Off by default. Enabling applies immediately; disabling takes effect after an app reload (already-loaded plugins are not unloaded mid-session).",
+    )
     default_fast_mode: bool = Field(
         default=False,
         description="When enabled, new agents default to fast mode",
     )
+    # pyrefly: ignore [bad-assignment]
     default_effort_level: Literal["low", "medium", "high", "xhigh", "max"] = Field(
         default="xhigh",
         description="Default thinking effort level for new agents (low, medium, high, xhigh, max)",
     )
 
-    @model_validator(mode="before")  # pyre-ignore[56]: pyre doesn't understand pydantic
+    @model_validator(mode="before")
     @classmethod
     def _migrate_claude_binary_mode(cls, data: Any) -> Any:
         """Migrate old claude_binary_mode + dependency_paths.claude into unified dependency_paths.claude.
@@ -298,7 +307,7 @@ class UserConfig(SerializableModel):
                     paths[claude_key] = old_mode
         return data
 
-    @model_validator(mode="before")  # pyre-ignore[56]: pyre doesn't understand pydantic
+    @model_validator(mode="before")
     @classmethod
     def _sanitize_custom_actions(cls, data: Any) -> Any:
         """Discard custom_actions if it doesn't match the expected schema.
@@ -319,7 +328,7 @@ class UserConfig(SerializableModel):
 
     @property
     def free_disk_gb_warn_limit(self) -> float:
-        return self.min_free_disk_gb * 3.0
+        return self.min_free_disk_gb * _FREE_DISK_GB_WARN_LIMIT_MULTIPLIER
 
 
 # At Runtime, ensure that all fields in PrivacySettings are also in UserConfig
@@ -334,8 +343,9 @@ def _generate_user_config_field_enum() -> type[StrEnum]:
         # Convert field name to SCREAMING_SNAKE_CASE for enum constant
         enum_name = field_name.upper()
         fields[enum_name] = to_camel(field_name)
-    # pyre thinks this is an instance of a StrEnum because it doesn't understand enums
-    return StrEnum("UserConfigField", fields)  # pyre-ignore[7, 19]
+    # type checkers think this returns a StrEnum instance because they don't model functional enum creation
+    # pyrefly: ignore [bad-return]
+    return StrEnum("UserConfigField", fields)
 
 
 UserConfigField: type[StrEnum] = _generate_user_config_field_enum()

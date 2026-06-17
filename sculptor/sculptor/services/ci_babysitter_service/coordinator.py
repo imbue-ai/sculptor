@@ -146,8 +146,8 @@ class CIBabysitterCoordinator(Service):
                 continue
             try:
                 self._handle_status(item)
-            except Exception as exc:
-                logger.error("CIBabysitterCoordinator: error handling PrStatusInfo for {}: {}", item.workspace_id, exc)
+            except Exception:
+                logger.exception("CIBabysitterCoordinator: error handling PrStatusInfo for {}", item.workspace_id)
 
     def _handle_status(self, new: PrStatusInfo) -> None:
         with self._lock:
@@ -333,7 +333,8 @@ class CIBabysitterCoordinator(Service):
         """The workspace's agent tasks, most-recent-first, excluding
         deleted/deleting tasks and the babysitter's own."""
         try:
-            project_tasks = transaction.get_tasks_for_project(  # pyre-ignore[16]
+            # pyrefly: ignore [missing-attribute]
+            project_tasks = transaction.get_tasks_for_project(
                 project_id=project_id,
                 input_data_classes=(AgentTaskInputsV2,),
             )
@@ -412,7 +413,7 @@ class CIBabysitterCoordinator(Service):
                 return message.model_name
         return None
 
-    def _lookup_workspace_project_id(self, workspace_id: WorkspaceID):
+    def _lookup_workspace_project_id(self, workspace_id: WorkspaceID) -> ProjectID | None:
         with self._data_model_service.open_transaction(RequestID()) as transaction:
             workspace = transaction.get_workspace(workspace_id)
             if workspace is None:

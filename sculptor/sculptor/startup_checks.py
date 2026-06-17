@@ -16,15 +16,12 @@ from sculptor.utils import build as build_utils
 
 
 def check_is_user_email_field_valid(config: UserConfig) -> bool:
-    """Please enter a valid email address."""
+    """Return whether the configured user email looks like a valid address."""
     # Matches things like .@..., <some string>@<another>.<last one>
-    # which excludes '@' from each of the string parts but allow all other characters
+    # which excludes '@' from each of the string parts but allows all other characters
     # including special characters and '.' a dot itself.
     pattern = r"^[^@]+@[^@]+\.[^@]+$"
-    if re.match(pattern, config.user_email):
-        return True
-    else:
-        return False
+    return re.match(pattern, config.user_email) is not None
 
 
 def check_sculptor_directory_writable() -> bool:
@@ -38,13 +35,11 @@ def check_sculptor_directory_writable() -> bool:
     """
     sculptor_folder = build_utils.get_sculptor_folder()
     try:
-        # Attempt to create a temporary file in the sculptor folder
         with tempfile.NamedTemporaryFile(dir=sculptor_folder, delete=True) as tmp:
-            # Write something to verify write access
             tmp.write(b"test")
             tmp.flush()
         return True
-    except (OSError, PermissionError) as e:
+    except OSError as e:
         logger.error(
             "Sculptor data directory is not writable: {}. Please check permissions for: {}",
             e,

@@ -1,13 +1,11 @@
-from dataclasses import dataclass
-
 from sculptor.database.models import TaskID
+from sculptor.foundation.pydantic_serialization import MutableModel
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import WorkspaceID
-from sculptor.web.derived import PrStatusInfo
+from sculptor.web.data_types import PrStatusInfo
 
 
-@dataclass
-class CIBabysitterState:
+class CIBabysitterState(MutableModel):
     workspace_id: WorkspaceID
     project_id: ProjectID
     paused: bool = False

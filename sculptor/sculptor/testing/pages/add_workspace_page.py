@@ -2,6 +2,7 @@ from playwright.sync_api import Locator
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
+from sculptor.testing.elements.add_repo_dialog import PlaywrightAddRepoDialogElement
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 
 
@@ -22,6 +23,16 @@ class PlaywrightAddWorkspacePage(PlaywrightProjectLayoutPage):
 
     def get_open_new_repo_button(self) -> Locator:
         return self.get_by_test_id(ElementIDs.OPEN_NEW_REPO_BUTTON)
+
+    def open_add_repo_dialog(self) -> PlaywrightAddRepoDialogElement:
+        """Open the 'Add Repository' dialog from the repo selector."""
+        self.get_project_selector().click()
+        self.get_open_new_repo_button().click()
+        dialog = PlaywrightAddRepoDialogElement(
+            locator=self.get_by_test_id(ElementIDs.ADD_REPO_DIALOG), page=self._page
+        )
+        expect(dialog.get_path_input()).to_be_visible()
+        return dialog
 
     def get_task_input(self) -> Locator:
         return self.get_by_test_id(ElementIDs.TASK_INPUT)

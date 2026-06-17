@@ -121,6 +121,8 @@ def run_migration_fixture_test(fixture: MigrationTestFixture) -> None:
     4. Runs the migration under test
     5. Calls fixture.verify() to check data integrity
     """
+    # Imported lazily so that merely importing this module (every fixture file does) does not pull in
+    # the heavy sql_implementation module or trigger its table-registration side effects at import time.
     from sculptor.services.data_model_service.sql_implementation import register_all_tables
 
     register_all_tables()

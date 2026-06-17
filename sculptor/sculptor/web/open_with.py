@@ -54,6 +54,9 @@ _MACOS_APP_PATHS: dict[ExternalApp, list[str]] = {
     ],
 }
 
+# Maximum time to wait for a Spotlight (mdfind) bundle lookup before giving up.
+_MDFIND_TIMEOUT_SECONDS = 5
+
 # Terminal emulators to try on Linux, in preference order.
 _LINUX_TERMINAL_EXECUTABLES: list[str] = [
     "ghostty",
@@ -91,7 +94,7 @@ def _find_macos_app_bundle(app: ExternalApp) -> str | None:
         try:
             result = run_blocking(
                 ["mdfind", f"kMDItemCFBundleIdentifier == '{bundle_id}'"],
-                timeout=5,
+                timeout=_MDFIND_TIMEOUT_SECONDS,
                 is_checked=False,
             )
             paths = [p.strip() for p in result.stdout.strip().splitlines() if p.strip()]
@@ -163,7 +166,7 @@ def _get_macos_launch_info(app: ExternalApp, target_path: Path) -> tuple[list[st
         case ExternalApp.PYCHARM:
             return _macos_launch_editor(app, target_path)
         case _ as unreachable:
-            assert_never(unreachable)  # pyre-fixme[6]: Pyre cannot narrow enum values through match/case
+            assert_never(unreachable)
 
 
 def _macos_launch_editor(app: ExternalApp, target_path: Path) -> tuple[list[str], Path | None] | None:
@@ -199,7 +202,7 @@ def _get_linux_launch_info(app: ExternalApp, target_path: Path) -> tuple[list[st
         case ExternalApp.GHOSTTY:
             return _linux_launch_cli_app(app, target_path)
         case _ as unreachable:
-            assert_never(unreachable)  # pyre-fixme[6]: Pyre cannot narrow enum values through match/case
+            assert_never(unreachable)
 
 
 def _linux_launch_cli_app(app: ExternalApp, target_path: Path) -> tuple[list[str], Path | None] | None:

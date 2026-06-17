@@ -174,10 +174,10 @@ class PlaywrightBrowserPanelElement(PlaywrightIntegrationTestElement):
     def _wait_for_webview_attached(self) -> None:
         deadline = time.monotonic() + _WEBVIEW_ATTACH_TIMEOUT_SECONDS
         while time.monotonic() < deadline:
-            ready = self._page.evaluate(
+            is_ready = self._page.evaluate(
                 "() => Boolean(window.__BROWSER_PANEL_TEST__ && window.__BROWSER_PANEL_TEST__.webContentsId)"
             )
-            if ready:
+            if is_ready:
                 return
             time.sleep(_URL_POLL_INTERVAL_SECONDS)
         raise TimeoutError("Timed out waiting for webview did-attach")

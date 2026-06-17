@@ -28,7 +28,7 @@ Before writing a commit message or an MR/PR description, scrub it of:
 
 State the *why* of a change in terms that are both useful and safe to publish. When the real motivation is sensitive, summarize it at an altitude that is safe for a public reader rather than omitting context entirely.
 
-This also applies to anything the `git-provider` skill or any workflow generates on your behalf (MR/PR bodies, squash-commit messages). The `/code-review-checklist` skill checks for these same issues.
+This also applies to anything a skill or workflow generates on your behalf (PR bodies, squash-commit messages). The `/code-review-checklist` skill checks for these same issues.
 
 # CRITICAL: Code Quality and Style
 
@@ -50,7 +50,7 @@ just test-unit
 
 ## Working with the repo and git
 
-When asked to create or manage merge/pull requests, refer to the `git-provider` skill — it covers detecting the host from the `origin` remote and the matching CLI and commands to use.
+When asked to create or manage pull requests, use the `gh` CLI to view, create, diff, and edit them, and to post review comments.
 
 If you create a new worktree, clone or copy of Sculptor, run `just rebuild` to install the proper dependencies.
 

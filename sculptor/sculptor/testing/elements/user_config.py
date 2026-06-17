@@ -1,12 +1,17 @@
 """Helpers for toggling user config flags via the API in integration tests.
 
-Follows the same GET + PUT + reload pattern as ``_set_chat_view_alpha`` in
-``alpha_chat_view.py``.
+Each helper does a GET + PUT + reload against ``/api/v1/config`` rather than
+driving the settings UI, which has timing issues with Radix controls.
 """
 
 from playwright.sync_api import Page
 
 from sculptor.testing.elements.base import wait_for_tiptap_ready
+
+# Under heavy load the backend can transiently return 500 (e.g. SQLite busy),
+# so the config PUT is retried a few times with a short delay between attempts.
+_PUT_RETRY_COUNT = 3
+_PUT_RETRY_DELAY_MS = 500
 
 
 def _set_user_config_flag(page: Page, field: str, value: object) -> None:
@@ -23,13 +28,11 @@ def _set_user_config_flag(page: Page, field: str, value: object) -> None:
     current_config = response.json()
 
     current_config[field] = value
-    # Retry the PUT — under heavy load the backend can transiently return 500
-    # (e.g. SQLite busy), matching the retry in _set_chat_view_alpha.
-    for _attempt in range(3):
+    for _attempt in range(_PUT_RETRY_COUNT):
         put_response = page.request.put(config_url, data={"userConfig": current_config})
         if put_response.ok:
             break
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(_PUT_RETRY_DELAY_MS)
     assert put_response.ok, f"PUT /api/v1/config failed: {put_response.status}"
 
     page.reload()

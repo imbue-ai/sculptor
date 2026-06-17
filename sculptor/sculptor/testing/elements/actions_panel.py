@@ -39,6 +39,6 @@ class PlaywrightActionsPanelElement(PlaywrightIntegrationTestElement):
         header = self.get_group_header_by_name(group_name)
         expect(header).to_be_visible()
         header.click(button="right")
-        delete_item = self._page.get_by_test_id(ElementIDs.GROUP_CONTEXT_MENU_DELETE)
+        delete_item = self.get_group_context_menu_delete_item()
         expect(delete_item).to_be_visible()
         delete_item.click()

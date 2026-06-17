@@ -1,5 +1,8 @@
 """add enter_plan_mode and exit_plan_mode to ChatInputUserMessage
 
+No SQL changes are needed — the new fields live inside JSON blobs and
+default to False, so existing data is unaffected.
+
 Revision ID: 593675cc4b70
 Revises: b1a2c3d4e5f6
 Create Date: 2026-02-23 15:38:35.651653

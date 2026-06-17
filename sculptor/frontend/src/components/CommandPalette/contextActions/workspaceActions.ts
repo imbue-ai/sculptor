@@ -124,6 +124,7 @@ export const buildWorkspaceActions = (runtime: WorkspaceActionRuntime): Readonly
     paletteSubtitle: "Permanently delete this workspace",
     paletteOrder: 110,
     paletteTitleSuffix: "name",
+    paletteShortcut: "delete_workspace",
     perform: (ws): void => runtime.beginDelete(ws),
   },
 ];

@@ -90,6 +90,7 @@ class DefaultAgentWrapper(Agent):
         while self._output_messages.qsize() > 0:
             message = self._output_messages.get_nowait()
             new_logs.append(message)
+        # pyrefly: ignore [bad-return]
         return new_logs
 
     def push_message(self, message: Message) -> None:

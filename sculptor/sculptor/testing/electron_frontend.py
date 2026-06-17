@@ -25,6 +25,12 @@ from sculptor.testing.subprocess_utils import Forwarder
 
 ELECTRON_READY_MESSAGE = "Launched Electron app"
 
+_FORGE_LOCK_TIMEOUT_SECONDS = 300
+_SLOW_LOCK_WAIT_LOG_THRESHOLD_SECONDS = 1.0
+_CDP_CONNECT_TIMEOUT_SECONDS = 120
+_CDP_CONNECT_RETRY_INTERVAL_SECONDS = 1
+_PROCESS_KILL_TIMEOUT_SECONDS = 5
+
 
 def _is_known_harmless_electron_error(line: str) -> bool:
     harmless_substrings = [
@@ -97,12 +103,12 @@ class ElectronFrontend:
         frontend_dir = get_v1_frontend_path()
         lock_path = Path("/tmp/sculptor_electron_forge.lock")
 
-        launched = False
-        file_lock = FileLock(str(lock_path), timeout=300)
+        is_launched = False
+        file_lock = FileLock(str(lock_path), timeout=_FORGE_LOCK_TIMEOUT_SECONDS)
         t_lock = time.monotonic()
         file_lock.acquire()
         lock_wait = time.monotonic() - t_lock
-        if lock_wait > 1.0:
+        if lock_wait > _SLOW_LOCK_WAIT_LOG_THRESHOLD_SECONDS:
             logger.info("[timing] Electron forge lock wait: {:.2f}s", lock_wait)
         try:
             t_proc = time.monotonic()
@@ -120,7 +126,7 @@ class ElectronFrontend:
             for line in self._electron_proc.stdout:
                 logger.info("[Electron stdout] {}", line.rstrip())
                 if ELECTRON_READY_MESSAGE in line:
-                    launched = True
+                    is_launched = True
                     self._forwarder = Forwarder(
                         self._electron_proc,
                         prefix="[Electron stdout] ",
@@ -134,15 +140,15 @@ class ElectronFrontend:
             "[timing] Electron process launch (xvfb + Vite + Electron ready): {:.2f}s", time.monotonic() - t_proc
         )
 
-        if not launched:
+        if not is_launched:
             self._kill_electron()
             raise RuntimeError("Electron frontend failed to start. Check logs above.")
 
         t_cdp = time.monotonic()
         try:
             retry_connect = retry(
-                stop=stop_after_delay(120),
-                wait=wait_fixed(1),
+                stop=stop_after_delay(_CDP_CONNECT_TIMEOUT_SECONDS),
+                wait=wait_fixed(_CDP_CONNECT_RETRY_INTERVAL_SECONDS),
                 retry=retry_if_exception_type(PlaywrightError),
                 reraise=True,
             )(lambda: self.playwright.chromium.connect_over_cdp(f"http://localhost:{cdp_port}"))
@@ -188,7 +194,7 @@ class ElectronFrontend:
                 pass
 
             try:
-                self._electron_proc.wait(timeout=5)
+                self._electron_proc.wait(timeout=_PROCESS_KILL_TIMEOUT_SECONDS)
             except subprocess.TimeoutExpired:
                 # Process didn't exit gracefully — force-kill as last resort.
                 try:
@@ -201,10 +207,10 @@ class ElectronFrontend:
         try:
             if self._electron_proc.stdout:
                 self._electron_proc.stdout.close()
-        except Exception:
+        except OSError:
             pass
 
         try:
-            self._electron_proc.wait(timeout=5)
+            self._electron_proc.wait(timeout=_PROCESS_KILL_TIMEOUT_SECONDS)
         except subprocess.TimeoutExpired:
             pass

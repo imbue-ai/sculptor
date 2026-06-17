@@ -172,15 +172,15 @@ lint:
     }
     quiet_by_default lint _do_lint
 
-# Type check Python (pyre) and JS/TS (tsc) code
+# Type check Python (pyrefly) and JS/TS (tsc) code
 [group("ci")]
 typecheck:
     #!/usr/bin/env bash
     set -euo pipefail
     {{ _quiet_by_default_fn }}
     _do_typecheck() {
-      echo "Type checking Python files with pyre..."
-      cd "{{justfile_directory()}}/sculptor" && uv run --project sculptor pyre
+      echo "Type checking Python files with pyrefly..."
+      cd "{{justfile_directory()}}" && uv run --project sculptor pyrefly check
       echo "Type checking JS/TS files with tsc..."
       {{ nvm_use }}
       cd "{{justfile_directory()}}/sculptor/frontend" && npm run tsc
@@ -629,12 +629,6 @@ storybook:
 [group("dev")]
 backend repo_path=".":
     #!/usr/bin/env bash
-    # Migrate the dev data folder to the new internal/ layout if needed.
-    dev_folder="{{justfile_directory()}}/.dev_sculptor"
-    if [ -d "$dev_folder" ] && [ ! -f "$dev_folder/.format_version" ]; then
-      echo "Migrating dev data folder to new layout..."
-      uv run --project sculptor python "{{justfile_directory()}}/scripts/migrate_sculptor_folder.py" --path "$dev_folder"
-    fi
     # Generate the source-built sculpt CLI client so `.venv/bin/sculpt` actually
     # imports and runs (digest-cached; a no-op when the API schema is unchanged).
     # Together with sculpt being a dev dependency of sculptor, this guarantees dev
@@ -961,20 +955,20 @@ verify-release-tag tag="":
 
 # Builds the Sculptor webapp in the default environment.
 [group("build")]
-build: (pyre-check) build-frontend build-backend
+build: (pyrefly-check) build-frontend build-backend
 
-# run pyre type checking. can be skipped with by setting env var SKIP_PYRE_IN_SCULPTOR_BUILD=1
+# run pyrefly type checking. can be skipped with by setting env var SKIP_PYREFLY_IN_SCULPTOR_BUILD=1
 [private]
-pyre-check:
+pyrefly-check:
     #!/usr/bin/env bash
     set -euo pipefail
-    cd "{{justfile_directory()}}/sculptor"
-    if [ -n "${SKIP_PYRE_IN_SCULPTOR_BUILD:-}" ]; then
-        echo "Skipping pyre check (SKIP_PYRE_IN_SCULPTOR_BUILD is set)"
+    cd "{{justfile_directory()}}"
+    if [ -n "${SKIP_PYREFLY_IN_SCULPTOR_BUILD:-}" ]; then
+        echo "Skipping pyrefly check (SKIP_PYREFLY_IN_SCULPTOR_BUILD is set)"
     else
-        echo "Running pyre type check..."
-        uv run --project sculptor pyre
-        echo "Pyre check passed!"
+        echo "Running pyrefly type check..."
+        uv run --project sculptor pyrefly check
+        echo "Pyrefly check passed!"
     fi
 
 # Creates a production build of the Sculptor webapp and backend.
@@ -994,11 +988,6 @@ sidecar python_key="": dist
 [group("build")]
 sculpt-binary python_key="": generate-sculpt-client
     /usr/bin/env bash "{{justfile_directory()}}/sculptor/builder/build-sculpt.sh" {{ python_key }}
-
-# Builds a standalone binary for the data folder migration script.
-[group("build")]
-migrate-binary python_key="":
-    /usr/bin/env bash "{{justfile_directory()}}/sculptor/builder/build-migrate.sh" {{ python_key }}
 
 # Resizes and reformats icons for packaging based on an original
 [group("build")]
@@ -1024,7 +1013,7 @@ electron-assets: icons
 The one-stop shop to clean, rebuild all intermediate targets from source, download all dependencies from remotes, and
 prepare for a clean build. Prefix your electron build targets for ease of use, e.g. `just refresh app` or `just refresh pkg`")]
 [group("build")]
-refresh-assets: clean build-frontend sidecar sculpt-binary migrate-binary electron-assets
+refresh-assets: clean build-frontend sidecar sculpt-binary electron-assets
 
 # Uses electron forge to create an executable application for MacOS on Arm64. This app will not be bundled into an installer.
 [group("build")]

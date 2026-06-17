@@ -11,9 +11,11 @@ def _validate_git_timestamp(value: str) -> str:
         datetime.fromisoformat(value)
         return value
     except ValueError:
-        raise ValueError(f"Invalid git timestamp: {value}")
+        raise ValueError(f"Invalid git timestamp: {value}") from None
 
 
 class CommitTimestamp(SerializableModel):
+    """Author and committer timestamps for a git commit, as ISO-format strings."""
+
     author_ts: Annotated[str, PlainValidator(_validate_git_timestamp)]
     committer_ts: Annotated[str, PlainValidator(_validate_git_timestamp)]

@@ -229,7 +229,11 @@ def _fetch_pipeline_info(
     if result.returncode != 0:
         logger.debug("glab mr view failed: {}", result.stderr)
         return None, None, None, None
-    data = json.loads(result.stdout)
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        logger.debug("Invalid JSON from glab mr view: {}", result.stdout[:200])
+        return None, None, None, None
     pipeline = data.get("pipeline")
     if pipeline is None:
         return None, None, None, None
@@ -238,13 +242,15 @@ def _fetch_pipeline_info(
 
 
 def _fetch_approvals(working_dir: Path, mr_iid: int) -> list[PrApproval]:
-    result = run_cli_with_retry(
-        ["glab", "api", "projects/:id/merge_requests/{}/approvals".format(mr_iid)], working_dir
-    )
+    result = run_cli_with_retry(["glab", "api", f"projects/:id/merge_requests/{mr_iid}/approvals"], working_dir)
     if result.returncode != 0:
         logger.debug("glab api approvals failed: {}", result.stderr)
         return []
-    data = json.loads(result.stdout)
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        logger.debug("Invalid JSON from glab api approvals: {}", result.stdout[:200])
+        return []
     approved_by = data.get("approved_by", [])
     approvals: list[PrApproval] = []
     for entry in approved_by:
@@ -255,13 +261,15 @@ def _fetch_approvals(working_dir: Path, mr_iid: int) -> list[PrApproval]:
 
 
 def _fetch_unresolved_comments(working_dir: Path, mr_iid: int) -> list[PrComment]:
-    result = run_cli_with_retry(
-        ["glab", "api", "projects/:id/merge_requests/{}/discussions".format(mr_iid)], working_dir
-    )
+    result = run_cli_with_retry(["glab", "api", f"projects/:id/merge_requests/{mr_iid}/discussions"], working_dir)
     if result.returncode != 0:
         logger.debug("glab api discussions failed: {}", result.stderr)
         return []
-    discussions = json.loads(result.stdout)
+    try:
+        discussions = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        logger.debug("Invalid JSON from glab api discussions: {}", result.stdout[:200])
+        return []
     comments: list[PrComment] = []
     for discussion in discussions:
         notes = discussion.get("notes", [])

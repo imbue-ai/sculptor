@@ -1,9 +1,16 @@
 import json
+import os
+import shutil
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
+from sculptor.foundation.processes.local_process import run_blocking
 from sculptor.foundation.subprocess_utils import FinishedProcess
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.web.pr_status import _GRAPHQL_PR_QUERY
+from sculptor.web.pr_status import _PR_QUERY_LIMIT
 from sculptor.web.pr_status import fetch_pr_status
 
 
@@ -17,50 +24,76 @@ WORKSPACE_ID = WorkspaceID()
 WORKING_DIR = Path("/tmp/repo")
 
 
-def _pr(number: int, state: str, base_ref: str = "main") -> dict:
-    """Build one `gh pr list --json ...` row in the given GitHub state."""
+def _pr_node(
+    number: int,
+    state: str,
+    base_ref: str = "main",
+    check_state: str | None = None,
+    reviews: list[dict] | None = None,
+    threads: list[dict] | None = None,
+) -> dict:
+    """Build one graphql ``pullRequests.nodes`` entry in the given GitHub state.
+
+    Mirrors the shape returned by the single ``gh api graphql`` query the
+    backend now issues: identity fields alongside the check/review/comment
+    detail (``statusCheckRollup`` is null when no checks have run).
+    """
+    rollup = {"state": check_state} if check_state is not None else None
     return {
         "number": number,
         "title": f"PR #{number}",
-        "baseRefName": base_ref,
-        "state": state,
         "url": f"https://github.com/org/repo/pull/{number}",
+        "state": state,
+        "baseRefName": base_ref,
+        "commits": {"nodes": [{"commit": {"statusCheckRollup": rollup}}]},
+        "latestReviews": {"nodes": reviews or []},
+        "reviewThreads": {"nodes": threads or []},
     }
 
 
-def _open_pr(number: int, base_ref: str = "main") -> dict:
-    return _pr(number, "OPEN", base_ref)
+def _open_node(number: int, base_ref: str = "main", **kwargs) -> dict:  # noqa: ANN003
+    return _pr_node(number, "OPEN", base_ref, **kwargs)
 
 
-def _merged_pr(number: int, base_ref: str = "main") -> dict:
-    return _pr(number, "MERGED", base_ref)
+def _merged_node(number: int, base_ref: str = "main") -> dict:
+    return _pr_node(number, "MERGED", base_ref)
 
 
-def _closed_pr(number: int, base_ref: str = "main") -> dict:
-    return _pr(number, "CLOSED", base_ref)
+def _closed_node(number: int, base_ref: str = "main") -> dict:
+    return _pr_node(number, "CLOSED", base_ref)
+
+
+def _graphql_stdout(nodes: list[dict]) -> str:
+    """Wrap PR nodes in the graphql response envelope gh emits."""
+    return json.dumps({"data": {"repository": {"pullRequests": {"nodes": nodes}}}})
 
 
 def _patch_cli(side_effect):  # noqa: ANN001
     return patch("sculptor.web.pr_status.run_cli_with_retry", side_effect=side_effect)
 
 
-def _pr_list_handler(prs: list[dict]):  # noqa: ANN001
-    """Build a cli_handler for the single `gh pr list --state=all` call.
+def _graphql_handler(nodes: list[dict]):  # noqa: ANN001
+    """Build a cli_handler for the single `gh api graphql` call.
 
-    The backend issues exactly one `gh pr list` query (across all states) and
-    then, for an open PR, a single combined `gh pr view` detail call that
-    bundles statusCheckRollup / reviews / reviewThreads. This handler returns
-    ``prs`` for the list call and an empty combined object for the detail call.
+    The backend issues exactly one graphql request that returns every PR on the
+    source branch (across all states) with its check/review/comment detail
+    bundled in. This handler returns ``nodes`` wrapped in the graphql envelope.
     """
 
     def handler(cmd, _working_dir):  # noqa: ANN001
-        if "list" in cmd:
-            return _make_finished(json.dumps(prs))
-        if "view" in cmd:
-            return _make_finished(json.dumps({"statusCheckRollup": [], "reviews": [], "reviewThreads": []}))
+        if "graphql" in cmd:
+            return _make_finished(_graphql_stdout(nodes))
         return _make_finished("[]")
 
     return handler
+
+
+def _captured_query(cmd: list[str]) -> str:
+    """Return the GraphQL query string passed as `-f query=...` in a gh command."""
+    for arg in cmd:
+        if arg.startswith("query="):
+            return arg[len("query=") :]
+    raise AssertionError(f"no query= argument found in command: {cmd}")
 
 
 # ---------------------------------------------------------------------------
@@ -69,7 +102,7 @@ def _pr_list_handler(prs: list[dict]):  # noqa: ANN001
 
 
 def test_open_pr_matching_target() -> None:
-    with _patch_cli(_pr_list_handler([_open_pr(100, base_ref="main")])):
+    with _patch_cli(_graphql_handler([_open_node(100, base_ref="main")])):
         result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
 
     assert result.pr_state == "open"
@@ -83,7 +116,7 @@ def test_open_pr_matching_target() -> None:
 
 
 def test_open_pr_mismatched_target() -> None:
-    with _patch_cli(_pr_list_handler([_open_pr(200, base_ref="develop")])):
+    with _patch_cli(_graphql_handler([_open_node(200, base_ref="develop")])):
         result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
 
     assert result.pr_state == "none"
@@ -98,7 +131,7 @@ def test_open_pr_mismatched_target() -> None:
 
 
 def test_no_prs_at_all() -> None:
-    with _patch_cli(_pr_list_handler([])):
+    with _patch_cli(_graphql_handler([])):
         result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
 
     assert result.pr_state == "none"
@@ -111,7 +144,7 @@ def test_no_prs_at_all() -> None:
 
 
 def test_merged_pr_matching_target() -> None:
-    with _patch_cli(_pr_list_handler([_merged_pr(300, base_ref="main")])):
+    with _patch_cli(_graphql_handler([_merged_node(300, base_ref="main")])):
         result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
 
     assert result.pr_state == "merged"
@@ -125,12 +158,12 @@ def test_merged_pr_matching_target() -> None:
 
 
 def test_multiple_open_prs_one_matches() -> None:
-    prs = [
-        _open_pr(400, base_ref="develop"),
-        _open_pr(401, base_ref="main"),
+    nodes = [
+        _open_node(400, base_ref="develop"),
+        _open_node(401, base_ref="main"),
     ]
 
-    with _patch_cli(_pr_list_handler(prs)):
+    with _patch_cli(_graphql_handler(nodes)):
         result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
 
     assert result.pr_state == "open"
@@ -144,12 +177,12 @@ def test_multiple_open_prs_one_matches() -> None:
 
 
 def test_multiple_open_prs_none_match() -> None:
-    prs = [
-        _open_pr(500, base_ref="develop"),
-        _open_pr(501, base_ref="staging"),
+    nodes = [
+        _open_node(500, base_ref="develop"),
+        _open_node(501, base_ref="staging"),
     ]
 
-    with _patch_cli(_pr_list_handler(prs)):
+    with _patch_cli(_graphql_handler(nodes)):
         result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
 
     assert result.pr_state == "none"
@@ -163,7 +196,7 @@ def test_multiple_open_prs_none_match() -> None:
 
 
 def test_closed_pr_matching_target() -> None:
-    with _patch_cli(_pr_list_handler([_closed_pr(800, base_ref="main")])):
+    with _patch_cli(_graphql_handler([_closed_node(800, base_ref="main")])):
         result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
 
     assert result.pr_state == "closed"
@@ -179,13 +212,13 @@ def test_closed_pr_matching_target() -> None:
 
 def test_merged_takes_precedence_over_closed() -> None:
     # A branch whose first PR was closed and whose second PR landed: the single
-    # --state=all query returns both, and local dispatch must prefer merged.
-    prs = [
-        _merged_pr(820, base_ref="main"),
-        _closed_pr(810, base_ref="main"),
+    # query returns both, and local dispatch must prefer merged.
+    nodes = [
+        _merged_node(820, base_ref="main"),
+        _closed_node(810, base_ref="main"),
     ]
 
-    with _patch_cli(_pr_list_handler(prs)):
+    with _patch_cli(_graphql_handler(nodes)):
         result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
 
     assert result.pr_state == "merged"
@@ -193,33 +226,28 @@ def test_merged_takes_precedence_over_closed() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Open PR detail is fetched in a single combined `gh pr view` call
+# Open PR detail (checks, reviews, comments) comes from the single graphql call
 # ---------------------------------------------------------------------------
 
 
-def test_open_pr_details_fetched_in_single_view_call() -> None:
-    view_calls: list[list] = []
+def test_open_pr_details_fetched_in_single_graphql_call() -> None:
+    calls: list[list] = []
+
+    node = _open_node(
+        42,
+        check_state="SUCCESS",
+        reviews=[{"state": "APPROVED", "author": {"login": "alice"}}],
+        threads=[
+            {
+                "isResolved": False,
+                "comments": {"nodes": [{"author": {"login": "bob"}, "path": "a.py", "line": 3, "body": "fix"}]},
+            }
+        ],
+    )
 
     def handler(cmd, _working_dir):  # noqa: ANN001
-        if "list" in cmd:
-            return _make_finished(json.dumps([_open_pr(42)]))
-        if "view" in cmd:
-            view_calls.append(cmd)
-            return _make_finished(
-                json.dumps(
-                    {
-                        "statusCheckRollup": [{"status": "COMPLETED", "conclusion": "SUCCESS"}],
-                        "reviews": [{"state": "APPROVED", "author": {"login": "alice"}}],
-                        "reviewThreads": [
-                            {
-                                "isResolved": False,
-                                "comments": [{"author": {"login": "bob"}, "path": "a.py", "line": 3, "body": "fix"}],
-                            }
-                        ],
-                    }
-                )
-            )
-        return _make_finished("[]")
+        calls.append(cmd)
+        return _make_finished(_graphql_stdout([node]))
 
     with _patch_cli(handler):
         result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
@@ -228,43 +256,124 @@ def test_open_pr_details_fetched_in_single_view_call() -> None:
     assert result.pipeline_status == "passed"
     assert [a.name for a in result.approvals] == ["alice"]
     assert len(result.unresolved_comments) == 1
-    # Exactly one `gh pr view`, and it bundles all three JSON fields in one call.
-    assert len(view_calls) == 1
-    assert view_calls[0][-1] == "statusCheckRollup,reviews,reviewThreads"
+    assert result.unresolved_comments[0].author == "bob"
+    # Exactly one CLI call, and it is a `gh api graphql` request (not the old
+    # `gh pr list` + `gh pr view` pair).
+    assert len(calls) == 1
+    assert calls[0][:3] == ["gh", "api", "graphql"]
 
 
 # ---------------------------------------------------------------------------
-# A non-rate-limit failure on the detail call still reports the open PR
+# Regression for the shipped bug: a failing check must reach pipeline_status.
+# An invalid `gh pr view --json` field used to poison the whole detail fetch,
+# so a failing CI never surfaced. The graphql rollup state must now map through.
 # ---------------------------------------------------------------------------
 
 
-def test_open_pr_detail_failure_degrades_gracefully() -> None:
+def test_failed_check_rollup_surfaces_as_failed_pipeline() -> None:
+    node = _open_node(59, check_state="FAILURE")
+    with _patch_cli(_graphql_handler([node])):
+        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+
+    assert result.pr_state == "open"
+    assert result.pr_iid == 59
+    assert result.pipeline_status == "failed"
+
+
+@pytest.mark.parametrize(
+    ("rollup_state", "expected"),
+    [
+        ("FAILURE", "failed"),
+        ("ERROR", "failed"),
+        ("PENDING", "running"),
+        ("EXPECTED", "running"),
+        ("SUCCESS", "passed"),
+        (None, None),
+        ("SOMETHING_NEW", None),
+    ],
+)
+def test_status_check_rollup_state_maps_to_pipeline_status(rollup_state: str | None, expected: str | None) -> None:
+    node = _open_node(10, check_state=rollup_state)
+    with _patch_cli(_graphql_handler([node])):
+        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+
+    assert result.pipeline_status == expected
+
+
+# ---------------------------------------------------------------------------
+# The query must request the fields the parser reads, via `gh api graphql`.
+# This is the unit-level guard against regressing to the broken approach
+# (mocks can never exercise real gh field validation — see the live test below).
+# ---------------------------------------------------------------------------
+
+
+def test_graphql_query_requests_the_fields_the_parser_reads() -> None:
+    captured: list[list] = []
+
     def handler(cmd, _working_dir):  # noqa: ANN001
-        if "list" in cmd:
-            return _make_finished(json.dumps([_open_pr(60)]))
-        if "view" in cmd:
-            return _make_finished("", returncode=1, stderr="HTTP 500 Internal Server Error")
-        return _make_finished("[]")
+        captured.append(cmd)
+        return _make_finished(_graphql_stdout([]))
+
+    with _patch_cli(handler):
+        fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+
+    assert len(captured) == 1
+    cmd = captured[0]
+    assert cmd[:3] == ["gh", "api", "graphql"]
+    query = _captured_query(cmd)
+    # Every field the parser navigates must be present in the query.
+    for field in ("statusCheckRollup", "state", "baseRefName", "latestReviews", "reviewThreads", "commits"):
+        assert field in query, f"query is missing field {field!r}"
+    # `reviewThreads` is requested directly (it is a valid GraphQL PullRequest
+    # field, unlike `gh pr view --json`'s curated subset that shipped the bug).
+    assert "reviewThreads" in query
+
+
+# ---------------------------------------------------------------------------
+# A non-rate-limit CLI failure is surfaced as its classified category.
+# (With a single combined call there is no partial result to degrade to.)
+# ---------------------------------------------------------------------------
+
+
+def test_transient_cli_failure_surfaces_error() -> None:
+    def handler(cmd, _working_dir):  # noqa: ANN001
+        return _make_finished("", returncode=1, stderr="HTTP 500 Internal Server Error")
 
     with _patch_cli(handler):
         result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
 
-    assert result.pr_state == "open"
-    assert result.pr_iid == 60
-    assert result.pipeline_status is None
-    assert result.error_category is None
+    assert result.pr_state == "none"
+    assert result.error_category == "transient"
+    assert result.error_provider == "github"
 
 
 # ---------------------------------------------------------------------------
-# Rate-limit errors surface as a rate_limited category (list and detail calls)
+# An unknown-field / usage error is NOT misclassified as not_authenticated.
+# gh's help text lists "author", which used to match the loose 'auth' check.
 # ---------------------------------------------------------------------------
 
 
-def test_rate_limit_on_list_surfaces_error() -> None:
+def test_unknown_field_usage_error_not_classified_as_not_authenticated() -> None:
+    stderr = 'Unknown JSON field: "reviewThreads"\nAvailable fields:\n  author\n  authorAssociation\n  state\n'
+
     def handler(cmd, _working_dir):  # noqa: ANN001
-        if "list" in cmd:
-            return _make_finished("", returncode=1, stderr="API rate limit exceeded")
-        return _make_finished("[]")
+        return _make_finished("", returncode=1, stderr=stderr)
+
+    with _patch_cli(handler):
+        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+
+    assert result.error_category != "not_authenticated"
+    assert result.error_category == "transient"
+
+
+# ---------------------------------------------------------------------------
+# Rate-limit errors surface as a rate_limited category
+# ---------------------------------------------------------------------------
+
+
+def test_rate_limit_surfaces_error() -> None:
+    def handler(cmd, _working_dir):  # noqa: ANN001
+        return _make_finished("", returncode=1, stderr="HTTP 403: API rate limit exceeded for user")
 
     with _patch_cli(handler):
         result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
@@ -274,16 +383,71 @@ def test_rate_limit_on_list_surfaces_error() -> None:
     assert result.error_provider == "github"
 
 
-def test_rate_limit_on_detail_surfaces_error() -> None:
+def test_secondary_rate_limit_surfaces_error() -> None:
     def handler(cmd, _working_dir):  # noqa: ANN001
-        if "list" in cmd:
-            return _make_finished(json.dumps([_open_pr(70)]))
-        if "view" in cmd:
-            return _make_finished("", returncode=1, stderr="HTTP 403: API rate limit exceeded for user")
-        return _make_finished("[]")
+        return _make_finished("", returncode=1, stderr="You have exceeded a secondary rate limit.")
 
     with _patch_cli(handler):
         result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
 
     assert result.error_category == "rate_limited"
     assert result.error_provider == "github"
+
+
+# ---------------------------------------------------------------------------
+# Malformed / missing repository data degrades to no-PR rather than crashing.
+# ---------------------------------------------------------------------------
+
+
+def test_null_repository_in_payload_returns_none() -> None:
+    def handler(cmd, _working_dir):  # noqa: ANN001
+        return _make_finished(json.dumps({"data": {"repository": None}}))
+
+    with _patch_cli(handler):
+        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+
+    assert result.pr_state == "none"
+    assert result.error_category is None
+
+
+# ---------------------------------------------------------------------------
+# Opt-in: validate the real query against GitHub's live GraphQL schema.
+#
+# Mocked tests cannot catch an invalid field name — that is exactly how the
+# `reviewThreads` bug shipped. Set SCULPTOR_PR_STATUS_LIVE_GH_TEST=1 (with an
+# authenticated `gh`) to run the actual query so an unrecognized field fails
+# loudly with a non-zero exit.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(
+    not os.environ.get("SCULPTOR_PR_STATUS_LIVE_GH_TEST"),
+    reason="opt-in: set SCULPTOR_PR_STATUS_LIVE_GH_TEST=1 to validate against real GitHub",
+)
+def test_graphql_query_is_valid_against_live_github() -> None:
+    if shutil.which("gh") is None:
+        pytest.skip("gh CLI not available")
+    result = run_blocking(
+        [
+            "gh",
+            "api",
+            "graphql",
+            "-f",
+            f"query={_GRAPHQL_PR_QUERY}",
+            "-F",
+            "owner=imbue-ai",
+            "-F",
+            "name=sculptor",
+            "-f",
+            "branch=main",
+            "-F",
+            f"limit={_PR_QUERY_LIMIT}",
+        ],
+        timeout=30.0,
+        is_checked=False,
+        cwd=Path(__file__).parent,
+    )
+    assert result.returncode == 0, f"gh api graphql rejected the query: {result.stderr}"
+    payload = json.loads(result.stdout)
+    nodes = payload["data"]["repository"]["pullRequests"]["nodes"]
+    assert isinstance(nodes, list)

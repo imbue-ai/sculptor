@@ -205,6 +205,13 @@ export const isRichMarkdownRenderingEnabledAtom = atom<boolean>(
 // new-workspace form); an already-created pi agent keeps running regardless.
 export const isPiAgentEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enablePiAgent ?? false);
 
+// Frontend plugin system (experimental — off by default). Gates plugin
+// loading at boot and the Plugins settings section. Enabling takes effect
+// immediately (PluginLoader bootstraps when the flag turns on); disabling only
+// fully takes effect after a reload, since already-loaded plugins are not
+// unloaded mid-session.
+export const isFrontendPluginsEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableFrontendPlugins ?? false);
+
 // Agent defaults
 export const isDefaultFastModeAtom = atom<boolean>((get) => get(userConfigAtom)?.defaultFastMode ?? false);
 

@@ -1,8 +1,5 @@
 import typer
 
-from sculpt.auth import get_authenticated_client as get_authenticated_client
-from sculpt.auth import get_default_base_url as get_default_base_url
-from sculpt.auth import MODEL_MAPPING as MODEL_MAPPING
 from sculpt.commands.agent import agent_app
 from sculpt.commands.repo import repo_app
 from sculpt.commands.run import run_cmd

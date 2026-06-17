@@ -121,7 +121,8 @@ def test_delete_idle_task_finalizes_immediately(
     # The task should be fully deleted, not stuck in is_deleting.
     with user_session.open_transaction(test_service_collection) as transaction:
         # get_task filters out deleted tasks, so use get_all_tasks to find it.
-        all_tasks = transaction.get_all_tasks()  # pyre-fixme[16]
+        # pyrefly: ignore [missing-attribute]
+        all_tasks = transaction.get_all_tasks()
         deleted_task = next((t for t in all_tasks if t.object_id == task.object_id), None)
         assert deleted_task is not None, "Task should still exist in DB"
         assert deleted_task.is_deleted, "Idle task should be immediately finalized as deleted"
