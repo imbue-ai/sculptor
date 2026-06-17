@@ -67,9 +67,12 @@ export const validateManifest = (manifest: PluginManifest): Error | null => {
   return null;
 };
 
+/** Normalize a user-entered source for storage/comparison: trim and drop trailing slashes. */
+const normalizeSource = (raw: string): string => raw.trim().replace(/\/+$/, "");
+
 /** Turn a user-entered source (URL or directory) into a manifest URL. */
 const normalizeManifestUrl = (source: string): string => {
-  const trimmed = source.trim().replace(/\/+$/, "");
+  const trimmed = normalizeSource(source);
   return trimmed.endsWith(".json") ? trimmed : `${trimmed}/manifest.json`;
 };
 
@@ -177,7 +180,10 @@ export class PluginManager {
 
   /** Adds a user source (persisted) and loads it immediately. No-op if duplicate. */
   async addSource(store: JotaiStore, rawSource: string): Promise<void> {
-    const source = rawSource.trim();
+    // Normalize (trim + drop trailing slashes) so `/plugins/foo` and
+    // `/plugins/foo/` can't be stored as distinct sources or slip past the
+    // duplicate/builtin guard below.
+    const source = normalizeSource(rawSource);
     if (!source) return;
     const existing = store.get(pluginSourcesAtom);
     if (existing.includes(source) || this.builtinSources.includes(source)) return;
@@ -344,6 +350,14 @@ export class PluginManager {
     });
   }
 
+  /** Membership test over the live plugin ids without allocating — the guard below runs per dev cache event. */
+  private isRegisteredPluginId(candidate: string): boolean {
+    for (const pluginId of this.pluginIdBySource.values()) {
+      if (pluginId === candidate) return true;
+    }
+    return false;
+  }
+
   /**
    * Dev-only guard for the shared QueryClient's key-namespace convention:
    * host keys start with the reserved "sculptor" prefix, plugin keys with the
@@ -356,7 +370,7 @@ export class PluginManager {
       if (event.type !== "added") return;
       const first = event.query.queryKey[0];
       if (first === SCULPTOR_QUERY_KEY_PREFIX) return;
-      if (typeof first === "string" && [...this.pluginIdBySource.values()].includes(first)) return;
+      if (typeof first === "string" && this.isRegisteredPluginId(first)) return;
       console.warn(
         `[plugins] query key outside any namespace: ${JSON.stringify(event.query.queryKey)} — ` +
           `host keys must start with "${SCULPTOR_QUERY_KEY_PREFIX}", plugin keys with the plugin id.`,

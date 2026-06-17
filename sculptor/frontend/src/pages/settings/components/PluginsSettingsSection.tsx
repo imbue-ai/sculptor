@@ -53,6 +53,7 @@ export const PluginsSettingsSection = (): ReactElement => {
           style={{ flexGrow: 1 }}
           placeholder="https://localhost:5174/my-plugin or /plugins/my-plugin"
           value={draft}
+          disabled={isBusy}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") void handleAdd();

@@ -206,8 +206,10 @@ export const isRichMarkdownRenderingEnabledAtom = atom<boolean>(
 export const isPiAgentEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enablePiAgent ?? false);
 
 // Frontend plugin system (experimental — off by default). Gates plugin
-// loading at boot and the Plugins settings section. Plugins load once per
-// page load, so toggling takes effect after an app reload.
+// loading at boot and the Plugins settings section. Enabling takes effect
+// immediately (PluginLoader bootstraps when the flag turns on); disabling only
+// fully takes effect after a reload, since already-loaded plugins are not
+// unloaded mid-session.
 export const isFrontendPluginsEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableFrontendPlugins ?? false);
 
 // Agent defaults

@@ -187,6 +187,9 @@ describe("PluginManager", () => {
     await manager.addSource(store, "/plugins/builtin");
     await manager.addSource(store, "/plugins/alpha");
     await manager.addSource(store, "/plugins/alpha");
+    // Trailing-slash and whitespace variants normalize to the same source.
+    await manager.addSource(store, "/plugins/alpha/");
+    await manager.addSource(store, "  /plugins/builtin/  ");
 
     expect(loaded).toEqual(["/plugins/alpha/manifest.json"]);
     expect(store.get(pluginSourcesAtom)).toEqual(["/plugins/alpha"]);
