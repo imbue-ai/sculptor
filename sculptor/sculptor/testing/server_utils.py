@@ -163,11 +163,10 @@ class SculptorFactory:
         electron_frontend: "ElectronFrontend | None" = None
         artifacts_recorder: "ArtifactsRecorder | None" = None
         if self.launch_mode == "electron":
-            electron_frontend, page, context = self._launch_electron_frontend()
-            # Register the CDP-acquired context so ``--tracing`` captures it; the
-            # browser path gets this for free via the ``page`` fixture's context.
-            artifacts_recorder = self.request.getfixturevalue("_artifacts_recorder")
-            artifacts_recorder.on_did_create_browser_context(context)
+            # _launch_electron_frontend registers the context for tracing and tears
+            # the shell back down if that registration fails, so a setup error after
+            # launch can't leak the Electron + Vite process.
+            electron_frontend, page, context, artifacts_recorder = self._launch_electron_frontend()
         else:
             page = self.request.getfixturevalue("page")
             configure_page(page, timeout_ms=self.default_timeout_ms)
@@ -234,22 +233,41 @@ class SculptorFactory:
         if not specimen_server.is_unexpected_error_caused_by_test and failure_line_during_test is not None:
             raise RuntimeError(f"Sculptor server emitted a line with ERROR: {failure_line_during_test}")
 
-    def _launch_electron_frontend(self) -> "tuple[ElectronFrontend, Page, BrowserContext]":
+    def _launch_electron_frontend(
+        self,
+        *,
+        custom_backend_cmd: str | None = None,
+        extra_env: dict[str, str] | None = None,
+        env_unset_keys: tuple[str, ...] = (),
+    ) -> "tuple[ElectronFrontend, Page, BrowserContext, ArtifactsRecorder]":
         """Launch a non-packaged Electron shell over CDP against the running backend.
 
-        Returns ``(frontend, page, context)``. The Electron main process is told
-        to connect to the already-started backend via ``SCULPTOR_API_PORT``; the
-        renderer is served by an Electron-managed Vite dev server.
+        Returns ``(frontend, page, context, artifacts_recorder)``. The Electron main
+        process is told to connect to the already-started backend via
+        ``SCULPTOR_API_PORT``; the renderer is served by an Electron-managed Vite
+        dev server. The CDP-acquired context is registered with pytest-playwright's
+        artifacts recorder so ``--tracing`` captures it (the browser path gets this
+        for free via the ``page`` fixture). If registration fails after the shell is
+        up, the shell is torn down before re-raising so it can't leak.
         """
-        electron_frontend = self._make_electron_frontend()
+        electron_frontend = self._make_electron_frontend(
+            custom_backend_cmd=custom_backend_cmd, extra_env=extra_env, env_unset_keys=env_unset_keys
+        )
         context, page = electron_frontend.__enter__()
-        return electron_frontend, page, context
+        try:
+            artifacts_recorder: ArtifactsRecorder = self.request.getfixturevalue("_artifacts_recorder")
+            artifacts_recorder.on_did_create_browser_context(context)
+        except BaseException:
+            electron_frontend.__exit__(None, None, None)
+            raise
+        return electron_frontend, page, context, artifacts_recorder
 
     def _make_electron_frontend(
         self,
         *,
         custom_backend_cmd: str | None = None,
         extra_env: dict[str, str] | None = None,
+        env_unset_keys: tuple[str, ...] = (),
     ) -> "ElectronFrontend":
         """Construct an ``ElectronFrontend`` for this factory's backend port.
 
@@ -267,6 +285,7 @@ class SculptorFactory:
             timeout_ms=self.default_timeout_ms,
             custom_backend_cmd=custom_backend_cmd,
             extra_env=extra_env,
+            env_unset_keys=env_unset_keys,
         )
 
     def _teardown_electron_factory_frontend(
@@ -317,19 +336,23 @@ class SculptorFactory:
         project_arg = f" {project_path}" if project_path is not None else ""
         backend_exec = f"exec {sys.executable} -m sculptor.cli.main --no-open-browser --port {self.port}{project_arg}"
         custom_backend_cmd = f"echo http://localhost:{self.port} && {backend_exec}"
-        # The testing environment (DATABASE_URL, sculptor folder, hidden keys,
-        # unset SESSION_TOKEN/CLAUDECODE, ...) reaches the backend as Electron's
-        # extra_env, since the custom command is the backend's parent.
+        # The testing environment (DATABASE_URL, sculptor folder, hidden keys, ...)
+        # reaches the backend as Electron's extra_env, since the custom command is the
+        # backend's parent. None-valued entries (SESSION_TOKEN, CLAUDECODE, ...) are
+        # "unset" requests: dropping them from extra_env is not enough because
+        # ElectronFrontend spreads os.environ, so a parent value would survive — hence
+        # they are passed as env_unset_keys so ElectronFrontend excludes them from the
+        # child's environment, matching the raw-backend path's unset semantics.
+        env_unset_keys = tuple(key for key, value in self.environment.items() if value is None)
         extra_env = {k: str(v) for k, v in self.environment.items() if v is not None}
         # A known session token lets Playwright's page.request calls authenticate
         # against the backend (which requires the token in custom-command mode).
         session_token = os.urandom(32).hex()
         extra_env["SCULPTOR_SESSION_TOKEN"] = session_token
 
-        electron_frontend = self._make_electron_frontend(custom_backend_cmd=custom_backend_cmd, extra_env=extra_env)
-        context, page = electron_frontend.__enter__()
-        artifacts_recorder: "ArtifactsRecorder" = self.request.getfixturevalue("_artifacts_recorder")
-        artifacts_recorder.on_did_create_browser_context(context)
+        electron_frontend, page, context, artifacts_recorder = self._launch_electron_frontend(
+            custom_backend_cmd=custom_backend_cmd, extra_env=extra_env, env_unset_keys=env_unset_keys
+        )
         try:
             context.add_cookies(
                 [
