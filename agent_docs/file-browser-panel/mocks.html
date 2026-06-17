@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>File Browser Panel — Files / Changes / Commits — Mock</title>
+<style>
+  /* ---- Radix-ish neutral palette (gray accent, matches Sculptor defaults) ---- */
+  .app {
+    --gray-1:#111111; --gray-2:#191919; --gray-3:#222222; --gray-4:#2a2a2a;
+    --gray-5:#313131; --gray-6:#3a3a3a; --gray-7:#484848; --gray-8:#606060;
+    --gray-9:#6e6e6e; --gray-10:#7b7b7b; --gray-11:#b4b4b4; --gray-12:#eeeeee;
+    --gray-a3:rgba(255,255,255,.06); --gray-a4:rgba(255,255,255,.09);
+    --gray-a5:rgba(255,255,255,.12); --gray-a8:rgba(255,255,255,.27);
+    --green-11:#3dd68c; --green-a:rgba(61,214,140,.13);
+    --red-11:#ff9592;   --red-a:rgba(255,149,146,.13);
+    --amber-11:#ffca16;
+    --radius-1:3px; --radius-2:4px; --radius-3:6px;
+    --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif;
+    --header-h:41px;
+    color-scheme: dark;
+  }
+  .app.light {
+    --gray-1:#fcfcfc; --gray-2:#f9f9f9; --gray-3:#f0f0f0; --gray-4:#e8e8e8;
+    --gray-5:#e0e0e0; --gray-6:#d9d9d9; --gray-7:#cecece; --gray-8:#bbbbbb;
+    --gray-9:#8d8d8d; --gray-10:#838383; --gray-11:#646464; --gray-12:#202020;
+    --gray-a3:rgba(0,0,0,.06); --gray-a4:rgba(0,0,0,.09);
+    --gray-a5:rgba(0,0,0,.12); --gray-a8:rgba(0,0,0,.27);
+    --green-11:#218358; --green-a:rgba(33,131,88,.10);
+    --red-11:#ce2c31;   --red-a:rgba(206,44,49,.10);
+    --amber-11:#ab6400;
+    color-scheme: light;
+  }
+
+  * { box-sizing:border-box; }
+  html,body { margin:0; }
+  body { background:#0b0b0b; font-family:var(--sans); }
+  .app { background:#0b0b0b; min-height:100vh; padding:0 0 80px; }
+  .app.light { background:#ececed; }
+
+  .pagebar {
+    position:sticky; top:0; z-index:50;
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    padding:12px 20px; background:var(--gray-1); border-bottom:1px solid var(--gray-a5);
+  }
+  .pagebar h1 { font-size:14px; color:var(--gray-12); margin:0; font-weight:600; }
+  .pagebar .sub { font-size:12px; color:var(--gray-10); }
+  .spacer { flex:1; }
+  .tabs { display:flex; gap:4px; flex-wrap:wrap; }
+  .tabbtn {
+    font:500 12.5px var(--sans); color:var(--gray-11); background:transparent;
+    border:1px solid transparent; padding:5px 11px; border-radius:var(--radius-3); cursor:pointer;
+  }
+  .tabbtn:hover { background:var(--gray-a3); color:var(--gray-12); }
+  .tabbtn.active { background:var(--gray-4); color:var(--gray-12); }
+  .themebtn {
+    font:500 12px var(--sans); color:var(--gray-11); background:var(--gray-3);
+    border:1px solid var(--gray-a5); padding:5px 10px; border-radius:var(--radius-3); cursor:pointer;
+  }
+
+  .scene { display:none; padding:22px 20px; max-width:1180px; margin:0 auto; }
+  .scene.active { display:block; }
+  .scene > h2 { font-size:15px; color:var(--gray-12); margin:6px 0 4px; }
+  .scene > p.lead { font-size:13px; color:var(--gray-11); margin:0 0 18px; max-width:820px; line-height:1.5; }
+  .caption { font-size:12px; color:var(--gray-10); margin:8px 2px 26px; line-height:1.55; max-width:860px; }
+  .caption b { color:var(--gray-11); font-weight:600; }
+  .caption code { font:11.5px var(--mono); color:var(--gray-11); background:var(--gray-3); padding:1px 5px; border-radius:var(--radius-1); }
+  .label { font-size:11px; letter-spacing:.04em; text-transform:uppercase; color:var(--gray-9); margin:0 2px 8px; font-weight:600; }
+  .keeptag { display:inline-block; font-size:10.5px; letter-spacing:.04em; text-transform:uppercase; color:var(--green-11);
+    border:1px solid var(--green-a); background:var(--green-a); border-radius:999px; padding:2px 8px; margin-left:8px; vertical-align:middle; }
+  .pin { display:inline-block; font-size:10.5px; letter-spacing:.04em; text-transform:uppercase; color:var(--amber-11);
+    border:1px solid rgba(255,202,22,.25); background:rgba(255,202,22,.10); border-radius:999px; padding:2px 8px; margin-left:8px; vertical-align:middle; }
+
+  .section {
+    background:var(--gray-1); border:1px solid var(--gray-a5); border-radius:var(--radius-3);
+    overflow:hidden; box-shadow:0 6px 22px rgba(0,0,0,.28); position:relative;
+  }
+  .section svg { width:15px; height:15px; flex-shrink:0; }
+  .ztab svg { width:14px; height:14px; }
+
+  .zonebar {
+    display:flex; align-items:center; gap:4px; height:var(--header-h);
+    padding:0 8px 0 10px; border-bottom:1px solid var(--gray-a5); background:var(--gray-2);
+  }
+  .ztab {
+    font:500 12.5px var(--sans); color:var(--gray-9); background:transparent;
+    border:0; padding:5px 9px; border-radius:var(--radius-2); cursor:pointer; display:flex; gap:6px; align-items:center;
+  }
+  .ztab .count { color:var(--gray-9); font-size:11px; }
+  .ztab.active { background:var(--gray-4); color:var(--gray-12); }
+  .ztab.active .count { color:var(--gray-11); }
+  .zoneactions { margin-left:auto; display:flex; align-items:center; gap:2px; }
+  .zoneactions .sep { width:1px; height:18px; background:var(--gray-a5); margin:0 3px; }
+
+  .md { display:flex; height:420px; }
+  .pane-list { display:flex; flex-direction:column; width:240px; flex:0 0 240px; min-width:200px; border-right:1px solid var(--gray-a5); }
+  .pane-detail { display:flex; flex-direction:column; flex:1 1 0; min-width:0; }
+  .divider { width:1px; background:var(--gray-a5); position:relative; flex:0 0 1px; }
+  .divider::after { content:""; position:absolute; inset:0 -3px; cursor:col-resize; }
+
+  /* tree-side header: search + actions */
+  .panelhdr {
+    display:flex; align-items:center; gap:6px; height:var(--header-h); flex:0 0 var(--header-h);
+    padding:0 8px 0 10px; border-bottom:1px solid var(--gray-a5);
+  }
+  /* Variant E: a dedicated full-width toolbar row (spans both panes, always
+     visible, so the toggle never moves and persists when the tree is hidden). */
+  .toolbar {
+    display:flex; align-items:center; gap:6px; height:var(--header-h); flex:0 0 var(--header-h);
+    padding:0 6px 0 10px; border-bottom:1px solid var(--gray-a5); background:var(--gray-1);
+  }
+  .toolbar .search { flex:0 1 320px; }
+  .toolbar .acts { margin-left:auto; display:flex; align-items:center; gap:2px; }
+  .toolbar .acts .sep { width:1px; height:18px; background:var(--gray-a5); margin:0 3px; }
+  .search {
+    display:flex; align-items:center; gap:6px; flex:1; min-width:0;
+    background:var(--gray-3); border:1px solid var(--gray-a5); border-radius:var(--radius-2);
+    padding:0 8px; height:26px;
+  }
+  .search svg { width:14px; height:14px; color:var(--gray-9); }
+  .search input { flex:1; min-width:0; background:transparent; border:0; outline:0; color:var(--gray-12); font:13px var(--sans); }
+  .search input::placeholder { color:var(--gray-9); }
+  .search .found { font-size:11px; color:var(--gray-9); white-space:nowrap; }
+
+  .iconbtn {
+    display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px;
+    border:0; background:transparent; color:var(--gray-11); border-radius:var(--radius-2); cursor:pointer; flex:0 0 auto;
+  }
+  .iconbtn:hover { background:var(--gray-a3); color:var(--gray-12); }
+  .iconbtn svg { width:15px; height:15px; }
+  .iconbtn.sm svg { width:14px; height:14px; }
+  .iconbtn.open { background:var(--gray-a4); color:var(--gray-12); }
+  .iconbtn .tg, .iconbtn.tg { color:var(--gray-11); }
+
+  /* viewer-side header: KEEPS the breadcrumb */
+  .diffhdr {
+    display:flex; align-items:center; gap:8px; height:var(--header-h); flex:0 0 var(--header-h);
+    padding:0 8px 0 12px; border-bottom:1px solid var(--gray-a5);
+  }
+  .diffhdr.withtoggle { padding-left:6px; }
+  .crumb { display:flex; align-items:center; min-width:0; font-size:12.5px; }
+  .crumb .dir { color:var(--gray-10); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .crumb .sep { color:var(--gray-8); margin:0 5px; }
+  .crumb .file { color:var(--gray-12); font-weight:500; white-space:nowrap; }
+  .diffhdr .hdracts { margin-left:auto; display:flex; align-items:center; gap:8px; }
+  .diffhdr .stats { display:flex; gap:8px; font:12px var(--mono); }
+  .diffhdr .stats .p { color:var(--green-11); } .diffhdr .stats .mi { color:var(--red-11); }
+  .showtree { color:var(--gray-11); }
+
+  .tree { flex:1; overflow:auto; padding:6px 4px; }
+  .trow { display:flex; align-items:center; gap:5px; height:28px; padding:0 8px 0 0; border-radius:var(--radius-2); margin:0 4px; cursor:pointer; user-select:none; }
+  .trow:hover { background:var(--gray-a3); }
+  .trow.active { background:var(--gray-a5); }
+  .trow .chev { width:14px; height:14px; color:var(--gray-9); flex:0 0 14px; display:flex; align-items:center; justify-content:center; }
+  .trow .chev svg { width:14px; height:14px; }
+  .trow .chev.open svg { transform:rotate(90deg); }
+  .trow .chev.leaf { visibility:hidden; }
+  .trow .tic { width:16px; height:16px; flex:0 0 16px; color:var(--gray-9); display:flex; align-items:center; }
+  .trow .tic svg { width:15px; height:15px; }
+  .trow.folder .tic { color:var(--gray-11); }
+  .trow .nm { font-size:13px; color:var(--gray-12); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .trow.dim .nm { color:var(--gray-11); }
+  .trow .stat { margin-left:auto; font:600 11px var(--mono); flex:0 0 auto; }
+  .trow .stat.m { color:var(--amber-11); } .trow .stat.a { color:var(--green-11); } .trow .stat.d { color:var(--red-11); }
+  .trow .lines { margin-left:auto; display:flex; gap:6px; font:11px var(--mono); flex:0 0 auto; }
+  .trow .lines .p { color:var(--green-11); } .trow .lines .mi { color:var(--red-11); }
+  .indent { flex:0 0 14px; }
+
+  .viewer { flex:1; overflow:auto; background:var(--gray-1); }
+  .code { font:12px/1.62 var(--mono); padding:6px 0; }
+  .cl { display:flex; padding:0 10px; white-space:pre; }
+  .cl .ln { width:30px; color:var(--gray-8); text-align:right; padding-right:12px; flex:0 0 auto; user-select:none; }
+  .cl .tx { color:var(--gray-12); }
+  .cl.add { background:var(--green-a); } .cl.add .sgn { color:var(--green-11); }
+  .cl.del { background:var(--red-a); } .cl.del .sgn { color:var(--red-11); }
+  .cl .sgn { width:12px; flex:0 0 12px; }
+  .tok-k { color:#c678dd; } .tok-s { color:var(--green-11); } .tok-c { color:var(--gray-9); } .tok-f { color:#61afef; }
+  .app.light .tok-k{color:#a626a4;} .app.light .tok-s{color:#50a14f;} .app.light .tok-f{color:#4078f2;}
+
+  .empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; color:var(--gray-8); }
+  .empty svg { width:30px; height:30px; } .empty span { font-size:13px; color:var(--gray-10); }
+
+  /* tree "…" menu (flat-list + collapse) shown open in the Files scene */
+  .menu {
+    position:absolute; width:206px; z-index:5;
+    background:var(--gray-2); border:1px solid var(--gray-a5); border-radius:var(--radius-3);
+    box-shadow:0 10px 28px rgba(0,0,0,.45); padding:5px;
+  }
+  .menulabel { font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--gray-9); padding:6px 8px 3px; }
+  .menuitem { display:flex; align-items:center; gap:8px; height:29px; padding:0 8px; border-radius:var(--radius-2); font-size:12.5px; color:var(--gray-12); cursor:pointer; }
+  .menuitem:hover { background:var(--gray-a3); }
+  .menuitem .check { width:13px; flex:0 0 13px; color:var(--gray-11); font-size:11px; text-align:center; }
+
+  .annot { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:var(--gray-10); background:var(--gray-2); border:1px dashed var(--gray-a5); border-radius:999px; padding:3px 10px; margin:0 0 10px; }
+  .annot b { color:var(--amber-11); font-weight:600; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:18px; align-items:start; }
+  @media (max-width:980px){ .two{ grid-template-columns:1fr; } }
+  .statebar { display:flex; align-items:center; gap:8px; margin:0 0 8px; }
+  .statebar .pill { font-size:11px; color:var(--gray-11); background:var(--gray-3); border:1px solid var(--gray-a5); padding:3px 9px; border-radius:999px; }
+</style>
+</head>
+<body>
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+  <symbol id="i-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 14 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H12a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></symbol>
+  <symbol id="i-filetext" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+  <symbol id="i-commit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><line x1="3" x2="9" y1="12" y2="12"/><line x1="15" x2="21" y1="12" y2="12"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+</svg>
+
+<div class="app" id="app">
+  <div class="pagebar">
+    <h1>File Browser Panel</h1>
+    <span class="sub">Search in the tree · refresh in the diff header · toggle hops when collapsed</span>
+    <span class="spacer"></span>
+    <div class="tabs" id="tabs">
+      <button class="tabbtn active" data-scene="files">Files</button>
+      <button class="tabbtn" data-scene="changes">Changes</button>
+      <button class="tabbtn" data-scene="commits">Commits</button>
+      <button class="tabbtn" data-scene="resize">Resize &amp; states</button>
+      <button class="tabbtn" data-scene="toggle">Collapse behavior ★</button>
+    </div>
+    <button class="themebtn" id="themebtn">◐ Light</button>
+  </div>
+
+  <!-- ============================ FILES ============================ -->
+  <section class="scene active" data-scene="files">
+    <h2>Files panel</h2>
+    <p class="lead">Search lives in the <b>tree header</b>; refresh moves into the <b>diff header</b> next to the breadcrumb. The <b>tree toggle</b> sits in the tree header while the tree is open — click it to collapse the tree, and it reappears to the left of the breadcrumb.</p>
+
+    <div class="section" id="filesSec">
+      <div class="zonebar">
+        <button class="ztab active"><svg><use href="#i-folder"/></svg>Files</button>
+        <button class="ztab">Changes <span class="count">7</span></button>
+        <button class="ztab">Commits <span class="count">12</span></button>
+        <button class="iconbtn" style="margin-left:auto" title="Add panel"><svg><use href="#i-plus"/></svg></button>
+      </div>
+      <div class="md">
+        <div class="pane-list listF" style="flex-basis:240px;width:240px">
+          <div class="panelhdr">
+            <div class="search"><svg><use href="#i-search"/></svg><input placeholder="Search files…"></div>
+            <button class="iconbtn sm open" title="View options…"><svg><use href="#i-more"/></svg></button>
+            <button class="iconbtn" title="Hide file tree" onclick="flip('F')"><svg class="tg"><use href="#i-folder-tree"/></svg></button>
+          </div>
+          <div class="tree" id="files-tree"></div>
+        </div>
+        <div class="divider dividerF"></div>
+        <div class="pane-detail">
+          <div class="diffhdr">
+            <button class="iconbtn sm showtree showF" title="Show file tree" onclick="flip('F')" style="display:none;margin-right:2px"><svg><use href="#i-folder-tree"/></svg></button>
+            <div class="crumb"><span class="dir">sculptor / frontend / src / pages / workspace / panels</span><span class="sep">/</span><span class="file">MasterDetailPanel.tsx</span></div>
+            <div class="hdracts">
+              <button class="iconbtn" title="Refresh"><svg><use href="#i-refresh"/></svg></button>
+              <button class="iconbtn sm" title="Diff options…"><svg><use href="#i-more"/></svg></button>
+            </div>
+          </div>
+          <div class="viewer"><div class="code" id="files-code"></div></div>
+        </div>
+      </div>
+      <div class="menu" style="left:150px;top:84px">
+        <div class="menulabel">File tree</div>
+        <div class="menuitem"><span class="check">✓</span> Tree view</div>
+        <div class="menuitem"><span class="check"></span> Flat list</div>
+        <div class="menuitem"><span class="check"></span> Collapse all folders</div>
+      </div>
+    </div>
+    <p class="caption"><b>Tree header:</b> <code>[🔍 search] [… tree opts] [⛛ toggle]</code>. <b>Diff header:</b> <code>[breadcrumb …] [⟳ refresh] [⋯ diff opts]</code>. Collapse the tree → its header (search + "…" + toggle) goes away and the toggle reappears left of the breadcrumb (see the Collapse-behavior tab).</p>
+  </section>
+
+  <!-- ============================ CHANGES ============================ -->
+  <section class="scene" data-scene="changes">
+    <h2>Changes panel — status colors</h2>
+    <p class="lead">Same layout; search filters the Changes tree. The diff header carries the breadcrumb, line stats, refresh, and the diff "…".</p>
+    <div class="section" id="changesSec">
+      <div class="zonebar">
+        <button class="ztab"><svg><use href="#i-folder"/></svg>Files</button>
+        <button class="ztab active">Changes <span class="count">7</span></button>
+        <button class="ztab">Commits <span class="count">12</span></button>
+        <button class="iconbtn" style="margin-left:auto" title="Add panel"><svg><use href="#i-plus"/></svg></button>
+      </div>
+      <div class="md">
+        <div class="pane-list listC2" style="flex-basis:240px;width:240px">
+          <div class="panelhdr">
+            <div class="search"><svg><use href="#i-search"/></svg><input placeholder="Search files…"></div>
+            <button class="iconbtn sm" title="View options…"><svg><use href="#i-more"/></svg></button>
+            <button class="iconbtn" title="Hide file tree" onclick="flip('C2')"><svg class="tg"><use href="#i-folder-tree"/></svg></button>
+          </div>
+          <div class="tree" id="changes-tree"></div>
+        </div>
+        <div class="divider dividerC2"></div>
+        <div class="pane-detail">
+          <div class="diffhdr">
+            <button class="iconbtn sm showtree showC2" title="Show file tree" onclick="flip('C2')" style="display:none;margin-right:2px"><svg><use href="#i-folder-tree"/></svg></button>
+            <div class="crumb"><span class="dir">sculptor / frontend / … / panels</span><span class="sep">/</span><span class="file">MasterDetailPanel.tsx</span></div>
+            <div class="hdracts">
+              <div class="stats"><span class="p">+14</span><span class="mi">−9</span></div>
+              <button class="iconbtn" title="Refresh"><svg><use href="#i-refresh"/></svg></button>
+              <button class="iconbtn sm" title="Diff options…"><svg><use href="#i-more"/></svg></button>
+            </div>
+          </div>
+          <div class="viewer"><div class="code" id="changes-code"></div></div>
+        </div>
+      </div>
+    </div>
+    <p class="caption">Status letters — modified <span style="color:var(--amber-11)">M</span>, added <span style="color:var(--green-11)">A</span>, deleted <span style="color:var(--red-11)">D</span> — and per-row line counts, exactly as today.</p>
+  </section>
+
+  <!-- ============================ COMMITS ============================ -->
+  <section class="scene" data-scene="commits">
+    <h2>Commits panel — no search</h2>
+    <p class="lead">Commits has no search, so its header is just the "…" (collapse all commits) and the toggle. Refresh + breadcrumb live in the diff header as everywhere else.</p>
+    <div class="section" id="commitsSec">
+      <div class="zonebar">
+        <button class="ztab"><svg><use href="#i-folder"/></svg>Files</button>
+        <button class="ztab">Changes <span class="count">7</span></button>
+        <button class="ztab active">Commits <span class="count">12</span></button>
+        <button class="iconbtn" style="margin-left:auto" title="Add panel"><svg><use href="#i-plus"/></svg></button>
+      </div>
+      <div class="md">
+        <div class="pane-list listCM" style="flex-basis:260px;width:260px">
+          <div class="panelhdr" style="justify-content:flex-end">
+            <button class="iconbtn sm" title="View options…"><svg><use href="#i-more"/></svg></button>
+            <button class="iconbtn" title="Hide commit list" onclick="flip('CM')"><svg class="tg"><use href="#i-folder-tree"/></svg></button>
+          </div>
+          <div class="tree" id="commits-tree"></div>
+        </div>
+        <div class="divider dividerCM"></div>
+        <div class="pane-detail">
+          <div class="diffhdr">
+            <button class="iconbtn sm showtree showCM" title="Show commit list" onclick="flip('CM')" style="display:none;margin-right:2px"><svg><use href="#i-folder-tree"/></svg></button>
+            <div class="crumb"><span class="dir">sculptor / frontend / … / panels</span><span class="sep">/</span><span class="file">MasterDetailPanel.tsx</span></div>
+            <div class="hdracts">
+              <div class="stats"><span class="p">+14</span><span class="mi">−9</span></div>
+              <button class="iconbtn" title="Refresh"><svg><use href="#i-refresh"/></svg></button>
+              <button class="iconbtn sm" title="Diff options…"><svg><use href="#i-more"/></svg></button>
+            </div>
+          </div>
+          <div class="viewer"><div class="code" id="commits-code"></div></div>
+        </div>
+      </div>
+    </div>
+    <p class="caption">The commit-list header is sparse (no search) — just collapse + toggle. If that feels too bare, those two could also move into the diff header next to refresh. Flag it if so.</p>
+  </section>
+
+  <!-- ============================ RESIZE & STATES ============================ -->
+  <section class="scene" data-scene="resize">
+    <h2>Resize behavior &amp; other states</h2>
+    <p class="lead">Widening the panel must <b>not</b> move the tree — only the viewer grows. Plus search-active and empty states.</p>
+    <p class="label">Resize — tree width identical; only the viewer absorbed the extra space</p>
+    <div class="two">
+      <div>
+        <div class="statebar"><span class="pill">narrow</span><span class="annot">tree = <b>240px</b></span></div>
+        <div class="section"><div class="md" style="height:250px">
+          <div class="pane-list" style="flex-basis:240px;width:240px"><div class="panelhdr"><div class="search"><svg><use href="#i-search"/></svg><input placeholder="Search files…"></div><button class="iconbtn"><svg class="tg"><use href="#i-folder-tree"/></svg></button></div><div class="tree" data-mini="1"></div></div>
+          <div class="divider"></div>
+          <div class="pane-detail"><div class="diffhdr"><div class="crumb"><span class="file">README.md</span></div></div><div class="viewer"><div class="code" data-mini-code="1"></div></div></div>
+        </div></div>
+      </div>
+      <div>
+        <div class="statebar"><span class="pill">wide</span><span class="annot">tree = <b>240px</b> (unchanged)</span></div>
+        <div class="section"><div class="md" style="height:250px">
+          <div class="pane-list" style="flex-basis:240px;width:240px"><div class="panelhdr"><div class="search"><svg><use href="#i-search"/></svg><input placeholder="Search files…"></div><button class="iconbtn"><svg class="tg"><use href="#i-folder-tree"/></svg></button></div><div class="tree" data-mini="1"></div></div>
+          <div class="divider"></div>
+          <div class="pane-detail"><div class="diffhdr"><div class="crumb"><span class="dir">sculptor / … / panels</span><span class="sep">/</span><span class="file">README.md</span></div></div><div class="viewer"><div class="code" data-mini-code="1"></div></div></div>
+        </div></div>
+      </div>
+    </div>
+    <p class="caption">Persist the <b>tree</b> width in pixels and let the viewer flex (today it's the inverse — viewer is a %, so the tree scales too).</p>
+
+    <p class="label" style="margin-top:18px">Search active &nbsp;·&nbsp; no file selected</p>
+    <div class="two">
+      <div>
+        <div class="statebar"><span class="pill">search filtering the tree</span></div>
+        <div class="section"><div class="md" style="height:250px">
+          <div class="pane-list" style="flex-basis:240px;width:240px"><div class="panelhdr"><div class="search"><svg><use href="#i-search"/></svg><input value="master" style="color:var(--gray-12)"><span class="found">3</span></div><button class="iconbtn"><svg class="tg"><use href="#i-folder-tree"/></svg></button></div><div class="tree" id="search-tree"></div></div>
+          <div class="divider"></div>
+          <div class="pane-detail"><div class="diffhdr"><div class="crumb"><span class="dir">sculptor / … / panels</span><span class="sep">/</span><span class="file">MasterDetailPanel.tsx</span></div></div><div class="viewer"><div class="code" data-mini-code="1"></div></div></div>
+        </div></div>
+      </div>
+      <div>
+        <div class="statebar"><span class="pill">nothing selected</span></div>
+        <div class="section"><div class="md" style="height:250px">
+          <div class="pane-list" style="flex-basis:240px;width:240px"><div class="panelhdr"><div class="search"><svg><use href="#i-search"/></svg><input placeholder="Search files…"></div><button class="iconbtn"><svg class="tg"><use href="#i-folder-tree"/></svg></button></div><div class="tree" data-mini="1"></div></div>
+          <div class="divider"></div>
+          <div class="pane-detail"><div class="empty"><svg><use href="#i-filetext"/></svg><span>Select a file to view its contents</span></div></div>
+        </div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ COLLAPSE BEHAVIOR ============================ -->
+  <section class="scene" data-scene="toggle">
+    <h2>Collapse behavior — the toggle hops</h2>
+    <p class="lead">Open: the toggle is in the tree header. Collapsed: the tree (and its header) disappears and the toggle reappears to the left of the breadcrumb in the diff header. Click the folder-tree icon in either frame.</p>
+    <div class="two">
+      <div>
+        <div class="statebar"><span class="pill">tree open</span></div>
+        <div class="section">
+          <div class="zonebar">
+            <button class="ztab active"><svg><use href="#i-folder"/></svg>Files</button>
+            <button class="ztab">Changes <span class="count">7</span></button>
+            <button class="ztab">Commits <span class="count">12</span></button>
+            <button class="iconbtn" style="margin-left:auto"><svg><use href="#i-plus"/></svg></button>
+          </div>
+          <div class="md" style="height:300px">
+            <div class="pane-list listG" style="flex-basis:230px;width:230px">
+              <div class="panelhdr">
+                <div class="search"><svg><use href="#i-search"/></svg><input placeholder="Search files…"></div>
+                <button class="iconbtn sm" title="View options…"><svg><use href="#i-more"/></svg></button>
+                <button class="iconbtn" title="Hide file tree" onclick="flip('G')"><svg class="tg"><use href="#i-folder-tree"/></svg></button>
+              </div>
+              <div class="tree" data-mini="1"></div>
+            </div>
+            <div class="divider dividerG"></div>
+            <div class="pane-detail">
+              <div class="diffhdr">
+                <button class="iconbtn sm showtree showG" title="Show file tree" onclick="flip('G')" style="display:none;margin-right:2px"><svg><use href="#i-folder-tree"/></svg></button>
+                <div class="crumb"><span class="file">MasterDetailPanel.tsx</span></div>
+                <div class="hdracts"><button class="iconbtn" title="Refresh"><svg><use href="#i-refresh"/></svg></button><button class="iconbtn sm" title="Diff options…"><svg><use href="#i-more"/></svg></button></div>
+              </div>
+              <div class="viewer"><div class="code" data-mini-code="1"></div></div>
+            </div>
+          </div>
+        </div>
+        <p class="caption" style="margin-top:8px"><b>Toggle in the tree header</b> (next to the tree "…"). Refresh sits in the diff header with the breadcrumb.</p>
+      </div>
+      <div>
+        <div class="statebar"><span class="pill">tree collapsed</span></div>
+        <div class="section">
+          <div class="zonebar">
+            <button class="ztab active"><svg><use href="#i-folder"/></svg>Files</button>
+            <button class="ztab">Changes <span class="count">7</span></button>
+            <button class="ztab">Commits <span class="count">12</span></button>
+            <button class="iconbtn" style="margin-left:auto"><svg><use href="#i-plus"/></svg></button>
+          </div>
+          <div class="md" style="height:300px">
+            <div class="pane-list listH" style="flex-basis:230px;width:230px;display:none">
+              <div class="panelhdr">
+                <div class="search"><svg><use href="#i-search"/></svg><input placeholder="Search files…"></div>
+                <button class="iconbtn sm" title="View options…"><svg><use href="#i-more"/></svg></button>
+                <button class="iconbtn" title="Hide file tree" onclick="flip('H')"><svg class="tg"><use href="#i-folder-tree"/></svg></button>
+              </div>
+              <div class="tree" data-mini="1"></div>
+            </div>
+            <div class="divider dividerH" style="display:none"></div>
+            <div class="pane-detail">
+              <div class="diffhdr">
+                <button class="iconbtn sm showtree showH" title="Show file tree" onclick="flip('H')" style="display:inline-flex;margin-right:2px"><svg><use href="#i-folder-tree"/></svg></button>
+                <div class="crumb"><span class="dir">sculptor / frontend / src / pages / workspace / panels</span><span class="sep">/</span><span class="file">MasterDetailPanel.tsx</span></div>
+                <div class="hdracts"><div class="stats"><span class="p">+14</span><span class="mi">−9</span></div><button class="iconbtn" title="Refresh"><svg><use href="#i-refresh"/></svg></button><button class="iconbtn sm" title="Diff options…"><svg><use href="#i-more"/></svg></button></div>
+              </div>
+              <div class="viewer"><div class="code" data-mini-code="1"></div></div>
+            </div>
+          </div>
+        </div>
+        <p class="caption" style="margin-top:8px"><b>Toggle to the left of the breadcrumb.</b> The tree and its header are gone; the viewer fills the panel. Click the icon to bring the tree back.</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+  const filesTree = [
+    {d:0,t:'folder',n:'container'},{d:0,t:'folder',n:'docs'},{d:0,t:'folder',n:'imbue_core'},{d:0,t:'folder',n:'scripts'},
+    {d:0,t:'folder',n:'sculptor',open:true},
+      {d:1,t:'folder',n:'frontend',open:true},
+        {d:2,t:'folder',n:'src',open:true},
+          {d:3,t:'folder',n:'pages'},
+          {d:3,t:'folder',n:'panels',open:true},
+            {d:4,t:'file',n:'MasterDetailPanel.tsx',active:true},
+            {d:4,t:'file',n:'FilesPanel.tsx'},{d:4,t:'file',n:'ChangesPanel.tsx'},{d:4,t:'file',n:'CommitsPanel.tsx'},
+      {d:1,t:'folder',n:'backend'},
+    {d:0,t:'folder',n:'tools'},
+    {d:0,t:'file',n:'CLAUDE.md'},{d:0,t:'file',n:'CONTRIBUTING.md'},{d:0,t:'file',n:'justfile'},{d:0,t:'file',n:'pyproject.toml'},{d:0,t:'file',n:'README.md'},
+  ];
+  const miniTree = [
+    {d:0,t:'folder',n:'sculptor',open:true},
+      {d:1,t:'folder',n:'frontend',open:true},
+        {d:2,t:'folder',n:'panels',open:true},
+          {d:3,t:'file',n:'MasterDetailPanel.tsx',active:true},
+          {d:3,t:'file',n:'FilesPanel.tsx'},{d:3,t:'file',n:'ChangesPanel.tsx'},
+    {d:0,t:'file',n:'CLAUDE.md'},{d:0,t:'file',n:'README.md'},{d:0,t:'file',n:'justfile'},
+  ];
+  const searchTree = [
+    {d:0,t:'file',n:'MasterDetailPanel.tsx',active:true,flat:'sculptor/…/panels'},
+    {d:0,t:'file',n:'MasterDetailPanel.module.scss',flat:'sculptor/…/panels'},
+    {d:0,t:'file',n:'masterDetail.test.tsx',flat:'sculptor/…/__tests__'},
+  ];
+  const changesTree = [
+    {d:0,t:'file',n:'MasterDetailPanel.tsx',active:true,stat:'M',p:14,mi:9},
+    {d:0,t:'file',n:'sectionLayoutAtoms.ts',stat:'M',p:6,mi:2},
+    {d:0,t:'file',n:'ResizeHandle.tsx',stat:'M',p:3,mi:3},
+    {d:0,t:'file',n:'MasterDetailHeader.tsx',stat:'A',p:48,mi:0},
+    {d:0,t:'file',n:'FileSearch.tsx',stat:'A',p:31,mi:0},
+    {d:0,t:'file',n:'DiffPanel.tsx',stat:'M',p:5,mi:7},
+    {d:0,t:'file',n:'FileBrowserPanel.tsx',stat:'D',p:0,mi:186,del:true},
+  ];
+  const commitsTree = [
+    {d:0,t:'commit',n:'Adapt migrated branch to the open-source repo layout',meta:'0810b7f · you · 2h ago',active:true},
+    {d:0,t:'commit',n:'Add a changes-vs-files panel setup to frame capture',meta:'c510f9c · you · 4h ago'},
+    {d:0,t:'commit',n:'Size the master-detail split before first paint',meta:'37685db · you · yesterday'},
+    {d:0,t:'commit',n:'Render the diff once instead of twice on expand',meta:'f493a85 · you · yesterday'},
+    {d:0,t:'commit',n:'Keep background workspaces warm through agent activity',meta:'efef6e3 · you · 2d ago'},
+  ];
+
+  function icon(id){ return '<svg><use href="#'+id+'"/></svg>'; }
+  function row(it){
+    const indents = Array.from({length:it.d}, ()=> '<span class="indent"></span>').join('');
+    if(it.t==='commit'){
+      return '<div class="trow '+(it.active?'active':'')+'" style="height:auto;padding:6px 8px">'
+        + '<span class="tic" style="color:var(--gray-11)">'+icon('i-commit')+'</span>'
+        + '<span style="display:flex;flex-direction:column;min-width:0">'
+        + '<span class="nm" style="white-space:normal">'+it.n+'</span>'
+        + '<span style="font:11px var(--mono);color:var(--gray-9)">'+it.meta+'</span></span></div>';
+    }
+    const isFolder = it.t==='folder';
+    const chev = isFolder ? '<span class="chev '+(it.open?'open':'')+'">'+icon('i-chevron')+'</span>' : '<span class="chev leaf">'+icon('i-chevron')+'</span>';
+    const tic = '<span class="tic">'+icon(isFolder?'i-folder':'i-file')+'</span>';
+    let right = '';
+    if(it.stat){ right = '<span class="stat '+it.stat.toLowerCase()+'">'+it.stat+'</span>'; }
+    else if(it.p!=null){ right = '<span class="lines"><span class="p">+'+it.p+'</span><span class="mi">−'+it.mi+'</span></span>'; }
+    let name = it.n;
+    if(it.flat){ name = it.n+' <span style="color:var(--gray-8);font-size:11px">'+it.flat+'</span>'; }
+    return '<div class="trow '+(isFolder?'folder ':'')+(it.active?'active ':'')+(it.del?'dim ':'')+'">'
+      + indents + chev + tic + '<span class="nm" '+(it.del?'style="text-decoration:line-through"':'')+'>'+name+'</span>'+right+'</div>';
+  }
+  function paint(el, data){ if(el) el.innerHTML = data.map(row).join(''); }
+
+  const previewCode = [
+    ['1','<span class="tok-c">/**</span>'],
+    ['2','<span class="tok-c"> * Master-detail layout shared by Files / Changes / Commits.</span>'],
+    ['3','<span class="tok-c"> * The tree keeps a fixed px width; the viewer flexes.</span>'],
+    ['4','<span class="tok-c"> */</span>'],
+    ['5','<span class="tok-k">export const</span> <span class="tok-f">MasterDetailPanel</span> = ({ workspaceId, stateKey, children }) =&gt; {'],
+    ['6','  <span class="tok-k">const</span> [listWidth, setListWidth] = <span class="tok-f">useListWidth</span>(stateKey);'],
+    ['7',''],
+    ['8','  <span class="tok-k">return</span> ('],
+    ['9','    &lt;<span class="tok-f">div</span> className={styles.row}&gt;'],
+    ['10','      &lt;<span class="tok-f">div</span> className={styles.list} style={{ width: listWidth }}&gt;{children}&lt;/<span class="tok-f">div</span>&gt;'],
+    ['11','      &lt;<span class="tok-f">ResizeHandle</span> axis=<span class="tok-s">"x"</span> onResize={setListWidth} /&gt;'],
+    ['12','      &lt;<span class="tok-f">div</span> className={styles.detail}&gt;'],
+    ['13','        &lt;<span class="tok-f">DiffPanel</span> workspaceId={workspaceId} stateKey={stateKey} singleFile /&gt;'],
+    ['14','      &lt;/<span class="tok-f">div</span>&gt;'],
+    ['15','    &lt;/<span class="tok-f">div</span>&gt;'],
+    ['16','  );'],
+    ['17','};'],
+  ];
+  const diffCode = [
+    ['k','11',' ','  &lt;div className={styles.row}&gt;'],
+    ['del','12','-','    &lt;div className={styles.list}&gt;{children}&lt;/div&gt;'],
+    ['add','12','+','    &lt;div className={styles.list} style={{ width: listWidth }}&gt;{children}&lt;/div&gt;'],
+    ['add','13','+','    &lt;ResizeHandle axis="x" getSize={getListSize} onResize={onResizeList} /&gt;'],
+    ['del','13','-','    &lt;ResizeHandle axis="x" getSize={getDetailSize} direction={-1} /&gt;'],
+    ['k','14',' ','    &lt;div className={styles.detail}&gt;'],
+    ['k','15',' ','      {hasDetail ? &lt;DiffPanel … singleFile /&gt; : &lt;EmptyDetail /&gt;}'],
+    ['k','16',' ','    &lt;/div&gt;'],
+    ['del','17','-','  // detail width = round((detailPercent / 100) * containerWidth)'],
+    ['add','18','+','  // list width persisted in px (min 200); detail flexes to fill'],
+    ['k','19',' ','  &lt;/div&gt;'],
+  ];
+  function paintPreview(el){ if(!el) return; el.innerHTML = previewCode.map(([ln,tx])=>'<div class="cl"><span class="ln">'+ln+'</span><span class="tx">'+tx+'</span></div>').join(''); }
+  function paintDiff(el){ if(!el) return; el.innerHTML = diffCode.map(([cls,ln,sgn,tx])=>'<div class="cl '+(cls==='add'?'add':cls==='del'?'del':'')+'"><span class="ln">'+ln+'</span><span class="sgn">'+sgn+'</span><span class="tx">'+tx+'</span></div>').join(''); }
+
+  paint(document.getElementById('files-tree'), filesTree);
+  paint(document.getElementById('changes-tree'), changesTree);
+  paint(document.getElementById('commits-tree'), commitsTree);
+  paint(document.getElementById('search-tree'), searchTree);
+  document.querySelectorAll('[data-mini]').forEach(el=>paint(el, miniTree));
+  paintPreview(document.getElementById('files-code'));
+  paintDiff(document.getElementById('changes-code'));
+  paintDiff(document.getElementById('commits-code'));
+  document.querySelectorAll('[data-mini-code]').forEach(el=>paintDiff(el));
+
+  document.getElementById('tabs').addEventListener('click', e=>{
+    const b = e.target.closest('.tabbtn'); if(!b) return;
+    document.querySelectorAll('.tabbtn').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    const s = b.dataset.scene;
+    document.querySelectorAll('.scene').forEach(x=>x.classList.toggle('active', x.dataset.scene===s));
+  });
+  document.getElementById('themebtn').addEventListener('click', ()=>{
+    const app = document.getElementById('app');
+    const light = app.classList.toggle('light');
+    document.getElementById('themebtn').textContent = light ? '◑ Dark' : '◐ Light';
+  });
+
+  function flip(v){
+    const list = document.querySelector('.list'+v); if(!list) return;
+    const hidden = list.style.display==='none';
+    list.style.display = hidden ? 'flex' : 'none';
+    const div = document.querySelector('.divider'+v); if(div) div.style.display = hidden?'block':'none';
+    const show = document.querySelector('.show'+v);
+    if(show) show.style.display = hidden ? 'none' : 'inline-flex';
+  }
+  window.flip = flip;
+</script>
+</body>
+</html>

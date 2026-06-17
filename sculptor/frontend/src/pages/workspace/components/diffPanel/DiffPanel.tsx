@@ -1,6 +1,6 @@
 import { Box, Flex, Text } from "@radix-ui/themes";
 import { useAtom, useAtomValue } from "jotai";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ElementIds, UserConfigField } from "~/api";
@@ -51,6 +51,15 @@ type DiffPanelProps = {
    * minimal control row. Always true in the in-panel master-detail viewer.
    */
   singleFile?: boolean;
+  /** Rendered before the breadcrumb in the file header (master-detail "show
+   *  tree" toggle when the tree is collapsed). */
+  headerLeading?: ReactNode;
+  /** Rendered in the file header's right cluster, before the "…" menu
+   *  (master-detail refresh button). */
+  headerActions?: ReactNode;
+  /** Dropdown items prepended to the file header's "…" menu (the tree
+   *  view-options, merged into a single menu). */
+  headerMenuItems?: ReactNode;
 };
 
 // Wait this long before showing the top progress bar; fetches that finish
@@ -95,7 +104,14 @@ const renderDiffContent = ({
   );
 };
 
-export const DiffPanel = ({ workspaceId, stateKey, singleFile = false }: DiffPanelProps): ReactElement => {
+export const DiffPanel = ({
+  workspaceId,
+  stateKey,
+  singleFile = false,
+  headerLeading,
+  headerActions,
+  headerMenuItems,
+}: DiffPanelProps): ReactElement => {
   const activeFileDiff = useActiveFileDiff(workspaceId, stateKey);
   // Only surface the loading bar when a file is open: the bar means "the diff
   // you're looking at is loading," which is meaningless over the empty "Open a
@@ -391,6 +407,9 @@ export const DiffPanel = ({ workspaceId, stateKey, singleFile = false }: DiffPan
               fileStatus={null}
               isBinary={false}
               viewOptions={viewOptions}
+              leadingControl={headerLeading}
+              extraActions={headerActions}
+              menuLeadingItems={headerMenuItems}
             />
             <Flex ref={diffContentRef} direction="column" flexGrow="1" overflow="hidden" className={styles.content}>
               <ReadOnlyPreview workspaceId={workspaceId} filePath={activeFileDiff.filePath!} />
@@ -407,6 +426,9 @@ export const DiffPanel = ({ workspaceId, stateKey, singleFile = false }: DiffPan
               fileStatus={null}
               isBinary={false}
               viewOptions={viewOptions}
+              leadingControl={headerLeading}
+              extraActions={headerActions}
+              menuLeadingItems={headerMenuItems}
             />
             <Flex ref={diffContentRef} direction="column" flexGrow="1" overflow="hidden" className={styles.content}>
               {isCommitDiffPending ? (
@@ -448,6 +470,9 @@ export const DiffPanel = ({ workspaceId, stateKey, singleFile = false }: DiffPan
               fileStatus={activeFileDiff.status}
               isBinary={activeFileDiff.isBinary}
               viewOptions={viewOptions}
+              leadingControl={headerLeading}
+              extraActions={headerActions}
+              menuLeadingItems={headerMenuItems}
             />
             <Flex ref={diffContentRef} direction="column" flexGrow="1" overflow="hidden" className={styles.content}>
               {renderContent()}

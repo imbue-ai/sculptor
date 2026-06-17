@@ -199,6 +199,10 @@ class ElementIDs(StrEnum):
     FILE_BROWSER_SEARCH_INPUT = "FILE_BROWSER_SEARCH_INPUT"
     FILE_BROWSER_SEARCH_CLOSE = "FILE_BROWSER_SEARCH_CLOSE"
     FILE_BROWSER_CHANGES_TREE = "FILE_BROWSER_CHANGES_TREE"
+    # Hide the tree pane (in the tree header) / show it again (in the diff header)
+    # for the master-detail Files / Changes / Commits panels.
+    FILE_BROWSER_HIDE_TREE_BTN = "FILE_BROWSER_HIDE_TREE_BTN"
+    DIFF_HEADER_SHOW_TREE_BTN = "DIFF_HEADER_SHOW_TREE_BTN"
     # Diff Panel
     DIFF_PANEL = "DIFF_PANEL"
     DIFF_TAB = "DIFF_TAB"

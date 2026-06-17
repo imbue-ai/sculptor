@@ -1,6 +1,6 @@
 import type { Atom } from "jotai";
 import { atom } from "jotai";
-import { atomWithStorage } from "jotai/utils";
+import { atomFamily, atomWithStorage } from "jotai/utils";
 
 import { atomWithDebouncedStorage } from "~/common/state/atoms/atomWithDebouncedStorage.ts";
 import { LAYOUT_SCOPE_GLOBAL, layoutScopeAtom, scopedLayoutStorageFamily } from "~/components/panels/atoms.ts";
@@ -58,13 +58,23 @@ export const sectionSizePercentAtom = atom(
   ) => set(sectionSizePercentFamily(get(sectionSizeScopeAtom)), update),
 );
 
-// In-panel master-detail divider, as the detail (diff) pane's percentage of the
-// panel width (REQ-DIFF-2). Global so the split carries across file panels and
-// workspaces.
-export const masterDetailDetailPercentAtom = atomWithDebouncedStorage<number>(
-  "sculptor-master-detail-percent",
-  60,
-  200,
+// In-panel master-detail layout (REQ-DIFF-2). The file tree (master/list) keeps a
+// FIXED pixel width while the viewer (detail) flexes to absorb panel resizes; the
+// user can still drag the divider to change the tree width. The width is keyed by
+// panel SCOPE ("files" / "changes" / "commits"), not the workspace — so a
+// comfortable width carries across workspaces, while each of the three panels
+// keeps its own value (independent of the others).
+export const MASTER_DETAIL_MIN_LIST_PX = 200;
+export const MASTER_DETAIL_DEFAULT_LIST_PX = 240;
+
+export const masterDetailListWidthAtomFamily = atomFamily((scope: string) =>
+  atomWithDebouncedStorage<number>(`sculptor-master-detail-list-px-${scope}`, MASTER_DETAIL_DEFAULT_LIST_PX, 200),
+);
+
+// Whether the tree pane is collapsed so the viewer fills the panel. Per panel,
+// persisted; toggled from the tree header (hide) and the diff header (show).
+export const masterDetailTreeHiddenAtomFamily = atomFamily((stateKey: string) =>
+  atomWithStorage<boolean>(`sculptor-master-detail-tree-hidden-${stateKey}`, false),
 );
 
 // ── Section splitting ────────────────────────────────────────────────

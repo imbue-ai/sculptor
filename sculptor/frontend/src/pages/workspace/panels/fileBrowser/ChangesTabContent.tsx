@@ -19,9 +19,15 @@ import type { ViewMode } from "./types.ts";
 type ChangesTabContentProps = {
   workspaceId: string;
   viewMode: ViewMode;
+  /** When non-null, filter the changed-files tree to these paths (search). */
+  searchMatchingPaths?: Set<string> | null;
 };
 
-export const ChangesTabContent = ({ workspaceId, viewMode }: ChangesTabContentProps): ReactElement => {
+export const ChangesTabContent = ({
+  workspaceId,
+  viewMode,
+  searchMatchingPaths,
+}: ChangesTabContentProps): ReactElement => {
   const workspace = useWorkspace(workspaceId);
   const hasTargetBranch = workspace?.targetBranch != null;
   const [scope, setScope] = useAtom(changesScopeAtomFamily(workspaceId));
@@ -59,6 +65,7 @@ export const ChangesTabContent = ({ workspaceId, viewMode }: ChangesTabContentPr
         workspaceId={workspaceId}
         viewMode={viewMode}
         scope={scope}
+        searchMatchingPaths={searchMatchingPaths}
         onDiscardFile={isUncommitted ? handleDiscardRequest : undefined}
       />
       <Flex flexShrink="0" p="2" className={styles.commitFooter}>

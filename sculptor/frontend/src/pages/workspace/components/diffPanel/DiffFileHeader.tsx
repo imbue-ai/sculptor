@@ -1,6 +1,6 @@
 import { DropdownMenu, Flex, IconButton } from "@radix-ui/themes";
 import { MoreHorizontal, Search, SplitSquareHorizontal } from "lucide-react";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { useMemo } from "react";
 
 import { ElementIds } from "~/api";
@@ -36,6 +36,13 @@ type DiffFileHeaderProps = {
   fileStatus: FileStatus | null;
   isBinary: boolean;
   viewOptions?: DiffViewOptions;
+  /** Rendered before the breadcrumb (e.g. the master-detail tree toggle). */
+  leadingControl?: ReactNode;
+  /** Rendered in the right-hand cluster before the "…" menu (e.g. refresh). */
+  extraActions?: ReactNode;
+  /** Dropdown items prepended to the "…" menu (e.g. the tree view-options,
+   *  merged so there is a single options menu). */
+  menuLeadingItems?: ReactNode;
 };
 
 export const DiffFileHeader = ({
@@ -47,6 +54,9 @@ export const DiffFileHeader = ({
   fileStatus,
   isBinary: isBinaryProp,
   viewOptions,
+  leadingControl,
+  extraActions,
+  menuLeadingItems,
 }: DiffFileHeaderProps): ReactElement => {
   const { dirParts, fileName } = useMemo(() => {
     const parts = filePath.split("/");
@@ -74,6 +84,7 @@ export const DiffFileHeader = ({
       className={styles.header}
       data-testid={ElementIds.DIFF_FILE_HEADER}
     >
+      {leadingControl}
       <Flex align="center" gap="0" className={styles.breadcrumb}>
         {dirParts.length > 0 && (
           <>
@@ -100,11 +111,19 @@ export const DiffFileHeader = ({
         </span>
       )}
 
+      {extraActions}
+
       <FileDropdownMenu
         context={menuContext}
         workspaceId={workspaceId}
         leadingItems={
-          viewOptions ? <DiffViewMenuItems isBinary={menuContext.isBinary} options={viewOptions} /> : undefined
+          menuLeadingItems || viewOptions ? (
+            <>
+              {menuLeadingItems}
+              {menuLeadingItems && viewOptions && <DropdownMenu.Separator />}
+              {viewOptions && <DiffViewMenuItems isBinary={menuContext.isBinary} options={viewOptions} />}
+            </>
+          ) : undefined
         }
       >
         <IconButton variant="ghost" size="1" color="gray" data-testid={ElementIds.DIFF_FILE_HEADER_MENU_TRIGGER}>

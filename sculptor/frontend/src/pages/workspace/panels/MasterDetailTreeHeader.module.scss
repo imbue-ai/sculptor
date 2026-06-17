@@ -1,0 +1,42 @@
+.header {
+  align-items: center;
+  border-bottom: 1px solid var(--gray-a5);
+  box-sizing: border-box;
+  display: flex;
+  flex-shrink: 0;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- matches the diff header / tab bar height
+  height: 41px;
+  padding-inline: var(--space-2);
+}
+
+.search {
+  align-items: center;
+  background: var(--gray-3);
+  border: 1px solid var(--gray-a5);
+  border-radius: var(--radius-2);
+  display: flex;
+  flex: 1;
+  gap: var(--space-2);
+  height: 26px;
+  min-width: 0;
+  padding: 0 var(--space-2);
+}
+
+.searchIcon {
+  color: var(--gray-9);
+  flex-shrink: 0;
+}
+
+.searchInput {
+  background: transparent;
+  border: 0;
+  color: var(--gray-12);
+  flex: 1;
+  font-size: var(--font-size-1-5);
+  min-width: 0;
+  outline: none;
+
+  &::placeholder {
+    color: var(--gray-9);
+  }
+}
