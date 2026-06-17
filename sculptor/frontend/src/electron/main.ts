@@ -68,8 +68,9 @@ const IS_LINUX = process.platform === "linux";
 // Mark the custom app scheme as a standard, secure, fetch-capable origin. This
 // must run before the app's "ready" event, so it lives at module top level.
 // The handler that actually serves files is registered after the app is ready
-// (see registerAppProtocolHandler). In development the renderer is still loaded
-// over http from the Vite dev server, so this scheme goes unused there.
+// (see registerAppProtocolHandler). In a plain `npm run dev` the renderer
+// loads over http from the Vite dev server and this scheme goes unused; the
+// integration tests opt in via SCULPTOR_USE_APP_SCHEME=1 (see below).
 protocol.registerSchemesAsPrivileged([
   {
     scheme: APP_SCHEME,
@@ -956,8 +957,9 @@ const createWindow = async (): Promise<void> => {
  * Maps each request to a file inside the bundle directory (with a path-
  * traversal guard) and streams it back via `net.fetch`, which infers the MIME
  * type from the extension. Extensionless misses fall back to the SPA shell.
- * Only meaningful for packaged builds; in development the renderer is loaded
- * from the Vite dev server and this handler is never hit.
+ * This file-serving branch is the packaged-build path; under
+ * SCULPTOR_USE_APP_SCHEME=1 (integration tests) the handler instead proxies to
+ * the Vite dev server. Only a plain `npm run dev` never hits this handler.
  */
 const registerAppProtocolHandler = (): void => {
   const bundleDir = path.join(app.getAppPath(), ".vite/build/renderer");

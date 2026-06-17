@@ -2,9 +2,10 @@
  *
  * These cover the pure helpers in ``appProtocol.ts`` — the part of the
  * protocol that is testable without an Electron runtime. The live
- * ``protocol.handle`` wiring in ``main.ts`` is only exercised in a packaged
- * build (the Electron integration tests run in dev mode, where the renderer is
- * served over http), so the security-critical path mapping is pinned here.
+ * ``protocol.handle`` wiring in ``main.ts`` is exercised by the Electron
+ * integration tests (which set SCULPTOR_USE_APP_SCHEME=1, so the renderer
+ * loads over sculptor://app and the handler proxies to Vite) and in packaged
+ * builds; this file pins the security-critical path mapping directly.
  */
 import * as path from "node:path";
 
