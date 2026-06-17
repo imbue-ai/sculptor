@@ -12,6 +12,7 @@ Tests verify:
 
 import re
 
+import pytest
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
@@ -504,6 +505,64 @@ def test_cmd_enter_in_workspace_name_creates_workspace(
 
     chat_panel = PlaywrightTaskPage(page=page).get_chat_panel()
     expect(chat_panel).to_be_visible()
+
+
+@user_story("to submit a repo path with Cmd+Enter without the New Workspace being created")
+def test_cmd_enter_in_repo_autocomplete_does_not_create_workspace(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """Cmd+Enter in the repo path autocomplete must not also create the workspace.
+
+    Regression test for SCU-1450. On the New Workspace page the user opens the
+    "Open New Repo" dialog and presses Cmd+Enter to submit a path in the repo
+    autocomplete (the dropdown covers the Add button, so Cmd+Enter is the
+    shortcut to submit). That keystroke used to bubble up to NewWorkspaceForm's
+    document-level Cmd+Enter handler, which immediately created the workspace
+    and navigated away — skipping the chance to name the branch/workspace.
+
+    The autocomplete owns that keystroke; it must not leak to the outer form.
+    """
+    page = sculptor_instance_.page
+    mod_key = get_playwright_modifier_key()
+    add_ws_page = PlaywrightAddWorkspacePage(page=page)
+
+    # Wait until the form would actually submit on Cmd+Enter: a project is
+    # selected and the branch-name preview has loaded (so submit is enabled).
+    # This guarantees the bug reproduces if the keystroke leaks through.
+    submit_button = add_ws_page.get_submit_button()
+    expect(submit_button).to_be_enabled()
+
+    # Open the "Open New Repo" dialog from the repo selector.
+    add_repo_dialog = add_ws_page.open_add_repo_dialog()
+    path_input = add_repo_dialog.get_path_input()
+
+    # Type a path and confirm the input holds it. Cmd+Enter submits the path
+    # regardless of dropdown state, so this does not depend on the host home
+    # directory listing any subdirectories (which would flake on empty-home CI).
+    path_input.fill("~/")
+    expect(path_input).to_have_value("~/")
+
+    # Submit the path with Cmd+Enter.
+    path_input.press(f"{mod_key}+Enter")
+
+    # Desired behaviour: the workspace is NOT created. Wait long enough for the
+    # (buggy) workspace-creation path to navigate to the chat panel — when the
+    # bug is present it does so within a few seconds — then conclude it did not.
+    # The 10s is a deliberate bounded wait for a negative assertion (the panel
+    # is expected to never appear), not a tightened positive timeout.
+    chat_panel = add_ws_page.get_chat_panel()
+    try:
+        expect(chat_panel).to_be_visible(timeout=10_000)
+    except AssertionError:
+        pass  # expected: no workspace created, so the chat panel never appears
+    else:
+        pytest.fail(
+            "Cmd+Enter in the repo autocomplete created the workspace and "
+            + "navigated to the chat panel (SCU-1450 regression)"
+        )
+
+    # Confirm we are still on the New Workspace page (no navigation happened).
+    expect(chat_panel).not_to_be_visible()
 
 
 # ---------------------------------------------------------------------------
