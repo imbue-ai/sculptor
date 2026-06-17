@@ -76,13 +76,17 @@ def test_home_button_is_noop_when_only_invisible_pseudo_tab_is_open(
     # toggle to".
     expect(workspace_tabs).to_have_count(0)
 
-    # Click the Home icon.
+    # With only an invisible pseudo-tab open, the toggle has nowhere to
+    # go, so useHomeToggle marks it a no-op and the Home button reflects
+    # the gate via ``aria-disabled`` rather than swallowing a click. If
+    # the invisible ``__home__`` pseudo-tab were wrongly counted as
+    # visible, the button would be enabled — so this directly pins the
+    # safety guard.
     home_button = layout.get_home_button()
-    home_button.click()
+    expect(home_button).to_be_disabled()
 
-    # Must still be on /home. With the bug, the safety check counted
-    # the invisible ``__home__`` pseudo-tab and navigated the user to
-    # ``lastNonHomeLocation`` (the workspace URL).
+    # And we're still on /home — the invisible pseudo-tab did not sneak
+    # the user back into the stale ``lastNonHomeLocation`` (workspace URL).
     expect(page).to_have_url(re.compile(r".*#/home$"))
 
 
@@ -116,7 +120,9 @@ def test_home_button_is_noop_when_only_stale_new_workspace_pseudo_tab_is_open(
     )
 
     expect(workspace_tabs).to_have_count(0)
-    layout.get_home_button().click()
+    # Same guard as the ``__home__`` case: the invisible draft pseudo-tab
+    # leaves nothing to toggle to, so the Home button is disabled.
+    expect(layout.get_home_button()).to_be_disabled()
     expect(page).to_have_url(re.compile(r".*#/home$"))
 
 
