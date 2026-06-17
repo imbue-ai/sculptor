@@ -71,6 +71,8 @@ class ElectronFrontend:
         frontend_port = self.port_manager.get_free_port()
         self._user_data_dir = tempfile.mkdtemp(prefix="sculptor_electron_")
 
+        is_headless = sys.platform == "linux" and "DISPLAY" not in os.environ and "WAYLAND_DISPLAY" not in os.environ
+
         cmd: tuple[str, ...] = (
             "npm",
             "run",
@@ -83,7 +85,15 @@ class ElectronFrontend:
         if os.getuid() == 0:
             cmd = cmd + ("--no-sandbox",)
 
-        if sys.platform == "linux" and "DISPLAY" not in os.environ and "WAYLAND_DISPLAY" not in os.environ:
+        if is_headless:
+            # Under xvfb there is no real GPU, and Chromium's GPU process then
+            # crash-loops at init (gl_context_egl "Failed to get config for
+            # surface 0" -> "Exiting GPU process due to errors during
+            # initialization"). Force software rendering so frames are produced
+            # deterministically instead of relying on that fallback recovering.
+            cmd = cmd + ("--disable-gpu",)
+
+        if is_headless:
             cmd = ("xvfb-run", "-a", "-e", "/tmp/xvfb-error.log", "-s", "-screen 0 1600x1000x16") + cmd
 
         electron_env: dict[str, str] = {
