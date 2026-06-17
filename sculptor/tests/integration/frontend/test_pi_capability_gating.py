@@ -284,6 +284,39 @@ def test_pi_model_switcher_offers_pi_models_and_accepts_a_pick(sculptor_instance
     expect(chat_panel.get_model_selector()).to_be_visible()
 
 
+@user_story("to see a freshly-created pi agent's switcher offer pi's own models before any message is sent")
+def test_fresh_pi_agent_switcher_shows_pi_models_without_a_message(sculptor_instance_: SculptorInstance) -> None:
+    """A freshly-created pi agent shows pi's OWN models in the switcher before any
+    message is sent — never the built-in Claude list.
+
+    pi's catalog is fetched when its environment is ready (not deferred to the
+    first turn), so the switcher reflects pi's models as soon as the workspace is
+    READY. FakePi scripts the catalog (`get_available_models` / `get_state`).
+    """
+    install_fake_pi_binary(sculptor_instance_.fake_bin_dir)
+    page = sculptor_instance_.page
+    # No prompt: the bug is the pre-message state of a fresh pi agent, so the
+    # switcher must already offer pi's models without a turn having run.
+    task_page = start_task_and_wait_for_ready(
+        sculptor_page=page,
+        workspace_name="Fresh Pi Models",
+        model_name=None,
+        agent_type="pi",
+    )
+    chat_panel = task_page.get_chat_panel()
+    default_model_name = _FAKE_PI_MODELS[0]["name"]
+
+    # With no message sent, the switcher already shows pi's current model.
+    expect(chat_panel.get_model_selector()).to_contain_text(default_model_name, timeout=30000)
+
+    # Its dropdown lists pi's models and never a Claude-only label from PRODUCTION_MODELS.
+    chat_panel.get_model_selector().click()
+    option_names = chat_panel.get_model_option_texts()
+    assert default_model_name in option_names, option_names
+    assert "Claude 4.6 Sonnet" not in option_names, option_names
+    page.keyboard.press("Escape")
+
+
 @pytest.mark.parametrize("harness", ["claude", "pi"], indirect=True)
 @user_story("to attach files in a pi workspace and have images and paths reach the agent")
 def test_uploads_usable_and_deliver_under_pi(sculptor_instance_: SculptorInstance, harness: HarnessTestConfig) -> None:
