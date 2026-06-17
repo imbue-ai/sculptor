@@ -4,7 +4,7 @@
 set -eu
 SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 . "$SCRIPT_DIR/_common.sh"
-: "${HOST:?set HOST in openhost.env}"
+: "${HOST:?could not derive HOST — is the oh CLI installed and logged in? (oh instance list)}"
 
 echo "== app status (confirm branch + sha match what you deployed) =="
 oh app status "$APP"

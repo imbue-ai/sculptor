@@ -5,8 +5,8 @@ description: |
   app (built from source via openhost.Dockerfile). Covers fresh deploys, updating
   or switching the deployed branch while keeping data, health-checking the live
   instance, and a full CLI-only reset to a fresh-onboarding instance. Wraps the
-  `oh` CLI; per-instance config lives in a gitignored openhost.env, and the common
-  flows are one-command scripts in this skill's scripts/ folder.
+  `oh` CLI; config is auto-derived (openhost.toml + git remote + oh CLI), and the
+  common flows are one-command scripts in this skill's scripts/ folder.
 user-invocable: true
 ---
 
@@ -23,28 +23,25 @@ into the host for any normal flow. The four common flows are wrapped in scripts
 under `scripts/`; the raw `oh` commands they run are shown alongside so you know
 what each does.
 
-## Instance config (`openhost.env`)
+## Config (auto-derived — no config file)
 
-The instance-specific values live in a gitignored file, `openhost.env`, in this
-skill's folder. The scripts source it automatically. Copy the example and fill it
-in once:
+There's nothing to fill in. `scripts/_common.sh` derives the four values every
+script needs, so any of them work from a fresh checkout:
 
-```bash
-cp .claude/skills/openhost-sculptor/openhost.env.example \
-   .claude/skills/openhost-sculptor/openhost.env
-# edit it: only HOST is personal
-```
+- `APP` — the app name, from `[app].name` in `openhost.toml` at the repo root.
+- `REPO` — the GitHub repo to build from, from the `origin` remote (normalized,
+  e.g. `git@github.com:imbue-ai/sculptor.git` → `https://github.com/imbue-ai/sculptor`).
+- `BRANCH` — the repo's current git branch.
+- `HOST` — the public URL host for `verify.sh`, derived as `$APP` under the
+  default `oh` instance's domain (`oh instance list`), e.g. `sculptor.<zone-domain>`.
 
-It sets `APP` (app name, matches `openhost.toml`), `HOST` (your instance's public
-URL host — the only personal value), `REPO` (the public GitHub repo to build
-from), and optionally `BRANCH` (defaults to the current git branch). Never commit
-`openhost.env`.
-
-To run ad-hoc `oh` commands in a shell, source it the same way the scripts do:
+To run ad-hoc `oh` commands in a shell with the same values, source `_common.sh`
+the way the scripts do (set `SCRIPT_DIR` to the `scripts/` folder first):
 
 ```bash
-set -a; . .claude/skills/openhost-sculptor/openhost.env; set +a
-: "${BRANCH:=$(git rev-parse --abbrev-ref HEAD)}"
+SCRIPT_DIR=.claude/skills/openhost-sculptor/scripts
+. "$SCRIPT_DIR/_common.sh"
+echo "$APP $REPO $BRANCH $HOST"
 ```
 
 ## Prereqs
@@ -77,8 +74,8 @@ Knowing how the container is wired explains the deploy and reset behavior below.
 
 ## Deploy / update
 
-Each script sources `openhost.env`, defaults `BRANCH` to the current git branch,
-and runs `oh` with `--wait` (the from-source build takes **~10 min** — uv sync,
+Each script derives its config via `_common.sh` (`BRANCH` is the current git
+branch) and runs `oh` with `--wait` (the from-source build takes **~10 min** — uv sync,
 frontend `npm install` / `generate-api` / `build`; don't assume it's instant).
 
 ### Fresh deploy — app name not yet in use
