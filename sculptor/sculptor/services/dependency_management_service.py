@@ -205,24 +205,48 @@ _AUTH_COMPLETE_WAIT_SECONDS = 120.0
 
 
 def _await_auth_url(process: RunningProcess) -> str | None:
-    """Poll a running ``auth login`` process for the first sign-in URL it prints.
+    """Poll a still-running ``auth login`` process for the first sign-in URL it prints.
 
-    Returns the URL as soon as it appears. Returns ``None`` if the process exits
-    first (e.g. a local browser-loopback login that needs no pasted code, or an
-    early failure) or if the URL doesn't appear within ``_AUTH_URL_WAIT_SECONDS``.
+    Returns the URL only while the process is still running and waiting for a
+    pasted code. Returns ``None`` if the process has already exited (a
+    self-completing local browser-loopback login, or an early failure — either
+    way there is no code to paste, so the URL is moot) or if no URL appears
+    within ``_AUTH_URL_WAIT_SECONDS``.
+
+    The caller must NOT hold ``_claude_auth_lock`` here: this blocks for up to
+    ``_AUTH_URL_WAIT_SECONDS`` on a misbehaving CLI.
     """
     deadline = time.monotonic() + _AUTH_URL_WAIT_SECONDS
     while True:
+        if process.is_finished():
+            return None
         match = _AUTH_URL_RE.search(process.read_stdout() + process.read_stderr())
         if match:
             return match.group(1)
-        if process.is_finished():
-            # Drain anything captured right before exit, then give up.
-            match = _AUTH_URL_RE.search(process.read_stdout() + process.read_stderr())
-            return match.group(1) if match else None
         if time.monotonic() >= deadline:
             return None
         time.sleep(0.2)
+
+
+def _terminate_process(process: RunningProcess) -> None:
+    """Best-effort terminate a process; a no-op if it already finished.
+
+    Bounded (a few seconds at most), so it is safe to call under a lock.
+    """
+    if process.is_finished():
+        return
+    try:
+        process.terminate(force_kill_seconds=2.0)
+    except Exception:
+        try:
+            process.kill_now(signal.SIGKILL)
+        except Exception:
+            pass
+
+
+def _auth_error_text(process: RunningProcess, fallback: str = "Authentication failed") -> str:
+    """Best-effort human-readable error text from a finished auth process."""
+    return (process.read_stderr() or process.read_stdout() or fallback).strip()
 
 
 class DependencyManagementService(Service):
@@ -232,8 +256,9 @@ class DependencyManagementService(Service):
     _claude_auth_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
     # The live 'auth login' process between start_auth_login() and
     # submit_auth_code(), kept alive (idling on stdin) so the user's pasted code
-    # can be written to it. Guarded by _claude_auth_lock.
-    _auth_session: RunningProcess | None = PrivateAttr(default=None)
+    # can be written to it. Only the brief reads and swaps of this field hold
+    # _claude_auth_lock — never the blocking subprocess waits.
+    _claude_auth_session: RunningProcess | None = PrivateAttr(default=None)
     # Guards _install_progress, _installing, _install_error, and
     # _progress_notifier_thread.
     # Acquired briefly, never held during I/O.
@@ -562,41 +587,56 @@ class DependencyManagementService(Service):
         if binary is None:
             return AuthStartResult(error=f"{tool.value} CLI not installed")
 
+        # Spawn the new session (abandoning any prior one) under the lock, then
+        # release it before the blocking URL wait so a slow CLI can't tie the
+        # lock up. The concurrency group owns the process, so it isn't orphaned
+        # even though it outlives this call.
         with self._claude_auth_lock:
-            # Abandon any prior in-flight session before starting a fresh one.
             self._terminate_auth_session_locked()
-            process = run_background(
+            process = self._spawn_auth_process(binary)
+            self._claude_auth_session = process
+
+        auth_url = _await_auth_url(process)
+
+        if process.is_finished():
+            # A local browser-loopback login self-completed (or failed early):
+            # no pasted code is needed.
+            success = process.returncode == 0
+            with self._claude_auth_lock:
+                self._terminate_auth_session_locked(process)
+            if success:
+                return AuthStartResult(success=True)
+            return AuthStartResult(error=_auth_error_text(process))
+
+        if auth_url is None:
+            # Still running but never surfaced a sign-in URL within the window.
+            with self._claude_auth_lock:
+                self._terminate_auth_session_locked(process)
+            return AuthStartResult(error="Timed out waiting for the sign-in URL")
+
+        # Running with a URL: leave the process waiting for the pasted code.
+        # Best-effort browser open for the local case; a no-op when headless.
+        try:
+            webbrowser.open(auth_url)
+        except Exception:
+            pass
+        return AuthStartResult(auth_url=auth_url, needs_code=True)
+
+    def _spawn_auth_process(self, binary: str) -> RunningProcess:
+        """Spawn ``<binary> auth login`` as a concurrency-group-tracked process.
+
+        Going through the group means the process is owned and reaped by it, so a
+        sign-in left in flight can't be orphaned. ``open_stdin`` keeps the CLI
+        waiting for the pasted code.
+        """
+        return self.concurrency_group.start_background_process_from_factory(
+            lambda: run_background(
                 [binary, "auth", "login"],
                 open_stdin=True,
                 timeout=_AUTH_PROCESS_TIMEOUT_SECONDS,
                 isolate_process_group=True,
             )
-            auth_url = _await_auth_url(process)
-
-            if auth_url is not None:
-                # Best-effort browser open for the local case; a no-op when headless.
-                try:
-                    webbrowser.open(auth_url)
-                except Exception:
-                    pass
-                if process.is_finished():
-                    # Loopback login already finished while we were reading the URL.
-                    success = process.returncode == 0
-                    self._terminate_auth_session_locked(process)
-                    if success:
-                        return AuthStartResult(auth_url=auth_url, success=True)
-                    error = (process.read_stderr() or process.read_stdout() or "Authentication failed").strip()
-                    return AuthStartResult(auth_url=auth_url, error=error)
-                self._auth_session = process
-                return AuthStartResult(auth_url=auth_url, needs_code=True)
-
-            # No URL surfaced: either a loopback login already completed, or it failed.
-            if process.is_finished() and process.returncode == 0:
-                self._terminate_auth_session_locked(process)
-                return AuthStartResult(success=True)
-            error = (process.read_stderr() or process.read_stdout() or "Authentication failed").strip()
-            self._terminate_auth_session_locked(process)
-            return AuthStartResult(error=error)
+        )
 
     def submit_auth_code(self, tool: Dependency, code: str) -> AuthResult:
         """Feed the code the user pasted from the sign-in page to the live auth session.
@@ -607,23 +647,26 @@ class DependencyManagementService(Service):
         if tool != Dependency.CLAUDE:
             return AuthResult(success=False, error=f"Authentication not supported for {tool.value}")
 
+        # Claim the session under the lock, then release it before the (bounded
+        # but potentially slow) wait so a hung CLI can't keep the lock held.
         with self._claude_auth_lock:
-            process = self._auth_session
+            process = self._claude_auth_session
             if process is None or process.is_finished():
                 return AuthResult(success=False, error="No sign-in is in progress. Start sign-in again.")
-            try:
-                process.write_stdin(code.strip() + "\n")
-                returncode = process.wait(timeout=_AUTH_COMPLETE_WAIT_SECONDS)
-                if returncode == 0:
-                    return AuthResult(success=True)
-                error = (process.read_stderr() or process.read_stdout() or f"Exit code {returncode}").strip()
-                return AuthResult(success=False, error=error)
-            except TimeoutExpired:
-                return AuthResult(success=False, error="Authentication timed out")
-            except Exception as e:
-                return AuthResult(success=False, error=str(e))
-            finally:
-                self._terminate_auth_session_locked(process)
+            self._claude_auth_session = None
+
+        try:
+            process.write_stdin(code.strip() + "\n")
+            returncode = process.wait(timeout=_AUTH_COMPLETE_WAIT_SECONDS)
+            if returncode == 0:
+                return AuthResult(success=True)
+            return AuthResult(success=False, error=_auth_error_text(process, fallback=f"Exit code {returncode}"))
+        except TimeoutExpired:
+            return AuthResult(success=False, error="Authentication timed out")
+        except Exception as e:
+            return AuthResult(success=False, error=str(e))
+        finally:
+            _terminate_process(process)
 
     def _terminate_auth_session_locked(self, process: RunningProcess | None = None) -> None:
         """Tear down an auth session and clear the stored handle.
@@ -631,18 +674,14 @@ class DependencyManagementService(Service):
         Must be called while holding ``_claude_auth_lock``. With no argument it
         tears down the currently-stored session; with an explicit process it
         tears that one down and clears the stored handle only if it matches.
+        The terminate itself is bounded, so holding the lock across it is fine —
+        unlike the sign-in waits, which run unlocked.
         """
-        session = process if process is not None else self._auth_session
-        if session is not None and not session.is_finished():
-            try:
-                session.terminate(force_kill_seconds=2.0)
-            except Exception:
-                try:
-                    session.kill_now(signal.SIGKILL)
-                except Exception:
-                    pass
-        if process is None or process is self._auth_session:
-            self._auth_session = None
+        session = process if process is not None else self._claude_auth_session
+        if session is not None:
+            _terminate_process(session)
+        if process is None or process is self._claude_auth_session:
+            self._claude_auth_session = None
 
     def _get_status(self) -> DependenciesStatus:
         """Compute the current status of all dependencies (no side effects)."""
