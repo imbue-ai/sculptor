@@ -40,9 +40,7 @@ describe("resolveRequestToFilePath", () => {
   });
 
   it("decodes percent-encoded paths", () => {
-    expect(resolveRequestToFilePath(BUNDLE, "sculptor://app/a%20b/c.png")).toBe(
-      path.join(BUNDLE, "a b", "c.png"),
-    );
+    expect(resolveRequestToFilePath(BUNDLE, "sculptor://app/a%20b/c.png")).toBe(path.join(BUNDLE, "a b", "c.png"));
   });
 
   it("ignores query strings and fragments (cache-bust tokens, hash routes)", () => {
