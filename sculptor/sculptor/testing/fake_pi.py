@@ -22,6 +22,13 @@ The preflight-failure path (`fake_pi:error`) emits a `response` with
 when the prompt is rejected before the agent starts (e.g. missing API
 key).
 
+The in-run failure path (`fake_pi:turn_error`) instead accepts the prompt
+(`response success:true`), starts the agent, then ends the assistant message
+with `stopReason:"error"` and an empty body carrying the reason on
+`errorMessage` — matching pi's wire shape when a turn fails mid-run (e.g. the
+selected model's provider has no key). PiAgent surfaces that reason as a
+clean, actionable error.
+
 `abort` is acknowledged with a `response` envelope and, like real pi, leaves
 the process alive for the next prompt — it does NOT exit. If a turn is in
 flight, abort preempts it and emits an `agent_end` whose assistant message
@@ -365,6 +372,22 @@ def _tool_text_payload(text: str) -> dict:
 
 def _emit_user_message_end(text: str) -> None:
     _emit({"type": "message_end", "message": _user_message(text)})
+
+
+def _emit_error_message_end(error_message: str) -> None:
+    """Emit pi's in-run failure boundary: an assistant `message_end` with an
+    empty body, `stopReason:"error"`, and the reason on `errorMessage`.
+
+    Mirrors what real pi emits when a turn fails mid-run (e.g. the selected
+    model's provider has no key): no in-stream error event, no content, the
+    reason carried only on `errorMessage`. PiAgent raises on consuming this.
+    """
+    _emit(
+        {
+            "type": "message_end",
+            "message": {"role": "assistant", "content": [], "stopReason": "error", "errorMessage": error_message},
+        }
+    )
 
 
 def _emit_agent_end(text: str) -> None:
@@ -966,6 +989,15 @@ def _find_error_directive(directives: Iterable[str]) -> str | None:
     return None
 
 
+def _find_turn_error_directive(directives: Iterable[str]) -> str | None:
+    """If any `fake_pi:turn_error` directive is present, return its message."""
+    for directive in directives:
+        name, args = _parse_directive(directive)
+        if name == "turn_error":
+            return str(args.get("message", "fake_pi turn error"))
+    return None
+
+
 def _emit_state(prompt_id: str | None, state: _SessionState) -> None:
     """Answer a `get_state` command with pi's `RpcSessionState` shape (RPC §5.1).
 
@@ -1059,6 +1091,16 @@ def _run_turn(
     error_message = _find_error_directive(directives)
     if error_message is not None:
         _emit_response("prompt", success=False, prompt_id=prompt_id, error=error_message)
+        return
+    turn_error_message = _find_turn_error_directive(directives)
+    if turn_error_message is not None:
+        # In-run failure: the prompt is accepted and the agent starts, but the
+        # turn ends in error (see _emit_error_message_end). PiAgent raises on the
+        # error message_end, so no agent_end follows.
+        _emit_response("prompt", success=True, prompt_id=prompt_id)
+        _emit({"type": "agent_start"})
+        _emit_user_message_end(prompt_text)
+        _emit_error_message_end(turn_error_message)
         return
     builder = _TurnBuilder(prompt_id=prompt_id, prompt_text=prompt_text, images=images)
     _emit_response("prompt", success=True, prompt_id=prompt_id)

@@ -1873,6 +1873,44 @@ def test_unprocessable_image_error_reaches_user_no_silent_drop() -> None:
     assert "Could not process image" in str(exc_info.value)
 
 
+def test_message_end_error_surfaces_pi_reason_not_generic_placeholder() -> None:
+    """A turn that ends in error with no body must surface pi's real reason.
+
+    Mirrors the real pi wire shape for a provider-auth failure (selecting a
+    model whose provider has no key): pi emits no in-stream error event and an
+    empty assistant message carrying the failure on ``errorMessage`` with
+    ``stopReason:"error"``. PiAgent must lift that reason into a clean,
+    actionable message rather than the generic "pi message ended in error"
+    placeholder (which drops pi's reason entirely).
+    """
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event(
+                {
+                    "type": "message_end",
+                    "message": {
+                        "role": "assistant",
+                        "content": [],
+                        "stopReason": "error",
+                        "errorMessage": "401 Authentication Fails, Your api key: ****0000 is invalid",
+                    },
+                }
+            ),
+        ]
+    )
+    with pytest.raises(PiCrashError) as exc_info:
+        agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+    text = str(exc_info.value)
+    # The generic placeholder must NOT be what the user sees.
+    assert "pi message ended in error" not in text
+    # An auth / unavailable-model failure leads with actionable guidance.
+    assert "another model" in text.lower() or "different model" in text.lower()
+    # pi's real reason is preserved as detail so debugging isn't lost.
+    assert "401" in text or "Authentication" in text
+
+
 def _drain(queue: Queue) -> list:
     out: list = []
     while not queue.empty():

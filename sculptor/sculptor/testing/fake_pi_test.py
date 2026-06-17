@@ -279,6 +279,31 @@ def test_fake_pi_rpc_error_directive_emits_failure_response_and_no_session_event
     assert _by_type(events, "agent_end") == []
 
 
+def test_fake_pi_rpc_turn_error_directive_emits_in_run_error_message_end() -> None:
+    prompt = 'fake_pi:turn_error `{"message": "401 Authentication Fails"}`'
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=_send_prompt(prompt),
+    )
+
+    assert result.returncode == 0
+    events = _parse_jsonl(result.stdout)
+    # The prompt is accepted (success:true) and the agent starts — unlike the
+    # preflight `error` path.
+    response = RpcResponse.model_validate(events[0])
+    assert response.command == "prompt"
+    assert response.success is True
+    assert _by_type(events, "agent_start") != []
+    # The turn ends in an assistant message_end carrying the reason on
+    # errorMessage with an empty body and stopReason "error".
+    assistant_ends = [e for e in _by_type(events, "message_end") if e["message"]["role"] == "assistant"]
+    assert len(assistant_ends) == 1
+    error_end = assistant_ends[0]
+    assert error_end["message"]["stopReason"] == "error"
+    assert error_end["message"]["content"] == []
+    assert error_end["message"]["errorMessage"] == "401 Authentication Fails"
+
+
 def test_fake_pi_rpc_default_response_when_no_directives_present() -> None:
     result = _run_fake_pi(
         ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],

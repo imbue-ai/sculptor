@@ -94,6 +94,7 @@ from sculptor.agents.pi_agent.output_processor import ParsedTurnStart
 from sculptor.agents.pi_agent.output_processor import ParsedUnknownEvent
 from sculptor.agents.pi_agent.output_processor import RpcResponse
 from sculptor.agents.pi_agent.output_processor import extract_assistant_text
+from sculptor.agents.pi_agent.output_processor import humanize_pi_failure_reason
 from sculptor.agents.pi_agent.output_processor import parse_rpc_message
 from sculptor.agents.pi_agent.prompt_assembly import build_attachment_instructions
 from sculptor.agents.pi_agent.prompt_assembly import build_image_block
@@ -1622,7 +1623,7 @@ class PiAgent(DefaultAgentWrapper):
         arrival order (RPC §5.1).
         """
         if parsed.command == "prompt" and parsed.id == state.prompt_id and not parsed.success:
-            message = parsed.error or "pi rejected the prompt"
+            message = humanize_pi_failure_reason(parsed.error) if parsed.error else "pi rejected the prompt"
             raise PiCrashError(message, exit_code=None, metadata=None)
         logger.debug("PiAgent received response: command={} success={}", parsed.command, parsed.success)
 
@@ -1742,8 +1743,8 @@ class PiAgent(DefaultAgentWrapper):
                 err = ParsedAssistantMessageError.model_validate(inner)
             except ValidationError:
                 err = ParsedAssistantMessageError(type="error", reason="pi reported an in-stream error")
-            text = state.accumulated_text or err.reason or "pi reported an in-stream error"
-            raise PiCrashError(text, exit_code=None, metadata=None)
+            reason = state.accumulated_text or err.reason
+            raise PiCrashError(humanize_pi_failure_reason(reason), exit_code=None, metadata=None)
         # Other inner variants (text_start / text_end / thinking_* /
         # toolcall_* / start / done) are deliberately discarded.
         logger.debug("PiAgent ignoring assistantMessageEvent variant: {}", inner_type)
@@ -1786,8 +1787,11 @@ class PiAgent(DefaultAgentWrapper):
             logger.info("PiAgent turn produced by model={}", parsed.message.model)
         stop_reason = parsed.message.stop_reason
         if stop_reason == "error" or (stop_reason == "aborted" and not self._is_abort_expected()):
-            text = extract_assistant_text(parsed.message) or state.accumulated_text or "pi message ended in error"
-            raise PiCrashError(text, exit_code=None, metadata=None)
+            # A failed turn carries no text and no in-stream error event; pi's
+            # real reason lives only on `error_message`. Lift it (after any
+            # assistant text / partial) into a clean, actionable message.
+            reason = extract_assistant_text(parsed.message) or parsed.message.error_message or state.accumulated_text
+            raise PiCrashError(humanize_pi_failure_reason(reason), exit_code=None, metadata=None)
         content = self._build_interleaved_content(parsed.message, state)
         has_tool_blocks = any(isinstance(block, ToolUseBlock) for block in content)
         if has_tool_blocks:
@@ -2283,8 +2287,8 @@ class PiAgent(DefaultAgentWrapper):
             if message.stop_reason == "aborted" and abort_expected:
                 # Expected interrupted boundary: finalize the partial below, don't raise.
                 continue
-            text = extract_assistant_text(message) or state.accumulated_text or "pi agent ended in error"
-            raise PiCrashError(text, exit_code=None, metadata=None)
+            reason = extract_assistant_text(message) or message.error_message or state.accumulated_text
+            raise PiCrashError(humanize_pi_failure_reason(reason), exit_code=None, metadata=None)
         if state.accumulated_text:
             self._output_messages.put(
                 ResponseBlockAgentMessage(
@@ -2298,8 +2302,8 @@ class PiAgent(DefaultAgentWrapper):
 
     def _handle_auto_retry_end(self, parsed: ParsedAutoRetryEnd, state: _TurnState) -> None:
         if not parsed.success:
-            text = parsed.final_error or state.accumulated_text or "pi exhausted retries"
-            raise PiCrashError(text, exit_code=None, metadata=None)
+            reason = parsed.final_error or state.accumulated_text or "pi exhausted retries"
+            raise PiCrashError(humanize_pi_failure_reason(reason), exit_code=None, metadata=None)
         # Successful retry — a new agent run is about to begin; do not yield.
 
     def _handle_compaction_start(self, state: _TurnState) -> None:
