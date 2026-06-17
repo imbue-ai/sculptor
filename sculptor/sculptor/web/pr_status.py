@@ -23,7 +23,7 @@ def fetch_pr_status(
     """Fetch PR status from GitHub for a workspace's current and target branch.
 
     Calls the gh CLI to find an open or merged PR matching the branches,
-    and if found, fetches check status, reviews, and unresolved comments.
+    and if found, surfaces check status, reviews, and unresolved comments.
 
     If no open PR matches the exact source+target pair but an open PR exists
     on the source branch targeting a different branch, the mismatch fields
@@ -55,10 +55,10 @@ def _fetch_pr_status_inner(
     """Inner implementation that raises CliStatusError on CLI failures."""
     stripped_target = strip_remote_prefix(target_branch)
 
-    # One `gh pr list` call returns every PR on this source branch regardless
-    # of state; we group by each PR's ``state`` and dispatch locally rather
-    # than issuing a separate query per state.
-    all_prs = _find_all_prs(working_dir, current_branch)
+    # One `gh api graphql` call returns every PR on this source branch (across
+    # all states) *with* its check/review/comment detail, so we group by each
+    # PR's ``state`` and dispatch locally rather than issuing a second query.
+    all_prs = _fetch_prs_with_details(working_dir, current_branch)
     open_prs = [pr for pr in all_prs if pr.get("state") == "OPEN"]
     merged_prs = [pr for pr in all_prs if pr.get("state") == "MERGED"]
     closed_prs = [pr for pr in all_prs if pr.get("state") == "CLOSED"]
@@ -67,7 +67,7 @@ def _fetch_pr_status_inner(
     # (checks, reviews, comments).
     open_match = _first_matching_target(open_prs, stripped_target)
     if open_match is not None:
-        return _build_open_pr_status(workspace_id, working_dir, open_match)
+        return _build_open_pr_status(workspace_id, open_match)
 
     # Otherwise prefer a terminal state for the exact target. Merged wins over
     # closed: GitHub PR states are disjoint (a merged PR is MERGED, never
@@ -111,8 +111,8 @@ def _fetch_pr_status_inner(
 def _first_matching_target(prs: list[dict], target_branch: str) -> dict | None:
     """Return the first PR whose base branch equals ``target_branch``, if any.
 
-    ``gh pr list`` returns PRs newest-first, so the first match is the most
-    recently created PR against that target.
+    The query orders PRs most-recently-updated first, so the first match is the
+    PR against that target the user most recently touched.
     """
     for pr in prs:
         if pr.get("baseRefName") == target_branch:
@@ -122,143 +122,159 @@ def _first_matching_target(prs: list[dict], target_branch: str) -> dict | None:
 
 def _build_open_pr_status(
     workspace_id: WorkspaceID,
-    working_dir: Path,
-    pr_data: dict,
+    pr_node: dict,
 ) -> PrStatusInfo:
-    """Build a full PrStatusInfo for an open PR (checks, reviews, comments)."""
-    pr_number = pr_data["number"]
-    details = _fetch_pr_details(working_dir, pr_number)
+    """Build a full PrStatusInfo for an open PR (checks, reviews, comments).
 
+    All detail fields already live on ``pr_node`` (the single graphql query
+    fetches them alongside the PR identity), so this does no further I/O.
+    """
     return PrStatusInfo(
         workspace_id=workspace_id,
         pr_state="open",
-        pr_iid=pr_number,
-        pr_title=pr_data.get("title"),
-        pr_web_url=pr_data.get("url"),
-        pipeline_status=_parse_check_status(details),
-        approvals=_parse_reviews(details),
-        unresolved_comments=_parse_review_comments(details),
+        pr_iid=pr_node["number"],
+        pr_title=pr_node.get("title"),
+        pr_web_url=pr_node.get("url"),
+        pipeline_status=_parse_check_status(pr_node),
+        approvals=_parse_reviews(pr_node),
+        unresolved_comments=_parse_review_comments(pr_node),
     )
 
 
-# Upper bound on PRs fetched per source branch in one `gh pr list` call. A
-# single source branch realistically has only a handful of PRs across its
-# lifetime, so one capped fetch returns every state (open/merged/closed) we
-# dispatch on without needing a per-state round trip.
-_PR_LIST_LIMIT = 30
+# Upper bound on PRs fetched per source branch in one graphql call. A single
+# source branch realistically has only a handful of PRs across its lifetime, so
+# one capped fetch (most-recently-updated first) returns every state
+# (open/merged/closed) we dispatch on. Each node also pulls check/review detail,
+# so this is deliberately small to keep the GraphQL point cost low.
+_PR_QUERY_LIMIT = 5
+
+# Single GraphQL query that replaces the old `gh pr list` + `gh pr view` pair.
+# It fetches the PR identity *and* its detail in one request, and — unlike
+# ``gh pr view --json``'s curated field subset — ``reviewThreads`` is a valid
+# field on the GraphQL ``PullRequest`` type, so unresolved-comment surfacing
+# actually works. Requesting ``statusCheckRollup { state }`` (one aggregate
+# enum) rather than every individual check context also lowers the point cost.
+# ``{owner}`` / ``{repo}`` in the field args are expanded by gh from the
+# working directory's ``origin`` remote, so no repo plumbing is needed here.
+_GRAPHQL_PR_QUERY = """
+query($owner: String!, $name: String!, $branch: String!, $limit: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequests(headRefName: $branch, first: $limit, orderBy: {field: UPDATED_AT, direction: DESC}) {
+      nodes {
+        number
+        title
+        url
+        state
+        baseRefName
+        commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+        latestReviews(first: 20) { nodes { state author { login } } }
+        reviewThreads(first: 30) {
+          nodes { isResolved comments(first: 1) { nodes { author { login } path line body } } }
+        }
+      }
+    }
+  }
+}
+"""
 
 
-def _find_all_prs(working_dir: Path, source_branch: str) -> list[dict]:
-    """Find all PRs (open, merged, or closed) for a source branch.
+def _fetch_prs_with_details(working_dir: Path, source_branch: str) -> list[dict]:
+    """Fetch all PRs (open/merged/closed) for a source branch, with detail.
 
-    ``--state=all`` returns PRs in every state; each row carries a ``state``
-    field (``OPEN`` / ``MERGED`` / ``CLOSED``) that the caller dispatches on.
-    No ``--base`` filter is applied, so the caller can also detect a PR opened
-    against a *different* target branch (the "switch target" affordance).
-    Returns up to ``_PR_LIST_LIMIT`` PRs, newest first.
+    Issues a single ``gh api graphql`` request. Each returned node carries its
+    ``state`` (``OPEN`` / ``MERGED`` / ``CLOSED``) for local dispatch, its base
+    branch (so a PR opened against a *different* target can be detected for the
+    "switch target" affordance), and the check/review/comment detail used to
+    build an open PR's full status. Returns up to ``_PR_QUERY_LIMIT`` PRs,
+    most-recently-updated first, or an empty list if the repository can't be
+    resolved.
+
+    Raises CliStatusError on any CLI failure (including rate limits, classified
+    via ``classify_cli_error``) so the poller can surface it and back off.
     """
     cmd = [
         "gh",
-        "pr",
-        "list",
-        f"--head={source_branch}",
-        "--state=all",
-        "--json",
-        "number,title,url,baseRefName,state",
-        "--limit",
-        str(_PR_LIST_LIMIT),
+        "api",
+        "graphql",
+        "-f",
+        f"query={_GRAPHQL_PR_QUERY}",
+        "-F",
+        "owner={owner}",
+        "-F",
+        "name={repo}",
+        "-f",
+        f"branch={source_branch}",
+        "-F",
+        f"limit={_PR_QUERY_LIMIT}",
     ]
     result = run_cli_with_retry(cmd, working_dir)
     if result.returncode != 0:
         raise CliStatusError(classify_cli_error(result.stderr), result.stderr)
     try:
-        prs = json.loads(result.stdout)
+        payload = json.loads(result.stdout)
     except json.JSONDecodeError as e:
-        raise CliStatusError("transient", f"Invalid JSON from gh pr list: {result.stdout[:200]}") from e
-    return prs
+        raise CliStatusError("transient", f"Invalid JSON from gh api graphql: {result.stdout[:200]}") from e
+    repository = (payload.get("data") or {}).get("repository")
+    if repository is None:
+        return []
+    return (repository.get("pullRequests") or {}).get("nodes") or []
 
 
-def _fetch_pr_details(working_dir: Path, pr_number: int) -> dict:
-    """Fetch checks, reviews, and review threads for an open PR in one call.
+def _parse_check_status(pr_node: dict) -> Literal["running", "passed", "failed"] | None:
+    """Map a PR's aggregate status-check rollup to our three-state model.
 
-    ``gh pr view`` issues a single GraphQL request no matter how many
-    ``--json`` fields are requested, so bundling ``statusCheckRollup``,
-    ``reviews``, and ``reviewThreads`` into one invocation collapses what
-    used to be three separate GraphQL round trips into one. That detail
-    fetch is the dominant per-poll cost for a workspace with an open PR, so
-    this roughly halves the GraphQL points spent polling it.
-
-    On a non-rate-limit failure this returns an empty dict so the caller
-    still reports the open PR (just without check/review detail), matching
-    the previous best-effort behaviour. A rate-limit failure is re-raised as
-    ``CliStatusError`` so the poller can surface it and back off instead of
-    silently dropping the signal.
+    Reads ``statusCheckRollup.state`` from the PR's most recent commit. GitHub
+    already collapses every check context into one ``StatusState`` enum, so we
+    map that single value instead of scanning individual checks. Returns None
+    when the commit has no checks (the rollup is null) or reports a state we
+    don't recognize.
     """
-    result = run_cli_with_retry(
-        ["gh", "pr", "view", str(pr_number), "--json", "statusCheckRollup,reviews,reviewThreads"],
-        working_dir,
-    )
-    if result.returncode != 0:
-        category = classify_cli_error(result.stderr)
-        if category == "rate_limited":
-            raise CliStatusError(category, result.stderr)
-        logger.debug("gh pr view details failed ({}): {}", category, result.stderr)
-        return {}
-    try:
-        return json.loads(result.stdout)
-    except json.JSONDecodeError:
-        logger.debug("Invalid JSON from gh pr view details: {}", result.stdout[:200])
-        return {}
-
-
-def _parse_check_status(details: dict) -> Literal["running", "passed", "failed"] | None:
-    checks = details.get("statusCheckRollup", [])
-    if not checks:
+    commit_nodes = (pr_node.get("commits") or {}).get("nodes") or []
+    if not commit_nodes:
         return None
-
-    has_running = False
-    has_failed = False
-    for check in checks:
-        conclusion = check.get("conclusion", "")
-        status = check.get("status", "")
-        if status in ("IN_PROGRESS", "QUEUED", "PENDING", "WAITING") or conclusion == "":
-            has_running = True
-        elif conclusion in ("FAILURE", "CANCELLED", "TIMED_OUT", "ERROR"):
-            has_failed = True
-
-    if has_failed:
+    rollup = (commit_nodes[0].get("commit") or {}).get("statusCheckRollup")
+    if rollup is None:
+        return None
+    state = rollup.get("state", "")
+    if state in ("FAILURE", "ERROR"):
         return "failed"
-    if has_running:
+    if state in ("PENDING", "EXPECTED"):
         return "running"
-    return "passed"
+    if state == "SUCCESS":
+        return "passed"
+    return None
 
 
-def _parse_reviews(details: dict) -> list[PrApproval]:
-    reviews = details.get("reviews", [])
-    # Keep only the latest review per author
-    latest_by_author: dict[str, PrApproval] = {}
-    for review in reviews:
+def _parse_reviews(pr_node: dict) -> list[PrApproval]:
+    """Extract approve / request-changes reviews from a PR's latest reviews.
+
+    ``latestReviews`` already returns the most recent review per reviewer, so
+    no per-author de-duplication is needed.
+    """
+    review_nodes = (pr_node.get("latestReviews") or {}).get("nodes") or []
+    approvals: list[PrApproval] = []
+    for review in review_nodes:
         state = review.get("state", "")
         if state not in ("APPROVED", "CHANGES_REQUESTED"):
             continue
-        author = review.get("author", {}).get("login", "unknown")
-        latest_by_author[author] = PrApproval(name=author, approved=state == "APPROVED")
-    return list(latest_by_author.values())
+        author = (review.get("author") or {}).get("login", "unknown")
+        approvals.append(PrApproval(name=author, approved=state == "APPROVED"))
+    return approvals
 
 
-def _parse_review_comments(details: dict) -> list[PrComment]:
-    threads = details.get("reviewThreads", [])
+def _parse_review_comments(pr_node: dict) -> list[PrComment]:
+    thread_nodes = (pr_node.get("reviewThreads") or {}).get("nodes") or []
     comments: list[PrComment] = []
-    for thread in threads:
+    for thread in thread_nodes:
         if thread.get("isResolved"):
             continue
-        thread_comments = thread.get("comments", [])
-        if not thread_comments:
+        comment_nodes = (thread.get("comments") or {}).get("nodes") or []
+        if not comment_nodes:
             continue
-        first_comment = thread_comments[0]
+        first_comment = comment_nodes[0]
         comments.append(
             PrComment(
-                author=first_comment.get("author", {}).get("login", "unknown"),
+                author=(first_comment.get("author") or {}).get("login", "unknown"),
                 file_path=first_comment.get("path", ""),
                 line=first_comment.get("line"),
                 body=first_comment.get("body", ""),
