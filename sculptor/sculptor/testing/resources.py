@@ -294,10 +294,16 @@ def _get_or_create_shared_instance(
     logger.info("[timing] SPA initial render: {:.2f}s", time.monotonic() - t2)
     logger.info("[timing] Total instance startup: {:.2f}s", time.monotonic() - t0)
 
+    # Capture the SPA's own origin (sculptor://app in Electron, the backend URL
+    # in browser mode) now that it has rendered, so between-test resets navigate
+    # to the renderer rather than the backend API URL.
+    frontend_url = page.url.split("#")[0].rstrip("/")
+
     # Build the instance
     instance = SculptorInstance(
         server=server,
         page=page,
+        frontend_url=frontend_url,
         repo=initial_repo,
         sculptor_folder=sculptor_folder,
         fake_bin_dir=fake_bin_dir,
@@ -443,6 +449,8 @@ def _create_packaged_instance(
     instance = SculptorInstance(
         server=server,
         page=page,
+        # base_url above was derived from page.url, so it is the SPA's origin.
+        frontend_url=base_url,
         repo=initial_repo,
         sculptor_folder=sculptor_folder,
         fake_bin_dir=fake_bin_dir,
@@ -556,6 +564,7 @@ def _create_custom_command_instance(
     instance = SculptorInstance(
         server=server,
         page=page,
+        frontend_url=page.url.split("#")[0].rstrip("/"),
         repo=initial_repo,
         sculptor_folder=sculptor_folder,
         fake_bin_dir=fake_bin_dir,

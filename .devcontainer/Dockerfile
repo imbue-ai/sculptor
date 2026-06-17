@@ -9,8 +9,15 @@
 
 FROM ubuntu:24.04
 
+# xvfb + xauth provide the virtual X display the Electron integration launch
+# mode needs (the harness wraps Electron in `xvfb-run` when there's no DISPLAY).
+# libgtk-3-0t64 + libnotify4 are the GTK stack full Electron links against:
+# `playwright install --with-deps chromium` only installs deps for Playwright's
+# headless Chromium, which omits GTK. (t64 is Ubuntu 24.04's time_t package
+# rename; libgtk-3-0t64 pulls in the pango/cairo/gdk-pixbuf/atk closure.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git curl ca-certificates build-essential pkg-config libssl-dev \
+        xvfb xauth libgtk-3-0t64 libnotify4 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv
@@ -39,6 +46,10 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
 # Critical for Modal snapshots — without this, some files vanish after snapshot restore.
 ENV UV_LINK_MODE=copy
 ENV NVM_DIR="/root/.nvm"
+# Put the nvm-installed node/npm on PATH for non-interactive shells: nvm only
+# wires them in per-shell, and the offload test process doesn't source nvm.
+# NODE_VERSION + NVM_DIR are set above.
+ENV PATH="${NVM_DIR}/versions/node/v${NODE_VERSION}/bin:${PATH}"
 
 WORKDIR /app
 

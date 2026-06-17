@@ -32,7 +32,7 @@ def _run_sculpt_ui(
     timeout_seconds: float = 30.0,
 ) -> tuple[int, str, str]:
     result = subprocess.run(
-        [sys.executable, "-m", "sculpt.main", "ui", *args, "--base-url", instance.base_url],
+        [sys.executable, "-m", "sculpt.main", "ui", *args, "--base-url", instance.backend_api_url],
         capture_output=True,
         text=True,
         timeout=timeout_seconds,
@@ -96,7 +96,7 @@ def test_navigate_closed_workspace_exits_3(sculptor_instance_: SculptorInstance)
     page = sculptor_instance_.page
     workspace_id = _start_empty_workspace(page)
 
-    base_url = sculptor_instance_.base_url.rstrip("/")
+    base_url = sculptor_instance_.backend_api_url.rstrip("/")
     response = page.request.patch(
         f"{base_url}/api/v1/workspaces/{workspace_id}",
         data={"is_open": False},

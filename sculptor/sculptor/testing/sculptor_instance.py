@@ -147,6 +147,11 @@ class SculptorInstance:
 
     server: SculptorServer
     page: Page
+    # Origin the SPA is served from, used for navigation (e.g. resets). In
+    # browser mode this is the backend's own URL; in Electron it's the
+    # renderer's separate origin (the Vite dev server, or sculptor://app),
+    # distinct from the backend API — so navigation must target this.
+    frontend_url: str
     repo: MockRepoState
     sculptor_folder: Path
     fake_bin_dir: Path
@@ -164,8 +169,12 @@ class SculptorInstance:
         return self._project_path
 
     @property
-    def base_url(self) -> str:
-        """The base URL of the running Sculptor backend."""
+    def backend_api_url(self) -> str:
+        """Base URL of the running Sculptor backend's HTTP API (for /api/... requests).
+
+        This is the *backend* origin, distinct in Electron from ``frontend_url``
+        (the renderer origin).
+        """
         return self.server.url
 
     # ------------------------------------------------------------------
@@ -211,7 +220,10 @@ class SculptorInstance:
         from ``self._project_path``), then removes each one through the
         Settings > Repositories UI.
         """
-        base_url = self.page.url.split("#")[0].rstrip("/")
+        # Use the backend origin, not one derived from page.url: in Electron
+        # the page origin is the renderer's (Vite, or sculptor://app), which
+        # serves no /api and which page.request can't fetch for sculptor://.
+        base_url = self.backend_api_url.rstrip("/")
         try:
             response = self.page.request.get(f"{base_url}/api/v1/projects/active")
         except Exception:
@@ -249,7 +261,7 @@ class SculptorInstance:
                 {
                     "name": "x-session-token",
                     "value": self._session_token,
-                    "url": self.base_url,
+                    "url": self.backend_api_url,
                 }
             ]
         )
@@ -305,7 +317,7 @@ class SculptorInstance:
         # tree, which cancels those pending timers.
         self._reset_user_config_defaults()
 
-        self.page.goto(f"{self.base_url}#/ws/new")
+        self.page.goto(f"{self.frontend_url}#/ws/new")
 
         # Wait for the Add Workspace page to render — raise if onboarding
         # shows instead (no shared-instance test should trigger onboarding).
@@ -374,7 +386,7 @@ class SculptorInstance:
         carrying the previous test's flags — back to the backend, undoing the
         reset before the test body runs.  See SCU-541 for the original failure.
         """
-        base_url = self.base_url.rstrip("/")
+        base_url = self.backend_api_url.rstrip("/")
         timeout = self._default_timeout_ms
         try:
             response = self.page.request.get(f"{base_url}/api/v1/config", timeout=timeout)
@@ -429,7 +441,7 @@ class SculptorInstance:
         an explicit timeout of ``_default_timeout_ms`` per call), guaranteeing
         the transaction is fully committed before we proceed.
         """
-        base_url = self.base_url.rstrip("/")
+        base_url = self.backend_api_url.rstrip("/")
         timeout = self._default_timeout_ms
         try:
             # /workspaces/recent returns all non-deleted workspaces (open and
@@ -674,6 +686,7 @@ class SculptorInstanceFactory:
             instance = SculptorInstance(
                 server=server,
                 page=sculptor_page,
+                frontend_url=sculptor_page.url.split("#")[0].rstrip("/"),
                 repo=self.base_repo,
                 sculptor_folder=self._delegate.sculptor_folder,
                 fake_bin_dir=self.fake_bin_dir,
