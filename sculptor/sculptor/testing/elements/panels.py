@@ -5,9 +5,19 @@ regardless of the default layout. Tests that need a particular panel state
 should call these helpers rather than inlining visibility checks.
 """
 
+from playwright.sync_api import Locator
 from playwright.sync_api import Page
 
 from sculptor.constants import ElementIDs
+
+
+def get_add_terminal_button(page: Page) -> Locator:
+    """Return the add-terminal toggle button locator.
+
+    Visible only when the bottom (terminal) panel is open; tests assert on
+    this to confirm the terminal is showing.
+    """
+    return page.get_by_test_id(ElementIDs.ADD_TERMINAL_BUTTON)
 
 
 def close_bottom_panel(page: Page) -> None:

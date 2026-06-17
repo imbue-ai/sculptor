@@ -54,6 +54,10 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
     def get_add_workspace_button(self) -> Locator:
         return self.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
 
+    def get_home_button(self) -> Locator:
+        """The topbar Home button that toggles between /home and the last workspace."""
+        return self.get_by_test_id(ElementIDs.HOME_BUTTON)
+
     def get_workspace_tabs(self) -> Locator:
         return self.get_by_test_id(ElementIDs.WORKSPACE_TAB)
 

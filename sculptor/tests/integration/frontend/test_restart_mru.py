@@ -18,7 +18,7 @@ import re
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
+from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.playwright_utils import trigger_root_loader
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
@@ -69,7 +69,8 @@ def test_restart_restores_active_workspace_and_agent(
             timeout=_RESTART_TIMEOUT_MS,
         )
         # Chat panel renders without a Spinner gap because rootLoader is synchronous.
-        expect(page.get_by_test_id(ElementIDs.CHAT_PANEL)).to_be_visible(timeout=_RESTART_TIMEOUT_MS)
+        task_page = PlaywrightTaskPage(page=page)
+        expect(task_page.get_chat_panel()).to_be_visible(timeout=_RESTART_TIMEOUT_MS)
 
 
 # ``test_restart_restores_draft_tab`` was removed with the modal migration.

@@ -8,11 +8,12 @@ from playwright.sync_api import expect
 
 from imbue_core.sculptor.user_config import DependencyPaths
 from imbue_core.sculptor.user_config import UserConfig
-from sculptor.constants import ElementIDs
 from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.dependency_stubs import DependencyState
 from sculptor.testing.dependency_stubs import stub_dependency
+from sculptor.testing.pages.new_workspace_modal_page import PlaywrightNewWorkspaceModalPage
 from sculptor.testing.pages.onboarding_page import PlaywrightOnboardingPage
+from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import soft_reload_page
 from sculptor.testing.resources import custom_sculptor_folder_populator
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
@@ -73,7 +74,8 @@ def test_full_onboarding_flow(sculptor_instance_factory_: SculptorInstanceFactor
         # After onboarding the user lands on an empty Home, which renders the
         # new-workspace form inline — its submit button should be visible
         # without any extra navigation (the topbar "+" is hidden there).
-        submit_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
+        modal = PlaywrightNewWorkspaceModalPage(page=page)
+        submit_button = modal.get_submit_button()
         expect(submit_button).to_be_visible(timeout=30000)
 
 
@@ -302,7 +304,7 @@ def test_back_navigation_preserves_email(sculptor_instance_factory_: SculptorIns
         expect(installation_step).to_be_visible()
 
         # Go back via the step indicator (click the first dot to return to step 1)
-        page.get_by_test_id(ElementIDs.ONBOARDING_STEP_INDICATOR_DOT).nth(0).click()
+        onboarding_page.get_step_indicator_dot(0).click()
 
         # Welcome step should be visible again
         welcome_step = onboarding_page.get_welcome_step()
@@ -404,19 +406,19 @@ def test_installation_step_skips_add_repo_when_project_exists(
         # rendered" beacon is the topbar "+" OR the inline new-workspace form's
         # submit button (on an empty Home the "+" is hidden and the inline form
         # is shown instead).
-        app_ready = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).or_(
-            page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
-        )
+        layout = PlaywrightProjectLayoutPage(page=page)
+        modal = PlaywrightNewWorkspaceModalPage(page=page)
+        app_ready = layout.get_add_workspace_button().or_(modal.get_submit_button())
         expect(app_ready).to_be_visible(timeout=30000)
 
         # The add-repo step should not have appeared
-        add_repo_step = page.get_by_test_id(ElementIDs.ONBOARDING_ADD_REPO_STEP)
+        add_repo_step = onboarding_page.get_add_repo_step()
         expect(add_repo_step).not_to_be_visible()
 
         # And the new-workspace form should be usable: on the empty Home it
         # renders inline, so its submit button is directly reachable without a
         # "+" click (the "+" is hidden in that initial state).
-        start_task_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
+        start_task_button = modal.get_submit_button()
         expect(start_task_button).to_be_visible()
 
 

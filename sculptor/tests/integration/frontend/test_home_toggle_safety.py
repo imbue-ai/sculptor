@@ -22,7 +22,7 @@ import re
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
+from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import blur_active_element
 from sculptor.testing.playwright_utils import navigate_to_home_page
 from sculptor.testing.playwright_utils import set_local_storage_item_with_storage_event
@@ -37,6 +37,7 @@ def test_home_button_is_noop_when_only_invisible_pseudo_tab_is_open(
     sculptor_instance_: SculptorInstance,
 ) -> None:
     page = sculptor_instance_.page
+    layout = PlaywrightProjectLayoutPage(page=page)
 
     # Create a workspace and visit it. Visiting populates
     # lastNonHomeLocationAtom (in-memory) with the workspace URL — this
@@ -55,12 +56,9 @@ def test_home_button_is_noop_when_only_invisible_pseudo_tab_is_open(
     # Close the workspace tab so the visible tab strip is empty. The
     # close marks the workspace as pendingClose, which removes it from
     # effectiveOpenTabIds before the API ack.
-    workspace_tabs = page.get_by_test_id(ElementIDs.WORKSPACE_TAB)
+    workspace_tabs = layout.get_workspace_tabs()
     expect(workspace_tabs).to_have_count(1)
-    tab = workspace_tabs.first
-    tab.hover()
-    close_button = tab.get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON)
-    close_button.click()
+    layout.close_workspace_tab(0)
     expect(workspace_tabs).to_have_count(0)
 
     # Inject a stale ``__home__`` pseudo-tab into ``tabOrderAtom`` via
@@ -79,7 +77,7 @@ def test_home_button_is_noop_when_only_invisible_pseudo_tab_is_open(
     expect(workspace_tabs).to_have_count(0)
 
     # Click the Home icon.
-    home_button = page.get_by_test_id(ElementIDs.HOME_BUTTON)
+    home_button = layout.get_home_button()
     home_button.click()
 
     # Must still be on /home. With the bug, the safety check counted
@@ -97,6 +95,7 @@ def test_home_button_is_noop_when_only_stale_new_workspace_pseudo_tab_is_open(
     Same regression risk as the ``__home__`` case.
     """
     page = sculptor_instance_.page
+    layout = PlaywrightProjectLayoutPage(page=page)
 
     start_task_and_wait_for_ready(
         sculptor_page=page,
@@ -107,11 +106,9 @@ def test_home_button_is_noop_when_only_stale_new_workspace_pseudo_tab_is_open(
     navigate_to_home_page(page)
     expect(page).to_have_url(re.compile(r".*#/home$"))
 
-    workspace_tabs = page.get_by_test_id(ElementIDs.WORKSPACE_TAB)
+    workspace_tabs = layout.get_workspace_tabs()
     expect(workspace_tabs).to_have_count(1)
-    tab = workspace_tabs.first
-    tab.hover()
-    tab.get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON).click()
+    layout.close_workspace_tab(0)
     expect(workspace_tabs).to_have_count(0)
 
     set_local_storage_item_with_storage_event(
@@ -119,7 +116,7 @@ def test_home_button_is_noop_when_only_stale_new_workspace_pseudo_tab_is_open(
     )
 
     expect(workspace_tabs).to_have_count(0)
-    page.get_by_test_id(ElementIDs.HOME_BUTTON).click()
+    layout.get_home_button().click()
     expect(page).to_have_url(re.compile(r".*#/home$"))
 
 
@@ -133,6 +130,7 @@ def test_home_keybinding_is_noop_when_only_invisible_pseudo_tab_is_open(
     that splits them can't reintroduce the bug on one surface only.
     """
     page = sculptor_instance_.page
+    layout = PlaywrightProjectLayoutPage(page=page)
 
     start_task_and_wait_for_ready(
         sculptor_page=page,
@@ -143,9 +141,8 @@ def test_home_keybinding_is_noop_when_only_invisible_pseudo_tab_is_open(
     navigate_to_home_page(page)
     expect(page).to_have_url(re.compile(r".*#/home$"))
 
-    workspace_tabs = page.get_by_test_id(ElementIDs.WORKSPACE_TAB)
-    workspace_tabs.first.hover()
-    workspace_tabs.first.get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON).click()
+    workspace_tabs = layout.get_workspace_tabs()
+    layout.close_workspace_tab(0)
     expect(workspace_tabs).to_have_count(0)
 
     set_local_storage_item_with_storage_event(page, "sculptor-tab-order", json.dumps(["__home__"]))
@@ -167,6 +164,7 @@ def test_home_button_golden_path_toggle(
     aria-pressed; clicking again returns to the workspace.
     """
     page = sculptor_instance_.page
+    layout = PlaywrightProjectLayoutPage(page=page)
 
     start_task_and_wait_for_ready(
         sculptor_page=page,
@@ -178,7 +176,7 @@ def test_home_button_golden_path_toggle(
     expect(page).to_have_url(re.compile(r".*#/ws/ws_[a-z0-9]+"))
     workspace_url_pattern = re.compile(r".*#/ws/ws_[a-z0-9]+")
 
-    home_button = page.get_by_test_id(ElementIDs.HOME_BUTTON)
+    home_button = layout.get_home_button()
     expect(home_button).to_have_attribute("aria-pressed", "false")
 
     # Toggle ON: workspace → /home.
@@ -188,7 +186,7 @@ def test_home_button_golden_path_toggle(
 
     # Toggle OFF: /home → back to the workspace. The visible workspace
     # tab is what gates the safety check through.
-    expect(page.get_by_test_id(ElementIDs.WORKSPACE_TAB)).to_have_count(1)
+    expect(layout.get_workspace_tabs()).to_have_count(1)
     home_button.click()
     expect(page).to_have_url(workspace_url_pattern)
     expect(home_button).to_have_attribute("aria-pressed", "false")

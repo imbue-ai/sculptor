@@ -2,7 +2,6 @@
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.chat_panel import select_model_by_name
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
@@ -76,7 +75,7 @@ def test_branch_switching_with_untracked_file(sculptor_instance_: SculptorInstan
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
     # Clone mode shows a "clone" badge on the workspace page.
-    mode_badge = page.get_by_test_id(ElementIDs.TASK_MODE_BADGE)
+    mode_badge = task_page.get_mode_badge()
     expect(mode_badge).to_be_visible()
     expect(mode_badge).to_have_text("clone")
 
@@ -104,6 +103,6 @@ def test_in_place_mode_displayed_correctly(sculptor_instance_: SculptorInstance)
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
     # Verify the workspace mode badge shows "in-place"
-    mode_badge = page.get_by_test_id(ElementIDs.TASK_MODE_BADGE)
+    mode_badge = task_page.get_mode_badge()
     expect(mode_badge).to_be_visible()
     expect(mode_badge).to_have_text("in-place")

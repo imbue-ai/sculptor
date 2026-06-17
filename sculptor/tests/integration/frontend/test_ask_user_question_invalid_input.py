@@ -23,7 +23,7 @@ no exit-plan-mode counterpart to this test is possible.
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
+from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.playwright_utils import navigate_to_home_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -69,7 +69,7 @@ def test_ask_user_question_invalid_input_returns_mcp_error_and_does_not_stick(
     # None throughout because all three validation surfaces (output
     # processor, MCP server, message_conversion reload path) reject the
     # malformed input in lockstep.
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
+    ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).not_to_be_visible()
 
     # The chat input is back — the user can type the next message rather
@@ -81,9 +81,9 @@ def test_ask_user_question_invalid_input_returns_mcp_error_and_does_not_stick(
     # The peek popover is the surface the user sees; an unanswered AUQ
     # would surface there as an orange waiting banner.
     navigate_to_home_page(page)
-    workspace_tab = page.get_by_test_id(ElementIDs.WORKSPACE_TAB).first
+    workspace_tab = task_page.get_workspace_tabs().first
     workspace_tab.hover()
-    popover = page.get_by_test_id(ElementIDs.WORKSPACE_PEEK_POPOVER)
+    popover = task_page.get_workspace_peek_popover()
     expect(popover).to_be_visible()
-    waiting_banner = page.get_by_test_id(ElementIDs.WORKSPACE_PEEK_BANNER)
+    waiting_banner = popover.get_banner()
     expect(waiting_banner).to_be_hidden()

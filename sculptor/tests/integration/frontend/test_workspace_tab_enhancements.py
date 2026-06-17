@@ -12,6 +12,8 @@ import re
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
+from sculptor.testing.pages.new_workspace_modal_page import PlaywrightNewWorkspaceModalPage
+from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import blur_active_element
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -29,12 +31,13 @@ def test_cmd_t_opens_new_workspace_modal(
     the shortcut and verifies the new-workspace form is shown.
     """
     page = sculptor_instance_.page
+    modal = PlaywrightNewWorkspaceModalPage(page=page)
 
     # Create a workspace so we have somewhere to navigate from
     start_task_and_wait_for_ready(page, prompt="Setup task", workspace_name="Shortcut WS")
 
     # Verify we're on the task page (chat panel visible, no workspace name input)
-    chat_panel = page.get_by_test_id(ElementIDs.CHAT_PANEL)
+    chat_panel = modal.get_chat_panel()
     expect(chat_panel).to_be_visible()
 
     # Blur the active element to ensure focus is not trapped in a text input
@@ -47,10 +50,10 @@ def test_cmd_t_opens_new_workspace_modal(
     page.keyboard.press(f"{mod_key}+t")
 
     # Verify the new-workspace modal is shown
-    workspace_name_input = page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT)
+    workspace_name_input = modal.get_workspace_name_input()
     expect(workspace_name_input).to_be_visible(timeout=60_000)
 
-    submit_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
+    submit_button = modal.get_submit_button()
     expect(submit_button).to_be_visible()
 
 
@@ -64,13 +67,14 @@ def test_cmd_w_closes_workspace_tab_without_deletion(
     accessible from the Open Workspace list.
     """
     page = sculptor_instance_.page
+    layout = PlaywrightProjectLayoutPage(page=page)
 
     # Create two workspaces so closing one still leaves a tab
     start_task_and_wait_for_ready(page, prompt="Task 1", workspace_name="WS One")
     start_task_and_wait_for_ready(page, prompt="Task 2", workspace_name="WS Two")
 
     # Verify both workspace tabs exist
-    workspace_tabs = page.get_by_test_id(ElementIDs.WORKSPACE_TAB)
+    workspace_tabs = layout.get_workspace_tabs()
     expect(workspace_tabs).to_have_count(2)
 
     # Blur the active element to ensure focus is not trapped in a text input
@@ -81,7 +85,7 @@ def test_cmd_w_closes_workspace_tab_without_deletion(
     page.keyboard.press(f"{mod_key}+w")
 
     # No delete confirmation dialog should appear
-    confirm_dialog = page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_DIALOG)
+    confirm_dialog = layout.get_delete_confirmation_dialog()
     expect(confirm_dialog).to_be_hidden()
 
     # One tab should remain
@@ -98,28 +102,29 @@ def test_context_menu_delete_removes_workspace(
     confirms in the dialog, and verifies the workspace is removed.
     """
     page = sculptor_instance_.page
+    layout = PlaywrightProjectLayoutPage(page=page)
 
     # Create a workspace
     start_task_and_wait_for_ready(page, prompt="Deletable task", workspace_name="Deletable WS")
 
-    workspace_tabs = page.get_by_test_id(ElementIDs.WORKSPACE_TAB)
+    workspace_tabs = layout.get_workspace_tabs()
     expect(workspace_tabs).to_have_count(1)
 
     # Right-click the workspace tab to open the context menu
     workspace_tabs.first.click(button="right")
 
     # Click the Delete item in the context menu
-    delete_item = page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_DELETE)
+    delete_item = layout.get_tab_context_menu_delete()
     expect(delete_item).to_be_visible()
     delete_item.click()
 
     # Confirm the deletion
-    confirm_button = page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_CONFIRM)
+    confirm_button = layout.get_delete_confirmation_dialog().get_by_test_id(ElementIDs.DELETE_CONFIRMATION_CONFIRM)
     expect(confirm_button).to_be_visible()
     confirm_button.click()
 
     # Wait for dialog to close
-    expect(page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_DIALOG)).to_be_hidden()
+    expect(layout.get_delete_confirmation_dialog()).to_be_hidden()
 
     # Workspace tab should be removed
     expect(workspace_tabs).to_have_count(0)
@@ -141,20 +146,21 @@ def test_cmd_w_on_new_workspace_modal_returns_to_workspace(
     while a dismissible overlay is open.
     """
     page = sculptor_instance_.page
+    modal = PlaywrightNewWorkspaceModalPage(page=page)
 
     # Create a workspace so we have somewhere to return to.
     start_task_and_wait_for_ready(page, prompt="MRU task", workspace_name="MRU WS")
 
     # Verify we're on the task page
-    chat_panel = page.get_by_test_id(ElementIDs.CHAT_PANEL)
+    chat_panel = modal.get_chat_panel()
     expect(chat_panel).to_be_visible()
 
     # Open the new-workspace modal via the "+" button
-    add_workspace_button = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
+    add_workspace_button = modal.get_add_workspace_button()
     add_workspace_button.click()
 
     # Verify the modal is open
-    workspace_name_input = page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT)
+    workspace_name_input = modal.get_workspace_name_input()
     expect(workspace_name_input).to_be_visible()
 
     # Press Cmd+W — should close the modal, leaving us on the workspace page.
@@ -174,5 +180,5 @@ def test_cmd_w_on_new_workspace_modal_returns_to_workspace(
     expect(chat_panel).to_be_visible()
 
     # No delete confirmation dialog should appear
-    confirm_dialog = page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_DIALOG)
+    confirm_dialog = modal.get_delete_confirmation_dialog()
     expect(confirm_dialog).to_be_hidden()

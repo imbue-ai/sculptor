@@ -13,12 +13,14 @@ import re
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.chat_panel import select_model_by_name
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.panels import ensure_terminal_visible
+from sculptor.testing.elements.panels import get_add_terminal_button
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
+from sculptor.testing.pages.new_workspace_modal_page import PlaywrightNewWorkspaceModalPage
+from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import blur_active_element
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import open_new_workspace_modal
@@ -48,6 +50,7 @@ def test_workspace_form_draft_persists_after_navigation(
     6. Verify the workspace name is still populated
     """
     page = sculptor_instance_.page
+    modal = PlaywrightNewWorkspaceModalPage(page=page)
 
     # Step 1: Create a workspace so we end up on a workspace page (not /home).
     start_task_and_wait_for_ready(
@@ -57,16 +60,16 @@ def test_workspace_form_draft_persists_after_navigation(
     )
 
     # Step 2: Open the modal via the topbar "+".
-    add_workspace_button = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
+    add_workspace_button = modal.get_add_workspace_button()
     expect(add_workspace_button).to_be_visible()
     add_workspace_button.click()
 
-    submit_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
+    submit_button = modal.get_submit_button()
     expect(submit_button).to_be_visible()
 
     # Step 3: Fill in the workspace name (the draft).
     draft_workspace_name = "My Draft Workspace"
-    workspace_name_input = page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT)
+    workspace_name_input = modal.get_workspace_name_input()
     workspace_name_input.fill(draft_workspace_name)
 
     # Step 4: Close the modal with Escape (no Submit). The draft atoms are
@@ -79,7 +82,7 @@ def test_workspace_form_draft_persists_after_navigation(
     expect(submit_button).to_be_visible()
 
     # Step 6: Verify the workspace name is still populated.
-    workspace_name_input = page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT)
+    workspace_name_input = modal.get_workspace_name_input()
     expect(workspace_name_input).to_have_value(draft_workspace_name)
 
 
@@ -152,6 +155,7 @@ def test_chat_input_focused_after_workspace_creation(
     All should end with focus in the chat input.
     """
     page = sculptor_instance_.page
+    task_page = PlaywrightTaskPage(page=page)
 
     # Scenario 1: Create the first workspace.
     start_task_and_wait_for_ready(
@@ -159,7 +163,7 @@ def test_chat_input_focused_after_workspace_creation(
         workspace_name="First Workspace",
     )
 
-    chat_editable = page.get_by_test_id(ElementIDs.CHAT_INPUT)
+    chat_editable = task_page.get_chat_panel().get_chat_input()
     expect(chat_editable).to_be_focused()
 
     # Scenario 2: Create a second workspace via the "+" button.
@@ -168,7 +172,7 @@ def test_chat_input_focused_after_workspace_creation(
         workspace_name="Second Workspace",
     )
 
-    chat_editable = page.get_by_test_id(ElementIDs.CHAT_INPUT)
+    chat_editable = task_page.get_chat_panel().get_chat_input()
     expect(chat_editable).to_be_focused()
 
     # Scenario 3: Ensure the terminal panel is open, then create another workspace.
@@ -176,7 +180,7 @@ def test_chat_input_focused_after_workspace_creation(
     ensure_terminal_visible(page)
 
     # Verify the terminal panel is visible.
-    add_terminal_button = page.get_by_test_id(ElementIDs.ADD_TERMINAL_BUTTON)
+    add_terminal_button = get_add_terminal_button(page)
     expect(add_terminal_button).to_be_visible()
 
     # Create a third workspace with the terminal panel open.
@@ -185,7 +189,7 @@ def test_chat_input_focused_after_workspace_creation(
         workspace_name="Third Workspace (Terminal Open)",
     )
 
-    chat_editable = page.get_by_test_id(ElementIDs.CHAT_INPUT)
+    chat_editable = task_page.get_chat_panel().get_chat_input()
     expect(chat_editable).to_be_focused()
 
 
@@ -200,10 +204,12 @@ def test_cmd_i_focuses_prompt_input(sculptor_instance_: SculptorInstance) -> Non
     """
     page = sculptor_instance_.page
     mod_key = get_playwright_modifier_key()
+    modal = PlaywrightNewWorkspaceModalPage(page=page)
+    task_page = PlaywrightTaskPage(page=page)
 
     # Step 1: Open the new-workspace modal, blur all inputs, then press Cmd+I.
     open_new_workspace_modal(page)
-    name_input = page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT)
+    name_input = modal.get_workspace_name_input()
     expect(name_input).to_be_visible()
     blur_active_element(page)
     expect(name_input).not_to_be_focused()
@@ -218,7 +224,7 @@ def test_cmd_i_focuses_prompt_input(sculptor_instance_: SculptorInstance) -> Non
     )
 
     # Step 3: Blur the chat input, then press Cmd+I — the chat input should be focused.
-    chat_editable = page.get_by_test_id(ElementIDs.CHAT_INPUT)
+    chat_editable = task_page.get_chat_panel().get_chat_input()
     expect(chat_editable).to_be_visible()
     blur_active_element(page)
     expect(chat_editable).not_to_be_focused()
@@ -232,9 +238,10 @@ def test_arrow_down_focuses_name_input_when_nothing_focused(
 ) -> None:
     """Pressing ArrowDown when no element has focus should focus the workspace name input."""
     page = sculptor_instance_.page
+    modal = PlaywrightNewWorkspaceModalPage(page=page)
 
     open_new_workspace_modal(page)
-    name_input = page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT)
+    name_input = modal.get_workspace_name_input()
     expect(name_input).to_be_visible()
 
     blur_active_element(page)
@@ -250,9 +257,10 @@ def test_arrow_up_focuses_name_input_when_nothing_focused(
 ) -> None:
     """Pressing ArrowUp when no element has focus should focus the workspace name input."""
     page = sculptor_instance_.page
+    modal = PlaywrightNewWorkspaceModalPage(page=page)
 
     open_new_workspace_modal(page)
-    name_input = page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT)
+    name_input = modal.get_workspace_name_input()
     expect(name_input).to_be_visible()
 
     blur_active_element(page)
@@ -269,12 +277,13 @@ def test_cmd_enter_in_workspace_name_creates_workspace(
     """Pressing Cmd+Enter while focus is in the workspace name input should create the workspace."""
     page = sculptor_instance_.page
     mod_key = get_playwright_modifier_key()
+    modal = PlaywrightNewWorkspaceModalPage(page=page)
 
     open_new_workspace_modal(page)
-    name_input = page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT)
+    name_input = modal.get_workspace_name_input()
     expect(name_input).to_be_visible()
 
-    submit_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
+    submit_button = modal.get_submit_button()
     expect(submit_button).to_be_enabled()
 
     name_input.fill("Cmd Enter Test")
@@ -283,7 +292,7 @@ def test_cmd_enter_in_workspace_name_creates_workspace(
 
     page.keyboard.press(f"{mod_key}+Enter")
 
-    chat_panel = page.get_by_test_id(ElementIDs.CHAT_PANEL)
+    chat_panel = modal.get_chat_panel()
     expect(chat_panel).to_be_visible()
 
 
@@ -321,24 +330,14 @@ def test_deleting_project_also_deletes_its_workspaces(
         assert get_response.ok, f"Expected workspace {workspace_id} to exist, got status {get_response.status}"
 
         settings_page = navigate_to_settings_page(page=page)
-        settings_page.click_on_repositories()
+        repos = settings_page.click_on_repositories()
 
-        # Delete the first repo row (the original project).
-        repo_rows = page.get_by_test_id(ElementIDs.SETTINGS_REPO_ROW)
-        expect(repo_rows.first).to_be_visible()
-        repo_rows.first.get_by_test_id(ElementIDs.SETTINGS_REMOVE_REPO_BUTTON).click()
-
-        confirm_button = page.get_by_test_id(ElementIDs.SETTINGS_REMOVE_REPO_CONFIRM)
-        expect(confirm_button).to_be_visible()
-        confirm_button.click()
-
-        # Confirm the delete-confirm dialog dismissed (request submitted) before
-        # asserting the resulting state — the dialog stays open while the
-        # request is in flight, so checking it disappears is the cleanest
-        # before/after signal.
-        expect(confirm_button).to_be_hidden()
+        # Delete the first repo row (the original project). remove_first_repo
+        # clicks remove, confirms, and waits for the row to hide — the cleanest
+        # before/after signal that the request was submitted.
+        repos.remove_first_repo()
         # Then wait for the repo row count to drop to zero.
-        expect(page.get_by_test_id(ElementIDs.SETTINGS_REPO_ROW)).to_have_count(0)
+        expect(repos.get_repo_rows()).to_have_count(0)
 
         get_response = page.request.get(f"{base_url}/api/v1/workspaces/{workspace_id}")
         assert get_response.status == 404, (

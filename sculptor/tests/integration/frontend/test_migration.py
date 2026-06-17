@@ -18,10 +18,11 @@ from playwright.sync_api import expect
 import sculptor.primitives.ids
 from imbue_core.sculptor.user_config import DependencyPaths
 from imbue_core.sculptor.user_config import UserConfig
-from sculptor.constants import ElementIDs
 from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.dependency_stubs import DependencyState
 from sculptor.testing.dependency_stubs import stub_dependency
+from sculptor.testing.pages.new_workspace_modal_page import PlaywrightNewWorkspaceModalPage
+from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.resources import custom_sculptor_folder_populator
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
@@ -123,12 +124,10 @@ def test_inplace_bootstrap_and_workspace_operations(
         # succeeded: the topbar "+" (when workspaces exist) or the inline
         # new-workspace form's submit button (on an empty Home, where the "+"
         # is hidden).
+        layout = PlaywrightProjectLayoutPage(page=page)
+        modal = PlaywrightNewWorkspaceModalPage(page=page)
         try:
-            expect(
-                page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).or_(
-                    page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
-                )
-            ).to_be_visible(timeout=45_000)
+            expect(layout.get_add_workspace_button().or_(modal.get_submit_button())).to_be_visible(timeout=45_000)
         except AssertionError:
             _dump_diagnostics(page, instance.sculptor_folder, "bootstrap")
             raise
@@ -189,12 +188,10 @@ def test_full_migration_script_then_frontend(
         # Verify the create surface is reachable (see equivalent comment in
         # the bootstrap test above): the topbar "+" when workspaces exist, or
         # the inline form's submit button on an empty Home.
+        layout = PlaywrightProjectLayoutPage(page=page)
+        modal = PlaywrightNewWorkspaceModalPage(page=page)
         try:
-            expect(
-                page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).or_(
-                    page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
-                )
-            ).to_be_visible(timeout=45_000)
+            expect(layout.get_add_workspace_button().or_(modal.get_submit_button())).to_be_visible(timeout=45_000)
         except AssertionError:
             _dump_diagnostics(page, migrated_folder, "migration")
             raise
