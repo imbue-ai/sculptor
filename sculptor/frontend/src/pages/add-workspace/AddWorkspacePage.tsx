@@ -1,6 +1,6 @@
 import { Button, Flex, Select, Spinner, Text, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
-import { BlocksIcon, BotIcon } from "lucide-react";
+import { BlocksIcon, BotIcon, PanelLeftOpen } from "lucide-react";
 import { posthog } from "posthog-js";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -40,8 +40,11 @@ import { useDraftTabName } from "../../common/state/hooks/usePromptDraft.ts";
 import { useRepoInfo } from "../../common/state/hooks/useRepoInfo.ts";
 import { useTerminalAgentRegistrations } from "../../common/state/hooks/useTerminalAgentRegistrations.ts";
 import { BranchSelector } from "../../components/BranchSelector.tsx";
+import { navSidebarCollapsedAtom } from "../../components/nav/navAtoms.ts";
 import { RepoSelector } from "../../components/RepoSelector.tsx";
 import { Toast, type ToastContent, ToastType } from "../../components/Toast.tsx";
+import { TooltipIconButton } from "../../components/TooltipIconButton.tsx";
+import { getTitleBarLeftPadding } from "../../electron/utils.ts";
 import styles from "./AddWorkspacePage.module.scss";
 import { BranchNameField } from "./components/BranchNameField.tsx";
 import { NewWorkspaceForm } from "./components/NewWorkspaceForm.tsx";
@@ -56,6 +59,12 @@ export const AddWorkspacePage = (): ReactElement => {
   const isInPlaceWorkspacesEnabled = useAtomValue(isInPlaceWorkspacesEnabledAtom);
   const isCloneWorkspacesEnabled = useAtomValue(isCloneWorkspacesEnabledAtom);
   const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
+  // The nav sidebar is global chrome rendered by PageLayout, but its expand
+  // toggle normally lives in the WorkspaceBanner — which this page doesn't
+  // render. Surface our own expand toggle so the sidebar can be reopened
+  // without first creating a workspace.
+  const isNavCollapsed = useAtomValue(navSidebarCollapsedAtom);
+  const setNavCollapsed = useSetAtom(navSidebarCollapsedAtom);
   // Worktree mode is always the default; the selector only appears when an
   // opt-in mode (clone or in-place) has been enabled and the user has more
   // than one option to choose from.
@@ -366,6 +375,25 @@ export const AddWorkspacePage = (): ReactElement => {
 
   return (
     <>
+      {/* When the sidebar is collapsed, its expand toggle (normally in the
+          WorkspaceBanner) is absent here, leaving the sidebar unrecoverable.
+          Surface a top-left toggle so it can be reopened from this page. */}
+      {isNavCollapsed && (
+        <div className={styles.collapsedSidebarToggle} style={{ paddingLeft: getTitleBarLeftPadding(false) }}>
+          <TooltipIconButton
+            tooltipText="Show sidebar"
+            side="right"
+            variant="ghost"
+            size="1"
+            color="gray"
+            onClick={() => setNavCollapsed(false)}
+            aria-label="Show sidebar"
+            data-testid="topbar-sidebar-toggle"
+          >
+            <PanelLeftOpen size={16} />
+          </TooltipIconButton>
+        </div>
+      )}
       <Flex direction="column" align="center" justify="center" className={styles.container}>
         <Flex direction="column" align="center" gap="5" className={styles.content}>
           <Text className={styles.headerTitle}>Name your workspace</Text>
