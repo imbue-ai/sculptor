@@ -148,9 +148,9 @@ class SculptorInstance:
     server: SculptorServer
     page: Page
     # Origin the SPA is served from, used for navigation (e.g. resets). In
-    # browser mode this is the backend's own URL; in Electron app-scheme mode
-    # the renderer is served from sculptor://app, which is a *different* origin
-    # than the backend API — so navigation must target this, not the API URL.
+    # browser mode this is the backend's own URL; in Electron it's the
+    # renderer's separate origin (the Vite dev server, or sculptor://app),
+    # distinct from the backend API — so navigation must target this.
     frontend_url: str
     repo: MockRepoState
     sculptor_folder: Path
@@ -172,8 +172,8 @@ class SculptorInstance:
     def backend_api_url(self) -> str:
         """Base URL of the running Sculptor backend's HTTP API (for /api/... requests).
 
-        Note this is the *backend* origin, which in Electron app-scheme mode is
-        distinct from ``frontend_url`` (the sculptor://app renderer origin).
+        This is the *backend* origin, distinct in Electron from ``frontend_url``
+        (the renderer origin).
         """
         return self.server.url
 
@@ -220,12 +220,9 @@ class SculptorInstance:
         from ``self._project_path``), then removes each one through the
         Settings > Repositories UI.
         """
-        # Hit the backend's HTTP origin explicitly, not one derived from
-        # page.url: in Electron mode the page origin is the renderer's (the
-        # Vite dev server, or sculptor://app), which serves no /api and which
-        # page.request cannot even fetch for the sculptor:// scheme — so the
-        # request would fail and this cleanup would silently skip, leaking
-        # projects between tests.
+        # Use the backend origin, not one derived from page.url: in Electron
+        # the page origin is the renderer's (Vite, or sculptor://app), which
+        # serves no /api and which page.request can't fetch for sculptor://.
         base_url = self.backend_api_url.rstrip("/")
         try:
             response = self.page.request.get(f"{base_url}/api/v1/projects/active")

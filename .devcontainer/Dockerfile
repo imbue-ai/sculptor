@@ -11,13 +11,10 @@ FROM ubuntu:24.04
 
 # xvfb + xauth provide the virtual X display the Electron integration launch
 # mode needs (the harness wraps Electron in `xvfb-run` when there's no DISPLAY).
-# libgtk-3-0t64 + libnotify4 are the GTK GUI stack that full Electron links
-# against: `playwright install --with-deps chromium` (finalize-base-image.sh)
-# installs deps for Playwright's *headless* Chromium shell, which omits GTK — so
-# without these the Electron binary aborts at startup with "libgtk-3.so.0:
-# cannot open shared object file" and never opens its remote-debugging port.
-# (t64 is Ubuntu 24.04's 64-bit-time_t package rename; libgtk-3-0t64 pulls in
-# the pango/cairo/gdk-pixbuf/atk closure transitively.)
+# libgtk-3-0t64 + libnotify4 are the GTK stack full Electron links against:
+# `playwright install --with-deps chromium` only installs deps for Playwright's
+# headless Chromium, which omits GTK. (t64 is Ubuntu 24.04's time_t package
+# rename; libgtk-3-0t64 pulls in the pango/cairo/gdk-pixbuf/atk closure.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git curl ca-certificates build-essential pkg-config libssl-dev \
         xvfb xauth libgtk-3-0t64 libnotify4 \
@@ -49,10 +46,9 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
 # Critical for Modal snapshots — without this, some files vanish after snapshot restore.
 ENV UV_LINK_MODE=copy
 ENV NVM_DIR="/root/.nvm"
-# Put the nvm-installed node/npm on PATH for non-interactive shells. nvm only
-# wires them in per-shell, and the offload test process doesn't source nvm — so
-# without this the Electron integration harness's `npm run electron:start`
-# fails with "npm: not found" (exit 127). NODE_VERSION + NVM_DIR are set above.
+# Put the nvm-installed node/npm on PATH for non-interactive shells: nvm only
+# wires them in per-shell, and the offload test process doesn't source nvm.
+# NODE_VERSION + NVM_DIR are set above.
 ENV PATH="${NVM_DIR}/versions/node/v${NODE_VERSION}/bin:${PATH}"
 
 WORKDIR /app

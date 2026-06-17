@@ -86,11 +86,9 @@ class ElectronFrontend:
             cmd = cmd + ("--no-sandbox",)
 
         if is_headless:
-            # Under xvfb there is no real GPU, and Chromium's GPU process then
-            # crash-loops at init (gl_context_egl "Failed to get config for
-            # surface 0" -> "Exiting GPU process due to errors during
-            # initialization"). Force software rendering so frames are produced
-            # deterministically instead of relying on that fallback recovering.
+            # Under xvfb there is no real GPU and Chromium's GPU process
+            # crash-loops at init; force software rendering so frames are
+            # produced deterministically.
             cmd = cmd + ("--disable-gpu",)
 
         if is_headless:
@@ -115,11 +113,9 @@ class ElectronFrontend:
         lock_path = Path("/tmp/sculptor_electron_forge.lock")
 
         is_launched = False
-        # Keep the most recent Electron stdout/stderr (stderr is merged into
-        # stdout below) so that, if Electron never reaches its ready message, we
-        # can surface the actual crash output in the raised error. Offload only
-        # streams the failure summary, not the per-sandbox logs, so without this
-        # the real reason ("Check logs above") is invisible in CI.
+        # Keep the most recent Electron output (stderr is merged into stdout
+        # below) so that if it never reaches its ready message we can surface
+        # the crash output in the raised error.
         recent_output: deque[str] = deque(maxlen=50)
         file_lock = FileLock(str(lock_path), timeout=_FORGE_LOCK_TIMEOUT_SECONDS)
         t_lock = time.monotonic()
@@ -182,17 +178,10 @@ class ElectronFrontend:
             page = pages[0]
             configure_page(page, timeout_ms=self.timeout_ms)
         except Exception as exc:
-            # Electron reached its ready message (so the launch-failure path
-            # above didn't fire), but a later step failed — most often the CDP
-            # connect, where the bare PlaywrightError ("connect ECONNREFUSED")
-            # gives no hint as to why the debug port never opened. Offload
-            # streams only the failure summary, not per-sandbox logs, so without
-            # this the real reason is invisible in CI. The Forwarder has been
-            # draining stdout (stderr is merged in) since launch, so its tail
-            # holds Chromium's own startup output — including the "DevTools
-            # listening on ws://..." line that appears iff --remote-debugging-port
-            # took effect. Kill first so that tail captures everything up to exit
-            # (the deque outlives the forwarder thread).
+            # CDP setup (usually the connect) failed after Electron launched;
+            # the bare PlaywrightError gives no hint why the debug port never
+            # opened, so attach the process's recent output to the error. Kill
+            # first so the tail captures everything up to exit.
             self._kill_electron()
             exit_code = self._electron_proc.poll() if self._electron_proc is not None else None
             post_launch = list(self._forwarder.recent_output) if self._forwarder is not None else []

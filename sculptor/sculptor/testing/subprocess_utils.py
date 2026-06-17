@@ -25,9 +25,8 @@ class Forwarder(threading.Thread):
         self.first_failure_line: str | None = None
         self.known_harmless_func = known_harmless_func
         # Retain the most recent lines so callers can surface the process's
-        # output after the fact — e.g. when the Electron app forwards fine but a
-        # later step (CDP connect) fails and the bare exception carries no clue
-        # as to what the process was doing.
+        # output after the fact, when a later failure's own exception carries
+        # none.
         self.recent_output: deque[str] = deque(maxlen=recent_output_lines)
         self._stop_event = threading.Event()
 

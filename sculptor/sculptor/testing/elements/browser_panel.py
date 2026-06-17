@@ -16,13 +16,10 @@ from playwright.sync_api import expect
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
 
-# Waits that depend on the <webview> guest actually attaching and committing a
-# navigation (vs. the address bar, which just mirrors the typed URL instantly).
-# Under the offload electron lane's heavy parallelism (xvfb + software
-# rendering, up to 200 sandboxes at once) the guest can take well over 10s to
-# attach and load — the fixture server is hit and returns 200, but only after
-# the old 10s budget had already expired, surfacing as a flaky "Webview
-# location did not reach ...; last value was ''". Give these a generous budget.
+# Waits that depend on the <webview> guest attaching and committing a
+# navigation (vs. the address bar, which mirrors the typed URL instantly). The
+# guest can take well over 10s to attach and load under heavy CI parallelism
+# (xvfb + software rendering), so give these a generous budget.
 _WEBVIEW_ATTACH_TIMEOUT_SECONDS: float = 30.0
 _WEBVIEW_LOAD_TIMEOUT_SECONDS: float = 30.0
 _URL_POLL_INTERVAL_SECONDS: float = 0.1
