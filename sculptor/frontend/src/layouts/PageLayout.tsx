@@ -26,6 +26,7 @@ import { KeyboardShortcutsDialog } from "../components/KeyboardShortcutsDialog.t
 import { WorkspaceNavSidebar } from "../components/nav/WorkspaceNavSidebar.tsx";
 import { NotificationToasts } from "../components/NotificationToasts.tsx";
 import { zenModeActiveAtom } from "../components/panels/atoms.ts";
+import { useFocusRingFade } from "../components/panels/hooks.ts";
 import { PanelRegistryProvider } from "../components/panels/PanelRegistryProvider.tsx";
 import { RepoPathDialog } from "../components/RepoPathDialog.tsx";
 import { TitleBar } from "../components/TitleBar.tsx";
@@ -102,6 +103,8 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
 
   useUnifiedStream();
   usePageLayoutKeyboardShortcuts();
+  // Pulse-then-fade the active-pane ring on focus changes and workspace entry.
+  useFocusRingFade();
   useAutoUpdateListener();
   useSyncActiveTabFromRoute();
   // Warm every open tab's git caches in the background so switching tabs

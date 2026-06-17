@@ -5,6 +5,7 @@ import { useKeybindingHandler } from "~/common/keybindings";
 import {
   activePanelPerZoneAtom,
   focusedZoneAtom,
+  focusZoneAtom,
   maximizedZoneAtom,
   panelsInZoneAtom,
 } from "~/components/panels/atoms.ts";
@@ -38,7 +39,10 @@ const resolveCurrentZone = (store: Store, rects: ReadonlyArray<ZoneRect>): ZoneI
 const focusZone = (store: Store, zone: ZoneId): void => {
   const el = document.querySelector<HTMLElement>(`[data-zone-id="${zone}"]`);
   el?.focus();
-  store.set(focusedZoneAtom, zone);
+  // Pulse the ring (focus + restart fade), so it reappears even when re-focusing
+  // the same zone (e.g. tab cycling). resolveCurrentZone still reads the value
+  // atom (focusedZoneAtom) for nav.
+  store.set(focusZoneAtom, zone);
 };
 
 /**

@@ -25,6 +25,28 @@
   z-index: 1;
 }
 
+// The active-pane ring is TRANSIENT: it pulses on a focus change (or when
+// returning to a workspace) and then fades out. `.focused` persists for as long
+// as the pane holds logical focus (it anchors Ctrl+Alt+Arrow nav), so we gate
+// the ring's opacity on `.ringVisible` — flipped on a timer by useFocusRingFade
+// — and let it fade via an opacity transition rather than vanish. The
+// `:not(.dropTarget)` guard leaves the drag drop-target edge solid for the whole
+// drag, even on a pane that is also the focused one.
+.focused:not(.dropTarget)::after {
+  opacity: 0%;
+  transition: opacity var(--duration-slow) var(--ease-out);
+}
+
+.focused.ringVisible:not(.dropTarget)::after {
+  opacity: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .focused:not(.dropTarget)::after {
+    transition: none;
+  }
+}
+
 // Maximized section (the "expand panel to fullscreen" view). It is absolutely
 // positioned to fill the workspace page container — every ancestor up to that
 // container is static, so it anchors there: it covers the top banner and the

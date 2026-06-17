@@ -1,4 +1,4 @@
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { useCallback, useEffect, useMemo } from "react";
 import { flushSync } from "react-dom";
 
@@ -6,9 +6,13 @@ import { isDismissibleOverlayOpen, shouldHandleKeybinding } from "~/common/Short
 import {
   activePanelPerZoneAtom,
   didZenImplyFocusModeAtom,
+  FOCUS_RING_VISIBLE_MS,
   focusedZoneAtom,
   focusModeActiveAtom,
   focusModeSavedVisibilityAtom,
+  focusRingNonceAtom,
+  focusRingVisibleAtom,
+  focusZoneAtom,
   isSideVisibleAtom,
   maximizedZoneAtom,
   panelEnabledAtom,
@@ -121,15 +125,15 @@ export const usePanelActions = (): UsePanelActionsResult => {
   const isFocusModeActive = useAtomValue(focusModeActiveAtom);
   const setFocusModeActive = useSetAtom(focusModeActiveAtom);
   const setFocusModeSavedVisibility = useSetAtom(focusModeSavedVisibilityAtom);
-  const setFocusedZone = useSetAtom(focusedZoneAtom);
+  const focusZone = useSetAtom(focusZoneAtom);
 
   const movePanel = useCallback(
     (panelId: PanelId, targetZone: ZoneId, insertIndex?: number): void => {
       // Adding a panel (via the "+"/palette) and dropping one (drag-and-drop)
       // both flow through here — both are deliberate placements, so the
-      // destination becomes the focused pane (shows the active-pane ring). A
+      // destination becomes the focused pane and pulses the active-pane ring. A
       // plain click does NOT set focus, keeping the ring intentional.
-      setFocusedZone(targetZone);
+      focusZone(targetZone);
 
       // Undefined for an UNPLACED panel (e.g. an agent/terminal added from the
       // Add Panel palette) — then there is no source section to clean up.
@@ -292,7 +296,7 @@ export const usePanelActions = (): UsePanelActionsResult => {
       setZoneVisibility,
       setZoneOrder,
       setSectionSplit,
-      setFocusedZone,
+      focusZone,
     ],
   );
 
@@ -760,4 +764,39 @@ export const usePanelKeyboardShortcuts = (): void => {
     setFocusModeActive,
     setFocusModeSavedVisibility,
   ]);
+};
+
+// ── useFocusRingFade ────────────────────────────────────────────────
+
+/**
+ * Drives the transient active-pane ring. The ring is flashed by DELIBERATE focus
+ * actions — pane navigation, adding/dropping a panel — and on workspace entry,
+ * each of which bumps `focusRingNonceAtom`; it then fades after
+ * FOCUS_RING_VISIBLE_MS. It is intentionally NOT flashed when focus is merely
+ * recorded on a click (selectZoneAtom changes focusedZone without bumping the
+ * nonce), so the ring stays wayfinding rather than firing during active work.
+ * The logical focus (focusedZoneAtom) is untouched — it persists so Ctrl+Alt+Arrow
+ * nav keeps its anchor. Mount once at the layout level.
+ */
+export const useFocusRingFade = (): void => {
+  const store = useStore();
+  const focusedZone = useAtomValue(focusedZoneAtom);
+  const nonce = useAtomValue(focusRingNonceAtom);
+  const setRingVisible = useSetAtom(focusRingVisibleAtom);
+
+  // Pulse on nonce bumps only. The zone is read imperatively (not a dep) so that
+  // silently recording focus on a click — which changes focusedZone but not the
+  // nonce — does not flash the ring. A bump with no focused pane (entering a
+  // never-focused workspace) shows nothing.
+  useEffect(() => {
+    if (store.get(focusedZoneAtom) === null) return;
+    setRingVisible(true);
+    const timer = setTimeout(() => setRingVisible(false), FOCUS_RING_VISIBLE_MS);
+    return (): void => clearTimeout(timer);
+  }, [nonce, store, setRingVisible]);
+
+  // Clearing focus (Escape) hides the ring immediately.
+  useEffect(() => {
+    if (focusedZone === null) setRingVisible(false);
+  }, [focusedZone, setRingVisible]);
 };

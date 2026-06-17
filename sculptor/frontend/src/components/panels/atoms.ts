@@ -81,6 +81,12 @@ export const zoneOrderFamily = scopedLayoutStorageFamily<Partial<Record<ZoneId, 
   {},
 );
 
+// The section (zone) that currently holds focus, persisted per workspace so that
+// returning to a workspace restores its last-focused pane (and re-pulses the
+// active-pane ring — see focusZoneAtom / useFocusRingFade). Default null: a
+// never-visited workspace has no focused pane and shows no ring on first entry.
+export const focusedZoneFamily = scopedLayoutStorageFamily<ZoneId | null>("sculptor-focused-zone", null);
+
 export const zoneAssignmentsAtom = proxyForScope(zoneAssignmentsFamily);
 
 export const activePanelPerZoneAtom = proxyForScope(activePanelPerZoneFamily);
@@ -90,6 +96,50 @@ export const zoneVisibilityAtom = proxyForScope(zoneVisibilityFamily);
 export const zoneSizesAtom = proxyForScope(zoneSizesFamily);
 
 export const zoneOrderAtom = proxyForScope(zoneOrderFamily);
+
+// Logical focus — the anchor for Ctrl+Alt+Arrow pane nav and the two-stage
+// Escape clear. Persisted per workspace (see focusedZoneFamily). The *visual*
+// ring is a separate, transient layer (focusRingVisibleAtom): focus persists,
+// but the ring only flashes and then fades (useFocusRingFade).
+export const focusedZoneAtom = proxyForScope(focusedZoneFamily);
+
+// ── Active-pane ring (transient visual layer over focusedZoneAtom) ────
+// The ring is wayfinding, not steady-state chrome: it answers "where did focus
+// just land?" after a jump (keyboard nav, adding/dropping a panel) or when
+// returning to a workspace, then fades out. So the logical focus persists
+// (focusedZoneAtom, above) while only the ring's visibility is timed here.
+
+// How long the ring stays fully visible before it fades. Tunable.
+export const FOCUS_RING_VISIBLE_MS = 2000;
+
+// Whether the ring is currently shown. Flipped true on each focus change, then
+// false after FOCUS_RING_VISIBLE_MS by useFocusRingFade. Non-persisted.
+export const focusRingVisibleAtom = atom<boolean>(false);
+
+// Bumped on every deliberate focus action (focusZoneAtom) and on workspace
+// entry, so the ring re-appears and its fade timer restarts even when focus
+// lands on the SAME zone (e.g. cycling tabs within a pane, or re-entering a
+// workspace whose last-focused zone matches the one we left). Non-persisted.
+export const focusRingNonceAtom = atom<number>(0);
+
+// Write-only action: focus a zone AND pulse the ring (restart the fade). Use for
+// deliberate "jump" actions — pane navigation, adding/dropping a panel. Clearing
+// focus (Escape) writes focusedZoneAtom directly with null and does NOT pulse;
+// recording focus on a plain click uses selectZoneAtom (below), also no pulse.
+export const focusZoneAtom = atom(null, (_get, set, zone: ZoneId): void => {
+  set(focusedZoneAtom, zone);
+  set(focusRingNonceAtom, (n) => n + 1);
+});
+
+// Write-only action: record focus on a zone WITHOUT pulsing the ring — for plain
+// pointer interactions (clicking into a pane). This persists "where I'm working"
+// so returning to the workspace can flash it, while staying silent during active
+// work. Also clears any in-flight ring so a click mid-pulse doesn't drag the ring
+// onto the clicked pane.
+export const selectZoneAtom = atom(null, (_get, set, zone: ZoneId): void => {
+  set(focusedZoneAtom, zone);
+  set(focusRingVisibleAtom, false);
+});
 
 /**
  * Make `workspaceId` the active layout scope, seeding its layout from
@@ -127,6 +177,11 @@ export const switchActiveWorkspaceAtom = atom(
     }
 
     set(activeWorkspaceIdAtom, workspaceId);
+
+    // Re-pulse the active-pane ring on entry so a restored focused pane flashes
+    // (then fades) as a wayfinding cue. Harmless when this workspace has no
+    // persisted focus — useFocusRingFade keeps the ring hidden while it is null.
+    set(focusRingNonceAtom, (n) => n + 1);
   },
 );
 
@@ -143,12 +198,14 @@ export const removeWorkspaceLayoutAtom = atom(null, (_get, _set, workspaceId: st
   zoneVisibilityFamily.remove(workspaceId);
   zoneSizesFamily.remove(workspaceId);
   zoneOrderFamily.remove(workspaceId);
+  focusedZoneFamily.remove(workspaceId);
   const baseKeys = [
     "sculptor-zone-assignments",
     "sculptor-active-panel-per-zone",
     "sculptor-zone-visibility",
     "sculptor-zone-sizes",
     "sculptor-zone-order",
+    "sculptor-focused-zone",
     "sculptor-section-split",
     "sculptor-section-size-percent",
     "sculptor-diffPanel-open",
@@ -196,14 +253,6 @@ export const didZenImplyFocusModeAtom = atomWithStorage<boolean>("sculptor-zen-m
 
 // Modal state atom — NOT persisted (resets on reload)
 export const modalPanelIdAtom = atom<PanelId | null>(null);
-
-// The section (zone) that currently holds user focus, or null until the user
-// first focuses a pane. Starts null so a fresh load shows no focus ring — the
-// indicator only appears once the user clicks into or keyboard-navigates to a
-// pane (it is intentionally NOT set by programmatic mount auto-focus). Drives
-// the subtle active-pane ring and is the origin for Ctrl+Alt+Arrow pane nav.
-// Non-persisted: focus is transient and should reset on reload.
-export const focusedZoneAtom = atom<ZoneId | null>(null);
 
 // Tracks whether a chat panel (real or skeleton) is currently mounted.
 // Chat-panel components flip this to `true` on mount and `false` on unmount,
@@ -540,6 +589,21 @@ const isZoneFocusedAtomMap = new Map<ZoneId, Atom<boolean>>(
 
 export const isZoneFocusedAtom = (zoneId: ZoneId): Atom<boolean> => {
   return isZoneFocusedAtomMap.get(zoneId)!;
+};
+
+// Narrow per-zone "show the ring" flag: this zone is focused AND the ring is
+// currently visible. Sections subscribe to their own slice so the fade timer
+// flips only the focused section, never every section. (Logical focus uses
+// isZoneFocusedAtom above; this gates the transient ring overlay.)
+const isZoneRingVisibleAtomMap = new Map<ZoneId, Atom<boolean>>(
+  ZONE_IDS.map((zoneId) => [
+    zoneId,
+    atom<boolean>((get) => get(focusedZoneAtom) === zoneId && get(focusRingVisibleAtom)),
+  ]),
+);
+
+export const isZoneRingVisibleAtom = (zoneId: ZoneId): Atom<boolean> => {
+  return isZoneRingVisibleAtomMap.get(zoneId)!;
 };
 
 // ── Derived zone atom for "files" panel ────────────────────────────

@@ -15,7 +15,7 @@ import { useHelpDialog } from "../../common/state/hooks/useHelpDialog.ts";
 import { useOpenSettings } from "../../common/state/hooks/useOpenSettings.ts";
 import { useResolvedTheme } from "../../common/Utils.ts";
 import { useCommandPalette } from "../../components/CommandPalette";
-import { focusedZoneAtom } from "../../components/panels/atoms.ts";
+import { focusedZoneAtom, focusRingVisibleAtom } from "../../components/panels/atoms.ts";
 import { useFocusMode, useMaximizePanel, useSideToggle, useZenMode } from "../../components/panels/hooks.ts";
 import { isAnySuggestionPopoverActive } from "../../components/SuggestionUtils.ts";
 import { chatToolDensityAtom } from "../../pages/workspace/components/chat-alpha/atoms.ts";
@@ -53,12 +53,14 @@ export const usePageLayoutKeyboardShortcuts = (): void => {
   const maximizedZoneRef = useRef(maximizedZone);
   maximizedZoneRef.current = maximizedZone;
 
-  // Same ref pattern for the focused-pane indicator, read by the two-stage
-  // Escape handler below.
+  // The two-stage Escape handler below acts only while the active-pane RING is
+  // visible (not merely while a zone is logically focused) — focus is now also
+  // recorded on plain clicks, and Escape shouldn't blur the chat input etc. just
+  // because the user clicked into a pane. It still clears the logical focus.
   const setFocusedZone = useSetAtom(focusedZoneAtom);
-  const focusedZone = useAtomValue(focusedZoneAtom);
-  const focusedZoneRef = useRef(focusedZone);
-  focusedZoneRef.current = focusedZone;
+  const isFocusRingVisible = useAtomValue(focusRingVisibleAtom);
+  const isFocusRingVisibleRef = useRef(isFocusRingVisible);
+  isFocusRingVisibleRef.current = isFocusRingVisible;
 
   // Whether a mention/skill popover was open at the START of the current Escape
   // keydown. Captured in the capture phase (below) because the editor's own
@@ -118,7 +120,7 @@ export const usePageLayoutKeyboardShortcuts = (): void => {
       // `preventDefault` even when it has nothing to dismiss, so for the chat
       // input we bypass that guard (but still defer while a mention/skill popover
       // is open, whose own Escape closes it). Terminals are excluded outright.
-      if (e.key === "Escape" && !isDismissibleOverlayOpen() && focusedZoneRef.current !== null) {
+      if (e.key === "Escape" && !isDismissibleOverlayOpen() && isFocusRingVisibleRef.current) {
         const active = document.activeElement as HTMLElement | null;
         const isInChatInput = active?.closest(`#${CHAT_INPUT_ELEMENT_ID}`) != null && !popoverOpenAtEscapeRef.current;
         const isHandledByWidget = e.defaultPrevented && !isInChatInput;

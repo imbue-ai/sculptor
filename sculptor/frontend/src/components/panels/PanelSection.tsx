@@ -3,7 +3,13 @@ import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { memo } from "react";
 
-import { focusedZoneAtom, isDropTargetAtom, isZoneFocusedAtom, maximizedZoneAtom } from "~/components/panels/atoms.ts";
+import {
+  isDropTargetAtom,
+  isZoneFocusedAtom,
+  isZoneRingVisibleAtom,
+  maximizedZoneAtom,
+  selectZoneAtom,
+} from "~/components/panels/atoms.ts";
 import { SectionBody } from "~/components/panels/SectionBody.tsx";
 import { tabStripPositionAtom } from "~/components/panels/sectionLayoutAtoms.ts";
 import { SectionTabBar } from "~/components/panels/SectionTabBar.tsx";
@@ -35,13 +41,16 @@ const PanelSectionInner = ({ zone, side }: PanelSectionProps): ReactElement => {
   const tabStripPosition = useAtomValue(tabStripPositionAtom);
   // Highlight while a cross-section drag targets this zone.
   const isDropTarget = useAtomValue(isDropTargetAtom(zone));
-  // Active-pane indicator: this section shows the (subtle) focus ring when it is
-  // the focused zone. Focus is set only by deliberate actions — adding a panel,
-  // dropping one via drag, or the pane-navigation hotkeys — never by a plain
-  // click. Clicking a DIFFERENT (non-focused) pane instead dismisses the ring,
-  // keeping it ephemeral; Escape clears it too (usePageLayoutKeyboardShortcuts).
+  // Active-pane indicator. `isFocused` is the persisted LOGICAL focus — "where
+  // I'm working". It is recorded by clicking into a pane (silently, below), by
+  // pane-navigation hotkeys, and by adding/dropping a panel; it persists so
+  // returning to the workspace can flash the ring there. `isRingVisible` is the
+  // TRANSIENT visual ring: it pulses on a deliberate jump (or workspace entry)
+  // and fades after FOCUS_RING_VISIBLE_MS (useFocusRingFade) — a plain click sets
+  // focus without flashing it, so the ring stays wayfinding, not steady chrome.
   const isFocused = useAtomValue(isZoneFocusedAtom(zone));
-  const setFocusedZone = useSetAtom(focusedZoneAtom);
+  const isRingVisible = useAtomValue(isZoneRingVisibleAtom(zone));
+  const selectZone = useSetAtom(selectZoneAtom);
   const maximizedZone = useAtomValue(maximizedZoneAtom);
   const isMaximized = maximizedZone === zone;
 
@@ -54,13 +63,15 @@ const PanelSectionInner = ({ zone, side }: PanelSectionProps): ReactElement => {
   return (
     <div
       ref={setDroppableRef}
-      className={`${styles.section} ${isFocused ? styles.focused : ""} ${isDropTarget ? styles.dropTarget : ""} ${isMaximized ? styles.maximized : ""}`}
+      className={`${styles.section} ${isFocused ? styles.focused : ""} ${isRingVisible ? styles.ringVisible : ""} ${isDropTarget ? styles.dropTarget : ""} ${isMaximized ? styles.maximized : ""}`}
       data-testid={`panel-section-${side}`}
       data-maximized={isMaximized ? "true" : undefined}
-      // Clicking a non-focused pane dismisses the ring (clicking the focused
-      // pane leaves it). Clicks never *add* the ring — only add/drop/hotkeys do.
+      // Clicking a non-focused pane records it as the focused pane (silently —
+      // no ring flash; clicking the already-focused pane is a no-op). The ring
+      // is only *flashed* by deliberate jumps (add/drop/hotkeys) and workspace
+      // entry, never by a plain click.
       onPointerDown={() => {
-        if (!isFocused) setFocusedZone(null);
+        if (!isFocused) selectZone(zone);
       }}
     >
       {tabStripPosition === "top" && tabBar}
