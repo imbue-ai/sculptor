@@ -96,6 +96,95 @@ def test_workspace_form_draft_persists_after_navigation(
     expect(workspace_name_input).to_have_value(draft_workspace_name)
 
 
+@user_story("to not lose my selected source branch and branch name when navigating away and back")
+def test_workspace_form_branch_state_persists_after_navigation(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """Selected source branch and manually-edited branch name should persist after navigating away and back.
+
+    The workspace name already persists (it is keyed by draftId in localStorage),
+    but the repo, source branch, and branch-name selections used to be ephemeral
+    React state that reset to their defaults whenever the Add Workspace tab was
+    unmounted and remounted. The result was that switching tabs and returning
+    silently dropped the user's repo/branch choices while leaving the name intact
+    — which could open a workspace on the wrong branch (SCU-1427).
+
+    Steps:
+    1. Create an initial workspace so there is a tab to navigate to
+    2. Navigate back to the Add Workspace page via the "+" button
+    3. Fill in the workspace name, select a non-default source branch ("main",
+       since the test repo is checked out on "testing"), and type a custom branch name
+    4. Navigate away by clicking on the existing workspace tab
+    5. Navigate back to the Add Workspace page via the "Open Workspace" tab
+    6. Verify the source branch and branch name are still the user's selections
+    """
+    page = sculptor_instance_.page
+    add_ws_page = PlaywrightAddWorkspacePage(page=page)
+
+    # Step 1: Create a workspace so we have somewhere to navigate to.
+    task_page = start_task_and_wait_for_ready(
+        sculptor_page=page,
+        prompt="Setup task",
+        workspace_name="Initial Workspace",
+    )
+
+    # Step 2: Navigate back to Add Workspace page via the "+" button.
+    add_workspace_button = task_page.get_add_workspace_button()
+    expect(add_workspace_button).to_be_visible()
+    add_workspace_button.click()
+
+    submit_button = add_ws_page.get_submit_button()
+    expect(submit_button).to_be_visible()
+
+    # Step 3: Fill in the workspace name, pick a non-default source branch, and
+    # type a custom branch name. The test repo is checked out on "testing", so
+    # "main" is a non-current branch the user can deliberately select.
+    draft_workspace_name = "Branch State Workspace"
+    custom_branch_name = "my-custom-branch-name"
+
+    workspace_name_input = add_ws_page.get_workspace_name_input()
+    workspace_name_input.fill(draft_workspace_name)
+
+    add_ws_page.select_branch("main")
+    branch_selector = add_ws_page.get_branch_selector()
+    expect(branch_selector).to_contain_text("main")
+
+    branch_name_input = add_ws_page.get_branch_name_input()
+    branch_name_input.fill(custom_branch_name)
+    expect(branch_name_input).to_have_value(custom_branch_name)
+
+    # Step 4: Navigate away by clicking on the existing workspace tab.
+    workspace_tab = add_ws_page.get_workspace_tabs().first
+    expect(workspace_tab).to_be_visible()
+    workspace_tab.click()
+
+    # Confirm we navigated away — the chat panel of the existing workspace should appear.
+    chat_panel = PlaywrightTaskPage(page=page).get_chat_panel()
+    expect(chat_panel).to_be_visible()
+
+    # Step 5: Navigate back to the Add Workspace page via the "Open Workspace" tab.
+    # Use .last because a stale "new workspace" tab may persist from previous test
+    # cleanup when running on a shared instance with xdist reordering.
+    open_workspace_tab = add_ws_page.get_add_workspace_tabs().last
+    expect(open_workspace_tab).to_be_visible()
+    open_workspace_tab.click()
+
+    submit_button = add_ws_page.get_submit_button()
+    expect(submit_button).to_be_visible()
+
+    # Step 6: Verify the source branch and branch name survived the round trip.
+    # The workspace name is also checked to confirm the documented asymmetry
+    # (name persisted; branch/source did not) is fully resolved.
+    workspace_name_input = add_ws_page.get_workspace_name_input()
+    expect(workspace_name_input).to_have_value(draft_workspace_name)
+
+    branch_name_input = add_ws_page.get_branch_name_input()
+    expect(branch_name_input).to_have_value(custom_branch_name)
+
+    branch_selector = add_ws_page.get_branch_selector()
+    expect(branch_selector).to_contain_text("main")
+
+
 @user_story("to draft multiple workspaces in parallel, like browser tabs")
 def test_multiple_new_workspace_tabs_with_independent_drafts(
     sculptor_instance_: SculptorInstance,
