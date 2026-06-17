@@ -90,12 +90,3 @@ def test_pep_440_to_semver(our_version, expected) -> None:
     else:
         with pytest.raises(expected):
             pep_440_to_semver(our_version)
-
-
-def test_ci_babysitter_intentional_failure() -> None:
-    """Intentional failing test to exercise the CI Babysitter -> terminal agent flow.
-
-    This asserts something deliberately false so CI fails. It can be safely deleted
-    (or the assertion flipped) to make CI green again.
-    """
-    assert next_version("1.2.3", VersionComponent.PATCH) == "9.9.9"
