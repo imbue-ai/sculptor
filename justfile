@@ -1476,6 +1476,16 @@ test-offload *args="":
     ulimit -n 8192
     offload run --trace {{args}} || [ $? -eq 2 ]
 
+# Run the @electron integration subset on Offload (Modal) in Electron launch
+# mode; see offload-electron.toml. These are skipped by the browser-mode lane.
+[group("test")]
+test-offload-electron *args="":
+    #!/bin/bash
+    set -ueo pipefail
+    {{ _require_offload }}
+    ulimit -n 8192
+    offload run -c offload-electron.toml --trace {{args}} || [ $? -eq 2 ]
+
 # Run the backend unit suite on Offload (Modal); see offload-unit.toml.
 # Alternative to `just test-unit-backend` (pytest -n 8).
 [group("test")]
