@@ -113,6 +113,26 @@ class PlaywrightDependencyCardElement:
     def get_authenticate_button(self) -> Locator:
         return self._card.locator('[data-role="authenticate-button"]')
 
+    def get_auth_panel(self) -> Locator:
+        """The headless/remote sign-in panel (link + paste-a-code field)."""
+        return self._card.locator('[data-role="auth-panel"]')
+
+    def get_auth_url_link(self) -> Locator:
+        """The "open sign-in page" link shown during the paste-a-code flow."""
+        return self._card.locator('[data-role="auth-url-link"]')
+
+    def get_auth_code_input(self) -> Locator:
+        """The field where the user pastes the code from the sign-in page."""
+        return self._card.locator('[data-role="auth-code-input"]')
+
+    def get_auth_code_submit(self) -> Locator:
+        """The button that submits the pasted sign-in code."""
+        return self._card.locator('[data-role="auth-code-submit"]')
+
+    def get_auth_error(self) -> Locator:
+        """The inline error shown when starting or completing sign-in fails."""
+        return self._card.locator('[data-role="auth-error"]')
+
     def get_mode_switch(self) -> Locator:
         return self._card.locator('[data-role="mode-switch"]')
 
