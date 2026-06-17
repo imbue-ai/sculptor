@@ -220,8 +220,11 @@ def test_images_deleted_when_task_deleted(
     for image_path in image_paths:
         assert image_path.exists(), f"Image should exist at {image_path}"
 
-    # Delete the workspace via the API
-    base_url = page.url.split("#")[0].rstrip("/")
+    # Delete the workspace via the API. Use the backend's HTTP origin, not
+    # page.url: in Electron app-scheme mode the page is served from
+    # sculptor://app, which page.request cannot fetch ("Protocol sculptor: not
+    # supported").
+    base_url = sculptor_instance_.backend_api_url.rstrip("/")
     response = page.request.get(f"{base_url}/api/v1/workspaces/recent")
     assert response.ok, f"Failed to list workspaces: {response.status}"
     workspaces = response.json().get("workspaces", [])
