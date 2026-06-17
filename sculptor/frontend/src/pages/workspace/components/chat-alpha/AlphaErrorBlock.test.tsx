@@ -58,7 +58,7 @@ const renderErrorBlock = (props: {
 afterEach(() => {
   cleanup();
   // openSettingsSpy is hoisted and shared across tests; clear its call history
-  // so per-test call-count assertions stay isolated as more tests are added.
+  // so per-test call-count assertions stay isolated.
   vi.clearAllMocks();
 });
 
@@ -90,8 +90,6 @@ describe("AlphaErrorBlock", () => {
   });
 
   describe("ClaudeBinaryNotFoundError", () => {
-    // Regression: the Pi handling generalizes the original Claude-only block, so
-    // Claude must keep linking to its own (DEPENDENCIES) settings section.
     const claudeBlock = makeErrorBlock({
       message: "Claude binary not found or is invalid.",
       errorType: "sculptor.interfaces.agents.errors.ClaudeBinaryNotFoundError",
