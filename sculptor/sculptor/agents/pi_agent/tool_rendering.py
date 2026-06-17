@@ -79,16 +79,25 @@ def _summarize_subagent_tasks(pi_args: Mapping[str, Any]) -> tuple[str, str]:
     The pi sub-agent tool takes either a single `{task}` or a parallel
     `{tasks: [{task, label?}]}`. The frontend's `buildSubagentMetadataMap` reads
     `subagent_type` (the pill's label) and `prompt` (its task text) off the
-    `Agent` tool input, so map onto those: a single task keeps its text; a
-    parallel batch summarizes the count and joins the task lines.
+    `Agent` tool input. A single task keeps its text; a parallel batch becomes
+    one `"<label>: <task>"` line per child, separated by a blank line. The blank
+    line keeps each child distinct in the popover (rendered markdown, where a
+    lone newline is only a soft break and would run the tasks together), and the
+    plain `<label>:` prefix also reads cleanly in the collapsed pill, which shows
+    the prompt as plain text rather than markdown.
     """
     tasks = pi_args.get("tasks")
     if isinstance(tasks, list) and tasks:
-        lines: list[str] = []
-        for entry in tasks:
-            if isinstance(entry, dict):
-                lines.append(_first_str(entry, "task"))
-        return f"subagent (x{len(tasks)})", "\n".join(line for line in lines if line)
+        sections: list[str] = []
+        for index, entry in enumerate(tasks, start=1):
+            if not isinstance(entry, dict):
+                continue
+            task_text = _first_str(entry, "task")
+            if not task_text:
+                continue
+            label = _first_str(entry, "label") or f"Sub-agent {index}"
+            sections.append(f"{label}: {task_text}")
+        return f"subagent (x{len(tasks)})", "\n\n".join(sections)
     return "subagent", _first_str(pi_args, "task", "prompt")
 
 

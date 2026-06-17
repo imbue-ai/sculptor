@@ -92,7 +92,17 @@ def test_map_subagent_parallel_tasks_summarized() -> None:
     )
     assert name == "Agent"
     assert input_["subagent_type"] == "subagent (x2)"
-    assert input_["prompt"] == "find models\nfind providers"
+    # Each task is its own blank-line-separated "<label>: <task>" section so it
+    # reads distinctly both in the markdown popover and the plain collapsed pill.
+    assert input_["prompt"] == "Sub-agent 1: find models\n\nSub-agent 2: find providers"
+
+
+def test_map_subagent_parallel_tasks_use_labels_when_present() -> None:
+    _, input_ = map_pi_tool_call(
+        "subagent",
+        {"tasks": [{"task": "scan docs", "label": "Huey"}, {"task": "scan ratchets", "label": "Duey"}]},
+    )
+    assert input_["prompt"] == "Huey: scan docs\n\nDuey: scan ratchets"
 
 
 def test_map_is_defensive_about_missing_or_odd_args() -> None:
