@@ -30,13 +30,16 @@ line with the new UI. It is a work list, not a description of shipped behavior.
   created the last-used agent type; the chevron opened an agent-type dropdown
   (Claude / pi / Terminal / registered CLIs).
 - Creation now lives in `AddPanelPalette` (`components/panels/AddPanelPalette.tsx`),
-  opened by a section's `+` button (`SectionTabBar.tsx`). The palette has:
-  - a root **"New {recently-used} agent"** row (dynamic label) — `Enter`/click
-    creates the recently-used type in one keystroke;
-  - a trailing chevron + `→` (ArrowRight) that drill into a **"Choose agent"**
-    sub-page;
-  - a separate **"New terminal"** row that creates a raw shell *panel*
-    (`addTerminalAtom`), not an agent.
+  opened by a section's `+` button (`SectionTabBar.tsx`). The "Create" group has
+  three rows:
+  - **"New {recently-used} agent"** (dynamic label) — `Enter`/click creates the
+    recently-used type in one keystroke (`ADD_AGENT_BUTTON`);
+  - **"Choose agent type…"** — `Enter`/click/`→`/chevron drills into the
+    **"Choose agent"** sub-page (`ADD_AGENT_CHEVRON_BUTTON`);
+  - **"New terminal"** — creates a raw shell *panel* (`addTerminalAtom`), not an
+    agent.
+- The empty-section quick add (`EmptyPanelLauncher.tsx`) shows the same dynamic
+  **"New {recently-used} agent"** fast-path button.
 
 ### The "Choose agent" sub-page (this feature)
 Lists, recently-used first (tagged with a "Recently used" pill):
@@ -70,8 +73,8 @@ Lists, recently-used first (tagged with a "Recently used" pill):
 | Palette search input | `add-panel-input` |
 | Palette list | `add-panel-list` |
 | Destination select | `add-panel-destination` |
-| Root "New … agent" row | `ElementIds.ADD_AGENT_BUTTON` |
-| Root row chevron (drill-in) | `ElementIds.ADD_AGENT_CHEVRON_BUTTON` |
+| "New … agent" fast-path row | `ElementIds.ADD_AGENT_BUTTON` |
+| "Choose agent type…" drill-in row | `ElementIds.ADD_AGENT_CHEVRON_BUTTON` |
 | "Choose agent" sub-page container | `ElementIds.AGENT_TYPE_MENU` |
 | Sub-page items | `AGENT_TYPE_MENU_ITEM_CLAUDE` / `_PI` / `_REGISTERED` (+`data-registration-id`) |
 | Agent tab | `panel-tab-${panelId}` |
@@ -208,3 +211,72 @@ right agent and focuses it in the section.
 3. Sweep group A (mechanical), then groups B and C.
 4. Add the new feature coverage (section 4).
 5. Manual QA (section 5).
+
+---
+
+## 7. File-browser master-detail redesign (separate follow-up)
+
+The Files / Changes / Commits panels were reworked (see
+`agent_docs/file-browser-panel/mocks.context.md`). The integration tests in
+`integration/frontend/test_file_browser.py` (and two siblings) still drive the
+**old** unified `FileBrowserPanel` — the in-panel tabs and the search-toggle
+flow — which no longer renders. They need migration to the new per-panel UI.
+
+### What changed (new target surfaces)
+- **No in-panel tabs.** `FILE_BROWSER_TAB_ALL/CHANGES/HISTORY` are gone. Files,
+  Changes, and Commits are now **separate section panels** (zone tabs); switch
+  between them via the section tab bar (`panel-tab-*`), not `get_tab_*()`.
+- **The tree side is search-only.** The tree header holds just
+  `FILE_BROWSER_SEARCH_INPUT` (always visible — no search-toggle or close
+  button). `FILE_BROWSER_SEARCH_FILES_BTN` and `FILE_BROWSER_SEARCH_CLOSE` are no
+  longer rendered (the ids/helpers are kept for now to avoid colliding with this
+  migration — remove them here). Commits has no search, so its tree side has no
+  header at all.
+- **All other controls live in the diff header (right pane):**
+  - **Refresh** (`FILE_BROWSER_REFRESH_BTN`) — on the right of the diff header.
+  - **Merged "…" menu** — `FILE_BROWSER_COLLAPSE_FOLDERS_BTN` and the tree/flat
+    toggle are now `DropdownMenu.Item`s inside the diff header's
+    `DIFF_FILE_HEADER_MENU_TRIGGER` menu (merged with the diff view options).
+    Open that menu first, then click the item.
+  - **Tree toggle** — a single folder-tree button at the **left of the diff
+    header** (before the breadcrumb), solid white when the tree is shown / dim
+    when collapsed. Its testid is `FILE_BROWSER_HIDE_TREE_BTN` when shown and
+    `DIFF_HEADER_SHOW_TREE_BTN` when collapsed.
+  - These controls render in the diff header when a file is open, and in the
+    empty-detail header when no file is open but the panel is wide enough to show
+    the detail pane. In a **narrow** panel with no file open (full-width tree)
+    they are not shown — open a file or widen the panel first.
+
+### Page object (`testing/elements/file_browser.py`)
+- Drop `get_tab_all/changes/history()` and `get_search_button()/get_search_close()`.
+- `get_search_input()` stays (now always present, tree side).
+- `get_collapse_button()` → open the diff header's `DIFF_FILE_HEADER_MENU_TRIGGER`
+  "…" menu first, then resolve the item.
+- `get_refresh_button()` → look in the diff header (needs the detail pane shown).
+- Add `get_tree_toggle_button()` resolving either id by state.
+
+### Affected tests (retarget or rework)
+- Tab-switching: `test_filter_tabs_switch_between_all_and_changes`,
+  `test_review_all_button_opens_combined_diff`,
+  `test_review_all_shows_all_branch_files`,
+  `test_switch_between_file_tab_and_review_all`,
+  `test_split_view_toggle_works_for_combined_diff` (and other `get_tab_changes/
+  history` call sites) → switch panels via the section tab bar.
+- Search: `test_file_search`, `test_file_search_filters_visible_rows`,
+  `test_file_search_escape_closes`, `test_file_search_no_matches_shows_empty_state`,
+  `test_file_search_uses_exact_substring_matching`,
+  `test_file_search_folders_are_collapsible` → drop the toggle/close steps; type
+  into the always-visible input.
+- Collapse: `test_collapse_all_folders_button`,
+  `test_collapse_all_changes_folders_button`, `test_collapse_all_commits_button`
+  → open the "…" menu before clicking collapse (and switch panels, not tabs).
+- Refresh: `test_file_browser_symlink_replaces_directory.py`,
+  `test_diff_loading_bar_no_file.py` → refresh now lives in the diff header.
+
+### New coverage to ADD
+- **Fixed-width tree on resize:** widening the panel grows only the viewer; the
+  tree keeps its px width (and persists per panel).
+- **Hide/show-tree toggle:** hide from the tree header → tree collapses, viewer
+  fills, and the show toggle appears left of the breadcrumb; clicking it restores
+  the tree.
+- **Always-visible search** filtering Files and Changes.

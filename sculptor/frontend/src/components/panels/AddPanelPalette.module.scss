@@ -250,7 +250,9 @@
   background: var(--gray-a4);
   border-radius: var(--radius-2);
   color: var(--gray-11);
+  flex-shrink: 0;
   font-size: var(--font-size-1);
   font-weight: var(--font-weight-medium);
   padding: 0 var(--space-2);
+  white-space: nowrap;
 }

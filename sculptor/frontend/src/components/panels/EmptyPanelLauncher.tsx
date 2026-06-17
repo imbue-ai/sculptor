@@ -3,6 +3,8 @@ import { useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useMemo } from "react";
 
+import { agentTypeDisplayLabel } from "~/common/state/atoms/agentTabs.ts";
+import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
 import { addPanelTargetZoneAtom } from "~/components/panels/addPanelAtoms.ts";
 import type { QuickAddItem } from "~/components/panels/quickAdd.ts";
 import { pickQuickAdd } from "~/components/panels/quickAdd.ts";
@@ -23,12 +25,6 @@ type EmptyPanelLauncherProps = {
   heading?: string;
 };
 
-const itemLabel = (item: QuickAddItem): string => {
-  if (item.kind === "create-terminal") return "New terminal";
-  if (item.kind === "create-agent") return "New agent";
-  return item.panel.displayName;
-};
-
 /**
  * The empty-section state: an "Add a panel…" button that opens the full Add
  * Panel palette (cmd+k) scoped to this section, over a "Quick add" list of the
@@ -37,14 +33,25 @@ const itemLabel = (item: QuickAddItem): string => {
  */
 export const EmptyPanelLauncher = ({ zone, heading }: EmptyPanelLauncherProps): ReactElement => {
   const menu = useAddPanelMenu(zone);
+  const { registrations } = useTerminalAgentRegistrations();
   const unplacedPanels = useUnplacedStaticPanels();
   const openPalette = useSetAtom(addPanelTargetZoneAtom);
   const items = useMemo(() => pickQuickAdd(unplacedPanels).slice(0, QUICK_ADD_LIMIT), [unplacedPanels]);
+
+  // The "New agent" quick add reuses the recently-used type — the same
+  // one-keystroke fast path as the palette's first "Create" row.
+  const createAgentLabel = `New ${agentTypeDisplayLabel(menu.defaultAgentType, registrations)} agent`;
 
   const onSelect = (item: QuickAddItem): void => {
     if (item.kind === "create-terminal") menu.createTerminal();
     else if (item.kind === "create-agent") menu.createAgent();
     else menu.openPanel(item.panel.id);
+  };
+
+  const itemLabel = (item: QuickAddItem): string => {
+    if (item.kind === "create-terminal") return "New terminal";
+    if (item.kind === "create-agent") return createAgentLabel;
+    return item.panel.displayName;
   };
 
   return (
