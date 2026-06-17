@@ -11,12 +11,16 @@ FROM ubuntu:24.04
 
 # xvfb + xauth provide the virtual X display the Electron integration launch
 # mode needs (the harness wraps Electron in `xvfb-run` when there's no DISPLAY).
-# Electron's other shared libs come from `playwright install --with-deps
-# chromium` in finalize-base-image.sh, which also handles Ubuntu 24.04's t64
-# package renames.
+# libgtk-3-0t64 + libnotify4 are the GTK GUI stack that full Electron links
+# against: `playwright install --with-deps chromium` (finalize-base-image.sh)
+# installs deps for Playwright's *headless* Chromium shell, which omits GTK — so
+# without these the Electron binary aborts at startup with "libgtk-3.so.0:
+# cannot open shared object file" and never opens its remote-debugging port.
+# (t64 is Ubuntu 24.04's 64-bit-time_t package rename; libgtk-3-0t64 pulls in
+# the pango/cairo/gdk-pixbuf/atk closure transitively.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git curl ca-certificates build-essential pkg-config libssl-dev \
-        xvfb xauth \
+        xvfb xauth libgtk-3-0t64 libnotify4 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv
