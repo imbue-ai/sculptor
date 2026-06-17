@@ -141,8 +141,15 @@ const CreatePrButton = ({ targetBranch, gitProvider }: CreatePrButtonProps): Rea
   );
 };
 
-const getPipelineDotClass = (status: string | null | undefined): string => {
-  switch (status) {
+// A PR waiting in the merge queue supersedes its pipeline status: the checks
+// have already gone green to be enqueued, so the dot reports "Merge queued"
+// instead of the (now stale) pipeline result.
+const getPipelineDotClass = (prStatus: PrStatusInfo): string => {
+  if (prStatus.isInMergeQueue) {
+    return styles.dotMergeQueued;
+  }
+
+  switch (prStatus.pipelineStatus) {
     case "running":
       return styles.dotRunning;
     case "passed":
@@ -156,8 +163,12 @@ const getPipelineDotClass = (status: string | null | undefined): string => {
   }
 };
 
-const getPipelineTooltip = (status: string | null | undefined): string => {
-  switch (status) {
+const getPipelineTooltip = (prStatus: PrStatusInfo): string => {
+  if (prStatus.isInMergeQueue) {
+    return "Merge queued";
+  }
+
+  switch (prStatus.pipelineStatus) {
     case "running":
       return "Pipeline running";
     case "passed":
@@ -222,20 +233,15 @@ const OpenPrButton = ({ prStatus, isDropdownOpen, gitProvider }: OpenPrButtonPro
           data-testid={ElementIds.PR_BUTTON_OPEN}
         >
           <Text size="1">PR #{prStatus.prIid}</Text>
-          <Tooltip content={getPipelineTooltip(prStatus.pipelineStatus)}>
-            <span className={`${styles.statusDot} ${getPipelineDotClass(prStatus.pipelineStatus)}`} />
+          <Tooltip content={getPipelineTooltip(prStatus)}>
+            <span
+              className={`${styles.statusDot} ${getPipelineDotClass(prStatus)}`}
+              data-testid={prStatus.isInMergeQueue ? ElementIds.PR_BUTTON_MERGE_QUEUED : undefined}
+            />
           </Tooltip>
           <Tooltip content={getReviewTooltip(prStatus)}>
             <span className={`${styles.statusDot} ${getReviewDotClass(prStatus)}`} />
           </Tooltip>
-          {prStatus.isInMergeQueue && (
-            <Tooltip content="Merge queued">
-              <span
-                className={`${styles.statusDot} ${styles.dotMergeQueued}`}
-                data-testid={ElementIds.PR_BUTTON_MERGE_QUEUED}
-              />
-            </Tooltip>
-          )}
         </button>
       </Tooltip>
       <Popover.Trigger>
