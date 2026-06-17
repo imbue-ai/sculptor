@@ -33,7 +33,10 @@ export const sectionSizesSharedAtom = atomWithStorage<boolean>("sculptor-section
 export type SectionSizeKey = "left" | "right" | "bottom";
 
 export const DEFAULT_SECTION_PERCENT: Record<SectionSizeKey, number> = {
-  left: 20,
+  // The Left section holds the master-detail Files / Changes / Commits panels
+  // (file tree + diff viewer side by side), so it defaults wide enough to show
+  // both without the tree crowding out the viewer.
+  left: 40,
   right: 22,
   bottom: 30,
 };

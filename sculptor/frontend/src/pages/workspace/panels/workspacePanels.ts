@@ -92,7 +92,9 @@ export const workspacePanels: ReadonlyArray<PanelDefinition> = [
 
 /**
  * Default first-load layout (REQ-DEFAULT-1):
- *   - Left section (top-left) visible: Files, Changes, Commits (Files active).
+ *   - Left section (top-left) collapsed, pre-seeded with Files, Changes, Commits
+ *     (Files active) — so a clean first launch is just Chat, and toggling the
+ *     Left section reveals the file panels immediately.
  *   - Center section visible: the default agent (placed at runtime — its panel
  *     id is a task id, unknown at static-config time).
  *   - Right section (top-right) empty and collapsed.
@@ -109,7 +111,7 @@ export const workspaceDefaultLayout: DefaultPanelLayout = {
     "top-left": "files",
   },
   zoneVisibility: {
-    "top-left": true,
+    "top-left": false,
     center: true,
     "top-right": false,
     bottom: false,

@@ -81,14 +81,12 @@ export const MasterDetailPanel = ({
   }, []);
 
   const hasDetail = diffState.activeTabPath != null;
-  // Reserve the detail pane (placeholder when no file is open) only when the
-  // panel is wide enough for both the fixed tree and a usable viewer — otherwise
-  // a narrow panel (e.g. the default Files panel in the Left section) keeps the
-  // full-width tree until a file is opened.
-  const hasRoomForDetail = containerWidth >= MASTER_DETAIL_MIN_LIST_PX + MIN_DETAIL_PX + HANDLE_PX;
-  const shouldShowDetail = isTreeHidden || hasDetail || hasRoomForDetail;
-  const isListFull = !isTreeHidden && !shouldShowDetail;
 
+  // The detail (diff/file viewer) is ALWAYS rendered — it is never hidden, with
+  // or without a file open (it shows a placeholder when empty). The tree is shown
+  // unless the user collapses it with the toggle; when the panel is too small to
+  // fit both comfortably, the viewer flexes down rather than dropping out, and
+  // the user can collapse the tree (the toggle) to reclaim its space.
   const maxList = Math.max(MASTER_DETAIL_MIN_LIST_PX, containerWidth - MIN_DETAIL_PX - HANDLE_PX);
   const clampedListWidth = Math.min(Math.max(listWidth, MASTER_DETAIL_MIN_LIST_PX), maxList);
 
@@ -141,37 +139,31 @@ export const MasterDetailPanel = ({
     collapseLabel: header.collapseLabel,
   };
 
-  const listStyle = isListFull ? undefined : { width: clampedListWidth };
-
   return (
     <div ref={containerRef} className={styles.row}>
       {!isTreeHidden && (
         <>
-          <div className={`${styles.list} ${isListFull ? styles.listFill : ""}`} style={listStyle}>
+          <div className={styles.list} style={{ width: clampedListWidth }}>
             {header.hasSearch && <MasterDetailTreeHeader workspaceId={workspaceId} />}
             {children}
           </div>
-          {shouldShowDetail && (
-            <ResizeHandle axis="x" getSize={getListSize} onResize={onResizeList} ariaLabel="Resize file tree" />
-          )}
+          <ResizeHandle axis="x" getSize={getListSize} onResize={onResizeList} ariaLabel="Resize file tree" />
         </>
       )}
-      {shouldShowDetail && (
-        <div className={styles.detail}>
-          {hasDetail ? (
-            <DiffPanel
-              workspaceId={workspaceId}
-              stateKey={stateKey}
-              singleFile
-              headerLeading={treeToggle}
-              headerActions={refreshButton}
-              headerMenuItems={<TreeOptionsItems {...treeOptions} />}
-            />
-          ) : (
-            <EmptyDetail toggle={treeToggle} refresh={refreshButton} menu={<TreeOptionsMenu {...treeOptions} />} />
-          )}
-        </div>
-      )}
+      <div className={styles.detail}>
+        {hasDetail ? (
+          <DiffPanel
+            workspaceId={workspaceId}
+            stateKey={stateKey}
+            singleFile
+            headerLeading={treeToggle}
+            headerActions={refreshButton}
+            headerMenuItems={<TreeOptionsItems {...treeOptions} />}
+          />
+        ) : (
+          <EmptyDetail toggle={treeToggle} refresh={refreshButton} menu={<TreeOptionsMenu {...treeOptions} />} />
+        )}
+      </div>
     </div>
   );
 };

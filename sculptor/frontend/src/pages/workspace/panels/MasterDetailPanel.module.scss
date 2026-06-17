@@ -23,13 +23,6 @@
   overflow: hidden;
 }
 
-.listFill {
-  // Narrow panel with no file open: the tree fills the whole panel and there is
-  // no viewer beside it, so drop the fixed width and the divider.
-  border-right: 0;
-  flex: 1 1 0;
-}
-
 .detail {
   display: flex;
   flex: 1 1 0;
