@@ -1,6 +1,9 @@
 import subprocess
 import threading
+from collections import deque
 from typing import Callable
+
+_DEFAULT_RECENT_OUTPUT_LINES = 50
 
 
 class Forwarder(threading.Thread):
@@ -14,12 +17,18 @@ class Forwarder(threading.Thread):
         sculptor_server: subprocess.Popen,
         prefix: str = "",
         known_harmless_func: Callable[[str], bool] | None = None,
+        recent_output_lines: int = _DEFAULT_RECENT_OUTPUT_LINES,
     ) -> None:
         super().__init__(daemon=True)
         self.prefix = prefix
         self.sculptor_server = sculptor_server
         self.first_failure_line: str | None = None
         self.known_harmless_func = known_harmless_func
+        # Retain the most recent lines so callers can surface the process's
+        # output after the fact — e.g. when the Electron app forwards fine but a
+        # later step (CDP connect) fails and the bare exception carries no clue
+        # as to what the process was doing.
+        self.recent_output: deque[str] = deque(maxlen=recent_output_lines)
         self._stop_event = threading.Event()
 
     def stop(self, timeout: float = 5.0) -> None:
@@ -34,6 +43,7 @@ class Forwarder(threading.Thread):
                 line = self.sculptor_server.stdout.readline()
                 if not line:
                     break
+                self.recent_output.append(line.rstrip())
                 # Note: the print(line) here routes to pytest junit due to an issue with how pytest hides stdout
                 #       the logger actually displays to the user
                 print_colored_line(self.prefix + line.rstrip(), known_harmless_func=self.known_harmless_func)

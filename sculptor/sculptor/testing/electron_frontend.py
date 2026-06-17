@@ -175,9 +175,26 @@ class ElectronFrontend:
             assert len(pages) == 1, f"Expected exactly one non-devtools page, got {pages}"
             page = pages[0]
             configure_page(page, timeout_ms=self.timeout_ms)
-        except Exception:
+        except Exception as exc:
+            # Electron reached its ready message (so the launch-failure path
+            # above didn't fire), but a later step failed — most often the CDP
+            # connect, where the bare PlaywrightError ("connect ECONNREFUSED")
+            # gives no hint as to why the debug port never opened. Offload
+            # streams only the failure summary, not per-sandbox logs, so without
+            # this the real reason is invisible in CI. The Forwarder has been
+            # draining stdout (stderr is merged in) since launch, so its tail
+            # holds Chromium's own startup output — including the "DevTools
+            # listening on ws://..." line that appears iff --remote-debugging-port
+            # took effect. Kill first so that tail captures everything up to exit
+            # (the deque outlives the forwarder thread).
             self._kill_electron()
-            raise
+            exit_code = self._electron_proc.poll() if self._electron_proc is not None else None
+            post_launch = list(self._forwarder.recent_output) if self._forwarder is not None else []
+            tail = "\n".join([*recent_output, *post_launch]) or "(no output captured)"
+            raise RuntimeError(
+                f"Electron launched but CDP setup on port {cdp_port} failed "
+                f"(Electron exit code {exit_code}): {exc}. Last Electron output:\n{tail}"
+            ) from exc
         logger.info("[timing] CDP connect + page acquisition: {:.2f}s", time.monotonic() - t_cdp)
 
         self._browser_context = context
