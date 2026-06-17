@@ -1101,6 +1101,11 @@ class PiAgent(DefaultAgentWrapper):
                 current_model=current_model,
             )
         )
+        logger.info(
+            "PiAgent fetched {} model(s) from pi at start; current model={}",
+            len(self._available_models),
+            current_model.model_id if current_model is not None else None,
+        )
 
     def _request_interrupt(self) -> None:
         """Halt the in-flight pi turn via pi's `abort` command (supports_interruption).
@@ -1410,6 +1415,12 @@ class PiAgent(DefaultAgentWrapper):
                 new_model = ModelOption(
                     provider=message.provider, model_id=message.model_id, display_name=message.model_id
                 )
+            logger.info(
+                "PiAgent set_model applied: requested {}/{}, pi reports {}",
+                message.provider,
+                message.model_id,
+                new_model.model_id,
+            )
             self._output_messages.put(
                 ModelsAvailableAgentMessage(
                     message_id=AgentMessageID(),
@@ -1644,6 +1655,8 @@ class PiAgent(DefaultAgentWrapper):
         if parsed.message.role != "assistant":
             logger.debug("PiAgent dropping non-assistant message_end (role={})", parsed.message.role)
             return
+        if parsed.message.model:
+            logger.info("PiAgent turn produced by model={}", parsed.message.model)
         stop_reason = parsed.message.stop_reason
         if stop_reason == "error" or (stop_reason == "aborted" and not self._is_abort_expected()):
             text = extract_assistant_text(parsed.message) or state.accumulated_text or "pi message ended in error"

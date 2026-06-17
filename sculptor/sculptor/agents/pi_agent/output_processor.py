@@ -38,6 +38,9 @@ class AgentMessage(SerializableModel):
     role: str
     content: list[dict[str, Any]] = []
     stop_reason: str | None = None
+    # The model id pi reports as having produced this message (assistant
+    # messages); absent on other roles.
+    model: str | None = None
 
 
 def extract_assistant_text(message: AgentMessage) -> str:
