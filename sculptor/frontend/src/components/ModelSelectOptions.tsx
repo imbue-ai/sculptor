@@ -3,7 +3,7 @@ import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 
 import { LlmModel, type ModelOption } from "~/api";
-import { getModelLongName } from "~/common/modelConstants";
+import { getModelLongName, getProviderDisplayName } from "~/common/modelConstants";
 import { sculptorSettingsAtom } from "~/common/state/atoms/sculptorSettings.ts";
 
 const PRODUCTION_MODELS = [
@@ -23,19 +23,43 @@ const PRODUCTION_MODELS = [
 // Only shown when INTEGRATION_ENABLED is true.
 const TESTING_ONLY_MODELS = [LlmModel.FAKE_CLAUDE, LlmModel.FAKE_CLAUDE_2];
 
+type ProviderGroup = {
+  provider: string;
+  models: ReadonlyArray<ModelOption>;
+};
+
+// Partition the catalog into per-provider groups, preserving incoming order:
+// the backend delivers it newest-first, which we keep within and across groups.
+const groupModelsByProvider = (models: ReadonlyArray<ModelOption>): ReadonlyArray<ProviderGroup> => {
+  const order: Array<string> = [];
+  const byProvider = new Map<string, Array<ModelOption>>();
+  for (const model of models) {
+    const existing = byProvider.get(model.provider);
+    if (existing === undefined) {
+      order.push(model.provider);
+      byProvider.set(model.provider, [model]);
+    } else {
+      existing.push(model);
+    }
+  }
+  return order.map((provider) => ({ provider, models: byProvider.get(provider) ?? [] }));
+};
+
 type ModelSelectOptionsProps = {
   optionTestId?: string;
   // A harness-supplied model list (pi). When provided and non-empty these are
-  // rendered (display_name label, model_id value); otherwise the built-in Claude
-  // list is rendered unchanged. The Claude/creation/fallback path MUST keep its
-  // PRODUCTION_MODELS display names — integration tests select by exact name.
+  // rendered grouped by provider (display_name label, model_id value); otherwise
+  // the built-in Claude list is rendered unchanged. The Claude/creation/fallback
+  // path MUST keep its PRODUCTION_MODELS display names — integration tests select
+  // by exact name.
   models?: ReadonlyArray<ModelOption>;
 };
 
 /**
  * Renders the model options for a Select dropdown.
  *
- * With a backend-supplied `models` list (pi) it renders those. Otherwise it
+ * With a backend-supplied `models` list (pi) it renders those grouped by
+ * provider, each group led by a non-selectable provider header. Otherwise it
  * renders the built-in Claude models (Claude Code uses the user's existing
  * authentication); the Fake Claude models are appended only when integration
  * testing is enabled.
@@ -47,10 +71,15 @@ export const ModelSelectOptions = ({ optionTestId, models }: ModelSelectOptionsP
   if (models !== undefined && models.length > 0) {
     return (
       <>
-        {models.map((model) => (
-          <Select.Item key={model.modelId} value={model.modelId} data-testid={optionTestId}>
-            {model.displayName}
-          </Select.Item>
+        {groupModelsByProvider(models).map((group) => (
+          <Select.Group key={group.provider}>
+            <Select.Label>{getProviderDisplayName(group.provider)}</Select.Label>
+            {group.models.map((model) => (
+              <Select.Item key={model.modelId} value={model.modelId} data-testid={optionTestId}>
+                {model.displayName}
+              </Select.Item>
+            ))}
+          </Select.Group>
         ))}
       </>
     );

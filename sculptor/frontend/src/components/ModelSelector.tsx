@@ -100,10 +100,16 @@ export const ModelSelector = ({
         </Flex>
       </Select.Trigger>
       <Select.Content position="popper" sideOffset={5}>
-        <Select.Group>
-          <Select.Label>Model</Select.Label>
+        {hasBackendModels ? (
+          // The backend (pi) list renders its own per-provider group headers, so
+          // it is not wrapped in the single "Model" group the Claude list uses.
           <ModelSelectOptions optionTestId={ElementIds.MODEL_OPTION} models={backendModels} />
-        </Select.Group>
+        ) : (
+          <Select.Group>
+            <Select.Label>Model</Select.Label>
+            <ModelSelectOptions optionTestId={ElementIds.MODEL_OPTION} />
+          </Select.Group>
+        )}
       </Select.Content>
     </Select.Root>
   );

@@ -18,6 +18,23 @@ const modelNames: Partial<Record<LlmModel, { short: string; long: string }>> = {
 export const getModelShortName = (model: LlmModel): string => modelNames[model]?.short || "Unknown";
 export const getModelLongName = (model: LlmModel): string => modelNames[model]?.long || "Unknown";
 
+const providerDisplayNames: Record<string, string> = {
+  anthropic: "Anthropic",
+  openrouter: "OpenRouter",
+  deepseek: "DeepSeek",
+  google: "Google",
+  openai: "OpenAI",
+  "amazon-bedrock": "Amazon Bedrock",
+};
+
+/**
+ * The human-friendly label for a model provider, used as the group header in the
+ * pi model switcher. Unknown providers fall back to a capitalized form of the
+ * raw provider string.
+ */
+export const getProviderDisplayName = (provider: string): string =>
+  providerDisplayNames[provider] ?? `${provider.charAt(0).toUpperCase()}${provider.slice(1)}`;
+
 /**
  * Route a model-switcher value change to the correct apply path.
  *
