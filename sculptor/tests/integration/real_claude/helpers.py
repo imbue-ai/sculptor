@@ -309,7 +309,7 @@ def get_transcript_path(
     Calls the backend diagnostics endpoint to retrieve the session JSONL path.
     Raises AssertionError if the transcript file doesn't exist.
     """
-    base_url = instance.base_url.rstrip("/")
+    base_url = instance.backend_api_url.rstrip("/")
     workspace_id = _extract_workspace_id(task_page._page.url)
     agent_id = task_page.get_task_id()
 
