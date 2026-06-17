@@ -58,6 +58,7 @@ export const resolveRequestToFilePath = (bundleDir: string, requestUrl: string):
   } catch {
     return null;
   }
+
   if (parsed.protocol !== `${APP_SCHEME}:` || parsed.host !== APP_HOST) {
     return null;
   }
@@ -69,6 +70,7 @@ export const resolveRequestToFilePath = (bundleDir: string, requestUrl: string):
     // Malformed percent-encoding.
     return null;
   }
+
   if (pathname === "" || pathname === "/") {
     pathname = "/index.html";
   }
