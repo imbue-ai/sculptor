@@ -19,13 +19,6 @@ import { toSplitZone, ZONE_IDS } from "~/components/panels/types.ts";
 import { agentIdFromPanelId, isAgentPanelId } from "~/pages/workspace/panels/dynamicPanels.tsx";
 import { getWorkspaceTerminals, isTerminalPanelId, parseTerminalPanelId } from "~/pages/workspace/panels/terminals.ts";
 
-// Whether more than one agent panel is placed anywhere in the layout. The
-// only/active agent can't be closed, so tab strips use this to decide whether
-// agent tabs show a close affordance.
-export const hasMultipleAgentPanelsAtom: Atom<boolean> = atom((get) => {
-  return Object.keys(get(zoneAssignmentsAtom)).filter((id) => isAgentPanelId(id)).length > 1;
-});
-
 // Whether a section's split (secondary) half still has a panel that is
 // *assigned* to it but not yet rendered because its dynamic source (agent task
 // / terminal) hasn't registered into the panel registry yet. On reload the

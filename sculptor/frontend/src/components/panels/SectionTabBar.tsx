@@ -1,11 +1,11 @@
 import { ContextMenu, Flex, IconButton } from "@radix-ui/themes";
-import { useAtomValue, useSetAtom, useStore } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { Columns2, Maximize2, Minimize2, Plus, Rows2, Trash2, X } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { memo, useCallback, useMemo } from "react";
 
 import { renameWorkspaceAgent } from "~/api";
-import { useImbueLocation, useImbueNavigate, useWorkspacePageParams } from "~/common/NavigateUtils.ts";
+import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { formatShortcutForDisplay } from "~/common/ShortcutUtils.ts";
 import { updateTasksAtom } from "~/common/state/atoms/tasks.ts";
 import { agentDeleteTargetAtom, renamingAgentIdAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
@@ -19,7 +19,6 @@ import {
   panelRegistryAtom,
   panelShortcutsAtom,
   panelsInZoneAtom,
-  zoneAssignmentsAtom,
 } from "~/components/panels/atoms.ts";
 import { useMaximizePanel } from "~/components/panels/hooks.ts";
 import type { SectionSide } from "~/components/panels/PanelSection.tsx";
@@ -34,8 +33,7 @@ import type { PanelId, ZoneId } from "~/components/panels/types.ts";
 import { TabBar } from "~/components/tabs/TabBar.tsx";
 import type { TabDefinition } from "~/components/tabs/types.ts";
 import { agentIdFromPanelId, isAgentPanelId } from "~/pages/workspace/panels/dynamicPanels.tsx";
-import { hasMultipleAgentPanelsAtom } from "~/pages/workspace/panels/panelDerivedAtoms.ts";
-import { isTerminalPanelId, removeTerminalAtom } from "~/pages/workspace/panels/terminals.ts";
+import { isTerminalPanelId, terminalCloseTargetAtom } from "~/pages/workspace/panels/terminals.ts";
 
 import styles from "./PanelSection.module.scss";
 
@@ -56,7 +54,6 @@ type SectionTabBarProps = {
  * SortableTab keeps prop identity.
  */
 const SectionTabBarInner = ({ zone, side }: SectionTabBarProps): ReactElement => {
-  const store = useStore();
   const registry = useAtomValue(panelRegistryAtom);
   const panelIds = useAtomValue(panelsInZoneAtom(zone));
   const ghostPanelId = useAtomValue(ghostPanelIdAtom(zone));
@@ -70,16 +67,13 @@ const SectionTabBarInner = ({ zone, side }: SectionTabBarProps): ReactElement =>
   const panelShortcuts = useAtomValue(panelShortcutsAtom);
   const { maximizedZone, toggleZone: toggleMaximizeZone } = useMaximizePanel();
   const isMaximized = maximizedZone === zone;
-  const hasMultipleAgents = useAtomValue(hasMultipleAgentPanelsAtom);
-  const removeTerminal = useSetAtom(removeTerminalAtom);
+  const setTerminalCloseTarget = useSetAtom(terminalCloseTargetAtom);
   const updateTasks = useSetAtom(updateTasksAtom);
   const setRenamingAgentId = useSetAtom(renamingAgentIdAtom);
   const renamingAgentId = useAtomValue(renamingAgentIdAtom);
   const setAgentDeleteTarget = useSetAtom(agentDeleteTargetAtom);
 
   const { workspaceID } = useWorkspacePageParams();
-  const { agentId: urlAgentId } = useImbueLocation();
-  const { navigateToAgent } = useImbueNavigate();
   const openPalette = useSetAtom(addPanelTargetZoneAtom);
 
   // The tab-definition pool: this zone's panels, plus the dragged tab while it
@@ -121,11 +115,10 @@ const SectionTabBarInner = ({ zone, side }: SectionTabBarProps): ReactElement =>
             // tabs so the diff tab bar (the other compact strip) is unaffected.
             dataAttributes: { "section-tab": "true" },
             shortcut: binding ? formatShortcutForDisplay(binding) : undefined,
-            // The only/active agent can't be closed (there's nothing to fall back
-            // to and the bootstrap keeps the URL agent visible), so its close
-            // affordance is hidden rather than shown as a silent no-op. Relocating
-            // it via drag is still allowed (that's how the Center is emptied).
-            closeable: isAgentPanelId(panelId) && !hasMultipleAgents ? false : undefined,
+            // Every tab is closeable now, including the only agent: closing it
+            // deletes the agent (with confirmation), and the delete flow keeps a
+            // workspace at ≥1 agent by spawning a fresh one — so there's always
+            // something to fall back to (see handleClose).
             labelContent: isRenaming ? (
               <InlineRenameInput
                 value={def.displayName}
@@ -137,37 +130,33 @@ const SectionTabBarInner = ({ zone, side }: SectionTabBarProps): ReactElement =>
           },
         ];
       }),
-    [
-      poolPanelIds,
-      registry,
-      renamingAgentId,
-      handleRenameCommit,
-      setRenamingAgentId,
-      hasMultipleAgents,
-      panelShortcuts,
-    ],
+    [poolPanelIds, registry, renamingAgentId, handleRenameCommit, setRenamingAgentId, panelShortcuts],
   );
 
   const handleActivate = useCallback((panelId: string): void => activatePanel(panelId, zone), [activatePanel, zone]);
 
-  // Closing a tab removes the panel from this section (returns it to the "+"
-  // pool) — it does not delete agents or kill terminals (REQ-INST-1). The active
-  // agent is kept on screen by the bootstrap invariant, so closing it focuses
-  // another open agent first when one exists. The sibling search spans all
-  // sections (zoneAssignments, read at call time so this strip doesn't subscribe
-  // to every layout change), not just this one, so closing the active agent
-  // still works when the other agent lives in this section's other split half.
+  // Closing an agent or terminal tab ends it (after confirmation), rather than
+  // parking it for re-add: the X opens the same confirm dialog as the context
+  // menu. Agent → delete (`agentDeleteTargetAtom`; the delete flow in
+  // AgentWorkspaceCommands handles post-delete navigation and keeps the
+  // workspace at ≥1 agent). Terminal → close its session
+  // (`terminalCloseTargetAtom`, handled by TerminalCloseConfirmation). Static
+  // panels are simply unplaced from the section.
   const handleClose = useCallback(
     (panelId: PanelId): void => {
-      if (isAgentPanelId(panelId) && agentIdFromPanelId(panelId) === urlAgentId) {
-        const zoneAssignments = store.get(zoneAssignmentsAtom);
-        const otherAgent = Object.keys(zoneAssignments).find((id) => isAgentPanelId(id) && id !== panelId);
-        if (!otherAgent) return; // can't close the only/active agent
-        navigateToAgent(workspaceID, agentIdFromPanelId(otherAgent));
+      const def = registry.find((p) => p.id === panelId);
+      if (isAgentPanelId(panelId)) {
+        setAgentDeleteTarget({ id: agentIdFromPanelId(panelId), name: def?.displayName ?? "" });
+        return;
+      }
+
+      if (isTerminalPanelId(panelId)) {
+        setTerminalCloseTarget({ id: panelId, name: def?.displayName ?? "" });
+        return;
       }
       removePanel(panelId);
     },
-    [store, urlAgentId, navigateToAgent, workspaceID, removePanel],
+    [registry, setAgentDeleteTarget, setTerminalCloseTarget, removePanel],
   );
 
   const handleDoubleClick = useCallback(
@@ -230,10 +219,9 @@ const SectionTabBarInner = ({ zone, side }: SectionTabBarProps): ReactElement =>
             {splitItems && <ContextMenu.Separator />}
             <ContextMenu.Item
               color="red"
-              onSelect={() => {
-                removeTerminal(panelId);
-                removePanel(panelId);
-              }}
+              onSelect={() =>
+                setTerminalCloseTarget({ id: panelId, name: registry.find((p) => p.id === panelId)?.displayName ?? "" })
+              }
             >
               <X size={14} /> Close terminal
             </ContextMenu.Item>
@@ -245,7 +233,7 @@ const SectionTabBarInner = ({ zone, side }: SectionTabBarProps): ReactElement =>
       if (!splitItems) return undefined;
       return <ContextMenu.Content size="1">{splitItems}</ContextMenu.Content>;
     },
-    [side, canSplit, splitSection, registry, setRenamingAgentId, setAgentDeleteTarget, removeTerminal, removePanel],
+    [side, canSplit, splitSection, registry, setRenamingAgentId, setAgentDeleteTarget, setTerminalCloseTarget],
   );
 
   // Rendered as a TabBar child that fills the rest of the strip: the "+" sits

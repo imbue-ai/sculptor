@@ -19,6 +19,7 @@ import { CompactLayout } from "../../components/panels/CompactLayout.tsx";
 import { useWorkspaceLayoutBootstrap } from "../workspace/panels/useWorkspaceLayoutBootstrap.ts";
 import { workspaceDefaultLayout } from "../workspace/panels/workspacePanels.ts";
 import { AgentWorkspaceCommands } from "./components/AgentWorkspaceCommands.tsx";
+import { TerminalCloseConfirmation } from "./components/TerminalCloseConfirmation.tsx";
 import { WorkspaceBanner } from "./components/WorkspaceBanner.tsx";
 import { useArtifactSync } from "./hooks/useArtifactSync";
 import styles from "./WorkspacePage.module.scss";
@@ -55,6 +56,7 @@ const WorkspacePageContent = ({ taskID }: { taskID: string }): ReactElement => {
       <WorkspaceBanner />
       <CompactLayout />
       <AgentWorkspaceCommands />
+      <TerminalCloseConfirmation />
     </Flex>
   );
 };

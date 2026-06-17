@@ -75,6 +75,16 @@ export const addTerminalAtom = atom(null, (get, set, workspaceId: string): strin
 });
 
 /**
+ * The terminal whose close is awaiting confirmation. Set from a terminal tab's
+ * close (X) / "Close terminal" menu item and read by the headless
+ * `TerminalCloseConfirmation` owner, which kills it on confirm. Stores the panel
+ * id (to kill + unplace) and the label (for the dialog copy). Mirrors
+ * `agentDeleteTargetAtom` for agents — closing a terminal now ends its session
+ * rather than parking it for re-add.
+ */
+export const terminalCloseTargetAtom = atom<{ id: string; name: string } | null>(null);
+
+/**
  * Remove a terminal instance and stop its backend pty. Used when a terminal
  * panel's tab is closed.
  */

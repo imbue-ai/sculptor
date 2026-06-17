@@ -12,7 +12,7 @@ import {
 } from "~/common/state/atoms/agentTabs.ts";
 import { tasksArrayAtom, updateTasksAtom } from "~/common/state/atoms/tasks.ts";
 import { isPiAgentEnabledAtom } from "~/common/state/atoms/userConfig.ts";
-import { useAddableDynamicPanels, useAddablePanels, useAddPanelToSection } from "~/components/panels/sectionHooks.ts";
+import { useAddablePanels, useAddPanelToSection } from "~/components/panels/sectionHooks.ts";
 import type { PanelDefinition, PanelId, ZoneId } from "~/components/panels/types.ts";
 import { agentPanelId } from "~/pages/workspace/panels/dynamicPanels.tsx";
 import { addTerminalAtom } from "~/pages/workspace/panels/terminals.ts";
@@ -20,11 +20,7 @@ import { addTerminalAtom } from "~/pages/workspace/panels/terminals.ts";
 type AddPanelMenu = {
   /** Static panels addable here (move from wherever they are). */
   staticPanels: ReadonlyArray<PanelDefinition>;
-  /** Agents not currently open in any section (REQ-AGENT-2). */
-  existingAgents: ReadonlyArray<PanelDefinition>;
-  /** Terminals not currently open in any section (REQ-TERM-2). */
-  existingTerminals: ReadonlyArray<PanelDefinition>;
-  /** Move an existing panel (static, agent, or terminal) into this section. */
+  /** Move an existing static panel into this section. */
   openPanel: (panelId: PanelId) => void;
   /**
    * Create a fresh agent here and focus it. With no argument, creates the
@@ -44,9 +40,9 @@ type AddPanelMenu = {
 };
 
 /**
- * Everything a section's "+" can add: static panels, plus the agent/terminal
- * "New …" actions and the lists of existing agents/terminals not open anywhere
- * (REQ-AGENT-2 / REQ-TERM-2 / REQ-INST-1).
+ * Everything a section's "+" can add: static panels (move from wherever they
+ * are) plus the agent/terminal "New …" actions. Agents and terminals have no
+ * "open existing" list — closing one ends it, so there's nothing to re-add.
  */
 export const useAddPanelMenu = (zone: ZoneId): AddPanelMenu => {
   const { workspaceID, agentID } = useWorkspacePageParams();
@@ -62,8 +58,6 @@ export const useAddPanelMenu = (zone: ZoneId): AddPanelMenu => {
   const isCreatingRef = useRef(false);
 
   const staticPanels = useAddablePanels(zone);
-  const existingAgents = useAddableDynamicPanels("agent");
-  const existingTerminals = useAddableDynamicPanels("terminal");
 
   const openPanel = useCallback((panelId: PanelId): void => movePanel(panelId, zone), [movePanel, zone]);
 
@@ -170,8 +164,6 @@ export const useAddPanelMenu = (zone: ZoneId): AddPanelMenu => {
 
   return {
     staticPanels,
-    existingAgents,
-    existingTerminals,
     openPanel,
     createAgent,
     createTerminal,

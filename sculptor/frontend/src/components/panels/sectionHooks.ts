@@ -278,9 +278,8 @@ export const useRemovePanelFromSection = (): ((panelId: PanelId) => void) => {
 /**
  * Static panels addable to a section via its "+" dropdown: every registered
  * "static" panel not already in this section (adding moves it from wherever it
- * is). Dynamic panels (agents, terminals) are offered separately — see
- * `useAddableDynamicPanels` — because they are only listed when not open in ANY
- * section (REQ-AGENT-2 / REQ-INST-1).
+ * is). Agents and terminals are NOT offered here — they are created fresh and
+ * closing one ends it, so there is no "open existing" pool to re-add from.
  */
 export const useAddablePanels = (zone: ZoneId): ReadonlyArray<PanelDefinition> => {
   const registry = useAtomValue(panelRegistryAtom);
@@ -288,20 +287,6 @@ export const useAddablePanels = (zone: ZoneId): ReadonlyArray<PanelDefinition> =
   return useMemo(
     () => registry.filter((panel) => (panel.kind ?? "static") === "static" && zoneAssignments[panel.id] !== zone),
     [registry, zoneAssignments, zone],
-  );
-};
-
-/**
- * Dynamic panels (agents, terminals) offered in a section's "+" — only those
- * not currently placed in ANY section, so moving an open one is a close-and-
- * reopen (REQ-AGENT-2 / REQ-TERM-2 / REQ-INST-1).
- */
-export const useAddableDynamicPanels = (kind: "agent" | "terminal"): ReadonlyArray<PanelDefinition> => {
-  const registry = useAtomValue(panelRegistryAtom);
-  const zoneAssignments = useAtomValue(zoneAssignmentsAtom);
-  return useMemo(
-    () => registry.filter((panel) => panel.kind === kind && zoneAssignments[panel.id] === undefined),
-    [registry, zoneAssignments, kind],
   );
 };
 

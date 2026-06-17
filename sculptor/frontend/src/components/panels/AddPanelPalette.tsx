@@ -24,11 +24,9 @@ import { useAddPanelMenu } from "~/pages/workspace/panels/useAddPanelMenu.ts";
 
 import styles from "./AddPanelPalette.module.scss";
 
-type PalettePage = "root" | "agents" | "terminals" | "new-agent";
+type PalettePage = "root" | "new-agent";
 
 const PAGE_BREADCRUMB: Record<Exclude<PalettePage, "root">, string> = {
-  agents: "Agents",
-  terminals: "Terminals",
   "new-agent": "Choose agent type",
 };
 
@@ -37,8 +35,9 @@ const PAGE_BREADCRUMB: Record<Exclude<PalettePage, "root">, string> = {
  * Opened from a section's "+" or the empty-section "Browse all panels" button
  * (both set `addPanelTargetZoneAtom`). Reuses the same data and actions as the
  * old "+" dropdown (`useAddPanelMenu`), but with search, keyboard navigation,
- * a changeable destination (footer pill), and drill-in sub-pages for existing
- * agents / terminals.
+ * a changeable destination (footer pill), and a drill-in "Choose agent type"
+ * sub-page. Agents/terminals are only ever created here, never re-opened —
+ * closing one ends it (see feature-followup.md).
  */
 export const AddPanelPalette = (): ReactElement => {
   const [target, setTarget] = useAtom(addPanelTargetZoneAtom);
@@ -124,13 +123,7 @@ const PaletteBody = ({ initialZone, onClose }: { initialZone: ZoneId; onClose: (
   );
 
   const placeholder =
-    page === "agents"
-      ? "Filter agents…"
-      : page === "terminals"
-        ? "Filter terminals…"
-        : page === "new-agent"
-          ? "Choose an agent type…"
-          : `Add a panel to the ${inSentence(currentLabel)} section…`;
+    page === "new-agent" ? "Choose an agent type…" : `Add a panel to the ${inSentence(currentLabel)} section…`;
 
   return (
     <Dialog.Content
@@ -189,14 +182,7 @@ const PaletteBody = ({ initialZone, onClose }: { initialZone: ZoneId; onClose: (
               onChooseAgent={openChooseAgent}
               onCreateTerminal={() => run(menu.createTerminal)}
               onOpenPanel={(id) => run(() => menu.openPanel(id))}
-              onOpenPage={openPage}
             />
-          )}
-          {page === "agents" && (
-            <ExistingPage panels={menu.existingAgents} onOpenPanel={(id) => run(() => menu.openPanel(id))} />
-          )}
-          {page === "terminals" && (
-            <ExistingPage panels={menu.existingTerminals} onOpenPanel={(id) => run(() => menu.openPanel(id))} />
           )}
           {page === "new-agent" && (
             <ChooseAgentPage
@@ -229,7 +215,6 @@ const RootPage = ({
   onChooseAgent,
   onCreateTerminal,
   onOpenPanel,
-  onOpenPage,
 }: {
   menu: ReturnType<typeof useAddPanelMenu>;
   registrations: ReadonlyArray<AgentRegistrationLabel>;
@@ -237,7 +222,6 @@ const RootPage = ({
   onChooseAgent: () => void;
   onCreateTerminal: () => void;
   onOpenPanel: (id: string) => void;
-  onOpenPage: (page: Exclude<PalettePage, "root">) => void;
 }): ReactElement => (
   <>
     <Command.Group heading="Create" className={styles.group}>
@@ -280,54 +264,6 @@ const RootPage = ({
         ))}
       </Command.Group>
     )}
-
-    {(menu.existingAgents.length > 0 || menu.existingTerminals.length > 0) && (
-      <Command.Group className={styles.group}>
-        {menu.existingAgents.length > 0 && (
-          <Row
-            value="open-existing-agent agent move reopen restore"
-            icon={<MessageSquarePlus size={17} />}
-            title="Open existing agent"
-            subtitle="Move an existing agent into this section"
-            trailing={<DrillInTrailing count={menu.existingAgents.length} />}
-            onSelect={() => onOpenPage("agents")}
-          />
-        )}
-        {menu.existingTerminals.length > 0 && (
-          <Row
-            value="open-existing-terminal terminal move reopen restore"
-            icon={<SquareTerminal size={17} />}
-            title="Open existing terminal"
-            subtitle="Move an existing terminal into this section"
-            trailing={<DrillInTrailing count={menu.existingTerminals.length} />}
-            onSelect={() => onOpenPage("terminals")}
-          />
-        )}
-      </Command.Group>
-    )}
-  </>
-);
-
-const DrillInTrailing = ({ count }: { count: number }): ReactElement => (
-  <>
-    <span className={styles.count}>{count}</span>
-    <span className={styles.chevron}>
-      <ChevronRight size={15} />
-    </span>
-  </>
-);
-
-const ExistingPage = ({
-  panels,
-  onOpenPanel,
-}: {
-  panels: ReadonlyArray<PanelDefinition>;
-  onOpenPanel: (id: string) => void;
-}): ReactElement => (
-  <>
-    {panels.map((panel) => (
-      <PanelRow key={panel.id} panel={panel} onSelect={() => onOpenPanel(panel.id)} />
-    ))}
   </>
 );
 

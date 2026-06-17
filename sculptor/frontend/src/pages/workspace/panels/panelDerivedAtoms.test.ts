@@ -5,44 +5,12 @@ import type { CodingAgentTaskView } from "~/api";
 import { taskAtomFamily, taskIdsAtom } from "~/common/state/atoms/tasks.ts";
 import { terminalTabStateAtom } from "~/common/state/atoms/terminalTabs.ts";
 import { zoneAssignmentsAtom } from "~/components/panels/atoms.ts";
-import { hasMultipleAgentPanelsAtom, hasPendingSplitPanelAtom } from "~/pages/workspace/panels/panelDerivedAtoms.ts";
+import { hasPendingSplitPanelAtom } from "~/pages/workspace/panels/panelDerivedAtoms.ts";
 
 beforeEach(() => localStorage.clear());
 afterEach(() => localStorage.clear());
 
 const makeTask = (id: string): CodingAgentTaskView => ({ id }) as unknown as CodingAgentTaskView;
-
-describe("hasMultipleAgentPanelsAtom", () => {
-  it("is false with no agent panels", () => {
-    const store = createStore();
-    store.set(zoneAssignmentsAtom, { files: "top-left", "terminal:ws1:0": "bottom" });
-    expect(store.get(hasMultipleAgentPanelsAtom)).toBe(false);
-  });
-
-  it("is false with a single agent panel", () => {
-    const store = createStore();
-    store.set(zoneAssignmentsAtom, { "agent:t1": "center", files: "top-left" });
-    expect(store.get(hasMultipleAgentPanelsAtom)).toBe(false);
-  });
-
-  it("is true with two agent panels", () => {
-    const store = createStore();
-    store.set(zoneAssignmentsAtom, { "agent:t1": "center", "agent:t2": "top-right" });
-    expect(store.get(hasMultipleAgentPanelsAtom)).toBe(true);
-  });
-
-  it("does not notify when assignments change without flipping the answer", () => {
-    const store = createStore();
-    store.set(zoneAssignmentsAtom, { "agent:t1": "center", "agent:t2": "top-right" });
-    let notifications = 0;
-    store.sub(hasMultipleAgentPanelsAtom, () => {
-      notifications += 1;
-    });
-    // Moving a panel between zones keeps the agent count at two.
-    store.set(zoneAssignmentsAtom, { "agent:t1": "top-left", "agent:t2": "top-right" });
-    expect(notifications).toBe(0);
-  });
-});
 
 describe("hasPendingSplitPanelAtom", () => {
   it("is false when nothing is assigned to the split half", () => {
