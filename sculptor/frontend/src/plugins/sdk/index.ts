@@ -4,12 +4,6 @@
  * and must bump the SDK major version.
  */
 export { PanelHeader } from "./components.ts";
-export {
-  useCurrentWorkspaceId,
-  usePluginSetting,
-  useWorkspaceBranch,
-  useWorkspaceId,
-  useWorkspaces,
-  useWorkspaceTasks,
-} from "./hooks.ts";
+export type { CurrentWorkspace } from "./hooks.ts";
+export { useCurrentWorkspace, usePluginSetting, useWorkspaces, useWorkspaceTasks } from "./hooks.ts";
 export type { CodingAgentTaskView, Workspace } from "~/api";

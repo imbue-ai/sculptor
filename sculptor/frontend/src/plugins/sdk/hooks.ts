@@ -1,47 +1,105 @@
-import { useAtom, useAtomValue } from "jotai";
-import { atomFamily, atomWithStorage } from "jotai/utils";
-import { useMemo } from "react";
+import { atom, useAtom, useAtomValue } from "jotai";
+import { atomFamily, atomWithStorage, selectAtom } from "jotai/utils";
+import { useContext, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
 
 import type { CodingAgentTaskView, Workspace } from "~/api";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
-import { workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
-import { useWorkspaceBranch as useHostWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch.ts";
+import { workspaceBranchAtomFamily } from "~/common/state/atoms/workspaceBranch.ts";
+import { workspaceAtomFamily, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 
 import { usePluginContext } from "../PluginContext.tsx";
-import { useWorkspacePluginContext } from "../WorkspaceContext.tsx";
-
-/** Current workspace id, read from the host-provided plugin context. */
-export const useWorkspaceId = (): string => useWorkspacePluginContext().workspaceId;
+import { useWorkspacePluginContext, WorkspacePluginContext } from "../WorkspaceContext.tsx";
 
 /**
  * Every non-deleted workspace known to the host, or `undefined` until the
- * first batch has loaded. Unlike `useWorkspaceId`, this needs no workspace
- * context — it reads an app-global atom, so it works in an overlay (which
- * isn't bound to one workspace) as well as in a panel.
+ * first batch has loaded. App-global: it reads a shared atom and needs no
+ * workspace context, so it works in an overlay as well as a panel.
  */
 export const useWorkspaces = (): ReadonlyArray<Workspace> | undefined => useAtomValue(workspacesArrayAtom);
 
 /**
- * The id of the workspace the user is currently viewing, or `null` when the
- * route isn't a workspace page (settings, onboarding, etc.). Read straight
- * from the route, so it tracks navigation — the right "where am I" signal for
- * an app-global overlay.
+ * A curated, plugin-facing view of a single workspace: identity, label, and
+ * live git branch. Deliberately a subset — not the host's full `Workspace`
+ * model — so the plugin contract doesn't couple to backend internals.
  */
-export const useCurrentWorkspaceId = (): string | null => {
-  const { workspaceID } = useParams<{ workspaceID?: string }>();
-  return workspaceID ?? null;
+export type CurrentWorkspace = {
+  id: string;
+  description: string;
+  /** Live current branch, or `null` until the backend has reported it. */
+  branch: string | null;
+  targetBranch: string | null;
 };
 
+// One derived view atom per workspace id, composing the workspace model with
+// its live branch (which the host keeps in a separate atom) into the curated
+// CurrentWorkspace shape.
+const currentWorkspaceViewAtomFamily = atomFamily((id: string) =>
+  atom((get): CurrentWorkspace | null => {
+    const workspace = get(workspaceAtomFamily(id));
+    if (!workspace) return null;
+    return {
+      id: workspace.objectId,
+      description: workspace.description,
+      branch: get(workspaceBranchAtomFamily(id))?.currentBranch ?? null,
+      targetBranch: workspace.targetBranch ?? null,
+    };
+  }),
+);
+
+// Stable fallback for when there is no current workspace, so the hook's
+// memoized selection always has a constant source atom.
+const noCurrentWorkspaceAtom = atom<CurrentWorkspace | null>(null);
+
 /**
- * The current git branch of the workspace the plugin is mounted in, or `null`
- * until the backend has reported it. Useful for linking the workspace to
- * external systems (e.g. parsing a ticket id out of the branch name).
+ * The workspace the user is currently in — the panel's workspace when mounted
+ * in a panel, otherwise the current route — or `null` when there is none (e.g.
+ * an overlay on the home or settings screen). Named for its nullability and to
+ * avoid shadowing the host's by-id `useWorkspace`, which has different
+ * semantics.
+ *
+ * Pass a `selector` to subscribe to one field and re-render only when that
+ * field changes (backed by jotai's `selectAtom`):
+ *
+ *     const branch = useCurrentWorkspace((w) => w?.branch ?? null);
+ *
+ * The selector should be pure over the workspace (no external closure state):
+ * its identity may change between renders, but its logic must not.
  */
-export const useWorkspaceBranch = (): string | null => {
-  const { workspaceId } = useWorkspacePluginContext();
-  return useHostWorkspaceBranch(workspaceId)?.currentBranch ?? null;
-};
+export function useCurrentWorkspace<T = CurrentWorkspace | null>(
+  selector?: (workspace: CurrentWorkspace | null) => T,
+  equalityFn?: (a: T, b: T) => boolean,
+): T {
+  // Resolve the active id: the panel's workspace if mounted in one (read
+  // non-throwing, so overlays don't crash), else the current route.
+  const panelContext = useContext(WorkspacePluginContext);
+  const { workspaceID } = useParams<{ workspaceID?: string }>();
+  const workspaceId = panelContext?.workspaceId ?? workspaceID ?? null;
+
+  // selectAtom rebuilds its derived atom whenever the selector/equality
+  // *identity* changes — which an inline selector does every render. Keep the
+  // latest in refs and hand selectAtom stable wrappers, so a field selector
+  // subscribes once and re-renders only when that field changes.
+  const selectorRef = useRef(selector);
+  selectorRef.current = selector;
+  const equalityRef = useRef(equalityFn);
+  equalityRef.current = equalityFn;
+
+  const sourceAtom = useMemo(
+    () => (workspaceId ? currentWorkspaceViewAtomFamily(workspaceId) : noCurrentWorkspaceAtom),
+    [workspaceId],
+  );
+  const selectedAtom = useMemo(
+    () =>
+      selectAtom<CurrentWorkspace | null, T>(
+        sourceAtom,
+        (workspace) => (selectorRef.current ? selectorRef.current(workspace) : (workspace as unknown as T)),
+        (a, b) => (equalityRef.current ? equalityRef.current(a, b) : Object.is(a, b)),
+      ),
+    [sourceAtom],
+  );
+  return useAtomValue(selectedAtom);
+}
 
 // One persisted atom per (plugin, key). atomFamily caches by the full storage
 // key; getOnInit reads localStorage synchronously so the value is present on
