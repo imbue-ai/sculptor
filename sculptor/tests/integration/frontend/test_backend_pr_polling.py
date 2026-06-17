@@ -27,46 +27,41 @@ from sculptor.testing.user_stories import user_story
 
 _FAKE_GITHUB_REMOTE = "https://github.com/test-org/test-repo.git"
 
-# Fake gh CLI that always returns an open PR for "pr list" queries.
-# The backend issues a single `gh pr list --state=all` query and dispatches on
-# each row's "state" field, so the PR object must carry "state": "OPEN". For an
-# open PR it then issues a single combined `gh pr view --json
-# statusCheckRollup,reviews,reviewThreads` detail call.
+# Fake gh CLI that always returns an open PR.
+# The backend issues a single `gh api graphql` query that returns every PR on
+# the source branch (across all states) with its check/review/comment detail
+# bundled in, and dispatches on each node's "state" field. So the fake emits
+# the GraphQL response envelope with one node tagged "state": "OPEN" (no checks,
+# reviews, or threads). ``statusCheckRollup`` is null when no checks have run.
 _FAKE_GH_OPEN_PR_SCRIPT = """\
 #!/bin/bash
-if [[ "$*" == *"pr list"* ]]; then
-    echo '[{"number": 42, "title": "Test PR", "url": "https://github.com/test/repo/pull/42", "baseRefName": "main", "state": "OPEN"}]'
-elif [[ "$*" == *"pr view"* ]]; then
-    echo '{"statusCheckRollup": [], "reviews": [], "reviewThreads": []}'
+if [[ "$*" == *"graphql"* ]]; then
+    echo '{"data":{"repository":{"pullRequests":{"nodes":[{"number":42,"title":"Test PR","url":"https://github.com/test/repo/pull/42","state":"OPEN","baseRefName":"main","commits":{"nodes":[{"commit":{"statusCheckRollup":null}}]},"latestReviews":{"nodes":[]},"reviewThreads":{"nodes":[]}}]}}}}'
 fi
 """
 
-# Fake gh CLI that returns a closed-not-merged PR for the single "pr list"
-# query. The backend dispatches on the "state" field, so the row is tagged
-# "state": "CLOSED".
+# Fake gh CLI that returns a closed-not-merged PR. The backend dispatches on
+# each node's "state" field, so the node is tagged "state": "CLOSED".
 _FAKE_GH_CLOSED_PR_SCRIPT = """\
 #!/bin/bash
-if [[ "$*" == *"pr list"* ]]; then
-    echo '[{"number": 77, "title": "Closed PR", "url": "https://github.com/test/repo/pull/77", "baseRefName": "main", "state": "CLOSED"}]'
-else
-    echo "[]"
+if [[ "$*" == *"graphql"* ]]; then
+    echo '{"data":{"repository":{"pullRequests":{"nodes":[{"number":77,"title":"Closed PR","url":"https://github.com/test/repo/pull/77","state":"CLOSED","baseRefName":"main","commits":{"nodes":[{"commit":{"statusCheckRollup":null}}]},"latestReviews":{"nodes":[]},"reviewThreads":{"nodes":[]}}]}}}}'
 fi
 """
 
-# Fake gh that switches behavior via mode file (no_pr → open_pr)
+# Fake gh that switches behavior via mode file (no_pr → open_pr). Each mode
+# emits the GraphQL response envelope; no_pr returns an empty node list.
+# The mode-file path is injected via ``.replace("{mode_file}", ...)`` (not
+# ``.format``) so the JSON braces below don't need escaping.
 _FAKE_GH_MODE_SCRIPT = """\
 #!/bin/bash
 MODE=$(cat "{mode_file}")
 case "$MODE" in
     no_pr)
-        echo "[]"
+        echo '{"data":{"repository":{"pullRequests":{"nodes":[]}}}}'
         ;;
     open_pr)
-        if [[ "$*" == *"pr list"* ]]; then
-            echo '[{{"number": 42, "title": "Test PR", "url": "https://github.com/test/repo/pull/42", "baseRefName": "main", "state": "OPEN"}}]'
-        elif [[ "$*" == *"pr view"* ]]; then
-            echo '{{"statusCheckRollup": [], "reviews": [], "reviewThreads": []}}'
-        fi
+        echo '{"data":{"repository":{"pullRequests":{"nodes":[{"number":42,"title":"Test PR","url":"https://github.com/test/repo/pull/42","state":"OPEN","baseRefName":"main","commits":{"nodes":[{"commit":{"statusCheckRollup":null}}]},"latestReviews":{"nodes":[]},"reviewThreads":{"nodes":[]}}]}}}}'
         ;;
 esac
 """
@@ -148,7 +143,7 @@ def test_multiple_workspaces_independent_pr_status(sculptor_instance_: SculptorI
     """
     mode_file = tmp_path / "gh_mode"
     mode_file.write_text("open_pr")
-    _install_fake_gh(sculptor_instance_.fake_bin_dir, _FAKE_GH_MODE_SCRIPT.format(mode_file=mode_file))
+    _install_fake_gh(sculptor_instance_.fake_bin_dir, _FAKE_GH_MODE_SCRIPT.replace("{mode_file}", str(mode_file)))
     _set_remote(sculptor_instance_, _FAKE_GITHUB_REMOTE)
 
     # Workspace 1: open PR
@@ -181,9 +176,9 @@ def test_closed_not_merged_pr_shows_closed_state(sculptor_instance_: SculptorIns
     button reflects the closed state instead of falling back to "Create PR".
 
     Mirrors the GitLab ``closed-not-merged`` MR handling. The fake ``gh`` CLI
-    returns the closed PR only for ``--state=closed`` queries, so a backend that
-    only consults ``--state=open`` and ``--state=merged`` (the bug) would render
-    "Create PR" and the assertion below would fail.
+    returns a single PR node tagged ``state: CLOSED``, so a backend that ignores
+    closed PRs (the bug) would render "Create PR" and the assertion below would
+    fail.
     """
     _install_fake_gh(sculptor_instance_.fake_bin_dir, _FAKE_GH_CLOSED_PR_SCRIPT)
     _set_remote(sculptor_instance_, _FAKE_GITHUB_REMOTE)
