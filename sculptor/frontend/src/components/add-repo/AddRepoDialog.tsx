@@ -49,7 +49,7 @@ export const AddRepoDialog = ({ open, onOpenChange, setToast }: AddRepoDialogPro
         <Dialog.Content maxWidth="480px" data-testid={ElementIds.ADD_REPO_DIALOG} style={{ overflow: "visible" }}>
           <Dialog.Title>
             <Text size="5" weight="bold">
-              Add Repository
+              Add new repository
             </Text>
           </Dialog.Title>
 
@@ -75,7 +75,7 @@ export const AddRepoDialog = ({ open, onOpenChange, setToast }: AddRepoDialogPro
               disabled={isValidating || !path.trim()}
               onClick={handleAddClick}
             >
-              {isValidating ? <Spinner size="2" /> : "Add Repository"}
+              {isValidating ? <Spinner size="2" /> : "Add new repository"}
             </Button>
           </Flex>
         </Dialog.Content>

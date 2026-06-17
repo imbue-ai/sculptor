@@ -97,7 +97,7 @@ export const RepoSelector = ({
           <Select.Item value={_NEW_REPO_SELECT_VALUE} data-testid={ElementIds.OPEN_NEW_REPO_BUTTON}>
             <Flex direction="row" align="center" gapX="2">
               <PlusIcon size={16} />
-              <Text>Open New Repo</Text>
+              <Text>Add new repository</Text>
             </Flex>
           </Select.Item>
         </Select.Content>
