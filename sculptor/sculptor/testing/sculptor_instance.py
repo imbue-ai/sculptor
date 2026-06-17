@@ -220,7 +220,13 @@ class SculptorInstance:
         from ``self._project_path``), then removes each one through the
         Settings > Repositories UI.
         """
-        base_url = self.page.url.split("#")[0].rstrip("/")
+        # Hit the backend's HTTP origin explicitly, not one derived from
+        # page.url: in Electron mode the page origin is the renderer's (the
+        # Vite dev server, or sculptor://app), which serves no /api and which
+        # page.request cannot even fetch for the sculptor:// scheme — so the
+        # request would fail and this cleanup would silently skip, leaking
+        # projects between tests.
+        base_url = self.backend_api_url.rstrip("/")
         try:
             response = self.page.request.get(f"{base_url}/api/v1/projects/active")
         except Exception:
