@@ -131,21 +131,30 @@ def _post_input(client: TestClient, task: Task, body: dict) -> httpx.Response:
     return client.post(f"/api/v1/agents/{task.object_id}/terminal/input", json=body)
 
 
-def test_single_line_prompt_writes_text_and_submit(
+def test_single_line_prompt_is_bracketed_paste_then_separate_submit(
     client: TestClient,
     test_already_started_services: CompleteServiceCollection,
     test_project: Project,
     tmp_path: Path,
 ) -> None:
+    # Regression (the CI Babysitter left its prompt unsubmitted with a trailing
+    # newline): a single-line prompt must NOT glue the submit carriage return
+    # onto the prompt text in one PTY write. A real TUI (Claude Code) treats a
+    # large single-burst write as a paste and swallows a trailing CR as a
+    # literal newline instead of Enter, so the prompt sits in the composer
+    # unsubmitted. (A short "Hi" stays under the paste threshold, which is why
+    # only longer prompts broke.) The body goes out as a bracketed paste and
+    # the Enter is its own write — identical framing to the multi-line path.
     services = test_already_started_services
     task = _create_task(services, test_project, _OPT_IN_CONFIG)
     _seed_run_start(services, task.object_id)
     _seed_signal(services, task.object_id, TerminalStatusSignal.IDLE)
 
+    prompt = "Investigate the failing pipeline for this MR, identify the root cause, fix the code, commit, and push."
     with _registered_manager(task.object_id, tmp_path) as manager:
-        response = _post_input(client, task, {"text": "Commit the changes"})
+        response = _post_input(client, task, {"text": prompt})
         assert response.status_code == 204, response.text
-        assert manager.written == [b"Commit the changes\r"]
+        assert manager.written == [b"\x1b[200~" + prompt.encode() + b"\x1b[201~", b"\r"]
 
 
 def test_single_line_without_submit_omits_carriage_return(
@@ -162,7 +171,8 @@ def test_single_line_without_submit_omits_carriage_return(
     with _registered_manager(task.object_id, tmp_path) as manager:
         response = _post_input(client, task, {"text": "draft only", "submit": False})
         assert response.status_code == 204, response.text
-        assert manager.written == [b"draft only"]
+        # Body is bracketed-pasted into the composer; no Enter, so it's a draft.
+        assert manager.written == [b"\x1b[200~draft only\x1b[201~"]
 
 
 def test_multi_line_prompt_is_bracketed_paste_then_submit(
@@ -216,7 +226,7 @@ def test_waiting_signal_allows_input(
     with _registered_manager(task.object_id, tmp_path) as manager:
         response = _post_input(client, task, {"text": "yes"})
         assert response.status_code == 204, response.text
-        assert manager.written == [b"yes\r"]
+        assert manager.written == [b"\x1b[200~yes\x1b[201~", b"\r"]
 
 
 def test_plain_terminal_never_receives_writes(

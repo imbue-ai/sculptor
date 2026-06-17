@@ -80,14 +80,18 @@ def deliver_prompt_to_terminal_agent(
     if terminal_manager is None:
         return TerminalDeliveryResult.NO_PTY
 
-    if "\n" in text:
-        # One write for the paste block, one for the submit — mirrors how a
-        # human pastes then hits Enter.
-        terminal_manager.write(_BRACKETED_PASTE_START + text.encode() + _BRACKETED_PASTE_END)
-        if submit:
-            terminal_manager.write(b"\r")
-    else:
-        terminal_manager.write(text.encode() + (b"\r" if submit else b""))
+    # Always bracketed-paste the body, then send the submit Enter as its OWN
+    # write — mirrors how a human pastes then hits Enter. The Enter must never
+    # share a write with the text: a real TUI (Claude Code) treats a large
+    # single-burst write as a paste and swallows a trailing carriage return as a
+    # literal newline instead of submitting, leaving the prompt in the composer
+    # unsubmitted. (A short prompt stays under the paste threshold and would
+    # submit either way, but the framing must not depend on length.) Bracketing
+    # the body and separating the Enter makes submission reliable regardless of
+    # the prompt's length or whether it spans multiple lines.
+    terminal_manager.write(_BRACKETED_PASTE_START + text.encode() + _BRACKETED_PASTE_END)
+    if submit:
+        terminal_manager.write(b"\r")
     # Log the event, never the text — prompts can embed user content.
     logger.info("Wrote automated prompt ({} chars) to terminal agent {}", len(text), task.object_id)
     return TerminalDeliveryResult.DELIVERED
