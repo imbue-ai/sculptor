@@ -107,7 +107,9 @@ const SortableTabContentInner = ({
 
   const closeIconSize = isCompact ? COMPACT_CLOSE_ICON_SIZE : DEFAULT_CLOSE_ICON_SIZE;
   const closeButtonClass = isCompact ? styles.compactCloseButton : styles.closeButton;
-  // Compact: always render close button so width stays stable (CSS handles visibility via opacity).
+  // Compact: always render the close button — it occupies a fixed trailing slot
+  // and is always visible (see .compactCloseButton), so the tab width stays
+  // stable and the label never shifts on hover.
   // Default: conditionally render to avoid reserving space in fixed-width tabs.
   const shouldRenderCloseButton = isCompact ? isCloseable : shouldShowCloseButton;
 

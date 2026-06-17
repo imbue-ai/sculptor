@@ -62,6 +62,17 @@
   width: var(--space-4);
 }
 
+// Compact (panel-section) tabs never swap the leading icon for the close button
+// — the close (X) is a separate always-visible trailing slot — so the leading
+// slot only ever holds the agent status dot. Drop the fixed square footprint and
+// the extra left margin (both only exist for the closeReplacesIcon swap): they
+// otherwise float the 8px dot ~20px from the tab's left edge. Sizing to the dot
+// leaves just the tab's own padding on the left and the tab `gap` to the label.
+.tabCompact .icon {
+  margin-left: 0;
+  width: auto;
+}
+
 // Focus-shortcut badge shown on the active tab (e.g. "⌘P") so the panel's focus
 // keybinding is discoverable from the header.
 .shortcutBadge {
@@ -132,9 +143,6 @@
   font-size: var(--font-size-1);
   gap: var(--space-1);
   padding: var(--space-1) var(--space-3);
-  // Positioning context for the absolutely-placed close (X), which overlays the
-  // tab's right edge instead of taking a flex slot.
-  position: relative;
   transition:
     background-color var(--duration-fast),
     color var(--duration-fast);
@@ -191,30 +199,21 @@
 }
 
 // Cap the label width on panel-section tabs (tagged with data-section-tab) so
-// long titles truncate with an ellipsis and the close (X) button stays visible
-// on hover instead of the tab growing. Scoped via the attribute so the diff tab
-// bar — the other compact strip — keeps its current width behaviour.
+// long titles truncate with an ellipsis rather than growing the tab; the close
+// (X) sits in its own fixed slot just after the (capped) label. Scoped via the
+// attribute so the diff tab bar — the other compact strip — keeps its current
+// width behaviour.
 [data-section-tab] .compactLabel {
   // stylelint-disable-next-line sculptor/no-hardcoded-values -- a fixed truncation cap; no spacing token fits
   max-width: 180px;
 }
 
-// Fade the label's right edge out beneath the close (X) on hover (when the X is
-// shown), so the title reads as truncating into the button rather than being
-// abruptly clipped by it (background-independent, unlike painting a swatch over
-// the text). The second stop reaches FULL transparency before the X's left edge
-// (the last space-4 is entirely transparent) so no text ever shows through the
-// icon — the fade happens ahead of it. Scoped via :has() to closeable tabs so
-// titles with no close button stay full-width; only on :hover so an active tab
-// keeps its full, unfaded title until pointed at.
-.tabCompact:has(.compactCloseButton):hover .compactLabel {
-  mask-image: linear-gradient(to right, black calc(100% - var(--space-6)), transparent calc(100% - var(--space-4)));
-}
-
-// Overlays the tab's right edge (absolute) rather than occupying a flex slot, so
-// an unhovered tab sizes to its label with no reserved trailing gap. When shown
-// it sits over the label's right end, which fades beneath it (see the mask rule
-// above) so the title reads as truncating into the X.
+// Sits in a fixed trailing flex slot (not an overlay) so it has permanent,
+// reserved space and never overlaps the label — the label truncates before it.
+// Always visible (no hover/active gating) so the close target stays in a stable,
+// predictable spot rather than materialising under the cursor on hover; this
+// keeps the tab width constant and avoids the accidental closes that came from
+// the X appearing over the label's right edge while switching tabs.
 .compactCloseButton {
   align-items: center;
   background: none;
@@ -223,27 +222,19 @@
   color: var(--gray-9);
   cursor: pointer;
   display: flex;
+  flex-shrink: 0;
   // Fixed square box (Radix sizes ghost IconButtons by padding, not height/width)
-  // so the X and its hover background center predictably over the tab's right end.
+  // so the X and its hover background stay a stable size.
   height: var(--space-4);
   justify-content: center;
-  // Radix's ghost variant applies a negative margin (to pad the hover area without
-  // growing layout); zero it so absolute `top: 50%` centering isn't pulled upward.
+  // Radix's ghost variant applies a negative margin (to pad the hover area
+  // without growing layout); zero it so the slot is exactly the box width.
   margin: 0;
   padding: 0;
-  position: absolute;
-  right: var(--space-2);
-  top: 50%;
-  transform: translateY(-50%);
   width: var(--space-4);
 
   &:hover {
     background-color: var(--gray-a4);
     color: var(--gray-12);
-  }
-
-  // Only revealed on hover — an active-but-unhovered tab keeps its X hidden.
-  .tabCompact:not(:hover) & {
-    opacity: 0%;
   }
 }
