@@ -54,7 +54,6 @@ let config = {
     extraResource: [
       path.resolve(__dirname, "../dist/sculptor_backend"), // Our backend
       path.resolve(__dirname, "../dist/sculpt"), // Sculpt CLI for agents
-      path.resolve(__dirname, "../dist/sculptor_migrate"), // Data folder migration binary
       // electron-updater reads app-update.yml from process.resourcesPath
       // during downloadUpdate() to resolve the updater cache directory name.
       // Without this file, downloads fail with ENOENT even when setFeedURL()
@@ -295,21 +294,14 @@ if (IS_NOTARIZING_AND_SIGNING) {
         ignore: (filePath: string): boolean => {
           // Only apply filtering inside the PyInstaller-produced dirs
           const isInSidecar =
-            filePath.includes("sculptor_backend/_internal/") ||
-            filePath.includes("sculpt/_internal/") ||
-            filePath.includes("sculptor_migrate/_internal/");
+            filePath.includes("sculptor_backend/_internal/") || filePath.includes("sculpt/_internal/");
           if (!isInSidecar) return false;
 
           // Always sign Mach-O binaries and bundle directories
           if (/\.(dylib|so|node)$/.test(filePath)) return false;
 
           // Sign the top-level PyInstaller executables (no extension, in the bundle root)
-          if (
-            filePath.endsWith("/sculptor_backend") ||
-            filePath.endsWith("/sculpt") ||
-            filePath.endsWith("/sculptor_migrate")
-          )
-            return false;
+          if (filePath.endsWith("/sculptor_backend") || filePath.endsWith("/sculpt")) return false;
 
           // Skip everything else (JSON, gzip, .pyc, images, source maps, etc.)
           return true;
