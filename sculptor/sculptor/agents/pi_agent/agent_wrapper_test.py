@@ -2368,7 +2368,7 @@ def test_shutdown_cancels_subagent_tasks() -> None:
 
 def test_interrupt_does_not_kill_subagent_task() -> None:
     """Stopping a turn must NOT kill a running sub-agent task: it is independent of the
-    turn that launched it, so it survives the interrupt (matches background tasks)."""
+    turn that launched it, so it survives the interrupt."""
     agent = _make_agent()
     agent._interrupt_pending.set()
     agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
@@ -2589,8 +2589,8 @@ def test_shutdown_cancels_background_tasks() -> None:
 
 
 def test_interrupt_does_not_kill_background_task() -> None:
-    """Stopping a turn must NOT kill a background task (the bug Danver hit): the task
-    is independent of the turn that launched it, so it survives the interrupt."""
+    """Stopping a turn must NOT kill a background task: the task is independent of the
+    turn that launched it, so it survives the interrupt."""
     agent = _make_agent()
     agent._interrupt_pending.set()
     agent._background_tasks[_BG_TASK_ID] = _BG_PGID

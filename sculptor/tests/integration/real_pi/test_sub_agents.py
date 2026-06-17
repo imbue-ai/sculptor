@@ -11,15 +11,9 @@ These exercise the two behaviours end-to-end against real pi:
 - the launch turn yields, the main thread stays interactive while a child runs,
   and the child's activity is surfaced as the nested pill when it completes;
 - a running sub-agent SURVIVES the user stopping a later turn (it is independent
-  of the turn that launched it — the same guarantee as background tasks).
-  No-orphan ON SHUTDOWN is covered by the unit tests
-  (``agent_wrapper_test.test_shutdown_cancels_subagent_tasks`` plus the
+  of the turn that launched it). No-orphan ON SHUTDOWN is covered by the unit
+  tests (``agent_wrapper_test.test_shutdown_cancels_subagent_tasks`` plus the
   extension's ``session_shutdown`` handler).
-
-Divergence note (REQ-TEST-1): there is no ``real_claude`` sub-agent *rendering*
-test to mirror (Claude's sub-agent suite lives in the deterministic
-``frontend/`` tests); the closest Claude real test is
-``real_claude/test_stop_kills_foreground_subprocess.py``.
 """
 
 from __future__ import annotations
@@ -97,9 +91,8 @@ def test_pi_subagent_yields_interactive_and_completes(sculptor_instance_: Sculpt
 def test_pi_subagent_survives_stop(sculptor_instance_: SculptorInstance) -> None:
     """Stopping a later turn must NOT kill a running sub-agent.
 
-    A sub-agent is independent of the turn that launched it (the same yield-early
-    guarantee as background tasks), so it survives an interrupt of any subsequent
-    turn — it is torn down only on shutdown."""
+    A sub-agent is independent of the turn that launched it, so it survives an
+    interrupt of any subsequent turn — it is torn down only on shutdown."""
     baseline = count_processes_matching(_is_child_pi)
     try:
         task_page = create_pi_workspace_and_send(

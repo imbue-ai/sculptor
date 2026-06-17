@@ -24,14 +24,13 @@ finished file-mutating tool (`edit`/`write`/`bash`) additionally triggers
 `on_diff_needed` so the workspace diff is regenerated — pi runs the tools
 against the workspace itself and emits no other signal that files changed.
 
-Sub-agents (`supports_sub_agents=True`) yield immediately, like background tasks:
-the pinned `sculptor_subagent` extension's `subagent` tool (mapped to Claude's
-`Agent`) returns a launch snapshot and reports a structured per-child payload
-out-of-band on completion. The adapter (`_emit_subagent_started` +
+Sub-agents (`supports_sub_agents=True`) yield immediately: the pinned
+`sculptor_subagent` extension's `subagent` tool (mapped to Claude's `Agent`)
+returns a launch snapshot and reports a structured per-child payload out-of-band
+on completion. The adapter (`_emit_subagent_started` +
 `_handle_subagent_completion` + `subagent.py`) records the task, then surfaces the
 children as nested `ResponseBlockAgentMessage`s carrying `parent_tool_use_id` plus
-a completion notification, so children group under the parent exactly as Claude's
-background sub-agents do.
+a completion notification, so children group under the parent.
 
 Wire-protocol reference: the pi RPC protocol notes (pi 0.78.0).
 """
@@ -262,9 +261,9 @@ class _ToolCall:
     # used as the result text if `tool_execution_end` carries no result body.
     partial_text: str = ""
     # True for the sub-agent tool (mapped to Claude's `Agent`): its result carries
-    # a structured launch payload (`subagent.py`); like the background tool it
-    # yields immediately, and the children's nested rendering + completion is
-    # surfaced out-of-band. See `_emit_subagent_started`.
+    # a structured launch payload (`subagent.py`); it yields immediately, and the
+    # children's nested rendering + completion is surfaced out-of-band. See
+    # `_emit_subagent_started`.
     is_subagent: bool = False
     # True for the background tool: its result carries a structured launch
     # payload (`background.py`) the adapter turns into a BackgroundTaskStarted
@@ -453,10 +452,10 @@ class PiAgent(DefaultAgentWrapper):
     # message-processing thread; the lock guards `wait()`'s cross-thread read.
     _background_tasks: dict[str, int] = PrivateAttr(default_factory=dict)
     # In-flight sub-agent tasks (task_id -> the detached children's process-group
-    # ids), tracked at the AGENT level like `_background_tasks` so they outlive the
-    # launching turn: the `subagent` tool yields immediately and the children's
-    # nested rendering is surfaced out-of-band on completion. Guarded by
-    # `_background_tasks_lock` (it protects both task dicts).
+    # ids), tracked at the AGENT level so they outlive the launching turn: the
+    # `subagent` tool yields immediately and the children's nested rendering is
+    # surfaced out-of-band on completion. Guarded by `_background_tasks_lock` (it
+    # protects both task dicts).
     _subagent_tasks: dict[str, tuple[int, ...]] = PrivateAttr(default_factory=dict)
     _background_tasks_lock: Lock = PrivateAttr(default_factory=Lock)
 
@@ -1695,12 +1694,12 @@ class PiAgent(DefaultAgentWrapper):
 
         Drops the task from the agent-level set and emits
         `BackgroundTaskNotificationAgentMessage` plus an assistant block carrying the
-        summary, so the completion (or failure) is visible. The summary is advertised
-        as a partial then the final block (paired ids), the way a streamed assistant
-        message is, so the LIVE stream reducer renders it (a lone final block with no
-        preceding partial renders only on reload — the live/reload divergence). Safe
-        to call inside a turn's drain OR out-of-band (the caller supplies the request
-        cycle in the latter case — see `_emit_background_completion_out_of_band`).
+        summary, so the completion (or failure) is visible. The summary MUST be
+        advertised as a partial then the final block (paired ids) so the LIVE stream
+        reducer renders it: a lone final block with no preceding partial renders only
+        on reload (the live/reload divergence). Safe to call inside a turn's drain OR
+        out-of-band (the caller supplies the request cycle in the latter case — see
+        `_emit_background_completion_out_of_band`).
         """
         with self._background_tasks_lock:
             self._background_tasks.pop(completion.task_id, None)

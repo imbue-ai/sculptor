@@ -1,29 +1,25 @@
 /**
  * Sculptor sub-agent extension (yield-early / async).
  *
- * Gives a pi (`--mode rpc`) agent the sub-agent capability Sculptor exposes for
- * Claude. Registers a single `subagent` tool that delegates work to child
- * agents, each running as its own isolated `pi` process (single task, or a
- * capped batch). The tool returns IMMEDIATELY (so the agent keeps control and
- * the turn does NOT block on the children), and the children keep running
- * detached. When the whole batch finishes, the extension reports completion
- * OUT-OF-BAND via `ctx.ui.notify` carrying a STRUCTURED, versioned per-child
- * payload the Sculptor adapter renders as nested, attributed blocks (a parent
- * `Agent` entry with each child's own tool calls and text grouped beneath it) —
- * Claude-parity background sub-agent rendering.
+ * Registers a single `subagent` tool that delegates work to child agents, each
+ * running as its own isolated `pi` process (single task, or a capped batch). The
+ * tool returns IMMEDIATELY (the agent keeps control; the turn does NOT block on
+ * the children), and the children keep running detached. When the whole batch
+ * finishes, the extension reports completion OUT-OF-BAND via `ctx.ui.notify`
+ * carrying a STRUCTURED, versioned per-child payload the Sculptor adapter renders
+ * as nested, attributed blocks (a parent `Agent` entry with each child's own tool
+ * calls and text grouped beneath it).
  *
- * Lifecycle (mirrors the background-task extension; the only difference is the
- * payload carries the full per-child snapshot instead of a shell summary):
+ * Lifecycle:
  * - START: the tool's result `details` carry `{ v, task }` with the task id, the
  *   launching tool-call id, every child's process-group id (`pgids`), and the
  *   child count. The adapter records the pgids (so Sculptor can SIGTERM the child
  *   groups INSIDE the environment on shutdown) and emits a started indicator. The
  *   launching turn then ends — the user keeps chatting while the children run.
  * - COMPLETION: a fire-and-forget `notify` carrying
- *   `{ "<MARKER>": { v, taskId, toolCallId, status, children } }`, where
- *   `children` is the same per-child shape the old blocking tool streamed. The
- *   adapter parses the marker and surfaces each child nested under the parent,
- *   plus a completion notification that clears the started indicator.
+ *   `{ "<MARKER>": { v, taskId, toolCallId, status, children } }`. The adapter
+ *   parses the marker and surfaces each child nested under the parent, plus a
+ *   completion notification that clears the started indicator.
  * - CLEANUP (no orphans): every live child is tracked and killed on
  *   `session_shutdown` (quit / SIGTERM / reload / new / resume / fork),
  *   complementing the per-task in-environment group `kill` Sculptor issues on
@@ -62,15 +58,13 @@ const SUBAGENT_PAYLOAD_VERSION = 1;
 // the completion payload rides the `notify` message string.
 const SUBAGENT_NOTIFY_MARKER = "sculptorSubagentTask";
 
-// Cap so a runaway prompt cannot spawn unbounded child processes. Because the
-// tool now yields immediately, all children are spawned at once (detached) up to
-// this cap rather than throttled behind a concurrency limit — the cap is the
-// resource bound.
+// Cap so a runaway prompt cannot spawn unbounded child processes. All children
+// are spawned at once (detached) up to this cap; the cap is the resource bound.
 const MAX_TASKS = 8;
 // Per-child bounds so the accumulated completion payload stays bounded.
 const MAX_EVENTS_PER_CHILD = 200;
 const MAX_EVENT_TEXT_BYTES = 8 * 1024;
-// SIGTERM, then SIGKILL after this if the child ignores it (matches background).
+// SIGTERM, then SIGKILL after this if the child ignores it.
 const KILL_ESCALATION_MS = 3000;
 
 type ChildEventKind = "text" | "tool_call" | "tool_result";
@@ -104,10 +98,9 @@ interface LiveTask {
 
 const liveTasks = new Map<string, LiveTask>();
 
-// The session-scoped context captured at session_start. `ctx.ui.notify` reached
-// from a DETACHED callback (after the tool returned) is proven to emit on the
-// RPC stdout; we use the session ctx (not the per-tool ctx) so the channel is
-// known-good for the whole batch lifetime.
+// The session-scoped context captured at session_start. The completion `notify`
+// fires from a DETACHED callback after the tool returned, so it uses the session
+// ctx (not the per-tool ctx, whose lifetime ends with the tool call).
 let sessionCtx: ExtensionContext | undefined;
 
 function truncateText(text: string): string {
@@ -212,8 +205,8 @@ function startChild(child: ChildState, signal: AbortSignal | undefined): {
 		}
 		// Tool calls + their results come from the tool-execution lane (clean
 		// {toolCallId, toolName, args} / {result, isError}); assistant TEXT comes
-		// from message_end. The issuing message's toolCall content block is
-		// deliberately NOT captured here so a call is recorded once.
+		// from message_end. The issuing message's toolCall content block is NOT
+		// captured here, so a call is recorded once.
 		if (event.type === "tool_execution_start") {
 			push({
 				kind: "tool_call",

@@ -1,30 +1,26 @@
 /**
  * Sculptor background-task extension.
  *
- * Gives a pi (`--mode rpc`) agent the background-task capability Sculptor
- * exposes for Claude. Registers a single `background` tool that starts a shell
- * command in the background: the tool returns IMMEDIATELY (so the agent keeps
- * control and the turn does not block on the command), and the command keeps
- * running detached. When it finishes, the extension reports completion
- * out-of-band via `ctx.ui.notify` carrying a STRUCTURED, versioned payload that
- * the Sculptor adapter maps onto the harness-agnostic
- * `BackgroundTaskStarted`/`BackgroundTaskNotification` contracts (the same
- * surface Claude's background tasks drive).
+ * Registers a single `background` tool that starts a shell command in the
+ * background: the tool returns IMMEDIATELY (the agent keeps control; the turn
+ * does not block on the command), and the command keeps running detached. When
+ * it finishes, the extension reports completion out-of-band via `ctx.ui.notify`
+ * carrying a STRUCTURED, versioned payload that the Sculptor adapter maps onto
+ * the harness-agnostic `BackgroundTaskStarted`/`BackgroundTaskNotification`
+ * contracts.
  *
- * Lifecycle wiring (mirrors how the sub-agent extension spawns + reports, but
- * non-blocking):
+ * Lifecycle:
  * - START: the tool's result `details` carry `{ v, task }` with the task's id,
  *   the launching tool-call id, and the child's process-group id (`pgid`). The
  *   adapter emits `BackgroundTaskStarted` and records the pgid so Sculptor can
  *   cancel the child on interrupt/stop by signalling that group INSIDE the
- *   environment (pi 0.78.0's extension API has no abort hook for detached work,
- *   so the parent tool's `signal` only covers the brief pre-return window).
+ *   environment (the extension API has no abort hook for detached work, so the
+ *   parent tool's `signal` only covers the brief pre-return window).
  * - COMPLETION: a fire-and-forget `notify` carrying
  *   `{ "<MARKER>": { v, taskId, toolCallId, status, exitCode, summary,
  *   durationMs } }`. The adapter parses the marker and emits
  *   `BackgroundTaskNotification` (clearing the pending id and surfacing the
- *   summary). Proven on real pi 0.78.0: a detached callback's `notify` reaches
- *   the RPC stdout after the tool already returned.
+ *   summary).
  * - CLEANUP (no orphans): every live child is tracked and killed on
  *   `session_shutdown` (fires on quit / SIGTERM / reload / new / resume / fork),
  *   complementing the per-task in-environment `kill` Sculptor issues on
@@ -60,7 +56,7 @@ const BACKGROUND_NOTIFY_MARKER = "sculptorBackgroundTask";
 
 // Cap the summary so the (single) notify message stays small.
 const MAX_SUMMARY_BYTES = 8 * 1024;
-// SIGTERM, then SIGKILL after this if the child ignores it (matches subagent).
+// SIGTERM, then SIGKILL after this if the child ignores it.
 const KILL_ESCALATION_MS = 3000;
 
 interface LiveTask {
@@ -75,10 +71,9 @@ interface LiveTask {
 // All in-flight children, keyed by taskId, so `session_shutdown` can reap them.
 const liveTasks = new Map<string, LiveTask>();
 
-// The session-scoped context captured at session_start. `ctx.ui.notify` reached
-// from a DETACHED callback (after the tool returned) is proven to emit on the
-// RPC stdout; we use the session ctx (not the per-tool ctx) so the channel is
-// known-good for the whole task lifetime.
+// The session-scoped context captured at session_start. The completion `notify`
+// fires from a DETACHED callback after the tool returned, so it uses the session
+// ctx (not the per-tool ctx, whose lifetime ends with the tool call).
 let sessionCtx: ExtensionContext | undefined;
 
 function truncateSummary(text: string): string {

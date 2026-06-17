@@ -3,8 +3,7 @@
 pi reports ``supports_sub_agents=True``: the pinned ``sculptor_subagent`` extension
 delegates work to child agents and the launching turn YIELDS immediately — the
 user keeps chatting while the children run — and each child's activity is surfaced
-out-of-band as the nested ``AlphaSubagentPill`` when it completes (the same
-background-sub-agent rendering Claude uses).
+out-of-band as the nested ``AlphaSubagentPill`` when it completes.
 
 These exercise the async sub-agent surface end-to-end under pi with the
 deterministic ``fake_pi:subagent`` directive (which scripts the launch + an

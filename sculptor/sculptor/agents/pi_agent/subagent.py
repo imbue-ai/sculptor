@@ -28,9 +28,8 @@ the marker key, under which the full per-child snapshot rides:
 The adapter (`agent_wrapper`) maps START onto a started indicator (recording the
 children's `pgids` so a shutdown can SIGTERM those groups in the environment) and
 COMPLETION onto nested, attributed child blocks — a parent `Agent` tool with each
-child's own tool calls and text grouped beneath it (`parent_tool_use_id`),
-matching Claude's background sub-agent rendering — plus a completion
-notification.
+child's own tool calls and text grouped beneath it (`parent_tool_use_id`) — plus
+a completion notification.
 
 Parsing is permissive — these payloads cross a subprocess / extension boundary,
 so a malformed value or unknown version yields `None` (the caller then treats the

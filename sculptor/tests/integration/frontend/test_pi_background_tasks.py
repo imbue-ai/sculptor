@@ -115,8 +115,7 @@ def test_pi_background_task_failure_surfaces(sculptor_instance_: SculptorInstanc
 @user_story("to confirm a background task under pi survives the user stopping a later turn")
 def test_pi_background_task_survives_stop(sculptor_instance_: SculptorInstance) -> None:
     """A backgrounded task is independent of the turn that launched it: stopping a LATER
-    turn must not kill it — once released, its completion still surfaces. This is the
-    deterministic guard for the regression where Stop wrongly killed a running task."""
+    turn must not kill it — once released, its completion still surfaces."""
     page = sculptor_instance_.page
     install_fake_pi_binary(sculptor_instance_.fake_bin_dir)
     task_release = Path(tempfile.gettempdir()) / f"pi_bg_survive_task_{uuid.uuid4().hex}"
