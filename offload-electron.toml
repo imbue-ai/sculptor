@@ -1,0 +1,74 @@
+# Offload runner for the Electron-launch-mode integration tests.
+# Run with: just test-offload-electron
+#
+# Companion to offload.toml (which runs the suite in the default `browser`
+# launch mode). The @electron-marked tests require a real Electron app driven
+# over CDP and are skipped in browser mode (see sculptor/conftest.py), so they
+# run in no other CI lane. This config runs exactly that subset by passing
+# `--sculptor-launch-mode=electron`; the Electron app launches under xvfb
+# (provided by the base image — see .devcontainer/Dockerfile).
+#
+# Reuses offload.toml's base image (same Dockerfile + finalize script), so no
+# separate image build beyond the shared checkpoint.
+
+[offload]
+max_parallel = 200
+# Electron is heavier than headless Chromium and its frontend launch alone can
+# take 50-60s, so give each batch more headroom than the browser lane's 900s.
+test_timeout_secs = 1200
+stream_output = true
+sandbox_project_root = "/app/sculptor"
+sandbox_repo_root = "/app"
+sandbox_init_cmd = "bash /app/scripts/finalize-base-image.sh"
+# Electron dev mode (electron-forge start) serves the renderer from the Vite
+# dev server, so it needs the generated API client + sculpt client but not a
+# production renderer bundle (no `npm run build`).
+post_patch_cmd = "export PATH=/root/.nvm/versions/node/v${NODE_VERSION}/bin:$PATH && cd /app/sculptor/frontend && npm run generate-api && cd /app && just generate-sculpt-client"
+
+[provider]
+type = "modal"
+dockerfile = ".devcontainer/Dockerfile"
+include_cwd = false
+
+[provider.env]
+SESSION_TOKEN = ""
+PROJECT_PATH = "/tmp/repo"
+GOOGLE_API_KEY = "fake"
+
+[framework]
+type = "pytest"
+command = "uv run --project sculptor pytest"
+# --sculptor-launch-mode=electron flips the harness onto the real Electron app
+# (and, in turn, the sculptor://app protocol). -p no:xdist: offload parallelizes
+# across sandboxes, so pytest runs serially within each.
+paths = ["sculptor/tests/integration/"]
+run_args = "-p no:xdist --sculptor-launch-mode=electron"
+
+# The @electron subset. real_claude/real_pi are excluded as in the browser lane;
+# the conftest launch-mode gate additionally skips any non-electron test.
+[groups.electron]
+retry_count = 1
+filters = "-m 'electron and not real_claude and not real_pi'"
+
+[checkpoint]
+build_inputs = [
+    ".devcontainer/Dockerfile",
+    ".dockerignore",
+    ".github/workflows/offload.yml",
+    "offload-electron.toml",
+    "scripts/finalize-base-image.sh",
+    "pyproject.toml",
+    "sculptor/pyproject.toml",
+    "sculptor/frontend/package.json",
+    "uv.lock",
+]
+
+[history]
+record_history = "flag"
+
+# Separate output dir so Electron results don't clobber the browser run.
+[report]
+output_dir = "test-results-electron"
+junit = true
+junit_file = "junit-electron.xml"
+download_globs = ["test-results-electron/**"]

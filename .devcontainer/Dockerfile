@@ -9,8 +9,14 @@
 
 FROM ubuntu:24.04
 
+# xvfb + xauth provide the virtual X display the Electron integration launch
+# mode needs (the harness wraps Electron in `xvfb-run` when there's no DISPLAY).
+# Electron's other shared libs come from `playwright install --with-deps
+# chromium` in finalize-base-image.sh, which also handles Ubuntu 24.04's t64
+# package renames.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git curl ca-certificates build-essential pkg-config libssl-dev \
+        xvfb xauth \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv
