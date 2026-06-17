@@ -247,8 +247,7 @@ _TASK_POLL_SECONDS: float = 0.1
 _IDLE_WAIT_SECONDS: float = 1.0
 
 # How long the start-time model fetch waits for pi's get_available_models /
-# get_state responses before giving up. Best-effort: a miss leaves the catalog
-# empty (the frontend falls back to its built-in list), it never blocks the agent.
+# get_state responses before giving up (see _fetch_models_into_state).
 _MODEL_FETCH_TIMEOUT_SECONDS: float = 10.0
 
 # Obsolete model ids pi's get_available_models returns that the switcher must not
@@ -682,7 +681,7 @@ class PiAgent(DefaultAgentWrapper):
         # Fetch pi's model catalog + current model and surface them onto task
         # state for the switcher. Done here, the sole reader of the process queue
         # before the message-processing thread starts (same constraint as the
-        # resume verification above); best-effort, never blocks the agent.
+        # resume verification above).
         self._fetch_models_into_state()
         self._message_processing_thread = self.concurrency_group.start_new_thread(
             target=self._process_message_queue,
@@ -1075,8 +1074,7 @@ class PiAgent(DefaultAgentWrapper):
         `ModelOption`s, curates them (`_curate_models`), and emits a
         `ModelsAvailableAgentMessage` the run-agent handler maps onto
         `AgentTaskStateV2.available_models` / `current_model`. Best-effort: an empty
-        catalog leaves the switcher to the frontend's built-in fallback list and
-        never blocks the agent.
+        catalog leaves the switcher to the frontend's built-in fallback list.
         """
         raw_models = self._request_available_models_blocking()
         state = self._request_state_blocking()
