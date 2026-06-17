@@ -57,7 +57,9 @@ const renderErrorBlock = (props: {
 
 afterEach(() => {
   cleanup();
-  vi.restoreAllMocks();
+  // openSettingsSpy is hoisted and shared across tests; clear its call history
+  // so per-test call-count assertions stay isolated as more tests are added.
+  vi.clearAllMocks();
 });
 
 describe("AlphaErrorBlock", () => {
