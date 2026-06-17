@@ -253,12 +253,12 @@ class AutoUpdateTestServer:
     def set_offline(self) -> None:
         """Make the server return 503 for all requests."""
         with self._state.lock:
-            self._state.offline = True
+            self._state.is_offline = True
 
     def set_online(self) -> None:
         """Restore normal request handling after :meth:`set_offline`."""
         with self._state.lock:
-            self._state.offline = False
+            self._state.is_offline = False
 
     def get_request_paths(self) -> list[str]:
         """Return a copy of all request paths received so far."""
