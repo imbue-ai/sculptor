@@ -5,12 +5,39 @@ import { ChevronRightIcon, RefreshCw } from "lucide-react";
 import type { ReactElement } from "react";
 import { useState } from "react";
 
-import type { ErrorBlock } from "~/api";
+import type { DependenciesStatus, ErrorBlock } from "~/api";
 import { ElementIds, TaskStatus } from "~/api";
 import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus";
 import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
 
 import styles from "./AlphaChatView.module.scss";
+
+// Agent binaries that, when missing or invalid, surface a friendly "not
+// available" block with a link to the settings section where a managed copy can
+// be installed, instead of a raw traceback. `getInstalled` reads the live
+// dependency status so a green "installed" badge can appear if the binary
+// reappears after the error.
+type BinaryNotFoundTool = {
+  errorSuffix: string;
+  name: string;
+  settingsSection: string;
+  getInstalled: (status: DependenciesStatus) => boolean;
+};
+
+const BINARY_NOT_FOUND_TOOLS: ReadonlyArray<BinaryNotFoundTool> = [
+  {
+    errorSuffix: "ClaudeBinaryNotFoundError",
+    name: "Claude",
+    settingsSection: "DEPENDENCIES",
+    getInstalled: (status: DependenciesStatus): boolean => status.claude.installed,
+  },
+  {
+    errorSuffix: "PiBinaryNotFoundError",
+    name: "Pi",
+    settingsSection: "PI",
+    getInstalled: (status: DependenciesStatus): boolean => status.pi.installed,
+  },
+];
 
 export const AlphaErrorBlock = ({
   block,
@@ -24,35 +51,35 @@ export const AlphaErrorBlock = ({
   onRetryRequest?: () => void;
 }): ReactElement => {
   const dependenciesStatus = useAtomValue(dependenciesStatusAtom);
-  const isClaudeInstalled = dependenciesStatus?.claude?.installed ?? false;
   const [isExpanded, setIsExpanded] = useState(false);
   const [hasRetried, setHasRetried] = useState(false);
   const openSettings = useOpenSettings();
-  const isClaudeBinaryNotFound = block.errorType?.endsWith("ClaudeBinaryNotFoundError") ?? false;
+  const binaryNotFoundTool = BINARY_NOT_FOUND_TOOLS.find((tool) => block.errorType?.endsWith(tool.errorSuffix));
   const errorLabel = block.errorType ? block.errorType.split(".").pop() : "Request Failed";
-  const showRetry = !isClaudeBinaryNotFound && isLastMessage && taskStatus !== TaskStatus.ERROR && onRetryRequest;
+  const showRetry = !binaryNotFoundTool && isLastMessage && taskStatus !== TaskStatus.ERROR && onRetryRequest;
 
-  if (isClaudeBinaryNotFound) {
+  if (binaryNotFoundTool) {
+    const isInstalled = dependenciesStatus ? binaryNotFoundTool.getInstalled(dependenciesStatus) : false;
     return (
       <>
         <div className={styles.errorBlock} data-testid={ElementIds.ERROR_BLOCK}>
           <div className={styles.errorHeader}>
-            <Badge color={isClaudeInstalled ? "orange" : "red"} size="1" variant="soft">
-              Claude Not Available
+            <Badge color={isInstalled ? "orange" : "red"} size="1" variant="soft">
+              {binaryNotFoundTool.name} Not Available
             </Badge>
             <span className={styles.errorMessage}>
-              {block.message || "Claude binary not found or is invalid."}{" "}
-              <Link onClick={() => openSettings("DEPENDENCIES")} style={{ cursor: "pointer" }}>
+              {block.message || `${binaryNotFoundTool.name} binary not found or is invalid.`}{" "}
+              <Link onClick={() => openSettings(binaryNotFoundTool.settingsSection)} style={{ cursor: "pointer" }}>
                 Go to Settings
               </Link>
             </span>
           </div>
         </div>
-        {isClaudeInstalled && (
+        {isInstalled && (
           <Flex align="center" gap="1" style={{ paddingTop: "var(--space-1)" }}>
             <CheckCircledIcon color="var(--green-9)" />
             <Badge color="green" size="1" variant="soft">
-              Claude installed
+              {binaryNotFoundTool.name} installed
             </Badge>
           </Flex>
         )}
