@@ -54,3 +54,12 @@ project's setup command and honors repo-provided environment (e.g. a checked-in
 `.sculptor/.env`), so opening a project can execute code on your host before any
 agent starts. Only open repositories you trust — treat "open this repo" like
 "run this repo."
+
+**Adding a plugin runs its code.** Frontend plugins load from a source you add
+— a local path or a remote or local URL — and run inside the app with the same
+privileges as Sculptor's own UI: they share the host's renderer and can reach
+everything it can, including the loopback API and the tools and remotes you've
+connected. A remote source is fetched on every load, so you're trusting whatever
+it serves at that moment, not just the code you saw when you added it. Only add
+plugin sources you trust — treat "add a plugin" like "run this code" — and
+prefer pinned, local sources over URLs that can change under you.
