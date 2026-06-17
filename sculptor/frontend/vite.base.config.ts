@@ -1,5 +1,5 @@
 // Shared Vite configuration for both frontend builds, so each bundles the app
-// through the same plugin pipeline (resolves PROD-2161). Only the genuinely
+// through the same plugin pipeline. Only the genuinely
 // target-specific knobs are left to each entry config:
 //
 //   - vite.web.config.ts      (web / OpenHost):  base "/",  outDir dist,
