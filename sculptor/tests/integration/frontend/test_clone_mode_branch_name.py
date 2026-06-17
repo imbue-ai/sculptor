@@ -31,8 +31,7 @@ def _workspace_id_from_url(page: Page) -> str:
     return match.group(1)
 
 
-def _clone_code_dir_for_workspace(page: Page, workspace_id: str, timeout_ms: int = 30_000) -> Path:
-    base_url = page.url.split("#")[0].rstrip("/")
+def _clone_code_dir_for_workspace(page: Page, base_url: str, workspace_id: str, timeout_ms: int = 30_000) -> Path:
     for _ in range(timeout_ms // 200):
         response = page.request.get(f"{base_url}/api/v1/workspaces/{workspace_id}")
         assert response.ok, f"GET workspace failed: {response.status} {response.text()}"
@@ -81,7 +80,7 @@ def test_clone_mode_cleared_branch_checks_out_base(sculptor_instance_: SculptorI
     add_ws_page.submit_and_wait_for_chat_panel()
 
     workspace_id = _workspace_id_from_url(page)
-    clone_path = _clone_code_dir_for_workspace(page, workspace_id)
+    clone_path = _clone_code_dir_for_workspace(page, sculptor_instance_.backend_api_url, workspace_id)
     current = _git_branch(clone_path)
     assert current in {"main", "master", "testing"}, f"unexpected base branch: {current!r}"
     assert not _branch_exists(clone_path, "test/some-work"), "clearing the branch field should not create a new branch"
@@ -105,6 +104,6 @@ def test_clone_mode_kept_branch_name_creates_new_branch(sculptor_instance_: Scul
     add_ws_page.submit_and_wait_for_chat_panel()
 
     workspace_id = _workspace_id_from_url(page)
-    clone_path = _clone_code_dir_for_workspace(page, workspace_id)
+    clone_path = _clone_code_dir_for_workspace(page, sculptor_instance_.backend_api_url, workspace_id)
     assert _git_branch(clone_path) == expected_branch
     assert _branch_exists(clone_path, expected_branch)
