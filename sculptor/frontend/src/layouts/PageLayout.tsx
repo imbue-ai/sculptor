@@ -34,6 +34,7 @@ import { WarningStatusBanner } from "../components/WarningStatusBanner.tsx";
 import { useAutoUpdateListener } from "../hooks/useAutoUpdateListener.ts";
 import { workspaceDefaultLayout, workspacePanels } from "../pages/workspace/panels/workspacePanels.ts";
 import { PluginLoader } from "../plugins/PluginLoader.tsx";
+import { PluginOverlays } from "../plugins/PluginOverlays.tsx";
 import { pluginPanelsAtom } from "../plugins/pluginRegistry.ts";
 import { usePageLayoutKeyboardShortcuts } from "./hooks/usePageLayoutKeyboardShortcuts.ts";
 import styles from "./PageLayout.module.scss";
@@ -123,6 +124,7 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
             remains draggable. */}
         {isZenModeActive && <TitleBar className={styles.zenTitleBar} />}
         <PluginLoader />
+        <PluginOverlays />
         <PanelRegistryProvider panels={combinedPanels} defaultLayout={workspaceDefaultLayout}>
           <Outlet />
         </PanelRegistryProvider>

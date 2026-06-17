@@ -1,9 +1,11 @@
 import { useAtom, useAtomValue } from "jotai";
 import { atomFamily, atomWithStorage } from "jotai/utils";
 import { useMemo } from "react";
+import { useParams } from "react-router-dom";
 
-import type { CodingAgentTaskView } from "~/api";
+import type { CodingAgentTaskView, Workspace } from "~/api";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
+import { workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
 import { useWorkspaceBranch as useHostWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch.ts";
 
 import { usePluginContext } from "../PluginContext.tsx";
@@ -11,6 +13,25 @@ import { useWorkspacePluginContext } from "../WorkspaceContext.tsx";
 
 /** Current workspace id, read from the host-provided plugin context. */
 export const useWorkspaceId = (): string => useWorkspacePluginContext().workspaceId;
+
+/**
+ * Every non-deleted workspace known to the host, or `undefined` until the
+ * first batch has loaded. Unlike `useWorkspaceId`, this needs no workspace
+ * context — it reads an app-global atom, so it works in an overlay (which
+ * isn't bound to one workspace) as well as in a panel.
+ */
+export const useWorkspaces = (): ReadonlyArray<Workspace> | undefined => useAtomValue(workspacesArrayAtom);
+
+/**
+ * The id of the workspace the user is currently viewing, or `null` when the
+ * route isn't a workspace page (settings, onboarding, etc.). Read straight
+ * from the route, so it tracks navigation — the right "where am I" signal for
+ * an app-global overlay.
+ */
+export const useCurrentWorkspaceId = (): string | null => {
+  const { workspaceID } = useParams<{ workspaceID?: string }>();
+  return workspaceID ?? null;
+};
 
 /**
  * The current git branch of the workspace the plugin is mounted in, or `null`
