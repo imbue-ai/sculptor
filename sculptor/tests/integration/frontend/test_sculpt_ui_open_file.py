@@ -48,7 +48,7 @@ def _run_sculpt_ui_open_file(
 
     Returns (exit_code, stdout, stderr).
     """
-    args = ["ui", "open-file", path, "-w", workspace_id, "--base-url", instance.base_url]
+    args = ["ui", "open-file", path, "-w", workspace_id, "--base-url", instance.backend_api_url]
     if mode is not None:
         args += ["--mode", mode]
 
@@ -153,7 +153,7 @@ def test_closed_workspace_exits_3(sculptor_instance_: SculptorInstance) -> None:
     workspace_id = _start_empty_workspace(page)
 
     # Close the workspace via the API.
-    base_url = sculptor_instance_.base_url.rstrip("/")
+    base_url = sculptor_instance_.backend_api_url.rstrip("/")
     response = request_with_retry(
         page.request.patch,
         f"{base_url}/api/v1/workspaces/{workspace_id}",

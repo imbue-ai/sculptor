@@ -112,7 +112,7 @@ def _enable_babysitter(instance: SculptorInstance) -> None:
     can fire before the parent agent's first chat message is committed, so
     we set the user-config fallback explicitly here.
     """
-    base_url = instance.base_url.rstrip("/")
+    base_url = instance.backend_api_url.rstrip("/")
     response = instance.page.request.get(f"{base_url}/api/v1/config", timeout=_CONFIG_API_TIMEOUT_MS)
     assert response.ok, f"GET /api/v1/config failed: {response.status}"
     config = response.json()
