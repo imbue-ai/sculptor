@@ -152,10 +152,8 @@ class ElectronFrontend:
             self._kill_electron()
             exit_code = self._electron_proc.poll() if self._electron_proc is not None else None
             tail = "\n".join(recent_output) or "(no output captured)"
-            raise RuntimeError(
-                f"Electron frontend failed to start (process exit code: {exit_code}).\n"
-                f"Last Electron output:\n{tail}"
-            )
+            message = f"Electron frontend failed to start (exit code {exit_code}). Last Electron output:\n{tail}"
+            raise RuntimeError(message)
 
         t_cdp = time.monotonic()
         try:

@@ -45,6 +45,11 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
 # Critical for Modal snapshots — without this, some files vanish after snapshot restore.
 ENV UV_LINK_MODE=copy
 ENV NVM_DIR="/root/.nvm"
+# Put the nvm-installed node/npm on PATH for non-interactive shells. nvm only
+# wires them in per-shell, and the offload test process doesn't source nvm — so
+# without this the Electron integration harness's `npm run electron:start`
+# fails with "npm: not found" (exit 127). NODE_VERSION + NVM_DIR are set above.
+ENV PATH="${NVM_DIR}/versions/node/v${NODE_VERSION}/bin:${PATH}"
 
 WORKDIR /app
 
