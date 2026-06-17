@@ -71,3 +71,9 @@ sculpt run \
   --json \
   "<context-summary prompt>"
 ```
+
+> **Use `sculpt run`, not `sculpt workspace create`.** `sculpt run` creates the
+> workspace, its agent, *and* the git worktree in one step. `sculpt workspace
+> create` only registers a workspace record — no agent, no checkout — so it
+> renders as a blank screen in the UI. To add an agent to an already-empty
+> workspace, run `sculpt agent create -w <ws_id> -p "..."`.
