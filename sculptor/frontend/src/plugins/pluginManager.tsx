@@ -41,7 +41,7 @@ type LoaderFn = (
  * settings UI. Empty in the base scaffolding — no plugin ships bundled yet;
  * sources serve from `public/plugins/<id>/`.
  */
-const BUILTIN_SOURCES: ReadonlyArray<string> = [];
+const BUILTIN_SOURCES: ReadonlyArray<string> = ["/plugins/sculpty", "/plugins/pomodoro"];
 
 /** SDK major version the host currently provides. */
 const HOST_SDK_VERSION = 1;
