@@ -8,6 +8,7 @@ import {
   LayoutGridIcon,
   PaintbrushIcon,
   PlayIcon,
+  PuzzleIcon,
   ShieldCheckIcon,
   ShieldIcon,
   TerminalIcon,
@@ -34,6 +35,7 @@ export const SettingsSection = {
   AGENT: "AGENT",
   KEYBINDINGS: "KEYBINDINGS",
   PANELS: "PANELS",
+  PLUGINS: "PLUGINS",
   DEPENDENCIES: "DEPENDENCIES",
   PI: "PI",
   REPOSITORIES: "REPOSITORIES",
@@ -97,6 +99,18 @@ export const SETTINGS_SECTIONS: ReadonlyArray<SettingsSectionDescriptor> = [
     paletteKeywords: ["layout", "docking", "zones"],
     icon: LayoutGridIcon,
     testId: ElementIds.SETTINGS_NAV_PANELS,
+  },
+  // Visibility of the Plugins section is gated on the experimental
+  // frontend-plugins flag at both consumers of this array (the Settings
+  // sidebar in SettingsPage and the Cmd+K palette builder) — with the flag
+  // off it appears in neither.
+  {
+    id: SettingsSection.PLUGINS,
+    displayName: "Plugins",
+    paletteSubtitle: "Installed plugins and their settings",
+    paletteKeywords: ["extensions", "addons"],
+    icon: PuzzleIcon,
+    testId: ElementIds.SETTINGS_NAV_PLUGINS,
   },
   {
     id: SettingsSection.DEPENDENCIES,
