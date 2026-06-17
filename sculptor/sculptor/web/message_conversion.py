@@ -494,6 +494,29 @@ def convert_agent_messages_to_task_update(
                         msg.approximate_creation_time,
                         harness,
                     )
+
+                # SCU-512: the buffered persistence copy re-asserts the turn's
+                # ToolUseBlocks.  If a tool_result arrived mid-stream it overwrote
+                # its ToolUseBlock in place (``_replace_tool_use_with_result`` does
+                # ``content[i] = result``), discarding the tool input.  For diff
+                # tools (Edit/Write/MultiEdit) that input carries the old_string/
+                # new_string the frontend needs to render the diff, so a dropped
+                # ToolUseBlock leaves a bare ToolResultBlock that shows as an empty
+                # pill.  Restore any ToolUseBlock the streamed copy no longer holds
+                # (by id) so the pairing — and the input — survive.
+                if in_progress_chat_message is not None:
+                    existing_tool_use_ids = {
+                        block.id for block in in_progress_chat_message.content if isinstance(block, ToolUseBlock)
+                    }
+                    restored_tool_uses = tuple(
+                        block
+                        for block in msg.content
+                        if isinstance(block, ToolUseBlock) and block.id not in existing_tool_use_ids
+                    )
+                    if restored_tool_uses:
+                        in_progress_chat_message = _restore_overwritten_tool_uses(
+                            in_progress_chat_message, restored_tool_uses
+                        )
             else:
                 # Non-streaming (or historical replay) - append content as usual
                 in_progress_chat_message = _handle_response_blocks(
@@ -993,6 +1016,37 @@ def _replace_tool_use_with_result(
             content[i] = result
             return content, True
     return content, False
+
+
+def _restore_overwritten_tool_uses(
+    in_progress: ChatMessage,
+    tool_uses: Sequence[ToolUseBlock],
+) -> ChatMessage:
+    """Re-insert ToolUseBlocks that a mid-stream tool_result overwrote in place.
+
+    SCU-512: while streaming, ``_replace_tool_use_with_result`` swaps a
+    ToolUseBlock for its ToolResultBlock (``content[i] = result``), which drops
+    the tool input.  For diff tools that input is the only source of the diff the
+    frontend renders.  When the buffered persistence message later re-asserts the
+    ToolUseBlock, this restores it: each tool_use is inserted immediately before
+    its matching ToolResultBlock (paired by ``tool_use_id``) so the frontend
+    renders the pair; if no matching result is present it is appended.
+    """
+    content = list(in_progress.content)
+    for tool_use in tool_uses:
+        insert_at = next(
+            (
+                i
+                for i, block in enumerate(content)
+                if isinstance(block, ToolResultBlock) and block.tool_use_id == tool_use.id
+            ),
+            None,
+        )
+        if insert_at is None:
+            content.append(tool_use)
+        else:
+            content.insert(insert_at, tool_use)
+    return in_progress.model_copy(update={"content": tuple(content)})
 
 
 def _handle_partial_response(
