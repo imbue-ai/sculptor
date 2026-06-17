@@ -6,20 +6,6 @@
   padding: var(--space-5);
 }
 
-// Expand-sidebar toggle anchored to the top-left titlebar gutter, shown only
-// when the nav sidebar is collapsed. paddingLeft is set inline so the button
-// clears the macOS traffic-light buttons.
-.collapsedSidebarToggle {
-  align-items: center;
-  app-region: no-drag;
-  display: flex;
-  height: 40px;
-  left: 0;
-  position: absolute;
-  top: 0;
-  z-index: 2;
-}
-
 .content {
   max-width: min(700px, 90%);
   width: 100%;
