@@ -89,6 +89,10 @@ class ElectronFrontend:
             "SCULPTOR_FRONTEND_PORT": str(frontend_port),
             "SCULPTOR_USER_DATA_DIR": self._user_data_dir,
             "SCULPTOR_ICON_LABEL": "pytest",
+            # Load the renderer from the custom sculptor://app origin (the
+            # protocol proxies to the Vite dev server) so integration tests
+            # exercise the real packaged-app origin without a packaged build.
+            "SCULPTOR_USE_APP_SCHEME": "1",
         }
         # In custom command mode, Electron spawns the backend itself via the
         # custom command — so we do NOT set SCULPTOR_API_PORT (the command
