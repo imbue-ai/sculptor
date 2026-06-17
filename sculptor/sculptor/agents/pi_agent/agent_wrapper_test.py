@@ -22,6 +22,7 @@ from unittest.mock import patch
 
 import pytest
 
+from sculptor.agents.pi_agent.agent_wrapper import PI_PROBE_SESSION_DIR_NAME
 from sculptor.agents.pi_agent.agent_wrapper import PI_SESSION_DIR_NAME
 from sculptor.agents.pi_agent.agent_wrapper import PI_SESSION_ID_STATE_FILE
 from sculptor.agents.pi_agent.agent_wrapper import PiAgent
@@ -2946,3 +2947,108 @@ def test_fetch_models_into_state_emits_nothing_when_pi_lists_no_models() -> None
     with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-models", "cmd-state"]):
         agent._fetch_models_into_state()
     assert not [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+
+
+def _make_probe_env(probe_process: MagicMock) -> MagicMock:
+    """A MagicMock environment whose binary + version preflight pass and whose
+    `run_process_in_background` returns `probe_process` (the canned probe RPC)."""
+    env = MagicMock(spec=AgentExecutionEnvironment)
+    env.get_tool_binary_path.return_value = "/bin/pi"
+    version_result = MagicMock()
+    version_result.stdout = ""
+    version_result.stderr = "pi 0.78.0\n"
+    env.run_process_to_completion.return_value = version_result
+    env.get_state_path.return_value = Path("/fake/state")
+    env.run_process_in_background.return_value = probe_process
+    return env
+
+
+def test_fetch_available_models_probe_returns_curated_catalog_and_current_model() -> None:
+    """The pre-message probe launches pi, fetches + curates the catalog, and returns
+    it with the current model — without leaving the agent's message-loop process set."""
+    current_raw = {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic"}
+    probe_process = _make_process([_models_response(_RAW_PI_MODELS), _state_response_with_model(current_raw)])
+    env = _make_probe_env(probe_process)
+    agent = _make_agent(env)
+    with patch(
+        "sculptor.agents.pi_agent.agent_wrapper.generate_id",
+        side_effect=["probe-sess", "cmd-models", "cmd-state"],
+    ):
+        available_models, current_model = agent.fetch_available_models_probe(secrets={})
+
+    assert [option.model_id for option in available_models] == _CURATED_PI_MODEL_IDS
+    assert current_model is not None and current_model.model_id == "claude-opus-4-8"
+    # The probe shuts its process down and does NOT leave it as the agent's
+    # message-loop process (start() owns that), so the normal lifecycle is intact.
+    probe_process.close_stdin.assert_called_once()
+    probe_process.terminate.assert_called_once()
+    assert agent._process is None
+    # No ModelsAvailableAgentMessage is emitted — the probe returns its result
+    # directly (the run-agent handler persists it), it does not stream a carrier.
+    assert not [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+
+
+def test_fetch_available_models_probe_launches_distinct_probe_session_dir() -> None:
+    """The probe spawns a minimal `pi --mode rpc` against a throwaway probe session
+    dir (never the real PI_SESSION_DIR_NAME) with no extensions / skills / prompt."""
+    probe_process = _make_process(
+        [_models_response(_RAW_PI_MODELS), _state_response_with_model({"id": "claude-opus-4-8"})]
+    )
+    env = _make_probe_env(probe_process)
+    agent = _make_agent(env)
+    with patch(
+        "sculptor.agents.pi_agent.agent_wrapper.generate_id",
+        side_effect=["probe-sess", "cmd-models", "cmd-state"],
+    ):
+        agent.fetch_available_models_probe(secrets={})
+
+    env.run_process_in_background.assert_called_once()
+    command = list(env.run_process_in_background.call_args.args[0])
+    assert command[:3] == ["/bin/pi", "--mode", "rpc"]
+    session_dir = command[command.index("--session-dir") + 1]
+    assert session_dir == str(Path("/fake/state") / PI_PROBE_SESSION_DIR_NAME)
+    assert session_dir != str(Path("/fake/state") / PI_SESSION_DIR_NAME)
+    # A distinct, probe-scoped id; never the persisted real session id.
+    assert command[command.index("--session-id") + 1] == "probe-probe-sess"
+    # Minimal launch: discovery off, and no -e / --append-system-prompt / --skill.
+    assert "--no-extensions" in command
+    assert "-e" not in command
+    assert "--append-system-prompt" not in command
+    assert "--skill" not in command
+
+
+def test_fetch_available_models_probe_returns_empty_when_binary_missing() -> None:
+    """No pi binary → empty result (the switcher falls back to defaults), no launch."""
+    env = MagicMock(spec=AgentExecutionEnvironment)
+    env.get_tool_binary_path.return_value = None
+    agent = _make_agent(env)
+    assert agent.fetch_available_models_probe(secrets={}) == ([], None)
+    env.run_process_in_background.assert_not_called()
+
+
+def test_fetch_available_models_probe_returns_empty_on_version_mismatch() -> None:
+    """An out-of-range pi version → empty result, and the probe never launches a process."""
+    env = MagicMock(spec=AgentExecutionEnvironment)
+    env.get_tool_binary_path.return_value = "/bin/pi"
+    version_result = MagicMock()
+    version_result.stdout = ""
+    version_result.stderr = "pi 0.1.0\n"
+    env.run_process_to_completion.return_value = version_result
+    agent = _make_agent(env)
+    assert agent.fetch_available_models_probe(secrets={}) == ([], None)
+    env.run_process_in_background.assert_not_called()
+
+
+def test_fetch_available_models_probe_returns_empty_when_pi_lists_no_models() -> None:
+    """Empty catalog + no current model → empty result and the probe still shuts down."""
+    probe_process = _make_process([_models_response([]), _state_response_with_model(None)])
+    env = _make_probe_env(probe_process)
+    agent = _make_agent(env)
+    with patch(
+        "sculptor.agents.pi_agent.agent_wrapper.generate_id",
+        side_effect=["probe-sess", "cmd-models", "cmd-state"],
+    ):
+        assert agent.fetch_available_models_probe(secrets={}) == ([], None)
+    probe_process.close_stdin.assert_called_once()
+    probe_process.terminate.assert_called_once()
+    assert agent._process is None

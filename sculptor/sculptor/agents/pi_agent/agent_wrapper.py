@@ -184,6 +184,12 @@ FILE_CHANGE_TOOL_NAMES: frozenset[str] = frozenset({"edit", "write", "bash"})
 PI_SESSION_DIR_NAME: str = "pi_session"
 PI_SESSION_ID_STATE_FILE: str = "pi_session_id"
 
+# The throwaway session dir the pre-message catalog probe launches pi against
+# (see fetch_available_models_probe). Distinct from PI_SESSION_DIR_NAME so the
+# probe's short-lived session never collides with the real conversation session
+# the agent later resumes.
+PI_PROBE_SESSION_DIR_NAME: str = "pi_probe_session"
+
 # Control messages that legitimately reach the end of `_push_message` without pi
 # handling them: the base class handles these after the False return (see
 # DefaultAgentWrapper.push_message). Pi recognizes them as handled-elsewhere, so
@@ -1104,6 +1110,129 @@ class PiAgent(DefaultAgentWrapper):
             len(self._available_models),
             current_model.model_id if current_model is not None else None,
         )
+
+    def fetch_available_models_probe(
+        self, secrets: Mapping[str, str | Secret]
+    ) -> tuple[list[ModelOption], ModelOption | None]:
+        """Fetch + curate pi's catalog via a short-lived probe, without starting the agent.
+
+        Lets the run-agent handler populate the switcher for a fresh pi agent
+        BEFORE the first message, when `start()` (and its
+        `_fetch_models_into_state`) has not run yet. Launches a minimal `pi
+        --mode rpc` process against a throwaway probe session
+        (`PI_PROBE_SESSION_DIR_NAME`, a distinct `--session-id`) with no
+        extensions / skills / system prompt — `get_available_models` and
+        `get_state` need none — issues those two RPCs as the sole reader of the
+        process queue, then shuts the probe down before returning the curated
+        `list[ModelOption]` + current `ModelOption | None`.
+
+        `secrets` are the backend-env + PATH the caller would pass `start()` (so
+        the probe resolves the same `pi` and reaches the same provider); the
+        probe merges its own api-key secrets on top, mirroring `start()`. The
+        probe does NOT call `start()`, so `self._secrets` is not set here.
+
+        Best-effort, like `_fetch_models_into_state`: on any failure (no binary,
+        version mismatch, timeout, no response) it logs and returns
+        `([], None)`, never raising — the switcher then falls back to the
+        frontend's built-in list, exactly as before this probe existed. Does NOT
+        touch the agent lifecycle: it neither sets `self._process` for the
+        message loop nor mints/persists the real session id, so the normal
+        `start()` path is unaffected.
+        """
+        binary = self.environment.get_tool_binary_path(Dependency.PI)
+        if binary is None:
+            logger.info("PiAgent model probe skipped: pi binary not found; switcher will fall back to defaults")
+            return [], None
+        detected_version = self._check_pi_version_for_probe(binary)
+        if detected_version is None or not _pi_version_in_range(detected_version):
+            logger.info(
+                "PiAgent model probe skipped: pi version {} out of range; switcher will fall back to defaults",
+                detected_version,
+            )
+            return [], None
+
+        pi_secrets = self._collect_api_key_secrets()
+        merged_secrets: dict[str, str | Secret] = {**secrets, **pi_secrets}
+        probe_session_dir = self.environment.get_state_path() / PI_PROBE_SESSION_DIR_NAME
+        command = [
+            binary,
+            "--mode",
+            "rpc",
+            "--session-dir",
+            str(probe_session_dir),
+            "--session-id",
+            f"probe-{generate_id()}",
+            "--no-extensions",
+        ]
+        probe_process = None
+        try:
+            probe_process = self.environment.run_process_in_background(
+                command,
+                secrets=merged_secrets,
+                open_stdin=True,
+            )
+            # Point the blocking RPC helpers at the probe process for the duration
+            # of the fetch only; the message loop never runs here, so there is no
+            # concurrent reader of this queue.
+            self._process = probe_process
+            raw_models = self._request_available_models_blocking()
+            state = self._request_state_blocking()
+        except Exception as e:  # noqa: BLE001
+            logger.info("PiAgent model probe failed ({}); switcher will fall back to defaults", e)
+            self._shutdown_probe_process(probe_process)
+            self._process = None
+            return [], None
+
+        self._shutdown_probe_process(probe_process)
+        self._process = None
+
+        current_raw = state.get("model") if isinstance(state, dict) else None
+        current_model = _model_option_from_pi(current_raw) if isinstance(current_raw, dict) else None
+        options: list[ModelOption] = []
+        for raw in raw_models:
+            option = _model_option_from_pi(raw)
+            if option is not None:
+                options.append(option)
+        curated = _curate_models(options, current_model)
+        if not curated and current_model is None:
+            logger.info("PiAgent model probe found no usable models; switcher will fall back to defaults")
+            return [], None
+        logger.info(
+            "PiAgent model probe fetched {} model(s); current model={}",
+            len(curated),
+            current_model.model_id if current_model is not None else None,
+        )
+        return curated, current_model
+
+    def _check_pi_version_for_probe(self, binary: str) -> str | None:
+        """`_check_pi_version` for the probe: return None instead of raising.
+
+        The probe is best-effort, so a failed / unparseable version check yields
+        an empty catalog (caller falls back to defaults) rather than the
+        `PiVersionMismatchError` `start()` raises to fail the run loudly.
+        """
+        try:
+            return self._check_pi_version(binary)
+        except PiVersionMismatchError:
+            return None
+
+    def _shutdown_probe_process(self, process: Any) -> None:
+        """Close stdin then terminate the catalog probe's pi process.
+
+        Pi exits on stdin EOF (Sculptor closes stdin at shutdown); terminate is
+        the backstop if it lingers. Best-effort — the probe is throwaway, so any
+        teardown error is logged and swallowed rather than failing the fetch.
+        """
+        if process is None:
+            return
+        try:
+            process.close_stdin()
+        except Exception as e:  # noqa: BLE001
+            logger.debug("PiAgent model probe close_stdin failed: {}", e)
+        try:
+            process.terminate()
+        except Exception as e:  # noqa: BLE001
+            logger.debug("PiAgent model probe terminate failed: {}", e)
 
     def _request_interrupt(self) -> None:
         """Halt the in-flight pi turn via pi's `abort` command (supports_interruption).

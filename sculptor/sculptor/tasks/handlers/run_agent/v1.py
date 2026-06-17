@@ -15,6 +15,8 @@ from typing import cast
 from loguru import logger
 
 from sculptor.agents.harness_registry import create_agent_for_run
+from sculptor.agents.harness_registry import get_harness_for_config
+from sculptor.agents.pi_agent.agent_wrapper import PiAgent
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
@@ -86,6 +88,7 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 )
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import Message
+from sculptor.state.messages import ModelOption
 from sculptor.state.messages import PersistentAgentMessage
 from sculptor.state.messages import PersistentUserMessage
 from sculptor.state.messages import ResponseBlockAgentMessage
@@ -206,6 +209,26 @@ def run_agent_task_v1(
                     services.workspace_service.mark_workspace_diff_stale(
                         task_state.workspace_id,
                     )
+
+                    # For a pi agent, fetch + persist pi's model catalog now (a
+                    # short-lived probe) so the switcher shows pi's own models
+                    # while the agent waits prompt-less below — start() (and its
+                    # catalog fetch) is deferred to the first message. Gated to pi
+                    # and best-effort, so it neither starts non-pi agents eagerly
+                    # nor fails the run if the probe cannot reach pi.
+                    try:
+                        task_state = _eager_fetch_pi_models_into_state(
+                            task=task,
+                            task_data=task_data,
+                            task_state=task_state,
+                            environment=environment,
+                            project=project,
+                            settings=settings,
+                            services=services,
+                            in_testing=settings.TESTING.INTEGRATION_ENABLED,
+                        )
+                    except Exception as e:  # noqa: BLE001
+                        logger.info("Pi model pre-fetch failed ({}); switcher will fall back to defaults", e)
 
                     # Now wait for the initial user message (may block for prompt-less agents)
                     re_queued_messages, initial_message = wait_for_initial_message_and_process_queue(
@@ -343,19 +366,7 @@ def _run_agent_in_environment(
             in_testing=in_testing,
             on_diff_needed=on_diff_needed,
         )
-        secrets: dict[str, str] = build_sculpt_backend_env(
-            backend_port=settings.BACKEND_PORT,
-            workspace_id=task_state.workspace_id,
-            project_id=project.object_id,
-            agent_id=task.object_id,
-        )
-        executable_parent = Path(sys.executable).parent
-        secrets["PATH"] = _build_agent_path(
-            is_packaged=is_packaged(),
-            executable_parent=executable_parent,
-            current_path=os.environ.get("PATH", ""),
-            sculpt_dir=get_sculpt_bin_dir(executable_parent),
-        )
+        secrets = _build_agent_secrets(settings=settings, task=task, task_state=task_state, project=project)
         agent_wrapper.start(secrets)
         if on_agent_started is not None:
             on_agent_started()
@@ -763,6 +774,92 @@ def on_exception(
     raise AgentTaskFailure(transaction_callback=on_transaction, is_user_notified=True)
 
 
+def _build_agent_secrets(
+    settings: SculptorSettings,
+    task: Task,
+    task_state: AgentTaskStateV2,
+    project: Project,
+) -> dict[str, str]:
+    """Build the backend-env + PATH secrets an agent subprocess launches with.
+
+    Shared by `_run_agent_in_environment` (the normal `agent_wrapper.start`) and
+    the pre-message pi catalog probe (`_eager_fetch_pi_models_into_state`), which
+    spawns a throwaway pi process with the same environment.
+    """
+    secrets: dict[str, str] = build_sculpt_backend_env(
+        backend_port=settings.BACKEND_PORT,
+        workspace_id=task_state.workspace_id,
+        project_id=project.object_id,
+        agent_id=task.object_id,
+    )
+    executable_parent = Path(sys.executable).parent
+    secrets["PATH"] = _build_agent_path(
+        is_packaged=is_packaged(),
+        executable_parent=executable_parent,
+        current_path=os.environ.get("PATH", ""),
+        sculpt_dir=get_sculpt_bin_dir(executable_parent),
+    )
+    return secrets
+
+
+def _eager_fetch_pi_models_into_state(
+    task: Task,
+    task_data: AgentTaskInputsV2,
+    task_state: AgentTaskStateV2,
+    environment: AgentExecutionEnvironment,
+    project: Project,
+    settings: SculptorSettings,
+    services: ServiceCollectionForTask,
+    in_testing: bool,
+) -> AgentTaskStateV2:
+    """Populate the switcher's model catalog for a fresh pi agent, before the first message.
+
+    `run_agent_task_v1` keeps a prompt-less agent READY without calling
+    `agent_wrapper.start()` until a message arrives, so pi's start-time
+    `_fetch_models_into_state` has not run and the task carries no
+    `available_models` — the switcher then shows the built-in Claude list. Here,
+    once the environment is ready, we run a short-lived pi probe
+    (`PiAgent.fetch_available_models_probe`) and persist its curated catalog onto
+    task state so the switcher reflects pi's models immediately.
+
+    Returns the task state, evolved with the catalog when the probe found one, so
+    the caller carries it forward — otherwise `finalize_task_setup`'s later
+    evolve-and-upsert (from the in-memory state) would write the catalog back
+    out. Gated to pi via `supports_model_selection` (only pi sources a dynamic
+    catalog; Claude/terminal/hello do not), so non-pi agents are never started
+    eagerly. Best-effort: on any failure the probe returns an empty catalog and
+    the task state is returned unchanged, so the switcher falls back exactly as
+    before.
+    """
+    if not get_harness_for_config(task_data.agent_config).capabilities().supports_model_selection:
+        return task_state
+    agent_wrapper = _get_agent_wrapper(
+        task_data=task_data,
+        task_state=task_state,
+        environment=environment,
+        project=project,
+        task_id=task.object_id,
+        workspace_service=services.workspace_service,
+        in_testing=in_testing,
+    )
+    # supports_model_selection currently implies the pi harness — the probe is a
+    # PiAgent method. If another harness ever sources a dynamic catalog, give it
+    # the same probe seam rather than starting it eagerly here.
+    if not isinstance(agent_wrapper, PiAgent):
+        return task_state
+    secrets = _build_agent_secrets(settings=settings, task=task, task_state=task_state, project=project)
+    available_models, current_model = agent_wrapper.fetch_available_models_probe(secrets)
+    if not available_models and current_model is None:
+        return task_state
+    return _persist_available_models(
+        available_models=available_models,
+        current_model=current_model,
+        task_id=task.object_id,
+        task_state=task_state,
+        services=services,
+    )
+
+
 def _get_agent_wrapper(
     task_data: AgentTaskInputsV2,
     task_state: AgentTaskStateV2,
@@ -1002,25 +1099,43 @@ def _record_available_models_in_state(
     if latest is None:
         return task_state
 
-    available_models = list(latest.available_models)
-    current_model = latest.current_model
-    if task_state.available_models == available_models and task_state.current_model == current_model:
-        return task_state
+    return _persist_available_models(
+        available_models=list(latest.available_models),
+        current_model=latest.current_model,
+        task_id=task_id,
+        task_state=task_state,
+        services=services,
+    )
 
+
+def _persist_available_models(
+    available_models: list[ModelOption],
+    current_model: ModelOption | None,
+    task_id: TaskID,
+    task_state: AgentTaskStateV2,
+    services: ServiceCollectionForTask,
+) -> AgentTaskStateV2:
+    """Write a model catalog onto `AgentTaskStateV2.available_models` / `current_model`.
+
+    Shared by the post-message path (`_record_available_models_in_state`, which
+    unwraps the agent's `ModelsAvailableAgentMessage`) and the pre-message
+    env-ready pi probe (`_eager_fetch_pi_models_into_state`). Routes through
+    `task_service.update_available_models` so the change publishes a task update
+    (a live switcher refreshes even with no message in flight, which the
+    pre-message path has) and the DB title is preserved against a concurrent
+    rename. Returns the evolved task state on a real change, else the input
+    unchanged.
+    """
     with services.data_model_service.open_task_transaction() as transaction:
-        task_row = transaction.get_task(task_id)
-        assert task_row is not None
-        # Read the current DB title so we don't clobber a concurrent rename.
-        db_state = AgentTaskStateV2.model_validate(task_row.current_state)
-        mutable_task_state = evolver(task_state)
-        assign(mutable_task_state.available_models, lambda: available_models)
-        assign(mutable_task_state.current_model, lambda: current_model)
-        assign(mutable_task_state.title, lambda: db_state.title)
-        updated_task_state = chill(mutable_task_state)
-        task_row = task_row.evolve(task_row.ref().current_state, updated_task_state.model_dump())
-        transaction.upsert_task(task_row)
-
-    return updated_task_state
+        updated_task = services.task_service.update_available_models(
+            task_id=task_id,
+            available_models=available_models,
+            current_model=current_model,
+            transaction=transaction,
+        )
+    if updated_task is None or not isinstance(updated_task.current_state, AgentTaskStateV2):
+        return task_state
+    return updated_task.current_state
 
 
 def _update_task_state(
