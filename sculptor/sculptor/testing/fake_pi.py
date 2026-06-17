@@ -352,6 +352,20 @@ def _emit_agent_end(text: str) -> None:
     )
 
 
+def _emit_reaction_turn(ack: str) -> None:
+    """Emit the out-of-band reaction turn pi runs when the extension wakes the agent
+    via `sendUserMessage` after a completion: an assistant acknowledgement bracketed
+    by agent_start/agent_end, so Sculptor consumes it as the auto-resume reaction."""
+    _emit({"type": "agent_start"})
+    _emit(
+        {
+            "type": "message_end",
+            "message": {"role": "assistant", "content": [{"type": "text", "text": ack}], "stopReason": "stop"},
+        }
+    )
+    _emit_agent_end(ack)
+
+
 def _emit_aborted_agent_end(text: str) -> None:
     """Emit the interrupted-turn boundary: an `agent_end` whose assistant message
     carries `stopReason:"aborted"` plus the partial text streamed so far.
@@ -619,6 +633,15 @@ def _handle_subagent(args: dict, builder: _TurnBuilder, abort_event: Event, stat
         "notifyType": "info" if status == "completed" else "warning",
         "message": json.dumps({"sculptorSubagentTask": completion}, separators=(",", ":")),
     }
+    # Optionally script the auto-resume reaction turn pi runs when the extension
+    # wakes the agent (sendUserMessage) after the completion notify.
+    reaction = args.get("reaction")
+
+    def _emit_completion() -> None:
+        _emit(notify_event)
+        if isinstance(reaction, str) and reaction:
+            _emit_reaction_turn(reaction)
+
     wait_path = args.get("wait_path")
     if wait_path:
         # Hold the completion on a daemon thread until a sentinel file appears, so a
@@ -634,7 +657,7 @@ def _handle_subagent(args: dict, builder: _TurnBuilder, abort_event: Event, stat
                 if time.monotonic() >= deadline:
                     return  # give up; the test's completion assertion will fail loudly
                 time.sleep(0.05)
-            _emit(notify_event)
+            _emit_completion()
 
         threading.Thread(target=_emit_completion_when_ready, name="fake-pi-subagent-completion", daemon=True).start()
     else:
@@ -642,7 +665,7 @@ def _handle_subagent(args: dict, builder: _TurnBuilder, abort_event: Event, stat
         # yielded the turn there, so this is still genuinely out-of-band (its
         # idle-drain surfaces it) — but synchronous, so a one-shot headless run
         # observes it before exiting on EOF.
-        _emit(notify_event)
+        _emit_completion()
 
 
 def _handle_background(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
@@ -730,6 +753,15 @@ def _handle_background(args: dict, builder: _TurnBuilder, abort_event: Event, st
         "notifyType": "info" if status == "completed" else "warning",
         "message": json.dumps({"sculptorBackgroundTask": completion}, separators=(",", ":")),
     }
+    # Optionally script the auto-resume reaction turn pi runs when the extension
+    # wakes the agent (sendUserMessage) after the completion notify.
+    reaction = args.get("reaction")
+
+    def _emit_completion() -> None:
+        _emit(notify_event)
+        if isinstance(reaction, str) and reaction:
+            _emit_reaction_turn(reaction)
+
     wait_path = args.get("wait_path")
     if wait_path:
         # Hold the completion on a daemon thread until a sentinel file appears, so a
@@ -745,7 +777,7 @@ def _handle_background(args: dict, builder: _TurnBuilder, abort_event: Event, st
                 if time.monotonic() >= deadline:
                     return  # give up; the test's completion assertion will fail loudly
                 time.sleep(0.05)
-            _emit(notify_event)
+            _emit_completion()
 
         threading.Thread(target=_emit_completion_when_ready, name="fake-pi-bg-completion", daemon=True).start()
     else:
@@ -753,7 +785,7 @@ def _handle_background(args: dict, builder: _TurnBuilder, abort_event: Event, st
         # yielded the turn there, so this is still genuinely out-of-band (its
         # idle-drain surfaces it) — but synchronous, so a one-shot headless run
         # observes it before exiting on EOF.
-        _emit(notify_event)
+        _emit_completion()
 
 
 def _handle_sleep(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:

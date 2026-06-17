@@ -2390,6 +2390,72 @@ def test_interrupt_does_not_kill_subagent_task() -> None:
     assert _SA_TASK_ID in agent._subagent_tasks
 
 
+def _reaction_turn_events(ack: str) -> list:
+    """A pi-initiated reaction turn (the extension's `sendUserMessage` wake-up):
+    `agent_start` with NO preceding `response` ack, then the assistant reaction."""
+    return [
+        _event({"type": "agent_start"}),
+        _event({"type": "message_end", "message": _assistant_msg(ack)}),
+        _event({"type": "agent_end", "messages": [_assistant_msg(ack)], "willRetry": False}),
+    ]
+
+
+def _main_agent_texts(emitted: list) -> list[str]:
+    return [
+        block.text
+        for m in emitted
+        if isinstance(m, ResponseBlockAgentMessage) and m.parent_tool_use_id is None
+        for block in m.content
+        if isinstance(block, TextBlock)
+    ]
+
+
+def test_subagent_completion_triggers_auto_resume_reaction() -> None:
+    """After a sub-agent completion the extension wakes the agent (sendUserMessage);
+    the idle-drain consumes the pi-initiated reaction turn out-of-band so the agent's
+    reaction renders, and the await-reaction guard clears."""
+    agent = _make_agent()
+    agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
+    ack = "Acknowledged: my sub-agent finished — continuing the work."
+    agent._process = _make_process(
+        [_event(_subagent_notify([_subagent_child("c0", "done", _read_child_events())]))] + _reaction_turn_events(ack)
+    )
+    agent._drain_idle_background_events()
+    emitted = _drain(agent._output_messages)
+
+    assert len(_bg_notifications(emitted)) == 1
+    assert any(ack in text for text in _main_agent_texts(emitted)), _main_agent_texts(emitted)
+    types = [type(m).__name__ for m in emitted]
+    assert "RequestStartedAgentMessage" in types and "RequestSuccessAgentMessage" in types
+    assert agent._awaiting_reaction_count == 0
+
+
+def test_background_completion_triggers_auto_resume_reaction() -> None:
+    """After a background-task completion the extension wakes the agent; the idle-drain
+    consumes the pi-initiated reaction turn so the agent's reaction renders."""
+    agent = _make_agent()
+    agent._background_tasks[_BG_TASK_ID] = _BG_PGID
+    ack = "Acknowledged: my background task finished — continuing the work."
+    agent._process = _make_process([_event(_background_notify())] + _reaction_turn_events(ack))
+    agent._drain_idle_background_events()
+    emitted = _drain(agent._output_messages)
+
+    assert len(_bg_notifications(emitted)) == 1
+    assert any(ack in text for text in _main_agent_texts(emitted)), _main_agent_texts(emitted)
+    assert agent._awaiting_reaction_count == 0
+
+
+def test_idle_drain_gives_up_awaiting_reaction_past_deadline() -> None:
+    """A completion whose reaction never arrives must not keep the drain awaiting
+    forever: once the window elapses, `_has_background_tasks` reports no work."""
+    agent = _make_agent()
+    agent._note_awaiting_reaction()
+    assert agent._has_background_tasks() is True
+    agent._awaiting_reaction_deadline = 0.0  # force the window to have elapsed
+    assert agent._has_background_tasks() is False
+    assert agent._awaiting_reaction_count == 0
+
+
 # --- Background tasks (yield-early launch → out-of-band completion) ----------
 
 _BG_TOOL_CALL_ID = "bgtc1"

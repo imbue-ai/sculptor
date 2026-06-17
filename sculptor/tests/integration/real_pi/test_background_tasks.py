@@ -121,3 +121,27 @@ def test_pi_background_task_survives_stop(sculptor_instance_: SculptorInstance) 
         # Clean up the task we deliberately left running (the shared instance is
         # reused across tests on success, so don't leak it).
         kill_processes_matching(matches_sleep)
+
+
+@real_pi
+@pytest.mark.timeout(600)
+def test_pi_background_task_completion_wakes_the_agent(sculptor_instance_: SculptorInstance) -> None:
+    """The background task's completion wakes the calling agent (the extension's
+    `sendUserMessage`), which reacts in a new turn — the auto-resume leg, end-to-end."""
+    prompt = (
+        "Use the `background` tool to run a command in the background. Pass this EXACT shell "
+        + "command to the tool's `command` parameter: echo BG-CHILD-50241 . "
+        + "After launching it, reply with exactly BG-LAUNCHED and end your turn. Do NOT wait for it. "
+        + "Later, when you are notified that the background task has finished, reply with exactly "
+        + "BG-RESUMED-50241 and nothing else."
+    )
+    task_page = create_pi_workspace_and_send(sculptor_instance_, prompt, wait_for_finish=True)
+    chat_panel = task_page.get_chat_panel()
+    expect(chat_panel.get_assistant_messages().filter(has_text="BG-LAUNCHED").first).to_be_visible(
+        timeout=RESPONSE_TIMEOUT_MS
+    )
+    # The completion wakes the agent; it reacts in a new (auto-resume) turn.
+    expect(chat_panel.get_assistant_messages().filter(has_text="BG-RESUMED-50241").first).to_be_visible(
+        timeout=RESPONSE_TIMEOUT_MS
+    )
+    assert_no_errors(chat_panel)

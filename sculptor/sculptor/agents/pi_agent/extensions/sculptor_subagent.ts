@@ -356,6 +356,8 @@ export default function sculptorSubagentExtension(pi: ExtensionAPI): void {
 			void Promise.all(handles.map((h) => h.done)).then(() => {
 				liveTasks.delete(taskId);
 				const status = children.some((c) => c.status === "error") ? "failed" : "completed";
+				const done = children.filter((c) => c.status === "done").length;
+				const failed = children.filter((c) => c.status === "error").length;
 				try {
 					sessionCtx?.ui.notify(
 						JSON.stringify({
@@ -371,6 +373,17 @@ export default function sculptorSubagentExtension(pi: ExtensionAPI): void {
 					);
 				} catch {
 					/* session torn down between completion and notify; nothing to surface */
+				}
+				// Wake the calling agent so it can react to the completion. sendUserMessage
+				// triggers a turn when the agent is idle; deliverAs "followUp" queues it
+				// behind an in-flight user turn instead of interrupting it.
+				try {
+					pi.sendUserMessage(
+						`Your delegated sub-agent task (${label}) finished: ${status} — ${done}/${children.length} done, ${failed} failed.`,
+						{ deliverAs: "followUp" },
+					);
+				} catch {
+					/* session torn down; nothing to deliver */
 				}
 			});
 

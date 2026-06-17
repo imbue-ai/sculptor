@@ -186,6 +186,17 @@ export default function sculptorBackgroundExtension(pi: ExtensionAPI): void {
 				} catch {
 					/* session torn down between completion and notify; nothing to surface */
 				}
+				// Wake the calling agent so it can react to the completion. sendUserMessage
+				// triggers a turn when the agent is idle; deliverAs "followUp" queues it
+				// behind an in-flight user turn instead of interrupting it.
+				try {
+					pi.sendUserMessage(
+						`Your background task (${label}) finished: ${status}${exitCode === null ? "" : ` (exit ${exitCode})`}.`,
+						{ deliverAs: "followUp" },
+					);
+				} catch {
+					/* session torn down; nothing to deliver */
+				}
 			};
 
 			child.on("close", (code) => finish(code === 0 ? "completed" : "failed", code));

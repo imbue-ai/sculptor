@@ -225,6 +225,12 @@ The user's request follows:
 # (ChatInput.tsx `wsTimeout`) so a wedged `new_session` fails rather than hanging the UI.
 _CLEAR_CONTEXT_TIMEOUT_SECONDS: float = 10.0
 
+# After a background/sub-agent completion, the extension wakes the agent with
+# `sendUserMessage`; Sculptor keeps the idle-drain alive this long to consume the
+# resulting reaction turn. Bounds the wait so a reaction that never arrives (the
+# wake-up errored) cannot keep the drain polling forever.
+_REACTION_WINDOW_SECONDS: float = 120.0
+
 # How long each blocking read of pi's stdout queue waits before the drain loop
 # re-checks shutdown / process-exit; small so an exit is noticed promptly.
 _STDOUT_QUEUE_POLL_SECONDS: float = 0.1
@@ -458,6 +464,12 @@ class PiAgent(DefaultAgentWrapper):
     # protects both task dicts).
     _subagent_tasks: dict[str, tuple[int, ...]] = PrivateAttr(default_factory=dict)
     _background_tasks_lock: Lock = PrivateAttr(default_factory=Lock)
+    # Count of surfaced completions whose auto-resume reaction turn (the
+    # extension's `sendUserMessage`) has not yet been consumed, with a deadline.
+    # Keeps the idle-drain alive to catch the reaction. Mutated only on the
+    # message-processing thread.
+    _awaiting_reaction_count: int = PrivateAttr(default=0)
+    _awaiting_reaction_deadline: float = PrivateAttr(default=0.0)
 
     def start(self, secrets: Mapping[str, str | Secret]) -> None:
         # Resolve and validate the pi binary BEFORE super().start so the
@@ -998,7 +1010,28 @@ class PiAgent(DefaultAgentWrapper):
 
     def _has_background_tasks(self) -> bool:
         with self._background_tasks_lock:
-            return bool(self._background_tasks) or bool(self._subagent_tasks)
+            if self._background_tasks or self._subagent_tasks:
+                return True
+        return self._is_awaiting_reaction()
+
+    def _is_awaiting_reaction(self) -> bool:
+        """True while a completion's auto-resume reaction turn is still expected.
+
+        Bounded by a deadline so a reaction that never arrives (the wake-up
+        errored) cannot keep the idle-drain polling forever.
+        """
+        if self._awaiting_reaction_count <= 0:
+            return False
+        if time.monotonic() >= self._awaiting_reaction_deadline:
+            self._awaiting_reaction_count = 0
+            return False
+        return True
+
+    def _note_awaiting_reaction(self) -> None:
+        """Record a surfaced completion so the idle-drain stays alive to consume the
+        reaction turn the extension triggers via `sendUserMessage`."""
+        self._awaiting_reaction_count += 1
+        self._awaiting_reaction_deadline = time.monotonic() + _REACTION_WINDOW_SECONDS
 
     def _run_prompt_turn(self, message: ChatInputUserMessage) -> None:
         self._update_plan_mode_from_message(message)
@@ -1750,15 +1783,15 @@ class PiAgent(DefaultAgentWrapper):
             )
 
     def _drain_idle_background_events(self) -> None:
-        """Between turns, dispatch background-task completions as they arrive.
+        """Between turns, surface task completions and consume any auto-resume turn.
 
-        Sculptor only drains pi's stdout during a turn, so a completion that fires
-        while the user is idle would otherwise sit unseen. When background tasks are
-        in flight, `_process_message_queue` calls this between user messages: it
-        consumes whatever pi has emitted and surfaces any background-completion
-        `notify` out-of-band. Runs on the message-processing thread (the sole stdout
-        reader), so it never races the in-turn drain. Non-completion events between
-        turns are not expected (pi is idle) and are ignored.
+        Sculptor drains pi's stdout only during a turn, so a completion `notify`
+        (and the reaction turn the extension triggers via `sendUserMessage`) firing
+        while the user is idle would otherwise sit unseen. While a task is in flight
+        — or a completion is awaiting its reaction turn — `_process_message_queue`
+        calls this between user messages: a completion is surfaced out-of-band, and a
+        pi-initiated turn (the auto-resume reaction) is consumed in its own request
+        cycle. Runs on the message-processing thread (the sole stdout reader).
         """
         process = self._process
         if process is None:
@@ -1781,14 +1814,45 @@ class PiAgent(DefaultAgentWrapper):
             if not isinstance(event, dict):
                 continue
             parsed = parse_rpc_message(event)
+            if isinstance(parsed, ParsedAgentStart):
+                # The extension woke the agent (`sendUserMessage`) after a completion;
+                # consume its reaction turn in its own request cycle.
+                self._awaiting_reaction_count = max(0, self._awaiting_reaction_count - 1)
+                self._consume_reaction_turn()
+                continue
             if isinstance(parsed, ExtensionUiRequest) and parsed.method == "notify":
                 completion = parse_background_completion(parsed.message)
                 if completion is not None:
                     self._emit_background_completion_out_of_band(completion)
+                    self._note_awaiting_reaction()
                     continue
                 sub_completion = parse_subagent_completion(parsed.message)
                 if sub_completion is not None:
                     self._emit_subagent_completion_out_of_band(sub_completion)
+                    self._note_awaiting_reaction()
+
+    def _consume_reaction_turn(self) -> None:
+        """Consume a pi-initiated turn — the auto-resume reaction the extension
+        triggered via `sendUserMessage` on completion — in its own request cycle so
+        it renders as a standalone assistant turn. The triggering `agent_start` has
+        already been read; `_consume_until_turn_end` consumes the rest through
+        `agent_end`. A turn-level failure is logged, not raised: an auto-resume
+        reaction must not tear down the session.
+        """
+        request_id = AgentMessageID()
+        self._output_messages.put(RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=request_id))
+        self._turn_in_flight.set()
+        interrupted = False
+        try:
+            self._consume_until_turn_end()
+        except PiCrashError as error:
+            logger.info("PiAgent auto-resume reaction turn failed: {}", error)
+            interrupted = True
+        finally:
+            self._turn_in_flight.clear()
+            self._output_messages.put(
+                RequestSuccessAgentMessage(message_id=AgentMessageID(), request_id=request_id, interrupted=interrupted)
+            )
 
     def _cancel_all_background_tasks(self) -> None:
         """SIGTERM every still-running background and sub-agent child by signalling its process group.
@@ -1938,14 +2002,16 @@ class PiAgent(DefaultAgentWrapper):
         if parsed.method == "notify":
             completion = parse_background_completion(parsed.message)
             if completion is not None:
-                # A task that happens to complete while a user turn is in flight is
-                # reconciled into that turn; one that completes between turns is
-                # caught by `_drain_idle_background_events` instead.
+                # A task that completes while a user turn is in flight is reconciled
+                # into that turn; the reaction the extension triggers (deliverAs
+                # "followUp") runs after this turn and is consumed by the idle-drain.
                 self._handle_background_completion(completion)
+                self._note_awaiting_reaction()
                 return
             sub_completion = parse_subagent_completion(parsed.message)
             if sub_completion is not None:
                 self._handle_subagent_completion(sub_completion)
+                self._note_awaiting_reaction()
                 return
             logger.debug("PiAgent ignoring non-task notify extension_ui_request")
             return

@@ -123,3 +123,28 @@ def test_pi_subagent_survives_stop(sculptor_instance_: SculptorInstance) -> None
         # Clean up the child we deliberately left running (the shared instance is
         # reused across tests on success, so don't leak it).
         kill_processes_matching(_is_child_pi)
+
+
+@real_pi
+@pytest.mark.timeout(600)
+def test_pi_subagent_completion_wakes_the_agent(sculptor_instance_: SculptorInstance) -> None:
+    """The sub-agent's completion wakes the calling agent (the extension's
+    `sendUserMessage`), which reacts in a new turn — the auto-resume leg, end-to-end."""
+    prompt = (
+        "Use your subagent tool to delegate exactly one task to a single sub-agent. "
+        + 'Pass this as the task: "Run the shell command: echo SA-CHILD-50240". '
+        + "Delegate it via the subagent tool; do not run it yourself. "
+        + "After launching it, reply with exactly SA-LAUNCHED and end your turn. "
+        + "Later, when you are notified that the sub-agent has finished, reply with exactly "
+        + "SA-RESUMED-50240 and nothing else."
+    )
+    task_page = create_pi_workspace_and_send(sculptor_instance_, prompt, wait_for_finish=True)
+    chat_panel = task_page.get_chat_panel()
+    expect(chat_panel.get_assistant_messages().filter(has_text="SA-LAUNCHED").first).to_be_visible(
+        timeout=RESPONSE_TIMEOUT_MS
+    )
+    # The completion wakes the agent; it reacts in a new (auto-resume) turn.
+    expect(chat_panel.get_assistant_messages().filter(has_text="SA-RESUMED-50240").first).to_be_visible(
+        timeout=RESPONSE_TIMEOUT_MS
+    )
+    assert_no_errors(chat_panel)
