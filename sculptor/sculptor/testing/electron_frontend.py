@@ -187,10 +187,8 @@ class ElectronFrontend:
             exit_code = self._electron_proc.poll() if self._electron_proc is not None else None
             post_launch = list(self._forwarder.recent_output) if self._forwarder is not None else []
             tail = "\n".join([*recent_output, *post_launch]) or "(no output captured)"
-            raise RuntimeError(
-                f"Electron launched but CDP setup on port {cdp_port} failed "
-                f"(Electron exit code {exit_code}): {exc}. Last Electron output:\n{tail}"
-            ) from exc
+            message = f"Electron launched but CDP setup on port {cdp_port} failed (exit code {exit_code}): {exc}. Last Electron output:\n{tail}"
+            raise RuntimeError(message) from exc
         logger.info("[timing] CDP connect + page acquisition: {:.2f}s", time.monotonic() - t_cdp)
 
         self._browser_context = context
