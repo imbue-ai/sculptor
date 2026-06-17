@@ -445,7 +445,7 @@ def test_deleting_project_also_deletes_its_workspaces(
         )
 
         workspace_id = _extract_workspace_id(page.url)
-        base_url = page.url.split("#")[0].rstrip("/")
+        base_url = sculptor_instance.backend_api_url.rstrip("/")
 
         get_response = page.request.get(f"{base_url}/api/v1/workspaces/{workspace_id}")
         assert get_response.ok, f"Expected workspace {workspace_id} to exist, got status {get_response.status}"
