@@ -429,6 +429,7 @@ APP.add_middleware(
         f"http://127.0.0.1:{api_port}",  # Direct web backend access, this usually doesnt need cors
         *([f"http://{frontend_host}:{frontend_port}"] if frontend_host is not None else []),
         "null",  # file:// URLs report origin as "null"
+        "sculptor://app",  # packaged renderer served from the custom app protocol
     ],
     # If we are running for an integration test, we need to allow any port so that our clients can port-hop.
     allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$" if is_integration_testing else None,
