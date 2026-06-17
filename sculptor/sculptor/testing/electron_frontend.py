@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections import deque
 from pathlib import Path
 
 from filelock import FileLock
@@ -108,6 +109,12 @@ class ElectronFrontend:
         lock_path = Path("/tmp/sculptor_electron_forge.lock")
 
         is_launched = False
+        # Keep the most recent Electron stdout/stderr (stderr is merged into
+        # stdout below) so that, if Electron never reaches its ready message, we
+        # can surface the actual crash output in the raised error. Offload only
+        # streams the failure summary, not the per-sandbox logs, so without this
+        # the real reason ("Check logs above") is invisible in CI.
+        recent_output: deque[str] = deque(maxlen=50)
         file_lock = FileLock(str(lock_path), timeout=_FORGE_LOCK_TIMEOUT_SECONDS)
         t_lock = time.monotonic()
         file_lock.acquire()
@@ -128,6 +135,7 @@ class ElectronFrontend:
             )
             assert self._electron_proc.stdout is not None
             for line in self._electron_proc.stdout:
+                recent_output.append(line.rstrip())
                 logger.info("[Electron stdout] {}", line.rstrip())
                 if ELECTRON_READY_MESSAGE in line:
                     is_launched = True
@@ -146,7 +154,12 @@ class ElectronFrontend:
 
         if not is_launched:
             self._kill_electron()
-            raise RuntimeError("Electron frontend failed to start. Check logs above.")
+            exit_code = self._electron_proc.poll() if self._electron_proc is not None else None
+            tail = "\n".join(recent_output) or "(no output captured)"
+            raise RuntimeError(
+                f"Electron frontend failed to start (process exit code: {exit_code}).\n"
+                f"Last Electron output:\n{tail}"
+            )
 
         t_cdp = time.monotonic()
         try:
