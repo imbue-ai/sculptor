@@ -348,8 +348,10 @@ export class PluginManager {
         // no WorkspacePluginContext: an overlay is app-global, so it reads the
         // current workspace through the SDK hooks instead of a fixed context.
         const PluginComponent = overlay.component;
+        // Attribute crashes to the owning plugin (manifest), matching the panel
+        // path — not to the overlay contribution id.
         const Wrapped = (): ReactElement => (
-          <PluginErrorBoundary pluginId={overlay.id} pluginName={overlay.id}>
+          <PluginErrorBoundary pluginId={manifest.id} pluginName={manifest.name}>
             <PluginContext.Provider value={{ pluginId: manifest.id }}>
               <PluginComponent />
             </PluginContext.Provider>
