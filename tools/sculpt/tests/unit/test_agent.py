@@ -269,21 +269,21 @@ class TestAgentCreateHarness:
         assert body["registrationId"] == "claude-code"
 
     @respx.mock
-    def test_create_without_harness_defaults_to_most_recently_used(self, runner: CliRunner) -> None:
+    def test_create_without_harness_omits_agent_type_so_server_uses_mru(self, runner: CliRunner) -> None:
         _mock_session()
         _mock_workspaces("ws_test123")
         route = respx.post("http://localhost:5050/api/v1/workspaces/ws_test123/agents").mock(
             return_value=Response(200, json=_task_response_dict())
         )
 
-        first = runner.invoke(app, ["agent", "create", "-w", "ws_test123", "--harness", "Pi"])
-        assert first.exit_code == 0
+        result = runner.invoke(app, ["agent", "create", "-w", "ws_test123"])
 
-        second = runner.invoke(app, ["agent", "create", "-w", "ws_test123"])
-        assert second.exit_code == 0
-
+        assert result.exit_code == 0
+        # With no --harness, the CLI sends nothing and lets the server apply the
+        # user's most-recently-used harness; the request must not pin a type.
         body = json.loads(route.calls.last.request.content)
-        assert body["agentType"] == "pi"
+        assert "agentType" not in body
+        assert "registrationId" not in body
 
     @respx.mock
     def test_create_with_invalid_harness_errors_and_lists_valid_options(self, runner: CliRunner) -> None:

@@ -2,7 +2,6 @@
 
 import os
 from collections.abc import Iterator
-from pathlib import Path
 
 import pytest
 from _pytest.junitxml import xml_key
@@ -35,12 +34,3 @@ def unset_sculpt_env_vars() -> Iterator[None]:
     for key, value in old_values.items():
         if value is not None:
             os.environ[key] = value
-
-
-@pytest.fixture(autouse=True)
-def isolate_cli_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Point the CLI's local state (e.g. the MRU harness) at a temp dir.
-
-    Keeps tests from reading or writing the real ``~/.sculpt`` state file.
-    """
-    monkeypatch.setenv("SCULPT_STATE_DIR", str(tmp_path / "sculpt-state"))

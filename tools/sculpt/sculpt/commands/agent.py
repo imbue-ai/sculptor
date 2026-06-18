@@ -59,10 +59,8 @@ from sculpt.formatting import overwrite_lines
 from sculpt.formatting import truncate
 from sculpt.harness import HarnessSelection
 from sculpt.harness import available_harness_names
-from sculpt.harness import read_most_recently_used_harness
 from sculpt.harness import resolve_builtin_harness
 from sculpt.harness import resolve_harness_name
-from sculpt.harness import write_most_recently_used_harness
 from sculpt.message_formatting import format_message
 from sculpt.resolve import resolve_agent_id
 from sculpt.resolve import resolve_by_prefix
@@ -135,23 +133,19 @@ def _fetch_terminal_agent_registrations(client: Client, json_output: bool) -> li
     return result.registrations
 
 
-def _resolve_harness_selection(harness: str | None, client: Client, json_output: bool) -> HarnessSelection:
-    """Resolve the requested harness, or fall back to the most-recently-used one.
+def _resolve_harness_selection(harness: str | None, client: Client, json_output: bool) -> HarnessSelection | None:
+    """Resolve an explicitly requested harness, or None to let the server decide.
 
     An explicit choice is validated against the built-in harnesses (Claude,
-    Pi, Terminal) and the server's registered terminal agents, and becomes
-    the new MRU. With no choice, the previously used harness is reused,
-    defaulting to Claude the first time.
+    Pi, Terminal) and the server's registered terminal agents. With no
+    choice, this returns None so the caller omits the agent type and the
+    server applies the user's most-recently-used harness from the app.
     """
     if harness is None:
-        mru = read_most_recently_used_harness()
-        if mru is not None:
-            return mru
-        return HarnessSelection(agent_type=AgentTypeName.CLAUDE)
+        return None
 
     builtin = resolve_builtin_harness(harness)
     if builtin is not None:
-        write_most_recently_used_harness(builtin)
         return builtin
 
     registrations = _fetch_terminal_agent_registrations(client, json_output)
@@ -159,7 +153,6 @@ def _resolve_harness_selection(harness: str | None, client: Client, json_output:
     if selection is None:
         valid = ", ".join(available_harness_names(registrations))
         cli_error(f"Invalid harness '{harness}'. Valid options: {valid}", json_output=json_output)
-    write_most_recently_used_harness(selection)
     return selection
 
 
@@ -176,7 +169,8 @@ def create(
         "--harness",
         help=(
             "Harness to create: Claude, Pi, Terminal, or a registered terminal agent"
-            + " by name (e.g. 'Claude CLI'). Defaults to the most-recently-used harness."
+            + " by name (e.g. 'Claude CLI'). If omitted, the server uses your"
+            + " most-recently-used harness from the Sculptor app."
         ),
     ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
@@ -199,7 +193,11 @@ def create(
     llm_model = MODEL_MAPPING[model_lower]
 
     selection = _resolve_harness_selection(harness, client, json_output)
-    if prompt and selection.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED):
+    if (
+        prompt
+        and selection is not None
+        and selection.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED)
+    ):
         cli_error("Terminal agents do not take an initial prompt (--prompt)", json_output=json_output)
 
     request = CreateAgentRequest(
@@ -208,8 +206,12 @@ def create(
         interface="API",
         name=name,
         sent_via="sculpt",
-        agent_type=selection.agent_type,
-        registration_id=selection.registration_id if selection.registration_id is not None else UNSET,
+        agent_type=selection.agent_type if selection is not None else UNSET,
+        registration_id=(
+            selection.registration_id
+            if selection is not None and selection.registration_id is not None
+            else UNSET
+        ),
     )
 
     try:
