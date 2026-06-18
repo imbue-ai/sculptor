@@ -209,6 +209,33 @@ describe("collectStubs (real installed namespaces)", () => {
     expect(sdk).toContain("export const PanelHeader = host_sdk.PanelHeader;");
   });
 
+  // A canary: well-known bindings every stub is expected to re-export. If a
+  // package's namespace stops being read (rename, resolution change, the import
+  // silently returning {}), these fail by name instead of surfacing as an
+  // `undefined` import inside a plugin at runtime. Not exhaustive — full SDK
+  // surface coverage belongs to plugin SDK testing — just an obvious tripwire.
+  const WELL_KNOWN_EXPORTS: Record<string, ReadonlyArray<string>> = {
+    "react.js": ["useState", "useEffect", "useMemo", "useRef", "useContext", "createContext", "forwardRef"],
+    "react-jsx-runtime.js": ["jsx", "jsxs", "Fragment"],
+    "react-dom.js": ["createPortal", "flushSync", "createRoot", "hydrateRoot"],
+    "jotai.js": ["atom", "useAtom", "useAtomValue", "useSetAtom", "Provider"],
+    "tanstack-react-query.js": ["useQuery", "useMutation", "useQueryClient", "useInfiniteQuery"],
+    "radix-themes.js": ["Flex", "Box", "Text", "Button", "Card", "Dialog"],
+    "lucide-react.js": ["Coins", "Hash", "Activity"],
+    "sculptor-plugin-sdk.js": ["PanelHeader", "usePluginSetting", "useWorkspaceTasks"],
+  };
+
+  it("re-exports the well-known bindings of every module", async () => {
+    const stubs = await collectStubs(process.cwd());
+    for (const [file, names] of Object.entries(WELL_KNOWN_EXPORTS)) {
+      const stub = stubs.get(file);
+      expect(stub, `missing stub: ${file}`).toBeDefined();
+      for (const name of names) {
+        expect(stub, `${file} should export ${name}`).toContain(`export const ${name} = `);
+      }
+    }
+  });
+
   it("is byte-stable across repeated runs", async () => {
     const a = await collectStubs(process.cwd());
     const b = await collectStubs(process.cwd());
