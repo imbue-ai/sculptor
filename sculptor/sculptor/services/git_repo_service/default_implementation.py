@@ -7,12 +7,13 @@ from typing import Generator
 from loguru import logger
 from pydantic import AnyUrl
 
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.subprocess_utils import ProcessError
-from imbue_core.subprocess_utils import ProcessSetupError
 from sculptor.database.models import Project
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.subprocess_utils import ProcessError
+from sculptor.foundation.subprocess_utils import ProcessSetupError
 from sculptor.services.git_repo_service.api import GitRepoService
 from sculptor.services.git_repo_service.error_types import GitRepoError
+from sculptor.services.git_repo_service.error_types import GitRepoNotFoundError
 from sculptor.services.git_repo_service.git_commands import run_git_command_local
 from sculptor.services.git_repo_service.git_errors import GitCommandFailure
 from sculptor.services.git_repo_service.git_repos import ReadOnlyGitRepo
@@ -68,6 +69,20 @@ class _ReadOnlyGitRepoSharedMethods(_GitRepoSharedMethods, ABC):
 
         return all_branches
 
+    def get_remote_branches(self) -> list[str]:
+        """Get a list of remote-tracking branches, excluding HEAD pointer entries."""
+        output = self._run_git(["branch", "-r", "--format=%(refname:short)"])
+        remote_branches: list[str] = []
+        for line in output.splitlines():
+            branch = line.strip()
+            if not branch:
+                continue
+            # Skip HEAD pointer entries like "origin/HEAD -> origin/main" or "origin/HEAD".
+            if branch.endswith("/HEAD") or "HEAD ->" in line:
+                continue
+            remote_branches.append(branch)
+        return remote_branches
+
 
 class LocalReadOnlyGitRepo(_ReadOnlyGitRepoSharedMethods):
     repo_path: Path
@@ -103,11 +118,11 @@ class LocalReadOnlyGitRepo(_ReadOnlyGitRepoSharedMethods):
                 log_command=self.log_command,
             )
             return result_stdout
-        except FileNotFoundError:
-            raise
+        except FileNotFoundError as e:
+            raise GitRepoNotFoundError(self.repo_path) from e
         except (GitCommandFailure, ProcessError) as e:
             if not self.repo_path.exists():
-                raise FileNotFoundError(f"Repository path does not exist: {self.repo_path}") from e
+                raise GitRepoNotFoundError(self.repo_path) from e
             branch_name = None
             message = "Git command failed"
             try:
@@ -122,9 +137,9 @@ class LocalReadOnlyGitRepo(_ReadOnlyGitRepoSharedMethods):
                 branch_name = result_stdout.strip()
             except Exception as e2:
                 if isinstance(e2, FileNotFoundError):
-                    raise
+                    raise GitRepoNotFoundError(self.repo_path) from e2
                 if isinstance(e2, ProcessSetupError) and not self.repo_path.exists():
-                    raise FileNotFoundError(f"Repository path does not exist: {self.repo_path}") from e
+                    raise GitRepoNotFoundError(self.repo_path) from e
                 if isinstance(e2, ProcessError) and "unknown revision or path not in the working tree" in e.stderr:
                     message += " (repository appears to be empty, no commits yet)"
                 else:
@@ -244,18 +259,11 @@ class LocalWritableGitRepo(LocalReadOnlyGitRepo, _WritableGitRepoSharedMethods):
 class DefaultGitRepoService(GitRepoService):
     """Default implementation of GitRepoService using direct git commands in an Environment."""
 
-    def _get_repo_path(self, project: Project) -> Path:
-        user_git_repo_url = project.user_git_repo_url
-        assert user_git_repo_url is not None and user_git_repo_url.startswith("file://"), (
-            "Only local git repositories are supported"
-        )
-        return Path(user_git_repo_url.replace("file://", ""))
-
     @contextmanager
     def open_local_user_git_repo_for_read(
         self, project: Project, log_command: bool = True
     ) -> Generator[LocalReadOnlyGitRepo, None, None]:
-        repo_path = self._get_repo_path(project)
+        repo_path = project.get_local_user_path()
         yield LocalReadOnlyGitRepo(
             repo_path=repo_path, concurrency_group=self.concurrency_group, log_command=log_command
         )

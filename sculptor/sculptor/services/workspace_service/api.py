@@ -5,18 +5,17 @@ from pathlib import Path
 from typing import Iterator
 from typing import Literal
 
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.errors import ExpectedError
-from imbue_core.event_utils import ReadOnlyEvent
-from imbue_core.progress_tracking.progress_tracking import RootProgressHandle
-from imbue_core.pydantic_serialization import FrozenModel
 from sculptor.database.models import Project
 from sculptor.database.models import Workspace
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
-from sculptor.interfaces.agents.agent import HarnessName
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.errors import ExpectedError
+from sculptor.foundation.event_utils import ReadOnlyEvent
+from sculptor.foundation.progress_tracking.progress_tracking import RootProgressHandle
+from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.interfaces.agents.artifacts import DiffArtifact
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
+from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.primitives.service import Service
 from sculptor.services.data_model_service.data_types import DataModelTransaction
@@ -57,6 +56,29 @@ class FileAtRefResult(FrozenModel):
 
     content: str
     encoding: Literal["utf-8", "base64"]
+
+
+class CommitFileChange(FrozenModel):
+    """Per-file change within a single commit."""
+
+    path: str
+    status: Literal["M", "A", "D", "R"]
+    old_path: str | None
+    additions: int
+    deletions: int
+
+
+class CommitRecord(FrozenModel):
+    """A single commit in a workspace branch's history."""
+
+    hash: str
+    short_hash: str
+    message: str
+    author_name: str
+    author_email: str
+    timestamp: str
+    parent_hashes: list[str]
+    files: list[CommitFileChange]
 
 
 class WorkspaceNotFoundError(ExpectedError):
@@ -117,7 +139,6 @@ class WorkspaceService(Service, ABC):
         description: str | None,
         transaction: DataModelTransaction,
         target_branch: str | None = None,
-        harness: HarnessName = HarnessName.CLAUDE,
     ) -> Workspace:
         """
         Create a new workspace for a project.
@@ -132,7 +153,6 @@ class WorkspaceService(Service, ABC):
             transaction: Database transaction for atomicity.
             target_branch: Diff/merge target branch. When None, a default is resolved
                 from the repo (origin's default branch, else local main/master).
-            harness: Which agent harness this workspace uses (claude or pi).
 
         Returns:
             The created Workspace.
@@ -428,7 +448,7 @@ class WorkspaceService(Service, ABC):
         self,
         workspace_id: WorkspaceID,
         transaction: DataModelTransaction,
-    ) -> tuple[list, str | None]:
+    ) -> tuple[list[CommitRecord], str | None]:
         """Get the commit history for the workspace branch.
 
         Returns commits from HEAD back to the fork point (source_git_hash) where

@@ -1,4 +1,4 @@
-from imbue_core.serialization import SerializedException
+from sculptor.foundation.serialization import SerializedException
 from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_FROM_SIGINT
 from sculptor.interfaces.agents.errors import AgentClientError
 from sculptor.interfaces.agents.errors import ErrorType
@@ -18,4 +18,5 @@ def test_serialization():
         )
     except AgentClientError as e:
         serialized_exception = SerializedException.build(e)
+        # pyrefly: ignore [missing-attribute]
         assert serialized_exception.construct_instance().exit_code == AGENT_EXIT_CODE_FROM_SIGINT

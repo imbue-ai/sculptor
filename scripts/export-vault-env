@@ -26,14 +26,10 @@
 #   The first two are auto-injected by the runner when the calling job
 #   declares `permissions: id-token: write`.
 #
-# - On Fly:
-#   Authenticates using Fly JWT.
-#   Expects VAULT_AUTH_ROLE to be set.
-#
 # - Locally:
 #   Expects the user to be already logged in.
 #
-# On GitHub Actions and Fly, also writes the VAULT_TOKEN from
+# On GitHub Actions, also writes the VAULT_TOKEN from
 # authentication, albeit unexported, like:
 #
 #   VAULT_TOKEN=...
@@ -55,15 +51,6 @@ if test "$GITHUB_ACTIONS" = "true"; then
     "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=imbue-vault" \
     | jq -r .value)
   export VAULT_TOKEN=$(vault write -field=token auth/jwt_github_actions/login role="$VAULT_AUTH_ROLE" jwt="$github_oidc_token")
-  echo "VAULT_TOKEN=$VAULT_TOKEN"
-elif test -S /.fly/api; then
-  # Running in a Fly machine.
-  # Use the local socket to generate an OIDC token;
-  # see https://fly.io/docs/security/openid-connect/.
-  # The app should have VAULT_AUTH_ROLE set in its fly.toml.
-  VAULT_ID_TOKEN=$(curl --unix-socket /.fly/api -X POST "http://localhost/v1/tokens/oidc" --data '{"aud":"imbue-vault"}')
-  # TODO: Make this work for apps in imbue-development too.
-  export VAULT_TOKEN=$(vault write -field=token auth/jwt_fly_prod/login role="$VAULT_AUTH_ROLE" jwt="$VAULT_ID_TOKEN")
   echo "VAULT_TOKEN=$VAULT_TOKEN"
 elif test -z "$VAULT_TOKEN" && ! test -f ~/.vault-token; then
   echo >&2 'Log in Vault first.'

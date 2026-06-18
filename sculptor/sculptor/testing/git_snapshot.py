@@ -1,15 +1,19 @@
+from collections.abc import Mapping
 from concurrent.futures import as_completed
 from pathlib import Path
-from typing import Mapping
 
 import attr
 
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.frozen_utils import empty_mapping
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.frozen_utils import empty_mapping
 from sculptor.primitives.executor import ObservableThreadPoolExecutor
 from sculptor.testing.computing_environment import apply_patch_via_git
 from sculptor.testing.computing_environment import make_commit
 from sculptor.testing.local_git_repo import LocalGitRepo
+
+
+class RepoCreationError(Exception):
+    """Raised when a repo cannot be created from a snapshot."""
 
 
 @attr.s(auto_attribs=True, frozen=True, kw_only=True)
@@ -45,7 +49,9 @@ def create_repo_from_snapshot(
     )
 
     if any(destination_path.iterdir()):
-        raise Exception(f"Destination for repo creation must be an empty directory. {destination_path} is not empty.")
+        raise RepoCreationError(
+            f"Destination for repo creation must be an empty directory. {destination_path} is not empty."
+        )
 
     # create the empty repo
     new_repo = LocalGitRepo(destination_path)
@@ -75,10 +81,9 @@ def create_repo_from_snapshot(
 def _write_files_in_parallel(
     repo: LocalGitRepo, content: Mapping[str, str], concurrency_group: ConcurrencyGroup
 ) -> None:
-    def write_file(file_path: str, file_content: str) -> None:
-        repo.write_file(file_path, file_content)
-
     with ObservableThreadPoolExecutor(concurrency_group) as executor:
-        futures = [executor.submit(write_file, file_path, file_content) for file_path, file_content in content.items()]
+        futures = [
+            executor.submit(repo.write_file, file_path, file_content) for file_path, file_content in content.items()
+        ]
         for future in as_completed(futures):
             future.result()  # This will raise any exceptions that occurred

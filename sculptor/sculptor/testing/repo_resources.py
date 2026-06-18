@@ -1,4 +1,3 @@
-import subprocess
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -9,7 +8,7 @@ from loguru import logger
 from xdist import get_xdist_worker_id
 from xdist import is_xdist_worker
 
-from imbue_core.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.testing.git_snapshot import FullLocalGitRepo
 from sculptor.testing.git_snapshot import GitCommitSnapshot
 from sculptor.testing.mock_repo import MockRepoState
@@ -70,5 +69,4 @@ def generate_test_project_repo(
         repo = MockRepoState.build_locally(
             state=initial_state, local_dir=repo_dir, concurrency_group=concurrency_group
         )
-        subprocess.run(["git", "remote", "add", "origin", str(repo_dir)])
         yield repo

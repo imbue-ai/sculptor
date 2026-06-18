@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 from loguru import logger
+from playwright.sync_api import Browser
 from playwright.sync_api import BrowserContext
 from playwright.sync_api import Page
 from playwright.sync_api import Playwright
@@ -49,7 +50,7 @@ class PackagedBackendFrontend:
         self._forwarder: Forwarder | None = None
         self._browser_context: BrowserContext | None = None
         self._page: Page | None = None
-        self._browser: object | None = None
+        self._browser: Browser | None = None
 
     def __enter__(self) -> tuple[BrowserContext, Page]:
         cmd = [
@@ -129,7 +130,7 @@ class PackagedBackendFrontend:
         if self._browser is not None:
             try:
                 self._browser.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to close headless Chromium browser during teardown: {}", e)
 
         kill_process_tree(self._backend_proc, self._forwarder, self.backend_port)

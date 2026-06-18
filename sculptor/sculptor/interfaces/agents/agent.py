@@ -15,34 +15,35 @@ from typing import Mapping
 from pydantic import Field
 from pydantic import Tag
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import TaskID as TaskID
-from imbue_core.ids import AssistantMessageID
-from imbue_core.pydantic_serialization import MutableModel
-from imbue_core.pydantic_serialization import SerializableModel
-from imbue_core.pydantic_serialization import build_discriminator
-from imbue_core.sculptor.state.chat_state import AskUserQuestionData
-from imbue_core.sculptor.state.chat_state import ContentBlockTypes
-from imbue_core.sculptor.state.chat_state import TurnMetrics
-from imbue_core.sculptor.state.claude_state import ParsedAgentResponsePassthrough
-from imbue_core.sculptor.state.claude_state import ParsedToolResultResponse
-from imbue_core.sculptor.state.messages import AgentMessageSource
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import EffortLevel
-from imbue_core.sculptor.state.messages import LLMModel
-from imbue_core.sculptor.state.messages import Message
-from imbue_core.sculptor.state.messages import PersistentAgentMessage
-from imbue_core.sculptor.state.messages import PersistentMessage
-from imbue_core.sculptor.state.messages import PersistentUserMessage
-from imbue_core.sculptor.state.messages import ResponseBlockAgentMessage
-from imbue_core.secrets_utils import Secret
-from imbue_core.serialization import SerializedException
-from imbue_core.time_utils import get_current_time
+from sculptor.foundation.pydantic_serialization import MutableModel
+from sculptor.foundation.pydantic_serialization import SerializableModel
+from sculptor.foundation.pydantic_serialization import build_discriminator
+from sculptor.foundation.secrets_utils import Secret
+from sculptor.foundation.serialization import SerializedException
+from sculptor.foundation.time_utils import get_current_time
 from sculptor.interfaces.agents.artifacts import FileAgentArtifact
 from sculptor.interfaces.agents.messages import EphemeralAgentMessage
 from sculptor.interfaces.agents.messages import EphemeralMessage
 from sculptor.interfaces.agents.tasks import TaskState
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import AssistantMessageID
+from sculptor.primitives.ids import TaskID as TaskID
 from sculptor.services.workspace_service.environment_manager.environments.local_environment import LocalEnvironment
+from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.chat_state import ContentBlockTypes
+from sculptor.state.chat_state import TurnMetrics
+from sculptor.state.claude_state import ParsedAgentResponsePassthrough
+from sculptor.state.claude_state import ParsedToolResultResponse
+from sculptor.state.messages import AgentMessageSource
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import EffortLevel
+from sculptor.state.messages import LLMModel
+from sculptor.state.messages import Message
+from sculptor.state.messages import ModelOption
+from sculptor.state.messages import PersistentAgentMessage
+from sculptor.state.messages import PersistentMessage
+from sculptor.state.messages import PersistentUserMessage
+from sculptor.state.messages import ResponseBlockAgentMessage
 
 ParsedAgentResponseType = ParsedAgentResponsePassthrough | ParsedToolResultResponse
 
@@ -104,6 +105,21 @@ class ClearContextUserMessage(PersistentUserMessage):
     object_type: str = Field(default="ClearContextUserMessage")
 
 
+class SetModelUserMessage(PersistentUserMessage):
+    """Switch the running agent's model out-of-band (the pi `set_model` path).
+
+    Persistent like `ClearContextUserMessage` so the harness picks it up through
+    the task runner and runs it between turns. Carries the `(provider, model_id)`
+    of the chosen `ModelOption`; the pi adapter issues pi's `set_model` RPC and,
+    on success, updates the persisted current model. Claude never receives this —
+    its model rides each turn as `ChatInputUserMessage.model_name`.
+    """
+
+    object_type: str = Field(default="SetModelUserMessage")
+    provider: str = Field(description="The chosen model's provider (e.g. 'anthropic')")
+    model_id: str = Field(description="The chosen model's id (pi's `modelId`)")
+
+
 class UserQuestionAnswerMessage(PersistentUserMessage):
     object_type: str = Field(default="UserQuestionAnswerMessage")
     answers: dict[str, str] = Field(description="Map from question text to answer text")
@@ -131,6 +147,7 @@ class RemoveQueuedMessageUserMessage(EphemeralUserMessage):
 PersistentUserMessageUnion = (
     Annotated[ChatInputUserMessage, Tag("ChatInputUserMessage")]
     | Annotated[ClearContextUserMessage, Tag("ClearContextUserMessage")]
+    | Annotated[SetModelUserMessage, Tag("SetModelUserMessage")]
     | Annotated[UserQuestionAnswerMessage, Tag("UserQuestionAnswerMessage")]
 )
 EphemeralUserMessageUnion = (
@@ -205,6 +222,30 @@ class TaskStatusRunnerMessage(EphemeralRunnerMessage):
     outcome: TaskState
 
 
+class TerminalStatusSignal(StrEnum):
+    """Status vocabulary a terminal-agent integration may signal.
+
+    `files-changed` and `session-id` are events, not status — they never
+    become one of these values.
+    """
+
+    BUSY = "BUSY"
+    IDLE = "IDLE"
+    WAITING = "WAITING"
+
+
+class TerminalAgentSignalRunnerMessage(EphemeralRunnerMessage):
+    """A status signal posted by a terminal agent's integration.
+
+    Ephemeral on purpose: signals are run-scoped (they survive frontend
+    reloads via the in-memory replay but vanish on backend restart) and
+    never drive unread tracking.
+    """
+
+    object_type: str = "TerminalAgentSignalRunnerMessage"
+    signal: TerminalStatusSignal
+
+
 class ResumeAgentResponseRunnerMessage(PersistentRunnerMessage):
     object_type: str = "ResumeAgentResponseRunnerMessage"
     for_user_message_id: AgentMessageID
@@ -230,6 +271,7 @@ EphemeralRunnerMessageUnion = (
     Annotated[TaskStatusRunnerMessage, Tag("TaskStatusRunnerMessage")]
     | Annotated[EnvironmentAcquiredRunnerMessage, Tag("EnvironmentAcquiredRunnerMessage")]
     | Annotated[EnvironmentReleasedRunnerMessage, Tag("EnvironmentReleasedRunnerMessage")]
+    | Annotated[TerminalAgentSignalRunnerMessage, Tag("TerminalAgentSignalRunnerMessage")]
 )
 RunnerMessageUnion = PersistentRunnerMessageUnion | EphemeralRunnerMessageUnion
 
@@ -294,26 +336,34 @@ class PersistentRequestCompleteAgentMessage(PersistentAgentMessage, RequestCompl
 
 class RequestSkippedAgentMessage(PersistentRequestCompleteAgentMessage):
     object_type: str = "RequestSkippedAgentMessage"
+    # pyrefly: ignore [bad-override]
     request_id: AgentMessageID
+    # pyrefly: ignore [bad-override]
     error: None = None
 
 
 class RequestSuccessAgentMessage(PersistentRequestCompleteAgentMessage):
     object_type: str = "RequestSuccessAgentMessage"
+    # pyrefly: ignore [bad-override]
     request_id: AgentMessageID
+    # pyrefly: ignore [bad-override]
     error: None = None
     interrupted: bool = False
 
 
 class RequestFailureAgentMessage(PersistentRequestCompleteAgentMessage, ErrorMessage):
     object_type: str = "RequestFailureAgentMessage"
+    # pyrefly: ignore [bad-override]
     request_id: AgentMessageID
+    # pyrefly: ignore [bad-override]
     error: SerializedException
 
 
 class RequestStoppedAgentMessage(PersistentRequestCompleteAgentMessage):
     object_type: str = "RequestStoppedAgentMessage"
+    # pyrefly: ignore [bad-override]
     request_id: AgentMessageID
+    # pyrefly: ignore [bad-override]
     error: SerializedException
 
 
@@ -394,6 +444,21 @@ class AutoCompactingDoneAgentMessage(EphemeralAgentMessage):
     object_type: str = "AutoCompactingDoneAgentMessage"
 
 
+class ModelsAvailableAgentMessage(EphemeralAgentMessage):
+    """Carries the harness's model catalog + current selection onto task state.
+
+    A harness with a dynamic catalog (pi) emits this once at agent start; the
+    run-agent handler maps it onto `AgentTaskStateV2.available_models` /
+    `current_model` (which the harness's `get_available_models` /
+    `get_selected_model_id` then read). Ephemeral: the durable record is the
+    persisted task state, re-derived on each agent start, not the message log.
+    """
+
+    object_type: str = "ModelsAvailableAgentMessage"
+    available_models: tuple[ModelOption, ...] = ()
+    current_model: ModelOption | None = None
+
+
 class AskUserQuestionAgentMessage(EphemeralAgentMessage):
     object_type: str = "AskUserQuestionAgentMessage"
     question_data: AskUserQuestionData
@@ -429,6 +494,7 @@ EphemeralAgentMessageUnion = (
     | Annotated[PlanModeAgentMessage, Tag("PlanModeAgentMessage")]
     | Annotated[AutoCompactingAgentMessage, Tag("AutoCompactingAgentMessage")]
     | Annotated[AutoCompactingDoneAgentMessage, Tag("AutoCompactingDoneAgentMessage")]
+    | Annotated[ModelsAvailableAgentMessage, Tag("ModelsAvailableAgentMessage")]
 )
 AgentMessageUnion = PersistentAgentMessageUnion | EphemeralAgentMessageUnion
 # this is necessary because pydantic won't let us use PersistentMessageTypes, which already has a discriminator, to make MessageTypes
@@ -451,7 +517,7 @@ class AgentConfig(SerializableModel):
 
 class HelloAgentConfig(AgentConfig):
     object_type: str = "HelloAgentConfig"
-    command: str = "echo"  # Default command to run
+    command: str = "echo"
 
 
 class ClaudeCodeSDKAgentConfig(AgentConfig):
@@ -462,15 +528,37 @@ class PiAgentConfig(AgentConfig):
     object_type: str = "PiAgentConfig"
 
 
+class TerminalAgentConfig(AgentConfig):
+    object_type: str = "TerminalAgentConfig"
+
+
+class RegisteredTerminalAgentConfig(AgentConfig):
+    """A terminal agent that launches a registered program in its shell.
+
+    Launch parameters are stamped at creation from the registration so the
+    task stays self-describing even if the registration file later changes.
+    """
+
+    object_type: str = "RegisteredTerminalAgentConfig"
+    registration_id: str
+    display_name: str
+    launch_command: str
+    # May contain the literal placeholder `{session_id}`.
+    resume_command_template: str | None = None
+    accepts_automated_prompts: bool = False
+
+
 AgentConfigTypes = Annotated[
     Annotated[HelloAgentConfig, Tag("HelloAgentConfig")]
     | Annotated[ClaudeCodeSDKAgentConfig, Tag("ClaudeCodeSDKAgentConfig")]
-    | Annotated[PiAgentConfig, Tag("PiAgentConfig")],
+    | Annotated[PiAgentConfig, Tag("PiAgentConfig")]
+    | Annotated[TerminalAgentConfig, Tag("TerminalAgentConfig")]
+    | Annotated[RegisteredTerminalAgentConfig, Tag("RegisteredTerminalAgentConfig")],
     build_discriminator(),
 ]
 
+TERMINAL_AGENT_CONFIG_TYPES = (TerminalAgentConfig, RegisteredTerminalAgentConfig)
 
-# DELIBERATE-TEMPORARY: workspace-bound harness selection.
-class HarnessName(StrEnum):
-    CLAUDE = "claude"
-    PI = "pi"
+
+def is_terminal_agent_config(config: AgentConfigTypes) -> bool:
+    return isinstance(config, TERMINAL_AGENT_CONFIG_TYPES)

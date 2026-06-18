@@ -5,11 +5,24 @@ wired up in the root ``tests/conftest.py`` so they run for every test suite
 and are visible to the xdist controller.
 """
 
-import json
 import os
 import time
 
 import pytest
+
+from sculptor.foundation.pydantic_serialization import FrozenModel
+
+
+class _TimelineEvent(FrozenModel):
+    """One JSONL timeline record for a single test phase."""
+
+    ts: float
+    pid: int
+    worker: str
+    nodeid: str
+    phase: str
+    outcome: str
+    duration: float
 
 
 def record_phase_duration(report: pytest.TestReport) -> None:
@@ -41,18 +54,17 @@ def write_timeline_event(report: pytest.TestReport) -> None:
     if _timeline_file is None:
         _timeline_file = open(_TIMELINE_PATH, "a")  # noqa: SIM115
 
-    now = time.time()
     worker_id = os.environ.get("PYTEST_XDIST_WORKER", "controller")
-    record = {
-        "ts": now,
-        "pid": os.getpid(),
-        "worker": worker_id,
-        "nodeid": report.nodeid,
-        "phase": report.when,
-        "outcome": report.outcome,
-        "duration": round(report.duration, 2),
-    }
-    _timeline_file.write(json.dumps(record) + "\n")
+    event = _TimelineEvent(
+        ts=time.time(),
+        pid=os.getpid(),
+        worker=worker_id,
+        nodeid=report.nodeid,
+        phase=report.when,
+        outcome=report.outcome,
+        duration=round(report.duration, 2),
+    )
+    _timeline_file.write(event.model_dump_json() + "\n")
     _timeline_file.flush()
 
 
@@ -101,7 +113,7 @@ def print_phase_timing_table(terminalreporter: pytest.TerminalReporter) -> None:
         total_call += call
         total_teardown += teardown
         # Truncate long test names from the left to fit the column.
-        short_name = nodeid if len(nodeid) <= 78 else "…" + nodeid[-(77):]
+        short_name = nodeid if len(nodeid) <= 78 else "…" + nodeid[-77:]
         terminalreporter.line(f"{short_name:<80s} {setup:>7.2f}s {call:>7.2f}s {teardown:>7.2f}s {total:>7.2f}s")
 
     terminalreporter.line("-" * len(header))

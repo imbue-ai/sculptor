@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections import deque
 from pathlib import Path
 
 from filelock import FileLock
@@ -24,6 +25,12 @@ from sculptor.testing.server_utils import get_v1_frontend_path
 from sculptor.testing.subprocess_utils import Forwarder
 
 ELECTRON_READY_MESSAGE = "Launched Electron app"
+
+_FORGE_LOCK_TIMEOUT_SECONDS = 300
+_SLOW_LOCK_WAIT_LOG_THRESHOLD_SECONDS = 1.0
+_CDP_CONNECT_TIMEOUT_SECONDS = 120
+_CDP_CONNECT_RETRY_INTERVAL_SECONDS = 1
+_PROCESS_KILL_TIMEOUT_SECONDS = 5
 
 
 def _is_known_harmless_electron_error(line: str) -> bool:
@@ -64,6 +71,8 @@ class ElectronFrontend:
         frontend_port = self.port_manager.get_free_port()
         self._user_data_dir = tempfile.mkdtemp(prefix="sculptor_electron_")
 
+        is_headless = sys.platform == "linux" and "DISPLAY" not in os.environ and "WAYLAND_DISPLAY" not in os.environ
+
         cmd: tuple[str, ...] = (
             "npm",
             "run",
@@ -76,13 +85,23 @@ class ElectronFrontend:
         if os.getuid() == 0:
             cmd = cmd + ("--no-sandbox",)
 
-        if sys.platform == "linux" and "DISPLAY" not in os.environ and "WAYLAND_DISPLAY" not in os.environ:
+        if is_headless:
+            # Under xvfb there is no real GPU and Chromium's GPU process
+            # crash-loops at init; force software rendering so frames are
+            # produced deterministically.
+            cmd = cmd + ("--disable-gpu",)
+
+        if is_headless:
             cmd = ("xvfb-run", "-a", "-e", "/tmp/xvfb-error.log", "-s", "-screen 0 1600x1000x16") + cmd
 
         electron_env: dict[str, str] = {
             "SCULPTOR_FRONTEND_PORT": str(frontend_port),
             "SCULPTOR_USER_DATA_DIR": self._user_data_dir,
             "SCULPTOR_ICON_LABEL": "pytest",
+            # Load the renderer from the custom sculptor://app origin (the
+            # protocol proxies to the Vite dev server) so integration tests
+            # exercise the real packaged-app origin without a packaged build.
+            "SCULPTOR_USE_APP_SCHEME": "1",
         }
         # In custom command mode, Electron spawns the backend itself via the
         # custom command — so we do NOT set SCULPTOR_API_PORT (the command
@@ -97,12 +116,16 @@ class ElectronFrontend:
         frontend_dir = get_v1_frontend_path()
         lock_path = Path("/tmp/sculptor_electron_forge.lock")
 
-        launched = False
-        file_lock = FileLock(str(lock_path), timeout=300)
+        is_launched = False
+        # Keep the most recent Electron output (stderr is merged into stdout
+        # below) so that if it never reaches its ready message we can surface
+        # the crash output in the raised error.
+        recent_output: deque[str] = deque(maxlen=50)
+        file_lock = FileLock(str(lock_path), timeout=_FORGE_LOCK_TIMEOUT_SECONDS)
         t_lock = time.monotonic()
         file_lock.acquire()
         lock_wait = time.monotonic() - t_lock
-        if lock_wait > 1.0:
+        if lock_wait > _SLOW_LOCK_WAIT_LOG_THRESHOLD_SECONDS:
             logger.info("[timing] Electron forge lock wait: {:.2f}s", lock_wait)
         try:
             t_proc = time.monotonic()
@@ -118,9 +141,10 @@ class ElectronFrontend:
             )
             assert self._electron_proc.stdout is not None
             for line in self._electron_proc.stdout:
+                recent_output.append(line.rstrip())
                 logger.info("[Electron stdout] {}", line.rstrip())
                 if ELECTRON_READY_MESSAGE in line:
-                    launched = True
+                    is_launched = True
                     self._forwarder = Forwarder(
                         self._electron_proc,
                         prefix="[Electron stdout] ",
@@ -134,15 +158,18 @@ class ElectronFrontend:
             "[timing] Electron process launch (xvfb + Vite + Electron ready): {:.2f}s", time.monotonic() - t_proc
         )
 
-        if not launched:
+        if not is_launched:
             self._kill_electron()
-            raise RuntimeError("Electron frontend failed to start. Check logs above.")
+            exit_code = self._electron_proc.poll() if self._electron_proc is not None else None
+            tail = "\n".join(recent_output) or "(no output captured)"
+            message = f"Electron frontend failed to start (exit code {exit_code}). Last Electron output:\n{tail}"
+            raise RuntimeError(message)
 
         t_cdp = time.monotonic()
         try:
             retry_connect = retry(
-                stop=stop_after_delay(120),
-                wait=wait_fixed(1),
+                stop=stop_after_delay(_CDP_CONNECT_TIMEOUT_SECONDS),
+                wait=wait_fixed(_CDP_CONNECT_RETRY_INTERVAL_SECONDS),
                 retry=retry_if_exception_type(PlaywrightError),
                 reraise=True,
             )(lambda: self.playwright.chromium.connect_over_cdp(f"http://localhost:{cdp_port}"))
@@ -154,9 +181,17 @@ class ElectronFrontend:
             assert len(pages) == 1, f"Expected exactly one non-devtools page, got {pages}"
             page = pages[0]
             configure_page(page, timeout_ms=self.timeout_ms)
-        except Exception:
+        except Exception as exc:
+            # CDP setup (usually the connect) failed after Electron launched;
+            # the bare PlaywrightError gives no hint why the debug port never
+            # opened, so attach the process's recent output to the error. Kill
+            # first so the tail captures everything up to exit.
             self._kill_electron()
-            raise
+            exit_code = self._electron_proc.poll() if self._electron_proc is not None else None
+            post_launch = list(self._forwarder.recent_output) if self._forwarder is not None else []
+            tail = "\n".join([*recent_output, *post_launch]) or "(no output captured)"
+            message = f"Electron launched but CDP setup on port {cdp_port} failed (exit code {exit_code}): {exc}. Last Electron output:\n{tail}"
+            raise RuntimeError(message) from exc
         logger.info("[timing] CDP connect + page acquisition: {:.2f}s", time.monotonic() - t_cdp)
 
         self._browser_context = context
@@ -188,7 +223,7 @@ class ElectronFrontend:
                 pass
 
             try:
-                self._electron_proc.wait(timeout=5)
+                self._electron_proc.wait(timeout=_PROCESS_KILL_TIMEOUT_SECONDS)
             except subprocess.TimeoutExpired:
                 # Process didn't exit gracefully — force-kill as last resort.
                 try:
@@ -201,10 +236,10 @@ class ElectronFrontend:
         try:
             if self._electron_proc.stdout:
                 self._electron_proc.stdout.close()
-        except Exception:
+        except OSError:
             pass
 
         try:
-            self._electron_proc.wait(timeout=5)
+            self._electron_proc.wait(timeout=_PROCESS_KILL_TIMEOUT_SECONDS)
         except subprocess.TimeoutExpired:
             pass

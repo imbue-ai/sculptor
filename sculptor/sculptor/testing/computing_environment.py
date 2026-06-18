@@ -12,13 +12,13 @@ from uuid import uuid4
 import anyio
 from loguru import logger
 
-from imbue_core.computing_environment.data_types import AnyPath
-from imbue_core.computing_environment.data_types import FailedToMakeCommitError
-from imbue_core.computing_environment.data_types import PatchApplicationError
-from imbue_core.computing_environment.data_types import RunCommandError
-from imbue_core.git_data_types import CommitTimestamp
-from imbue_core.section import Section
-from imbue_core.time_utils import get_current_time
+from sculptor.foundation.time_utils import get_current_time
+from sculptor.testing.computing_environment_types import AnyPath
+from sculptor.testing.computing_environment_types import FailedToMakeCommitError
+from sculptor.testing.computing_environment_types import PatchApplicationError
+from sculptor.testing.computing_environment_types import RunCommandError
+from sculptor.testing.git_data_types import CommitTimestamp
+from sculptor.testing.section import Section
 
 # Import the types needed for file modes
 if TYPE_CHECKING:
@@ -69,9 +69,12 @@ class ComputingEnvironment(Protocol):
     ) -> None: ...
 
 
+_MAX_GIT_LOCK_RETRIES = 50
+_GIT_LOCK_RETRY_DELAY_SECONDS = 0.1
+
+
 def _get_temp_patch_file() -> anyio.Path:
-    # this triggers the file watcher
-    # patch_file = (self.base_path / str(uuid4())).with_suffix(".patch")
+    # Write the patch under /tmp rather than the repo so we don't trigger the repo file watcher.
     patch_file = (Path("/tmp") / uuid4().hex).with_suffix(".patch")
     return anyio.Path(patch_file)
 
@@ -83,31 +86,29 @@ def run_command_with_retry_on_git_lock_error(
     is_error_logged: bool = True,
     cwd: AnyPath | None = None,
 ) -> str:
-    max_retries = 50
     retry_count = 0
-    retry_delay = 0.1  # seconds
     while True:
         try:
             return computing_environment.run_command(
-                command, check=check, is_error_logged=is_error_logged and retry_count >= max_retries, cwd=cwd
+                command, check=check, is_error_logged=is_error_logged and retry_count >= _MAX_GIT_LOCK_RETRIES, cwd=cwd
             )
         except RunCommandError as e:
             error_message = str(e)
             is_potentially_transient_lock_error = (
                 "fatal: Unable to create" in error_message and ".git/index.lock': File exists" in error_message
             )
-            is_retry_limit_reached = retry_count >= max_retries
+            is_retry_limit_reached = retry_count >= _MAX_GIT_LOCK_RETRIES
             if is_retry_limit_reached or (not is_potentially_transient_lock_error):
                 raise
             retry_count += 1
             logger.trace(
                 "{} failed due to git lock error, retrying (attempt {}/{}, error: {})",
                 command,
-                retry_count + 1,
-                max_retries,
+                retry_count,
+                _MAX_GIT_LOCK_RETRIES,
                 error_message,
             )
-            time.sleep(retry_delay)
+            time.sleep(_GIT_LOCK_RETRY_DELAY_SECONDS)
 
 
 def get_branch_name(computing_environment: ComputingEnvironment, is_error_logged: bool = True) -> str:
@@ -138,18 +139,19 @@ def get_commit_ts_for_current_time() -> CommitTimestamp:
     )
 
 
-def _convert_time_to_commit_ts(time: str | datetime | CommitTimestamp | None) -> CommitTimestamp:
-    if time is None:
+def _convert_time_to_commit_ts(commit_time: str | datetime | CommitTimestamp | None) -> CommitTimestamp:
+    if commit_time is None:
         return get_commit_ts_for_current_time()
-    elif isinstance(time, datetime):
+    elif isinstance(commit_time, datetime):
         return CommitTimestamp(
-            author_ts=convert_datetime_to_git_timestamp(time), committer_ts=convert_datetime_to_git_timestamp(time)
+            author_ts=convert_datetime_to_git_timestamp(commit_time),
+            committer_ts=convert_datetime_to_git_timestamp(commit_time),
         )
-    elif isinstance(time, CommitTimestamp):
-        return time
+    elif isinstance(commit_time, CommitTimestamp):
+        return commit_time
     else:
         # assume it's a git timestamp
-        return CommitTimestamp(author_ts=time, committer_ts=time)
+        return CommitTimestamp(author_ts=commit_time, committer_ts=commit_time)
 
 
 def make_commit(

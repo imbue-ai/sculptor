@@ -142,6 +142,6 @@ def _run_migrations_on_connection(connection: Connection) -> None:
 
 class MigrationsFailedError(Exception):
     @property
-    def is_likely_a_result_of_sculptor_downgrade(self):
+    def is_likely_a_result_of_sculptor_downgrade(self) -> bool:
         cause = self.__cause__
         return isinstance(cause, CommandError) and "Can't locate revision identified by" in str(cause)

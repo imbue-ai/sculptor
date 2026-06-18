@@ -45,7 +45,7 @@
 "." = 1
 
 [no-integration-page-evaluate]
-"." = 25
+"." = 22
 
 [no-integration-page-goto]
 "." = 0
@@ -54,7 +54,7 @@
 "." = 4
 
 [no-integration-time-sleep]
-"." = 8
+"." = 9
 
 [no-integration-type-method]
 "." = 0
@@ -87,10 +87,16 @@
 "." = 0
 
 [no-pyre-fixme]
-"." = 44
+"." = 0
 
 [no-pyre-ignore]
-"." = 51
+"." = 0
+
+[no-pyrefly-ignore]
+"." = 75
+
+[no-pyrefly-ignore-errors]
+"." = 0
 
 [no-pytorch-lightning]
 "." = 0
@@ -133,6 +139,9 @@
 
 [no-underscore-imports]
 "." = 6
+
+[no-unlabeled-pyrefly-ignore]
+"." = 0
 
 [no-unlabeled-type-ignore]
 "." = 18

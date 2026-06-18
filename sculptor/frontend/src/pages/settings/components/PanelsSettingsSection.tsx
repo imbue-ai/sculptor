@@ -1,4 +1,4 @@
-import { Button, Flex, Select, Switch, Text } from "@radix-ui/themes";
+import { Badge, Button, Flex, Select, Switch, Text } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import { type ReactElement, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -170,7 +170,19 @@ export const PanelsSettingsSection = ({ onSettingChange }: PanelsSettingsSection
               <Flex align="center" gap="3" style={{ flex: 1, minWidth: 0 }}>
                 <Icon size={18} />
                 <Flex direction="column" style={{ minWidth: 0 }}>
-                  <Text weight="medium">{panel.displayName}</Text>
+                  <Flex align="center" gap="2">
+                    <Text weight="medium">{panel.displayName}</Text>
+                    {panel.pluginId && (
+                      <Badge
+                        size="1"
+                        color="iris"
+                        variant="soft"
+                        data-testid={`${ElementIds.SETTINGS_PANELS_PLUGIN_BADGE}-${panel.id}`}
+                      >
+                        plugin
+                      </Badge>
+                    )}
+                  </Flex>
                   <Text size="2" color="gray">
                     {panel.description}
                   </Text>

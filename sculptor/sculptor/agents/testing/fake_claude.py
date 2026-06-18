@@ -18,7 +18,7 @@ from uuid import uuid4
 from sculptor.agents.default.claude_code_sdk.harness import compute_claude_jsonl_directory
 from sculptor.agents.testing.fake_claude_commands import COMMAND_REGISTRY
 from sculptor.agents.testing.fake_claude_commands import UnknownFakeClaudeCommandError
-from sculptor.agents.testing.fake_claude_commands import _dispatch_handler
+from sculptor.agents.testing.fake_claude_commands import dispatch_handler
 from sculptor.agents.testing.fake_claude_commands import handle_default
 from sculptor.agents.testing.fake_claude_jsonl import generate_id
 from sculptor.agents.testing.fake_claude_jsonl import make_end_message
@@ -26,6 +26,10 @@ from sculptor.agents.testing.fake_claude_jsonl import make_init_message
 from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_FROM_SIGTERM
 
 _FAKE_CLAUDE_PREFIX = "fake_claude:"
+
+# Seconds to stall a resumed /compact so integration tests can observe the
+# transient Compacting indicator before FakeClaude exits.
+_COMPACT_INDICATOR_DELAY_SECONDS = 3
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -51,8 +55,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--tools", default=None)
     parser.add_argument("--strict-mcp-config", action="store_true")
     parser.add_argument("--disable-slash-commands", action="store_true")
-    parsed, extra = parser.parse_known_args(argv)
-    parsed.prompt = None
+    parsed, _extra = parser.parse_known_args(argv)
     return parsed
 
 
@@ -163,7 +166,7 @@ def _dispatch_single_prompt(
     if handler is None:
         raise UnknownFakeClaudeCommandError(f"unknown command '{command_name}'")
 
-    return _dispatch_handler(handler, args, cwd, emit_streaming, plugin_dir=plugin_dir), ""
+    return dispatch_handler(handler, args, cwd, emit_streaming, plugin_dir=plugin_dir), ""
 
 
 def _install_sigterm_handler() -> None:
@@ -222,7 +225,7 @@ def main(argv: list[str] | None = None) -> int:
     # Add a delay during compact operations so that integration tests can
     # observe transient UI states like the Compacting indicator.
     if prompt == "/compact" and parsed.resume:
-        time.sleep(3)
+        time.sleep(_COMPACT_INDICATOR_DELAY_SECONDS)
 
     emit_streaming = parsed.include_partial_messages
     session_id = _get_session_id(parsed.resume)

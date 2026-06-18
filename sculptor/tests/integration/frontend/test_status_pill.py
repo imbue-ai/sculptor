@@ -6,7 +6,7 @@ appropriate state labels, displays elapsed time, and disappears when done.
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
+from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.playwright_utils import navigate_to_home_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -28,23 +28,24 @@ def test_status_pill_visible_during_agent_activity(sculptor_instance_: SculptorI
     """Test that the status pill appears while the agent is streaming/working."""
     page = sculptor_instance_.page
 
-    start_task_and_wait_for_ready(
+    task_page = start_task_and_wait_for_ready(
         sculptor_page=page,
         prompt=SLOW_PROMPT,
         wait_for_agent_to_finish=False,
     )
+    chat_panel = task_page.get_chat_panel()
 
     # The status pill should be visible while the agent is working
-    status_pill = page.get_by_test_id(ElementIDs.STATUS_PILL)
-    expect(status_pill).to_be_visible(timeout=15000)
+    status_pill = chat_panel.get_status_pill()
+    expect(status_pill).to_be_visible()
 
     # It should have a label (Thinking..., Streaming..., or Calling tools...)
-    label = page.get_by_test_id(ElementIDs.STATUS_PILL_LABEL)
+    label = chat_panel.get_status_pill_label()
     expect(label).to_be_visible()
     expect(label).not_to_be_empty()
 
     # It should show elapsed time
-    elapsed = page.get_by_test_id(ElementIDs.STATUS_PILL_ELAPSED)
+    elapsed = chat_panel.get_status_pill_elapsed()
     expect(elapsed).to_be_visible()
     expect(elapsed).to_contain_text("s")
 
@@ -62,7 +63,7 @@ def test_status_pill_disappears_after_completion(sculptor_instance_: SculptorIns
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
     # The status pill should NOT be visible after completion
-    status_pill = page.get_by_test_id(ElementIDs.STATUS_PILL)
+    status_pill = chat_panel.get_status_pill()
     expect(status_pill).not_to_be_visible()
 
 
@@ -71,18 +72,19 @@ def test_status_pill_shows_stop_button(sculptor_instance_: SculptorInstance) -> 
     """Test that the stop button is present on the status pill during cancellable states."""
     page = sculptor_instance_.page
 
-    start_task_and_wait_for_ready(
+    task_page = start_task_and_wait_for_ready(
         sculptor_page=page,
         prompt=SLOW_PROMPT,
         wait_for_agent_to_finish=False,
     )
+    chat_panel = task_page.get_chat_panel()
 
     # Wait for the pill to appear
-    status_pill = page.get_by_test_id(ElementIDs.STATUS_PILL)
-    expect(status_pill).to_be_visible(timeout=15000)
+    status_pill = chat_panel.get_status_pill()
+    expect(status_pill).to_be_visible()
 
     # Stop button should be present in the DOM (always rendered for layout stability)
-    stop_button = page.get_by_test_id(ElementIDs.STATUS_PILL_STOP)
+    stop_button = chat_panel.get_stop_button()
     expect(stop_button).to_be_attached()
 
 
@@ -91,18 +93,19 @@ def test_status_pill_shows_animation(sculptor_instance_: SculptorInstance) -> No
     """Test that the status pill shows an animation element while the agent is active."""
     page = sculptor_instance_.page
 
-    start_task_and_wait_for_ready(
+    task_page = start_task_and_wait_for_ready(
         sculptor_page=page,
         prompt=SLOW_PROMPT,
         wait_for_agent_to_finish=False,
     )
+    chat_panel = task_page.get_chat_panel()
 
     # Wait for the pill to appear
-    status_pill = page.get_by_test_id(ElementIDs.STATUS_PILL)
-    expect(status_pill).to_be_visible(timeout=15000)
+    status_pill = chat_panel.get_status_pill()
+    expect(status_pill).to_be_visible()
 
     # Should have an animation element
-    animation = page.get_by_test_id(ElementIDs.STATUS_PILL_ANIMATION)
+    animation = chat_panel.get_status_pill_animation()
     expect(animation).to_be_visible()
 
 
@@ -117,25 +120,25 @@ def test_status_pill_timer_persists_across_tab_switch(sculptor_instance_: Sculpt
     """
     page = sculptor_instance_.page
 
-    start_task_and_wait_for_ready(
+    task_page = start_task_and_wait_for_ready(
         sculptor_page=page,
         prompt=SLOW_PROMPT,
         workspace_name="Timer Persist WS",
         wait_for_agent_to_finish=False,
     )
+    chat_panel = task_page.get_chat_panel()
 
     # Wait for the status pill to appear and the timer to reach at least 2s
-    status_pill = page.get_by_test_id(ElementIDs.STATUS_PILL)
-    expect(status_pill).to_be_visible(timeout=15_000)
+    status_pill = chat_panel.get_status_pill()
+    expect(status_pill).to_be_visible()
 
-    elapsed_locator = page.get_by_test_id(ElementIDs.STATUS_PILL_ELAPSED)
+    elapsed_locator = chat_panel.get_status_pill_elapsed()
     page.wait_for_function(
         """() => {
             const el = document.querySelector('[data-testid="STATUS_PILL_ELAPSED"]');
             if (!el) return false;
             return parseFloat(el.textContent) >= 2.0;
         }""",
-        timeout=15_000,
     )
 
     # Read the elapsed value before navigating away
@@ -148,21 +151,33 @@ def test_status_pill_timer_persists_across_tab_switch(sculptor_instance_: Sculpt
     navigate_to_home_page(page)
 
     # Navigate back by clicking the workspace tab
-    workspace_tab = page.get_by_test_id(ElementIDs.WORKSPACE_TAB).first
+    workspace_tab = task_page.get_workspace_tabs().first
     workspace_tab.click()
 
     # Wait for the status pill to reappear
-    expect(status_pill).to_be_visible(timeout=15_000)
+    expect(status_pill).to_be_visible()
 
-    # The timer should NOT have reset — it should be >= the value before the switch.
-    # Allow a small tolerance for timing jitter in CI.
-    elapsed_after_text = elapsed_locator.text_content()
-    assert elapsed_after_text is not None
-    elapsed_after = float(elapsed_after_text.rstrip("s"))
-
-    assert elapsed_after >= elapsed_before - 0.5, (
-        f"Timer reset! Before: {elapsed_before}s, After: {elapsed_after}s."
-        + " Expected timer to continue counting, not reset to 0."
+    # The timer should NOT have reset. On remount the timer is restored
+    # synchronously from its persisted origin, so the FIRST non-zero value it
+    # displays is already the continued time. A reset bug instead restarts at
+    # 0.0s and ticks up from ~0.1s. Capturing that first non-zero value and
+    # asserting it is already >= the pre-switch value distinguishes "continued"
+    # from "reset" with no dependence on a timing margin — unlike a plain
+    # ``>= threshold`` wait, which a reset-then-climb would eventually satisfy
+    # (the agent keeps ticking) and thereby mask the regression.
+    first_value_handle = page.wait_for_function(
+        """() => {
+            const el = document.querySelector('[data-testid="STATUS_PILL_ELAPSED"]');
+            if (!el) return null;
+            const value = parseFloat(el.textContent);
+            return value > 0 ? value : null;
+        }""",
+    )
+    first_value_after = first_value_handle.json_value()
+    assert first_value_after >= elapsed_before - 0.5, (
+        f"Timer reset on tab switch: first value after returning was {first_value_after}s,"
+        + f" expected >= {elapsed_before - 0.5}s (continuing from {elapsed_before}s before the switch)."
+        + " Expected the timer to resume, not restart from 0."
     )
 
 
@@ -180,7 +195,7 @@ def test_status_pill_hidden_while_ask_user_question_panel_showing(sculptor_insta
     """
     page = sculptor_instance_.page
 
-    start_task_and_wait_for_ready(
+    task_page = start_task_and_wait_for_ready(
         sculptor_page=page,
         prompt="""\
 fake_claude:ask_user_question `{
@@ -198,12 +213,13 @@ fake_claude:ask_user_question `{
 }`""",
         wait_for_agent_to_finish=False,
     )
+    chat_panel = task_page.get_chat_panel()
 
     # Wait for the AUQ panel to appear — confirms the agent is in the
     # WAITING state with a held MCP tools/call.
-    ask_panel = page.get_by_test_id(ElementIDs.ASK_USER_QUESTION_PANEL)
-    expect(ask_panel).to_be_visible(timeout=30_000)
+    auq_panel = get_ask_user_question_panel(page)
+    expect(auq_panel).to_be_visible()
 
     # The status pill must NOT be visible while WAITING.
-    status_pill = page.get_by_test_id(ElementIDs.STATUS_PILL)
+    status_pill = chat_panel.get_status_pill()
     expect(status_pill).not_to_be_visible()

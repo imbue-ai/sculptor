@@ -1,13 +1,12 @@
 """Integration tests for project path monitoring functionality."""
 
 import shutil
-from pathlib import Path
 
 import pytest
 from playwright.sync_api import expect
 
-from imbue_core.common import get_temp_dir
-from imbue_core.test_utils import create_temp_dir
+from sculptor.foundation.common import get_temp_dir
+from sculptor.foundation.test_utils import create_temp_dir
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
@@ -27,7 +26,7 @@ def test_project_path_monitoring(sculptor_instance_: SculptorInstance) -> None:
     # Store the original project path
     original_path = sculptor_instance_.repo.base_path
 
-    with create_temp_dir(root_dir=Path(get_temp_dir())) as temp_dir:
+    with create_temp_dir(root_dir=get_temp_dir()) as temp_dir:
         # Step 1: Move the project directory
         moved_path = temp_dir / original_path.name
         shutil.move(str(original_path), str(moved_path))

@@ -1,4 +1,4 @@
-"""Synchronous version of LocalGitRepo in imbue_core"""
+"""Synchronous version of LocalGitRepo in sculptor.foundation"""
 
 from __future__ import annotations
 
@@ -17,11 +17,11 @@ from typing import TYPE_CHECKING
 import attr
 from loguru import logger
 
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.computing_environment.data_types import AnyPath
-from imbue_core.computing_environment.data_types import RunCommandError
-from imbue_core.constants import ExceptionPriority
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.constants import ExceptionPriority
 from sculptor.testing.computing_environment import run_command_with_retry_on_git_lock_error
+from sculptor.testing.computing_environment_types import AnyPath
+from sculptor.testing.computing_environment_types import RunCommandError
 
 if TYPE_CHECKING:
     # for proper file mode typing
@@ -83,10 +83,10 @@ class LocalGitRepo:
         """
         command_string = shlex.join(command)
         logger.trace(
-            "Running command: command_string={} from cwd={} with secrets={} check={} is_error_logged={}",
+            "Running command: command_string={} from cwd={} with secret_keys={} check={} is_error_logged={}",
             command_string,
             cwd or self.base_path,
-            secrets,
+            sorted(secrets) if secrets else None,
             check,
             is_error_logged,
         )
@@ -142,17 +142,16 @@ class LocalGitRepo:
     ) -> Generator[IO[Any], None, None]:
         logger.trace("opening file {} in cwd {} with mode {}", relative_path, cwd, mode)
         if cwd is not None:
-            sb_file_path = str(Path(cwd) / relative_path)
+            file_path = Path(cwd) / relative_path
         else:
-            sb_file_path = str(self.base_path / relative_path)
+            file_path = self.base_path / relative_path
 
         if mkdir_if_missing:
-            parent_dir = Path(sb_file_path).parent
-            parent_dir.mkdir(parents=True, exist_ok=True)
+            file_path.parent.mkdir(parents=True, exist_ok=True)
 
         f: IO[Any] | None = None
         try:
-            f = Path(sb_file_path).open(mode=mode)  # type: ignore
+            f = file_path.open(mode=mode)  # type: ignore
             yield f
         finally:
             if f is not None:
@@ -177,14 +176,14 @@ class LocalGitRepo:
     def delete_file(self, relative_path: AnyPath, cwd: AnyPath | None = None) -> None:
         logger.trace("deleting the file {} in cwd {}", relative_path, cwd)
         if cwd is not None:
-            sb_file_path = str(Path(cwd) / relative_path)
+            file_path = Path(cwd) / relative_path
         else:
-            sb_file_path = str(self.base_path / relative_path)
-        Path(sb_file_path).unlink()
+            file_path = self.base_path / relative_path
+        file_path.unlink()
 
     def is_git_repo(self) -> bool:
         """Check that repo is valid git repo."""
-        return Path(self.base_path / ".git").exists()
+        return (self.base_path / ".git").exists()
 
     def configure_git(
         self,
@@ -208,6 +207,6 @@ class LocalGitRepo:
         self.run_git(("add", "."))
         self.run_git(("commit", "-m", f"'{initial_commit_message}'"))
         branch_name = self.run_git(("symbolic-ref", "HEAD"))
-        if not branch_name == "refs/heads/main":
+        if branch_name != "refs/heads/main":
             # rename master to main for consistency
             self.run_git(("branch", "-m", "master", "main"))

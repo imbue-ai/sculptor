@@ -19,8 +19,8 @@ from typing_extensions import Annotated
 from uvicorn import Config
 from uvicorn import Server
 
-from imbue_core.log_utils import ensure_core_log_levels_configured
 from sculptor import version as sculptor_version
+from sculptor.foundation.log_utils import ensure_core_log_levels_configured
 from sculptor.services.user_config.user_config import initialize_from_file
 from sculptor.utils.errors import setup_irrecoverable_exception_handler
 from sculptor.utils.logs import setup_loggers
@@ -34,6 +34,10 @@ from sculptor.web.middleware import register_on_startup
 # typer.BadParameter output does not carry the indentation a triple-quoted
 # block would introduce.
 _LATE_START_ERROR_MESSAGE = "--trace-to must be passed at the sculptor CLI entry point so the bootstrap in cli/main.py can start viztracer before the backend imports run. Passing it through the typer callback alone is not supported."
+
+# Fallback frontend (vite) port used only when SCULPTOR_FRONTEND_PORT is unset;
+# in dev mode the launcher normally sets that variable explicitly.
+_DEFAULT_FRONTEND_PORT = 5174
 
 
 typer_cli = typer.Typer(
@@ -141,7 +145,7 @@ def main(
     # We bind to 127.0.0.1 to avoid exposing the server to the network by default.
     # (In theory, we could use "localhost" to also support IPv6 [::1] but we'd need to handle ipv6 in docker port binding setup then.)
     server = SyncCloseServer(config=Config(APP, host=settings.BIND_HOST, port=port, log_config=None, log_level=None))
-    frontend_port = int(os.environ.get("SCULPTOR_FRONTEND_PORT", 5174))
+    frontend_port = int(os.environ.get("SCULPTOR_FRONTEND_PORT", _DEFAULT_FRONTEND_PORT))
 
     if not serve_static:
         port = frontend_port

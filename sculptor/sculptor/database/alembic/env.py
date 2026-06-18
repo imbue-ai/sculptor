@@ -4,6 +4,7 @@ from alembic import context
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
+from sculptor.database.alembic.utils import drop_all_automanaged_triggers
 from sculptor.database.core import METADATA
 from sculptor.services.data_model_service.sql_implementation import register_all_tables
 
@@ -14,20 +15,11 @@ register_all_tables()
 config = context.config
 
 # Interpret the config file for Python logging.
-# This line sets up loggers basically.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
+# MetaData object for 'autogenerate' support.
 target_metadata = METADATA
-
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
-# my_important_option = config.get_main_option("my_important_option")
-# ... etc.
 
 
 def run_migrations_offline() -> None:
@@ -75,6 +67,10 @@ def run_migrations_online() -> None:
         context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
+            # Invariant: no auto-managed triggers exist while migrations run, so a migration
+            # can never fail by dropping a column a trigger still references. Triggers are
+            # recreated from the current model immediately after migrations.
+            drop_all_automanaged_triggers(connection)
             context.run_migrations()
 
 

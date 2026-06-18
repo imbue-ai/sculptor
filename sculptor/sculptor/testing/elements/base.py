@@ -1,5 +1,7 @@
-import logging
+from collections.abc import Sequence
+from typing import Any
 
+from loguru import logger
 from playwright.sync_api import Locator
 from playwright.sync_api import Page
 from playwright.sync_api import expect
@@ -9,8 +11,6 @@ from tenacity import stop_after_attempt
 from tenacity import wait_fixed
 
 from sculptor.constants import ElementIDs
-
-logger = logging.getLogger(__name__)
 
 
 def wait_for_tiptap_ready(page: Page, *, timeout_ms: int = 10_000) -> None:
@@ -49,7 +49,7 @@ def wait_for_tiptap_ready(page: Page, *, timeout_ms: int = 10_000) -> None:
             }})"""
         )
     except Exception as exc:
-        logger.debug("wait_for_tiptap_ready timed out after %dms: %s", timeout_ms, exc)
+        logger.debug("wait_for_tiptap_ready timed out after {}ms: {}", timeout_ms, exc)
 
 
 class PlaywrightIntegrationTestElement(Locator):
@@ -64,7 +64,7 @@ class PlaywrightIntegrationTestElement(Locator):
         self._page = page
         self._locator = locator
 
-    def __getattr__(self, attr):
+    def __getattr__(self, attr: str) -> Any:
         return getattr(self._locator, attr)
 
 
@@ -115,7 +115,7 @@ def type_into_tiptap(page: Page, locator: Locator, text: str) -> None:
     # After a page reload the React fiber tree may not have the Tiptap editor
     # prop attached yet even though the DOM element is visible and clickable.
     # Poll with requestAnimationFrame (once per frame, ~16 ms) for up to 5 s
-    # before giving up.  On Fly runners after shared-instance recreation,
+    # before giving up.  On contended CI runners after shared-instance recreation,
     # the editor can take >2 s to initialize.
     locator.evaluate(
         f"""(el, text) => new Promise((resolve, reject) => {{
@@ -199,7 +199,7 @@ def set_tiptap_markdown(locator: Locator, markdown: str) -> None:
     )
 
 
-def type_paragraphs_into_tiptap(locator: Locator, paragraphs: list[str]) -> None:
+def type_paragraphs_into_tiptap(locator: Locator, paragraphs: Sequence[str]) -> None:
     """Insert multiple paragraphs separated by real paragraph breaks.
 
     Unlike ``type_into_tiptap`` (which uses ``tr.insertText`` and creates hard
@@ -265,7 +265,7 @@ def type_with_delay(locator: Locator, text: str, delay: int) -> None:
 # NOTE: This is an exception to our rule against using .type() in tests.
 # TipTap's ordered list input rule triggers on "1. " being typed through
 # keyboard events — .fill() and insertText() bypass this entirely.
-def type_ordered_list_then_text(page: Page, locator: Locator, items: list[str], trailing_text: str) -> None:
+def type_ordered_list_then_text(page: Page, locator: Locator, items: Sequence[str], trailing_text: str) -> None:
     """Type an ordered list followed by text using real keyboard input.
 
     Types ``1. <first item>`` to trigger TipTap's ordered list input rule,
@@ -297,6 +297,17 @@ def tiptap_has_placeholder(locator: Locator, placeholder_text: str) -> bool:
         }""",
         placeholder_text,
     )
+
+
+def get_tiptap_placeholder_paragraphs(locator: Locator, placeholder_text: str) -> Locator:
+    """Return the ``<p>`` nodes showing the given TipTap placeholder text.
+
+    The Placeholder extension sets ``data-placeholder`` on empty nodes; an empty
+    result means the placeholder is hidden. Returning a Locator (rather than the
+    snapshot bool of ``tiptap_has_placeholder``) lets callers use
+    ``expect(...).to_have_count(0)`` so Playwright auto-retries.
+    """
+    return locator.locator(f'p[data-placeholder="{placeholder_text}"]')
 
 
 # NOTE: This is an exception to our rule to not use page.evaluate().

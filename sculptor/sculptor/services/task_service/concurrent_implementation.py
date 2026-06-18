@@ -13,27 +13,30 @@ from typing import TypeVar
 from loguru import logger
 from pydantic import PrivateAttr
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.concurrency_group import ConcurrencyExceptionGroup
-from imbue_core.concurrency_group import ConcurrentShutdownError
-from imbue_core.constants import ExceptionPriority
-from imbue_core.log_utils import log_and_exit_program
-from imbue_core.pydantic_serialization import MutableModel
-from imbue_core.time_utils import get_current_time
 from sculptor.config.settings import SculptorSettings
 from sculptor.constants import SCULPTOR_EXIT_CODE_IRRECOVERABLE_ERROR
 from sculptor.database.models import Project
 from sculptor.database.models import Task
 from sculptor.database.models import TaskID
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.concurrency_group import ConcurrencyExceptionGroup
+from sculptor.foundation.concurrency_group import ConcurrentShutdownError
+from sculptor.foundation.constants import ExceptionPriority
+from sculptor.foundation.log_utils import log_and_exit_program
+from sculptor.foundation.pydantic_serialization import MutableModel
+from sculptor.foundation.time_utils import get_current_time
 from sculptor.interfaces.agents.agent import TaskStatusRunnerMessage
 from sculptor.interfaces.agents.tasks import TaskState
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import ProjectID
 from sculptor.services.task_service.base_implementation import BaseTaskService
 from sculptor.utils.errors import is_irrecoverable_exception
 
 SHUTDOWN_TIMEOUT_SECONDS: float = 30.0
 ERROR_BACKOFF_SECONDS: float = 0.5
+# Kept short so the spawner notices the shutdown flag promptly.
+TASK_SPAWNER_WAIT_TIMEOUT_SECONDS: float = 1.0
+MAX_QUEUED_TASKS_PER_BATCH: int = 100
 
 
 class Runner(MutableModel):
@@ -60,7 +63,7 @@ T = TypeVar("T", bound=Hashable)
 
 
 class DebounceCache(Generic[T]):
-    def __init__(self, interval_seconds: float, max_items=1024) -> None:
+    def __init__(self, interval_seconds: float, max_items: int = 1024) -> None:
         self.cache: OrderedDict[T, float] = OrderedDict()
         self.max_items = max_items
         self.interval_seconds = interval_seconds
@@ -140,13 +143,12 @@ class ConcurrentTaskService(BaseTaskService, ABC):
     def _spawn_run_tasks(self, shutdown_flag: Event) -> None:
         logger.info("Started task spawning thread")
         # continue scheduling tasks until the shutdown flag is set
-        activated_projects = set()
+        activated_projects: set[ProjectID] = set()
         while not shutdown_flag.is_set():
             try:
                 with self._new_or_restored_task_condition:
                     if not self._has_outstanding_work:
-                        # The timeout can't be too large or we'll be slow to shut down.
-                        self._new_or_restored_task_condition.wait(1.0)
+                        self._new_or_restored_task_condition.wait(TASK_SPAWNER_WAIT_TIMEOUT_SECONDS)
                     self._has_outstanding_work = False
                 active_projects = self.project_service.get_active_projects()
                 for project in active_projects:
@@ -217,7 +219,7 @@ class ConcurrentTaskService(BaseTaskService, ABC):
         # Retrieve a batch of tasks and mark them as RUNNING so that they're not retrieved again.
         with self.data_model_service.open_task_transaction() as transaction:
             existing_tasks = transaction.get_tasks_for_project(
-                outcomes={TaskState.QUEUED}, project_id=project_id, max_results=100
+                outcomes={TaskState.QUEUED}, project_id=project_id, max_results=MAX_QUEUED_TASKS_PER_BATCH
             )
             acknowledged_tasks = tuple(task.evolve(task.ref().outcome, TaskState.RUNNING) for task in existing_tasks)
             for task in acknowledged_tasks:
@@ -226,7 +228,7 @@ class ConcurrentTaskService(BaseTaskService, ABC):
                 self.create_message(message=message, task_id=task.object_id, transaction=transaction)
             return acknowledged_tasks
 
-    def _stop_expired_runners(self):
+    def _stop_expired_runners(self) -> None:
         # then warn about any tasks that are running for too long
         for task_id, deadline in list(self._completion_deadline.items()):
             runner = self._runner_by_id[task_id]
@@ -235,13 +237,13 @@ class ConcurrentTaskService(BaseTaskService, ABC):
                 runner.stop()
                 runner.join()
 
-    def _clean_stopped_tasks(self):
+    def _clean_stopped_tasks(self) -> None:
         # first clean up any tasks that are no longer running
         for task_id, runner in list(self._runner_by_id.items()):
             if not runner.is_alive():
                 # remove the task from the list of running tasks
                 logger.info("Runner with id {} is no longer alive", task_id)
-                is_thread_runner = getattr(runner, "thread", False)
+                is_thread_runner = getattr(runner, "_thread", None) is not None
                 if is_thread_runner:
                     logger.info(
                         "Thread runner with name '{}' died and we're now deleting it from `self._runner_by_id`",
@@ -259,7 +261,6 @@ class ConcurrentTaskService(BaseTaskService, ABC):
             task_id = task.object_id
             if task_id not in self._runner_by_id:
                 # exceptions in here will definitely have been logged, see implementation of self._run_task
-                logger.info("Creating runner:{}", self.settings)
                 new_runner = self.create_runner(task, task_id, self.settings)
                 self._runner_by_id[task_id] = new_runner
                 new_runner.start()

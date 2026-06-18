@@ -8,6 +8,7 @@ export type StaticKeybindingId =
   | "new_workspace"
   | "open_workspace"
   | "close_workspace"
+  | "delete_workspace"
   | "next_tab"
   | "previous_tab"
   | "send_message"

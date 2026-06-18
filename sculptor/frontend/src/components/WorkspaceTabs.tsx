@@ -293,6 +293,28 @@ export const WorkspaceTabs = (): ReactElement => {
     return (): void => window.removeEventListener("keydown", handleKeyDown);
   }, [keybindingsMap, closeCurrentTab]);
 
+  // Delete workspace shortcut: open the confirmation dialog for the current
+  // workspace. Unlike close (which only removes the tab), delete permanently
+  // removes the workspace and all of its agents, so it routes through the same
+  // confirmation dialog as the right-click and Cmd+K delete actions.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (isDismissibleOverlayOpen()) return;
+      const deleteBinding = keybindingsMap.delete_workspace.binding;
+      if (deleteBinding == null || !shouldHandleKeybinding(e, deleteBinding)) return;
+      // Suppress the browser/Electron default (Cmd+Shift+W closes the window)
+      // even on non-workspace tabs where there is nothing to delete.
+      e.preventDefault();
+      if (!activeWorkspaceID) return;
+      const workspace = (workspaces ?? []).find((ws) => ws.objectId === activeWorkspaceID);
+      if (workspace == null) return;
+      setDeleteTarget({ id: workspace.objectId, name: workspace.description ?? "" });
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return (): void => window.removeEventListener("keydown", handleKeyDown);
+  }, [keybindingsMap, activeWorkspaceID, workspaces, setDeleteTarget]);
+
   // Build TabDefinition array from workspaces
   const tabs = useMemo((): Array<TabDefinition> => {
     const workspaceTabs: Array<TabDefinition> = (workspaces ?? []).map((workspace) => {

@@ -58,9 +58,10 @@ export const SkillsPanel = (): ReactElement => {
   const { workspaceID } = useWorkspacePageParams();
   const { taskID } = useImbueParams();
   const openFileViewTab = useSetAtom(openFileViewTabAtom);
-  // Pi has no skills layer: the panel collapses to an empty state
-  // so the user sees a clear signal instead of stale Claude content. `?? true`
-  // keeps existing behavior before the task has loaded.
+  // A harness that doesn't support skills collapses the panel to an empty
+  // state so the user sees a clear signal instead of stale skill content.
+  // `?? true` keeps the panel populated before the task's capabilities have
+  // loaded.
   const canRenderSkills = useTaskSupportsSkills(taskID ?? "") ?? true;
   const skills = useMemo(() => (canRenderSkills ? rawSkills : []), [canRenderSkills, rawSkills]);
 

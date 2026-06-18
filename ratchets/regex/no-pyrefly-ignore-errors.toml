@@ -1,0 +1,9 @@
+[rule]
+id = "no-pyrefly-ignore-errors"
+description = "Disallow '# pyrefly: ignore-errors' module-wide suppressions; suppress individual lines with rule names instead"
+severity = "error"
+
+[match]
+pattern = '#\s*pyrefly:\s*ignore-errors'
+languages = ["python"]
+include = ["**/*.py"]

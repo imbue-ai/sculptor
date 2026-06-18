@@ -6,6 +6,8 @@ import react from "@vitejs/plugin-react-swc";
 import type { BuildOptions, Plugin } from "vite";
 import { defineConfig, loadEnv, type UserConfig } from "vite";
 
+import { pluginRuntimeStubs } from "./vite-plugins/plugin-runtime-stubs.ts";
+
 /**
  * Exclude ``@xterm/xterm`` from the bundle and serve it as a standalone
  * ES module.  See the detailed comment in vite.config.ts for the full
@@ -61,7 +63,7 @@ export default defineConfig(({ command, mode }): UserConfig => {
   console.log(`PostHog token: ${posthogToken ? "set" : "(empty — telemetry disabled)"}`);
   console.log(`PostHog host: ${posthogHost}`);
 
-  const ENABLED_PLUGINS = [externalizeXterm(), react()];
+  const ENABLED_PLUGINS = [externalizeXterm(), pluginRuntimeStubs(), react()];
 
   const baseConfig: UserConfig = {
     root,
@@ -95,8 +97,15 @@ export default defineConfig(({ command, mode }): UserConfig => {
       },
     },
     clearScreen: false,
-    // Makes asset paths relative so it works even if you load via file:// later
-    base: "./",
+    // Use an absolute asset base so the built index.html references
+    // `/assets/...`. The packaged renderer is served from the real
+    // `sculptor://app` origin (and the Vite dev server in development), not
+    // `file://`, so absolute paths resolve against the origin root regardless
+    // of the document's path — the app-scheme handler serves `/assets/...`
+    // directly. A relative base (`./`) instead resolves assets against the
+    // document directory, which breaks if the document path ever gains a
+    // trailing segment (e.g. `index.html/`).
+    base: "/",
     plugins: ENABLED_PLUGINS,
     envPrefix: "SCULPTOR_",
     resolve: {

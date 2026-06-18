@@ -3,7 +3,9 @@ import hashlib
 import os
 import re
 import shutil
+import signal
 import threading
+import time
 import uuid
 import webbrowser
 from collections.abc import Callable
@@ -11,6 +13,7 @@ from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from queue import Queue
+from subprocess import TimeoutExpired
 from typing import Any
 from typing import assert_never
 
@@ -20,12 +23,12 @@ from packaging.version import InvalidVersion
 from packaging.version import Version
 from pydantic import PrivateAttr
 
-from imbue_core.concurrency_group import InvalidConcurrencyGroupStateError
-from imbue_core.processes.local_process import run_streaming
-from imbue_core.pydantic_serialization import FrozenModel
-from imbue_core.subprocess_utils import ProcessError
-from imbue_core.subprocess_utils import ProcessTimeoutError
-from imbue_core.thread_utils import ObservableThread
+from sculptor.foundation.concurrency_group import InvalidConcurrencyGroupStateError
+from sculptor.foundation.processes.local_process import RunningProcess
+from sculptor.foundation.processes.local_process import run_background
+from sculptor.foundation.pydantic_serialization import FrozenModel
+from sculptor.foundation.subprocess_utils import ProcessError
+from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.primitives.service import Service
 from sculptor.services.managed_tools import CLAUDE_VERSION_RANGE
@@ -37,6 +40,7 @@ from sculptor.services.managed_tools import get_managed_tools
 from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.utils.build import get_internal_folder
 from sculptor.web.data_types import AuthResult
+from sculptor.web.data_types import AuthStartResult
 from sculptor.web.data_types import BinaryMode
 from sculptor.web.data_types import DependenciesStatus
 from sculptor.web.data_types import DependencyInfo
@@ -69,6 +73,9 @@ PI_VERSION_RANGE = VersionRange(
 DEPENDENCIES_DIR_NAME = "dependencies"
 _VERSION_DIR_PREFIX = "version-"
 _TEMP_DIR_PREFIX = "tmp-"
+_DOWNLOAD_CHUNK_SIZE_BYTES = 65536
+# Versions to keep when a tool has no ManagedTool conformer to override it.
+_DEFAULT_RETENTION_KEEP = 2
 
 
 def _is_valid_custom_binary(value: str) -> bool:
@@ -171,7 +178,7 @@ def _retention_keep_for_tool(tool: Dependency) -> int:
     managed_tool = get_managed_tool(tool)
     if managed_tool is not None:
         return managed_tool.retention_keep
-    return 2
+    return _DEFAULT_RETENTION_KEEP
 
 
 def _is_version_dir(name: str) -> bool:
@@ -190,45 +197,59 @@ def _version_from_dir_name(name: str) -> Version:
     return Version(name[len(_VERSION_DIR_PREFIX) :])
 
 
-class _AuthUrlTracker:
-    """Tracks the first auth URL seen in process output and opens it in the browser."""
-
-    def __init__(self) -> None:
-        self.auth_url: str | None = None
-
-    def on_line(self, line: str, is_stderr: bool) -> None:
-        if self.auth_url is not None:
-            return
-        url_match = re.search(r"(https://\S+)", line)
-        if url_match:
-            self.auth_url = url_match.group(1)
-            try:
-                webbrowser.open(self.auth_url)
-            except Exception:
-                pass
+# Regex for the sign-in URL the CLI prints to stdout/stderr.
+_AUTH_URL_RE = re.compile(r"(https://\S+)")
+# How long to wait for the CLI to emit its sign-in URL before giving up on start.
+_AUTH_URL_WAIT_SECONDS = 30.0
+# Overall cap on the spawned 'auth login' process (it idles waiting on stdin).
+_AUTH_PROCESS_TIMEOUT_SECONDS = 600.0
+# How long to wait for the CLI to finish after the user submits their code.
+_AUTH_COMPLETE_WAIT_SECONDS = 120.0
 
 
-def _do_auth_login(binary: str) -> AuthResult:
-    """Run 'binary auth login', open the browser for the auth URL, and wait for completion."""
-    tracker = _AuthUrlTracker()
+def _await_auth_url(process: RunningProcess) -> str | None:
+    """Poll a still-running ``auth login`` process for the first sign-in URL it prints.
+
+    Returns the URL only while the process is still running and waiting for a
+    pasted code. Returns ``None`` if the process has already exited (a
+    self-completing local browser-loopback login, or an early failure — either
+    way there is no code to paste, so the URL is moot) or if no URL appears
+    within ``_AUTH_URL_WAIT_SECONDS``.
+
+    The caller must NOT hold ``_claude_auth_lock`` here: this blocks for up to
+    ``_AUTH_URL_WAIT_SECONDS`` on a misbehaving CLI.
+    """
+    deadline = time.monotonic() + _AUTH_URL_WAIT_SECONDS
+    while True:
+        if process.is_finished():
+            return None
+        match = _AUTH_URL_RE.search(process.read_stdout() + process.read_stderr())
+        if match:
+            return match.group(1)
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(0.2)
+
+
+def _terminate_process(process: RunningProcess) -> None:
+    """Best-effort terminate a process; a no-op if it already finished.
+
+    Bounded (a few seconds at most), so it is safe to call under a lock.
+    """
+    if process.is_finished():
+        return
     try:
-        result = run_streaming(
-            [binary, "auth", "login"],
-            on_output=tracker.on_line,
-            is_checked=False,
-            timeout=300.0,
-        )
-        if result.returncode == 0:
-            return AuthResult(success=True, auth_url=tracker.auth_url)
-        return AuthResult(
-            success=False,
-            auth_url=tracker.auth_url,
-            error=result.stderr or f"Exit code {result.returncode}",
-        )
-    except ProcessTimeoutError:
-        return AuthResult(success=False, auth_url=tracker.auth_url, error="Authentication timed out after 5 minutes")
-    except Exception as e:
-        return AuthResult(success=False, auth_url=tracker.auth_url, error=str(e))
+        process.terminate(force_kill_seconds=2.0)
+    except Exception:
+        try:
+            process.kill_now(signal.SIGKILL)
+        except Exception:
+            pass
+
+
+def _auth_error_text(process: RunningProcess, fallback: str = "Authentication failed") -> str:
+    """Best-effort human-readable error text from a finished auth process."""
+    return (process.read_stderr() or process.read_stdout() or fallback).strip()
 
 
 class DependencyManagementService(Service):
@@ -236,6 +257,11 @@ class DependencyManagementService(Service):
     # download thread for the entire duration of _download_verify_stage.
     _install_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
     _claude_auth_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
+    # The live 'auth login' process between start_auth_login() and
+    # submit_auth_code(), kept alive (idling on stdin) so the user's pasted code
+    # can be written to it. Only the brief reads and swaps of this field hold
+    # _claude_auth_lock — never the blocking subprocess waits.
+    _claude_auth_session: RunningProcess | None = PrivateAttr(default=None)
     # Guards _install_progress, _installing, _install_error, and
     # _progress_notifier_thread.
     # Acquired briefly, never held during I/O.
@@ -290,12 +316,25 @@ class DependencyManagementService(Service):
             if thread.is_alive():
                 logger.warning("Thread {} did not stop within timeout during shutdown", thread.name)
 
+        # Tear down any in-flight Claude sign-in so its `auth login` subprocess
+        # doesn't outlive the service. Left running it idles on stdin until its
+        # process timeout, and its isolated process group shields it from the
+        # signals that take down the rest of the app. Bounded acquire so a
+        # sign-in that is mid-start can't block shutdown.
+        if self._claude_auth_lock.acquire(timeout=4.0):
+            try:
+                self._terminate_auth_session_locked()
+            finally:
+                self._claude_auth_lock.release()
+        else:
+            logger.warning("Could not acquire auth lock during shutdown; sign-in subprocess may linger")
+
     def _auto_install_if_needed(self) -> None:
         """Auto-install each managed tool whose pinned binary is missing or out of range.
 
         Loops the ManagedTool registry; for every tool with a MANAGED binary mode that
         is not already installed-and-in-range, it spawns an install. Claude always
-        auto-installs when MANAGED. pi additionally requires the ``enable_multi_harness``
+        auto-installs when MANAGED. pi additionally requires the ``enable_pi_agent``
         experiment to be on, so a Claude-only user (the default) never auto-downloads pi.
         They can still trigger a manual install from the Pi settings section, which routes
         through ``install_managed`` and is not gated here.
@@ -314,9 +353,9 @@ class DependencyManagementService(Service):
                 mode, _ = _parse_dependency_config(config.dependency_paths.claude)
             elif tool == Dependency.PI:
                 # pi is dark-launched: only auto-provision it for users who opted into
-                # the multi-harness experiment. Without this gate every Claude-only user
+                # the pi-agent experiment. Without this gate every Claude-only user
                 # would download the pinned pi build on startup.
-                if not config.enable_multi_harness:
+                if not config.enable_pi_agent:
                     continue
                 mode, _ = _parse_dependency_config(config.dependency_paths.pi)
             else:
@@ -531,19 +570,121 @@ class DependencyManagementService(Service):
         except ProcessError:
             return False
 
-    def run_auth_login(self, tool: Dependency) -> AuthResult:
-        """Run authentication for a dependency and wait for the user to complete it.
+    def start_auth_login(self, tool: Dependency) -> AuthStartResult:
+        """Begin interactive authentication for a dependency.
+
+        Spawns ``<binary> auth login`` and reads its output until the sign-in URL
+        appears, then returns immediately with that URL — leaving the process
+        alive and waiting on stdin. The caller surfaces the URL to the user, who
+        signs in and pastes the resulting code back via :meth:`submit_auth_code`.
+
+        On a machine with a usable local browser the CLI completes a
+        localhost-loopback login on its own and needs no pasted code; that case
+        returns ``success=True`` with ``needs_code=False``.
 
         Currently only Claude supports authentication. Other tools return an error.
         """
         if tool != Dependency.CLAUDE:
-            return AuthResult(success=False, error=f"Authentication not supported for {tool.value}")
+            return AuthStartResult(error=f"Authentication not supported for {tool.value}")
         binary = self.resolve_binary_path(tool)
         if binary is None:
-            return AuthResult(success=False, error=f"{tool.value} CLI not installed")
+            return AuthStartResult(error=f"{tool.value} CLI not installed")
 
+        # Spawn the new session (abandoning any prior one) under the lock, then
+        # release it before the blocking URL wait so a slow CLI can't tie the
+        # lock up. The concurrency group owns the process, so it isn't orphaned
+        # even though it outlives this call.
         with self._claude_auth_lock:
-            return _do_auth_login(binary)
+            self._terminate_auth_session_locked()
+            process = self._spawn_auth_process(binary)
+            self._claude_auth_session = process
+
+        auth_url = _await_auth_url(process)
+
+        if process.is_finished():
+            # A local browser-loopback login self-completed (or failed early):
+            # no pasted code is needed.
+            success = process.returncode == 0
+            with self._claude_auth_lock:
+                self._terminate_auth_session_locked(process)
+            if success:
+                return AuthStartResult(success=True)
+            return AuthStartResult(error=_auth_error_text(process))
+
+        if auth_url is None:
+            # Still running but never surfaced a sign-in URL within the window.
+            with self._claude_auth_lock:
+                self._terminate_auth_session_locked(process)
+            return AuthStartResult(error="Timed out waiting for the sign-in URL")
+
+        # Running with a URL: leave the process waiting for the pasted code.
+        # Best-effort browser open for the local case; a no-op when headless.
+        try:
+            webbrowser.open(auth_url)
+        except Exception:
+            pass
+        return AuthStartResult(auth_url=auth_url, needs_code=True)
+
+    def _spawn_auth_process(self, binary: str) -> RunningProcess:
+        """Spawn ``<binary> auth login`` as a concurrency-group-tracked process.
+
+        Going through the group means the process is owned and reaped by it, so a
+        sign-in left in flight can't be orphaned. ``open_stdin`` keeps the CLI
+        waiting for the pasted code.
+        """
+        return self.concurrency_group.start_background_process_from_factory(
+            lambda: run_background(
+                [binary, "auth", "login"],
+                open_stdin=True,
+                timeout=_AUTH_PROCESS_TIMEOUT_SECONDS,
+                isolate_process_group=True,
+            )
+        )
+
+    def submit_auth_code(self, tool: Dependency, code: str) -> AuthResult:
+        """Feed the code the user pasted from the sign-in page to the live auth session.
+
+        Writes the code to the waiting ``auth login`` process's stdin and waits
+        for it to finish. Returns success when the CLI exits cleanly.
+        """
+        if tool != Dependency.CLAUDE:
+            return AuthResult(success=False, error=f"Authentication not supported for {tool.value}")
+
+        # Claim the session under the lock, then release it before the (bounded
+        # but potentially slow) wait so a hung CLI can't keep the lock held.
+        with self._claude_auth_lock:
+            process = self._claude_auth_session
+            if process is None or process.is_finished():
+                return AuthResult(success=False, error="No sign-in is in progress. Start sign-in again.")
+            self._claude_auth_session = None
+
+        try:
+            process.write_stdin(code.strip() + "\n")
+            returncode = process.wait(timeout=_AUTH_COMPLETE_WAIT_SECONDS)
+            if returncode == 0:
+                return AuthResult(success=True)
+            return AuthResult(success=False, error=_auth_error_text(process, fallback=f"Exit code {returncode}"))
+        except TimeoutExpired:
+            return AuthResult(success=False, error="Authentication timed out")
+        except Exception as e:
+            return AuthResult(success=False, error=str(e))
+        finally:
+            _terminate_process(process)
+
+    def _terminate_auth_session_locked(self, process: RunningProcess | None = None) -> None:
+        """Tear down an auth session and clear the stored handle.
+
+        Must be called while holding ``_claude_auth_lock``. With no argument it
+        tears down the currently-stored session; with an explicit process it
+        tears that one down and clears the stored handle only if it matches.
+        The terminate itself is bounded, so holding the lock across it is fine —
+        unlike the sign-in waits, which run unlocked.
+        """
+        session = process if process is not None else self._claude_auth_session
+        if session is not None:
+            _terminate_process(session)
+        if process is None or process is self._claude_auth_session:
+            self._claude_auth_session = None
 
     def _get_status(self) -> DependenciesStatus:
         """Compute the current status of all dependencies (no side effects)."""
@@ -879,7 +1020,7 @@ class DependencyManagementService(Service):
                     stream.raise_for_status()
                     total_bytes = int(stream.headers.get("content-length", 0)) or distribution.size
                     with open(downloaded, "wb") as f:
-                        for chunk in stream.iter_bytes(chunk_size=65536):
+                        for chunk in stream.iter_bytes(chunk_size=_DOWNLOAD_CHUNK_SIZE_BYTES):
                             if self._stop_requested.is_set():
                                 return InstallResult(success=False, error="Install cancelled during shutdown")
                             f.write(chunk)
@@ -893,7 +1034,7 @@ class DependencyManagementService(Service):
             # no activation and (for a tarball) no extraction of untrusted bytes.
             sha256 = hashlib.sha256()
             with open(downloaded, "rb") as f:
-                for chunk in iter(lambda: f.read(65536), b""):
+                for chunk in iter(lambda: f.read(_DOWNLOAD_CHUNK_SIZE_BYTES), b""):
                     sha256.update(chunk)
             actual_checksum = sha256.hexdigest()
             if actual_checksum != distribution.checksum_sha256:
@@ -962,12 +1103,15 @@ class DependencyManagementService(Service):
 
         version_dirs.sort(key=lambda x: x[0], reverse=True)
 
-        # Determine active version to protect it
-        active_path = self.resolve_binary_path(tool)
+        # Determine the active version dir to protect it. Compare on path ancestry
+        # (not substring) so e.g. an active "version-2.1.81" doesn't shield the
+        # distinct "version-2.1.8" dir, whose path is a string prefix of it.
+        active_binary = self.resolve_binary_path(tool)
+        active_dir = Path(active_binary) if active_binary else None
 
         for _, dir_path in version_dirs[keep:]:
-            # Never delete the active version
-            if active_path and str(dir_path) in active_path:
+            # Never delete the version dir that contains the active binary.
+            if active_dir is not None and dir_path in active_dir.parents:
                 continue
             shutil.rmtree(dir_path, ignore_errors=True)
 

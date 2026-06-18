@@ -89,7 +89,7 @@ def test_search_bar_does_not_flash_red_while_typing_matching_query(
 
     # Create a conversation with searchable text content.
     # Use a unique keyword to avoid a flaky match-count inflation (expected 2,
-    # got 4) seen intermittently on Fly runners.  Root cause is unclear — could
+    # got 4) seen intermittently on slow CI runners.  Root cause is unclear — could
     # be a DOM-level race in the TreeWalker search under heavier load, or a
     # transient duplicate render.  Using a rare word sidesteps the issue.
     keyword = "zephyr"

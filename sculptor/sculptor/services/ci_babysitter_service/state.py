@@ -1,13 +1,11 @@
-from dataclasses import dataclass
-
-from imbue_core.agents.data_types.ids import ProjectID
 from sculptor.database.models import TaskID
+from sculptor.foundation.pydantic_serialization import MutableModel
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import WorkspaceID
-from sculptor.web.derived import PrStatusInfo
+from sculptor.web.data_types import PrStatusInfo
 
 
-@dataclass
-class CIBabysitterState:
+class CIBabysitterState(MutableModel):
     workspace_id: WorkspaceID
     project_id: ProjectID
     paused: bool = False
@@ -23,3 +21,11 @@ class CIBabysitterState:
     # has_conflicts=False (conflict resolved). A subsequent re-conflict
     # then re-arms the dispatch.
     last_dispatched_merge_conflict: bool = False
+    # A one-off, runtime reason the most recent terminal drive couldn't
+    # deliver (e.g. the program wasn't at its prompt). Set/cleared by the
+    # terminal-drive worker; cleared again once the CI cycle resolves.
+    transient_disabled_reason: str | None = None
+    # Overlapping-drive guard: True while a terminal-drive worker is writing
+    # this workspace's PTY, so a second near-simultaneous failure coalesces
+    # instead of starting a racing worker.
+    is_terminal_drive_in_progress: bool = False

@@ -3,12 +3,18 @@ import sys
 from functools import cache
 from pathlib import Path
 from typing import Final
+from typing import TYPE_CHECKING
 
 from loguru import logger
 from packaging.version import Version
 
 import sculptor
 from sculptor import version
+
+if TYPE_CHECKING:
+    from sculptor.primitives.ids import ProjectID
+    from sculptor.primitives.ids import TaskID
+    from sculptor.primitives.ids import WorkspaceID
 
 SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG: Final = "SCULPTOR_FOLDER"
 SCULPTOR_WORKSPACES_FOLDER_OVERRIDE_ENV_FLAG: Final = "SCULPTOR_WORKSPACES_FOLDER"
@@ -75,8 +81,37 @@ def get_sculpt_bin_dir(executable_parent: Path | None = None, *, packaged: bool 
     return sculpt_bin_dir
 
 
+def build_sculpt_backend_env(
+    *,
+    backend_port: int,
+    workspace_id: "WorkspaceID",
+    project_id: "ProjectID",
+    agent_id: "TaskID | None" = None,
+) -> dict[str, str]:
+    """The ``SCULPT_*`` identity vars a shell needs so a bare ``sculpt``
+    invocation reaches this backend and resolves its workspace/project (and,
+    when given, agent) without flags.
+
+    Single source for the three surfaces that expose these — the chat task
+    handler, the terminal-agent task handler, and the workspace terminal
+    manager — so the set cannot drift between them. ``PATH`` is intentionally
+    NOT included: each caller computes it differently (the chat handler's
+    packaging-aware ``_build_agent_path`` vs. ``get_sculpt_bin_dir()``), so it
+    stays a per-site concern. Workspace terminals are not agent-scoped, so they
+    omit ``agent_id``.
+    """
+    env = {
+        "SCULPT_API_PORT": str(backend_port),
+        "SCULPT_WORKSPACE_ID": str(workspace_id),
+        "SCULPT_PROJECT_ID": str(project_id),
+    }
+    if agent_id is not None:
+        env["SCULPT_AGENT_ID"] = str(agent_id)
+    return env
+
+
 def is_dev_build() -> bool:
-    # If the version is a dev release, then we are in a dev build, otherwise we are in a production build.
+    """Return True when running a dev release rather than a production build."""
     return Version(version.__version__).is_devrelease
 
 
@@ -140,6 +175,7 @@ def get_install_path() -> Path:
 
 @cache
 def get_sculptor_folder() -> Path:
+    """Return the root Sculptor data folder for the current build and environment."""
     # NOTE: The Electron shell of the packaged version of sculptor sometimes reads from this folder. Please keep any
     # changes you make here consistent with sculptor/frontend/src/electron/logger.ts getSculptorFolder
     path_from_env = os.environ.get(SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG)
@@ -165,10 +201,12 @@ def get_sculptor_folder() -> Path:
 
 
 def get_internal_folder() -> Path:
+    """Return the internal data folder used for Sculptor-managed state."""
     return get_sculptor_folder() / "internal"
 
 
 def get_workspaces_folder() -> Path:
+    """Return the folder under which agent workspaces are created."""
     # Workspace paths are persisted in the DB, so this override should stay stable across
     # launches of the same instance — pointing it elsewhere will leave existing workspace
     # rows referencing the previous location. Primary use case: nested dev Sculptor

@@ -11,35 +11,35 @@ from typing import cast
 
 from loguru import logger
 
-from imbue_core.agents.agent_api.data_types import AgentToolName
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.sculptor.state.chat_state import DiffToolContent
-from imbue_core.sculptor.state.chat_state import GenericToolContent
-from imbue_core.sculptor.state.chat_state import SimpleToolContent
-from imbue_core.sculptor.state.chat_state import ToolInput
-from imbue_core.sculptor.state.chat_state import ToolResultBlock
-from imbue_core.sculptor.state.claude_state import ContentBlockStopEvent
-from imbue_core.sculptor.state.claude_state import MessageStartEvent
-from imbue_core.sculptor.state.claude_state import MessageStopEvent
-from imbue_core.sculptor.state.claude_state import ParsedStreamEventTypes
-from imbue_core.sculptor.state.claude_state import ParsedToolResultResponseSimple
-from imbue_core.sculptor.state.claude_state import ParsedUserResponse
-from imbue_core.sculptor.state.claude_state import TextBlockStartEvent
-from imbue_core.sculptor.state.claude_state import TextDeltaEvent
-from imbue_core.sculptor.state.claude_state import ToolBlockStartEvent
-from imbue_core.sculptor.state.claude_state import ToolInputDeltaEvent
-from imbue_core.sculptor.state.claude_state import parse_claude_code_json_lines_simple
 from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.claude_code_sdk.harness import ClaudeCodeHarness
+from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.interfaces.agents.agent import ChatInputUserMessage
 from sculptor.interfaces.agents.agent import ParsedAgentResponseType
 from sculptor.interfaces.agents.agent import ParsedToolResultResponse
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
 from sculptor.interfaces.agents.errors import IllegalOperationError
+from sculptor.interfaces.agents.tool_names import AgentToolName
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.services.workspace_service.setup_command_runner import RunningSetup
 from sculptor.services.workspace_service.setup_command_runner import SetupReminderState
+from sculptor.state.chat_state import DiffToolContent
+from sculptor.state.chat_state import GenericToolContent
+from sculptor.state.chat_state import SimpleToolContent
+from sculptor.state.chat_state import ToolInput
+from sculptor.state.chat_state import ToolResultBlock
+from sculptor.state.claude_state import ContentBlockStopEvent
+from sculptor.state.claude_state import MessageStartEvent
+from sculptor.state.claude_state import MessageStopEvent
+from sculptor.state.claude_state import ParsedStreamEventTypes
+from sculptor.state.claude_state import ParsedToolResultResponseSimple
+from sculptor.state.claude_state import ParsedUserResponse
+from sculptor.state.claude_state import TextBlockStartEvent
+from sculptor.state.claude_state import TextDeltaEvent
+from sculptor.state.claude_state import ToolBlockStartEvent
+from sculptor.state.claude_state import ToolInputDeltaEvent
+from sculptor.state.claude_state import parse_claude_code_json_lines_simple
 
 
 def get_claude_command(
@@ -428,7 +428,7 @@ def is_session_id_valid(
     path_exists = claude_session_file_path.exists()
     logger.debug("Checking path {} exists={}", claude_session_file_path, path_exists)
     if not path_exists:
-        logger.info(
+        logger.debug(
             "Session id {} is not valid because the file {} does not exist", session_id, claude_session_file_path
         )
         return False
@@ -497,14 +497,14 @@ def _create_synthetic_write_diff(file_path: str, content: str) -> str:
     in the format expected by the frontend's parseDiff (split on 'diff --git').
     """
     lines = content.split("\n")
-    num_lines = len(lines)
+    line_count = len(lines)
     additions = "\n".join("+" + line for line in lines)
     return (
         f"diff --git a/{file_path} b/{file_path}\n"
         f"new file mode 100644\n"
         f"--- /dev/null\n"
         f"+++ b/{file_path}\n"
-        f"@@ -0,0 +1,{num_lines} @@\n"
+        f"@@ -0,0 +1,{line_count} @@\n"
         f"{additions}\n"
     )
 

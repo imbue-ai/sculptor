@@ -98,6 +98,10 @@ class DependencyState(StrEnum):
     INSTALLED_STUB = "INSTALLED_STUB"
     # binary found, version OK, but auth check fails
     INSTALLED_NOT_AUTHENTICATED = "INSTALLED_NOT_AUTHENTICATED"
+    # binary found, version OK, auth check fails, and `auth login` does NOT
+    # self-complete: it prints a sign-in URL and blocks waiting for a pasted
+    # code on stdin (the headless/remote fallback exercised by SCU-1502).
+    INSTALLED_NEEDS_PASTE_CODE = "INSTALLED_NEEDS_PASTE_CODE"
 
 
 # Stub script content for disabled dependencies.
@@ -140,9 +144,7 @@ esac
 """
 
 CLAUDE_INSTALLED_NOT_AUTHENTICATED_STUB = f"""#!/bin/bash
-# State file to track authentication across invocations
-AUTH_STATE_FILE="/tmp/claude_stub_auth_$$_state"
-# Use a shared state dir based on the stub's directory
+# Track authentication across invocations via a state file next to the stub.
 AUTH_STATE_DIR="$(dirname "$0")"
 AUTH_STATE_FILE="${{AUTH_STATE_DIR}}/.claude_auth_state"
 
@@ -167,6 +169,61 @@ case "$1" in
                 touch "$AUTH_STATE_FILE"
                 echo "Login successful."
                 exit 0
+                ;;
+            *)
+                exit 1
+                ;;
+        esac
+        ;;
+    *)
+        echo '{{"type":"error","error":{{"type":"stub_error","message":"Claude stub: not a real installation"}}}}' >&2
+        exit 1
+        ;;
+esac
+"""
+
+# The sign-in URL the paste-a-code stub prints; the onboarding UI surfaces it as
+# a link for the user to open.
+CLAUDE_PASTE_CODE_AUTH_URL = "https://example.com/headless-sign-in"
+# The only code the paste-a-code stub accepts. Tests paste this to complete
+# sign-in; anything else makes the stub exit non-zero.
+CLAUDE_PASTE_CODE_VALID = "valid-paste-code"
+
+# Mimics `claude auth login` in a headless/remote environment: the localhost
+# browser-loopback flow can't reach the user, so the CLI prints a sign-in URL and
+# then blocks reading a code from stdin. Sign-in succeeds only when the pasted
+# code matches CLAUDE_PASTE_CODE_VALID; success is persisted to a state file so a
+# subsequent `auth status` reports authenticated (mirroring the real CLI).
+CLAUDE_INSTALLED_NEEDS_PASTE_CODE_STUB = f"""#!/bin/bash
+AUTH_STATE_DIR="$(dirname "$0")"
+AUTH_STATE_FILE="${{AUTH_STATE_DIR}}/.claude_auth_state"
+
+case "$1" in
+    --version|-v)
+        echo "claude {CLAUDE_INSTALLED_STUB_VERSION}"
+        exit 0
+        ;;
+    auth)
+        case "$2" in
+            status)
+                if [ -f "$AUTH_STATE_FILE" ]; then
+                    echo "Authenticated as stub@example.com"
+                    exit 0
+                fi
+                echo "Not authenticated" >&2
+                exit 1
+                ;;
+            login)
+                # Print the URL, then block on stdin waiting for the pasted code.
+                echo "Open this URL to sign in: {CLAUDE_PASTE_CODE_AUTH_URL}" >&2
+                read code
+                if [ "$code" = "{CLAUDE_PASTE_CODE_VALID}" ]; then
+                    touch "$AUTH_STATE_FILE"
+                    echo "Login successful."
+                    exit 0
+                fi
+                echo "invalid code" >&2
+                exit 1
                 ;;
             *)
                 exit 1
@@ -205,6 +262,7 @@ DEPENDENCY_STUB_SCRIPTS: dict[tuple[str, DependencyState], str] = {
     ("claude", DependencyState.NOT_INSTALLED): CLAUDE_NOT_INSTALLED_STUB,
     ("claude", DependencyState.INSTALLED_STUB): CLAUDE_INSTALLED_STUB,
     ("claude", DependencyState.INSTALLED_NOT_AUTHENTICATED): CLAUDE_INSTALLED_NOT_AUTHENTICATED_STUB,
+    ("claude", DependencyState.INSTALLED_NEEDS_PASTE_CODE): CLAUDE_INSTALLED_NEEDS_PASTE_CODE_STUB,
     ("pi", DependencyState.NOT_INSTALLED): PI_NOT_INSTALLED_STUB,
     ("pi", DependencyState.INSTALLED_STUB): PI_INSTALLED_STUB,
 }

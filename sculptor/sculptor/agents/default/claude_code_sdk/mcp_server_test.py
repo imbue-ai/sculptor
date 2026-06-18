@@ -1,13 +1,13 @@
 from typing import Any
 
-from imbue_core.sculptor.state.chat_state import AskUserQuestionData
-from imbue_core.sculptor.state.chat_state import QuestionOption
-from imbue_core.sculptor.state.chat_state import UserQuestion
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.default.claude_code_sdk.mcp_result_formatters import format_ask_user_question_result
 from sculptor.agents.default.claude_code_sdk.mcp_schemas import build_mcp_tools
 from sculptor.agents.default.claude_code_sdk.mcp_server import SculptorMcpServer
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
+from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.chat_state import QuestionOption
+from sculptor.state.chat_state import UserQuestion
 
 SCULPTOR_MCP_SERVER_NAME = CLAUDE_CODE_HARNESS.mcp_server_name
 SCULPTOR_MCP_ASK_TOOL_NAME = CLAUDE_CODE_HARNESS.mcp_ask_tool_name
@@ -474,11 +474,11 @@ def test_cache_invalidates_when_a_fresh_auq_panel_is_shown_after_delivery() -> N
     assert len(respond.calls) == 1
 
     server.deliver_answer(_make_answer("toolu_first"))
-    assert server._new_auq_since_last_delivery is False
+    assert server._has_new_auq_since_last_delivery is False
 
     # Pretend the agent emitted a fresh AUQ — cache must be invalidated.
     server.register_tool_use_id("toolu_second", SCULPTOR_MCP_ASK_TOOL_FQN)
-    assert server._new_auq_since_last_delivery is True
+    assert server._has_new_auq_since_last_delivery is True
 
     server.handle_message(
         "req_second",

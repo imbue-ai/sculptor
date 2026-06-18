@@ -98,6 +98,53 @@ def test_cmd_w_closes_workspace_tab(
     expect(workspace_tabs).to_have_count(1)
 
 
+@user_story("to delete the active workspace via keyboard shortcut")
+def test_cmd_shift_w_deletes_active_workspace(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """Pressing Cmd+Shift+W deletes the active workspace after confirmation.
+
+    Unlike Cmd+W (which just closes the tab), Cmd+Shift+W opens the delete
+    confirmation dialog; confirming permanently removes the workspace.
+
+    Steps:
+    1. Create two workspaces (the second is active)
+    2. Press Cmd+Shift+W
+    3. Verify the delete confirmation dialog appears
+    4. Confirm the deletion and verify the tab count drops to 1
+    5. Navigate Home and verify the deleted workspace is gone (proving it was
+       deleted, not merely closed — a closed workspace would still be listed)
+    """
+    page = sculptor_instance_.page
+    layout = PlaywrightProjectLayoutPage(page=page)
+
+    # Step 1: Create two workspaces. "Delete WS" is active after creation.
+    start_task_and_wait_for_ready(page, prompt="Task 1", workspace_name="Keep WS")
+    start_task_and_wait_for_ready(page, prompt="Task 2", workspace_name="Delete WS")
+
+    workspace_tabs = layout.get_workspace_tabs()
+    expect(workspace_tabs).to_have_count(2)
+
+    # Step 2: Press Cmd+Shift+W to delete the active workspace.
+    mod_key = get_playwright_modifier_key()
+    page.keyboard.press(f"{mod_key}+Shift+w")
+
+    # Step 3: Unlike Cmd+W, this opens the delete confirmation dialog.
+    confirm_dialog = layout.get_delete_confirmation_dialog()
+    expect(confirm_dialog).to_be_visible()
+
+    # Step 4: Confirm the deletion; the tab count drops to 1.
+    layout.confirm_delete()
+    expect(workspace_tabs).to_have_count(1)
+
+    # Step 5: The deleted workspace no longer appears on the Home page. A
+    # closed (not deleted) workspace would still be listed here.
+    navigate_to_home_page(page)
+    home_page = PlaywrightHomePage(page)
+    expect(home_page.get_workspace_rows()).to_have_count(1)
+    expect(home_page.get_workspace_rows().filter(has_text="Delete WS")).to_have_count(0)
+
+
 @user_story("to reopen a previously closed workspace from the workspace list")
 def test_reopen_closed_workspace_from_list(
     sculptor_instance_: SculptorInstance,

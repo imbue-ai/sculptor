@@ -15,3 +15,6 @@ class PlaywrightPrPopoverElement:
 
     def get_babysitter_pause_toggle(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.PR_BABYSITTER_PAUSE_TOGGLE)
+
+    def get_babysitter_status(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.PR_BABYSITTER_STATUS)

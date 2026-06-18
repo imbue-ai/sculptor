@@ -1,7 +1,7 @@
 import { Flex } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet } from "react-router-dom";
 
 import { useSyncActiveTabFromRoute } from "../common/hooks/useSyncActiveTabFromRoute.ts";
@@ -10,6 +10,7 @@ import { backendStatusAtom } from "../common/state/atoms/backend.ts";
 import {
   deleteErrorToastAtom,
   mentionChipUnreachableToastAtom,
+  terminalPromptRejectedToastAtom,
   workspaceDeleteErrorToastAtom,
   workspaceOpenCloseErrorToastAtom,
 } from "../common/state/atoms/toasts.ts";
@@ -34,6 +35,9 @@ import { VersionDisplay } from "../components/VersionDisplay.tsx";
 import { WarningStatusBanner } from "../components/WarningStatusBanner.tsx";
 import { useAutoUpdateListener } from "../hooks/useAutoUpdateListener.ts";
 import { workspaceDefaultLayout, workspacePanels } from "../pages/workspace/panels/workspacePanels.ts";
+import { PluginLoader } from "../plugins/PluginLoader.tsx";
+import { PluginOverlays } from "../plugins/PluginOverlays.tsx";
+import { pluginPanelsAtom } from "../plugins/pluginRegistry.ts";
 import { usePageLayoutKeyboardShortcuts } from "./hooks/usePageLayoutKeyboardShortcuts.ts";
 import styles from "./PageLayout.module.scss";
 
@@ -43,6 +47,8 @@ type PageLayoutProps = {
 
 export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): ReactElement => {
   const isZenModeActive = useAtomValue(zenModeActiveAtom);
+  const pluginPanels = useAtomValue(pluginPanelsAtom);
+  const combinedPanels = useMemo(() => [...workspacePanels, ...pluginPanels], [pluginPanels]);
   const backendStatus = useAtomValue(backendStatusAtom);
   const deleteErrorToast = useAtomValue(deleteErrorToastAtom);
   const setDeleteErrorToast = useSetAtom(deleteErrorToastAtom);
@@ -52,6 +58,8 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
   const setWorkspaceOpenCloseErrorToast = useSetAtom(workspaceOpenCloseErrorToastAtom);
   const mentionChipUnreachableToast = useAtomValue(mentionChipUnreachableToastAtom);
   const setMentionChipUnreachableToast = useSetAtom(mentionChipUnreachableToastAtom);
+  const terminalPromptRejectedToast = useAtomValue(terminalPromptRejectedToastAtom);
+  const setTerminalPromptRejectedToast = useSetAtom(terminalPromptRejectedToastAtom);
   const projectID = useActiveProjectID();
   const currentProject = useProject(projectID ?? "");
   const [isRepoPathDialogOpen, setIsRepoPathDialogOpen] = useState(false);
@@ -81,6 +89,12 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
       if (!open) setMentionChipUnreachableToast(null);
     },
     [setMentionChipUnreachableToast],
+  );
+  const handleTerminalPromptRejectedOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) setTerminalPromptRejectedToast(null);
+    },
+    [setTerminalPromptRejectedToast],
   );
 
   // Reset the persistent new-workspace modal atom when this layout
@@ -126,7 +140,9 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
         {/* In zen mode, render a draggable region so the top window edge
             remains draggable. */}
         {isZenModeActive && <TitleBar className={styles.zenTitleBar} />}
-        <PanelRegistryProvider panels={workspacePanels} defaultLayout={workspaceDefaultLayout}>
+        <PluginLoader />
+        <PluginOverlays />
+        <PanelRegistryProvider panels={combinedPanels} defaultLayout={workspaceDefaultLayout}>
           <Outlet />
         </PanelRegistryProvider>
         {showVersionIndicator && !isZenModeActive && (
@@ -195,6 +211,12 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
         onOpenChange={handleMentionChipUnreachableOpenChange}
         title={mentionChipUnreachableToast?.title}
         description={mentionChipUnreachableToast?.description}
+      />
+      <Toast
+        open={terminalPromptRejectedToast !== null}
+        onOpenChange={handleTerminalPromptRejectedOpenChange}
+        title={terminalPromptRejectedToast?.title}
+        description={terminalPromptRejectedToast?.description}
       />
     </>
   );

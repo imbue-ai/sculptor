@@ -8,22 +8,24 @@ and the user-global default pattern.
 from coolname import generate_slug
 from slugify import slugify
 
+_MAX_SLUG_LENGTH = 20
+_RANDOM_SLUG_WORD_COUNT = 2
+
 
 def slugify_workspace_name(name: str) -> str:
     """Slugify a user-supplied workspace name into a kebab-case slug.
 
     Empty or pure-whitespace/punctuation input returns the empty string.
-    Output is capped at 20 chars on a word boundary to avoid a trailing
-    partial token.
+    Output is capped on a word boundary to avoid a trailing partial token.
     """
     if not name or not name.strip():
         return ""
-    return slugify(name, max_length=20, word_boundary=True, separator="-", lowercase=True)
+    return slugify(name, max_length=_MAX_SLUG_LENGTH, word_boundary=True, separator="-", lowercase=True)
 
 
 def generate_random_slug() -> str:
     """Return a random `<adjective>-<noun>` slug (UX-quality randomness)."""
-    return generate_slug(2)
+    return generate_slug(_RANDOM_SLUG_WORD_COUNT)
 
 
 def resolve_pattern(pattern: str, user_slug: str, name_slug: str) -> str:

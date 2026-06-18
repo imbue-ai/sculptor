@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from imbue_core.agents.agent_api.data_types import AgentToolName
 from sculptor.agents.default.artifact_creation import _make_file_artifact
 from sculptor.agents.default.artifact_creation import _read_task_list_artifact
 from sculptor.agents.default.artifact_creation import should_refresh_task_list
@@ -12,6 +11,7 @@ from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.interfaces.agents.artifacts import AgentTaskStatus
 from sculptor.interfaces.agents.artifacts import ArtifactType
 from sculptor.interfaces.agents.artifacts import TaskListArtifact
+from sculptor.interfaces.agents.tool_names import AgentToolName
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 
 

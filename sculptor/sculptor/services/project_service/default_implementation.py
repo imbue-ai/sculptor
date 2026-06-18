@@ -5,18 +5,21 @@ from loguru import logger
 from pydantic import PrivateAttr
 from typeid.errors import InvalidTypeIDStringException
 
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.agents.data_types.ids import TypeIDPrefixMismatchError
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.thread_utils import ObservableThread
 from sculptor.database.models import Project
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.primitives.ids import OrganizationReference
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
+from sculptor.primitives.ids import TypeIDPrefixMismatchError
 from sculptor.primitives.ids import get_deterministic_typeid_suffix
 from sculptor.services.data_model_service.api import DataModelService
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.project_service.api import ProjectService
 from sculptor.utils.build import get_internal_folder
+
+_PATH_MONITORING_INTERVAL_IN_SECONDS: float = 10.0
+_MONITORING_THREAD_JOIN_TIMEOUT_IN_SECONDS: float = 5.0
 
 
 class DefaultProjectService(ProjectService):
@@ -44,7 +47,7 @@ class DefaultProjectService(ProjectService):
         if self._stop_event is not None:
             self._stop_event.set()
         if self._monitoring_thread is not None:
-            self._monitoring_thread.join(timeout=5)
+            self._monitoring_thread.join(timeout=_MONITORING_THREAD_JOIN_TIMEOUT_IN_SECONDS)
         logger.info("Project path monitoring thread joined")
 
     def get_active_projects(self) -> tuple[Project, ...]:
@@ -118,7 +121,9 @@ class DefaultProjectService(ProjectService):
         )
         logger.info("Started project path monitoring thread")
 
-    def _monitor_project_paths(self, stop_event: threading.Event, interval_in_seconds: float = 10.0) -> None:
+    def _monitor_project_paths(
+        self, stop_event: threading.Event, interval_in_seconds: float = _PATH_MONITORING_INTERVAL_IN_SECONDS
+    ) -> None:
         """Background thread that continuously monitors project path accessibility."""
         logger.info("Project path monitoring thread started")
 
@@ -150,18 +155,18 @@ class DefaultProjectService(ProjectService):
         project_path = Path(project.user_git_repo_url.replace("file://", ""))
         # Check if the path exists and is accessible
         try:
-            current_accessible = project_path.exists() and project_path.is_dir()
+            is_currently_accessible = project_path.exists() and project_path.is_dir()
         except OSError:
-            current_accessible = False
+            is_currently_accessible = False
 
         # If the status changed, update the project in the database
-        if current_accessible == project.is_path_accessible:
+        if is_currently_accessible == project.is_path_accessible:
             return
         logger.info(
             "Project path accessibility changed for {}: {} -> {}",
             project.name,
             project.is_path_accessible,
-            current_accessible,
+            is_currently_accessible,
         )
 
         try:
@@ -172,7 +177,7 @@ class DefaultProjectService(ProjectService):
             # of `project`.
             with self.data_model_service.open_transaction(request_id=RequestID(), is_user_request=True) as transaction:
                 updated_project = transaction.update_project_fields(
-                    project.object_id, is_path_accessible=current_accessible
+                    project.object_id, is_path_accessible=is_currently_accessible
                 )
                 if updated_project is None:
                     # Project was deleted between the active-projects snapshot and
@@ -191,7 +196,9 @@ class DefaultProjectService(ProjectService):
                             updated_projects.append(p)
                     self._active_projects = tuple(updated_projects)
 
-                logger.info("Successfully updated project {} accessibility to {}", project.name, current_accessible)
+                logger.info(
+                    "Successfully updated project {} accessibility to {}", project.name, is_currently_accessible
+                )
         except Exception as e:
             log_exception(e, "Failed to update project {project} accessibility", project=project.name)
 

@@ -15,8 +15,8 @@ import pytest
 from fastapi import Depends
 from fastapi.testclient import TestClient
 
-from imbue_core.concurrency_group import ConcurrencyGroup
 from sculptor.config.settings import SculptorSettings
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.utils import tracing
 from sculptor.web.app import APP

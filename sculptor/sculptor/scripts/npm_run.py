@@ -17,7 +17,7 @@ from pathlib import Path
 import typer
 from typer import Typer
 
-from imbue_core.git import get_git_repo_root
+from sculptor.foundation.git import get_git_repo_root
 
 
 @lru_cache
@@ -70,10 +70,10 @@ def run_npm_command(
     try:
         subprocess.run(fully_resolved_command, check=check_exit_code, cwd=frontend_path)
     except subprocess.CalledProcessError as error:
-        # We intentially only print this error rather than a full stack trace.
+        # We intentionally only print this error rather than a full stack trace.
         # We only need a simple line.
         print(f"Command '{' '.join(fully_resolved_command)}' failed with exit code {error.returncode}")
-        raise typer.Exit(-1)
+        raise typer.Exit(-1) from None
 
 
 app = Typer(pretty_exceptions_enable=False)

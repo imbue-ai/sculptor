@@ -11,29 +11,41 @@ from pydantic import EmailStr
 from pydantic import Field
 from pydantic import Tag
 
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.pydantic_serialization import SerializableModel
-from imbue_core.pydantic_serialization import build_discriminator
-from imbue_core.sculptor.state.chat_state import AskUserQuestionData
-from imbue_core.sculptor.state.messages import EffortLevel
-from imbue_core.sculptor.state.messages import LLMModel
-from imbue_core.sculptor.state.messages import Message
-from imbue_core.upper_case_str_enum import UpperCaseStrEnum
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
-from sculptor.interfaces.agents.agent import HarnessName
+from sculptor.foundation.pydantic_serialization import SerializableModel
+from sculptor.foundation.pydantic_serialization import build_discriminator
+from sculptor.foundation.upper_case_str_enum import UpperCaseStrEnum
 from sculptor.interfaces.agents.artifacts import DiffArtifact
 from sculptor.interfaces.agents.artifacts import TaskListArtifact
+from sculptor.primitives.ids import ProjectID
+from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.data_model_service.api import CompletedTransaction
 from sculptor.services.task_service.api import TaskMessageContainer
+from sculptor.services.terminal_agent_registry.registry import TerminalAgentRegistration
 from sculptor.services.workspace_service.api import GitOperationResult
+from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.messages import EffortLevel
+from sculptor.state.messages import LLMModel
+from sculptor.state.messages import Message
 
 
 class TaskInterface(StrEnum):
     TERMINAL = "TERMINAL"
     API = "API"
+
+
+class AgentTypeName(StrEnum):
+    """The per-agent type chosen at creation time.
+
+    `REGISTERED` requires a `registration_id` alongside it.
+    """
+
+    CLAUDE = "claude"
+    PI = "pi"
+    TERMINAL = "terminal"
+    REGISTERED = "registered"
 
 
 class WorkspaceBranchInfo(SerializableModel):
@@ -81,9 +93,9 @@ class PrStatusInfo(SerializableModel):
     pipeline_updated_at: str | None = None
     approvals: list[PrApproval] = Field(default_factory=list)
     unresolved_comments: list[PrComment] = Field(default_factory=list)
-    error_category: Literal["cli_missing", "not_authenticated", "no_access", "network_error", "transient"] | None = (
-        None
-    )
+    error_category: (
+        Literal["cli_missing", "not_authenticated", "no_access", "network_error", "rate_limited", "transient"] | None
+    ) = None
     error_provider: Literal["gitlab", "github"] | None = None
     error_message: str | None = None
     mismatched_pr_iid: int | None = None
@@ -121,6 +133,8 @@ class StartTaskRequest(RequestModel):
     fast_mode: bool = False
     effort: EffortLevel = EffortLevel.EXTRA_HIGH
     sent_via: str | None = None
+    # Prompt-ful creation is always a chat agent; terminal types are rejected (422).
+    agent_type: AgentTypeName = AgentTypeName.CLAUDE
 
 
 class CreateWorkspaceRequestV2(RequestModel):
@@ -135,8 +149,6 @@ class CreateWorkspaceRequestV2(RequestModel):
     # Diff/merge target branch. When None, the backend resolves a sensible default
     # from the repo (origin's default branch, else local main/master).
     target_branch: str | None = None
-    # DELIBERATE-TEMPORARY: workspace-bound harness selection.
-    harness: HarnessName = HarnessName.CLAUDE
 
 
 class UpdateWorkspaceRequest(RequestModel):
@@ -162,10 +174,42 @@ class CreateAgentRequest(RequestModel):
     fast_mode: bool = False
     effort: EffortLevel = EffortLevel.EXTRA_HIGH
     sent_via: str | None = None
+    agent_type: AgentTypeName = AgentTypeName.CLAUDE
+    # Required iff agent_type is REGISTERED.
+    registration_id: str | None = None
 
 
 class RenameAgentRequest(RequestModel):
     title: str
+
+
+class ListTerminalAgentRegistrationsResponse(SerializableModel):
+    """Current terminal-agent registrations (re-read from disk per request)."""
+
+    registrations: list[TerminalAgentRegistration]
+
+
+class SignalEventRequest(RequestModel):
+    """A terminal-agent signal.
+
+    `event` is a plain string so unknown events validate and reach the
+    handler (forward compatibility — a closed enum would 422 on additive
+    evolution). `session_id` accompanies the `session-id` event only.
+    """
+
+    event: str
+    session_id: str | None = None
+
+
+class TerminalInputRequest(RequestModel):
+    """An automated prompt for a registered terminal agent.
+
+    Smallest viable surface for v1: text plus whether to submit it — no
+    arbitrary key injection.
+    """
+
+    text: str
+    submit: bool = True
 
 
 class WorkspaceResponse(SerializableModel):
@@ -228,7 +272,6 @@ class RecentWorkspaceResponse(SerializableModel):
     agent_count: int
     is_open: bool
     last_activity_at: datetime.datetime
-    harness: HarnessName = HarnessName.CLAUDE
 
 
 class ListWorkspacesResponse(SerializableModel):
@@ -250,7 +293,7 @@ class SendMessageRequest(RequestModel):
 
 class AnswerQuestionRequest(RequestModel):
     answers: dict[str, str]
-    notes: dict[str, str] = {}
+    notes: dict[str, str] = Field(default_factory=dict)
     question_data: AskUserQuestionData
     tool_use_id: str
     model: LLMModel
@@ -259,6 +302,13 @@ class AnswerQuestionRequest(RequestModel):
 class BtwRequest(RequestModel):
     question: str
     request_id: str
+
+
+class SetModelRequest(RequestModel):
+    # The chosen ModelOption's identity. Sent only for harnesses with a backend
+    # model list (pi); the pi adapter issues pi's `set_model` RPC with these.
+    provider: str
+    model_id: str
 
 
 class WorkspaceSetupCommandRequest(RequestModel):
@@ -595,6 +645,33 @@ class AuthResult(SerializableModel):
     success: bool
     auth_url: str | None = None
     error: str | None = None
+
+
+class AuthStartResult(SerializableModel):
+    """Result of starting an interactive Claude authentication session.
+
+    Authentication is two steps so it works in headless/remote environments
+    (e.g. a container) where the browser-loopback flow can't reach the user's
+    browser: start returns the sign-in ``auth_url`` and leaves the CLI running,
+    waiting on stdin; the user signs in and pastes the resulting code back via
+    :class:`SubmitAuthCodeRequest`.
+
+    On a machine with a usable local browser the CLI completes the loopback flow
+    on its own and no code is needed — that case returns ``success=True`` with
+    ``needs_code=False``.
+    """
+
+    auth_url: str | None = None
+    needs_code: bool = False
+    success: bool = False
+    error: str | None = None
+
+
+class SubmitAuthCodeRequest(RequestModel):
+    """Submit the code the user pasted from the sign-in page to finish authentication."""
+
+    code: str
+    tool: str = "CLAUDE"
 
 
 class DependenciesStatus(SerializableModel):

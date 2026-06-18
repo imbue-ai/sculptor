@@ -10,9 +10,10 @@ This script:
 import shlex
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
-from imbue_core.git import get_git_repo_root
+from sculptor.foundation.git import get_git_repo_root
 
 
 def get_frontend_path() -> Path:
@@ -71,7 +72,7 @@ def install_npm_dependencies(frontend_path: Path) -> None:
         sys.exit(1)
 
 
-def print_files_to_lint(frontend_path: Path, files_to_check: list[str]) -> None:
+def print_files_to_lint(frontend_path: Path, files_to_check: Sequence[str]) -> None:
     """Print the files that will be linted."""
     if not files_to_check:
         # Get all matching files if no specific files provided

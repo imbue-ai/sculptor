@@ -1,20 +1,17 @@
 import json
 import sys
 from pathlib import Path
-from queue import Queue
 
 from loguru import logger
 from pydantic import AnyUrl
 from pydantic import ValidationError
 
-from imbue_core.agents.agent_api.data_types import AgentToolName
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.common import generate_id
-from imbue_core.constants import ExceptionPriority
-from imbue_core.sculptor.state.chat_state import ToolInput
 from sculptor.agents.default.constants import FILE_CHANGE_TOOL_NAMES
 from sculptor.agents.default.utils import get_warning_message
 from sculptor.database.models import AgentMessageID
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.common import generate_id
+from sculptor.foundation.constants import ExceptionPriority
 from sculptor.interfaces.agents.agent import TaskID
 from sculptor.interfaces.agents.agent import UpdatedArtifactAgentMessage
 from sculptor.interfaces.agents.agent import WarningAgentMessage
@@ -25,8 +22,23 @@ from sculptor.interfaces.agents.artifacts import Task
 from sculptor.interfaces.agents.artifacts import TaskListArtifact
 from sculptor.interfaces.agents.errors import IllegalOperationError
 from sculptor.interfaces.agents.harness import Harness
+from sculptor.interfaces.agents.tool_names import AgentToolName
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
+from sculptor.state.chat_state import ToolInput
 from sculptor.utils.timeout import log_runtime_decorator
+
+# Git subcommands that mutate branch/working-tree state, requiring the diff and
+# branch-name artifacts to be refreshed when one runs.
+_GIT_BRANCH_COMMANDS: tuple[str, ...] = (
+    "git commit",
+    "git reset",
+    "git revert",
+    "git checkout",
+    "git switch",
+    "git merge",
+    "git rebase",
+    "git cherry-pick",
+)
 
 
 @log_runtime_decorator()
@@ -37,7 +49,7 @@ def get_file_artifact_messages(
     task_id: TaskID,
     session_id: str | None = None,
 ) -> list[UpdatedArtifactAgentMessage | WarningAgentMessage]:
-    messages: Queue[UpdatedArtifactAgentMessage | WarningAgentMessage] = Queue()
+    messages: list[UpdatedArtifactAgentMessage | WarningAgentMessage] = []
     try:
         remote_artifact_path = _make_file_artifact(
             artifact_name=artifact_name,
@@ -52,7 +64,7 @@ def get_file_artifact_messages(
             priority=ExceptionPriority.MEDIUM_PRIORITY,
             artifact_name=artifact_name,
         )
-        messages.put(get_warning_message(f"Failed to create file artifact {artifact_name}", e, task_id))
+        messages.append(get_warning_message(f"Failed to create file artifact {artifact_name}", e, task_id))
     else:
         file_artifact_message = UpdatedArtifactAgentMessage(
             message_id=AgentMessageID(),
@@ -61,28 +73,15 @@ def get_file_artifact_messages(
                 url=AnyUrl(f"file://{remote_artifact_path}"),
             ),
         )
-        messages.put(file_artifact_message)
-    return list(messages.queue)
+        messages.append(file_artifact_message)
+    return messages
 
 
 def should_send_diff_and_branch_name_artifacts(tool_name: str, tool_input: ToolInput) -> bool:
-    logger.info("Should send diff and branch name")
     if tool_name in (FILE_CHANGE_TOOL_NAMES + (AgentToolName.BASH,)):
         return True
     command = tool_input.get("command", "")
-    # Check for git commands that change the branch state
-    git_branch_commands = [
-        "git commit",
-        "git reset",
-        "git revert",
-        "git checkout",
-        "git switch",
-        "git merge",
-        "git rebase",
-        "git cherry-pick",
-    ]
-
-    return any(cmd in command for cmd in git_branch_commands)
+    return any(cmd in command for cmd in _GIT_BRANCH_COMMANDS)
 
 
 def should_refresh_task_list(tool_name: str) -> bool:
@@ -129,7 +128,7 @@ def _read_task_list_artifact(
             data = json.loads(entry.read_text(encoding="utf-8"))
             tasks.append(Task.model_validate(data))
         except (json.JSONDecodeError, ValidationError, OSError) as e:
-            logger.info("Skipping malformed task file {}: {}", entry, e)
+            logger.warning("Skipping malformed task file {}: {}", entry, e)
             continue
 
     tasks.sort(key=_task_sort_key)

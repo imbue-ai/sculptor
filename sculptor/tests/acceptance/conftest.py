@@ -3,11 +3,11 @@ from typing import Generator
 
 import pytest
 
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.concurrency_group import ConcurrencyGroup  # noqa: F401
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import Project
+from sculptor.foundation.concurrency_group import ConcurrencyGroup  # noqa: F401
 from sculptor.primitives.ids import OrganizationReference
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import UserReference
 from sculptor.service_collections.service_collection import CompleteServiceCollection

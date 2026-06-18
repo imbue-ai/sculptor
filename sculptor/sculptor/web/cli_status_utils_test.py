@@ -67,6 +67,31 @@ def test_classify_cli_error_dns_keyword_returns_network_error() -> None:
     assert classify_cli_error("DNS lookup failed for api.github.com") == "network_error"
 
 
+# --- classify_cli_error: rate_limited ---
+
+
+def test_classify_cli_error_primary_rate_limit_returns_rate_limited() -> None:
+    """GitHub's primary GraphQL limit comes back as HTTP 403 'API rate limit exceeded'."""
+    assert classify_cli_error("HTTP 403: API rate limit exceeded for user ID 12345") == "rate_limited"
+
+
+def test_classify_cli_error_graphql_rate_limit_returns_rate_limited() -> None:
+    assert classify_cli_error("GraphQL: API rate limit exceeded (repository.pullRequests)") == "rate_limited"
+
+
+def test_classify_cli_error_secondary_rate_limit_returns_rate_limited() -> None:
+    assert classify_cli_error("You have exceeded a secondary rate limit. Please wait a few minutes.") == "rate_limited"
+
+
+def test_classify_cli_error_ratelimit_header_returns_rate_limited() -> None:
+    assert classify_cli_error("x-ratelimit-remaining: 0") == "rate_limited"
+
+
+def test_classify_cli_error_rate_limit_takes_priority_over_403() -> None:
+    """A rate-limit 403 must classify as rate_limited, not no_access."""
+    assert classify_cli_error("HTTP 403 Forbidden: API rate limit exceeded") == "rate_limited"
+
+
 # --- classify_cli_error: transient ---
 
 
@@ -101,6 +126,31 @@ def test_classify_cli_error_unknown_error_defaults_to_transient() -> None:
 
 def test_classify_cli_error_empty_stderr_defaults_to_transient() -> None:
     assert classify_cli_error("") == "transient"
+
+
+# --- classify_cli_error: usage errors ---
+
+
+def test_classify_cli_error_unknown_json_field_returns_transient() -> None:
+    """gh rejects an unknown --json field and prints a field list containing
+    "author"; that must not read as not_authenticated (the bug this fixes)."""
+    stderr = 'Unknown JSON field: "reviewThreads"\nAvailable fields:\n  author\n  authorAssociation\n  state\n'
+    assert classify_cli_error(stderr) == "transient"
+
+
+def test_classify_cli_error_unknown_json_field_is_not_not_authenticated() -> None:
+    """The 'author'/'authorAssociation' help text must never classify as auth."""
+    stderr = 'Unknown JSON field: "bogus"\nAvailable fields:\n  author\n  authorAssociation\n'
+    assert classify_cli_error(stderr) != "not_authenticated"
+
+
+def test_classify_cli_error_unknown_flag_returns_transient() -> None:
+    assert classify_cli_error("unknown flag: --jsom") == "transient"
+
+
+def test_classify_cli_error_author_substring_alone_does_not_match_auth() -> None:
+    """A bare "author" token (no real auth keyword) must not match the auth check."""
+    assert classify_cli_error("returned field author for the pull request") != "not_authenticated"
 
 
 # --- classify_cli_error: priority ---

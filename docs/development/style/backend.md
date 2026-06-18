@@ -19,7 +19,7 @@ If creating a primitive class, put it in `primitives.py`. If `primitives.py` bec
 Always create a specific ID class for each type of object that has an ID by inheriting from the `ObjectID` class:
 
 ```python
-from imbue_core.agents.data_types.ids import ObjectID
+from sculptor.primitives.ids import ObjectID
 
 
 class TaskId(ObjectID):
@@ -37,7 +37,7 @@ from pathlib import Path
 
 from pydantic import Field
 
-from imbue_core.pydantic_serialization import FrozenModel
+from sculptor.foundation.pydantic_serialization import FrozenModel
 
 
 class EnvironmentConfig(FrozenModel):
@@ -62,7 +62,7 @@ Always use `SecretStr` for any secret data:
 from pydantic import Field
 from pydantic import SecretStr
 
-from imbue_core.pydantic_serialization import FrozenModel
+from sculptor.foundation.pydantic_serialization import FrozenModel
 
 
 class AgentCredentials(FrozenModel):
@@ -112,7 +112,7 @@ If a new enum value is added, the type checker will report an error at every loc
 When you need complex conditional logic that cannot be expressed with match statements, use if/elif/else chains. The else clause is mandatory:
 
 ```python
-from imbue_core.errors import ImbueError
+from sculptor.foundation.errors import ImbueError
 
 
 def categorize_task_urgency(task: Task, current_time: datetime) -> str:
@@ -193,7 +193,7 @@ from functools import cached_property
 from pydantic import Field
 from pydantic import computed_field
 
-from imbue_core.pydantic_serialization import FrozenModel
+from sculptor.foundation.pydantic_serialization import FrozenModel
 
 
 class TaskResult(FrozenModel):
@@ -217,8 +217,8 @@ class TaskResult(FrozenModel):
 
 Instead of using `BaseModel` directly, use one of our canonical base classes:
 
-* `imbue_core.pydantic_serialization.SerializableModel`: Use by default. Serializable to/from JSON and immutable.
-* `imbue_core.pydantic_serialization.FrozenModel`: Use when data cannot fit into JSON (e.g., dict with non-string keys).
+* `sculptor.foundation.pydantic_serialization.SerializableModel`: Use by default. Serializable to/from JSON and immutable.
+* `sculptor.foundation.pydantic_serialization.FrozenModel`: Use when data cannot fit into JSON (e.g., dict with non-string keys).
 
 Always prefer immutable classes--they're much easier and safer to work with. You can "change" an immutable class with `model_copy(update={...})`.
 

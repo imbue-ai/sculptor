@@ -6,6 +6,7 @@ import {
   optimisticDeleteTaskAtom,
   rollbackDeleteTaskAtom,
   taskAtomFamily,
+  taskAvailableModelsAtomFamily,
   taskIdsAtom,
   tasksArrayAtom,
   taskSupportsBackgroundTasksAtomFamily,
@@ -32,6 +33,7 @@ const createMockTask = (overrides: Partial<CodingAgentTaskView> = {}): CodingAge
     systemPrompt: null,
     model: "CLAUDE_4_SONNET",
     harnessCapabilities: {
+      supportsChatInterface: true,
       supportsInteractiveBackchannel: true,
       supportsSkills: true,
       supportsSubAgents: true,
@@ -134,6 +136,7 @@ describe("taskSupportsInteractiveBackchannelAtomFamily", () => {
     const task = createMockTask({
       id: "task-1",
       harnessCapabilities: {
+        supportsChatInterface: true,
         supportsInteractiveBackchannel: true,
         supportsSkills: true,
         supportsSubAgents: true,
@@ -147,6 +150,7 @@ describe("taskSupportsInteractiveBackchannelAtomFamily", () => {
         supportsFileAttachments: true,
         supportsInterruption: true,
         supportsFileReferences: true,
+        supportsModelSelection: true,
       },
     });
     store.set(taskAtomFamily("task-1"), task);
@@ -159,6 +163,7 @@ describe("taskSupportsInteractiveBackchannelAtomFamily", () => {
     const task = createMockTask({
       id: "task-1",
       harnessCapabilities: {
+        supportsChatInterface: true,
         supportsInteractiveBackchannel: false,
         supportsSkills: false,
         supportsSubAgents: false,
@@ -172,6 +177,7 @@ describe("taskSupportsInteractiveBackchannelAtomFamily", () => {
         supportsFileAttachments: false,
         supportsInterruption: false,
         supportsFileReferences: false,
+        supportsModelSelection: false,
       },
     });
     store.set(taskAtomFamily("task-1"), task);
@@ -185,6 +191,7 @@ describe("taskSupportsInteractiveBackchannelAtomFamily", () => {
       id: "task-1",
       status: "RUNNING",
       harnessCapabilities: {
+        supportsChatInterface: true,
         supportsInteractiveBackchannel: true,
         supportsSkills: true,
         supportsSubAgents: true,
@@ -198,6 +205,7 @@ describe("taskSupportsInteractiveBackchannelAtomFamily", () => {
         supportsFileAttachments: true,
         supportsInterruption: true,
         supportsFileReferences: true,
+        supportsModelSelection: true,
       },
     });
     store.set(taskAtomFamily("task-1"), task);
@@ -213,11 +221,30 @@ describe("taskSupportsInteractiveBackchannelAtomFamily", () => {
     unsubscribe();
   });
 
+  it("does not notify availableModels subscribers on unrelated task updates (stable empty list)", () => {
+    const store = createStore();
+    // No backend catalog (Claude): availableModels is undefined, so the derived
+    // atom must yield a stable empty array rather than a fresh one each recompute.
+    const task = createMockTask({ id: "task-1" });
+    store.set(taskAtomFamily("task-1"), task);
+
+    let notificationCount = 0;
+    const unsubscribe = store.sub(taskAvailableModelsAtomFamily("task-1"), () => {
+      notificationCount += 1;
+    });
+
+    store.set(taskAtomFamily("task-1"), { ...task, status: "WAITING" } as CodingAgentTaskView);
+    expect(notificationCount).toBe(0);
+
+    unsubscribe();
+  });
+
   it("notifies subscribers when supports_interactive_backchannel changes", () => {
     const store = createStore();
     const task = createMockTask({
       id: "task-1",
       harnessCapabilities: {
+        supportsChatInterface: true,
         supportsInteractiveBackchannel: true,
         supportsSkills: true,
         supportsSubAgents: true,
@@ -231,6 +258,7 @@ describe("taskSupportsInteractiveBackchannelAtomFamily", () => {
         supportsFileAttachments: true,
         supportsInterruption: true,
         supportsFileReferences: true,
+        supportsModelSelection: true,
       },
     });
     store.set(taskAtomFamily("task-1"), task);

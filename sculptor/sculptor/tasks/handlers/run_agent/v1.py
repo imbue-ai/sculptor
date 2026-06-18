@@ -14,28 +14,9 @@ from typing import cast
 
 from loguru import logger
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.common import is_live_debugging
-from imbue_core.concurrency_group import ConcurrencyExceptionGroup
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.concurrency_group import ConcurrentShutdownError
-from imbue_core.constants import ExceptionPriority
-from imbue_core.errors import ExpectedError
-from imbue_core.event_utils import CancelledByEventError
-from imbue_core.event_utils import ReadOnlyEvent
-from imbue_core.nested_evolver import assign
-from imbue_core.nested_evolver import chill
-from imbue_core.nested_evolver import evolver
-from imbue_core.progress_tracking.progress_tracking import RootProgressHandle
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import Message
-from imbue_core.sculptor.state.messages import PersistentAgentMessage
-from imbue_core.sculptor.state.messages import PersistentUserMessage
-from imbue_core.sculptor.state.messages import ResponseBlockAgentMessage
-from imbue_core.serialization import SerializedException
 from sculptor.agents.harness_registry import create_agent_for_run
+from sculptor.agents.harness_registry import get_harness_for_config
+from sculptor.agents.pi_agent.agent_wrapper import PiAgent
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskInputsV2
 from sculptor.database.models import AgentTaskStateV2
@@ -44,6 +25,20 @@ from sculptor.database.models import NotificationID
 from sculptor.database.models import NotificationImportance
 from sculptor.database.models import Project
 from sculptor.database.models import Task
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.common import is_live_debugging
+from sculptor.foundation.concurrency_group import ConcurrencyExceptionGroup
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.concurrency_group import ConcurrentShutdownError
+from sculptor.foundation.constants import ExceptionPriority
+from sculptor.foundation.errors import ExpectedError
+from sculptor.foundation.event_utils import CancelledByEventError
+from sculptor.foundation.event_utils import ReadOnlyEvent
+from sculptor.foundation.nested_evolver import assign
+from sculptor.foundation.nested_evolver import chill
+from sculptor.foundation.nested_evolver import evolver
+from sculptor.foundation.progress_tracking.progress_tracking import RootProgressHandle
+from sculptor.foundation.serialization import SerializedException
 from sculptor.interfaces.agents.agent import Agent
 from sculptor.interfaces.agents.agent import AgentCrashedRunnerMessage
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
@@ -53,6 +48,7 @@ from sculptor.interfaces.agents.agent import EnvironmentReleasedRunnerMessage
 from sculptor.interfaces.agents.agent import EnvironmentTypes
 from sculptor.interfaces.agents.agent import KilledAgentRunnerMessage
 from sculptor.interfaces.agents.agent import MessageTypes
+from sculptor.interfaces.agents.agent import ModelsAvailableAgentMessage
 from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessage
 from sculptor.interfaces.agents.agent import PersistentRunnerMessageUnion
 from sculptor.interfaces.agents.agent import PersistentUserMessageUnion
@@ -76,6 +72,8 @@ from sculptor.interfaces.agents.errors import WaitTimeoutAgentError
 from sculptor.interfaces.agents.harness import AgentRunContext
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.interfaces.environments.errors import EnvironmentFailure
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import UserReference
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.git_repo_service.api import GitRepoService
@@ -88,11 +86,18 @@ from sculptor.services.workspace_service.api import WorkspaceService
 from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
     LocalAgentExecutionEnvironment,
 )
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import Message
+from sculptor.state.messages import ModelOption
+from sculptor.state.messages import PersistentAgentMessage
+from sculptor.state.messages import PersistentUserMessage
+from sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.tasks.handlers.run_agent.setup import finalize_task_setup
 from sculptor.tasks.handlers.run_agent.setup import load_initial_task_state
 from sculptor.tasks.handlers.run_agent.setup import message_queue_subscription_context
 from sculptor.tasks.handlers.run_agent.setup import title_prediction_context
 from sculptor.tasks.handlers.run_agent.setup import wait_for_initial_message_and_process_queue
+from sculptor.utils.build import build_sculpt_backend_env
 from sculptor.utils.build import get_sculpt_bin_dir
 from sculptor.utils.build import is_packaged
 from sculptor.utils.shutdown import GLOBAL_SHUTDOWN_EVENT
@@ -106,6 +111,8 @@ _POLL_SECONDS: float = 1.0
 _MAX_SOFT_SHUTDOWN_SECONDS: float = 10.0
 # how long to wait when hard killing the agent after the soft shutdown has been requested
 _MAX_HARD_SHUTDOWN_SECONDS: float = 10.0
+# how long to wait for an already-completed agent to fully finish (and surface any exception)
+_COMPLETED_AGENT_FINAL_WAIT_SECONDS: float = 10.0
 
 
 class AgentTaskFailure(TaskError):
@@ -203,6 +210,26 @@ def run_agent_task_v1(
                         task_state.workspace_id,
                     )
 
+                    # For a pi agent, fetch + persist pi's model catalog now (a
+                    # short-lived probe) so the switcher shows pi's own models
+                    # while the agent waits prompt-less below — start() (and its
+                    # catalog fetch) is deferred to the first message. Gated to pi
+                    # and best-effort, so it neither starts non-pi agents eagerly
+                    # nor fails the run if the probe cannot reach pi.
+                    try:
+                        task_state = _eager_fetch_pi_models_into_state(
+                            task=task,
+                            task_data=task_data,
+                            task_state=task_state,
+                            environment=environment,
+                            project=project,
+                            settings=settings,
+                            services=services,
+                            in_testing=settings.TESTING.INTEGRATION_ENABLED,
+                        )
+                    except Exception as e:  # noqa: BLE001
+                        logger.info("Pi model pre-fetch failed ({}); switcher will fall back to defaults", e)
+
                     # Now wait for the initial user message (may block for prompt-less agents)
                     re_queued_messages, initial_message = wait_for_initial_message_and_process_queue(
                         input_message_queue, task_state, shutdown_event
@@ -256,10 +283,10 @@ def run_agent_task_v1(
                         )
     # handle ConcurrencyExceptionGroup as a general exception
     except ConcurrencyExceptionGroup as e:
-        _on_exception(e, task_id, user_reference, services, shutdown_event)
+        on_exception(e, task_id, user_reference, services, shutdown_event)
     # all other exceptions should be handled and turned into task failures
     except Exception as e:
-        _on_exception(e, task_id, user_reference, services, shutdown_event)
+        on_exception(e, task_id, user_reference, services, shutdown_event)
     return None
 
 
@@ -272,7 +299,7 @@ def _build_agent_path(*, is_packaged: bool, executable_parent: Path, current_pat
 
     When running from source (not packaged), the server runs inside a uv-managed
     venv (via ``uv run``) that has editable installs of workspace members
-    (sculptor, imbue_core, etc.) pointing at the server's source tree. If agents
+    (sculptor, sculptor.foundation, etc.) pointing at the server's source tree. If agents
     inherit the venv's bin dir at the front of PATH, they use the venv Python —
     which imports from the server's source tree instead of the workspace clone's,
     causing cross-workspace pollution. So in dev mode we additionally strip the
@@ -339,19 +366,7 @@ def _run_agent_in_environment(
             in_testing=in_testing,
             on_diff_needed=on_diff_needed,
         )
-        secrets: dict[str, str] = {
-            "SCULPT_API_PORT": str(settings.BACKEND_PORT),
-            "SCULPT_WORKSPACE_ID": str(task_state.workspace_id),
-            "SCULPT_PROJECT_ID": str(project.object_id),
-            "SCULPT_AGENT_ID": str(task.object_id),
-        }
-        executable_parent = Path(sys.executable).parent
-        secrets["PATH"] = _build_agent_path(
-            is_packaged=is_packaged(),
-            executable_parent=executable_parent,
-            current_path=os.environ.get("PATH", ""),
-            sculpt_dir=get_sculpt_bin_dir(executable_parent),
-        )
+        secrets = _build_agent_secrets(settings=settings, task=task, task_state=task_state, project=project)
         agent_wrapper.start(secrets)
         if on_agent_started is not None:
             on_agent_started()
@@ -385,7 +400,7 @@ def _run_agent_in_environment(
             if isinstance(message, PersistentRequestCompleteAgentMessage):
                 if message.request_id == initial_in_flight_user_chat_message_id:
                     # it doesn't count if this was from a sigterm
-                    was_killed = _get_is_killed_request(message)
+                    was_killed = _get_killed_exit_code(message)
                     if not was_killed:
                         initial_in_flight_user_chat_message_id = None
             # used above so that we can figure out which user messages started being processed so far
@@ -393,7 +408,7 @@ def _run_agent_in_environment(
                 persistent_user_message_by_id[message.message_id] = message
             # remember all messages that have been emitted so far by the agent
             if isinstance(message, PersistentAgentMessage):
-                was_killed = _get_is_killed_request(message)
+                was_killed = _get_killed_exit_code(message)
                 if not was_killed:
                     persistent_message_history.append(message)
                 # A ResponseBlockAgentMessage from the in-flight turn means Claude
@@ -428,8 +443,8 @@ def _run_agent_in_environment(
             kill_time_start = time.monotonic()
             try:
                 agent_wrapper.terminate(_MAX_HARD_SHUTDOWN_SECONDS)
-                remaining_shutdown_time = time.monotonic() - kill_time_start
-                if remaining_shutdown_time < 0:
+                remaining_shutdown_time = _MAX_HARD_SHUTDOWN_SECONDS - (time.monotonic() - kill_time_start)
+                if remaining_shutdown_time <= 0:
                     raise UncleanTerminationAgentError("No time left to call wait() on agent wrapper")
                 exit_code = agent_wrapper.wait(remaining_shutdown_time)
             except (UncleanTerminationAgentError, WaitTimeoutAgentError) as e:
@@ -486,7 +501,7 @@ def _run_agent_in_environment(
         # add any persistent messages to our history
         for message in new_messages:
             if isinstance(message, PersistentAgentMessage):
-                killed_exit_code = _get_is_killed_request(message)
+                killed_exit_code = _get_killed_exit_code(message)
                 if killed_exit_code:
                     logger.debug("Agent seems like it exited, returning")
                     return _handle_completed_agent(
@@ -506,6 +521,10 @@ def _run_agent_in_environment(
         # case where the in-flight chat ID isn't reflected in
         # user_input_message_being_processed (cleared at v1.py:600 by design).
         task_state = _record_latest_completion_in_state(new_messages, task.object_id, task_state, services)
+
+        # Persist any model catalog the agent surfaced this batch (pi emits one at
+        # start) onto task state so the harness's get_available_models reads it.
+        task_state = _record_available_models_in_state(new_messages, task.object_id, task_state, services)
 
         # Did the currently-pending in-flight message complete? Drives the dispatch
         # decision below — distinct from the cursor advance above, which fires for
@@ -602,13 +621,15 @@ def _run_agent_in_environment(
                 agent_wrapper.push_message(message)
 
 
-def _get_is_killed_request(message: Message) -> int:
+def _get_killed_exit_code(message: Message) -> int:
     if isinstance(message, RequestStoppedAgentMessage):
         causal_error = message.error.construct_instance()
         # sigterm and signint
         if isinstance(causal_error, AgentClientError) and causal_error.exit_code in (
             SIGTERM_EXIT_CODES | SIGINT_EXIT_CODES
         ):
+            # exit_code is a member of a set of ints here, so it cannot be None
+            # pyrefly: ignore [bad-return]
             return causal_error.exit_code
     return 0
 
@@ -650,7 +671,7 @@ def _send_user_input_message(
     return user_input_message_being_processed
 
 
-def _on_exception(
+def on_exception(
     e: Exception,
     task_id: TaskID,
     user_reference: UserReference,
@@ -753,6 +774,94 @@ def _on_exception(
     raise AgentTaskFailure(transaction_callback=on_transaction, is_user_notified=True)
 
 
+def _build_agent_secrets(
+    settings: SculptorSettings,
+    task: Task,
+    task_state: AgentTaskStateV2,
+    project: Project,
+) -> dict[str, str]:
+    """Build the backend-env + PATH secrets an agent subprocess launches with.
+
+    Shared by `_run_agent_in_environment` (the normal `agent_wrapper.start`) and
+    the pre-message pi catalog probe (`_eager_fetch_pi_models_into_state`), which
+    spawns a throwaway pi process with the same environment.
+    """
+    secrets: dict[str, str] = build_sculpt_backend_env(
+        backend_port=settings.BACKEND_PORT,
+        workspace_id=task_state.workspace_id,
+        project_id=project.object_id,
+        agent_id=task.object_id,
+    )
+    executable_parent = Path(sys.executable).parent
+    secrets["PATH"] = _build_agent_path(
+        is_packaged=is_packaged(),
+        executable_parent=executable_parent,
+        current_path=os.environ.get("PATH", ""),
+        sculpt_dir=get_sculpt_bin_dir(executable_parent),
+    )
+    return secrets
+
+
+def _eager_fetch_pi_models_into_state(
+    task: Task,
+    task_data: AgentTaskInputsV2,
+    task_state: AgentTaskStateV2,
+    environment: AgentExecutionEnvironment,
+    project: Project,
+    settings: SculptorSettings,
+    services: ServiceCollectionForTask,
+    in_testing: bool,
+) -> AgentTaskStateV2:
+    """Populate the switcher's model catalog for a fresh pi agent, before the first message.
+
+    `run_agent_task_v1` keeps a prompt-less agent READY without calling
+    `agent_wrapper.start()` until a message arrives, so pi's start-time
+    `_fetch_models_into_state` has not run and the task carries no
+    `available_models` — the switcher then shows the built-in Claude list. Here,
+    once the environment is ready, we run a short-lived pi probe
+    (`PiAgent.fetch_available_models_probe`) and persist its curated catalog onto
+    task state so the switcher reflects pi's models immediately.
+
+    Returns the task state, evolved with the catalog when the probe found one, so
+    the caller carries it forward — otherwise `finalize_task_setup`'s later
+    evolve-and-upsert (from the in-memory state) would write the catalog back
+    out. Restricted to pi: the `supports_model_selection` check skips harnesses
+    that cannot select a model at all, and the `PiAgent` check below skips the
+    rest — only pi sources a dynamic catalog via the probe (Claude supports model
+    selection but with a static built-in list). Best-effort: on any failure the
+    probe returns an empty catalog and the task state is returned unchanged, so
+    the switcher falls back exactly as before.
+    """
+    if not get_harness_for_config(task_data.agent_config).capabilities().supports_model_selection:
+        return task_state
+    agent_wrapper = _get_agent_wrapper(
+        task_data=task_data,
+        task_state=task_state,
+        environment=environment,
+        project=project,
+        task_id=task.object_id,
+        workspace_service=services.workspace_service,
+        in_testing=in_testing,
+    )
+    # Only pi sources a dynamic catalog via this probe (a PiAgent method); Claude
+    # supports model selection but with a static built-in list, so it is not probed
+    # here. If another harness ever sources a dynamic catalog, give it the same
+    # probe seam rather than starting it eagerly here.
+    if not isinstance(agent_wrapper, PiAgent):
+        return task_state
+    secrets = _build_agent_secrets(settings=settings, task=task, task_state=task_state, project=project)
+    available_models, current_model = agent_wrapper.fetch_available_models_probe(secrets)
+    if not available_models and current_model is None:
+        return task_state
+    return _persist_available_models(
+        available_models=available_models,
+        current_model=current_model,
+        task_id=task.object_id,
+        task_state=task_state,
+        services=services,
+    )
+
+
 def _get_agent_wrapper(
     task_data: AgentTaskInputsV2,
     task_state: AgentTaskStateV2,
@@ -763,7 +872,7 @@ def _get_agent_wrapper(
     in_testing: bool = False,
     on_diff_needed: Callable[[], None] | None = None,
 ) -> Agent:
-    logger.info("Discriminating agent wrapper")
+    logger.debug("Discriminating agent wrapper")
     context = AgentRunContext(
         task_data=task_data,
         task_state=task_state,
@@ -806,7 +915,9 @@ def _handle_completed_agent(
     # call — applied here for the final batch of messages popped after the loop exits.
     _record_latest_completion_in_state(new_messages, task.object_id, task_state, services)
 
-    agent_wrapper.wait(10)  # NOTE: if the agent has hit an exception, we will raise it here
+    agent_wrapper.wait(
+        _COMPLETED_AGENT_FINAL_WAIT_SECONDS
+    )  # NOTE: if the agent has hit an exception, we will raise it here
 
     # if we expected to shut down, and we observed the correct exit code, fine
     if exit_code == AGENT_EXIT_CODE_CLEAN_SHUTDOWN_ON_INTERRUPT or exit_code in (
@@ -966,6 +1077,67 @@ def _record_latest_completion_in_state(
         task_state=task_state,
         services=services,
     )
+
+
+def _record_available_models_in_state(
+    new_messages: Sequence[Message],
+    task_id: TaskID,
+    task_state: AgentTaskStateV2,
+    services: ServiceCollectionForTask,
+) -> AgentTaskStateV2:
+    """Persist the latest model catalog the agent surfaced this batch onto task state.
+
+    A harness with a dynamic catalog (pi) emits a `ModelsAvailableAgentMessage`
+    at agent start; this writes its `available_models` / `current_model` onto
+    `AgentTaskStateV2` (which the harness's `get_available_models` /
+    `get_selected_model_id` read). The last message in the batch wins. No-op when
+    the batch carries none. Preserves the DB title like `_update_task_state`, so a
+    concurrent rename is not clobbered.
+    """
+    latest: ModelsAvailableAgentMessage | None = None
+    for message in new_messages:
+        if isinstance(message, ModelsAvailableAgentMessage):
+            latest = message
+    if latest is None:
+        return task_state
+
+    return _persist_available_models(
+        available_models=list(latest.available_models),
+        current_model=latest.current_model,
+        task_id=task_id,
+        task_state=task_state,
+        services=services,
+    )
+
+
+def _persist_available_models(
+    available_models: list[ModelOption],
+    current_model: ModelOption | None,
+    task_id: TaskID,
+    task_state: AgentTaskStateV2,
+    services: ServiceCollectionForTask,
+) -> AgentTaskStateV2:
+    """Write a model catalog onto `AgentTaskStateV2.available_models` / `current_model`.
+
+    Shared by the post-message path (`_record_available_models_in_state`, which
+    unwraps the agent's `ModelsAvailableAgentMessage`) and the pre-message
+    env-ready pi probe (`_eager_fetch_pi_models_into_state`). Routes through
+    `task_service.update_available_models` so the change publishes a task update
+    (a live switcher refreshes even with no message in flight, which the
+    pre-message path has) and the DB title is preserved against a concurrent
+    rename. Returns the evolved task state on a real change, else the input
+    unchanged.
+    """
+    with services.data_model_service.open_task_transaction() as transaction:
+        updated_task = services.task_service.update_available_models(
+            task_id=task_id,
+            available_models=available_models,
+            current_model=current_model,
+            transaction=transaction,
+        )
+    if updated_task is None or not isinstance(updated_task.current_state, AgentTaskStateV2):
+        return task_state
+    return updated_task.current_state
 
 
 def _update_task_state(

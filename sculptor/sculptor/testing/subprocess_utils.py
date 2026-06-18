@@ -1,6 +1,9 @@
 import subprocess
 import threading
+from collections import deque
 from typing import Callable
+
+_DEFAULT_RECENT_OUTPUT_LINES = 50
 
 
 class Forwarder(threading.Thread):
@@ -14,12 +17,17 @@ class Forwarder(threading.Thread):
         sculptor_server: subprocess.Popen,
         prefix: str = "",
         known_harmless_func: Callable[[str], bool] | None = None,
+        recent_output_lines: int = _DEFAULT_RECENT_OUTPUT_LINES,
     ) -> None:
         super().__init__(daemon=True)
         self.prefix = prefix
         self.sculptor_server = sculptor_server
-        self.first_failure_line = None
+        self.first_failure_line: str | None = None
         self.known_harmless_func = known_harmless_func
+        # Retain the most recent lines so callers can surface the process's
+        # output after the fact, when a later failure's own exception carries
+        # none.
+        self.recent_output: deque[str] = deque(maxlen=recent_output_lines)
         self._stop_event = threading.Event()
 
     def stop(self, timeout: float = 5.0) -> None:
@@ -34,13 +42,13 @@ class Forwarder(threading.Thread):
                 line = self.sculptor_server.stdout.readline()
                 if not line:
                     break
+                self.recent_output.append(line.rstrip())
                 # Note: the print(line) here routes to pytest junit due to an issue with how pytest hides stdout
                 #       the logger actually displays to the user
                 print_colored_line(self.prefix + line.rstrip(), known_harmless_func=self.known_harmless_func)
                 if "|ERROR" in line or "Cache miss" in line:
                     # note that we do NOT blow up here -- that's because we want to capture all the output
                     self.first_failure_line = line.rstrip()
-                    # raise RuntimeError(line.strip())
         except ValueError:
             # stdout was closed; exit gracefully
             pass
@@ -64,8 +72,7 @@ def print_colored_line(
         # Cyan
         print(f"\033[36m{line}\033[0m")
     elif "|TRACE" in line or level == "TRACE":
-        # Gray
-        # print(f"\033[90m{line}\033[0m")
+        # Trace lines are matched here but intentionally not printed (too verbose).
         pass
     else:
         print(line)

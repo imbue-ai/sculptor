@@ -24,10 +24,39 @@ from playwright.sync_api import expect
 from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
 from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
 from sculptor.testing.elements.pr_popover import PlaywrightPrPopoverElement
+from sculptor.testing.elements.terminal import get_agent_terminal_panel
+from sculptor.testing.elements.terminal import wait_for_xterm_substring
 from sculptor.testing.playwright_utils import full_spa_reload
+from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
+
+# A registered terminal program that opts into automated prompts: it signals
+# idle (reaches its prompt), then echoes each received line as RECEIVED:<line>
+# and goes busy — letting the babysitter's readiness wait + guarded write be
+# observed in the terminal buffer. Copied from
+# test_terminal_agent_automated_prompts.py (the canonical fake program).
+_FAKE_PROMPTS_COMMAND = (
+    "echo FAKE-PROMPTS-BANNER; sculpt signal idle; printf %sDONE IDLE-; echo; "
+    + "while read -r _line; do echo RECEIVED:$_line; sculpt signal busy; done"
+)
+# Fragment of the proactive MRU-non-driveable disabled reason (see
+# _DISABLED_REASON_MRU_NON_DRIVEABLE in the coordinator).
+_NON_DRIVEABLE_REASON_FRAGMENT = "terminal that can't receive automated prompts"
+
+
+def _write_registration(
+    instance: SculptorInstance, registration_id: str, display_name: str, *, accepts_automated_prompts: bool
+) -> Path:
+    """Write a terminal-agent registration TOML and return its path (for cleanup)."""
+    registrations_dir = instance.sculptor_folder / "terminal_agents"
+    registrations_dir.mkdir(parents=True, exist_ok=True)
+    path = registrations_dir / f"{registration_id}.toml"
+    opt_in_line = "accepts_automated_prompts = true\n" if accepts_automated_prompts else ""
+    path.write_text(f'display_name = "{display_name}"\nlaunch_command = "{_FAKE_PROMPTS_COMMAND}"\n{opt_in_line}')
+    return path
+
 
 _MERGED_MODE_STABLE_WAIT_MS = 25_000
 # Time to wait between baseline-recording poll and the next state-changing
@@ -112,7 +141,7 @@ def _enable_babysitter(instance: SculptorInstance) -> None:
     can fire before the parent agent's first chat message is committed, so
     we set the user-config fallback explicitly here.
     """
-    base_url = instance.base_url.rstrip("/")
+    base_url = instance.backend_api_url.rstrip("/")
     response = instance.page.request.get(f"{base_url}/api/v1/config", timeout=_CONFIG_API_TIMEOUT_MS)
     assert response.ok, f"GET /api/v1/config failed: {response.status}"
     config = response.json()
@@ -243,3 +272,115 @@ def test_scenario_4_pause_toggle_prevents_prompt(sculptor_instance_: SculptorIns
     pipeline_id_file.write_text("102")
     sculptor_instance_.page.wait_for_timeout(_MERGED_MODE_STABLE_WAIT_MS)
     expect(pipeline_prompts).to_have_count(1)
+
+
+@user_story("to have the CI Babysitter drive my terminal agent to fix a failed pipeline")
+def test_babysitter_drives_registered_terminal_agent(sculptor_instance_: SculptorInstance, tmp_path: Path) -> None:
+    """When the workspace's most-recent agent is a registered, opt-in terminal
+    agent, the babysitter spawns its OWN terminal task on CI failure, waits for
+    the program to reach its prompt, and writes the fix-CI prompt to its PTY.
+    """
+    state_file = tmp_path / "glab_state"
+    pipeline_id_file = tmp_path / "pipeline_id"
+    state_file.write_text("failed")
+    pipeline_id_file.write_text("100")
+
+    registration = _write_registration(
+        sculptor_instance_, "babysit-prompts", "Babysit Prompts", accepts_automated_prompts=True
+    )
+    try:
+        _enable_babysitter(sculptor_instance_)
+        _install_state_driven_glab(sculptor_instance_, state_file, pipeline_id_file)
+        _set_remote(sculptor_instance_, _FAKE_GITLAB_REMOTE)
+
+        page = sculptor_instance_.page
+        start_task_and_wait_for_ready(page, "say hello")
+
+        # Make the registered terminal agent the workspace's most-recent agent.
+        agent_tabs = PlaywrightAgentTabBarElement(page)
+        agent_tabs.open_agent_type_menu()
+        registered_item = agent_tabs.get_agent_type_menu_item_registered("babysit-prompts")
+        expect(registered_item).to_be_visible()
+        registered_item.click()
+        user_tab = agent_tabs.get_agent_tab_by_name("Babysit Prompts 1").first
+        expect(user_tab).to_be_visible()
+        expect(get_agent_terminal_panel(page)).to_be_visible()
+        wait_for_xterm_substring(page, "IDLE-DONE")  # the program is at its prompt
+
+        _bump_pipeline_id_after_baseline(page, pipeline_id_file, "101")
+
+        # The babysitter spawns its own "CI Babysitter" terminal task (distinct
+        # from the user's tab) and writes the fix-CI prompt to its PTY.
+        babysitter_tab = agent_tabs.get_agent_tab_by_name("CI Babysitter")
+        expect(babysitter_tab.first).to_be_visible(timeout=60_000)
+        babysitter_tab.first.click()
+        expect(get_agent_terminal_panel(page)).to_be_visible()
+        wait_for_xterm_substring(page, "RECEIVED:Investigate the failing pipeline")
+    finally:
+        registration.unlink(missing_ok=True)
+
+
+@user_story("to understand why the CI Babysitter can't act when my agent is a plain terminal")
+def test_plain_terminal_mru_shows_disabled_reason(sculptor_instance_: SculptorInstance, tmp_path: Path) -> None:
+    """When the workspace's most-recent agent is a plain terminal (not driveable),
+    the PR popover proactively shows the disabled reason and the pause toggle is
+    inert — without needing a pipeline failure first.
+    """
+    state_file = tmp_path / "glab_state"
+    pipeline_id_file = tmp_path / "pipeline_id"
+    state_file.write_text("failed")
+    pipeline_id_file.write_text("100")
+
+    _enable_babysitter(sculptor_instance_)
+    _install_state_driven_glab(sculptor_instance_, state_file, pipeline_id_file)
+    _set_remote(sculptor_instance_, _FAKE_GITLAB_REMOTE)
+
+    page = sculptor_instance_.page
+    start_task_and_wait_for_ready(page, "say hello")
+
+    # Make the workspace's most-recent agent a plain terminal (never driveable).
+    agent_tabs = PlaywrightAgentTabBarElement(page)
+    agent_tabs.open_agent_type_menu()
+    agent_tabs.get_agent_type_menu_item_terminal().click()
+    terminal_tab = agent_tabs.get_agent_tab_by_name("Terminal 1").first
+    expect(terminal_tab).to_be_visible()
+
+    # Let the polling create per-workspace state so the proactive reason is
+    # computed before the popover fetches it.
+    page.wait_for_timeout(_BASELINE_POLL_SETTLE_MS)
+
+    pr_popover = PlaywrightPrPopoverElement(page)
+    pr_chevron = pr_popover.get_chevron()
+    expect(pr_chevron).to_be_visible(timeout=60_000)
+    pr_chevron.click()
+
+    expect(pr_popover.get_babysitter_status()).to_contain_text(_NON_DRIVEABLE_REASON_FRAGMENT, timeout=30_000)
+    # A persistent reason makes the toggle inert (it won't act regardless of pause).
+    expect(pr_popover.get_babysitter_pause_toggle()).to_be_disabled()
+
+
+@user_story("to pick which agent the CI Babysitter uses, limited to ones that accept automated prompts")
+def test_settings_selector_lists_only_driveable_harnesses(sculptor_instance_: SculptorInstance) -> None:
+    """The 'Babysitter agent' selector lists MRU + Claude + opt-in registered
+    terminal agents, and excludes non-opt-in registrations and plain terminals.
+    """
+    opt_in = _write_registration(sculptor_instance_, "agent-opt-in", "Opt In Agent", accepts_automated_prompts=True)
+    no_opt_in = _write_registration(
+        sculptor_instance_, "agent-no-opt-in", "No Opt In Agent", accepts_automated_prompts=False
+    )
+    try:
+        page = sculptor_instance_.page
+        settings_page = navigate_to_settings_page(page=page)
+        ci_section = settings_page.click_on_ci()
+        ci_section.enable()
+        ci_section.open_agent_select()
+
+        expect(ci_section.get_agent_option("Most recently used")).to_be_visible()
+        expect(ci_section.get_agent_option("Claude")).to_be_visible()
+        expect(ci_section.get_agent_option("Opt In Agent")).to_be_visible()
+        # Non-opt-in registration and plain terminals are never selectable.
+        expect(ci_section.get_agent_option("No Opt In Agent")).to_have_count(0)
+        expect(ci_section.get_agent_option("Terminal")).to_have_count(0)
+    finally:
+        opt_in.unlink(missing_ok=True)
+        no_opt_in.unlink(missing_ok=True)

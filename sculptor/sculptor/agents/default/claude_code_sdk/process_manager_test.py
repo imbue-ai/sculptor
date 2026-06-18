@@ -12,17 +12,9 @@ from uuid import uuid4
 
 import pytest
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.sculptor.state.chat_state import AskUserQuestionData
-from imbue_core.sculptor.state.chat_state import QuestionOption
-from imbue_core.sculptor.state.chat_state import UserQuestion
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import LLMModel
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.default.claude_code_sdk.process_manager import ClaudeProcessManager
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.interfaces.agents.agent import InterruptProcessUserMessage
 from sculptor.interfaces.agents.agent import RequestSkippedAgentMessage
 from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
@@ -30,7 +22,10 @@ from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
 from sculptor.interfaces.agents.errors import AgentClientError
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
+from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import LocalEnvironmentID
+from sculptor.primitives.ids import ProjectID
+from sculptor.primitives.ids import TaskID
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.workspace_service.environment_manager.environments.local_agent_execution_environment import (
     LocalAgentExecutionEnvironment,
@@ -40,6 +35,11 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.setup_command_runner import FailedSetup
 from sculptor.services.workspace_service.setup_command_runner import RunningSetup
 from sculptor.services.workspace_service.setup_command_runner import SetupReminderState
+from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.chat_state import QuestionOption
+from sculptor.state.chat_state import UserQuestion
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import LLMModel
 
 
 @pytest.fixture

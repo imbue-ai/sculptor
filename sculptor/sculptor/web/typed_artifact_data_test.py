@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import HTTPException
 
-from imbue_core.async_monkey_patches_test import expect_exact_logged_errors
+from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
 from sculptor.interfaces.agents.artifacts import AgentTaskStatus
 from sculptor.interfaces.agents.artifacts import ArtifactType
 from sculptor.interfaces.agents.artifacts import DiffArtifact

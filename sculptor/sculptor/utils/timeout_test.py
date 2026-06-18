@@ -2,7 +2,7 @@ import time
 from unittest.mock import Mock
 from unittest.mock import patch
 
-from imbue_core.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.utils.timeout import TIMING_LOG_THRESHOLD_SECONDS
 from sculptor.utils.timeout import format_timing_log
 from sculptor.utils.timeout import log_runtime

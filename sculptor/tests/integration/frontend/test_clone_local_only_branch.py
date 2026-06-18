@@ -40,8 +40,7 @@ def _workspace_id_from_url(page: Page) -> str:
     return match.group(1)
 
 
-def _clone_code_dir_for_workspace(page: Page, workspace_id: str, timeout_ms: int = 30_000) -> Path:
-    base_url = page.url.split("#")[0].rstrip("/")
+def _clone_code_dir_for_workspace(page: Page, base_url: str, workspace_id: str, timeout_ms: int = 30_000) -> Path:
     for _ in range(timeout_ms // 200):
         response = page.request.get(f"{base_url}/api/v1/workspaces/{workspace_id}")
         assert response.ok, f"GET workspace failed: {response.status} {response.text()}"
@@ -122,7 +121,7 @@ def test_clone_from_local_only_branch_with_source_remotes_present(
     expect(task_page.get_chat_panel()).to_be_visible(timeout=60_000)
 
     workspace_id = _workspace_id_from_url(page)
-    clone_path = _clone_code_dir_for_workspace(page, workspace_id)
+    clone_path = _clone_code_dir_for_workspace(page, sculptor_instance_.backend_api_url, workspace_id)
     assert _git_branch(clone_path) == LOCAL_ONLY_BRANCH, (
         f"expected clone checked out on {LOCAL_ONLY_BRANCH!r}, got {_git_branch(clone_path)!r}"
     )

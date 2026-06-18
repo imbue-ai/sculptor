@@ -5,6 +5,7 @@ from loguru import logger
 from sculptor.utils import build as build_utils
 
 _FORMAT_VERSION = "1"
+_FORMAT_VERSION_FILENAME = ".format_version"
 
 
 def _bootstrap_sculptor_folder(sculptor_path: Path) -> None:
@@ -12,7 +13,7 @@ def _bootstrap_sculptor_folder(sculptor_path: Path) -> None:
     logger.info("Bootstrapping Sculptor folder at {}", sculptor_path)
     (sculptor_path / "internal").mkdir(parents=True, exist_ok=True)
     (sculptor_path / "workspaces").mkdir(parents=True, exist_ok=True)
-    (sculptor_path / ".format_version").write_text(f"{_FORMAT_VERSION}\n")
+    (sculptor_path / _FORMAT_VERSION_FILENAME).write_text(f"{_FORMAT_VERSION}\n")
 
 
 def ensure_sculptor_folder_ready() -> None:
@@ -24,7 +25,7 @@ def ensure_sculptor_folder_ready() -> None:
     """
     sculptor_path = build_utils.get_sculptor_folder()
 
-    if (sculptor_path / ".format_version").is_file():
+    if (sculptor_path / _FORMAT_VERSION_FILENAME).is_file():
         return
 
     _bootstrap_sculptor_folder(sculptor_path)

@@ -5,11 +5,11 @@ from typing import Generator
 from typing import Protocol
 from typing import TypeVar
 
-from imbue_core.pydantic_serialization import FrozenModel
 from sculptor.database.models import Notification
 from sculptor.database.models import Project
 from sculptor.database.models import UserSettings
 from sculptor.database.models import Workspace
+from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.primitives.ids import OrganizationReference
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import UserReference
@@ -87,4 +87,6 @@ class TaskDataModelService(DataModelService, ABC):
 
     @abstractmethod
     @contextmanager
-    def open_task_transaction(self) -> Generator[TaskAndDataModelTransaction, None, None]: ...
+    def open_task_transaction(
+        self, *, immediate: bool = False
+    ) -> Generator[TaskAndDataModelTransaction, None, None]: ...

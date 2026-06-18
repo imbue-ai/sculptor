@@ -7,14 +7,13 @@ from typing import cast
 import pytest
 from loguru import logger
 
-from imbue_core.git import get_repo_base_path
-from imbue_core.itertools import only
-from imbue_core.sculptor.state.messages import Message
 from sculptor.database.models import MustBeShutDownTaskInputsV1
 from sculptor.database.models import NoOpTaskInputsV1
 from sculptor.database.models import Project
 from sculptor.database.models import Task
 from sculptor.database.models import TaskID
+from sculptor.foundation.git import get_repo_base_path
+from sculptor.foundation.itertools import only
 from sculptor.interfaces.agents.agent import MessageTypes
 from sculptor.interfaces.agents.tasks import TaskState
 from sculptor.primitives.ids import RequestID
@@ -23,6 +22,7 @@ from sculptor.services.task_service.api import TaskMessageContainer
 from sculptor.services.task_service.conftest import get_user_input_message
 from sculptor.services.task_service.threaded_implementation import LocalThreadTaskService
 from sculptor.services.task_service.threaded_implementation import _get_name_for_runner_from_task
+from sculptor.state.messages import Message
 from sculptor.web.auth import UserSession
 from sculptor.web.auth import authenticate_anonymous
 
@@ -121,7 +121,8 @@ def test_delete_idle_task_finalizes_immediately(
     # The task should be fully deleted, not stuck in is_deleting.
     with user_session.open_transaction(test_service_collection) as transaction:
         # get_task filters out deleted tasks, so use get_all_tasks to find it.
-        all_tasks = transaction.get_all_tasks()  # pyre-fixme[16]
+        # pyrefly: ignore [missing-attribute]
+        all_tasks = transaction.get_all_tasks()
         deleted_task = next((t for t in all_tasks if t.object_id == task.object_id), None)
         assert deleted_task is not None, "Task should still exist in DB"
         assert deleted_task.is_deleted, "Idle task should be immediately finalized as deleted"

@@ -16,8 +16,8 @@ from pathlib import Path
 
 from loguru import logger
 
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.subprocess_utils import ProcessError
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.subprocess_utils import ProcessError
 
 
 class CloneError(Exception):
@@ -49,7 +49,7 @@ def clone_repository(
     Raises:
         CloneError: If cloning fails or git operations encounter errors.
     """
-    logger.info("Cloning repository from {} to {}", source_repo_path, destination)
+    logger.debug("Cloning repository from {} to {}", source_repo_path, destination)
 
     source_remotes = _list_remotes(source_repo_path, concurrency_group)
     branch_to_checkout = target_branch or _get_current_branch(source_repo_path, concurrency_group)
@@ -101,7 +101,7 @@ def clone_repository(
         )
         _mirror_branch_upstream(source_repo_path, destination, branch_to_checkout, concurrency_group)
 
-    logger.info("Successfully cloned repository to {} on branch {}", destination, branch_to_checkout)
+    logger.debug("Successfully cloned repository to {} on branch {}", destination, branch_to_checkout)
 
 
 def _resolve_worktree_to_parent(repo_path: Path, concurrency_group: ConcurrencyGroup) -> Path:

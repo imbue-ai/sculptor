@@ -14,21 +14,21 @@ from typing import Union
 from loguru import logger
 from pydantic import PrivateAttr
 
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.event_utils import CompoundEvent
-from imbue_core.event_utils import MutableEvent
-from imbue_core.event_utils import ReadOnlyEvent
-from imbue_core.processes.local_process import RunningProcess
-from imbue_core.processes.local_process import run_background
-from imbue_core.secrets_utils import Secret
 from sculptor.agents.default.constants import CLONE_MODE_PROMPT
 from sculptor.agents.default.constants import IN_PLACE_MODE_PROMPT
 from sculptor.agents.default.constants import WORKTREE_MODE_PROMPT
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.event_utils import CompoundEvent
+from sculptor.foundation.event_utils import MutableEvent
+from sculptor.foundation.event_utils import ReadOnlyEvent
+from sculptor.foundation.processes.local_process import RunningProcess
+from sculptor.foundation.processes.local_process import run_background
+from sculptor.foundation.secrets_utils import Secret
 from sculptor.interfaces.environments.base import Environment
 from sculptor.interfaces.environments.errors import FileOrDirectoryCouldNotBeDeletedError
 from sculptor.primitives.ids import LocalEnvironmentID
+from sculptor.primitives.ids import ProjectID
 from sculptor.services.workspace_service.environment_manager.env_file_parser import atomic_copy_env_file
 from sculptor.services.workspace_service.environment_manager.env_file_parser import load_project_env_vars
 from sculptor.services.workspace_service.environment_manager.environments.clone_strategy import clone_repository
@@ -55,6 +55,11 @@ LOCAL_WORKSPACE_DIR = get_workspaces_folder()
 _SETUP_PGID_CONVERGE_TIMEOUT_S = 0.2
 _SETUP_PGID_POLL_INTERVAL_S = 0.005
 
+# Cancel ladder for the setup subprocess: escalate SIGINT -> SIGTERM -> SIGKILL,
+# giving the process group a grace period at each step to exit on its own.
+_CANCEL_SIGTERM_DELAY_S = 2.0
+_CANCEL_SIGKILL_DELAY_S = 5.0
+
 # https://github.com/python/typeshed/tree/main/stdlib/_typeshed
 if TYPE_CHECKING:
     # for proper file mode typing
@@ -66,6 +71,7 @@ if TYPE_CHECKING:
 
 class LocalEnvironment(Environment):
     object_type: str = "LocalEnvironment"
+    # pyrefly: ignore [bad-override-mutable-attribute]
     environment_id: LocalEnvironmentID
     concurrency_group: ConcurrencyGroup
     # The repo host path - points directly to the user's repository.
@@ -567,8 +573,8 @@ def _drain_setup_stdout(process: subprocess.Popen, on_chunk: Callable[[bytes], N
     finally:
         try:
             stdout.close()
-        except Exception:
-            pass
+        except OSError as exc:
+            logger.debug("Failed to close setup subprocess stdout: {}", exc)
 
 
 class _CancelLadderState:
@@ -593,7 +599,7 @@ class _CancelLadderState:
             self.cancel_started_at = now
             return
         elapsed = now - self.cancel_started_at
-        if not self.sent_sigterm and elapsed >= 2.0:
+        if not self.sent_sigterm and elapsed >= _CANCEL_SIGTERM_DELAY_S:
             logger.info("Cancel ladder: SIGTERM to pgid {}", pgid)
             try:
                 os.killpg(pgid, signal.SIGTERM)
@@ -601,7 +607,7 @@ class _CancelLadderState:
                 return
             self.sent_sigterm = True
             return
-        if self.sent_sigterm and elapsed >= 5.0:
+        if self.sent_sigterm and elapsed >= _CANCEL_SIGKILL_DELAY_S:
             logger.info("Cancel ladder: SIGKILL to pgid {}", pgid)
             try:
                 os.killpg(pgid, signal.SIGKILL)

@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Any
 
-from imbue_core.errors import ExpectedError
+from sculptor.foundation.errors import ExpectedError
 
 
 class AgentCrashed(ExpectedError):
@@ -61,12 +61,33 @@ class PiVersionMismatchError(AgentClientError):
     """
 
     def __init__(self, detected_version: str, pinned_version: str) -> None:
-        super().__init__(
-            f"Pi version {detected_version} is outside the pinned range (expected {pinned_version}).",
-            exit_code=None,
+        message = (
+            f"Pi version {detected_version} is outside the pinned range (expected {pinned_version}). "
+            + "Set the pi Binary Source to Managed in Settings to install the pinned version "
+            + f"automatically, or point pi at a {pinned_version} build."
         )
+        super().__init__(message, exit_code=None)
         self.detected_version = detected_version
         self.pinned_version = pinned_version
+
+
+class PiContextResetError(AgentClientError):
+    """Raised when pi's ``new_session`` (the ``/clear`` context-reset path) fails.
+
+    An ``AgentClientError`` rather than a crash: a failed reset (``success:false``,
+    a ``data.cancelled:true`` veto, or no response within the budget) is reported
+    as a failed request while the agent keeps running.
+    """
+
+
+class PiSetModelError(AgentClientError):
+    """Raised when pi's ``set_model`` (the model-switch path) fails.
+
+    An ``AgentClientError`` rather than a crash: a rejected switch
+    (``success:false`` — e.g. ``Model not found`` — or no response within the
+    budget) is reported as a failed request the frontend toasts, while the agent
+    keeps running on its current model.
+    """
 
 
 class PiCrashError(AgentCrashed):

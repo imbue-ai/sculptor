@@ -10,6 +10,12 @@ import typer
 
 from sculpt.commands.data_types import ErrorOutput
 
+_ELLIPSIS = "..."
+
+# ANSI escape sequences for in-place TTY updates.
+_MOVE_CURSOR_UP = "\033[A"
+_CLEAR_LINE = "\033[2K"
+
 
 def format_table(headers: Sequence[str], rows: Sequence[Sequence[str]]) -> str:
     """Format data as an aligned table."""
@@ -42,7 +48,7 @@ def truncate(text: str, max_length: int = 50) -> str:
     text = text.replace("\n", " ").strip()
     if len(text) <= max_length:
         return text
-    return text[: max_length - 3] + "..."
+    return text[: max_length - len(_ELLIPSIS)] + _ELLIPSIS
 
 
 def json_error(error: str, detail: str = "") -> str:
@@ -91,7 +97,7 @@ def overwrite_lines(text: str, previous_line_count: int) -> int:
     """
     if previous_line_count > 0:
         for _ in range(previous_line_count):
-            sys.stdout.write("\033[A\033[2K")
+            sys.stdout.write(_MOVE_CURSOR_UP + _CLEAR_LINE)
     sys.stdout.write(text + "\n")
     sys.stdout.flush()
     return text.count("\n") + 1

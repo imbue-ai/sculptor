@@ -11,6 +11,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi import WebSocket
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 from starlette.types import Message
 from starlette.types import Scope
 from starlette.websockets import WebSocketDisconnect
@@ -26,12 +27,12 @@ def _settings_no_token() -> SculptorSettings:
 
 
 def _settings_with_token() -> SculptorSettings:
-    return SculptorSettings(SESSION_TOKEN="secret123")
+    return SculptorSettings(SESSION_TOKEN=SecretStr("secret123"))
 
 
 def _make_app(settings_factory) -> FastAPI:
     app = FastAPI()
-    app.add_middleware(SessionTokenMiddleware, settings_factory=settings_factory)  # pyre-ignore[6]
+    app.add_middleware(SessionTokenMiddleware, settings_factory=settings_factory)
 
     @app.get("/api/v1/items")
     def items() -> dict:

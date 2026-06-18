@@ -1,12 +1,16 @@
 import { useAtomValue } from "jotai";
 
-import type { CodingAgentTaskView, TaskStatus } from "../../../api";
+import type { CodingAgentTaskView, ModelOption, TaskStatus } from "../../../api";
 import {
+  taskAcceptsAutomatedPromptsAtomFamily,
   taskAtomFamily,
+  taskAvailableModelsAtomFamily,
   taskIsAutoCompactingAtomFamily,
   taskModelAtomFamily,
+  taskSelectedModelIdAtomFamily,
   taskStatusAtomFamily,
   taskSupportsBackgroundTasksAtomFamily,
+  taskSupportsChatInterfaceAtomFamily,
   taskSupportsCompactionAtomFamily,
   taskSupportsContextResetAtomFamily,
   taskSupportsFastModeAtomFamily,
@@ -15,6 +19,7 @@ import {
   taskSupportsImageInputAtomFamily,
   taskSupportsInteractiveBackchannelAtomFamily,
   taskSupportsInterruptionAtomFamily,
+  taskSupportsModelSelectionAtomFamily,
   taskSupportsSessionResumeAtomFamily,
   taskSupportsSkillsAtomFamily,
   taskSupportsSubAgentsAtomFamily,
@@ -30,6 +35,14 @@ export const useTaskStatus = (taskId: string): TaskStatus | undefined => useAtom
 
 /** Subscribe to only the task's model field. Re-renders only when model changes. */
 export const useTaskModel = (taskId: string): string | undefined => useAtomValue(taskModelAtomFamily(taskId));
+
+/** Subscribe to the harness's backend-sourced model list (pi); empty for Claude. */
+export const useTaskAvailableModels = (taskId: string): ReadonlyArray<ModelOption> =>
+  useAtomValue(taskAvailableModelsAtomFamily(taskId));
+
+/** Subscribe to the model_id the switcher should show selected for a backend list (pi). */
+export const useTaskSelectedModelId = (taskId: string): string | undefined =>
+  useAtomValue(taskSelectedModelIdAtomFamily(taskId));
 
 export const useTaskIsAutoCompacting = (taskId: string): boolean =>
   useAtomValue(taskIsAutoCompactingAtomFamily(taskId));
@@ -85,3 +98,17 @@ export const useTaskSupportsSessionResume = (taskId: string): boolean | undefine
 /** Subscribe to only the task's `supports_tool_use_rendering` capability. */
 export const useTaskSupportsToolUseRendering = (taskId: string): boolean | undefined =>
   useAtomValue(taskSupportsToolUseRenderingAtomFamily(taskId));
+
+/** Subscribe to only the task's `supports_chat_interface` capability —
+ * the coarse main-panel switch (chat interface vs terminal panel). */
+export const useTaskSupportsChatInterface = (taskId: string): boolean | undefined =>
+  useAtomValue(taskSupportsChatInterfaceAtomFamily(taskId));
+
+/** Subscribe to only the task's `supports_model_selection` capability. */
+export const useTaskSupportsModelSelection = (taskId: string): boolean | undefined =>
+  useAtomValue(taskSupportsModelSelectionAtomFamily(taskId));
+
+/** Subscribe to only the task's `accepts_automated_prompts` field — true
+ * only for registered terminal agents whose registration opted in. */
+export const useTaskAcceptsAutomatedPrompts = (taskId: string): boolean | undefined =>
+  useAtomValue(taskAcceptsAutomatedPromptsAtomFamily(taskId));

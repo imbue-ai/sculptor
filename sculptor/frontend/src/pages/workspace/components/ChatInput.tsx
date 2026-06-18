@@ -1,20 +1,24 @@
-import { Flex } from "@radix-ui/themes";
+import { Flex, IconButton, Tooltip } from "@radix-ui/themes";
 import type { Editor as TipTapEditor } from "@tiptap/react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { Plus } from "lucide-react";
+import { ListChecks, Plus } from "lucide-react";
 import { posthog } from "posthog-js";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { HTTPException } from "~/common/Errors.ts";
 import { isTextBlock } from "~/common/Guards.ts";
 import { useKeybinding, useKeybindingDisplayText } from "~/common/keybindings/hooks.ts";
 import { getModelCapabilities } from "~/common/modelCapabilities.ts";
 import { type ParsedPseudoSkillCommand, parsePseudoSkillCommand } from "~/common/pseudoSkills.ts";
 import { mergeClasses, optional } from "~/common/Utils.ts";
-import { AgentSettingsControls } from "~/components/AgentSettingsControls.tsx";
+import { CapabilityGate } from "~/components/CapabilityGate.tsx";
+import { EffortSelector } from "~/components/EffortSelector.tsx";
+import { FastModeToggle } from "~/components/FastModeToggle.tsx";
 import { FilePreviewList } from "~/components/FilePreviewList.tsx";
 import { processAndValidateFiles, saveFiles } from "~/components/FileUploadUtils.ts";
 import { KeyboardHint } from "~/components/KeyboardHint.tsx";
+import { ModelSelector } from "~/components/ModelSelector.tsx";
 import { SendButton } from "~/components/SendButton.tsx";
 import { CAPABILITY_UNSUPPORTED_COPY } from "~/components/useCapabilityGate.ts";
 
@@ -27,7 +31,9 @@ import {
   ElementIds,
   interruptWorkspaceAgent,
   LlmModel,
+  type ModelOption,
   sendWorkspaceAgentMessages,
+  setWorkspaceAgentModel,
 } from "../../../api";
 import { CHAT_INPUT_ELEMENT_ID } from "../../../common/Constants.ts";
 import { useWorkspacePageParams } from "../../../common/NavigateUtils.ts";
@@ -44,6 +50,7 @@ import {
   defaultEffortLevelAtom,
   isAlwaysInterruptAndSendAtom,
   isDefaultFastModeAtom,
+  lastUsedModelAtom,
   userConfigAtom,
 } from "../../../common/state/atoms/userConfig.ts";
 import { useDraftAttachedFiles } from "../../../common/state/hooks/useDraftAttachedFiles.ts";
@@ -51,13 +58,16 @@ import { useInterruptAgent } from "../../../common/state/hooks/useInterruptAgent
 import { usePromptDraft } from "../../../common/state/hooks/usePromptDraft.ts";
 import { useTaskDetailWithDefaults } from "../../../common/state/hooks/useTaskDetail";
 import {
+  useTaskAvailableModels,
   useTaskModel,
+  useTaskSelectedModelId,
   useTaskSupportsContextReset,
   useTaskSupportsFastMode,
   useTaskSupportsFileAttachments,
   useTaskSupportsImageInput,
   useTaskSupportsInteractiveBackchannel,
   useTaskSupportsInterruption,
+  useTaskSupportsModelSelection,
 } from "../../../common/state/hooks/useTaskHelpers.ts";
 import { Editor } from "../../../components/Editor.tsx";
 import type { FileUploadHandle } from "../../../components/FileUpload.tsx";
@@ -107,10 +117,15 @@ export const ChatInput = ({
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const { workspaceID, agentID: taskID } = useWorkspacePageParams();
   const taskModel = useTaskModel(taskID ?? "");
+  // Harness-supplied model list + selection (pi); empty/undefined for Claude, in
+  // which case the switcher falls back to its built-in list and localModel.
+  const backendModels = useTaskAvailableModels(taskID ?? "");
+  const selectedModelId = useTaskSelectedModelId(taskID ?? "");
   const isDefaultFastMode = useAtomValue(isDefaultFastModeAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
   const userConfig = useAtomValue(userConfigAtom);
   const [storedModel, setStoredModel] = useAtom(modelAtomFamily(taskID ?? ""));
+  const setLastUsedModel = useSetAtom(lastUsedModelAtom);
   const localModel = storedModel ?? (taskModel as LlmModel) ?? LlmModel.CLAUDE_4_OPUS_200K;
   const [isPlanFirst, setIsPlanFirst] = useState<boolean>(false);
 
@@ -124,6 +139,19 @@ export const ChatInput = ({
 
   const setIsFastMode = useCallback((value: boolean) => setStoredFastMode(value), [setStoredFastMode]);
   const setEffort = useCallback((value: EffortLevel) => setStoredEffort(value), [setStoredEffort]);
+
+  // Switching the model both updates this task's preference and records the
+  // model as the user's most recently used. The MRU value is what new
+  // workspaces default to when the "Default model" setting is "Most Recently
+  // Used"; without recording it here the MRU default would never reflect the
+  // model the user is actually using and would fall back to Fable (SCU-1457).
+  const handleModelChange = useCallback(
+    (value: LlmModel) => {
+      setStoredModel(value);
+      setLastUsedModel(value);
+    },
+    [setStoredModel, setLastUsedModel],
+  );
 
   const [toast, setToast] = useState<ToastContent | null>(null);
   // Mirrored onto the send button as `data-last-send-error` so callers can
@@ -170,6 +198,9 @@ export const ChatInput = ({
   const canResetContext = useTaskSupportsContextReset(taskID ?? "") ?? true;
   const canHarnessAttachFiles = useTaskSupportsFileAttachments(taskID ?? "") ?? true;
   const canUseImageInput = useTaskSupportsImageInput(taskID ?? "") ?? true;
+  // Claude and pi both switch models; harnesses that can't (hello/terminal) get
+  // the disabled-with-tooltip switcher. `?? true` keeps it live until the task loads.
+  const canSelectModel = useTaskSupportsModelSelection(taskID ?? "") ?? true;
   // The `+` prefilter popover's "Images" category opens the same file
   // picker the toolbar's image button uses. Owning the ref here lets us
   // route both paths through one validated upload pipeline.
@@ -303,10 +334,10 @@ export const ChatInput = ({
           message: promptDraft?.replace(/\u200B/g, "\u00A0").replace(/(\n\n\u00A0)+$/, ""),
           model: localModel,
           files: attachedFiles,
-          // CAPABILITY-GAP: supportsInteractiveBackchannel — the plan-mode
-          // toggle is gated disabled-with-tooltip for harnesses without the
-          // backchannel, so `isPlanFirst`/`isInPlanMode` stay false there and
-          // these fields are inert.
+          // The plan-mode toggle is gated (disabled-with-tooltip) for harnesses
+          // without the interactive backchannel, so `isPlanFirst`/`isInPlanMode`
+          // stay false there and these fields are inert; harnesses that support
+          // it (Claude, pi) drive plan mode through them.
           enter_plan_mode: isPlanFirst,
           exit_plan_mode: !isPlanFirst && isInPlanMode,
           fast_mode: modelCapabilities.supportsFastMode && isFastMode,
@@ -380,6 +411,30 @@ export const ChatInput = ({
       await interruptWorkspaceAgent({ path: { workspace_id: workspaceID, agent_id: taskID } });
     }
   }, [promptDraft, taskID, sendMessage, isAgentBusy, workspaceID]);
+
+  // Out-of-band model switch for a harness with a backend model list (pi). The
+  // value stays server-driven (selectedModelId), so on success the persisted
+  // current model propagates and the Select updates; on failure the endpoint
+  // surfaces pi's error (e.g. "Model not found") and we toast, leaving the
+  // selection on the actual current model. The Claude path uses setStoredModel
+  // (per-turn) instead and never reaches here.
+  const handleBackendModelChange = useCallback(
+    async (option: ModelOption): Promise<void> => {
+      if (!taskID) return;
+      try {
+        await setWorkspaceAgentModel({
+          path: { workspace_id: workspaceID, agent_id: taskID },
+          body: { provider: option.provider, modelId: option.modelId },
+        });
+      } catch (error) {
+        // The endpoint returns a 400 carrying the harness's rejection message
+        // (e.g. pi's "Model not found"); surface it so the failure is actionable.
+        const detail = error instanceof HTTPException ? error.detail : undefined;
+        setToast({ title: `Failed to switch to ${option.displayName}`, description: detail, type: ToastType.ERROR });
+      }
+    },
+    [taskID, workspaceID],
+  );
 
   const handleMentionPicker = useCallback((): void => {
     if (!editorRef.current) return;
@@ -617,18 +672,43 @@ export const ChatInput = ({
               </TooltipIconButton>
             </Flex>
             <Flex align="center" flexShrink="0">
-              <AgentSettingsControls
-                model={localModel}
-                onModelChange={(value) => setStoredModel(value)}
-                effort={effort}
-                onEffortChange={setEffort}
-                isFastMode={isFastMode}
-                onFastModeToggle={() => setIsFastMode(!isFastMode)}
-                isPlanMode={isPlanFirst || isInPlanMode}
-                onPlanModeToggle={() => setIsPlanFirst(!isPlanFirst)}
-                canEnterPlanMode={canEnterPlanMode}
-                canUseFastMode={canUseFastMode}
-              />
+              <CapabilityGate
+                capabilityValue={canEnterPlanMode}
+                elementId={ElementIds.CAPABILITY_DISABLED_PLAN_MODE}
+                disabledIcon={<ListChecks size={16} />}
+                size="3"
+                style={{ margin: 0 }}
+              >
+                <Tooltip content={isPlanFirst || isInPlanMode ? "Leave plan mode" : "Enter plan mode"}>
+                  <IconButton
+                    variant="ghost"
+                    size="3"
+                    onClick={() => setIsPlanFirst(!isPlanFirst)}
+                    aria-label="Toggle plan first mode"
+                    data-testid={ElementIds.PLAN_MODE_TOGGLE}
+                    data-active={isPlanFirst || isInPlanMode}
+                    style={
+                      isPlanFirst || isInPlanMode ? { color: "var(--button-primary-bg)", margin: 0 } : { margin: 0 }
+                    }
+                  >
+                    <ListChecks size={16} />
+                  </IconButton>
+                </Tooltip>
+              </CapabilityGate>
+              {modelCapabilities.supportsFastMode && canUseFastMode && (
+                <FastModeToggle isActive={isFastMode} onToggle={() => setIsFastMode(!isFastMode)} />
+              )}
+              <EffortSelector effort={effort} onEffortChange={setEffort} />
+              <Flex pr="1">
+                <ModelSelector
+                  model={localModel}
+                  onModelChange={handleModelChange}
+                  capabilityValue={canSelectModel}
+                  backendModels={backendModels}
+                  selectedModelId={selectedModelId}
+                  onBackendModelChange={handleBackendModelChange}
+                />
+              </Flex>
               <SendButton
                 onClick={handleSend}
                 disabled={(isDisabled && !draftIsBypassCommand(promptDraft)) || !promptDraft?.trim()}

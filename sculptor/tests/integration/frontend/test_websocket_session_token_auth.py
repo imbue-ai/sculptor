@@ -67,7 +67,7 @@ def test_stream_websocket_requires_session_token(
     # actually enforces it (the default test environment leaves it unset).
     sculptor_instance_factory_.update_environment(SESSION_TOKEN=_SESSION_TOKEN)
     with sculptor_instance_factory_.spawn_instance() as instance:
-        base_url = instance.base_url
+        base_url = instance.backend_api_url
 
         # 1. No token: a drive-by client can't authenticate, so the handshake
         #    must be rejected with the dedicated 4401 close code.

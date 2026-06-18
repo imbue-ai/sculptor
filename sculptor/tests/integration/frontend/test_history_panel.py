@@ -199,7 +199,7 @@ def test_history_panel_refreshes_on_target_branch_change(sculptor_instance_: Scu
     # Read HEAD's short hash from the commits API so we can assert the terminus
     # moves to HEAD after the target-branch change.
     workspace_id = _extract_workspace_id(page.url)
-    base_url = page.url.split("#")[0].rstrip("/")
+    base_url = sculptor_instance_.backend_api_url.rstrip("/")
     pre_patch = page.request.get(f"{base_url}/api/v1/workspaces/{workspace_id}/commits")
     assert pre_patch.ok, f"Failed to read commits: {pre_patch.status}"
     head_short_hash = pre_patch.json()["commits"][0]["hash"][:11]

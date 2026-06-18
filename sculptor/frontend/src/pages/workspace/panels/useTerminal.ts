@@ -299,10 +299,18 @@ export const shouldClearActiveTerminal = (
 // ---------------------------------------------------------------------------
 
 type UseTerminalArgs = {
-  workspaceID: string;
-  terminalIndex: number;
+  /** The backend WebSocket path for this terminal's PTY, e.g.
+   * `/api/v1/workspaces/{id}/terminal/{index}/ws` (workspace terminals) or
+   * `/api/v1/agents/{id}/terminal/ws` (terminal agents). */
+  terminalPath: string;
   isVisible: boolean;
   onOutput?: () => void;
+  /** Font size in px (default 12). Fixed at mount. */
+  fontSize?: number;
+  /** Cell-height multiplier (default 1). Fixed at mount. xterm's
+   * customGlyphs rendering stretches box-drawing characters to the full
+   * cell, so TUI borders stay seamless at line heights above 1. */
+  lineHeight?: number;
 };
 
 type UseTerminalResult = {
@@ -310,10 +318,11 @@ type UseTerminalResult = {
 };
 
 export const useTerminal = ({
-  workspaceID,
-  terminalIndex,
+  terminalPath,
   isVisible,
   onOutput,
+  fontSize = 12,
+  lineHeight = 1,
 }: UseTerminalArgs): UseTerminalResult => {
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
@@ -330,8 +339,6 @@ export const useTerminal = ({
   const grayColor = useThemeGrayColor();
   const accentColor = useThemeAccentColor();
   const [isXtermReady, setIsXtermReady] = useState<boolean>(false);
-
-  const terminalPath = `/api/v1/workspaces/${workspaceID}/terminal/${terminalIndex}/ws`;
 
   // Compute the terminal panel background from the Radix color scale in JS.
   // This avoids reading CSS custom properties via getComputedStyle, which can
@@ -382,7 +389,8 @@ export const useTerminal = ({
 
       const xterm = new XTerm({
         cursorBlink: true,
-        fontSize: 12,
+        fontSize,
+        lineHeight,
         fontFamily: 'Menlo, Monaco, "Courier New", monospace',
         theme: getTheme(),
         allowProposedApi: true,

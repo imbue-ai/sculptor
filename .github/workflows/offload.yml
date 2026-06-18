@@ -2,6 +2,7 @@ name: offload
 
 on:
   pull_request:
+  merge_group:
   push:
     branches: [main]
 
@@ -12,6 +13,7 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  OFFLOAD_VERSION: "0.9.8"
   # HCP Vault address + namespace. Mirrors the values in scripts/export-vault-env.
   VAULT_ADDR: https://vault-cluster-public-vault-df29b16f.9b573ab7.z1.hashicorp.cloud:8200
   VAULT_NAMESPACE: admin
@@ -96,12 +98,12 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             ~/.cargo/bin/offload
-          key: cargo-offload-0.9.7-${{ runner.os }}
+          key: cargo-offload-${{ env.OFFLOAD_VERSION }}-${{ runner.os }}
 
       - name: Install offload
         run: |
-          if ! command -v offload >/dev/null || ! offload --version | grep -q '0.9.7'; then
-            cargo install offload@0.9.7 --force
+          if ! command -v offload >/dev/null || ! offload --version | grep -qF "$OFFLOAD_VERSION"; then
+            cargo install offload@"$OFFLOAD_VERSION" --force
           fi
           offload --version
 
@@ -167,5 +169,133 @@ jobs:
         with:
           check-name: offload integration tests
           junit-path: test-results/junit-integration.xml
+          tests-outcome: ${{ steps.tests.outcome }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  # Runs the @electron integration subset in Electron launch mode (real Electron
+  # under xvfb, driven over CDP). These tests are skipped by the browser-mode
+  # lane above, so without this job they run in no CI lane at all. Kept as a
+  # separate job (rather than a matrix) so the browser lane stays untouched.
+  offload-electron-integration-tests:
+    name: offload electron integration tests
+    # SECURITY: same fork gate as the browser lane — never run untrusted forked
+    # code on the self-hosted offload-runner.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: offload-runner
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      id-token: write
+      checks: write
+    env:
+      JUST_VERBOSE: "1"
+      SCIENCE_FILESYSTEM_ROOT: /tmp/science
+      VAULT_AUTH_ROLE: sculptor_test_gh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history needed for offload's checkpoint resolution.
+          fetch-depth: 0
+
+      # Use a consistent bot identity for the git-note commits offload writes.
+      - name: Configure git identity for offload note writes
+        run: |
+          git config user.email "dev@imbue.com"
+          git config user.name "imbue-dev"
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends rsync jq unzip ca-certificates
+
+      - name: Install Vault CLI
+        run: |
+          VAULT_VERSION=1.19.0
+          VAULT_SHA256=9df904271319452bbb37825cfe50726383037550cc04b7c2d0ab09e2f08f82a1
+          curl -fsSL "https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_linux_amd64.zip" -o /tmp/vault.zip
+          echo "${VAULT_SHA256}  /tmp/vault.zip" | sha256sum -c -
+          sudo unzip -o /tmp/vault.zip -d /usr/local/bin
+          rm /tmp/vault.zip
+          vault --version
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Setup just
+        uses: extractions/setup-just@v2
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache offload binary
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/offload
+          key: cargo-offload-${{ env.OFFLOAD_VERSION }}-${{ runner.os }}
+
+      - name: Install offload
+        run: |
+          if ! command -v offload >/dev/null || ! offload --version | grep -qF "$OFFLOAD_VERSION"; then
+            cargo install offload@"$OFFLOAD_VERSION" --force
+          fi
+          offload --version
+
+      - name: Fetch offload image-cache git notes
+        run: git fetch origin 'refs/notes/*:refs/notes/*' || true
+
+      - name: Sync Python deps
+        run: uv sync --frozen
+
+      - name: Run offload electron integration tests
+        id: tests
+        run: |
+          eval "$(./scripts/export-vault-env \
+            shared/modal/MODAL_TOKEN_ID \
+            shared/modal/MODAL_TOKEN_SECRET)"
+          ulimit -n 8192
+
+          OFFLOAD_EXIT=0
+          just test-offload-electron --ci || OFFLOAD_EXIT=$?
+
+          # Reap leaked Modal python3 workers so they don't linger on the
+          # runner host between jobs. See SCU-1376 for the underlying issue.
+          pkill -TERM -f 'python3.*modal' 2>/dev/null || true
+          sleep 3
+          pkill -KILL -f 'python3.*modal' 2>/dev/null || true
+
+          # offload exits 2 for "some tests failed"; preserve that so the
+          # rest of the pipeline still uploads artifacts and parses JUnit.
+          if [ "$OFFLOAD_EXIT" -ne 0 ] && [ "$OFFLOAD_EXIT" -ne 2 ]; then
+            exit "$OFFLOAD_EXIT"
+          fi
+
+      - name: Surface failed + flaky test names
+        if: always()
+        run: python3 scripts/ci/print_offload_failed_tests.py test-results-electron/junit-electron.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-offload-electron
+          path: test-results-electron/
+          include-hidden-files: true
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Report test results (flake-aware)
+        if: always()
+        uses: ./.github/actions/report-flaky-aware-tests
+        with:
+          check-name: offload electron integration tests
+          junit-path: test-results-electron/junit-electron.xml
           tests-outcome: ${{ steps.tests.outcome }}
           github-token: ${{ secrets.GITHUB_TOKEN }}

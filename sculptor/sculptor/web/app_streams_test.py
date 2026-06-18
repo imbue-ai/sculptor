@@ -18,22 +18,22 @@ from uvicorn import Config
 from websocket import create_connection
 from websockets.sync.connection import Connection
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.common import generate_id
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.constants import ExceptionPriority
-from imbue_core.ids import AssistantMessageID
-from imbue_core.itertools import only
-from imbue_core.sculptor.state.chat_state import TextBlock
-from imbue_core.sculptor.state.messages import ResponseBlockAgentMessage
-from imbue_core.thread_utils import ObservableThread
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import Notification
 from sculptor.database.models import NotificationID
 from sculptor.database.models import Project
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.common import generate_id
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.constants import ExceptionPriority
+from sculptor.foundation.itertools import only
+from sculptor.foundation.thread_utils import ObservableThread
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import AssistantMessageID
 from sculptor.primitives.ids import RequestID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
+from sculptor.state.chat_state import TextBlock
+from sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.web.app import APP
 from sculptor.web.app_basic_test import _create_task_with_message_in_workspace
 from sculptor.web.app_basic_test import _create_workspace
@@ -82,13 +82,13 @@ def server_url(server_app: FastAPI) -> Generator[str, None, None]:
     server._ready_event.wait()
 
     # figure out what port was bound
-    # pyre-ignore[16]: pyre doesn't understand the way server is initialized and it's a third-party library so we can't fix it
     server_port = only(only(server.servers).sockets).getsockname()[-1]
 
     # Now make requests using the actual port
     yield f"http://127.0.0.1:{server_port}"
 
-    server_app.shutdown_event.set()  # pyre-fixme[16]: the source of shutdown_event is unknown
+    # pyrefly: ignore [missing-attribute]
+    server_app.shutdown_event.set()
     server.should_exit = True
     server_thread.join()
 

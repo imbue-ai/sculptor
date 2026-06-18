@@ -136,7 +136,7 @@ def get_schema_names() -> list[str]:
 @schema_app.callback(invoke_without_command=True)
 def schema_callback(
     ctx: typer.Context,
-    command: str = typer.Argument(None, help="Command name (e.g. workspace.list, agent.show, run)"),
+    command: str | None = typer.Argument(None, help="Command name (e.g. workspace.list, agent.show, run)"),
 ) -> None:
     """Show JSON schema for a command's --json output.
 
@@ -152,7 +152,7 @@ def schema_callback(
         for name in get_schema_names():
             description = _SCHEMAS[name].get("description", "")
             typer.echo(f"  {name:25s} {description}")
-        typer.echo(f"\nUse `sculpt schema <name>` to view a schema.")
+        typer.echo("\nUse `sculpt schema <name>` to view a schema.")
         return
 
     schema = _SCHEMAS.get(command)

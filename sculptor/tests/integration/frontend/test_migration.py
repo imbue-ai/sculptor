@@ -1,14 +1,11 @@
-"""Integration tests for Sculptor data directory migration.
+"""Integration tests for Sculptor data directory bootstrap.
 
 Tests verify:
-- In-place bootstrap creates correct directory structure when .format_version is missing
-- Full migration script produces a working Sculptor folder that the backend can use
+- Bootstrap creates correct directory structure when .format_version is missing
 """
 
 import hashlib
 import os
-import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
@@ -16,8 +13,8 @@ from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 import sculptor.primitives.ids
-from imbue_core.sculptor.user_config import DependencyPaths
-from imbue_core.sculptor.user_config import UserConfig
+from sculptor.config.user_config import DependencyPaths
+from sculptor.config.user_config import UserConfig
 from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.dependency_stubs import DependencyState
 from sculptor.testing.dependency_stubs import stub_dependency
@@ -58,17 +55,6 @@ def _populate_bootstrap_folder(folder_path: Path) -> None:
     save_config(_make_test_config(), internal / "config.toml")
 
 
-def _populate_old_format_folder(folder_path: Path) -> None:
-    """Create an old-format flat layout inside folder_path for the migration script.
-
-    Old layout: config.toml, database.db, workspaces/, logs/ at the top level.
-    No internal/ subdirectory, no .format_version.
-    """
-    save_config(_make_test_config(), folder_path / "config.toml")
-    (folder_path / "workspaces").mkdir(exist_ok=True)
-    (folder_path / "logs").mkdir(exist_ok=True)
-
-
 def _dump_diagnostics(page: Page, sculptor_folder: Path, label: str) -> None:
     """Capture page screenshot and config for debugging CI failures."""
     screenshot_dir = Path(tempfile.mkdtemp(prefix="migration_test_diag_"))
@@ -86,22 +72,6 @@ def _dump_diagnostics(page: Page, sculptor_folder: Path, label: str) -> None:
     test_ids = page.evaluate("() => [...document.querySelectorAll('[data-testid]')].map(e => e.dataset.testid)")
     print(f"Visible test IDs: {test_ids}")
     print("=== END DIAGNOSTICS ===\n")
-
-
-def _get_repo_root() -> Path:
-    """Return the repository root directory."""
-    return Path(__file__).resolve().parents[4]
-
-
-def _run_migration_script(home_dir: Path, dev: bool = False) -> subprocess.CompletedProcess:
-    """Run the standalone migration script as a subprocess with HOME overridden."""
-    cmd = [sys.executable, str(_get_repo_root() / "scripts" / "migrate_sculptor_folder.py")]
-    if dev:
-        cmd.append("--dev")
-    env = {**os.environ, "HOME": str(home_dir)}
-    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
-    assert result.returncode == 0, f"Migration script failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
-    return result
 
 
 @user_story("to have Sculptor bootstrap correctly when .format_version is missing")
@@ -141,63 +111,4 @@ def test_inplace_bootstrap_and_workspace_operations(
         start_task_and_wait_for_ready(
             sculptor_page=page,
             workspace_name="Bootstrap Test Workspace",
-        )
-
-
-@user_story("to migrate from old folder layout and have Sculptor work correctly")
-@stub_dependency("claude", state=DependencyState.INSTALLED_STUB)
-def test_full_migration_script_then_frontend(
-    sculptor_instance_factory_: SculptorInstanceFactory,
-    tmp_path: Path,
-) -> None:
-    """Run the migration script on an old-format folder, then verify the frontend works.
-
-    1. Creates a fake home with ~/.sculptor_data in old-format layout
-    2. Runs the migration script as a subprocess
-    3. Points the factory at the migrated ~/.sculptor folder
-    4. Spawns a backend and verifies workspace creation works
-    """
-    fake_home = tmp_path / "fake_home"
-    fake_home.mkdir()
-
-    # Create old-format layout at fake_home/.sculptor_data
-    old_folder = fake_home / ".sculptor_data"
-    _populate_old_format_folder(old_folder)
-
-    # Run the migration script
-    _run_migration_script(home_dir=fake_home)
-
-    # Verify migration produced expected structure
-    migrated_folder = fake_home / ".sculptor"
-    assert (migrated_folder / ".format_version").is_file()
-    assert (migrated_folder / "internal").is_dir()
-    assert (migrated_folder / "workspaces").is_dir()
-    assert (migrated_folder / "internal" / "config.toml").is_file()
-    assert not old_folder.exists()
-
-    # Point the factory at the migrated folder
-    sculptor_instance_factory_.update_environment(
-        sculptor_folder=migrated_folder,
-        SCULPTOR_FOLDER=str(migrated_folder),
-        DATABASE_URL=f"sqlite:///{migrated_folder / 'internal' / 'database.db'}",
-    )
-
-    with sculptor_instance_factory_.spawn_instance() as instance:
-        page = instance.page
-
-        # Verify the create surface is reachable (see equivalent comment in
-        # the bootstrap test above): the topbar "+" when workspaces exist, or
-        # the inline form's submit button on an empty Home.
-        layout = PlaywrightProjectLayoutPage(page=page)
-        modal = PlaywrightNewWorkspaceModalPage(page=page)
-        try:
-            expect(layout.get_add_workspace_button().or_(modal.get_submit_button())).to_be_visible(timeout=45_000)
-        except AssertionError:
-            _dump_diagnostics(page, migrated_folder, "migration")
-            raise
-
-        # Create a workspace to verify full functionality
-        start_task_and_wait_for_ready(
-            sculptor_page=page,
-            workspace_name="Migration Test Workspace",
         )

@@ -2,6 +2,7 @@ import datetime
 import shutil
 from abc import ABC
 from abc import abstractmethod
+from collections.abc import Sequence
 from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
@@ -16,24 +17,22 @@ from loguru import logger
 from pydantic import AnyUrl
 from pydantic import PrivateAttr
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.common import is_live_debugging
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.constants import ExceptionPriority
-from imbue_core.errors import ExpectedError
-from imbue_core.event_utils import ShutdownEvent
-from imbue_core.sculptor.state.messages import AgentMessageSource
-from imbue_core.sculptor.state.messages import Message
-from imbue_core.sculptor.state.messages import PersistentMessage
-from imbue_core.serialization import SerializedException
-from imbue_core.time_utils import get_current_time
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import SavedAgentMessage
 from sculptor.database.models import Task
 from sculptor.database.models import TaskID
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.common import is_live_debugging
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.constants import ExceptionPriority
+from sculptor.foundation.errors import ExpectedError
+from sculptor.foundation.event_utils import ShutdownEvent
+from sculptor.foundation.nested_evolver import assign
+from sculptor.foundation.nested_evolver import chill
+from sculptor.foundation.nested_evolver import evolver
+from sculptor.foundation.serialization import SerializedException
+from sculptor.foundation.time_utils import get_current_time
 from sculptor.interfaces.agents.agent import EnvironmentAcquiredRunnerMessage
 from sculptor.interfaces.agents.agent import EnvironmentReleasedRunnerMessage
 from sculptor.interfaces.agents.agent import EphemeralMessage
@@ -49,6 +48,8 @@ from sculptor.interfaces.agents.artifacts import FileAgentArtifact
 from sculptor.interfaces.agents.tasks import TaskState
 from sculptor.interfaces.environments.base import Environment
 from sculptor.primitives.constants import MESSAGE_LOG_TYPE
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import UserReference
 from sculptor.primitives.ids import WorkspaceID
@@ -68,6 +69,10 @@ from sculptor.services.task_service.errors import TaskNotFound
 from sculptor.services.task_service.errors import UserPausedTaskError
 from sculptor.services.task_service.errors import UserStoppedTaskError
 from sculptor.services.workspace_service.api import WorkspaceService
+from sculptor.state.messages import AgentMessageSource
+from sculptor.state.messages import Message
+from sculptor.state.messages import ModelOption
+from sculptor.state.messages import PersistentMessage
 from sculptor.tasks.api import run_task
 from sculptor.utils.errors import is_irrecoverable_exception
 from sculptor.utils.filtered_queue import FilteredQueue
@@ -196,7 +201,6 @@ class BaseTaskService(TaskService, ABC):
         task = self.get_task(task_id, transaction)
         if not task:
             raise TaskNotFound(f"{task_id} not found")
-        assert task is not None  # for the type checker
         logger.debug("Marking task {} as read", task_id)
         updated_task = task.evolve(task.ref().last_read_at, get_current_time())
         updated_task = transaction.upsert_task(updated_task)
@@ -208,10 +212,36 @@ class BaseTaskService(TaskService, ABC):
         task = self.get_task(task_id, transaction)
         if not task:
             raise TaskNotFound(f"{task_id} not found")
-        assert task is not None  # for the type checker
         logger.debug("Marking task {} as unread", task_id)
         updated_task = task.evolve(task.ref().last_read_at, None)
         updated_task = transaction.upsert_task(updated_task)
+        transaction.add_callback(lambda: self._publish_task_update(task=updated_task))
+        return updated_task
+
+    def update_available_models(
+        self,
+        task_id: TaskID,
+        available_models: Sequence[ModelOption],
+        current_model: ModelOption | None,
+        transaction: DataModelTransaction,
+    ) -> Task | None:
+        assert isinstance(transaction, SQLTransaction)
+        task = self.get_task(task_id, transaction)
+        if task is None or not isinstance(task.current_state, AgentTaskStateV2):
+            return None
+        models = list(available_models)
+        state = task.current_state
+        if state.available_models == models and state.current_model == current_model:
+            return None
+        # Evolve only the catalog fields; the title is read from this same task
+        # row, so a concurrent rename already committed is preserved.
+        mutable_state = evolver(state)
+        assign(mutable_state.available_models, lambda: models)
+        assign(mutable_state.current_model, lambda: current_model)
+        updated_task = task.evolve(task.ref().current_state, chill(mutable_state).model_dump())
+        updated_task = transaction.upsert_task(updated_task)
+        # Publish the same task-update a message write registers, so a live
+        # switcher refreshes even though this change created no message.
         transaction.add_callback(lambda: self._publish_task_update(task=updated_task))
         return updated_task
 
@@ -324,6 +354,11 @@ class BaseTaskService(TaskService, ABC):
         assert isinstance(transaction, SQLTransaction)
         return tuple(x.message for x in transaction.get_messages_for_task(task_id))
 
+    def get_live_messages_for_task(self, task_id: TaskID) -> tuple[Message, ...]:
+        # Same lock as create_message's append so the snapshot is consistent.
+        with self._subscription_lock:
+            return tuple(self._messages_by_task_id.get(task_id, ()))
+
     @contextmanager
     def subscribe_to_all_tasks_for_user(
         self, user_reference: UserReference
@@ -338,7 +373,8 @@ class BaseTaskService(TaskService, ABC):
             # otherwise there is a race condition where the listener might not see some messages that are being committed
             # or they might arrive out of order (both of which are bad)
             with self.data_model_service.open_transaction(RequestID()) as transaction:
-                tasks = transaction.get_tasks_for_user(user_reference)  # pyre-fixme[16]
+                # pyrefly: ignore [missing-attribute]
+                tasks = transaction.get_tasks_for_user(user_reference)
                 task_ids = {task.object_id for task in tasks}
             latest_tasks = tuple(
                 self._latest_task_by_task_id[task_id]
@@ -420,7 +456,8 @@ class BaseTaskService(TaskService, ABC):
         with self._subscription_lock:
             registry.setdefault(registry_key, []).append(listener)
             with self.data_model_service.open_transaction(RequestID()) as transaction:
-                tasks = transaction.get_tasks_for_user(user_reference)  # pyre-fixme[16]
+                # pyrefly: ignore [missing-attribute]
+                tasks = transaction.get_tasks_for_user(user_reference)
                 matching_task_ids = {task.object_id for task in tasks if task_filter(task)}
             latest_tasks = tuple(
                 self._latest_task_by_task_id[task_id]

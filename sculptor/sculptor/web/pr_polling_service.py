@@ -20,16 +20,17 @@ from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
 from queue import Queue
+from typing import Literal
 
 from loguru import logger
 from pydantic import PrivateAttr
 
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.constants import ExceptionPriority
-from imbue_core.processes.local_process import run_blocking
-from imbue_core.sculptor.user_config import UserConfig
+from sculptor.config.user_config import UserConfig
 from sculptor.database.models import Workspace
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.constants import ExceptionPriority
+from sculptor.foundation.processes.local_process import run_blocking
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.primitives.service import Service
@@ -41,6 +42,11 @@ from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import PrStatusInfo
 from sculptor.web.mr_status import fetch_mr_status
 from sculptor.web.pr_status import fetch_pr_status
+
+# Git host providers we know how to poll. Matches ``PrStatusInfo.error_provider``.
+_Provider = Literal["github", "gitlab"]
+# The terminal/non-terminal PR states. Matches ``PrStatusInfo.pr_state``.
+_PrState = Literal["none", "open", "merged", "closed"]
 
 # Re-enqueue delay when a poll returns None — either the workspace is still
 # initializing (no working_dir yet) or _execute_poll caught an exception.
@@ -60,20 +66,93 @@ _DISABLED_RECHECK_SECONDS = 60.0
 # very low and the closed multiplier to 1, we never schedule polls closer
 # together than this. Matches the UI's minimum.
 _MIN_POLL_INTERVAL_SECONDS = 10.0
+# Minimum spacing between the *start* of any two API-backed polls, enforced
+# globally across the whole worker pool. GitHub's GraphQL guidance is to avoid
+# concurrent requests; staggering poll starts keeps the workers from firing
+# gh/glab simultaneously and smooths bursts under the per-minute limit. The
+# ``gh``/``glab`` commands we run are GraphQL-backed, so each poll spends real
+# GraphQL points — spacing them is what keeps a fleet of workspaces under the
+# hourly budget.
+_GLOBAL_MIN_POLL_SPACING_SECONDS = 1.5
+# How long to suppress all polls for a provider after it returns a rate-limit
+# error. The next poll re-checks and re-applies the cooldown if the host is
+# still throttling, so this is a probe interval rather than a guess at the
+# exact reset time.
+_RATE_LIMIT_COOLDOWN_SECONDS = 60.0
+# Terminal PR states (merged/closed) never change again, so poll them rarely
+# even while the workspace is open.
+_TERMINAL_STATE_MULTIPLIER = 10
 
 
-def _compute_poll_delay(config: UserConfig, *, is_open: bool) -> float:
+def _compute_poll_delay(config: UserConfig, *, is_open: bool, pr_state: _PrState) -> float:
     """Compute the next-poll delay for a workspace from the user's settings.
 
     Closed workspaces get ``pr_poll_interval_seconds * pr_poll_closed_multiplier``.
-    Both factors are read from ``UserConfig`` per call so the new delay is
-    picked up on the very next poll cycle after a settings change.
+    Terminal PRs (merged/closed) back off by ``_TERMINAL_STATE_MULTIPLIER``
+    regardless of whether the workspace is open, since their status can't
+    change. The largest applicable multiplier wins. All factors are read from
+    ``UserConfig`` per call so a new delay is picked up on the very next poll
+    cycle after a settings change.
     """
     base = max(float(config.pr_poll_interval_seconds), _MIN_POLL_INTERVAL_SECONDS)
-    if is_open:
-        return base
-    multiplier = max(1, config.pr_poll_closed_multiplier)
+    multiplier = 1.0
+    if not is_open:
+        multiplier = max(multiplier, float(max(1, config.pr_poll_closed_multiplier)))
+    if pr_state in ("merged", "closed"):
+        multiplier = max(multiplier, float(_TERMINAL_STATE_MULTIPLIER))
     return base * multiplier
+
+
+class _CooldownDeferred:
+    """Sentinel result meaning a poll was skipped because its provider is in
+    rate-limit cooldown. Carries how long to wait before trying again so the
+    worker can re-enqueue without touching the cache or hitting the API."""
+
+    __slots__ = ("retry_after",)
+
+    def __init__(self, retry_after: float) -> None:
+        self.retry_after = retry_after
+
+
+class _HostThrottle:
+    """Thread-safe, process-global throttle shared by all poll workers.
+
+    GitHub's GraphQL rate limit is per authenticated user — one budget shared
+    across every workspace and repo — so throttling has to be global, not
+    per-workspace. Two responsibilities:
+
+    - **Spacing**: ``reserve_slot`` hands out start times at least
+      ``min_interval`` apart, so concurrent workers stagger their gh/glab
+      calls instead of firing them at once.
+    - **Cooldown**: when a provider returns a rate-limit error,
+      ``enter_cooldown`` suppresses every poll for that provider until the
+      cooldown expires (queried via ``cooldown_remaining``).
+    """
+
+    def __init__(self, min_interval: float) -> None:
+        self._min_interval = min_interval
+        self._lock = threading.Lock()
+        self._next_allowed_start = 0.0
+        self._cooldown_until: dict[_Provider, float] = {}
+
+    def cooldown_remaining(self, provider: _Provider) -> float:
+        with self._lock:
+            return max(0.0, self._cooldown_until.get(provider, 0.0) - time.monotonic())
+
+    def enter_cooldown(self, provider: _Provider, seconds: float) -> None:
+        with self._lock:
+            until = time.monotonic() + seconds
+            # Extend an existing cooldown, never shorten it.
+            if until > self._cooldown_until.get(provider, 0.0):
+                self._cooldown_until[provider] = until
+
+    def reserve_slot(self) -> float:
+        """Reserve the next global spacing slot; return seconds to wait before starting."""
+        with self._lock:
+            now = time.monotonic()
+            start = max(now, self._next_allowed_start)
+            self._next_allowed_start = start + self._min_interval
+            return start - now
 
 
 @dataclass(frozen=True)
@@ -203,6 +282,10 @@ class PrPollingService(Service):
     _worker_sleep_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
     _gh_available: bool | None = PrivateAttr(default=None)
     _glab_available: bool | None = PrivateAttr(default=None)
+    # Process-global throttle/cooldown shared by every worker. The gh/glab
+    # commands are GraphQL-backed and the rate limit is per-user, so spacing
+    # and cooldown must be coordinated across the whole pool, not per workspace.
+    _throttle: _HostThrottle = PrivateAttr(default_factory=lambda: _HostThrottle(_GLOBAL_MIN_POLL_SPACING_SECONDS))
 
     def __init__(
         self,
@@ -495,6 +578,13 @@ class PrPollingService(Service):
         if state.is_deleted:
             return
 
+        # Provider is in rate-limit cooldown — the poll was skipped without
+        # hitting the API. Leave the cached status untouched and retry once
+        # the cooldown expires.
+        if isinstance(result, _CooldownDeferred):
+            self._enqueue(job.workspace_id, delay=max(result.retry_after, _MIN_POLL_INTERVAL_SECONDS))
+            return
+
         # None means workspace wasn't ready (no working_dir yet) — retry soon.
         if result is None:
             self._enqueue(job.workspace_id, delay=_NOT_READY_RETRY_SECONDS)
@@ -506,10 +596,16 @@ class PrPollingService(Service):
         with self._observer_lock:
             if result != self._cache.get(job.workspace_id):
                 self._cache[job.workspace_id] = result
-                for queue in self._observers:
-                    queue.put(result)
+                for observer_queue in self._observers:
+                    observer_queue.put(result)
 
-        self._enqueue(job.workspace_id, delay=_compute_poll_delay(config, is_open=state.is_open))
+        if result.error_category == "rate_limited" and result.error_provider is not None:
+            # A host cooldown was just set for this provider — wait it out
+            # rather than re-polling at the base interval.
+            delay = max(self._throttle.cooldown_remaining(result.error_provider), _MIN_POLL_INTERVAL_SECONDS)
+        else:
+            delay = _compute_poll_delay(config, is_open=state.is_open, pr_state=result.pr_state)
+        self._enqueue(job.workspace_id, delay=delay)
 
     def _wake_sleepiest_worker(self, delay: float) -> None:
         """Wake the worker sleeping the longest, but only if the new job is more urgent.
@@ -524,6 +620,8 @@ class PrPollingService(Service):
         with self._worker_sleep_lock:
             if not self._worker_sleep_until:
                 return
+            # dict.get never returns None for the dict's own keys
+            # pyrefly: ignore [no-matching-overload]
             sleepiest_index = max(self._worker_sleep_until, key=self._worker_sleep_until.get)
             if scheduled_time >= self._worker_sleep_until[sleepiest_index]:
                 return
@@ -533,7 +631,9 @@ class PrPollingService(Service):
         with self._pending_lock:
             self._pending.discard(workspace_id)
 
-    def _execute_poll(self, workspace_id: WorkspaceID, state: _WorkspacePollState) -> PrStatusInfo | None:
+    def _execute_poll(
+        self, workspace_id: WorkspaceID, state: _WorkspacePollState
+    ) -> PrStatusInfo | _CooldownDeferred | None:
         try:
             status = self._fetch_status(workspace_id, state)
             state.first_failure = None
@@ -554,7 +654,33 @@ class PrPollingService(Service):
             )
             return None
 
-    def _fetch_status(self, workspace_id: WorkspaceID, state: _WorkspacePollState) -> PrStatusInfo | None:
+    def _respect_throttle(self, provider: _Provider) -> _CooldownDeferred | None:
+        """Apply the global throttle before an API-backed poll.
+
+        Returns a ``_CooldownDeferred`` if ``provider`` is currently in
+        rate-limit cooldown — the caller should skip the poll (making no API
+        call) and re-enqueue. Otherwise reserves a global spacing slot and
+        waits until it's due (an interruptible wait so ``stop()`` wakes it
+        immediately), then returns None to signal "go ahead".
+        """
+        remaining = self._throttle.cooldown_remaining(provider)
+        if remaining > 0:
+            logger.trace("PR poll: {} in rate-limit cooldown, deferring {:.1f}s", provider, remaining)
+            return _CooldownDeferred(remaining)
+        wait = self._throttle.reserve_slot()
+        if wait > 0:
+            self._shutdown_event.wait(timeout=wait)
+        return None
+
+    def _note_rate_limit(self, status: PrStatusInfo, provider: _Provider) -> None:
+        """Start a host cooldown for ``provider`` if the poll was rate-limited."""
+        if status.error_category == "rate_limited":
+            self._throttle.enter_cooldown(provider, _RATE_LIMIT_COOLDOWN_SECONDS)
+            logger.debug("PR poll: {} rate-limited, cooling down {:.0f}s", provider, _RATE_LIMIT_COOLDOWN_SECONDS)
+
+    def _fetch_status(
+        self, workspace_id: WorkspaceID, state: _WorkspacePollState
+    ) -> PrStatusInfo | _CooldownDeferred | None:
         working_dir = state.working_dir
 
         # Re-read from DB if working_dir not yet available (environment may have initialized)
@@ -602,12 +728,17 @@ class PrPollingService(Service):
                     error_provider="github",
                     error_message="gh CLI not found in PATH",
                 )
-            return fetch_pr_status(
+            deferred = self._respect_throttle("github")
+            if deferred is not None:
+                return deferred
+            status = fetch_pr_status(
                 workspace_id=workspace_id,
                 working_dir=working_dir,
                 current_branch=current_branch,
                 target_branch=target_branch,
             )
+            self._note_rate_limit(status, "github")
+            return status
 
         if origin_url is not None and _is_gitlab_url(origin_url):
             if not self._is_glab_available():
@@ -618,11 +749,16 @@ class PrPollingService(Service):
                     error_provider="gitlab",
                     error_message="glab CLI not found in PATH",
                 )
-            return fetch_mr_status(
+            deferred = self._respect_throttle("gitlab")
+            if deferred is not None:
+                return deferred
+            status = fetch_mr_status(
                 workspace_id=workspace_id,
                 working_dir=working_dir,
                 current_branch=current_branch,
                 target_branch=target_branch,
             )
+            self._note_rate_limit(status, "gitlab")
+            return status
 
         return PrStatusInfo(workspace_id=workspace_id, pr_state="none")

@@ -8,24 +8,20 @@ from typing import cast
 
 from loguru import logger
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.constants import ExceptionPriority
-from imbue_core.event_utils import ReadOnlyEvent
-from imbue_core.nested_evolver import assign
-from imbue_core.nested_evolver import chill
-from imbue_core.nested_evolver import evolver
-from imbue_core.progress_tracking.progress_tracking import RootProgressHandle
-from imbue_core.progress_tracking.progress_tracking import start_finish_context
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import Message
-from imbue_core.sculptor.state.messages import PersistentUserMessage
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskStateV2
 from sculptor.database.models import Project
 from sculptor.database.models import Task
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.constants import ExceptionPriority
+from sculptor.foundation.errors import ImbueError
+from sculptor.foundation.event_utils import ReadOnlyEvent
+from sculptor.foundation.nested_evolver import assign
+from sculptor.foundation.nested_evolver import chill
+from sculptor.foundation.nested_evolver import evolver
+from sculptor.foundation.progress_tracking.progress_tracking import RootProgressHandle
+from sculptor.foundation.progress_tracking.progress_tracking import start_finish_context
 from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessage
 from sculptor.interfaces.agents.agent import PersistentUserMessageUnion
 from sculptor.interfaces.agents.agent import RequestStoppedAgentMessage
@@ -33,17 +29,28 @@ from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
 from sculptor.interfaces.agents.agent import StopAgentUserMessage
 from sculptor.interfaces.agents.agent import UserMessageUnion
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import TaskID
 from sculptor.server.llm_content_generation import TaskTitle
 from sculptor.server.llm_content_generation import generate_title_from_prompt
 from sculptor.services.task_service.data_types import ServiceCollectionForTask
 from sculptor.services.task_service.errors import UserPausedTaskError
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import Message
+from sculptor.state.messages import PersistentUserMessage
 from sculptor.utils.type_utils import extract_leaf_types
 
 # it will take at most this much time to notice when the process has finished
 _POLL_SECONDS: float = 1.0
 # if it takes longer than this, we give up waiting for the title and branch name to be predicted
 _TITLE_NAME_TIMEOUT_SECONDS: float = 10.0
-_FIXED_BRANCH_NAME_COUNTER_FOR_TESTING = 0
+# the fallback title is the initial prompt truncated to this many characters
+_FALLBACK_TITLE_MAX_LENGTH: int = 60
+_FIXED_TITLE_COUNTER_FOR_TESTING = 0
+
+
+class LastProcessedMessageNotInQueueError(ImbueError):
+    """Raised when the persisted last-processed message id is absent from the input queue."""
 
 
 @contextmanager
@@ -194,9 +201,9 @@ def _predict_title(
             title_generation_handler.report_generated_title(title)
             return
         try:
-            logger.info("Generating title for task...")
+            logger.debug("Generating title for task...")
             task_title = generate_title_from_prompt(initial_prompt, concurrency_group)
-            logger.info("Generated title: '{}'", task_title.title)
+            logger.debug("Generated title: '{}'", task_title.title)
             title_result.append(task_title)
         except Exception as e:
             log_exception(
@@ -204,8 +211,12 @@ def _predict_title(
                 "Failed to generate title",
                 priority=ExceptionPriority.LOW_PRIORITY,
             )
-            title = initial_prompt[:60] + "..." if len(initial_prompt) > 60 else initial_prompt
-            logger.info("Generated fallback title: '{}'", title)
+            title = (
+                initial_prompt[:_FALLBACK_TITLE_MAX_LENGTH] + "..."
+                if len(initial_prompt) > _FALLBACK_TITLE_MAX_LENGTH
+                else initial_prompt
+            )
+            logger.debug("Generated fallback title: '{}'", title)
             title_result.append(TaskTitle(title=title))
         finally:
             if title_result:
@@ -213,13 +224,13 @@ def _predict_title(
 
 
 def _generate_fixed_title_for_testing() -> str:
-    global _FIXED_BRANCH_NAME_COUNTER_FOR_TESTING
-    _FIXED_BRANCH_NAME_COUNTER_FOR_TESTING += 1
-    return f"Task {_FIXED_BRANCH_NAME_COUNTER_FOR_TESTING}"
+    global _FIXED_TITLE_COUNTER_FOR_TESTING
+    _FIXED_TITLE_COUNTER_FOR_TESTING += 1
+    return f"Task {_FIXED_TITLE_COUNTER_FOR_TESTING}"
 
 
 def load_initial_task_state(services: ServiceCollectionForTask, task: Task) -> tuple[AgentTaskStateV2, Project]:
-    logger.info("loading initial task state")
+    logger.debug("loading initial task state")
     with services.data_model_service.open_task_transaction() as transaction:
         task_row = transaction.get_task(task.object_id)
         assert task_row is not None, "Task must exist in the database"
@@ -338,7 +349,9 @@ def _drop_already_processed_messages(
                 found_last_processed_input_message = True
                 break
         if not found_last_processed_input_message:
-            raise Exception(f"Unable to find last processed message in queue: {last_processed_input_message_id}")
+            raise LastProcessedMessageNotInQueueError(
+                f"Unable to find last processed message in queue: {last_processed_input_message_id}"
+            )
 
         # And then consume all ephemeral messages until the next message that needs to be processed
         while not user_message_queue.empty():

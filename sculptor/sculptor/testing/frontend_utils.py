@@ -18,8 +18,11 @@ DEFAULT_TEST_VIEWPORT: dict[str, int] = {"width": 1600, "height": 1000}
 # that does the same.
 DEFAULT_TEST_LOCALE: str = "en-US"
 
+# Default Playwright action/navigation timeout for integration tests, in milliseconds.
+DEFAULT_TEST_TIMEOUT_MS: int = 30 * 1000
 
-def configure_page(page: Page, timeout_ms: int = 30 * 1000) -> None:
+
+def configure_page(page: Page, timeout_ms: int = DEFAULT_TEST_TIMEOUT_MS) -> None:
     page.set_default_timeout(timeout_ms)
     page.set_default_navigation_timeout(timeout_ms)
     expect.set_options(timeout=timeout_ms)

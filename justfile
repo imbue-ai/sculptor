@@ -172,15 +172,15 @@ lint:
     }
     quiet_by_default lint _do_lint
 
-# Type check Python (pyre) and JS/TS (tsc) code
+# Type check Python (pyrefly) and JS/TS (tsc) code
 [group("ci")]
 typecheck:
     #!/usr/bin/env bash
     set -euo pipefail
     {{ _quiet_by_default_fn }}
     _do_typecheck() {
-      echo "Type checking Python files with pyre..."
-      cd "{{justfile_directory()}}/sculptor" && uv run --project sculptor pyre
+      echo "Type checking Python files with pyrefly..."
+      cd "{{justfile_directory()}}" && uv run --project sculptor pyrefly check
       echo "Type checking JS/TS files with tsc..."
       {{ nvm_use }}
       cd "{{justfile_directory()}}/sculptor/frontend" && npm run tsc
@@ -384,7 +384,7 @@ check:
       "just _run-check lint" \
       2>&1 | grep -v 'exited with code 0'
 
-# Run all unit tests (backend, frontend, imbue_core, and sculpt CLI)
+# Run all unit tests (backend, frontend, foundation, and sculpt CLI)
 # Pass junitxml="true" to output JUnit XML files for CI
 # Set JUST_VERBOSE=1 in the environment for full output (used in CI).
 [group("ci")]
@@ -398,19 +398,21 @@ test-unit junitxml="":
     fi
     just test-unit-backend {{ if junitxml != "" { "sculptor/pytest_junit.xml" } else { "" } }}
     just test-unit-frontend
-    just test-unit-imbue-core
+    just test-unit-foundation
     just test-unit-sculpt {{ if junitxml != "" { "sculpt_junit.xml" } else { "" } }}
 
-# Run imbue_core unit tests
+# Run foundation unit tests (the former imbue_core library, now sculptor.foundation).
+# Runs with sculptor/sculptor/foundation/ as the pytest rootdir (via its own pytest.ini) so it
+# keeps the isolated test environment it had as a standalone package, independent of sculptor/conftest.py.
 [group("ci")]
-test-unit-imbue-core:
+test-unit-foundation:
     #!/usr/bin/env bash
     set -euo pipefail
     {{ _quiet_by_default_fn }}
-    _do_test_unit_imbue_core() {
-      env -u SESSION_TOKEN PROJECT_PATH=/tmp/repo GOOGLE_API_KEY=fake ANTHROPIC_API_KEY=fake uv run --project imbue_core pytest -n "${SCULPTOR_TEST_WORKERS:-8}" imbue_core/ -m "not integration and not acceptance"
+    _do_test_unit_foundation() {
+      env -u SESSION_TOKEN PROJECT_PATH=/tmp/repo GOOGLE_API_KEY=fake ANTHROPIC_API_KEY=fake uv run --project sculptor pytest -n "${SCULPTOR_TEST_WORKERS:-8}" sculptor/sculptor/foundation/ -m "not integration and not acceptance"
     }
-    quiet_by_default test-unit-imbue-core _do_test_unit_imbue_core
+    quiet_by_default test-unit-foundation _do_test_unit_foundation
 
 # Run sculpt CLI unit tests
 # Pass a path to junitxml to output JUnit XML for CI
@@ -627,12 +629,6 @@ storybook:
 [group("dev")]
 backend repo_path=".":
     #!/usr/bin/env bash
-    # Migrate the dev data folder to the new internal/ layout if needed.
-    dev_folder="{{justfile_directory()}}/.dev_sculptor"
-    if [ -d "$dev_folder" ] && [ ! -f "$dev_folder/.format_version" ]; then
-      echo "Migrating dev data folder to new layout..."
-      uv run --project sculptor python "{{justfile_directory()}}/scripts/migrate_sculptor_folder.py" --path "$dev_folder"
-    fi
     # Generate the source-built sculpt CLI client so `.venv/bin/sculpt` actually
     # imports and runs (digest-cached; a no-op when the API schema is unchanged).
     # Together with sculpt being a dev dependency of sculptor, this guarantees dev
@@ -841,16 +837,16 @@ install:
     just install-build-deps
     just install-backend
     just install-frontend
-    just install-pi
+    # pi is not installed here: Sculptor provisions it in MANAGED mode (the
+    # default). Run `just install-pi` only for a CUSTOM or real_pi dev setup.
 
-# Downloads the pinned, self-contained pi binary from GitHub Releases.
-# pi ships standalone per-platform binaries (no Node needed) at
-# github.com/earendil-works/pi; we install the version Sculptor's
-# PI_VERSION_RANGE pins. The binary loads sibling files (package.json, wasm,
-# theme/) relative to its real path, so we keep the whole release tree under
-# .venv/pi and symlink the binary into .venv/bin — which `uv run` puts first on
-# PATH, so the backend's `which pi` resolves to this pinned build. Auto-update /
-# managed provisioning is a deferred followup; this is the dev stopgap.
+# Installs the pinned, self-contained pi binary from GitHub Releases into
+# .venv/pi (the whole release tree — the binary loads sibling files like
+# package.json/wasm/theme relative to its real path) and symlinks it into
+# .venv/bin, which `uv run` puts first on PATH so a CUSTOM `pi` resolves to it.
+# We install the version PI_VERSION_RANGE pins. Sculptor provisions pi itself
+# in MANAGED mode (the default), so this is NOT part of `just install`/`rebuild`.
+# Opt-in dev helper: for a CUSTOM pi against .venv/bin/pi, or the real_pi suite.
 [group("install")]
 install-pi:
     #!/usr/bin/env bash
@@ -959,20 +955,20 @@ verify-release-tag tag="":
 
 # Builds the Sculptor webapp in the default environment.
 [group("build")]
-build: (pyre-check) build-frontend build-backend
+build: (pyrefly-check) build-frontend build-backend
 
-# run pyre type checking. can be skipped with by setting env var SKIP_PYRE_IN_SCULPTOR_BUILD=1
+# run pyrefly type checking. can be skipped with by setting env var SKIP_PYREFLY_IN_SCULPTOR_BUILD=1
 [private]
-pyre-check:
+pyrefly-check:
     #!/usr/bin/env bash
     set -euo pipefail
-    cd "{{justfile_directory()}}/sculptor"
-    if [ -n "${SKIP_PYRE_IN_SCULPTOR_BUILD:-}" ]; then
-        echo "Skipping pyre check (SKIP_PYRE_IN_SCULPTOR_BUILD is set)"
+    cd "{{justfile_directory()}}"
+    if [ -n "${SKIP_PYREFLY_IN_SCULPTOR_BUILD:-}" ]; then
+        echo "Skipping pyrefly check (SKIP_PYREFLY_IN_SCULPTOR_BUILD is set)"
     else
-        echo "Running pyre type check..."
-        uv run --project sculptor pyre
-        echo "Pyre check passed!"
+        echo "Running pyrefly type check..."
+        uv run --project sculptor pyrefly check
+        echo "Pyrefly check passed!"
     fi
 
 # Creates a production build of the Sculptor webapp and backend.
@@ -992,11 +988,6 @@ sidecar python_key="": dist
 [group("build")]
 sculpt-binary python_key="": generate-sculpt-client
     /usr/bin/env bash "{{justfile_directory()}}/sculptor/builder/build-sculpt.sh" {{ python_key }}
-
-# Builds a standalone binary for the data folder migration script.
-[group("build")]
-migrate-binary python_key="":
-    /usr/bin/env bash "{{justfile_directory()}}/sculptor/builder/build-migrate.sh" {{ python_key }}
 
 # Resizes and reformats icons for packaging based on an original
 [group("build")]
@@ -1022,7 +1013,7 @@ electron-assets: icons
 The one-stop shop to clean, rebuild all intermediate targets from source, download all dependencies from remotes, and
 prepare for a clean build. Prefix your electron build targets for ease of use, e.g. `just refresh app` or `just refresh pkg`")]
 [group("build")]
-refresh-assets: clean build-frontend sidecar sculpt-binary migrate-binary electron-assets
+refresh-assets: clean build-frontend sidecar sculpt-binary electron-assets
 
 # Uses electron forge to create an executable application for MacOS on Arm64. This app will not be bundled into an installer.
 [group("build")]
@@ -1404,12 +1395,13 @@ test-real-claude tests="sculptor/tests/integration/real_claude/" buildargs="": b
     }
     quiet_by_default test-real-claude _do_test_real_claude
 
-# Runs real pi integration tests (requires a locally installed `pi` binary at
-# the pinned version and ANTHROPIC_API_KEY). These tests hit the real upstream
-# model through real pi and are excluded from CI. Run serially by default.
+# Runs real pi integration tests (require ANTHROPIC_API_KEY). These tests hit
+# the real upstream model through real pi and are excluded from CI. The
+# `install-pi` dependency puts the pinned pi on PATH (.venv/bin/pi), which the
+# real_pi resolver requires. Run serially by default.
 # Set XDIST_WORKERS to override (e.g. XDIST_WORKERS=2 for parallel).
 [group("test")]
-test-real-pi tests="sculptor/tests/integration/real_pi/" buildargs="": build-frontend generate-sculpt-client
+test-real-pi tests="sculptor/tests/integration/real_pi/" buildargs="": install-pi build-frontend generate-sculpt-client
     #!/usr/bin/env bash
     set -euo pipefail
     if [ "${JUST_VERBOSE:-}" != "1" ] && [ -z "${JUST_LOG_FILE:-}" ]; then
@@ -1472,6 +1464,16 @@ test-offload *args="":
     {{ _require_offload }}
     ulimit -n 8192
     offload run --trace {{args}} || [ $? -eq 2 ]
+
+# Run the @electron integration subset on Offload (Modal) in Electron launch
+# mode; see offload-electron.toml. These are skipped by the browser-mode lane.
+[group("test")]
+test-offload-electron *args="":
+    #!/bin/bash
+    set -ueo pipefail
+    {{ _require_offload }}
+    ulimit -n 8192
+    offload run -c offload-electron.toml --trace {{args}} || [ $? -eq 2 ]
 
 # Run the backend unit suite on Offload (Modal); see offload-unit.toml.
 # Alternative to `just test-unit-backend` (pytest -n 8).

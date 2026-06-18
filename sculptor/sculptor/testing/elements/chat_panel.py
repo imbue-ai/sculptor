@@ -1,3 +1,5 @@
+import re
+
 from playwright.sync_api import Locator
 from playwright.sync_api import expect
 
@@ -161,6 +163,34 @@ class PlaywrightChatPanelElement(PlaywrightFilePreviewAndUploadMixin, Playwright
         )
         return self._locator.locator(selector)
 
+    def get_status_pill_elapsed(self) -> Locator:
+        return self.get_by_test_id(ElementIDs.STATUS_PILL_ELAPSED)
+
+    def wait_for_agent_progress(self, min_advance_seconds: float = 1.0) -> None:
+        """Wait until the status pill's elapsed timer advances by at least
+        ``min_advance_seconds``.
+
+        This is a virtualization-proof "the agent is still actively working and
+        time has genuinely passed" signal — the status pill lives in the chat
+        panel chrome, not the virtualized message list, so it stays mounted even
+        when the streaming message has scrolled out of view. Use it to confirm a
+        transient UI state persists across a span of continued agent activity
+        without resorting to a fixed ``wait_for_timeout``. Requires the status
+        pill to be visible (agent in a busy phase).
+        """
+        elapsed = self.get_status_pill_elapsed()
+        expect(elapsed).to_be_visible()
+        baseline = float((elapsed.text_content() or "0s").rstrip("s"))
+        self._page.wait_for_function(
+            f"""() => {{
+                const el = document.querySelector('[data-testid="{ElementIDs.STATUS_PILL_ELAPSED.value}"]');
+                return el !== null && parseFloat(el.textContent) >= {baseline + min_advance_seconds};
+            }}""",
+        )
+
+    def get_status_pill_animation(self) -> Locator:
+        return self.get_by_test_id(ElementIDs.STATUS_PILL_ANIMATION)
+
     def get_compacting_pill(self) -> Locator:
         """Locator that matches only when the alpha status pill is in the
         ``compacting`` lifecycle state. Pair with ``to_be_attached`` /
@@ -188,8 +218,12 @@ class PlaywrightChatPanelElement(PlaywrightFilePreviewAndUploadMixin, Playwright
         return self.get_by_test_id(ElementIDs.MODEL_SELECTOR)
 
     def get_model_options(self) -> Locator:
-        """Get all model options in the dropdown."""
-        return self._page.get_by_test_id(ElementIDs.MODEL_OPTION)
+        """All model options in the dropdown (each testid is ``MODEL_OPTION-<model id>``)."""
+        return self._page.get_by_test_id(re.compile(rf"^{re.escape(ElementIDs.MODEL_OPTION)}-"))
+
+    def get_model_option(self, model_id: str) -> Locator:
+        """The dropdown option for a specific model id (testid ``MODEL_OPTION-<model id>``)."""
+        return self._page.get_by_test_id(f"{ElementIDs.MODEL_OPTION}-{model_id}")
 
     def get_fast_mode_toggle(self) -> Locator:
         return self.get_by_test_id(ElementIDs.FAST_MODE_TOGGLE)
@@ -267,7 +301,7 @@ def wait_for_completed_message_count(
     expect(chat_panel.get_thinking_indicator()).not_to_be_visible(**kwargs)
 
 
-def send_chat_message(chat_panel, message: str) -> None:
+def send_chat_message(chat_panel: PlaywrightChatPanelElement, message: str) -> None:
     """Send a message in chat and verify input is cleared."""
     chat_input = chat_panel.get_chat_input()
     type_into_tiptap(chat_panel._page, chat_input, message)

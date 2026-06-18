@@ -1,5 +1,7 @@
 import inspect
 import signal
+from collections.abc import Mapping
+from collections.abc import Sequence
 from contextlib import asynccontextmanager
 from functools import wraps
 from threading import Event
@@ -17,11 +19,11 @@ from starlette.requests import Request
 from starlette.staticfiles import StaticFiles
 from starlette.websockets import WebSocket
 
-from imbue_core.common import is_live_debugging
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.itertools import only
-from imbue_core.subprocess_utils import terminate_isolated_process_groups
 from sculptor.config.settings import SculptorSettings
+from sculptor.foundation.common import is_live_debugging
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.itertools import only
+from sculptor.foundation.subprocess_utils import terminate_isolated_process_groups
 from sculptor.primitives.constants import ANONYMOUS_ORGANIZATION_REFERENCE
 from sculptor.primitives.ids import RequestID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
@@ -129,11 +131,10 @@ def _get_user_session(
 
 
 class DecoratedAPIRouter(APIRouter):
-    def __init__(self, *args, decorator=None, **kwargs) -> None:
+    def __init__(self, *args: Any, decorator: Callable[..., Any] | None = None, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.decorator = decorator
 
-    # pyre-ignore[14]: we're using kwargs instead of spelling out every keyword argument here, but Pyre mistakenly thinks it's not consistent with the overridden method
     def add_api_route(self, path: str, endpoint: Callable[..., Any], **kwargs):
         if "operation_id" not in kwargs or kwargs["operation_id"] is None:
             kwargs["operation_id"] = alias_generators.to_camel(endpoint.__name__)
@@ -143,9 +144,9 @@ class DecoratedAPIRouter(APIRouter):
         return super().add_api_route(path, endpoint, **kwargs)
 
 
-def add_logging_context(func):
+def add_logging_context(func: Callable[..., Any]) -> Callable[..., Any]:
     @wraps(func)
-    def sync_wrapper(*args, **kwargs):
+    def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
         # Get the user_session from the function's kwargs or bound arguments
         sig = inspect.signature(func)
         bound = sig.bind(*args, **kwargs)
@@ -170,7 +171,9 @@ def add_logging_context(func):
     return sync_wrapper
 
 
-def run_sync_function_with_debugging_support_if_enabled(func, args, kwargs):
+def run_sync_function_with_debugging_support_if_enabled(
+    func: Callable[..., Any], args: Sequence[Any], kwargs: Mapping[str, Any]
+) -> Any:
     """
     If we are not debugging, then we run the function directly and return the result.
 
@@ -200,7 +203,10 @@ def run_sync_function_with_debugging_support_if_enabled(func, args, kwargs):
 
 # simply part of the implementation of `run_sync_function_with_debugging_support_if_enabled`, see docstring there
 def _run_in_thread_so_that_unhandled_exceptions_can_be_caught_by_a_debugger(
-    func, args, kwargs, output_container
+    func: Callable[..., Any],
+    args: Sequence[Any],
+    kwargs: Mapping[str, Any],
+    output_container: list[Any],
 ) -> None:
     try:
         result = func(*args, **kwargs)
@@ -214,10 +220,10 @@ def _run_in_thread_so_that_unhandled_exceptions_can_be_caught_by_a_debugger(
         output_container.append(result)
 
 
-on_startup_callback = lambda: None  # noqa: E731
+on_startup_callback: Callable[[], None] = lambda: None  # noqa: E731
 
 
-def register_on_startup(callback: Callable) -> None:
+def register_on_startup(callback: Callable[[], None]) -> None:
     global on_startup_callback
     on_startup_callback = callback
 
@@ -249,7 +255,6 @@ def _write_trace_if_enabled() -> None:
 
 
 class App(FastAPI):
-    # pyre-ignore[13]: Pyre doesn't like uninitialized fields; we are in fact initializing this field, just outside the __init__ method.
     shutdown_event: Event
 
 
@@ -292,9 +297,10 @@ async def lifespan(app: App):
                 # no longer has a setup command (or the toggle is off) become
                 # `not_configured`.
                 try:
+                    # pyrefly: ignore [missing-attribute]
                     services.workspace_service.reconcile_setup_state()
                 except Exception as exc:
-                    logger.error("Failed to reconcile workspace setup state on startup: {}", exc)
+                    logger.opt(exception=exc).error("Failed to reconcile workspace setup state on startup")
 
                 # Set initial project if provided via CLI by setting it as the most recently used project.
                 initial_project_path = getattr(app.state, "initial_project", None)

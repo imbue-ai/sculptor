@@ -1,8 +1,8 @@
 from contextlib import contextmanager
 from typing import Generator
 
-from imbue_core.concurrency_group import ConcurrencyGroup
 from sculptor.config.settings import SculptorSettings
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.services.btw_service.api import BtwService
 from sculptor.services.ci_babysitter_service.coordinator import CIBabysitterCoordinator
 from sculptor.services.task_service.data_types import TaskServiceCollection
@@ -20,15 +20,15 @@ class CompleteServiceCollection(TaskServiceCollection):
         # The order is important here - it reflects the dependencies between services.
         # WorkspaceService manages EnvironmentManager internally.
         with (
-            self.data_model_service.run(log_runtimes=True),
-            self.dependency_management_service.run(log_runtimes=True),
-            self.project_service.run(log_runtimes=True),
-            self.workspace_service.run(log_runtimes=True),
-            self.git_repo_service.run(log_runtimes=True),
-            self.task_service.run(log_runtimes=True),
-            self.pr_polling_service.run(log_runtimes=True),
-            self.ci_babysitter_service.run(log_runtimes=True),
-            self.btw_service.run(log_runtimes=True),
+            self.data_model_service.run(should_log_runtimes=True),
+            self.dependency_management_service.run(should_log_runtimes=True),
+            self.project_service.run(should_log_runtimes=True),
+            self.workspace_service.run(should_log_runtimes=True),
+            self.git_repo_service.run(should_log_runtimes=True),
+            self.task_service.run(should_log_runtimes=True),
+            self.pr_polling_service.run(should_log_runtimes=True),
+            self.ci_babysitter_service.run(should_log_runtimes=True),
+            self.btw_service.run(should_log_runtimes=True),
         ):
             yield
 

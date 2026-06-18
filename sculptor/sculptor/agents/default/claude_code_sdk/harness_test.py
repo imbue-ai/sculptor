@@ -99,6 +99,7 @@ def test_hello_harness_get_jsonl_path_for_working_directory_returns_none() -> No
 
 def test_claude_harness_capabilities() -> None:
     assert CLAUDE_CODE_HARNESS.capabilities() == HarnessCapabilities(
+        supports_chat_interface=True,
         supports_interactive_backchannel=True,
         supports_skills=True,
         supports_sub_agents=True,
@@ -112,11 +113,15 @@ def test_claude_harness_capabilities() -> None:
         supports_file_attachments=True,
         supports_interruption=True,
         supports_file_references=True,
+        supports_model_selection=True,
     )
 
 
 def test_hello_harness_capabilities_are_all_false() -> None:
+    # Hello is a chat agent (its main panel is the chat interface); every
+    # per-affordance capability is false.
     assert HELLO_HARNESS.capabilities() == HarnessCapabilities(
+        supports_chat_interface=True,
         supports_interactive_backchannel=False,
         supports_skills=False,
         supports_sub_agents=False,
@@ -130,6 +135,7 @@ def test_hello_harness_capabilities_are_all_false() -> None:
         supports_file_attachments=False,
         supports_interruption=False,
         supports_file_references=False,
+        supports_model_selection=False,
     )
 
 
@@ -139,6 +145,7 @@ def test_harness_capabilities_rejects_partial_construction() -> None:
     with pytest.raises(ValidationError):
         HarnessCapabilities.model_validate(
             {
+                "supports_chat_interface": True,
                 "supports_interactive_backchannel": False,
                 "supports_skills": False,
                 "supports_sub_agents": False,

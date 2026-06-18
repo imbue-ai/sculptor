@@ -1,25 +1,8 @@
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.ids import AssistantMessageID
-from imbue_core.ids import ToolUseID
-from imbue_core.itertools import only
-from imbue_core.sculptor.state.chat_state import AskUserQuestionData
-from imbue_core.sculptor.state.chat_state import ChatMessage
-from imbue_core.sculptor.state.chat_state import ChatMessageRole
-from imbue_core.sculptor.state.chat_state import ErrorBlock
-from imbue_core.sculptor.state.chat_state import FileBlock
-from imbue_core.sculptor.state.chat_state import GenericToolContent
-from imbue_core.sculptor.state.chat_state import QuestionOption
-from imbue_core.sculptor.state.chat_state import TextBlock
-from imbue_core.sculptor.state.chat_state import ToolResultBlock
-from imbue_core.sculptor.state.chat_state import ToolUseBlock
-from imbue_core.sculptor.state.chat_state import TurnMetrics
-from imbue_core.sculptor.state.chat_state import UserQuestion
-from imbue_core.sculptor.state.chat_state import make_plan_approval_question
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import LLMModel
-from imbue_core.serialization import SerializedException
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
+from sculptor.agents.pi_agent.backchannel import build_ask_user_question_data
+from sculptor.agents.pi_agent.harness import PI_HARNESS
+from sculptor.foundation.itertools import only
+from sculptor.foundation.serialization import SerializedException
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import BackgroundTaskNotificationAgentMessage
 from sculptor.interfaces.agents.agent import BackgroundTaskStartedAgentMessage
@@ -35,6 +18,25 @@ from sculptor.interfaces.agents.agent import ResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import StreamingMessageCompleteAgentMessage
 from sculptor.interfaces.agents.agent import TurnMetricsAgentMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import AssistantMessageID
+from sculptor.primitives.ids import TaskID
+from sculptor.primitives.ids import ToolUseID
+from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.chat_state import ChatMessage
+from sculptor.state.chat_state import ChatMessageRole
+from sculptor.state.chat_state import ErrorBlock
+from sculptor.state.chat_state import FileBlock
+from sculptor.state.chat_state import GenericToolContent
+from sculptor.state.chat_state import QuestionOption
+from sculptor.state.chat_state import TextBlock
+from sculptor.state.chat_state import ToolResultBlock
+from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.chat_state import TurnMetrics
+from sculptor.state.chat_state import UserQuestion
+from sculptor.state.chat_state import make_plan_approval_question
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import LLMModel
 from sculptor.web.derived import TaskUpdate
 from sculptor.web.message_conversion import convert_agent_messages_to_task_update
 
@@ -1704,7 +1706,7 @@ def test_answered_plan_approval_not_re_shown_after_ephemeral_replay() -> None:
     plan_question_data = make_plan_approval_question(str(tool_use_id))
     answer_msg = UserQuestionAnswerMessage(
         message_id=AgentMessageID(),
-        answers={"Claude has finished planning. How would you like to proceed?": "Approve plan"},
+        answers={"Planning complete. How would you like to proceed?": "Approve plan"},
         question_data=plan_question_data,
         tool_use_id=str(tool_use_id),
     )
@@ -5914,3 +5916,249 @@ def test_resumed_turn_log_shape_replays_to_a_finalized_state() -> None:
         f"the turn must finalize (no stuck Thinking pill); got {state.in_progress_user_message_id}"
     )
     assert state.in_progress_chat_message is None
+
+
+def test_pi_ask_user_question_stamps_role_and_correlates_with_answer() -> None:
+    """Real-pi AUQ rendering parity with Claude — the gap FakePi can't catch.
+
+    Pi emits the ask_user_question call as a tool block with the extension's flat
+    ``{question, options}`` input. Conversion must (1) stamp ``interactive_role``
+    from the pi harness so the frontend renders the question panel by role rather
+    than by tool name, and (2) key ``submitted_question_answers`` by the same
+    tool-call id the rendered ToolUseBlock carries, so the answered panel
+    correlates (the dispatcher unifies the question's tool_use_id onto the
+    tool-call id; FakePi never emits this tool block, so this is unit-level).
+    """
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+    tool_call_id = ToolUseID("toolu_pi_auq")
+
+    tool_use = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=AssistantMessageID("assistant-pi-auq"),
+        message_id=AgentMessageID(),
+        content=(
+            ToolUseBlock(
+                id=tool_call_id,
+                name="ask_user_question",
+                input={"question": "Tabs or spaces?", "options": ["Tabs", "Spaces"]},
+            ),
+        ),
+    )
+    state = convert_agent_messages_to_task_update(
+        [tool_use],
+        task_id=task_id,
+        harness=PI_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+    assert state.in_progress_chat_message is not None
+    use_block = state.in_progress_chat_message.content[0]
+    assert isinstance(use_block, ToolUseBlock)
+    assert use_block.interactive_role == "ask_user_question"
+
+    answer = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"Tabs or spaces?": "Spaces"},
+        question_data=build_ask_user_question_data("Tabs or spaces?", ["Tabs", "Spaces"], str(tool_call_id)),
+        tool_use_id=str(tool_call_id),
+    )
+    state = convert_agent_messages_to_task_update(
+        [answer],
+        task_id=task_id,
+        harness=PI_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=state,
+    )
+    # The answer is keyed by the same id the rendered tool block carries, so the
+    # answered question panel finds it (this is the correlation that was broken).
+    assert str(use_block.id) in state.submitted_question_answers
+    assert state.submitted_question_answers[str(use_block.id)].answers == {"Tabs or spaces?": "Spaces"}
+
+
+def test_pi_ask_user_question_result_block_is_stamped_for_suppression() -> None:
+    """A pi AUQ tool_result that reaches the frontend (its tool use lived in an
+    earlier, already-finalized message) must carry ``interactive_role`` so the
+    frontend suppresses it — otherwise it renders as a stray second tool card."""
+    state = convert_agent_messages_to_task_update(
+        [
+            ResponseBlockAgentMessage(
+                role="assistant",
+                assistant_message_id=AssistantMessageID("assistant-pi-auq-result"),
+                message_id=AgentMessageID(),
+                content=(
+                    ToolResultBlock(
+                        tool_use_id=ToolUseID("toolu_pi_auq_orphan"),
+                        tool_name="ask_user_question",
+                        invocation_string="",
+                        content=GenericToolContent(text="The user answered: Spaces"),
+                    ),
+                ),
+            )
+        ],
+        task_id=TaskID(),
+        harness=PI_HARNESS,
+        completed_message_by_id={},
+        current_state=None,
+    )
+    assert state.in_progress_chat_message is not None
+    result_block = state.in_progress_chat_message.content[0]
+    assert isinstance(result_block, ToolResultBlock)
+    assert result_block.interactive_role == "ask_user_question"
+
+
+def test_pi_ask_user_question_role_stamped_when_delivered_via_partial_first() -> None:
+    """The live-streaming escape: the AUQ tool block arrives first in a
+    PartialResponseBlockAgentMessage (the agent re-advertises its interleaved
+    content as a partial), and the later ResponseBlockAgentMessage is skipped as
+    a duplicate. The partial path must stamp interactive_role too, or the live
+    turn renders as a generic tool card instead of the question panel.
+    """
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+    assistant_message_id = AssistantMessageID("assistant-pi-partial")
+    chat_message_id = AgentMessageID()
+    tool_call_id = ToolUseID("toolu_pi_partial")
+    auq_block = ToolUseBlock(id=tool_call_id, name="ask_user_question", input={"question": "Tabs or spaces?"})
+
+    partial = PartialResponseBlockAgentMessage(
+        assistant_message_id=assistant_message_id,
+        message_id=AgentMessageID(),
+        first_response_message_id=chat_message_id,
+        content=(auq_block,),
+    )
+    final = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=assistant_message_id,
+        message_id=chat_message_id,
+        content=(auq_block,),
+    )
+    state = convert_agent_messages_to_task_update(
+        [partial, final],
+        task_id=task_id,
+        harness=PI_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+    assert state.in_progress_chat_message is not None
+    blocks = [b for b in state.in_progress_chat_message.content if isinstance(b, ToolUseBlock)]
+    assert len(blocks) == 1, "the duplicate final block must not double-render"
+    assert blocks[0].interactive_role == "ask_user_question"
+
+
+def test_streamed_edit_tool_use_input_survives_mid_stream_tool_result() -> None:
+    """Regression test for SCU-512: a streamed Edit's ToolUseBlock input must not be
+    lost when its tool_result arrives mid-stream.
+
+    While ``is_streaming_active`` is True the tool_result ``ResponseBlockAgentMessage``
+    runs through the streaming branch, which replaces the Edit ``ToolUseBlock`` in
+    place with its ``ToolResultBlock`` — dropping the rich input (``old_string`` /
+    ``new_string`` / ``file_path``). The buffered final ``ResponseBlockAgentMessage``
+    re-asserts the Edit ``ToolUseBlock`` for persistence, but the
+    ``message_was_streamed`` branch used to filter every ``ToolUseBlock`` out as
+    "already streamed", so the input was never restored. The resulting ``ChatMessage``
+    held only a bare ``ToolResultBlock`` (no diff / no input args), which renders as
+    an empty/minimal pill — easily mistaken for "the Edit didn't show up at all".
+
+    Message order mirrors the real output_processor stream for an Edit:
+      1. PartialResponseBlockAgentMessage [Edit ToolUseBlock(input)]  (streaming starts)
+      2. ResponseBlockAgentMessage [Edit ToolResultBlock]  (mid-stream; overwrites tool_use)
+      3. StreamingMessageCompleteAgentMessage
+      4. ResponseBlockAgentMessage [Edit ToolUseBlock(input)]  (buffered persistence copy)
+      5. RequestSuccessAgentMessage
+    """
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+
+    user_message = ChatInputUserMessage(
+        text="Remove the comment.",
+        model_name=LLMModel.CLAUDE_4_SONNET,
+    )
+    edit_tool_use_id = ToolUseID("toolu_edit_scu512")
+    assistant_message_id = AssistantMessageID("assistant-edit-scu512")
+    assistant_chat_message_id = AgentMessageID()  # "ID1" — first_response_message_id
+
+    edit_input = {"file_path": "/x.py", "old_string": "a", "new_string": "b"}
+    edit_tool_block = ToolUseBlock(id=edit_tool_use_id, name="Edit", input=edit_input)
+
+    request_started = RequestStartedAgentMessage(request_id=user_message.message_id)
+
+    # 1. Streaming partial carrying the Edit tool_use with full input.
+    partial = PartialResponseBlockAgentMessage(
+        assistant_message_id=assistant_message_id,
+        message_id=AgentMessageID(),
+        first_response_message_id=assistant_chat_message_id,
+        content=(edit_tool_block,),
+    )
+
+    # 2. Tool result arrives mid-stream (is_streaming_active=True). GenericToolContent
+    #    matches the real session where the diff was not embedded in the result, so the
+    #    diff can only be reconstructed from the surviving ToolUseBlock input.
+    mid_stream_result = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=assistant_message_id,
+        message_id=AgentMessageID(),
+        content=(
+            ToolResultBlock(
+                tool_use_id=edit_tool_use_id,
+                tool_name="Edit",
+                invocation_string="/x.py",
+                content=GenericToolContent(text="The file /x.py has been updated successfully."),
+            ),
+        ),
+    )
+
+    # 3. Streaming completes.
+    streaming_complete = StreamingMessageCompleteAgentMessage(message_id=AgentMessageID())
+
+    # 4. Buffered persistence copy re-asserts the Edit tool_use under the same
+    #    first_response_message_id (this is the copy that must restore the input).
+    buffered_persistence = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=assistant_message_id,
+        message_id=assistant_chat_message_id,
+        content=(edit_tool_block,),
+    )
+
+    request_success = _make_request_success(request_id=user_message.message_id)
+
+    state = convert_agent_messages_to_task_update(
+        [
+            user_message,
+            request_started,
+            partial,
+            mid_stream_result,
+            streaming_complete,
+            buffered_persistence,
+            request_success,
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+
+    assistant_messages = [m for m in state.chat_messages if m.role == ChatMessageRole.ASSISTANT]
+    assert len(assistant_messages) == 1, (
+        f"Expected exactly one finalized assistant ChatMessage, got {len(assistant_messages)}."
+    )
+    completed = assistant_messages[0]
+
+    # The Edit ToolUseBlock with its original input must survive so the frontend can
+    # render the diff (old_string -> new_string). On main the content is a bare
+    # ToolResultBlock and this assertion fails.
+    tool_use_blocks = [b for b in completed.content if isinstance(b, ToolUseBlock)]
+    block_types = [type(b).__name__ for b in completed.content]
+    assert len(tool_use_blocks) == 1, (
+        f"Expected the Edit ToolUseBlock to survive, but content was {block_types}. The streamed Edit input was dropped."
+    )
+    surviving = tool_use_blocks[0]
+    assert surviving.id == edit_tool_use_id
+    assert surviving.input.get("old_string") == "a"
+    assert surviving.input.get("new_string") == "b"
+    assert surviving.input.get("file_path") == "/x.py"
+
+    # The tool_result must still be present (paired with the tool_use by tool_use_id).
+    tool_result_blocks = [b for b in completed.content if isinstance(b, ToolResultBlock)]
+    assert len(tool_result_blocks) == 1
+    assert tool_result_blocks[0].tool_use_id == str(edit_tool_use_id)

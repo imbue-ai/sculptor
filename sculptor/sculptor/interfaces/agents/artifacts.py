@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import AnyUrl
 from pydantic import Field
 
-from imbue_core.pydantic_serialization import SerializableModel
+from sculptor.foundation.pydantic_serialization import SerializableModel
 
 
 class AgentTaskStatus(StrEnum):
@@ -45,7 +45,7 @@ class DiffArtifact(SerializableModel):
     """Unified diff artifact containing all diff types."""
 
     object_type: str = "DiffArtifact"
-    uncommitted_diff: str = ""  # Uncommitted changes
+    uncommitted_diff: str = ""
     target_branch_diff: str = ""  # Diff from merge-base(target, HEAD) to HEAD
     # Commit SHA of merge-base(target, HEAD) — the ref the target_branch_diff's
     # old-side line numbers reference. The frontend fetches the "old" file

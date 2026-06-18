@@ -1,3 +1,2 @@
-# General timeout to wait for things
-BUILD_TIMEOUT_SECS = 10 * 60
-RUNNING_TIMEOUT_SECS = 7 * 60
+BUILD_TIMEOUT_SECONDS: int = 10 * 60
+RUNNING_TIMEOUT_SECONDS: int = 7 * 60

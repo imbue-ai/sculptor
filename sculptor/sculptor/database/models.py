@@ -2,30 +2,31 @@ import datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
+from typing import Any
 
 from pydantic import Tag
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import ObjectID
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.agents.data_types.ids import TaskID as AgentTaskID
-from imbue_core.pydantic_serialization import SerializableModel
-from imbue_core.pydantic_serialization import build_discriminator
-from imbue_core.sculptor.state.messages import AgentMessageSource
-from imbue_core.sculptor.state.messages import LLMModel
-from imbue_core.serialization import SerializedException
 from sculptor.database.automanaged import DatabaseModel
 from sculptor.database.workspace_enums import DiffStatus
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.pydantic_serialization import SerializableModel
+from sculptor.foundation.pydantic_serialization import build_discriminator
+from sculptor.foundation.serialization import SerializedException
 from sculptor.interfaces.agents.agent import AgentConfigTypes
-from sculptor.interfaces.agents.agent import HarnessName
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import PersistentMessageTypes
 from sculptor.interfaces.agents.tasks import TaskState
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import ObjectID
 from sculptor.primitives.ids import OrganizationReference
+from sculptor.primitives.ids import ProjectID
+from sculptor.primitives.ids import TaskID as AgentTaskID
 from sculptor.primitives.ids import UserReference
 from sculptor.primitives.ids import UserSettingsID
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.state.messages import AgentMessageSource
+from sculptor.state.messages import LLMModel
+from sculptor.state.messages import ModelOption
 
 TaskID = AgentTaskID
 
@@ -113,8 +114,6 @@ class Workspace(DatabaseModel):
     diff_updated_at: datetime.datetime | None = None
     # User-supplied or auto-generated branch name. Required for WORKTREE workspaces (validated at the API layer); optional for CLONE; null for IN_PLACE.
     requested_branch_name: str | None = None
-    # DELIBERATE-TEMPORARY: workspace-bound harness selection.
-    harness: HarnessName = HarnessName.CLAUDE
 
 
 # Runtime tables
@@ -190,6 +189,20 @@ class AgentTaskStateV2(BaseTaskState):
     last_processed_message_id: AgentMessageID | None = None
     title: str | None = None
     workspace_id: WorkspaceID
+    # Terminal agents only: the session id the registered program last
+    # signalled (validated to [A-Za-z0-9._-]{1,128}), used to resume the
+    # program after a backend restart.
+    terminal_session_id: str | None = None
+    # Terminal agents only: the shell pid of the handler's last PTY spawn,
+    # used to reap a crash-surviving shell before relaunching.
+    terminal_shell_pid: int | None = None
+    # pi agents only: the curated model catalog the agent fetched from pi at
+    # start (get_available_models), surfaced by the pi harness's
+    # get_available_models so the chat switcher offers pi's real models.
+    available_models: list[ModelOption] = []
+    # pi agents only: the model pi reported as current at start (get_state.model),
+    # surfaced by the pi harness's get_selected_model_id as the switcher's value.
+    current_model: ModelOption | None = None
 
 
 class NoOpTaskStateV1(BaseTaskState):
@@ -277,7 +290,7 @@ class SavedAgentMessage(DatabaseModel):
     # it's here so that we can not bother to include partial messages in some queries.
     is_partial: bool
 
-    def model_post_init(self, __context) -> None:
+    def model_post_init(self, context: Any) -> None:
         if self.object_id != self.message.message_id:
             raise ValueError(
                 f"SavedAgentMessage object_id {self.object_id} does not match message ID {self.message.message_id}."

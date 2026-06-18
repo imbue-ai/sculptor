@@ -5,6 +5,8 @@ from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
 
 
 class PlaywrightGitInitDialogElement(PlaywrightIntegrationTestElement):
+    """Page Object Model for the git-init / initial-commit confirmation dialog."""
+
     def get_confirm_button(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.PROJECT_GIT_INIT_CONFIRM)
 

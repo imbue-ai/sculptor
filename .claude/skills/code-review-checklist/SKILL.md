@@ -190,7 +190,7 @@ This category applies when the stated goal is an MR/PR body produced by an auton
 - Type hints on new/changed public functions
 - No new `Any` types unless justified
 - Pydantic models for structured data, not ad-hoc dicts
-- No new Pyre errors; suppressions justified with a comment
+- No new Pyrefly errors; suppressions justified with a comment
 - For frontend: TypeScript types up to date; if `ElementIDs` changed, run
   `just generate-api`
 

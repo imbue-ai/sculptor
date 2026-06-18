@@ -51,11 +51,14 @@ from multiprocessing.reduction import recv_handle
 from pathlib import Path
 from queue import Queue
 from subprocess import TimeoutExpired
+from typing import Any
 from typing import Final
+from typing import Mapping
+from typing import Sequence
 
 from loguru import logger
 
-from imbue_core.processes.local_process import RunningProcess
+from sculptor.foundation.processes.local_process import RunningProcess
 from sculptor.services.workspace_service.environment_manager.environments.pty_helper import HELPER_FD_ENV
 from sculptor.utils.build import is_packaged
 
@@ -112,7 +115,7 @@ class PtyHelperSpawnError(RuntimeError):
     """Raised when the posix_spawn helper fails to deliver a usable pty."""
 
 
-def _scrub_shell_env(extra_env: dict[str, str], env_var_override: bool) -> dict[str, str]:
+def _scrub_shell_env(extra_env: Mapping[str, str], env_var_override: bool) -> dict[str, str]:
     """Build the environment the shell will see, starting from the backend's
     environment and stripping Sculptor's internal vars.
 
@@ -208,9 +211,9 @@ def _spawn_helper_subprocess(child_sock: socket.socket) -> int:
 def _send_config(
     conn: Connection,
     shell: str,
-    argv: list[str],
+    argv: Sequence[str],
     cwd: str,
-    shell_env: dict[str, str],
+    shell_env: Mapping[str, str],
     rows: int,
     cols: int,
 ) -> None:
@@ -358,9 +361,9 @@ def _reap_just_exited_helper(helper_pid: int) -> None:
 
 def _spawn_helper(
     shell: str,
-    argv: list[str],
+    argv: Sequence[str],
     cwd: str,
-    shell_env: dict[str, str],
+    shell_env: Mapping[str, str],
     rows: int,
     cols: int,
 ) -> _SpawnedHelper:
@@ -418,7 +421,7 @@ class SpawnedPtyProcess(RunningProcess):
         name: str,
         working_directory: Path,
         shell: str | None = None,
-        extra_env: dict[str, str] | None = None,
+        extra_env: Mapping[str, str] | None = None,
         env_var_override: bool = False,
     ) -> None:
         self._name = name
@@ -438,6 +441,10 @@ class SpawnedPtyProcess(RunningProcess):
         return self._helper.primary_fd
 
     @property
+    def shell_pid(self) -> int | None:
+        return self._helper.shell_pid if self._helper is not None else None
+
+    @property
     def is_checked(self) -> bool:
         return False
 
@@ -449,7 +456,7 @@ class SpawnedPtyProcess(RunningProcess):
     def command(self) -> tuple[str, ...]:
         return (self._name,)
 
-    def start(self, kwargs: dict | None = None) -> None:
+    def start(self, kwargs: Mapping[str, Any] | None = None) -> None:
         if self._helper is not None:
             raise RuntimeError("Process already started")
         shell_env = _scrub_shell_env(self._extra_env, self._env_var_override)
@@ -534,7 +541,7 @@ class SpawnedPtyProcess(RunningProcess):
     def get_timed_out(self) -> bool:
         return False
 
-    def run(self, kwargs: dict) -> None:
+    def run(self, kwargs: Mapping[str, Any]) -> None:
         pass
 
     def get_queue(self) -> Queue[tuple[str, bool]]:

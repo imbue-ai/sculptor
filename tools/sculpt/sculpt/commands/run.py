@@ -112,9 +112,7 @@ def run_cmd(
     )
 
     try:
-        agent_result = create_workspace_agent.sync(
-            workspace_id=workspace_id, client=client, body=agent_request
-        )  # type: ignore[arg-type]
+        agent_result = create_workspace_agent.sync(workspace_id=workspace_id, client=client, body=agent_request)
     except httpx.ConnectError:
         handle_connection_error(json_output)
 

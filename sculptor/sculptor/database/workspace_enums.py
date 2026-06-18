@@ -2,7 +2,7 @@
 
 from enum import auto
 
-from imbue_core.upper_case_str_enum import UpperCaseStrEnum
+from sculptor.foundation.upper_case_str_enum import UpperCaseStrEnum
 
 
 class WorkspaceInitializationStrategy(UpperCaseStrEnum):

@@ -29,7 +29,7 @@ from pydantic import Field
 from pydantic import TypeAdapter
 from pydantic import ValidationError
 
-from imbue_core.pydantic_serialization import SerializableModel
+from sculptor.foundation.pydantic_serialization import SerializableModel
 
 
 # `content` is untyped dicts: pi interleaves text and toolCall blocks, and only
@@ -38,11 +38,72 @@ class AgentMessage(SerializableModel):
     role: str
     content: list[dict[str, Any]] = []
     stop_reason: str | None = None
+    # The model id pi reports as having produced this message (assistant
+    # messages); absent on other roles.
+    model: str | None = None
+    # The failure reason pi records when a turn ends in error — carried on an
+    # otherwise-empty assistant message with `stopReason:"error"` (e.g. a
+    # provider-auth failure). The only place the real reason lives for a turn
+    # that fails without a preceding in-stream error event.
+    error_message: str | None = None
 
 
 def extract_assistant_text(message: AgentMessage) -> str:
     """Concatenate every `{type:"text"}` block on an assistant message."""
     return "".join(block.get("text", "") for block in message.content if block.get("type") == "text")
+
+
+# Substrings (matched case-insensitively) in pi's failure reason that mark a
+# provider-auth failure — typically selecting a model whose provider has no
+# valid key.
+_AUTH_FAILURE_MARKERS = (
+    "api key",
+    "apikey",
+    "api_key",
+    "authentication",
+    "unauthorized",
+    "unauthenticated",
+    "401",
+    "403",
+    "forbidden",
+    "permission denied",
+    "credential",
+)
+# Substrings (matched case-insensitively) marking an unknown / unavailable model.
+_UNKNOWN_MODEL_MARKERS = (
+    "model not found",
+    "unknown model",
+    "model_not_found",
+    "no such model",
+    "model does not exist",
+)
+_AUTH_FAILURE_MESSAGE = (
+    "This model isn't available — it may require authentication with its provider. Try another model."
+)
+_UNKNOWN_MODEL_MESSAGE = (
+    "This model isn't available — it may not exist or isn't enabled for your account. Try another model."
+)
+_GENERIC_FAILURE_MESSAGE = "The model failed to complete this turn. Try again, or switch to another model."
+
+
+def humanize_pi_failure_reason(reason: str | None) -> str:
+    """Turn pi's raw turn-failure reason into a clean, actionable message.
+
+    Recognized failure shapes (provider auth, unknown/unavailable model) lead
+    with specific guidance and preserve pi's raw reason on a `Details:` line so
+    debugging isn't lost. An already human-readable reason (e.g. pi's own API
+    error text) is surfaced unchanged. An empty reason falls back to a clean
+    generic message — never the bare "pi message ended in error" placeholder.
+    """
+    cleaned = (reason or "").strip()
+    lowered = cleaned.lower()
+    if any(marker in lowered for marker in _AUTH_FAILURE_MARKERS):
+        return f"{_AUTH_FAILURE_MESSAGE}\n\nDetails: {cleaned}"
+    if any(marker in lowered for marker in _UNKNOWN_MODEL_MARKERS):
+        return f"{_UNKNOWN_MODEL_MESSAGE}\n\nDetails: {cleaned}"
+    if cleaned:
+        return cleaned
+    return _GENERIC_FAILURE_MESSAGE
 
 
 def extract_tool_call_blocks(message: AgentMessage) -> list[dict[str, Any]]:
@@ -75,11 +136,19 @@ class ExtensionUiRequest(SerializableModel):
     # `editor`) and fire-and-forget calls (`notify`/`setStatus`/`setWidget`/
     # `setTitle`/`set_editor_text`). `timeout`, when present, means pi
     # auto-resolves a dialog with a default if the client doesn't reply, so
-    # the client need not track timeouts. Method-specific payload fields are
-    # left to `extra="allow"`; pi-basic loads no extensions, so these never
-    # appear in practice (RPC §5.3).
+    # the client need not track timeouts — the backchannel extension never sets
+    # one (Sculptor's unbounded-wait question model).
     method: str
     timeout: int | None = None
+    # Dialog payload fields the backchannel dispatcher consumes (RPC §5.3):
+    # `select`/`input`/`confirm`/`editor` carry a `title`; `select` also carries
+    # `options`. Other method-specific fields ride `extra="allow"`.
+    title: str | None = None
+    options: list[str] | None = None
+    # The `notify` method's text payload. Sculptor's background-task extension
+    # encodes its structured completion marker here, so the dispatcher parses it
+    # (`background.py`) onto a BackgroundTaskNotification (RPC §5.3 notify).
+    message: str | None = None
 
 
 # --- Lane 3: session events (the AgentSessionEvent union, RPC §5.2) --------

@@ -135,6 +135,12 @@ export const ciBabysitterMergeConflictPromptAtom = atom<string>(
   (get) => get(ciBabysitterConfigAtom)?.mergeConflictPrompt ?? DEFAULT_CI_BABYSITTER_MERGE_CONFLICT_PROMPT,
 );
 
+// Which agent the babysitter drives: the discriminated union from the backend
+// (MRU | Claude | Pi | Registered{registrationId}); null until config loads.
+export const ciBabysitterAgentAtom = atom<NonNullable<CiBabysitterConfig["agent"]> | null>(
+  (get) => get(ciBabysitterConfigAtom)?.agent ?? null,
+);
+
 // File browser settings
 export const fileBrowserSplitRatioAtom = atom<number>((get) => get(userConfigAtom)?.fileBrowserDefaultSplitRatio ?? 50);
 
@@ -200,11 +206,17 @@ export const isRichMarkdownRenderingEnabledAtom = atom<boolean>(
   (get) => get(userConfigAtom)?.enableRichMarkdownRendering ?? false,
 );
 
-// Multi-harness / pi (experimental — off by default). Gates only the
-// new-workspace harness picker and the harness badge; the workspace.harness
-// execution path is independent of this flag, so existing pi workspaces run pi
-// regardless.
-export const isMultiHarnessEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableMultiHarness ?? false);
+// Pi agent (experimental — off by default). Gates only whether the pi option
+// is offered in the agent-type pickers (the + button menu and the
+// new-workspace form); an already-created pi agent keeps running regardless.
+export const isPiAgentEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enablePiAgent ?? false);
+
+// Frontend plugin system (experimental — off by default). Gates plugin
+// loading at boot and the Plugins settings section. Enabling takes effect
+// immediately (PluginLoader bootstraps when the flag turns on); disabling only
+// fully takes effect after a reload, since already-loaded plugins are not
+// unloaded mid-session.
+export const isFrontendPluginsEnabledAtom = atom<boolean>((get) => get(userConfigAtom)?.enableFrontendPlugins ?? false);
 
 // Agent defaults
 export const isDefaultFastModeAtom = atom<boolean>((get) => get(userConfigAtom)?.defaultFastMode ?? false);

@@ -8,21 +8,12 @@ from pathlib import Path
 from queue import Queue
 from subprocess import TimeoutExpired
 from threading import Event
+from typing import Any
 from typing import Callable
 from typing import Mapping
 
 from loguru import logger
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import TaskID
-from imbue_core.async_monkey_patches import log_exception
-from imbue_core.constants import ExceptionPriority
-from imbue_core.processes.local_process import RunningProcess
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import LLMModel
-from imbue_core.sculptor.state.messages import Message
-from imbue_core.secrets_utils import Secret
-from imbue_core.thread_utils import ObservableThread
 from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.claude_code_sdk.harness import ClaudeCodeHarness
 from sculptor.agents.default.claude_code_sdk.mcp_server import SculptorMcpServer
@@ -40,6 +31,11 @@ from sculptor.agents.default.utils import get_state_file_contents
 from sculptor.agents.default.utils import get_turn_request_id
 from sculptor.agents.default.utils import get_warning_message
 from sculptor.common.plugin import get_plugin_dirs
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.foundation.constants import ExceptionPriority
+from sculptor.foundation.processes.local_process import RunningProcess
+from sculptor.foundation.secrets_utils import Secret
+from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.interfaces.agents.agent import ClearContextUserMessage
 from sculptor.interfaces.agents.agent import ContextClearedMessage
 from sculptor.interfaces.agents.agent import InterruptProcessUserMessage
@@ -57,11 +53,16 @@ from sculptor.interfaces.agents.errors import IllegalOperationError
 from sculptor.interfaces.agents.errors import UncleanTerminationAgentError
 from sculptor.interfaces.agents.errors import WaitTimeoutAgentError
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import TaskID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.user_config.user_config import get_user_config_instance
 from sculptor.services.workspace_service.environment_manager.env_file_parser import load_project_env_vars
 from sculptor.services.workspace_service.setup_command_runner import SetupReminderState
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import LLMModel
+from sculptor.state.messages import Message
 from sculptor.utils.build import get_internal_folder
 
 
@@ -118,7 +119,7 @@ class ClaudeProcessManager:
         transcript_path = environment.get_artifacts_path() / "transcript.jsonl"
         environment.get_artifacts_path().mkdir(parents=True, exist_ok=True)
         self._transcript_file = open(str(transcript_path), "a")  # noqa: SIM115
-        self._transcript_collector = TranscriptCollector(verbose=verbose_log, file=self._transcript_file)
+        self._transcript_collector = TranscriptCollector(is_verbose=verbose_log, file=self._transcript_file)
         # The MCP server outlives any single CLI invocation. Each new
         # ``ClaudeOutputProcessor.__init__`` rebinds its ``respond`` callback to
         # the freshly-spawned CLI's stdin via ``set_respond``; the placeholder
@@ -137,7 +138,7 @@ class ClaudeProcessManager:
         self._pending_answer_request_ids: list[AgentMessageID] = []
 
     @staticmethod
-    def _noop_mcp_respond(control_request_id: str, response_data: dict) -> None:
+    def _noop_mcp_respond(control_request_id: str, response_data: dict[str, Any]) -> None:
         """Placeholder MCP `respond` callback used between CLI invocations.
 
         ``deliver_answer`` should never be called when no CLI is running, but
@@ -559,7 +560,7 @@ class ClaudeProcessManager:
 
         file_paths = []
         for local_file_path in message.files:
-            filename = local_file_path.split("/")[-1]
+            filename = Path(local_file_path).name
             if os.path.isabs(local_file_path):
                 source = Path(local_file_path)
             else:
@@ -606,14 +607,16 @@ class ClaudeProcessManager:
             env_var_names = self.environment.get_project_env_var_names()
             setup_state = self._fetch_setup_state(is_first_message)
             user_instructions = get_user_instructions(
-                message=message,  # pyre-fixme[6]
+                # UserMessageUnion is wider than get_user_instructions accepts; non-chat messages never reach here
+                # pyrefly: ignore [bad-argument-type]
+                message=message,
                 file_paths=file_paths,
                 is_in_plan_mode=self._is_in_plan_mode,
                 env_var_names=env_var_names,
                 is_first_message=is_first_message,
                 setup_state=setup_state,
             )
-            filename = f"{self.environment.get_state_path()}/user_instructions_{message.message_id}.txt"
+            filename = str(self.environment.get_state_path() / f"user_instructions_{message.message_id}.txt")
             self.environment.write_file(filename, user_instructions)
             session_id_state_file = self._harness.session_id_state_file_name
             validated_session_id_state_file = self._harness.validated_session_id_state_file_name
@@ -726,8 +729,11 @@ class ClaudeProcessManager:
             for path in (session_id_path, validated_session_id_path):
                 try:
                     self.environment.delete_file_or_directory(path)
-                except OSError:
-                    pass
+                except OSError as e:
+                    # A state file may simply not exist yet (e.g. clearing context
+                    # before the first turn has written a session id). Deleting the
+                    # other file should still proceed, so log rather than swallow.
+                    logger.debug("Could not delete session id state file {}: {}", path, e)
             self._output_messages.put(ContextClearedMessage(message_id=AgentMessageID()))
             logger.info("Cleared context for task {}", self.task_id)
 

@@ -20,13 +20,6 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.exc import OperationalError
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.async_monkey_patches_test import expect_exact_logged_errors
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.pydantic_serialization import SerializableModel
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import LLMModel
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.alembic.json_migrations import get_json_schemas_of_all_nested_models
 from sculptor.database.alembic.json_migrations import get_potentially_breaking_changes
@@ -51,10 +44,15 @@ from sculptor.database.models import TaskID
 from sculptor.database.models import Workspace
 from sculptor.database.workspace_enums import DiffStatus
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.interfaces.agents.agent import HelloAgentConfig
+from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import ObjectID
 from sculptor.primitives.ids import ObjectSnapshotID
 from sculptor.primitives.ids import OrganizationReference
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import UserReference
 from sculptor.primitives.ids import WorkspaceID
@@ -69,6 +67,8 @@ from sculptor.services.data_model_service.sql_implementation import SQLTransacti
 from sculptor.services.data_model_service.sql_implementation import WORKSPACE_LATEST_TABLE
 from sculptor.services.data_model_service.sql_implementation import WORKSPACE_TABLE
 from sculptor.services.data_model_service.sql_implementation import _UPDATE_FIELDS_PROTECTED_COLUMNS
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import LLMModel
 from sculptor.utils.type_utils import extract_leaf_types
 
 
@@ -289,6 +289,22 @@ def test_there_are_no_missing_json_schema_migrations() -> None:
     )
 
 
+def test_frozen_json_schema_baseline_covers_every_persisted_model() -> None:
+    """The frozen baseline must be non-empty and cover every persisted model.
+
+    ``get_potentially_breaking_changes`` only inspects keys that exist in the frozen
+    baseline, so an empty (or partial) baseline silently disables the JSON-column
+    durability guard checked by ``test_there_are_no_missing_json_schema_migrations``.
+    See SCU-1523, where the file was ``{}`` and the guard was permanently green.
+    """
+    frozen_schemas = get_frozen_database_model_nested_json_schemas()
+    latest_schemas = get_json_schemas_of_all_nested_models(tuple(AUTOMANAGED_MODEL_CLASSES))
+    empty_baseline_message = f"frozen_pydantic_schemas.json is empty; the JSON-column durability guard is silently disabled. Run `{BUMP_MIGRATIONS_COMMAND}` to regenerate the baseline."
+    assert frozen_schemas, empty_baseline_message
+    missing_models_message = f"The frozen baseline does not cover the same models as the live registry ({sorted(frozen_schemas)} vs {sorted(latest_schemas)}); the durability guard would not inspect the missing models. Run `{BUMP_MIGRATIONS_COMMAND}`."
+    assert set(frozen_schemas.keys()) == set(latest_schemas.keys()), missing_models_message
+
+
 # ============================================================================
 # MIGRATION CORRECTNESS TESTS
 # These tests verify that the Alembic migration chain produces a correct
@@ -460,6 +476,7 @@ def test_triggers_work_after_migration() -> None:
             # Build column values from the model's field definitions
             field_values: dict[str, Any] = {}
             for field_name, field in model_cls.model_fields.items():
+                assert field.annotation is not None
                 field_values[field_name] = _generate_synthetic_value(field_name, field.annotation)
 
             # Insert a row into the snapshots table
@@ -502,6 +519,99 @@ def test_triggers_work_after_migration() -> None:
             assert len(rows) == 1, (
                 f"Expected 1 row in {latest_table_name} after second insert into {table_name}, got {len(rows)}"
             )
+
+
+def test_drop_all_automanaged_triggers_unblocks_drop_column() -> None:
+    """Encodes the exact failure mode: a trigger referencing a column blocks DROP COLUMN.
+
+    SQLite validates trigger bodies during ALTER TABLE, so dropping a column that an
+    existing trigger references fails. drop_all_automanaged_triggers removes that hazard,
+    which is what makes the whole class of migration failures impossible.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.pool import StaticPool
+
+    from sculptor.database.alembic.utils import drop_all_automanaged_triggers
+
+    engine = create_engine(IN_MEMORY_SQLITE, poolclass=StaticPool, connect_args={"check_same_thread": False})
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE widget (id TEXT, doomed TEXT)"))
+        connection.execute(text("CREATE TABLE widget_latest (id TEXT PRIMARY KEY, doomed TEXT)"))
+        connection.execute(
+            text("""
+                CREATE TRIGGER widget_before_insert BEFORE INSERT ON widget BEGIN
+                    INSERT INTO widget_latest (id, doomed) VALUES (NEW.id, NEW.doomed)
+                    ON CONFLICT (id) DO UPDATE SET doomed = excluded.doomed;
+                END;
+            """)
+        )
+
+    # With the trigger present, dropping the referenced column fails — the exact bug.
+    with pytest.raises(OperationalError):
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE widget DROP COLUMN doomed"))
+
+    # After dropping triggers, the same statement succeeds and no triggers remain.
+    with engine.begin() as connection:
+        drop_all_automanaged_triggers(connection)
+        connection.execute(text("ALTER TABLE widget DROP COLUMN doomed"))
+        remaining = [row[0] for row in connection.execute(text("SELECT name FROM sqlite_master WHERE type='trigger'"))]
+    assert remaining == []
+
+
+def test_in_memory_migration_runner_drops_preexisting_triggers() -> None:
+    """The in-memory migration runner enforces the no-triggers-during-migration invariant.
+
+    Simulates a real upgrade: a database that already carries auto-managed triggers from a
+    prior startup. Running migrations through the production runner must drop them first
+    (they are recreated afterwards by initialize_db_from_connection, which the bare runner
+    does not do). Guards against the wiring being removed from override_run_env.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.pool import StaticPool
+
+    from sculptor.database.core import _run_migrations_on_connection
+    from sculptor.services.data_model_service.sql_implementation import register_all_tables
+
+    register_all_tables()
+
+    engine = create_engine(IN_MEMORY_SQLITE, poolclass=StaticPool, connect_args={"check_same_thread": False})
+    with engine.begin() as connection:
+        # Full init: migrate to head AND create all auto-managed triggers, as a prior startup would.
+        initialize_db_from_connection(connection, IN_MEMORY_SQLITE)
+        triggers_before = connection.execute(text("SELECT count(*) FROM sqlite_master WHERE type='trigger'")).scalar()
+        assert triggers_before is not None and triggers_before > 0, (
+            "expected auto-managed triggers to exist after initialization"
+        )
+
+        # Re-run migrations through the production runner (a no-op upgrade to head).
+        _run_migrations_on_connection(connection)
+        triggers_after = connection.execute(text("SELECT count(*) FROM sqlite_master WHERE type='trigger'")).scalar()
+    assert triggers_after == 0, "the migration runner must drop all triggers before running migrations"
+
+
+def test_file_migration_runner_drops_preexisting_triggers(tmp_path: Path) -> None:
+    """Same invariant for the file-database runner (the env.py path used in production)."""
+    from sculptor.database.alembic.utils import get_alembic_script_location
+    from sculptor.database.core import _run_migrations_on_database_url
+    from sculptor.database.core import initialize_db
+    from sculptor.services.data_model_service.sql_implementation import register_all_tables
+
+    register_all_tables()
+
+    url = f"sqlite:///{tmp_path / 'database.db'}"
+    engine = create_new_engine(url)
+    # Simulate a prior startup: migrate to head and create triggers.
+    initialize_db(engine)
+    with engine.connect() as connection:
+        before = connection.execute(text("SELECT count(*) FROM sqlite_master WHERE type='trigger'")).scalar()
+    assert before is not None and before > 0, "expected auto-managed triggers to exist after initialization"
+
+    # Run migrations through the file-database runner (env.py).
+    _run_migrations_on_database_url(url, get_alembic_script_location())
+    with engine.connect() as connection:
+        after = connection.execute(text("SELECT count(*) FROM sqlite_master WHERE type='trigger'")).scalar()
+    assert after == 0, "the migration runner must drop all triggers before running migrations"
 
 
 def _get_migration_fixtures() -> list[MigrationTestFixture]:
@@ -1467,7 +1577,7 @@ def test_update_project_fields_rejects_bad_inputs(
     # These runtime tests exercise the defense-in-depth belt inside
     # ``_update_model_fields`` for callers that might bypass static typing
     # (e.g. dynamic dict unpacking from untyped sources).  We drive the
-    # internal helper directly so no pyre-ignore is needed.
+    # internal helper directly so no type suppression is needed.
     with service.open_transaction(RequestID()) as transaction:
         assert isinstance(transaction, SQLTransaction)
         with pytest.raises(ValueError, match="at least one field"):
@@ -1544,7 +1654,9 @@ def test_update_project_fields_writes_exactly_one_snapshot_row(
             text("SELECT COUNT(*) FROM project WHERE object_id = :oid"), {"oid": str(project.object_id)}
         ).scalar()
 
+    # pyrefly: ignore [unsupported-operation]
     assert after_rows == before_rows + 1, (
+        # pyrefly: ignore [unsupported-operation]
         f"Expected exactly one new snapshot row; got delta={after_rows - before_rows}"
     )
 
@@ -1637,6 +1749,8 @@ def test_update_project_fields_stress_disjoint_concurrent_writers(
             barrier.wait(timeout=10)
             for i in range(iterations):
                 with service.open_transaction(RequestID()) as transaction:
+                    # dynamic per-thread field names can't be statically typed against the TypedDict kwargs
+                    # pyrefly: ignore [bad-argument-type]
                     transaction.update_project_fields(project.object_id, **{field_name: f"{field_name}_iter_{i}"})
         except BaseException as e:
             with errors_lock:
@@ -1948,7 +2062,9 @@ def test_update_workspace_fields_writes_exactly_one_snapshot_row(
             text("SELECT COUNT(*) FROM workspace WHERE object_id = :oid"), {"oid": str(workspace_id)}
         ).scalar()
 
+    # pyrefly: ignore [unsupported-operation]
     assert after_rows == before_rows + 1, (
+        # pyrefly: ignore [unsupported-operation]
         f"Expected exactly one new snapshot row; got delta={after_rows - before_rows}"
     )
 

@@ -1,4 +1,4 @@
-from imbue_core.errors import ExpectedError
+from sculptor.foundation.errors import ExpectedError
 
 
 class EnvironmentFailure(ExpectedError):

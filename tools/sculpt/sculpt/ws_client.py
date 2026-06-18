@@ -63,7 +63,7 @@ def _build_ws_url(base_url: str, session_token: str, scope: str | None = None) -
         ws_url = "ws://" + base_url[len("http://") :]
     else:
         ws_url = base_url
-    url = f"{ws_url}/api/v1/stream/ws?x-session-token={session_token}"
+    url = f"{ws_url}/api/v1/stream/ws?x-session-token={urllib.parse.quote(session_token, safe='')}"
     if scope is not None:
         url = f"{url}&scope={urllib.parse.quote(scope, safe=':')}"
     return url
@@ -95,6 +95,8 @@ def _wrap_invalid_status(e: websockets.exceptions.InvalidStatus) -> Exception:
 
 _TERMINAL_STATUSES = frozenset({"READY", "ERROR"})
 _TERMINAL_TASK_STATUSES = frozenset({"FAILED", "CANCELLED", "DELETED", "SUCCEEDED"})
+
+_MAX_RECONNECT_DELAY_SECONDS = 30
 
 
 def _is_terminal_state(snapshot: AgentSnapshot) -> bool:
@@ -358,7 +360,7 @@ async def _follow_agent_async(
             retry_count += 1
             if retry_count > max_retries:
                 return ExitReason.RETRY_EXHAUSTED
-            delay = min(2 ** (retry_count - 1), 30)
+            delay = min(2 ** (retry_count - 1), _MAX_RECONNECT_DELAY_SECONDS)
             await asyncio.sleep(delay)
         except asyncio.CancelledError:
             return ExitReason.CTRL_C

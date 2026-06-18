@@ -2,11 +2,11 @@ from typing import Callable
 
 from pydantic import PrivateAttr
 
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.thread_utils import ObservableThread
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import Task
 from sculptor.database.models import TaskID
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.services.task_service.concurrent_implementation import ConcurrentTaskService
 from sculptor.services.task_service.concurrent_implementation import Runner
 from sculptor.services.task_service.data_types import ServiceCollectionForTask
@@ -44,13 +44,12 @@ class ThreadRunner(Runner):
 
     def join(self, timeout: float | None = None) -> None:
         assert self._thread is not None
-        # send the shutdown signal to the task
         self._thread.join(timeout)
 
     def exception(self) -> BaseException | None:
         if self._thread is None:
             return None
-        return self._thread._exception
+        return self._thread.exception_raw
 
     def get_name(self) -> str:
         if self._thread is None:

@@ -15,12 +15,11 @@ from unittest.mock import patch
 import httpx
 import pytest
 
-from imbue_core.concurrency_group import ConcurrencyGroup
-from imbue_core.sculptor.user_config import DependencyPaths
-from imbue_core.sculptor.user_config import UserConfig
-from imbue_core.subprocess_utils import FinishedProcess
-from imbue_core.subprocess_utils import ProcessError
-from imbue_core.subprocess_utils import ProcessTimeoutError
+from sculptor.config.user_config import DependencyPaths
+from sculptor.config.user_config import UserConfig
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.subprocess_utils import FinishedProcess
+from sculptor.foundation.subprocess_utils import ProcessError
 from sculptor.services.dependency_management_service import CLAUDE_VERSION_RANGE
 from sculptor.services.dependency_management_service import Dependency
 from sculptor.services.dependency_management_service import DependencyCheckResult
@@ -901,96 +900,115 @@ class TestStop:
         service.stop()
 
 
-class TestRunAuthLogin:
+class TestAuthLogin:
+    @staticmethod
+    def _make_fake_claude(
+        tmp_path: Path,
+        *,
+        print_url: bool = True,
+        accept_code: str = "good",
+        exit_without_reading: bool = False,
+    ) -> str:
+        """A stand-in for ``claude auth login``.
+
+        Prints a sign-in URL (optionally), then — unless it exits early to mimic a
+        self-completing local loopback login — reads a code from stdin and exits 0
+        only when it matches ``accept_code``.
+        """
+        lines = ["#!/bin/sh"]
+        if print_url:
+            lines.append('echo "Visit: https://claude.ai/auth?code=true to sign in"')
+        if exit_without_reading:
+            lines.append("exit 0")
+        else:
+            lines.append("read code")
+            lines.append(f'if [ "$code" = "{accept_code}" ]; then exit 0; fi')
+            lines.append('echo "invalid code" >&2')
+            lines.append("exit 1")
+        script = tmp_path / "fake-claude"
+        script.write_text("\n".join(lines) + "\n")
+        script.chmod(0o755)
+        return str(script)
+
     @patch("sculptor.services.dependency_management_service.webbrowser")
-    @patch("sculptor.services.dependency_management_service.get_user_config_instance")
-    @patch("shutil.which", return_value="/usr/bin/claude")
-    def test_successful_auth(self, mock_which: MagicMock, mock_config: MagicMock, mock_browser: MagicMock) -> None:
-        mock_config.return_value = _make_user_config(claude_binary_mode="claude")
-
-        auth_result = FinishedProcess(
-            stdout="",
-            stderr="Visit: https://claude.ai/auth/callback?code=abc\nAuthenticated!",
-            returncode=0,
-            command=("test",),
-            is_output_already_logged=False,
-        )
-
-        def fake_run_streaming(
-            command: object,
-            on_output: Callable[[str, bool], None],
-            is_checked: object = True,
-            timeout: object = None,
-        ) -> FinishedProcess:
-            # Simulate run_streaming calling the output callback for each stderr line
-            on_output("Visit: https://claude.ai/auth/callback?code=abc", True)
-            on_output("Authenticated!", True)
-            return auth_result
-
-        with patch("sculptor.services.dependency_management_service.run_streaming", side_effect=fake_run_streaming):
-            with ConcurrencyGroup(name="test") as cg:
-                service = DependencyManagementService(concurrency_group=cg)
-                result = service.run_auth_login(Dependency.CLAUDE)
-
-        assert result.success is True
-        assert result.auth_url == "https://claude.ai/auth/callback?code=abc"
-        mock_browser.open.assert_called_once_with("https://claude.ai/auth/callback?code=abc")
-
-    @patch("sculptor.services.dependency_management_service.get_user_config_instance")
-    @patch("shutil.which", return_value="/usr/bin/claude")
-    def test_auth_timeout(self, mock_which: MagicMock, mock_config: MagicMock) -> None:
-        mock_config.return_value = _make_user_config(claude_binary_mode="claude")
-
-        with patch(
-            "sculptor.services.dependency_management_service.run_streaming",
-            side_effect=ProcessTimeoutError(("claude", "auth", "login"), "", ""),
-        ):
-            with ConcurrencyGroup(name="test") as cg:
-                service = DependencyManagementService(concurrency_group=cg)
-                result = service.run_auth_login(Dependency.CLAUDE)
-
-        assert result.success is False
-        assert "timed out" in (result.error or "").lower()
-
-    @patch("sculptor.services.dependency_management_service.get_user_config_instance")
-    @patch("shutil.which", return_value=None)
-    def test_not_installed(self, mock_which: MagicMock, mock_config: MagicMock) -> None:
-        mock_config.return_value = _make_user_config(claude_binary_mode="claude")
-
+    def test_start_then_submit_success(self, mock_browser: MagicMock, tmp_path: Path) -> None:
+        fake = self._make_fake_claude(tmp_path, accept_code="good")
         with ConcurrencyGroup(name="test") as cg:
             service = DependencyManagementService(concurrency_group=cg)
-            result = service.run_auth_login(Dependency.CLAUDE)
+            with patch.object(DependencyManagementService, "resolve_binary_path", return_value=fake):
+                start = service.start_auth_login(Dependency.CLAUDE)
+                assert start.needs_code is True
+                assert start.success is False
+                assert start.auth_url == "https://claude.ai/auth?code=true"
+                mock_browser.open.assert_called_once_with("https://claude.ai/auth?code=true")
 
-        assert result.success is False
-        assert "not installed" in (result.error or "").lower()
+                result = service.submit_auth_code(Dependency.CLAUDE, "good")
+                assert result.success is True
+                # The completed session is torn down.
+                assert service._claude_auth_session is None
 
-    @patch("sculptor.services.dependency_management_service.get_user_config_instance")
-    @patch("shutil.which", return_value="/usr/bin/claude")
-    def test_auth_failure(self, mock_which: MagicMock, mock_config: MagicMock) -> None:
-        mock_config.return_value = _make_user_config(claude_binary_mode="claude")
-
-        auth_result = FinishedProcess(
-            stdout="",
-            stderr="Authentication failed",
-            returncode=1,
-            command=("test",),
-            is_output_already_logged=False,
-        )
-
-        with patch("sculptor.services.dependency_management_service.run_streaming", return_value=auth_result):
-            with ConcurrencyGroup(name="test") as cg:
-                service = DependencyManagementService(concurrency_group=cg)
-                result = service.run_auth_login(Dependency.CLAUDE)
-
-        assert result.success is False
-
-    def test_unsupported_tool(self) -> None:
+    @patch("sculptor.services.dependency_management_service.webbrowser")
+    def test_submit_invalid_code_fails(self, mock_browser: MagicMock, tmp_path: Path) -> None:
+        fake = self._make_fake_claude(tmp_path, accept_code="good")
         with ConcurrencyGroup(name="test") as cg:
             service = DependencyManagementService(concurrency_group=cg)
-            result = service.run_auth_login(Dependency.GIT)
+            with patch.object(DependencyManagementService, "resolve_binary_path", return_value=fake):
+                service.start_auth_login(Dependency.CLAUDE)
+                result = service.submit_auth_code(Dependency.CLAUDE, "wrong")
+                assert result.success is False
+                assert service._claude_auth_session is None
 
-        assert result.success is False
-        assert "not supported" in (result.error or "").lower()
+    @patch("sculptor.services.dependency_management_service.webbrowser")
+    def test_start_self_completes_without_code(self, mock_browser: MagicMock, tmp_path: Path) -> None:
+        # A login that finishes on its own (local browser-loopback) needs no pasted code.
+        fake = self._make_fake_claude(tmp_path, print_url=False, exit_without_reading=True)
+        with ConcurrencyGroup(name="test") as cg:
+            service = DependencyManagementService(concurrency_group=cg)
+            with patch.object(DependencyManagementService, "resolve_binary_path", return_value=fake):
+                start = service.start_auth_login(Dependency.CLAUDE)
+                assert start.success is True
+                assert start.needs_code is False
+                assert service._claude_auth_session is None
+
+    @patch("sculptor.services.dependency_management_service.webbrowser")
+    def test_stop_terminates_in_flight_session(self, mock_browser: MagicMock, tmp_path: Path) -> None:
+        # A sign-in left waiting for a pasted code must not outlive the service:
+        # stop() tears down the still-running `auth login` subprocess.
+        fake = self._make_fake_claude(tmp_path, accept_code="good")
+        with ConcurrencyGroup(name="test") as cg:
+            service = DependencyManagementService(concurrency_group=cg)
+            with patch.object(DependencyManagementService, "resolve_binary_path", return_value=fake):
+                start = service.start_auth_login(Dependency.CLAUDE)
+                assert start.needs_code is True
+                session = service._claude_auth_session
+                assert session is not None and not session.is_finished()
+
+                service.stop()
+
+                assert service._claude_auth_session is None
+                assert session.is_finished()
+
+    def test_submit_without_active_session(self) -> None:
+        with ConcurrencyGroup(name="test") as cg:
+            service = DependencyManagementService(concurrency_group=cg)
+            result = service.submit_auth_code(Dependency.CLAUDE, "code")
+            assert result.success is False
+            assert "no sign-in" in (result.error or "").lower()
+
+    def test_start_not_installed(self) -> None:
+        with ConcurrencyGroup(name="test") as cg:
+            service = DependencyManagementService(concurrency_group=cg)
+            with patch.object(DependencyManagementService, "resolve_binary_path", return_value=None):
+                result = service.start_auth_login(Dependency.CLAUDE)
+                assert result.success is False
+                assert "not installed" in (result.error or "").lower()
+
+    def test_start_unsupported_tool(self) -> None:
+        with ConcurrencyGroup(name="test") as cg:
+            service = DependencyManagementService(concurrency_group=cg)
+            result = service.start_auth_login(Dependency.GIT)
+            assert result.success is False
+            assert "not supported" in (result.error or "").lower()
 
 
 class TestCheckAuthenticated:
@@ -1601,10 +1619,10 @@ def _make_user_config_with_pi(pi_path: str = "pi") -> UserConfig:
     )
 
 
-def _make_managed_config(claude: str, pi: str, enable_multi_harness: bool = False) -> UserConfig:
+def _make_managed_config(claude: str, pi: str, enable_pi_agent: bool = False) -> UserConfig:
     """A UserConfig with explicit claude + pi binary-mode values.
 
-    ``enable_multi_harness`` gates pi auto-install on startup and defaults to off,
+    ``enable_pi_agent`` gates pi auto-install on startup and defaults to off,
     matching the product default: a Claude-only user never auto-downloads pi.
     """
     return UserConfig(
@@ -1613,7 +1631,7 @@ def _make_managed_config(claude: str, pi: str, enable_multi_harness: bool = Fals
         organization_id="org-1",
         instance_id="inst-1",
         dependency_paths=DependencyPaths(claude=claude, pi=pi),
-        enable_multi_harness=enable_multi_harness,
+        enable_pi_agent=enable_pi_agent,
     )
 
 
@@ -1959,10 +1977,10 @@ class TestPiAuth:
             service = DependencyManagementService(concurrency_group=cg)
             assert service.check_authenticated(Dependency.PI) is None
 
-    def test_run_auth_login_returns_not_supported(self) -> None:
+    def test_start_auth_login_returns_not_supported(self) -> None:
         with ConcurrencyGroup(name="test") as cg:
             service = DependencyManagementService(concurrency_group=cg)
-            result = service.run_auth_login(Dependency.PI)
+            result = service.start_auth_login(Dependency.PI)
 
         assert result.success is False
         assert result.error is not None
@@ -2332,7 +2350,7 @@ class TestCheckInstalledConcurrently:
 class TestAutoInstallLoop:
     """_auto_install_if_needed loops over managed tools (Claude + pi).
 
-    pi auto-install is additionally gated on the ``enable_multi_harness`` experiment:
+    pi auto-install is additionally gated on the ``enable_pi_agent`` experiment:
     a flag-off user (the default) never auto-downloads pi, while Claude — which is not
     part of the experiment — auto-installs whenever it is MANAGED and missing. A manual
     install via ``install_managed`` is never gated (see TestPiInstallManaged).
@@ -2340,12 +2358,12 @@ class TestAutoInstallLoop:
 
     @patch("sculptor.services.dependency_management_service.get_user_config_instance")
     @patch("sculptor.services.dependency_management_service.get_internal_folder")
-    def test_pi_managed_and_missing_is_auto_installed_when_multi_harness_enabled(
+    def test_pi_managed_and_missing_is_auto_installed_when_pi_agent_enabled(
         self, mock_folder: MagicMock, mock_config: MagicMock, tmp_path: Path
     ) -> None:
         """pi MANAGED + missing + flag on auto-installs on startup; Claude (CUSTOM) does not."""
         mock_folder.return_value = tmp_path
-        mock_config.return_value = _make_managed_config(claude="claude", pi="MANAGED", enable_multi_harness=True)
+        mock_config.return_value = _make_managed_config(claude="claude", pi="MANAGED", enable_pi_agent=True)
         mock_cg = MagicMock()
         service = DependencyManagementService.model_construct(concurrency_group=mock_cg)
 
@@ -2355,12 +2373,12 @@ class TestAutoInstallLoop:
 
     @patch("sculptor.services.dependency_management_service.get_user_config_instance")
     @patch("sculptor.services.dependency_management_service.get_internal_folder")
-    def test_pi_managed_and_missing_is_not_auto_installed_when_multi_harness_disabled(
+    def test_pi_managed_and_missing_is_not_auto_installed_when_pi_agent_disabled(
         self, mock_folder: MagicMock, mock_config: MagicMock, tmp_path: Path
     ) -> None:
         """pi MANAGED + missing but flag off must NOT auto-download pi — the default for a Claude-only user."""
         mock_folder.return_value = tmp_path
-        mock_config.return_value = _make_managed_config(claude="claude", pi="MANAGED", enable_multi_harness=False)
+        mock_config.return_value = _make_managed_config(claude="claude", pi="MANAGED", enable_pi_agent=False)
         mock_cg = MagicMock()
         service = DependencyManagementService.model_construct(concurrency_group=mock_cg)
 
@@ -2390,7 +2408,7 @@ class TestAutoInstallLoop:
     ) -> None:
         """Both MANAGED + missing but flag off: Claude installs, pi is skipped — the gate is pi-only."""
         mock_folder.return_value = tmp_path
-        mock_config.return_value = _make_managed_config(claude="MANAGED", pi="MANAGED", enable_multi_harness=False)
+        mock_config.return_value = _make_managed_config(claude="MANAGED", pi="MANAGED", enable_pi_agent=False)
         mock_cg = MagicMock()
         service = DependencyManagementService.model_construct(concurrency_group=mock_cg)
 
@@ -2400,12 +2418,12 @@ class TestAutoInstallLoop:
 
     @patch("sculptor.services.dependency_management_service.get_user_config_instance")
     @patch("sculptor.services.dependency_management_service.get_internal_folder")
-    def test_both_auto_install_when_multi_harness_enabled(
+    def test_both_auto_install_when_pi_agent_enabled(
         self, mock_folder: MagicMock, mock_config: MagicMock, tmp_path: Path
     ) -> None:
         """Both MANAGED + missing + flag on: Claude and pi both auto-install, in registry order."""
         mock_folder.return_value = tmp_path
-        mock_config.return_value = _make_managed_config(claude="MANAGED", pi="MANAGED", enable_multi_harness=True)
+        mock_config.return_value = _make_managed_config(claude="MANAGED", pi="MANAGED", enable_pi_agent=True)
         mock_cg = MagicMock()
         service = DependencyManagementService.model_construct(concurrency_group=mock_cg)
 
@@ -2420,7 +2438,7 @@ class TestAutoInstallLoop:
     ) -> None:
         """An already-installed, in-range managed pi is not re-installed (flag on so the gate is open)."""
         mock_folder.return_value = tmp_path
-        mock_config.return_value = _make_managed_config(claude="claude", pi="MANAGED", enable_multi_harness=True)
+        mock_config.return_value = _make_managed_config(claude="claude", pi="MANAGED", enable_pi_agent=True)
 
         # Stage the pinned pi so check_installed(PI) reports installed + in range.
         version_dir = tmp_path / "dependencies" / "pi" / f"version-{_PI_RECOMMENDED}" / "pi"

@@ -17,21 +17,23 @@ from typing import Literal
 
 from loguru import logger
 
-from imbue_core.processes.local_process import RunningProcess
-from imbue_core.sculptor.state.messages import LLMModel
 from sculptor.agents.default.claude_code_sdk.harness import ClaudeCodeHarness
 from sculptor.agents.default.constants import MODEL_SHORTNAME_MAP
 from sculptor.agents.default.utils import get_state_file_contents
 from sculptor.database.models import TaskID
+from sculptor.foundation.processes.local_process import RunningProcess
 from sculptor.interfaces.agents.errors import ClaudeBinaryNotFoundError
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.state.messages import LLMModel
 from sculptor.web.data_types import BtwUpdate
 
 BtwState = Literal["running", "done", "error", "aborted"]
 
 _PUBLISH_THROTTLE_SECONDS = 0.1
 _READ_TIMEOUT_SECONDS = 0.1
+_ABORT_FORCE_KILL_SECONDS = 5.0
+_STDERR_TAIL_CHARS = 500
 # Cold-start cushion: `/btw` can race the main agent's first `system/init`
 # handshake (which is what writes the session-id state file). The interrupt
 # path handles the same race with an in-process Event; we only have the
@@ -125,7 +127,7 @@ class BtwProcessManager:
             return
         try:
             if not process.is_finished():
-                process.terminate(force_kill_seconds=5.0)
+                process.terminate(force_kill_seconds=_ABORT_FORCE_KILL_SECONDS)
         except Exception as exc:
             logger.opt(exception=exc).warning("Error while aborting /btw subprocess")
 
@@ -165,7 +167,7 @@ class BtwProcessManager:
             # spawn — propagate it now so we don't leak the just-launched pid.
             try:
                 if not process.is_finished():
-                    process.terminate(force_kill_seconds=5.0)
+                    process.terminate(force_kill_seconds=_ABORT_FORCE_KILL_SECONDS)
             except Exception as exc:
                 logger.opt(exception=exc).warning("Error while aborting /btw subprocess")
         output_queue = process.get_queue()
@@ -199,7 +201,7 @@ class BtwProcessManager:
             self._publish(self._build_update(request_id=request_id, state="aborted", answer=answer))
             return
         if returncode != 0 and error_message is None:
-            stderr_tail = process.read_stderr()[-500:]
+            stderr_tail = process.read_stderr()[-_STDERR_TAIL_CHARS:]
             error_message = f"claude exited with code {returncode}: {stderr_tail}".strip()
 
         if error_message is not None:

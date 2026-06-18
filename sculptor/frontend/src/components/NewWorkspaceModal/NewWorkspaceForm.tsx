@@ -1,6 +1,6 @@
 import { Button, Flex, IconButton, Select, Spinner, Switch, Text, Tooltip } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { BlocksIcon, X } from "lucide-react";
+import { BlocksIcon, BotIcon, X } from "lucide-react";
 import type { KeyboardEvent, ReactElement } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -16,6 +16,13 @@ import {
 } from "../../api";
 import { HTTPException } from "../../common/Errors.ts";
 import { useImbueNavigate } from "../../common/NavigateUtils.ts";
+import {
+  AGENT_TYPE_LABELS,
+  encodeRegisteredAgentType,
+  lastUsedAgentTypeAtom,
+  parseStoredAgentType,
+  type StoredAgentType,
+} from "../../common/state/atoms/agentTabs.ts";
 import { sculptorSettingsAtom } from "../../common/state/atoms/sculptorSettings.ts";
 import {
   defaultEffortLevelAtom,
@@ -23,9 +30,11 @@ import {
   isCloneWorkspacesEnabledAtom,
   isDefaultFastModeAtom,
   isInPlaceWorkspacesEnabledAtom,
+  isPiAgentEnabledAtom,
 } from "../../common/state/atoms/userConfig.ts";
 import { useProjects } from "../../common/state/hooks/useProjects.ts";
 import { useRepoInfo } from "../../common/state/hooks/useRepoInfo.ts";
+import { useTerminalAgentRegistrations } from "../../common/state/hooks/useTerminalAgentRegistrations.ts";
 import { getMetaKey, isModifierPressed } from "../../electron/utils.ts";
 import { AgentSettingsControls } from "../AgentSettingsControls.tsx";
 import { BranchSelector } from "../BranchSelector.tsx";
@@ -105,6 +114,22 @@ export const NewWorkspaceForm = ({ entrySource: entrySourceProp }: NewWorkspaceF
   const [agentEffort, setAgentEffort] = useState<EffortLevel>((defaultEffortLevel as EffortLevel) ?? EffortLevel.XHIGH);
   const [isAgentFastMode, setIsAgentFastMode] = useState<boolean>(isDefaultFastMode);
   const [isAgentPlanMode, setIsAgentPlanMode] = useState<boolean>(false);
+
+  // The first agent's type (per-agent, not per-workspace). Registered terminal
+  // agents select as `registered:<id>`. The form opens preset to the shared
+  // last-used type (the same MRU the tab bar's + button reads) — a mount-time
+  // snapshot the user can change freely; the MRU is written back only when a
+  // workspace is actually created. A stored "pi" is unusable when pi-agent is
+  // off, so it falls back to Claude at seed time. Only the pi *option* is gated
+  // behind the flag; the select itself is always visible.
+  const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
+  const lastUsedAgentType = useAtomValue(lastUsedAgentTypeAtom);
+  const setLastUsedAgentType = useSetAtom(lastUsedAgentTypeAtom);
+  const [agentTypeValue, setAgentTypeValue] = useState<string>(
+    lastUsedAgentType === "pi" && !isPiAgentEnabled ? "claude" : lastUsedAgentType,
+  );
+  const { registrations, refetch: refreshRegistrations } = useTerminalAgentRegistrations();
+  const { agentType, registrationId } = parseStoredAgentType(agentTypeValue as StoredAgentType);
 
   // Projects arrive over the unified WebSocket stream; read them from the
   // shared atom rather than re-fetching.
@@ -345,9 +370,29 @@ export const NewWorkspaceForm = ({ entrySource: entrySourceProp }: NewWorkspaceF
 
       const workspaceId = wsResponse.data.objectId;
 
+      // If the remembered registered agent's registration is no longer present
+      // (deleted since the modal opened), fall back to Claude rather than
+      // leaving the just-created workspace with a failed, agentless first
+      // agent.
+      const isMissingRegistration =
+        agentType === "registered" && !registrations.some((r) => r.registrationId === registrationId);
+      const effectiveAgentType = isMissingRegistration ? "claude" : agentType;
+      const effectiveRegistrationId = isMissingRegistration ? undefined : registrationId;
+      const effectiveAgentTypeValue: StoredAgentType = isMissingRegistration
+        ? "claude"
+        : (agentTypeValue as StoredAgentType);
+
+      // Only Claude consumes a creation-time model: terminal/registered agents
+      // have no model concept, and pi selects from its own catalog in-task, so
+      // it starts on pi's default rather than a Claude model it would ignore.
+      const shouldSendCreationModel = effectiveAgentType === "claude";
       const agentResponse = await createWorkspaceAgent({
         path: { workspace_id: workspaceId },
-        body: { model: agentModel },
+        body: {
+          model: shouldSendCreationModel ? agentModel : undefined,
+          agentType: effectiveAgentType,
+          registrationId: effectiveRegistrationId,
+        },
       });
 
       if (!agentResponse.data) {
@@ -356,6 +401,10 @@ export const NewWorkspaceForm = ({ entrySource: entrySourceProp }: NewWorkspaceF
 
       const agentId = agentResponse.data.id;
 
+      // The agent was actually created with this type — record it as the shared
+      // MRU so the tab bar's plain + click creates the same type next time.
+      setLastUsedAgentType(effectiveAgentTypeValue);
+
       // If the user typed an initial prompt, send it as the first message to
       // the new agent before navigating. The agent is ready to receive messages
       // on `createWorkspaceAgent` resolve; sending here (rather than queuing in
@@ -363,8 +412,13 @@ export const NewWorkspaceForm = ({ entrySource: entrySourceProp }: NewWorkspaceF
       // `useChatData.sendMessage`. Per-agent settings (effort / fastMode /
       // planMode) ride along on the same request so the initial message starts
       // with the user's chosen settings instead of snapping to defaults.
+      //
+      // Terminal and registered agents have no chat stream — the backend
+      // rejects a prompt for them and a queued message would never be read —
+      // so only chat-capable agents (Claude, pi) receive the initial prompt.
+      const isChatAgent = effectiveAgentType !== "terminal" && effectiveAgentType !== "registered";
       const trimmedPrompt = initialPrompt.trim();
-      if (trimmedPrompt) {
+      if (trimmedPrompt && isChatAgent) {
         try {
           await sendWorkspaceAgentMessages({
             path: { workspace_id: workspaceId, agent_id: agentId },
@@ -434,6 +488,11 @@ export const NewWorkspaceForm = ({ entrySource: entrySourceProp }: NewWorkspaceF
     agentEffort,
     isAgentFastMode,
     isAgentPlanMode,
+    agentType,
+    registrationId,
+    agentTypeValue,
+    registrations,
+    setLastUsedAgentType,
     navigateToAgent,
     resetDraft,
     setToast,
@@ -623,6 +682,61 @@ export const NewWorkspaceForm = ({ entrySource: entrySourceProp }: NewWorkspaceF
             </span>
           }
         />
+        {/* First-agent type selector — the same per-agent choice as the tab
+            bar's + menu. Always visible; only the pi option is gated behind the
+            experimental pi-agent flag (Claude, Terminal, and any registered
+            terminal agents are available to everyone). */}
+        <Select.Root
+          size="1"
+          value={agentTypeValue}
+          onValueChange={setAgentTypeValue}
+          onOpenChange={(open): void => {
+            // Re-read the registrations directory on every open so the options
+            // track the filesystem without a restart.
+            if (open) void refreshRegistrations();
+          }}
+        >
+          <Select.Trigger
+            variant="ghost"
+            data-testid={ElementIds.ADD_WORKSPACE_AGENT_TYPE_SELECT}
+            className={styles.toolbarPill}
+          >
+            <Flex align="center" gap="1">
+              <BotIcon size={12} />
+              <Text size="1" color="gray">
+                agent
+              </Text>
+              <Text size="1" weight="medium" color="gray" highContrast>
+                {agentType === "registered"
+                  ? (registrations.find((r) => r.registrationId === registrationId)?.displayName ?? "Registered")
+                  : AGENT_TYPE_LABELS[agentType]}
+              </Text>
+            </Flex>
+          </Select.Trigger>
+          <Select.Content position="popper" side="bottom" sideOffset={5}>
+            <Select.Item value="claude" data-testid={ElementIds.AGENT_TYPE_OPTION_CLAUDE}>
+              {AGENT_TYPE_LABELS.claude}
+            </Select.Item>
+            {isPiAgentEnabled && (
+              <Select.Item value="pi" data-testid={ElementIds.AGENT_TYPE_OPTION_PI}>
+                {AGENT_TYPE_LABELS.pi}
+              </Select.Item>
+            )}
+            <Select.Item value="terminal" data-testid={ElementIds.AGENT_TYPE_OPTION_TERMINAL}>
+              {AGENT_TYPE_LABELS.terminal}
+            </Select.Item>
+            {registrations.map((registration) => (
+              <Select.Item
+                key={registration.registrationId}
+                value={encodeRegisteredAgentType(registration.registrationId)}
+                data-testid={ElementIds.AGENT_TYPE_OPTION_REGISTERED}
+                data-registration-id={registration.registrationId}
+              >
+                {registration.displayName}
+              </Select.Item>
+            ))}
+          </Select.Content>
+        </Select.Root>
         {isModeSelectorVisible && (
           <Select.Root
             size="1"

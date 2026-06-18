@@ -40,6 +40,12 @@ from loguru import logger
 
 from sculptor.testing.port_manager import PortManager
 
+# Number of chunks the artifact is split into when ``artifact_chunk_delay`` is
+# set, so ``electron-updater`` emits several ``download-progress`` events.
+_ARTIFACT_CHUNK_COUNT = 10
+# How long ``stop()`` waits for the server thread to exit before giving up.
+_THREAD_JOIN_TIMEOUT_SECONDS = 5.0
+
 
 def _manifest_filename() -> str:
     if sys.platform == "darwin":
@@ -92,7 +98,7 @@ class _ServerState:
         self.artifact_content: bytes = b""
         self.artifact_filename: str = ""
         self.artifact_chunk_delay: float = 0.0
-        self.offline: bool = False
+        self.is_offline: bool = False
         self.request_paths: list[str] = []
         self.request_user_agents: list[str] = []
 
@@ -111,13 +117,13 @@ class _Handler(BaseHTTPRequestHandler):
         with self.server_state.lock:
             self.server_state.request_paths.append(path)
             self.server_state.request_user_agents.append(user_agent)
-            offline = self.server_state.offline
+            is_offline = self.server_state.is_offline
             manifest_yaml = self.server_state.manifest_yaml
             artifact_content = self.server_state.artifact_content
             artifact_filename = self.server_state.artifact_filename
             chunk_delay = self.server_state.artifact_chunk_delay
 
-        if offline:
+        if is_offline:
             self._respond(503, b"Service Unavailable", "text/plain")
             return
 
@@ -144,7 +150,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _respond_chunked(self, body: bytes, content_type: str, chunk_delay: float) -> None:
         """Send the response in chunks with delays to produce download-progress events."""
-        chunk_size = max(1, len(body) // 10)
+        chunk_size = max(1, len(body) // _ARTIFACT_CHUNK_COUNT)
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
@@ -178,7 +184,7 @@ class AutoUpdateTestServer:
         if self._httpd is not None:
             self._httpd.shutdown()
         if self._thread is not None:
-            self._thread.join(timeout=5)
+            self._thread.join(timeout=_THREAD_JOIN_TIMEOUT_SECONDS)
 
     # ------------------------------------------------------------------
     # Test helpers
@@ -197,7 +203,7 @@ class AutoUpdateTestServer:
         The manifest's SHA-512 and size are computed from the artifact content
         so that ``electron-updater``'s integrity check passes.
 
-        When ``artifact_chunk_delay`` is set, the artifact is served in 10
+        When ``artifact_chunk_delay`` is set, the artifact is served in several
         chunks with a delay between each, forcing ``electron-updater`` to emit
         ``download-progress`` events that the UI can observe.
         """
@@ -247,12 +253,12 @@ class AutoUpdateTestServer:
     def set_offline(self) -> None:
         """Make the server return 503 for all requests."""
         with self._state.lock:
-            self._state.offline = True
+            self._state.is_offline = True
 
     def set_online(self) -> None:
         """Restore normal request handling after :meth:`set_offline`."""
         with self._state.lock:
-            self._state.offline = False
+            self._state.is_offline = False
 
     def get_request_paths(self) -> list[str]:
         """Return a copy of all request paths received so far."""

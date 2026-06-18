@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import itertools
 import json
+import re
 from collections.abc import Callable
+from collections.abc import Mapping
+from collections.abc import Sequence
 from typing import TypeVar
 
 import playwright
@@ -17,14 +20,14 @@ from tenacity import retry_if_exception_type
 from tenacity import stop_after_delay
 from tenacity import wait_fixed
 
-from imbue_core.async_monkey_patches import log_exception
 from sculptor.constants import ElementIDs
-from sculptor.interfaces.agents.agent import HarnessName
+from sculptor.foundation.async_monkey_patches import log_exception
+from sculptor.state.messages import LLMModel
 from sculptor.testing.elements.base import type_into_tiptap
 from sculptor.testing.elements.chat_panel import select_model_by_name
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
 from sculptor.testing.elements.user_config import enable_clone_workspaces
-from sculptor.testing.elements.user_config import enable_multi_harness
+from sculptor.testing.elements.user_config import enable_pi_agent
 from sculptor.testing.pages.settings_page import PlaywrightSettingsPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 
@@ -92,12 +95,16 @@ def navigate_to_home_page(page: Page) -> None:
         # SPA, so RecentWorkspaces wouldn't pick up CLI-created workspaces.
         # ``page.reload()`` is avoided because it triggers
         # ERR_INSUFFICIENT_RESOURCES on CI runners.
-        full_spa_reload(page, target_hash="/#/home")
+        full_spa_reload(page, target_hash="#/home")
     elif home_button.is_visible():
         home_button.click()
     else:
+        # Home button not visible — navigate via URL. Append the hash directly
+        # to the base (no extra "/"): an injected slash would turn a document
+        # path like ".../index.html" into ".../index.html/", breaking
+        # relative-to-document asset resolution under the sculptor://app origin.
         base_url = page.url.split("#")[0].rstrip("/")
-        page.goto(f"{base_url}/#/home")
+        page.goto(f"{base_url}#/home")
 
     workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
     inline_new_workspace_form = page.get_by_test_id(ElementIDs.HOME_NEW_WORKSPACE_FORM)
@@ -169,7 +176,7 @@ def delete_all_workspaces_via_ui(page: Page) -> None:
     confirm_dialog = page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_DIALOG)
 
     # Phase 1: Delete all open workspace tabs.
-    for i in range(_MAX_WORKSPACE_DELETE_ITERATIONS):
+    for _ in range(_MAX_WORKSPACE_DELETE_ITERATIONS):
         if workspace_tabs.count() == 0:
             break
         workspace_tabs.first.click(button="right")
@@ -209,7 +216,7 @@ def delete_all_workspaces_via_ui(page: Page) -> None:
     # navigate_to_home_page already waits for workspace rows or empty state.
     workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
 
-    for i in range(_MAX_WORKSPACE_DELETE_ITERATIONS):
+    for _ in range(_MAX_WORKSPACE_DELETE_ITERATIONS):
         if workspace_rows.count() == 0:
             break
         delete_button = workspace_rows.first.get_by_test_id(ElementIDs.WORKSPACE_ROW_CONTEXT_MENU_DELETE)
@@ -240,7 +247,7 @@ def start_task_and_wait_for_ready(
     model_name: str | None = FAKE_CLAUDE_MODEL_NAME,
     workspace_name: str | None = None,
     mode: str | None = None,
-    harness: HarnessName | None = None,
+    agent_type: str | None = None,
 ) -> PlaywrightTaskPage:
     """Create a workspace and agent through the new-workspace modal.
 
@@ -277,11 +284,13 @@ def start_task_and_wait_for_ready(
     elif mode not in (None, "WORKTREE"):
         raise ValueError(f"unsupported mode: {mode!r}; expected None, 'WORKTREE', or 'CLONE'")
 
-    # The harness picker is gated behind the experimental multi-harness flag
-    # (off by default). Any explicit harness selection drives the picker below,
-    # so enable the flag before navigating so the picker is present.
-    if harness is not None:
-        enable_multi_harness(sculptor_page)
+    if agent_type not in (None, "claude", "pi", "terminal"):
+        raise ValueError(f"unsupported agent_type: {agent_type!r}; expected None, 'claude', 'pi', or 'terminal'")
+    # Only the pi *option* is gated behind the experimental pi-agent flag
+    # (the agent-type select itself is always visible) — enable the flag
+    # before navigating so the option is present.
+    if agent_type == "pi":
+        enable_pi_agent(sculptor_page)
 
     open_new_workspace_modal(sculptor_page)
 
@@ -298,12 +307,15 @@ def start_task_and_wait_for_ready(
         sculptor_page.get_by_test_id(ElementIDs.MODE_SELECTOR).click()
         sculptor_page.get_by_test_id(ElementIDs.MODE_OPTION_CLONE).click()
 
-    # When a harness is requested, drive the picker before submitting so the
-    # selection is persisted on the workspace row. Defaults to Claude (the form
-    # default) when omitted.
-    if harness is not None:
-        sculptor_page.get_by_test_id(ElementIDs.HARNESS_SELECTOR).click()
-        option_id = ElementIDs.HARNESS_OPTION_PI if harness == HarnessName.PI else ElementIDs.HARNESS_OPTION_CLAUDE
+    # When an agent type is requested, drive the first-agent type select
+    # before submitting. Defaults to Claude (the form default) when omitted.
+    if agent_type is not None:
+        sculptor_page.get_by_test_id(ElementIDs.ADD_WORKSPACE_AGENT_TYPE_SELECT).click()
+        option_id = {
+            "claude": ElementIDs.AGENT_TYPE_OPTION_CLAUDE,
+            "pi": ElementIDs.AGENT_TYPE_OPTION_PI,
+            "terminal": ElementIDs.AGENT_TYPE_OPTION_TERMINAL,
+        }[agent_type]
         sculptor_page.get_by_test_id(option_id).click()
 
     # Wait for the submit button to be enabled — repo info loaded, AND the
@@ -315,8 +327,15 @@ def start_task_and_wait_for_ready(
     # Click create workspace
     submit_button.click()
 
+    # A terminal first agent has no chat surface — wait for the terminal
+    # panel instead and skip the chat-panel/model/prompt steps entirely.
+    if agent_type == "terminal":
+        terminal_panel_locator = sculptor_page.get_by_test_id(ElementIDs.AGENT_TERMINAL_PANEL)
+        expect(terminal_panel_locator).to_be_visible(timeout=60_000)
+        return PlaywrightTaskPage(page=sculptor_page)
+
     # Wait for the chat panel to appear (indicates we navigated to the agent page).
-    # On Fly runners the workspace clone + environment setup can take >30s.
+    # On contended CI runners the workspace clone + environment setup can take >30s.
     chat_panel_locator = sculptor_page.get_by_test_id(ElementIDs.CHAT_PANEL)
     expect(chat_panel_locator).to_be_visible(timeout=60_000)
 
@@ -449,9 +468,17 @@ def request_with_retry(
 
 
 def navigate_to_settings_page(page: Page, **_kwargs: object) -> PlaywrightSettingsPage:
-    """Navigate to the settings page via direct URL."""
-    base_url = page.url.split("#")[0].rstrip("/")
-    page.goto(f"{base_url}/#/settings")
+    """Navigate to the settings page by setting the SPA hash route.
+
+    Mirrors how a user reaches settings: a hash-only navigation within the
+    already-loaded SPA, with no document reload. Assigning
+    ``window.location.hash`` fires a ``hashchange`` event the hash router
+    handles, so this avoids re-fetching ``index.html`` (and its assets)
+    altogether — important under the ``sculptor://app`` origin, where the
+    built renderer references assets via absolute paths and a fresh document
+    navigation is unnecessary just to change routes.
+    """
+    page.evaluate("window.location.hash = '/settings'")
     return PlaywrightSettingsPage(page=page)
 
 
@@ -470,6 +497,44 @@ def delete_project_via_settings(
     # Re-open the new-workspace modal so callers see the same post-deletion
     # state they got before the modal migration.
     open_new_workspace_modal(page)
+
+
+def upload_file_via_api(page: Page, *, name: str, mime_type: str, content: bytes) -> str:
+    """Upload a file through the harness-agnostic upload endpoint, returning its id.
+
+    The endpoint accepts any file type — the image-only validation lives in the
+    frontend — so this is how an integration test attaches a non-image file the
+    UI would refuse. ``page.request`` inherits the page's session cookie.
+    """
+    base_url = page.url.split("#")[0].rstrip("/")
+    response = page.request.post(
+        f"{base_url}/api/v1/upload-file",
+        multipart={"file": {"name": name, "mimeType": mime_type, "buffer": content}},
+    )
+    assert response.ok, f"upload-file failed: {response.status} {response.text()}"
+    # The endpoint serializes UploadFileResponse with a camelCase alias, so the
+    # JSON key is `fileId` (matching the frontend's FileUploadUtils reader).
+    return response.json()["fileId"]
+
+
+def send_message_via_api(
+    page: Page, *, message: str, files: Sequence[str], model: LLMModel = LLMModel.CLAUDE_4_OPUS_200K
+) -> None:
+    """Send a chat message (with attached upload ids) to the active agent via the API.
+
+    Parses the workspace/agent ids from the page URL (``/ws/<ws>/agent/<agent>``).
+    pi ignores ``model`` (it reads its own ``models.json``), so the default is
+    only a schema-valid placeholder for pi workspaces.
+    """
+    base_url = page.url.split("#")[0].rstrip("/")
+    match = re.search(r"/ws/([^/]+)/agent/([^/?#]+)", page.url)
+    assert match is not None, f"could not parse workspace/agent ids from URL: {page.url}"
+    workspace_id, agent_id = match.group(1), match.group(2)
+    response = page.request.post(
+        f"{base_url}/api/v1/workspaces/{workspace_id}/agents/{agent_id}/messages",
+        data={"message": message, "model": model.value, "files": files},
+    )
+    assert response.ok, f"send-message failed: {response.status} {response.text()}"
 
 
 # NOTE: The helpers below use page.goto() and page.evaluate(), which are
@@ -523,13 +588,13 @@ def navigate_away_and_back(page: Page) -> None:
     """
     current_url = page.url
     base_url = current_url.split("#")[0].rstrip("/")
-    page.goto(f"{base_url}/#/home")
+    page.goto(f"{base_url}#/home")
     # Confirm Home rendered before going back.
     expect(get_app_ready_beacon(page)).to_be_visible()
     page.goto(current_url)
 
 
-def full_spa_reload(page: Page, target_hash: str = "/#/home") -> None:
+def full_spa_reload(page: Page, target_hash: str = "#/") -> None:
     """Force a full SPA unload/reload by navigating through ``about:blank``.
 
     Hash-only navigation (e.g. from ``/#/ws/1`` to ``/#/``) does not unload
@@ -537,11 +602,10 @@ def full_spa_reload(page: Page, target_hash: str = "/#/home") -> None:
     ``about:blank`` first forces the browser to fully tear down and re-create
     the page, clearing all in-memory state.
 
-    The default ``target_hash`` lands on ``/home`` directly (skipping the
-    ``/`` rootLoader's MRU redirect) so the reload deterministically returns
-    to Home and re-runs its once-on-mount recent-workspaces fetch. Callers
-    that want a specific route (a workspace URL, settings, etc.) should pass
-    it explicitly.
+    ``target_hash`` is appended directly to the base URL, so it must start with
+    ``#`` (not ``/#``): an injected slash would turn a document path like
+    ``.../index.html`` into ``.../index.html/`` and break relative-to-document
+    asset resolution under the sculptor://app origin.
     """
     base_url = page.url.split("#")[0].rstrip("/")
     page.goto("about:blank")
@@ -552,7 +616,7 @@ def full_spa_reload(page: Page, target_hash: str = "/#/home") -> None:
     page.wait_for_load_state("domcontentloaded")
 
 
-def set_local_storage_items(page: Page, items: dict[str, str]) -> None:
+def set_local_storage_items(page: Page, items: Mapping[str, str]) -> None:
     """Set multiple localStorage key-value pairs in the browser.
 
     Used to simulate pre-existing user state (e.g. panel layouts saved by a

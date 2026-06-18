@@ -40,3 +40,26 @@ access.** Each task runs in its workspace — a separate copy of your
 repo — and for stronger isolation you can run agents in the experimental
 [container backend](docs/help/experimental/container_backend.md) (Docker or a
 remote).
+
+**The local app is a trust boundary.** Sculptor runs a local web server (HTTP
+and WebSockets) bound to `127.0.0.1`. A per-session token stops web pages you
+visit in a browser from reaching it. But the loopback interface itself is the
+boundary: any process on the same machine that can open a connection to that
+port can reach the API. Don't run Sculptor on a machine you share with people
+you don't trust, and don't expose its port to a network (port-forwarding, or
+binding the experimental container backend to a non-loopback address).
+
+**Opening a repository runs its code.** Setting up a workspace runs the
+project's setup command and honors repo-provided environment (e.g. a checked-in
+`.sculptor/.env`), so opening a project can execute code on your host before any
+agent starts. Only open repositories you trust — treat "open this repo" like
+"run this repo."
+
+**Adding a plugin runs its code.** Frontend plugins load from a source you add
+— a local path or a remote or local URL — and run inside the app with the same
+privileges as Sculptor's own UI: they share the host's renderer and can reach
+everything it can, including the loopback API and the tools and remotes you've
+connected. A remote source is fetched on every load, so you're trusting whatever
+it serves at that moment, not just the code you saw when you added it. Only add
+plugin sources you trust — treat "add a plugin" like "run this code" — and
+prefer pinned, local sources over URLs that can change under you.

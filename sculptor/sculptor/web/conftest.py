@@ -4,10 +4,11 @@ import pytest
 from fastapi import Depends
 from fastapi.testclient import TestClient
 from loguru import logger
+from pydantic import SecretStr
 
-from imbue_core.concurrency_group import ConcurrencyGroup
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import Project
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.primitives.ids import RequestID
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.service_collections.service_collection import get_services
@@ -71,7 +72,7 @@ def client_with_session_token_required(
     test_already_started_services: CompleteServiceCollection,
 ) -> Generator[TestClient, None, None]:
     def override_get_settings() -> SculptorSettings:
-        return test_settings.model_copy(update={"SESSION_TOKEN": "test_token"})
+        return test_settings.model_copy(update={"SESSION_TOKEN": SecretStr("test_token")})
 
     def override_services_factory(
         concurrency_group: ConcurrencyGroup,

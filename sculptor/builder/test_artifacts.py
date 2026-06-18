@@ -9,7 +9,7 @@ from builder.artifacts import artifacts_for_target_and_stage
 from sculptor import version
 from sculptor.version import pep_440_to_semver
 
-GIT_SHA = version.dev_git_sha(short=False)
+GIT_SHA = version.dev_git_sha(is_short=False)
 VERSION = version.pyproject_version()
 SEMVER_VERSION = pep_440_to_semver(VERSION)
 

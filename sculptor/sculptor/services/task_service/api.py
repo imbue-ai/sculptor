@@ -1,5 +1,6 @@
 from abc import ABC
 from abc import abstractmethod
+from collections.abc import Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from queue import Queue
@@ -7,20 +8,21 @@ from typing import Generator
 
 from pydantic import AnyUrl
 
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.pydantic_serialization import FrozenModel
-from imbue_core.sculptor.state.messages import Message
 from sculptor.database.models import Task
 from sculptor.database.models import TaskID
+from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.interfaces.agents.agent import MessageTypes
 from sculptor.interfaces.agents.agent import PersistentMessageTypes
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
 from sculptor.interfaces.agents.agent import UserMessageUnion
 from sculptor.interfaces.environments.base import Environment
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import UserReference
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.primitives.service import Service
 from sculptor.services.data_model_service.data_types import DataModelTransaction
+from sculptor.state.messages import Message
+from sculptor.state.messages import ModelOption
 
 
 class TaskMessageContainer(FrozenModel):
@@ -62,6 +64,23 @@ class TaskService(Service, ABC):
     def mark_unread(self, task_id: TaskID, transaction: DataModelTransaction) -> Task: ...
 
     @abstractmethod
+    def update_available_models(
+        self,
+        task_id: TaskID,
+        available_models: Sequence[ModelOption],
+        current_model: ModelOption | None,
+        transaction: DataModelTransaction,
+    ) -> Task | None:
+        """Persist a harness's model catalog onto the task and publish the update.
+
+        Writes `available_models` / `current_model` onto the task's
+        `AgentTaskStateV2` and registers the same task-update publish a message
+        write does, so a live switcher refreshes even though no message was
+        created. A no-op (returns None) when the catalog already matches or the
+        task is missing / not an agent task. The DB title is preserved so a
+        concurrent rename is not clobbered."""
+
+    @abstractmethod
     def restore_task(self, task_id: TaskID, transaction: DataModelTransaction) -> Task: ...
 
     @abstractmethod
@@ -84,12 +103,18 @@ class TaskService(Service, ABC):
     ) -> tuple[PersistentMessageTypes, ...]: ...
 
     @abstractmethod
+    def get_live_messages_for_task(self, task_id: TaskID) -> tuple[Message, ...]:
+        """Snapshot of the task's in-memory messages, INCLUDING ephemeral
+        run-scoped ones (e.g. terminal-agent signals) that
+        get_saved_messages_for_task never sees."""
+
+    @abstractmethod
     @contextmanager
     def subscribe_to_all_tasks_for_user(
         self, user_reference: UserReference
     ) -> Generator[Queue[TaskMessageContainer], None, None]:
         """
-        Returns a queue that receives all task messages some user's tasks.
+        Returns a queue that receives all task messages for some user's tasks.
 
         Note that for efficiency, only the Message objects used by SimpleAgentView are returned.
         """

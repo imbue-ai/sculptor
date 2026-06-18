@@ -66,7 +66,7 @@ def _start_task_and_wait_for_pr_status(page: Page, prompt: str, expected_button:
     on it.
     """
     task_page = start_task_and_wait_for_ready(page, prompt)
-    # The backend poll cadence on slow CI runners (Fly / offload) plus the
+    # The backend poll cadence on slow CI runners (e.g. offload) plus the
     # clone-on-target-branch transient means the initial PR button can take
     # a non-trivial amount of time to reach its final state — give it a
     # generous budget before we conclude the status never arrived.
@@ -250,36 +250,20 @@ def test_github_cli_error_variants(sculptor_instance_: SculptorInstance, tmp_pat
 # Group 3: GitHub happy paths — one spawn, mode-switching fake gh
 # ---------------------------------------------------------------------------
 
+# The backend issues a single `gh api graphql` query for PR status, so each
+# mode emits the GraphQL response envelope: no_pr returns an empty node list,
+# open_pr returns one node tagged "state": "OPEN". The mode-file path is
+# injected via ``.replace("{mode_file}", ...)`` (not ``.format``) so the JSON
+# braces below don't need escaping.
 _FAKE_GH_HAPPY_SCRIPT = """\
 #!/bin/bash
 MODE=$(cat "{mode_file}")
 case "$MODE" in
     no_pr)
-        # Disambiguate per-subcommand so the backend's follow-up calls
-        # (status rollup / reviews / reviewThreads) don't parse "[]" as
-        # invalid JSON for the object-shaped responses they expect.
-        if [[ "$*" == *"pr list"* ]]; then
-            echo "[]"
-        elif [[ "$*" == *"statusCheckRollup"* ]]; then
-            echo '{{"statusCheckRollup": []}}'
-        elif [[ "$*" == *"reviews"* ]]; then
-            echo '{{"reviews": []}}'
-        elif [[ "$*" == *"reviewThreads"* ]]; then
-            echo '{{"reviewThreads": []}}'
-        else
-            echo "{{}}"
-        fi
+        echo '{"data":{"repository":{"pullRequests":{"nodes":[]}}}}'
         ;;
     open_pr)
-        if [[ "$*" == *"pr list"* ]]; then
-            echo '[{{"number": 42, "title": "Test PR", "url": "https://github.com/test/repo/pull/42", "baseRefName": "main", "state": "OPEN"}}]'
-        elif [[ "$*" == *"statusCheckRollup"* ]]; then
-            echo '{{"statusCheckRollup": []}}'
-        elif [[ "$*" == *"reviews"* ]]; then
-            echo '{{"reviews": []}}'
-        elif [[ "$*" == *"reviewThreads"* ]]; then
-            echo '{{"reviewThreads": []}}'
-        fi
+        echo '{"data":{"repository":{"pullRequests":{"nodes":[{"number":42,"title":"Test PR","url":"https://github.com/test/repo/pull/42","state":"OPEN","baseRefName":"main","commits":{"nodes":[{"commit":{"statusCheckRollup":null}}]},"latestReviews":{"nodes":[]},"reviewThreads":{"nodes":[]}}]}}}}'
         ;;
 esac
 """
@@ -289,7 +273,9 @@ esac
 def test_github_happy_paths(sculptor_instance_: SculptorInstance, tmp_path: Path) -> None:
     """No-PR and open-PR scenarios each show the correct button state."""
     mode_file = tmp_path / "gh_mode"
-    _create_fake_cli(sculptor_instance_.fake_bin_dir, "gh", _FAKE_GH_HAPPY_SCRIPT.format(mode_file=mode_file))
+    _create_fake_cli(
+        sculptor_instance_.fake_bin_dir, "gh", _FAKE_GH_HAPPY_SCRIPT.replace("{mode_file}", str(mode_file))
+    )
     _set_remote(sculptor_instance_, _FAKE_GITHUB_REMOTE)
 
     # --- No PR exists → Create PR button ---

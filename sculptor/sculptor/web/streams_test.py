@@ -2,7 +2,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from imbue_core.agents.data_types.ids import ProjectID
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import Notification
 from sculptor.database.models import NotificationID
@@ -11,6 +10,7 @@ from sculptor.database.models import UserSettings
 from sculptor.database.models import Workspace
 from sculptor.database.models import WorkspaceInitializationStrategy
 from sculptor.primitives.ids import OrganizationReference
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import UserReference
 from sculptor.primitives.ids import UserSettingsID
 from sculptor.primitives.ids import WorkspaceID
@@ -62,7 +62,8 @@ def test_convert_to_user_update_collects_models_and_overwrites_duplicates() -> N
 
 def test_convert_to_user_update_raises_for_unexpected_models() -> None:
     with pytest.raises(AssertionError):
-        # pyre-ignore[6]: the test is checking that there's an assertion error if we input an invalid type
+        # deliberately passes the wrong type to exercise the runtime assertion
+        # pyrefly: ignore [bad-argument-type]
         _convert_to_user_update(["unexpected model"])
 
 

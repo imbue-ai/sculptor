@@ -3,6 +3,7 @@
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
+from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
 from sculptor.testing.elements.alpha_chat_view import get_alpha_scroll_position
 from sculptor.testing.elements.alpha_chat_view import scroll_alpha_chat_to_top
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
@@ -34,30 +35,38 @@ def test_scroll_position_restored_on_task_switch(sculptor_instance_: SculptorIns
     wait_for_completed_message_count(chat_panel=chat_panel_b, expected_message_count=2)
 
     # We're on task B.  Navigate to task A first.
-    workspace_tabs = page.get_by_test_id(ElementIDs.WORKSPACE_TAB)
+    workspace_tabs = task_page_b.get_workspace_tabs()
     expect(workspace_tabs).to_have_count(2)
     workspace_tabs.first.click()
-    page.wait_for_timeout(500)
 
-    expect(page.get_by_test_id(ElementIDs.ALPHA_CHAT_VIEW)).to_be_visible()
+    alpha_chat_view = get_alpha_chat_view(page)
+    expect(alpha_chat_view).to_be_visible()
 
-    # Scroll to the top in task A
+    # Scroll to the top in task A and wait for scroll to settle
     scroll_alpha_chat_to_top(page)
-    page.wait_for_timeout(300)
+    page.wait_for_function(
+        f"""() => {{
+            const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
+            return el && el.scrollTop < 10;
+        }}"""
+    )
 
     # Record position
     pos_a = get_alpha_scroll_position(page)
 
     # Switch to task B via workspace tab (no reload)
     workspace_tabs.last.click()
-    page.wait_for_timeout(500)
+    expect(alpha_chat_view).to_be_visible()
 
     # Navigate back to task A
     workspace_tabs.first.click()
-    page.wait_for_timeout(1000)
 
-    # Verify scroll position is restored (should be near the top where we left it)
-    restored_pos = get_alpha_scroll_position(page)
-    # Allow tolerance of 200px to account for the virtualizer's dynamic paddingStart
-    # (sized to the intro block, typically ~154px) plus settling adjustments.
-    assert abs(restored_pos - pos_a) < 200, f"Expected scroll position ~{pos_a}, got {restored_pos}"
+    # Verify scroll position is restored (within 200px tolerance to account for
+    # the virtualizer's dynamic paddingStart plus settling adjustments).
+    page.wait_for_function(
+        f"""(expectedPos) => {{
+            const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
+            return el && Math.abs(el.scrollTop - expectedPos) < 200;
+        }}""",
+        arg=pos_a,
+    )

@@ -1,6 +1,7 @@
 import datetime
 import json
 from abc import ABC
+from collections.abc import Sequence
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
@@ -14,22 +15,6 @@ from pydantic import Tag
 from pydantic import ValidationError
 from pydantic import computed_field
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.ids import AssistantMessageID
-from imbue_core.itertools import only
-from imbue_core.pydantic_serialization import SerializableModel
-from imbue_core.pydantic_serialization import build_discriminator
-from imbue_core.sculptor.state.chat_state import AskUserQuestionData
-from imbue_core.sculptor.state.chat_state import ChatMessage
-from imbue_core.sculptor.state.chat_state import TextBlock
-from imbue_core.sculptor.state.chat_state import ToolUseBlock
-from imbue_core.sculptor.state.chat_state import TurnMetrics
-from imbue_core.sculptor.state.messages import AgentMessageSource
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import LLMModel
-from imbue_core.sculptor.state.messages import Message
-from imbue_core.sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.agents.harness_registry import get_harness_for_config
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskInputsV2
@@ -45,23 +30,45 @@ from sculptor.database.models import TaskID
 from sculptor.database.models import TaskInputs
 from sculptor.database.models import UserSettings
 from sculptor.database.models import Workspace
+from sculptor.foundation.itertools import only
+from sculptor.foundation.pydantic_serialization import SerializableModel
+from sculptor.foundation.pydantic_serialization import build_discriminator
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingDoneAgentMessage
 from sculptor.interfaces.agents.agent import EnvironmentAcquiredRunnerMessage
+from sculptor.interfaces.agents.agent import EnvironmentReleasedRunnerMessage
 from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessage
+from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageAgentMessage
 from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
+from sculptor.interfaces.agents.agent import TerminalAgentSignalRunnerMessage
+from sculptor.interfaces.agents.agent import TerminalStatusSignal
 from sculptor.interfaces.agents.agent import UpdatedArtifactAgentMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
+from sculptor.interfaces.agents.agent import is_terminal_agent_config
 from sculptor.interfaces.agents.artifacts import AgentTaskStatus
 from sculptor.interfaces.agents.artifacts import ArtifactType
 from sculptor.interfaces.agents.artifacts import TaskListArtifact
 from sculptor.interfaces.agents.harness import Harness
 from sculptor.interfaces.agents.harness import HarnessCapabilities
 from sculptor.interfaces.agents.tasks import TaskState
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import AssistantMessageID
+from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.chat_state import ChatMessage
+from sculptor.state.chat_state import TextBlock
+from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.chat_state import TurnMetrics
+from sculptor.state.messages import AgentMessageSource
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import LLMModel
+from sculptor.state.messages import Message
+from sculptor.state.messages import ModelOption
+from sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.utils.functional import first
 from sculptor.web.data_types import PrApproval  # noqa: F401 — re-exported for existing import sites
 from sculptor.web.data_types import PrComment  # noqa: F401 — re-exported for existing import sites
@@ -87,6 +94,32 @@ class WorkspacePeekAgentStatus(StrEnum):
     ERROR = "ERROR"
     COMPLETED = "COMPLETED"
     IDLE = "IDLE"
+
+
+def scan_terminal_signal_state(messages: Sequence[Message]) -> tuple[bool, TerminalStatusSignal | None]:
+    """(run_started, latest_signal_this_run) from a task's live messages.
+
+    The single home for the run-scoping subtleties shared by the status
+    derivation below and the terminal-input endpoint:
+    EnvironmentAcquiredRunnerMessage is the run-start anchor — both it and
+    the signal messages are ephemeral, so the result reflects the live
+    program, resets on every (re)start, and a relaunched program's hooks
+    re-drive it. Scanned in reverse: the latest signal wins, but only if it
+    arrived after the most recent run start. No anchor at all means the run
+    hasn't started (still acquiring the environment).
+    """
+    latest_signal: TerminalStatusSignal | None = None
+    for msg in reversed(messages):
+        if latest_signal is None and isinstance(msg, TerminalAgentSignalRunnerMessage):
+            latest_signal = msg.signal
+        if isinstance(msg, EnvironmentReleasedRunnerMessage):
+            # The most recent run has ended (and its environment released)
+            # without a newer one acquiring yet — its signals are stale, so
+            # treat the agent as not-yet-running rather than reviving them.
+            return False, None
+        if isinstance(msg, EnvironmentAcquiredRunnerMessage):
+            return True, latest_signal
+    return False, None
 
 
 TaskInputType = TypeVar("TaskInputType", bound=TaskInputs)
@@ -115,12 +148,12 @@ class LimitedBaseTaskView(SerializableModel, Generic[TaskInputType, TaskStateTyp
 
     @property
     def task_input(self) -> TaskInputType:
-        # pyre-fixme[7]: self.task.input_data is a union type, but the return value is a type variable, which could be a fixed variant. Maybe make the Task type generic in its input_data type.
+        # pyrefly: ignore [bad-return]
         return self.task.input_data
 
     @property
     def task_state(self) -> TaskStateType | None:
-        # pyre-fixme[7]: self.task.current_state is a union type, but the return value is a type variable, which could be a fixed variant. Maybe make the Task type generic in its current_state type.
+        # pyrefly: ignore [bad-return]
         return self.task.current_state
 
     @computed_field
@@ -146,7 +179,6 @@ class LimitedBaseTaskView(SerializableModel, Generic[TaskInputType, TaskStateTyp
     def _maybe_get_status_from_outcome(self) -> TaskStatus | None:
         """
         NOTE: This is almost always None because outcome is never set while task is running.
-        I Extracted it when I thought we were caching task status on state.
         """
         if self.task.outcome == TaskState.FAILED:
             return TaskStatus.ERROR
@@ -382,6 +414,29 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
 
     @computed_field
     @property
+    def available_models(self) -> list[ModelOption]:
+        """The models the harness offers in its switcher (empty when it sources
+        none and the frontend falls back to its built-in list)."""
+        return self._resolve_harness().get_available_models(self.task_state)
+
+    @computed_field
+    @property
+    def selected_model_id(self) -> str | None:
+        """The model_id the switcher should show as selected, or None when the
+        harness tracks no per-task selection."""
+        return self._resolve_harness().get_selected_model_id(self.task_state)
+
+    @computed_field
+    @property
+    def accepts_automated_prompts(self) -> bool:
+        # Stamped from the registration TOML at creation: only opted-in
+        # registered terminal agents can receive automated prompts through
+        # the terminal-input endpoint.
+        agent_config = self.task_input.agent_config
+        return isinstance(agent_config, RegisteredTerminalAgentConfig) and agent_config.accepts_automated_prompts
+
+    @computed_field
+    @property
     def is_smooth_streaming_supported(self) -> bool:
         return self.model in (
             LLMModel.CLAUDE_4_SONNET,
@@ -424,6 +479,21 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
         if task_from_outcome is not None:
             return task_from_outcome
 
+        if is_terminal_agent_config(self.task_input.agent_config):
+            # Terminal agents have no chat: status comes from the latest
+            # signal posted since the most recent run start. No signals this
+            # run → calm neutral READY; signals never drive the unread dot.
+            # No run-start anchor at all → still acquiring the environment
+            # (no "no user message → READY" special case applies).
+            run_started, latest_signal = scan_terminal_signal_state(self._messages)
+            if not run_started:
+                return TaskStatus.BUILDING
+            if latest_signal == TerminalStatusSignal.BUSY:
+                return TaskStatus.RUNNING
+            if latest_signal == TerminalStatusSignal.WAITING:
+                return TaskStatus.WAITING
+            return TaskStatus.READY
+
         # Check if environment has been acquired via message
         has_environment = any(isinstance(m, EnvironmentAcquiredRunnerMessage) for m in self._messages)
         if not has_environment:
@@ -438,9 +508,9 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
         chat_input_messages = [
             x for x in self._messages if isinstance(x, (ChatInputUserMessage, UserQuestionAnswerMessage))
         ]
-        request_finished_messages = set(
-            [x.request_id for x in self._messages if isinstance(x, PersistentRequestCompleteAgentMessage)]
-        )
+        request_finished_messages = {
+            x.request_id for x in self._messages if isinstance(x, PersistentRequestCompleteAgentMessage)
+        }
         # NOTE: this used to exclude ``RequestStoppedAgentMessage`` as a workaround
         # for an older bug — interrupted/SIGTERM'd chats were re-delivered to
         # Claude on the next agent run, and the exclusion kept status pinned at
@@ -757,10 +827,8 @@ def create_initial_task_view(
     task: Task,
     settings: SculptorSettings,
 ) -> TaskViewTypes:
-    # Matching on task.input_data directly makes Pyre fail the exhaustiveness check
-    input_data = task.input_data
     task_view_class: type[TaskViewTypes]
-    match input_data:
+    match task.input_data:
         case AgentTaskInputsV2():
             task_view_class = CodingAgentTaskView
         case NoOpTaskInputsV1():

@@ -4,11 +4,12 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { DependenciesStatus, DependencyInfo } from "~/api";
 import {
-  authenticateDependency,
   ElementIds,
   getDependenciesStatus,
   getUserConfig,
   installDependency,
+  startDependencyAuth,
+  submitDependencyAuthCode,
   updateUserConfig,
 } from "~/api";
 import { HTTPException } from "~/common/Errors.ts";
@@ -77,6 +78,10 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
   const [installError, setInstallError] = useState<string | null>(null);
   const [hasTriggeredInstall, setHasTriggeredInstall] = useState(false);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  // The sign-in URL returned by start; while set, the Claude card shows the
+  // "open this link, then paste the code" UI for headless/remote deployments.
+  const [authUrl, setAuthUrl] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [isRechecking, setIsRechecking] = useState(false);
   const { startPolling, stopPolling } = usePollingInterval();
 
@@ -162,17 +167,44 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
     }
   };
 
+  // Step 1 of sign-in: ask the backend to start `claude auth login`. It returns
+  // the sign-in URL (and keeps the CLI waiting for a pasted code). On a machine
+  // with a usable local browser the flow self-completes (success) and no code
+  // is needed.
   const triggerAuth = async (): Promise<void> => {
     setIsAuthenticating(true);
+    setAuthError(null);
+    setAuthUrl(null);
     try {
-      const response = await authenticateDependency({ query: { tool: "CLAUDE" } });
+      const response = await startDependencyAuth({ query: { tool: "CLAUDE" } });
       if (response.data?.success) {
         await loadDependencies();
+      } else if (response.data?.needsCode && response.data.authUrl) {
+        setAuthUrl(response.data.authUrl);
+      } else {
+        setAuthError(response.data?.error ?? "Sign-in failed. Please try again.");
       }
     } catch (err) {
-      console.error("Authentication failed:", err);
+      setAuthError(err instanceof Error ? err.message : "Sign-in failed. Please try again.");
     } finally {
       setIsAuthenticating(false);
+    }
+  };
+
+  // Step 2 of sign-in: send the code the user pasted from the sign-in page to
+  // the still-running CLI, then refresh status.
+  const submitAuthCode = async (code: string): Promise<void> => {
+    setAuthError(null);
+    try {
+      const response = await submitDependencyAuthCode({ body: { tool: "CLAUDE", code } });
+      if (response.data?.success) {
+        setAuthUrl(null);
+        await loadDependencies();
+      } else {
+        setAuthError(response.data?.error ?? "Sign-in failed. Please try again.");
+      }
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : "Sign-in failed. Please try again.");
     }
   };
 
@@ -201,6 +233,15 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
       loadDependencies(true);
     }
   }, 30_000);
+
+  // Dismiss the sign-in prompt once Claude reports authenticated — e.g. when a
+  // local loopback login completed in the background and the poll picked it up.
+  useEffect(() => {
+    if (authUrl && dependencies?.claude?.isAuthenticated === true) {
+      setAuthUrl(null);
+      setAuthError(null);
+    }
+  }, [authUrl, dependencies?.claude?.isAuthenticated]);
 
   /* We can only submit if all the dependencies are installed, in range, and authenticated */
   const canSubmit = (): boolean => {
@@ -302,6 +343,9 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
           onModeSwitch={handleModeSwitch}
           modeControls={claudeModeControls}
           onAuthenticate={triggerAuth}
+          authUrl={authUrl}
+          authError={authError}
+          onSubmitAuthCode={submitAuthCode}
           onApplyOverride={(path) => handleOverride("claude", path)}
           installProgress={dependencies?.claude?.installProgress ?? null}
         />

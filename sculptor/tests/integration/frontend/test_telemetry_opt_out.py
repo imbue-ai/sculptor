@@ -26,13 +26,12 @@ Onboarding (fresh instances):
 
 from pathlib import Path
 
-from playwright.sync_api import Page
 from playwright.sync_api import expect
 
-from imbue_core.sculptor.user_config import DependencyPaths
-from imbue_core.sculptor.user_config import UserConfig
+from sculptor.config.user_config import DependencyPaths
+from sculptor.config.user_config import UserConfig
 from sculptor.services.user_config.user_config import save_config
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
+from sculptor.testing.pages.new_workspace_modal_page import PlaywrightNewWorkspaceModalPage
 from sculptor.testing.pages.onboarding_page import PlaywrightOnboardingPage
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import soft_reload_page
@@ -44,10 +43,10 @@ from sculptor.testing.user_stories import user_story
 _TELEMETRY_FLAG_KEYS = ("isErrorReportingEnabled", "isProductAnalyticsEnabled", "isSessionRecordingEnabled")
 
 
-def _get_user_config(page: Page) -> dict:
+def _get_user_config(instance: SculptorInstance) -> dict:
     """Fetch the persisted user config through the backend API."""
-    base_url = page.url.split("#")[0].rstrip("/")
-    response = page.request.get(f"{base_url}/api/v1/config")
+    base_url = instance.backend_api_url.rstrip("/")
+    response = instance.page.request.get(f"{base_url}/api/v1/config")
     assert response.ok, f"GET /api/v1/config failed: {response.status}"
     return response.json()
 
@@ -79,21 +78,21 @@ def test_privacy_settings_telemetry_switch(sculptor_instance_: SculptorInstance)
     privacy_section.get_opt_out_cancel_button().click()
     expect(privacy_section.get_opt_out_dialog()).not_to_be_visible()
     expect(telemetry_switch).to_have_attribute("data-state", "checked")
-    config = _get_user_config(page)
+    config = _get_user_config(sculptor_instance_)
     assert config["isErrorReportingEnabled"] is True
     assert config["isProductAnalyticsEnabled"] is True
 
     # 3. Confirming the opt-out persists all-flags-off.
     privacy_section.disable_telemetry()
     expect(telemetry_switch).to_have_attribute("data-state", "unchecked")
-    config = _get_user_config(page)
+    config = _get_user_config(sculptor_instance_)
     assert all(config[key] is False for key in _TELEMETRY_FLAG_KEYS), config
 
     # 4. Opting back in is instant — no dialog — and restores the flags.
     privacy_section.enable_telemetry()
     expect(privacy_section.get_opt_out_dialog()).not_to_be_visible()
     expect(telemetry_switch).to_have_attribute("data-state", "checked")
-    config = _get_user_config(page)
+    config = _get_user_config(sculptor_instance_)
     assert config["isErrorReportingEnabled"] is True
     assert config["isProductAnalyticsEnabled"] is True
     assert config["isSessionRecordingEnabled"] is False
@@ -103,8 +102,8 @@ def test_privacy_settings_telemetry_switch(sculptor_instance_: SculptorInstance)
 def test_put_config_rejects_telemetry_flag_changes(sculptor_instance_: SculptorInstance) -> None:
     """Verifies behavior 5: the PUT guard for the SDK-facing telemetry flags."""
     page = sculptor_instance_.page
-    base_url = page.url.split("#")[0].rstrip("/")
-    config = _get_user_config(page)
+    base_url = sculptor_instance_.backend_api_url.rstrip("/")
+    config = _get_user_config(sculptor_instance_)
 
     # Changing a telemetry flag is rejected with a pointer at the dedicated endpoint.
     response = page.request.put(
@@ -163,7 +162,7 @@ def test_onboarding_email_with_telemetry_opt_out(sculptor_instance_factory_: Scu
 
         expect(onboarding_page.get_installation_step()).to_be_visible()
 
-        config = _get_user_config(page)
+        config = _get_user_config(sculptor_instance)
         assert config["userEmail"] == "optout@user.com"
         assert config["isPrivacyPolicyConsented"] is True
         assert all(config[key] is False for key in _TELEMETRY_FLAG_KEYS), config
@@ -192,7 +191,7 @@ def test_onboarding_skip_account_setup(sculptor_instance_factory_: SculptorInsta
 
         # The config stays anonymous; consent and the default telemetry
         # choice are recorded.
-        config = _get_user_config(page)
+        config = _get_user_config(sculptor_instance)
         assert config["userEmail"] == ""
         assert config["isPrivacyPolicyConsented"] is True
         assert config["isErrorReportingEnabled"] is True
@@ -204,7 +203,7 @@ def test_onboarding_skip_account_setup(sculptor_instance_factory_: SculptorInsta
         expect(add_repo_step).to_be_visible()
         add_repo_step.complete_step(str(sculptor_instance_factory_.base_repo.base_path))
 
-        add_workspace_page = PlaywrightAddWorkspacePage(page)
+        add_workspace_page = PlaywrightNewWorkspaceModalPage(page=page)
         expect(add_workspace_page.get_submit_button()).to_be_visible()
 
         # Settings → Privacy shows the unset email and the enabled switch.

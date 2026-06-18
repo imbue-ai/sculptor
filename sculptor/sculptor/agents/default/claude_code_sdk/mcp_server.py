@@ -10,18 +10,18 @@ and resolve them via `deliver_answer` when the user answers in the UI.
 
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Any
 
 from loguru import logger
 from pydantic import ValidationError
 
-from imbue_core.sculptor.state.chat_state import UserQuestion
 from sculptor.agents.default.claude_code_sdk.harness import ClaudeCodeHarness
 from sculptor.agents.default.claude_code_sdk.mcp_result_formatters import format_ask_user_question_result
 from sculptor.agents.default.claude_code_sdk.mcp_result_formatters import format_exit_plan_mode_result
 from sculptor.agents.default.claude_code_sdk.mcp_schemas import build_mcp_tools
+from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
+from sculptor.state.chat_state import UserQuestion
 
 _MCP_PROTOCOL_VERSION = "2024-11-05"
 _MCP_SERVER_VERSION = "0.0.1"
@@ -82,8 +82,7 @@ def _validate_arguments(tool_fqn: str, ask_tool_fqn: str, arguments: Any) -> str
     return None
 
 
-@dataclass(frozen=True)
-class PendingCall:
+class PendingCall(SerializableModel):
     """A `tools/call` request that is being held until the user answers."""
 
     control_request_id: str
@@ -116,7 +115,7 @@ class SculptorMcpServer:
         # cache wouldn't match). Invalidated when a fresh AUQ panel is
         # shown via ``register_tool_use_id``.
         self._last_delivered_text: str | None = None
-        self._new_auq_since_last_delivery: bool = False
+        self._has_new_auq_since_last_delivery: bool = False
         self._expected_tool_use_id: str | None = None
 
     def set_respond(self, respond: Callable[[str, dict[str, Any]], None]) -> None:
@@ -135,14 +134,14 @@ class SculptorMcpServer:
         the matching `tools/call` immediately afterwards.
         """
         if tool_fqn not in (self._harness.mcp_ask_tool_fqn, self._harness.mcp_exit_plan_mode_tool_fqn):
-            logger.info("register_tool_use_id called with non-MCP tool_fqn={}", tool_fqn)
+            logger.debug("register_tool_use_id called with non-MCP tool_fqn={}", tool_fqn)
             return
         with self._lock:
             self._expected_tool_use_id = tool_use_id
             if self._last_delivered_text is not None:
                 # A fresh AUQ panel is being shown — the cache from the
                 # previous Q&A no longer applies to this one.
-                self._new_auq_since_last_delivery = True
+                self._has_new_auq_since_last_delivery = True
 
     def handle_message(self, control_request_id: str, message: dict[str, Any]) -> None:
         """Dispatch an MCP JSON-RPC message by method."""
@@ -182,12 +181,12 @@ class SculptorMcpServer:
         with self._lock:
             pending = self._pending.pop(answer.tool_use_id, None)
         if pending is None:
-            logger.info("deliver_answer: no pending MCP call for tool_use_id={}", answer.tool_use_id)
+            logger.debug("deliver_answer: no pending MCP call for tool_use_id={}", answer.tool_use_id)
             return
         text = self._format_answer_text(pending.tool_fqn, answer)
         with self._lock:
             self._last_delivered_text = text
-            self._new_auq_since_last_delivery = False
+            self._has_new_auq_since_last_delivery = False
         self._respond_with_text(pending.control_request_id, pending.mcp_message_id, text)
 
     def _handle_tools_call(self, control_request_id: str, message: dict[str, Any]) -> None:
@@ -232,13 +231,13 @@ class SculptorMcpServer:
             # Serve the cache for a duplicate tools/call against the just-
             # answered AUQ — the resumed CLI re-emits the dangling call
             # with a fresh tool_use_id, so we match against
-            # ``_new_auq_since_last_delivery`` rather than tool_use_id
+            # ``_has_new_auq_since_last_delivery`` rather than tool_use_id
             # equality. ``register_tool_use_id`` flips that flag whenever
             # a fresh AUQ panel is shown, invalidating the cache. Checked
             # before the registered-id requirement because a duplicate
             # tools/call may arrive without a paired register.
             cached_text: str | None
-            if self._last_delivered_text is not None and not self._new_auq_since_last_delivery:
+            if self._last_delivered_text is not None and not self._has_new_auq_since_last_delivery:
                 cached_text = self._last_delivered_text
             else:
                 cached_text = None
@@ -248,7 +247,7 @@ class SculptorMcpServer:
             return
 
         if tool_use_id is None:
-            logger.info(
+            logger.debug(
                 "tools/call for {} arrived without a registered tool_use_id; dropping (this indicates an out-of-order assistant stream)",
                 tool_name_short,
             )

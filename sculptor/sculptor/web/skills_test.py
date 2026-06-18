@@ -10,13 +10,14 @@ from pathlib import Path
 import pytest
 
 from sculptor.web.data_types import SkillInfo
-from sculptor.web.skills import _parse_command_frontmatter
+from sculptor.web.skills import SkillSourceDirectory
+from sculptor.web.skills import SkillSourceKind
 from sculptor.web.skills import _parse_skill_frontmatter
 from sculptor.web.skills import _scan_commands_directory
 from sculptor.web.skills import _scan_skills_directory
 from sculptor.web.skills import discover_skills
-
-# --- _parse_skill_frontmatter tests ---
+from sculptor.web.skills import get_skill_source_directories
+from sculptor.web.skills import parse_command_frontmatter
 
 
 def test_parse_skill_frontmatter_extracts_name_and_description() -> None:
@@ -82,46 +83,40 @@ def test_parse_skill_frontmatter_drops_non_str_description() -> None:
     assert description is None
 
 
-# --- _parse_command_frontmatter tests ---
-
-
 def test_parse_command_frontmatter_extracts_description() -> None:
     content = "---\ndescription: Identify style issues\n---\nBody content\n"
-    description = _parse_command_frontmatter(content)
+    description = parse_command_frontmatter(content)
     assert description == "Identify style issues"
 
 
 def test_parse_command_frontmatter_strips_multiline_description() -> None:
     content = "---\ndescription: |\n  Fix ratchet violations\n  in the codebase.\n---\nBody\n"
-    description = _parse_command_frontmatter(content)
+    description = parse_command_frontmatter(content)
     assert description == "Fix ratchet violations\nin the codebase."
 
 
 def test_parse_command_frontmatter_returns_none_without_frontmatter() -> None:
     content = "Just a markdown file\n"
-    description = _parse_command_frontmatter(content)
+    description = parse_command_frontmatter(content)
     assert description is None
 
 
 def test_parse_command_frontmatter_returns_none_without_description() -> None:
     content = "---\nargument-hint: <file>\n---\nBody\n"
-    description = _parse_command_frontmatter(content)
+    description = parse_command_frontmatter(content)
     assert description is None
 
 
 def test_parse_command_frontmatter_returns_none_for_invalid_yaml() -> None:
     content = "---\n: bad: yaml: [[\n---\n"
-    description = _parse_command_frontmatter(content)
+    description = parse_command_frontmatter(content)
     assert description is None
 
 
 def test_parse_command_frontmatter_returns_none_for_non_dict_yaml() -> None:
     content = "---\n- a list\n---\n"
-    description = _parse_command_frontmatter(content)
+    description = parse_command_frontmatter(content)
     assert description is None
-
-
-# --- _scan_skills_directory tests ---
 
 
 def test_scan_skills_directory_finds_valid_skills(tmp_path: Path) -> None:
@@ -216,9 +211,6 @@ def test_scan_skills_directory_uses_empty_description_when_missing(tmp_path: Pat
     assert result == [SkillInfo(name="no-desc", description="", source="custom", file_path=str(skill / "SKILL.md"))]
 
 
-# --- _scan_commands_directory tests ---
-
-
 def test_scan_commands_directory_finds_markdown_commands(tmp_path: Path) -> None:
     commands_dir = tmp_path / ".claude" / "commands"
     commands_dir.mkdir(parents=True)
@@ -278,9 +270,6 @@ def test_scan_commands_directory_ignores_subdirectories(tmp_path: Path) -> None:
 def test_scan_commands_directory_returns_empty_for_missing_directory(tmp_path: Path) -> None:
     result = _scan_commands_directory(tmp_path / "nonexistent")
     assert result == []
-
-
-# --- discover_skills tests ---
 
 
 def test_discover_skills_combines_skills_and_commands(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -484,6 +473,52 @@ def test_discover_skills_plugin_does_not_shadow_unprefixed_repo_skill(
     result = discover_skills(repo_dir, plugin_dirs=[plugin_dir])
     names = sorted(s.name for s in result)
     assert names == ["fix-bug", "sculptor:fix-bug"]
+
+
+def test_get_skill_source_directories_lists_repo_and_home_in_order() -> None:
+    """The repo/home sources appear in discover order with the right kinds."""
+    repo = Path("/repo")
+    home = Path("/home/dev")
+    result = get_skill_source_directories(repo, home_path=home)
+    assert result == [
+        SkillSourceDirectory(path=repo / ".claude" / "skills", kind=SkillSourceKind.SKILL_DIR, namespace=None),
+        SkillSourceDirectory(path=repo / ".claude" / "commands", kind=SkillSourceKind.COMMAND_FILES, namespace=None),
+        SkillSourceDirectory(path=home / ".claude" / "skills", kind=SkillSourceKind.SKILL_DIR, namespace=None),
+        SkillSourceDirectory(path=home / ".claude" / "commands", kind=SkillSourceKind.COMMAND_FILES, namespace=None),
+    ]
+
+
+def test_get_skill_source_directories_puts_plugins_first_with_namespace(tmp_path: Path) -> None:
+    """Plugin `skills/` dirs come first, tagged SKILL_DIR with the plugin namespace."""
+    plugin_dir = tmp_path / "plugin"
+    _write_plugin_json(plugin_dir, "sculptor")
+    repo = tmp_path / "repo"
+    home = tmp_path / "home"
+
+    result = get_skill_source_directories(repo, plugin_dirs=[plugin_dir], home_path=home)
+
+    assert result[0] == SkillSourceDirectory(
+        path=plugin_dir / "skills", kind=SkillSourceKind.SKILL_DIR, namespace="sculptor"
+    )
+    # The repo/home sources follow the plugin source.
+    assert [s.path for s in result[1:]] == [
+        repo / ".claude" / "skills",
+        repo / ".claude" / "commands",
+        home / ".claude" / "skills",
+        home / ".claude" / "commands",
+    ]
+
+
+def test_get_skill_source_directories_defaults_home_to_path_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Omitting home_path falls back to Path.home() (matches discover_skills)."""
+    fake_home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+
+    result = get_skill_source_directories(tmp_path / "repo")
+    home_sources = [s.path for s in result if str(s.path).startswith(str(fake_home))]
+    assert home_sources == [fake_home / ".claude" / "skills", fake_home / ".claude" / "commands"]
 
 
 def test_discover_skills_namespaces_multiple_plugins_separately(

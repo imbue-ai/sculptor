@@ -2,10 +2,10 @@ from abc import ABC
 from abc import abstractmethod
 from pathlib import Path
 
-from imbue_core.agents.data_types.ids import ProjectID
-from imbue_core.concurrency_group import ConcurrencyGroup
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.interfaces.environments.base import Environment
+from sculptor.primitives.ids import ProjectID
 
 
 class EnvironmentManager(ABC):

@@ -4,11 +4,13 @@ This module exists to break circular imports between agent.py and environment mo
 Messages defined here can be safely imported by environment implementations.
 """
 
-from imbue_core.sculptor.state.messages import AgentMessageSource
-from imbue_core.sculptor.state.messages import Message
+from sculptor.state.messages import AgentMessageSource
+from sculptor.state.messages import Message
 
 
 class EphemeralMessage(Message):
+    """Base class for messages that are logged but not saved to the database."""
+
     @property
     def is_ephemeral(self) -> bool:
         return True

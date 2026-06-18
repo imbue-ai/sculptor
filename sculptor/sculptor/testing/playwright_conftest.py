@@ -45,7 +45,7 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo) -> Gener
     outcome = yield
     report = outcome.get_result()
     if report.when == "call":
-        item.report_call = report  # pyre-ignore[16]
+        item.report_call = report
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
@@ -174,7 +174,7 @@ def pytest_runtest_logfinish(nodeid: str, location: tuple[str, int | None, str])
     already started" on every later test in that sibling — the same
     cascade we are trying to prevent. Offload runs one test per Modal
     sandbox (no xdist), so this gate keeps the fix where it matters and
-    avoids the friendly-fire on Fly's ``XDIST_WORKERS=7`` runs and on
+    avoids the friendly-fire on CI ``XDIST_WORKERS=7`` runs and on
     local-xdist runs.
     """
     if os.environ.get("PYTEST_XDIST_WORKER") or _IS_XDIST_CONTROLLER:

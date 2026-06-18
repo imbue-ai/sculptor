@@ -1,4 +1,3 @@
-import queue
 from queue import Empty
 from queue import Queue
 from threading import Event
@@ -9,15 +8,10 @@ from loguru import logger
 from pydantic import AnyUrl
 from pydantic import PrivateAttr
 
-from imbue_core.agents.data_types.ids import AgentMessageID
-from imbue_core.common import generate_id
-from imbue_core.ids import AssistantMessageID
-from imbue_core.sculptor.state.chat_state import TextBlock
-from imbue_core.sculptor.state.messages import ChatInputUserMessage
-from imbue_core.sculptor.state.messages import ResponseBlockAgentMessage
-from imbue_core.secrets_utils import Secret
-from imbue_core.thread_utils import ObservableThread
 from sculptor.agents.default.agent_wrapper import DefaultAgentWrapper
+from sculptor.foundation.common import generate_id
+from sculptor.foundation.secrets_utils import Secret
+from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.interfaces.agents.agent import FileAgentArtifact
 from sculptor.interfaces.agents.agent import HelloAgentConfig
 from sculptor.interfaces.agents.agent import StopAgentUserMessage
@@ -25,6 +19,16 @@ from sculptor.interfaces.agents.agent import UpdatedArtifactAgentMessage
 from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_CLEAN_SHUTDOWN_ON_INTERRUPT
 from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_SHUTDOWN_DUE_TO_EXCEPTION
 from sculptor.interfaces.agents.errors import AgentCrashed
+from sculptor.primitives.ids import AgentMessageID
+from sculptor.primitives.ids import AssistantMessageID
+from sculptor.state.chat_state import TextBlock
+from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import ResponseBlockAgentMessage
+
+_STOP_WAIT_TIMEOUT_SECONDS = 10.0
+_SHUTDOWN_JOIN_TIMEOUT_SECONDS = 30.0
+_INPUT_QUEUE_POLL_TIMEOUT_SECONDS = 1.0
+_OUTPUT_QUEUE_POLL_TIMEOUT_SECONDS = 0.1
 
 
 class HelloAgent(DefaultAgentWrapper):
@@ -33,7 +37,8 @@ class HelloAgent(DefaultAgentWrapper):
     _input_agent_messages: Queue[ChatInputUserMessage] = PrivateAttr(default_factory=Queue)
     _shutdown_event: Event = PrivateAttr(default_factory=Event)
 
-    def push_message(self, message: ChatInputUserMessage | StopAgentUserMessage) -> None:  # pyre-fixme[14]
+    # pyrefly: ignore [bad-override]
+    def push_message(self, message: ChatInputUserMessage | StopAgentUserMessage) -> None:
         match message:
             case ChatInputUserMessage():
                 logger.info("Received user input message: {}", message)
@@ -41,8 +46,12 @@ class HelloAgent(DefaultAgentWrapper):
             case StopAgentUserMessage():
                 with self._handle_user_message(message):
                     logger.info("Stopping agent")
+                    # Mark the turn as stopping so the clean-exit branch of
+                    # _handle_user_message suppresses RequestSuccessAgentMessage: an
+                    # interrupted turn must not report success.
+                    self._is_stopping = True
                     self._shutdown_event.set()
-                    self.wait(10.0)
+                    self.wait(_STOP_WAIT_TIMEOUT_SECONDS)
                     self._exit_code = AGENT_EXIT_CODE_CLEAN_SHUTDOWN_ON_INTERRUPT
             case _ as unreachable:
                 assert_never(unreachable)
@@ -53,20 +62,21 @@ class HelloAgent(DefaultAgentWrapper):
             self._exit_code = AGENT_EXIT_CODE_SHUTDOWN_DUE_TO_EXCEPTION
         return super().poll()
 
-    def wait(self, timeout: float) -> int | None:  # pyre-fixme[15]: overrides Agent.wait which returns int
+    # pyrefly: ignore [bad-override]
+    def wait(self, timeout: float) -> int | None:
         if self._exception is not None:
             if self._process is not None:
                 self._process.terminate()
             raise AgentCrashed("Agent crashed", exit_code=None, metadata=None) from self._exception
         if self._process is not None:
-            exit_code = self._process.wait(30)
+            exit_code = self._process.wait(_SHUTDOWN_JOIN_TIMEOUT_SECONDS)
             self._exit_code = exit_code
         else:
             exit_code = None
 
         message_processing_thread = self._message_processing_thread
         assert message_processing_thread is not None
-        message_processing_thread.join(30)
+        message_processing_thread.join(_SHUTDOWN_JOIN_TIMEOUT_SECONDS)
         assert not message_processing_thread.is_alive(), "Message processing thread did not finish in time"
 
         return exit_code
@@ -77,14 +87,13 @@ class HelloAgent(DefaultAgentWrapper):
     def _process_message_queue(self, secrets: Mapping[str, str | Secret]) -> None:
         while not self._shutdown_event.is_set():
             try:
-                message = self._input_agent_messages.get(timeout=1)
-            except queue.Empty:
+                message = self._input_agent_messages.get(timeout=_INPUT_QUEUE_POLL_TIMEOUT_SECONDS)
+            except Empty:
                 continue
             assert isinstance(message, ChatInputUserMessage)
             with self._handle_user_message(message):
                 command = [self.config.command, message.text]
                 self._process = self.environment.run_process_in_background(command, secrets=secrets)
-                # start the output reader thread -- will add messages to the queue
                 self._output_reader()
 
     def start(
@@ -113,10 +122,10 @@ class HelloAgent(DefaultAgentWrapper):
     def _output_reader(self) -> None:
         process = self._process
         assert process is not None
-        queue = process.get_queue()
-        while not process.is_finished() or not queue.empty():
+        output_queue = process.get_queue()
+        while not process.is_finished() or not output_queue.empty():
             try:
-                line, is_stdout = queue.get(timeout=0.1)
+                line, is_stdout = output_queue.get(timeout=_OUTPUT_QUEUE_POLL_TIMEOUT_SECONDS)
             except Empty:
                 continue
             if not is_stdout:

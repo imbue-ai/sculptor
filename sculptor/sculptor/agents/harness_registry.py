@@ -8,18 +8,21 @@ here and adding one `case` branch to each function below.
 
 from __future__ import annotations
 
-from imbue_core.errors import ExpectedError
 from sculptor.agents.default.claude_code_sdk.agent_wrapper import ClaudeCodeSDKAgent
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
 from sculptor.agents.hello_agent.agent_wrapper import HelloAgent
 from sculptor.agents.hello_agent.harness import HELLO_HARNESS
 from sculptor.agents.pi_agent.agent_wrapper import PiAgent
 from sculptor.agents.pi_agent.harness import PI_HARNESS
+from sculptor.agents.terminal_agent.harness import TERMINAL_HARNESS
+from sculptor.foundation.errors import ExpectedError
 from sculptor.interfaces.agents.agent import Agent
 from sculptor.interfaces.agents.agent import AgentConfigTypes
 from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
 from sculptor.interfaces.agents.agent import HelloAgentConfig
 from sculptor.interfaces.agents.agent import PiAgentConfig
+from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
+from sculptor.interfaces.agents.agent import TerminalAgentConfig
 from sculptor.interfaces.agents.harness import AgentRunContext
 from sculptor.interfaces.agents.harness import Harness
 from sculptor.services.workspace_service.setup_command_runner import SetupStateProvider
@@ -43,6 +46,8 @@ def get_harness_for_config(config: AgentConfigTypes) -> Harness:
             return CLAUDE_CODE_HARNESS
         case PiAgentConfig():
             return PI_HARNESS
+        case TerminalAgentConfig() | RegisteredTerminalAgentConfig():
+            return TERMINAL_HARNESS
         case _:
             raise UnknownAgentConfigError(f"Unknown agent config: {config}")
 
@@ -90,5 +95,9 @@ def create_agent_for_run(context: AgentRunContext) -> Agent:
                 on_diff_needed=context.on_diff_needed,
                 harness=PI_HARNESS,
             )
+        # Terminal configs (TerminalAgentConfig / RegisteredTerminalAgentConfig)
+        # never reach this function: they are dispatched to
+        # `run_terminal_agent_task_v1` in `tasks/api.py`, and the sole caller
+        # of this function (`run_agent_task_v1`) only runs for chat configs.
         case _:
             raise UnknownAgentConfigError(f"Unknown agent config: {context.task_data.agent_config}")

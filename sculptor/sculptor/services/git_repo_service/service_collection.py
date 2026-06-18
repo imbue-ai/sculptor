@@ -1,5 +1,5 @@
-from imbue_core.concurrency_group import ConcurrencyGroup
 from sculptor.config.settings import SculptorSettings
+from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.services.data_model_service.sql_implementation import SQLDataModelService
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.git_repo_service.data_types import GitRepoServiceCollection
@@ -12,6 +12,7 @@ def get_git_repo_service_collection(
     concurrency_group: ConcurrencyGroup,
     settings: SculptorSettings,
 ) -> GitRepoServiceCollection:
+    """Build the service collection that the git repo service depends on."""
     data_model_service = SQLDataModelService.build_from_settings(
         settings, concurrency_group.make_concurrency_group("data_model_service")
     )
