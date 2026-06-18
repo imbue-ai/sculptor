@@ -11,7 +11,6 @@ export function getUpdateChannelDisplayName(channel: UpdateChannel): string {
 
 /**
  * Returns a human-readable status string for the current auto-update state.
- * Used by both the VersionPopover and the Settings page.
  */
 export function getUpdateStatusText(
   status: AutoUpdateStatus | null,

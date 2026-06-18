@@ -10,12 +10,7 @@ import { useEffect, useRef } from "react";
  * the palette converge on a single function instead of going through a
  * synthesized KeyboardEvent.
  *
- * Why this exists: previously the palette synthesized real keydown events
- * to fire the chat/tab/agent handlers. That dance had to defer the
- * dispatch via setTimeout(0) (so the palette's Radix dialog had time to
- * unmount), depended on the binding still being mapped, and was untestable.
- *
- * The map keys are the eight actions the palette exposes — they don't
+ * The map keys are the actions the palette exposes — they don't
  * mirror keybinding ids 1:1 because some palette commands could one day
  * point at actions with no shortcut.
  */

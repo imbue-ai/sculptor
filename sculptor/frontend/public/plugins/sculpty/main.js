@@ -24,10 +24,6 @@
  * data matches src/assets/logos/{peace,joy,excitement}.svg.
  */
 
-// ---------------------------------------------------------------------------
-// Squiggle artwork + per-mood tuning
-// ---------------------------------------------------------------------------
-
 const SHAPES = {
   sleeping: {
     fill: "#B4D3BA",
@@ -79,17 +75,9 @@ const SIZE = 96;
 const VIEWBOX = 336;
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 const lerp = (a, b, t) => a + (b - a) * t;
 const easeInOut = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
 const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-// ---------------------------------------------------------------------------
-// Plugin entry
-// ---------------------------------------------------------------------------
 
 export default function activate() {
   const el = document.createElement("div");

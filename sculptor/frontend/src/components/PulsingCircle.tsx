@@ -40,11 +40,9 @@ export const PulsingCircle = forwardRef<HTMLDivElement, PulsingCircleProps>((pro
 
   return (
     <FlexSvg {...props} ref={ref}>
-      {/* Pulsing outer circle */}
       <circle cx="50%" cy="50%" r="25%" fill={outerColorVal}>
         <animate attributeName="r" values="40%;48%;40%" dur="2.0s" repeatCount="indefinite" />
       </circle>
-      {/* Inner circle */}
       <circle cx="50%" cy="50%" r="25%" fill={innerColorVal} />
     </FlexSvg>
   );

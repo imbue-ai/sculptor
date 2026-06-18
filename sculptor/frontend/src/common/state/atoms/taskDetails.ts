@@ -11,24 +11,19 @@ import type { ArtifactsMap } from "../../../pages/workspace/Types";
  * This is accumulated from incremental TaskUpdate messages.
  */
 export type TaskDetailState = {
-  // Chat messages
   completedChatMessages: Array<ChatMessage>;
   inProgressChatMessage: ChatMessage | null;
   queuedChatMessages: Array<ChatMessage>;
   workingUserMessageId: string | null;
-  // Artifacts
   artifacts: ArtifactsMap;
-  // AskUserQuestion state
   pendingUserQuestion: AskUserQuestionData | null;
   submittedQuestionAnswers: Record<string, SubmittedQuestionAnswers>;
-  // Plan mode state
   isInPlanMode: boolean;
   // Background tasks whose ``task_started`` has arrived but whose
   // ``task_notification`` has not. Drives the alpha status pill's
   // "waiting for background task" label so it doesn't claim the agent is
   // thinking while the harness is actually idle (SCU-387).
   pendingBackgroundTaskIds: Array<string>;
-  // Error state
   error?: string;
 };
 

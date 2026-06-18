@@ -334,8 +334,7 @@ export const useRunCommand = (): ((cmd: Command, opts?: { keepOpen?: boolean }) 
       // which watches `commandPalettePendingAtom` and pulls focus back to
       // its own input ref after the perform settles. Keeping the focus
       // logic next to the input ref (rather than querying the DOM here)
-      // also lets us drop the `document.querySelector` lookup that this
-      // hook previously did.
+      // avoids a `document.querySelector` lookup in this hook.
     },
     [ctx, close, pushPage, setPending],
   );

@@ -3,8 +3,8 @@
  *
  * Key design choices:
  * - Character pre-filter: quickly rejects paths that cannot possibly match
- *   (all query chars must appear as a subsequence in the path). This
- *   eliminates ~95% of candidates in O(n+m) before any scoring begins.
+ *   (all query chars must appear as a subsequence in the path), in O(n+m)
+ *   before any scoring begins.
  * - Filename bias: tries to match the query against just the final path
  *   segment first and multiplies the score by FILENAME_BONUS_MULTIPLIER.
  *   Matches in the filename are almost always what the user wants.

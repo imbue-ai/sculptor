@@ -17,15 +17,11 @@ import { useGitAndOpenInRuntime } from "./contextActions/useGitAndOpenInRuntime.
 
 /**
  * Build the `WorkspaceActionRuntime` and `AgentActionRuntime` objects
- * the dynamic providers need. Extracted from `CommandRegistrations.tsx`
- * so the wiring file is the orchestrator, not the implementation.
+ * the dynamic providers need.
  *
  * The close handlers come from `useWorkspaceTabActions`, the same hook
  * `WorkspaceTabs.tsx` consumes — so the right-click context menu and
- * the Cmd+K palette share one implementation of close + navigate. (MR
- * !1021 flagged the previous duplication: the palette closed the
- * tab but skipped the navigation step, leaving the workspace contents
- * displayed and the user's last "Close All" looking like a no-op.)
+ * the Cmd+K palette share one implementation of close + navigate.
  */
 export const useContextActionRuntimes = (): {
   workspaceActionRuntime: WorkspaceActionRuntime;

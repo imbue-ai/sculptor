@@ -17,8 +17,7 @@ import type { Command } from "../types.ts";
 // Actions, Terminal, …) live on `view.panels`. The `view.panels` page
 // title intentionally matches what users search for ("Toggle panel
 // visibility...") so typing it surfaces the page that actually lists
-// panels — earlier the equivalent string used the word "plugin", which
-// turned out to be opaque to coworkers.
+// panels.
 export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
   {
     id: "view.toggle_layout",

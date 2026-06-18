@@ -35,7 +35,7 @@ export const groupOrder = (id: CommandGroupId | string): number =>
 
 /**
  * Look up the display heading for a group id. Falls back to the raw id for
- * unknown strings, matching the previous behavior.
+ * unknown strings.
  */
 export const groupHeading = (id: CommandGroupId | string): string =>
   (COMMAND_GROUPS_BY_ID as Record<string, CommandGroup | undefined>)[id]?.heading ?? id;

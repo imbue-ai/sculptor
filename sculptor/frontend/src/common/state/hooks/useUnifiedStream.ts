@@ -63,18 +63,14 @@ export const useUnifiedStream = (): void => {
 
   const onMessage = useCallback(
     (data: StreamingUpdate): void => {
-      // ========================================================================
       // Handle task views (for task list/sidebar)
-      // ========================================================================
       if (data.taskViewsByTaskId) {
         updateTasks(data.taskViewsByTaskId);
       }
 
-      // ========================================================================
       // Handle task details (for chat pages)
       //    Process ALL tasks, even if not currently viewing them
       // NOTE: This is O(activeTasks) because we only get a task update if something happens
-      // ========================================================================
       if (data.taskUpdateByTaskId && Object.keys(data.taskUpdateByTaskId).length > 0) {
         Object.entries(data.taskUpdateByTaskId).forEach(([taskId, taskUpdate]) => {
           updateTaskDetail({
@@ -114,9 +110,7 @@ export const useUnifiedStream = (): void => {
         });
       }
 
-      // ========================================================================
       // Handle user update
-      // ========================================================================
       if (data.userUpdate) {
         const userUpdate = data.userUpdate;
 
@@ -138,18 +132,14 @@ export const useUnifiedStream = (): void => {
         }
       }
 
-      // ========================================================================
       // Handle workspace branch updates
-      // ========================================================================
       if (data.workspaceBranchByWorkspaceId && Object.keys(data.workspaceBranchByWorkspaceId).length > 0) {
         Object.entries(data.workspaceBranchByWorkspaceId).forEach(([workspaceId, branchInfo]) => {
           updateWorkspaceBranch({ workspaceId, branchInfo: branchInfo ?? null });
         });
       }
 
-      // ========================================================================
       // Handle workspace remote-branches updates
-      // ========================================================================
       if (
         data.workspaceRemoteBranchesByWorkspaceId &&
         Object.keys(data.workspaceRemoteBranchesByWorkspaceId).length > 0
@@ -159,18 +149,14 @@ export const useUnifiedStream = (): void => {
         });
       }
 
-      // ========================================================================
       // Handle workspace setup status updates
-      // ========================================================================
       if (data.workspaceSetupStatusByWorkspaceId && Object.keys(data.workspaceSetupStatusByWorkspaceId).length > 0) {
         Object.entries(data.workspaceSetupStatusByWorkspaceId).forEach(([workspaceId, setupStatus]) => {
           updateWorkspaceSetupStatus({ workspaceId, status: setupStatus ?? null });
         });
       }
 
-      // ========================================================================
       // Handle workspace setup live output chunks
-      // ========================================================================
       if (data.workspaceSetupOutputByWorkspaceId && Object.keys(data.workspaceSetupOutputByWorkspaceId).length > 0) {
         Object.entries(data.workspaceSetupOutputByWorkspaceId).forEach(([workspaceId, chunks]) => {
           chunks.forEach((chunk) => {
@@ -179,32 +165,24 @@ export const useUnifiedStream = (): void => {
         });
       }
 
-      // ========================================================================
       // Handle dependencies status updates
-      // ========================================================================
       if (data.dependenciesStatus) {
         setDependenciesStatus(data.dependenciesStatus);
       }
 
-      // ========================================================================
       // Handle PR status updates
-      // ========================================================================
       if (data.prStatusByWorkspaceId && Object.keys(data.prStatusByWorkspaceId).length > 0) {
         Object.entries(data.prStatusByWorkspaceId).forEach(([workspaceId, prStatus]) => {
           updatePrStatus({ workspaceId, prStatus: prStatus ?? null });
         });
       }
 
-      // ========================================================================
       // Handle finished request IDs
-      // ========================================================================
       if (data.finishedRequestIds && data.finishedRequestIds.length > 0) {
         acknowledgeRequests(data.finishedRequestIds);
       }
 
-      // ========================================================================
       // Handle /btw side-chat streaming updates
-      // ========================================================================
       if (data.btwUpdate) {
         handleBtwUpdate({
           requestId: data.btwUpdate.requestId,
@@ -214,9 +192,7 @@ export const useUnifiedStream = (): void => {
         });
       }
 
-      // ========================================================================
       // Handle ui open-file events (sculpt ui open-file)
-      // ========================================================================
       if (data.uiOpenFileByWorkspaceId && Object.keys(data.uiOpenFileByWorkspaceId).length > 0) {
         Object.entries(data.uiOpenFileByWorkspaceId).forEach(([workspaceId, action]) => {
           openFileFromUiEvent({
@@ -227,9 +203,7 @@ export const useUnifiedStream = (): void => {
         });
       }
 
-      // ========================================================================
       // Handle agent webview commands (sculpt ui webview-navigate / webview-refresh)
-      // ========================================================================
       if (data.uiWebviewCommandByWorkspaceId && Object.keys(data.uiWebviewCommandByWorkspaceId).length > 0) {
         Object.entries(data.uiWebviewCommandByWorkspaceId).forEach(([workspaceId, action]) => {
           store.set(agentWebviewStateAtomFamily(workspaceId), (prev) => ({ ...prev, command: action }));

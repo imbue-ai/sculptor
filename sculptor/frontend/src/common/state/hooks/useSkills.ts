@@ -17,8 +17,8 @@ type UseSkillsResult = {
 /**
  * SkillsPanel-facing thin wrapper around `useWorkspaceSkills`. Adds the static
  * `BUILTIN_SKILLS` to the API results and sorts the merged list. While the
- * API fetch is in flight the merged list is empty (not just "API-only") to
- * match the prior behavior where the panel showed nothing during loads.
+ * API fetch is in flight the merged list is empty (not just "API-only"), so
+ * the panel shows nothing during loads.
  */
 export const useSkills = (): UseSkillsResult => {
   const { workspaceID } = useWorkspacePageParams();

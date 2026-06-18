@@ -5,10 +5,9 @@ import { getBackendCapabilities } from "~/common/state/atoms/backendCapabilities
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 // NOTE: we can support PDF uploads but Claude Code can not read PDFs
 const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".gif"] as const; // ".pdf"
-const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const; // "application/pdf"
+const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
 
 export const validateFile = (file: File): { valid: boolean; error?: string } => {
-  // Check file size
   if (file.size > MAX_FILE_SIZE) {
     return {
       valid: false,
@@ -16,7 +15,6 @@ export const validateFile = (file: File): { valid: boolean; error?: string } => 
     };
   }
 
-  // Check file extension
   const fileNameLower = file.name.toLowerCase();
   const hasValidExtension = ALLOWED_EXTENSIONS.some((ext) => fileNameLower.endsWith(ext));
   if (!hasValidExtension) {
@@ -26,7 +24,6 @@ export const validateFile = (file: File): { valid: boolean; error?: string } => 
     };
   }
 
-  // Check MIME type
   if (!ALLOWED_MIME_TYPES.includes(file.type as (typeof ALLOWED_MIME_TYPES)[number])) {
     return {
       valid: false,

@@ -314,8 +314,7 @@ const EntityMentionChip = ({
           {...wrapperProps}
           className={classnames(
             // Reuse the `@`-chip palette so every chip family (file, folder,
-            // skill, entity) shares one accent scheme. Per-type colours
-            // (amber/teal/violet) were retired — entity type now reads off
+            // skill, entity) shares one accent scheme. Entity type reads off
             // the leading icon and the `data-entity-type` attribute.
             isClickable ? styles.clickableMention : styles.mention,
             entityStyles.entityChip,

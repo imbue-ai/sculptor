@@ -4,7 +4,7 @@ import { defineConfig } from "vite";
 export default defineConfig({
   build: {
     // By default, forge will bundle everything in `.vite/build`.
-    outDir: ".vite/build", // explicitly set output directory
+    outDir: ".vite/build",
     lib: {
       entry: "src/preload.ts",
       formats: ["cjs"], // Use CommonJS format for Electron preload script
