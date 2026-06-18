@@ -289,6 +289,22 @@ def test_there_are_no_missing_json_schema_migrations() -> None:
     )
 
 
+def test_frozen_json_schema_baseline_covers_every_persisted_model() -> None:
+    """The frozen baseline must be non-empty and cover every persisted model.
+
+    ``get_potentially_breaking_changes`` only inspects keys that exist in the frozen
+    baseline, so an empty (or partial) baseline silently disables the JSON-column
+    durability guard checked by ``test_there_are_no_missing_json_schema_migrations``.
+    See SCU-1523, where the file was ``{}`` and the guard was permanently green.
+    """
+    frozen_schemas = get_frozen_database_model_nested_json_schemas()
+    latest_schemas = get_json_schemas_of_all_nested_models(tuple(AUTOMANAGED_MODEL_CLASSES))
+    empty_baseline_message = f"frozen_pydantic_schemas.json is empty; the JSON-column durability guard is silently disabled. Run `{BUMP_MIGRATIONS_COMMAND}` to regenerate the baseline."
+    assert frozen_schemas, empty_baseline_message
+    missing_models_message = f"The frozen baseline does not cover the same models as the live registry ({sorted(frozen_schemas)} vs {sorted(latest_schemas)}); the durability guard would not inspect the missing models. Run `{BUMP_MIGRATIONS_COMMAND}`."
+    assert set(frozen_schemas.keys()) == set(latest_schemas.keys()), missing_models_message
+
+
 # ============================================================================
 # MIGRATION CORRECTNESS TESTS
 # These tests verify that the Alembic migration chain produces a correct
