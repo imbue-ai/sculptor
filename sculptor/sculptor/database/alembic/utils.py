@@ -17,6 +17,17 @@ from sculptor.database.alembic.json_migrations import Schemas
 FROZEN_SCHEMAS_PATH = Path(__file__).parent / "frozen_pydantic_schemas.json"
 
 
+class EmptyFrozenSchemasError(ValueError):
+    """Raised when attempting to persist an empty frozen JSON-schema baseline.
+
+    An empty baseline silently disables the JSON-column durability guard
+    (``get_potentially_breaking_changes`` only inspects keys present in the
+    baseline), which is how the guard was disarmed in SCU-1523. An empty result
+    almost always means the automanaged-model registry was not populated (import
+    ``sculptor.services.data_model_service.sql_implementation`` before regenerating).
+    """
+
+
 def drop_all_automanaged_triggers(connection: Connection) -> None:
     """Drop every database trigger before migrations run.
 
@@ -85,6 +96,11 @@ def get_frozen_database_model_nested_json_schemas() -> Schemas:
     return json.loads(FROZEN_SCHEMAS_PATH.read_text(encoding="utf-8"))
 
 
+_EMPTY_SCHEMAS_MESSAGE = "Refusing to overwrite the frozen JSON-schema baseline with an empty schema set: this would silently disable the JSON-column durability guard. The automanaged-model registry was likely not populated (import sculptor.services.data_model_service.sql_implementation before regenerating)."
+
+
 def update_frozen_database_model_nested_json_schemas(schemas: Schemas) -> None:
+    if not schemas:
+        raise EmptyFrozenSchemasError(_EMPTY_SCHEMAS_MESSAGE)
     content = json.dumps(schemas, sort_keys=True, indent=2) + "\n"
     FROZEN_SCHEMAS_PATH.write_text(content, encoding="utf-8")
