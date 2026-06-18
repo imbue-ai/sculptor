@@ -11,8 +11,10 @@ import re
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
+from sculptor.constants import ElementIDs
 from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
 from sculptor.testing.elements.file_tree import get_changes_tree
+from sculptor.testing.elements.setup_status import PlaywrightSetupStatusElement
 from sculptor.testing.elements.terminal import expect_chat_replaces_terminal_panel
 from sculptor.testing.elements.terminal import expect_terminal_panel_replaces_chat
 from sculptor.testing.elements.terminal import get_agent_terminal_panel
@@ -20,6 +22,7 @@ from sculptor.testing.elements.terminal import get_agent_terminal_textarea
 from sculptor.testing.elements.terminal import get_xterm_buffer_text
 from sculptor.testing.elements.terminal import run_command_in_agent_terminal
 from sculptor.testing.elements.terminal import wait_for_xterm_substring
+from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -159,3 +162,51 @@ def test_terminal_agent_tabs_do_not_leak_content(sculptor_instance_: SculptorIns
     assert "LEAK-CHECK-BRAVO" not in get_xterm_buffer_text(page), (
         "Terminal 1 shows Terminal 2's output -- tab contents leaked across agents"
     )
+
+
+@user_story("to see whether the workspace setup command ran when using a terminal agent")
+def test_terminal_agent_surfaces_setup_status(sculptor_instance_: SculptorInstance) -> None:
+    """A terminal agent runs the workspace setup command and surfaces its status.
+
+    Setup is gated on workspace state, not agent type, so a terminal agent runs
+    it just like a chat agent. The status is surfaced in the workspace banner
+    (workspace-level chrome shared by all agents), so it shows even though a
+    terminal agent has no chat intro — without it a setup run (including a
+    failure) would be invisible.
+    """
+    page = sculptor_instance_.page
+
+    # Configure a project setup command with a recognizable marker.
+    settings_page = navigate_to_settings_page(page=page)
+    settings_page.click_on_repositories().expand_repo_config()
+    setup_input = page.get_by_test_id(ElementIDs.SETTINGS_WORKSPACE_SETUP_COMMAND_INPUT).first
+    expect(setup_input).to_be_visible()
+    setup_input.fill('echo "SCULPTOR_TERMINAL_SETUP_MARKER_24680"')
+    setup_input.blur()
+    page.wait_for_timeout(500)
+
+    # Create a workspace whose FIRST agent is a terminal agent: the terminal
+    # handler itself acquires the environment and triggers setup.
+    start_task_and_wait_for_ready(
+        page,
+        workspace_name="Terminal Setup WS",
+        agent_type="terminal",
+        model_name=None,
+    )
+
+    # This is a terminal agent (terminal panel, no chat), yet the setup status
+    # is surfaced — in the workspace banner. Scope the card lookup to the banner
+    # to prove it's workspace-level chrome, not the agent panel.
+    expect(get_agent_terminal_panel(page)).to_be_visible()
+    banner = page.get_by_test_id(ElementIDs.WORKSPACE_BANNER)
+    card = banner.get_by_test_id(ElementIDs.SETUP_STATUS_CARD)
+    expect(card).to_be_visible(timeout=60_000)
+
+    # Wait for a terminal state (the rerun button mounts only once the run has
+    # finished), then open the popover and confirm the marker — proving the
+    # setup command actually ran for the terminal agent. Mirrors the gating in
+    # test_workspace_setup_status.py to avoid racing pending->running->succeeded.
+    setup = PlaywrightSetupStatusElement(page)
+    expect(setup.get_rerun_button()).to_be_visible(timeout=60_000)
+    card.click()
+    expect(setup.get_output()).to_contain_text("SCULPTOR_TERMINAL_SETUP_MARKER_24680")

@@ -44,17 +44,6 @@
   outline: none;
 }
 
-.rowOpen,
-.rowOpen:hover,
-.rowOpen:focus-visible {
-  background: var(--accent-a3);
-  color: var(--accent-11);
-}
-
-.rowError {
-  color: var(--red-11);
-}
-
 .rowNoToggle {
   cursor: default;
 }
@@ -77,14 +66,6 @@
   align-self: center;
   color: var(--gray-8);
   flex-shrink: 0;
-}
-
-.rowOpen .rowIcon {
-  color: var(--accent-11);
-}
-
-.rowError .rowIcon {
-  color: var(--red-11);
 }
 
 .rowLabel {
@@ -114,24 +95,11 @@
   white-space: nowrap;
 }
 
-.rowOpen .rowTitle {
-  color: var(--accent-11);
-}
-
-.rowError .rowTitle {
-  color: var(--red-11);
-}
-
 // `$` shell prompt leading the command. Lighter than the command itself
 // so it reads as a typographic cue rather than a glyph.
 .rowPrompt {
   color: var(--gray-8);
   user-select: none;
-}
-
-.rowPlaceholder {
-  color: var(--gray-9);
-  font-style: italic;
 }
 
 // Aside column: status badge / duration / action icon buttons. The
@@ -145,16 +113,4 @@
   display: inline-flex;
   flex-shrink: 0;
   gap: var(--space-2);
-}
-
-.popoverEmpty {
-  color: var(--gray-9);
-  font-style: italic;
-}
-
-.truncationBanner {
-  background: var(--amber-a3);
-  color: var(--amber-11);
-  font-size: var(--font-size-1);
-  padding: var(--space-1) var(--space-3);
 }
