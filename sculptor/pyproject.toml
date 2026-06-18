@@ -116,7 +116,7 @@ dev = [
     # playwright's bundled Chromium must match Electron's (1.53 <-> Electron 37,
     # 1.60 <-> Electron 42) for connect_over_cdp; bump together with Electron.
     # Keep the frontend package.json "playwright" devDependency on the same pin.
-    "playwright==1.53.0",
+    "playwright==1.60.0",
     "pylint==3.2.6",
     "pyrefly>=1.0.0",
     "pytest-asyncio",

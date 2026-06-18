@@ -24,7 +24,10 @@ from sculptor.testing.port_manager import PortManager
 from sculptor.testing.server_utils import get_v1_frontend_path
 from sculptor.testing.subprocess_utils import Forwarder
 
-ELECTRON_READY_MESSAGE = "Launched Electron app"
+# electron-forge 7.10+ stopped printing its "Launched Electron app" task
+# title when stdout is not a TTY, so key on the first line the app's own main
+# process logs instead (src/electron/logger.ts emits it at module load).
+ELECTRON_READY_MESSAGE = "Logging to temp file:"
 
 _FORGE_LOCK_TIMEOUT_SECONDS = 300
 _SLOW_LOCK_WAIT_LOG_THRESHOLD_SECONDS = 1.0
