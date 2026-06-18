@@ -69,8 +69,6 @@ export const ActionsSettingsSection = ({ setToast }: ActionsSettingsSectionProps
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  // --- CRUD handlers (unchanged) ---
-
   const handleAddAction = (): void => {
     setEditingAction(undefined);
     setIsDialogOpen(true);
@@ -290,8 +288,6 @@ export const ActionsSettingsSection = ({ setToast }: ActionsSettingsSectionProps
     input.click();
   };
 
-  // --- DnD handlers (DockingLayout pattern) ---
-
   const resolveActionGroupId = (rowEl: Element): string | null => {
     // Walk up to find the parent group section, if any
     const groupSection = rowEl.closest("[data-group-section]");
@@ -426,8 +422,6 @@ export const ActionsSettingsSection = ({ setToast }: ActionsSettingsSectionProps
     setDropTarget(null);
     dropTargetRef.current = null;
   };
-
-  // --- Render ---
 
   const ungroupedActions = getUngroupedActions();
   const sortedGroups = getSortedGroups();

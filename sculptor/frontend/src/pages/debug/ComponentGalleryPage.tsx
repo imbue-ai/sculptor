@@ -109,10 +109,6 @@ import { AskUserQuestion } from "~/pages/workspace/components/AskUserQuestion";
 
 import styles from "./ComponentGalleryPage.module.scss";
 
-// ---------------------------------------------------------------------------
-// Mock data
-// ---------------------------------------------------------------------------
-
 const MOCK_BRANCHES = [
   { branch: "main", badges: [] },
   { branch: "feature/auth-flow", badges: [] },
@@ -212,10 +208,6 @@ const MOCK_MULTI_QUESTION_DATA: AskUserQuestionData = {
   toolUseId: "gallery-tool-2",
 };
 
-// ---------------------------------------------------------------------------
-// Navigation sections
-// ---------------------------------------------------------------------------
-
 const SECTIONS = [
   { id: "radix-primitives", label: "Radix Primitives" },
   { id: "status-indicators", label: "Status & Indicators" },
@@ -225,10 +217,6 @@ const SECTIONS = [
   { id: "dialogs-modals", label: "Dialogs & Modals" },
   { id: "cards-banners", label: "Cards & Banners" },
 ] as const;
-
-// ---------------------------------------------------------------------------
-// Section component
-// ---------------------------------------------------------------------------
 
 const Section = ({ id, title, children }: { id: string; title: string; children: ReactNode }): ReactElement => (
   <section id={id} className={styles.section}>
@@ -256,10 +244,6 @@ const ComponentBlock = ({
     </div>
   </div>
 );
-
-// ---------------------------------------------------------------------------
-// Interactive demos
-// ---------------------------------------------------------------------------
 
 const TabBarDemo = (): ReactElement => {
   const [openTabIds, setOpenTabIds] = useState<Array<string>>(["tab-1", "tab-2", "tab-3"]);
@@ -516,10 +500,6 @@ const ActionDialogDemo = (): ReactElement => {
   );
 };
 
-// ---------------------------------------------------------------------------
-// Error boundary for isolating component failures
-// ---------------------------------------------------------------------------
-
 type ErrorBoundaryState = {
   error: Error | null;
 };
@@ -555,11 +535,7 @@ class ComponentErrorBoundary extends Component<{ children: ReactNode; name: stri
   }
 }
 
-// ---------------------------------------------------------------------------
-// Theme settings for the gallery page (differs from app-wide ThemeBuilderSettings
-// by restricting appearance to "light" | "dark" without "system")
-// ---------------------------------------------------------------------------
-
+// Differs from app-wide ThemeBuilderSettings by restricting appearance to "light" | "dark" without "system".
 type ThemeSettings = {
   accentColor: AccentColor;
   appearance: "light" | "dark";
@@ -576,10 +552,6 @@ type ThemeSettings = {
   successColor: AccentColor;
   warningColor: AccentColor;
 };
-
-// ---------------------------------------------------------------------------
-// Theme controls toolbar
-// ---------------------------------------------------------------------------
 
 const ThemeControlSelect = <T extends string>({
   label,
@@ -727,10 +699,6 @@ const ThemeControls = ({
   </div>
 );
 
-// ---------------------------------------------------------------------------
-// Main gallery page
-// ---------------------------------------------------------------------------
-
 const GalleryContent = ({
   settings,
   onSettingsChange,
@@ -810,9 +778,6 @@ const GalleryContent = ({
                 </p>
               </header>
 
-              {/* ============================================================
-                SECTION: Radix Primitives
-                ============================================================ */}
               <Section id="radix-primitives" title="Radix Primitives">
                 <ComponentBlock
                   name="Button"
@@ -1395,9 +1360,6 @@ const GalleryContent = ({
                 </ComponentBlock>
               </Section>
 
-              {/* ============================================================
-                SECTION: Status & Indicators
-                ============================================================ */}
               <Section id="status-indicators" title="Status & Indicators">
                 <ComponentBlock
                   name="PulsingCircle"
@@ -1442,9 +1404,6 @@ const GalleryContent = ({
                 </ComponentBlock>
               </Section>
 
-              {/* ============================================================
-                SECTION: Inputs & Editing
-                ============================================================ */}
               <Section id="inputs-editing" title="Inputs & Editing">
                 <ComponentBlock
                   name="InlineRenameInput"
@@ -1487,9 +1446,6 @@ const GalleryContent = ({
                 </ComponentBlock>
               </Section>
 
-              {/* ============================================================
-                SECTION: Navigation & Selection
-                ============================================================ */}
               <Section id="navigation-selection" title="Navigation & Selection">
                 <ComponentBlock
                   name="TabBar (default)"
@@ -1534,9 +1490,6 @@ const GalleryContent = ({
                 </ComponentBlock>
               </Section>
 
-              {/* ============================================================
-                SECTION: Content Display
-                ============================================================ */}
               <Section id="content-display" title="Content Display">
                 <ComponentBlock
                   name="MarkdownBlock"
@@ -1576,9 +1529,6 @@ const GalleryContent = ({
                 </ComponentBlock>
               </Section>
 
-              {/* ============================================================
-                SECTION: Dialogs & Modals
-                ============================================================ */}
               <Section id="dialogs-modals" title="Dialogs & Modals">
                 <ComponentBlock
                   name="DeleteConfirmationDialog"
@@ -1602,9 +1552,6 @@ const GalleryContent = ({
                 </ComponentBlock>
               </Section>
 
-              {/* ============================================================
-                SECTION: Cards & Banners
-                ============================================================ */}
               <Section id="cards-banners" title="Cards & Banners">
                 <ComponentBlock
                   name="WarningStatusBanner"

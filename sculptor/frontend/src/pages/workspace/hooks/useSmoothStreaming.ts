@@ -108,8 +108,6 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
   const lastBatchArrivalTimeRef = useRef<number>(0);
   const [renderedMessage, setRenderedMessage] = useState<ChatMessage | null>(chatMessage ?? null);
 
-  // ── Engine lifecycle ──────────────────────────────────────────────
-
   const ensureEngine = useCallback((): StreamingEngine => {
     if (!engineRef.current) {
       engineRef.current = new StreamingEngine();
@@ -117,8 +115,6 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
     }
     return engineRef.current;
   }, []);
-
-  // ── Animation loop ────────────────────────────────────────────────
 
   const stopAnimationLoop = useCallback((): void => {
     if (rafIdRef.current !== null) {
@@ -197,8 +193,6 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
     };
   }, [ensureEngine, stopAnimationLoop]);
 
-  // ── Snapshot handling ─────────────────────────────────────────────
-
   const handleSnapshot = useCallback(
     (engine: StreamingEngine, snapshot: ChatMessage): void => {
       const isNewMessage = activeMessageIdRef.current !== snapshot.id;
@@ -225,7 +219,6 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
         return;
       }
 
-      // ── Smooth streaming path ───────────────────────────────────
       const prevBufferSize = engine.getBufferSize();
       engine.updateLatestSnapshot(snapshot);
       const newBufferSize = engine.getBufferSize();

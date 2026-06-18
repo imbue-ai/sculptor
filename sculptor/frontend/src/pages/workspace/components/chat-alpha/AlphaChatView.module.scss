@@ -258,7 +258,6 @@
   @include thin-scrollbar(both);
 }
 
-// Error styling on tool results
 .toolResultError {
   background-color: var(--red-2);
   border-left-color: var(--red-9);
@@ -277,7 +276,6 @@
   padding: var(--space-1) 0;
 }
 
-// Error block
 .errorBlock {
   border-left: 3px solid var(--red-9);
   padding-left: var(--space-2);
@@ -307,7 +305,6 @@
   word-break: break-word;
 }
 
-// Warning block
 .warningBlock {
   border-left: 3px solid var(--orange-9);
   padding-left: var(--space-2);
@@ -324,7 +321,6 @@
   word-break: break-word;
 }
 
-// Resume response indicator
 .resumeIndicator {
   color: var(--gray-9);
   font-size: var(--font-size-2);
@@ -344,7 +340,6 @@
   padding-left: var(--space-3);
 }
 
-// Tool group header
 .toolGroupHeader {
   align-items: baseline;
   cursor: pointer;
@@ -362,7 +357,6 @@
   opacity: 80%;
 }
 
-// Skill pill
 .skillPill {
   color: var(--accent-12);
   font-family: var(--code-font-family);

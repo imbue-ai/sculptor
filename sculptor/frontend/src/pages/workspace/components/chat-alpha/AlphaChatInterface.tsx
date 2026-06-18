@@ -421,8 +421,6 @@ export const AlphaChatInterface = ({
 
   // Expose the jump-to-bottom callback to the command palette so Cmd+K →
   // Jump to bottom invokes it directly instead of synthesizing a key event.
-  // Jump-to-top is gone after the upstream removal of `scrollToTop` /
-  // `jump_to_top` keybinding; the palette no longer surfaces that command.
   const handleJumpToBottom = useCallback((): void => {
     exitNavigation();
     scrollToBottom();

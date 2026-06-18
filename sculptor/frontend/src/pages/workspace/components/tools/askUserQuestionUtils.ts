@@ -8,8 +8,7 @@
  *
  * This is a heuristic — ideally answers would store structured selections
  * rather than a flat string. But this handles option labels that contain
- * ", " (e.g. "Yes, proceed") which the previous split-then-match approach
- * could not.
+ * ", " (e.g. "Yes, proceed").
  */
 export const splitAnswerIntoParts = (
   answerText: string,

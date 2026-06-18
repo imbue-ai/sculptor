@@ -115,7 +115,6 @@ export const PrDetailDropdown = ({ prStatus, gitProvider }: PrDetailDropdownProp
 
   return (
     <div className={styles.dropdown} data-testid={ElementIds.PR_DROPDOWN}>
-      {/* Header */}
       <Flex align="center" gap="2" mb="3">
         {prStatus.prWebUrl ? (
           <Link size="2" weight="medium" href={prStatus.prWebUrl} target="_blank" style={{ flex: 1 }} truncate>
@@ -131,7 +130,6 @@ export const PrDetailDropdown = ({ prStatus, gitProvider }: PrDetailDropdownProp
 
       <Separator size="4" mb="3" />
 
-      {/* Pipeline/Checks section */}
       <Flex direction="column" gap="1" mb="3">
         <Text className={styles.sectionTitle}>{ciLabel}</Text>
         {prStatus.pipelineStatus ? (
@@ -164,7 +162,6 @@ export const PrDetailDropdown = ({ prStatus, gitProvider }: PrDetailDropdownProp
         <>
           <Separator size="4" mb="3" />
 
-          {/* CI Babysitter section (experimental) */}
           <Flex direction="column" gap="1" mb="3">
             <Flex align="center" justify="between">
               <Text className={styles.sectionTitle}>CI Babysitter</Text>
@@ -184,7 +181,6 @@ export const PrDetailDropdown = ({ prStatus, gitProvider }: PrDetailDropdownProp
 
       <Separator size="4" mb="3" />
 
-      {/* Approvals section */}
       <Flex direction="column" gap="1" mb="3">
         <Text className={styles.sectionTitle}>
           {reviewLabel} {totalApprovals > 0 && `(${approvedCount}/${totalApprovals})`}
@@ -212,7 +208,6 @@ export const PrDetailDropdown = ({ prStatus, gitProvider }: PrDetailDropdownProp
 
       <Separator size="4" mb="3" />
 
-      {/* Unresolved comments section */}
       <Flex direction="column" gap="1">
         <Text className={styles.sectionTitle}>Unresolved comments {commentCount > 0 && `(${commentCount})`}</Text>
         {commentCount > 0 ? (

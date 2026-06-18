@@ -180,8 +180,6 @@ export const AlphaToolPillRow = ({
     [focusedIndex, pillDataList.length, isPopoverOpen, isExpanded, handleNavigate, setOpenPillId],
   );
 
-  // ─── Popover anchor (virtual) ───────────────────────────────────────────────
-  //
   // Density flips swap the row layout from a single horizontal pill row to a
   // stack of full-width rows. Wiring the popover anchor as a DOM wrapper —
   // PopoverAnchor in default, conditional PopoverAnchor on the active row in

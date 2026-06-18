@@ -97,7 +97,6 @@ type SetActiveDiffPayload = SetActiveSingleDiff | SetActiveCombinedDiff | SetAct
 
 /**
  * Build a DiffTab and its identity key from a discriminated union payload.
- * All three tab types share the same "find-or-create, then activate" logic.
  */
 const buildTabFromPayload = (payload: SetActiveDiffPayload, now: number): { tab: DiffTab; tabPath: string } => {
   switch (payload.kind) {
@@ -152,8 +151,6 @@ const buildTabFromPayload = (payload: SetActiveDiffPayload, now: number): { tab:
 
 /**
  * Unified atom that activates (or opens) a diff tab of any kind.
- * Replaces the previous `openDiffTabAtom`, `openCombinedDiffTabAtom`, and
- * `openFileViewTabAtom` — which were ~90% identical.
  */
 export const setActiveDiffTabAtom = atom(null, (get, set, payload: SetActiveDiffPayload) => {
   const stateAtom = diffPanelStateAtomFamily(payload.workspaceId);

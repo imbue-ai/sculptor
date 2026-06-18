@@ -16,8 +16,6 @@ import { PopoverHeader } from "./PopoverHeader.tsx";
 import type { PillData } from "./toolPill.types.ts";
 import { makeRelative } from "./toolPillUtils.ts";
 
-// ─── Per-tool structured renderers ──────────────────────────────────────────
-
 export type ToolEntryShellArgs = {
   title: ReactNode;
   meta?: ReactNode;
@@ -297,8 +295,6 @@ export const ToolEntryContent = ({
       return <DefaultEntry {...props} />;
   }
 };
-
-// ─── Main popover component ───────────────────────────────────────────────────
 
 type AlphaToolPopoverProps = {
   pillData: PillData;

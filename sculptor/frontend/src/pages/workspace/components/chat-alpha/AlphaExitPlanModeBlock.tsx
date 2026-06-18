@@ -73,9 +73,8 @@ export const AlphaExitPlanModeBlock = ({ toolBlock }: { toolBlock: ToolUseBlock 
   }
 
   if (matchingAnswers) {
-    // Look the answer up by the question's OWN stored text (it varies by harness
-    // and has changed over time) rather than a hardcoded string, so historical
-    // plan turns resolve too.
+    // Look the answer up by the question's OWN stored text (it varies by harness)
+    // rather than a hardcoded string, so historical plan turns resolve too.
     const planQuestion = matchingAnswers.questionData.questions[0]?.question ?? "";
     const answerValue = matchingAnswers.answers[planQuestion] ?? "";
     const isDismissed = answerValue === DISMISSED_ANSWER;

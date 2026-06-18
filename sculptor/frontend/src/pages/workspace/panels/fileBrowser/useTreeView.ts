@@ -4,10 +4,6 @@ import type { TreeNode } from "./types.ts";
 import type { FlatRowEntry } from "./utils.ts";
 import { collectAllFolderPaths, collectDescendantFolderPaths, getAncestorPaths } from "./utils.ts";
 
-// ---------------------------------------------------------------------------
-// useAgentFileTracking — auto-expand/scroll when agent operates on a file
-// ---------------------------------------------------------------------------
-
 type UseAgentFileTrackingParams = {
   activeFilePath: string | undefined;
   workspaceId: string;
@@ -35,10 +31,6 @@ export const useAgentFileTracking = ({
     prevActivePathRef.current = activePath;
   }, [activeFilePath, expandFolders, workspaceId]);
 };
-
-// ---------------------------------------------------------------------------
-// useSearchAutoExpand — save/restore folder expand state during search
-// ---------------------------------------------------------------------------
 
 type UseSearchAutoExpandParams = {
   isSearchActive: boolean;
@@ -95,10 +87,6 @@ export const useSearchAutoExpand = ({
   }, [isSearchActive, tree, expandFolders, workspaceId, setExpandedFolders]);
 };
 
-// ---------------------------------------------------------------------------
-// useTreeNodeMap — lookup from path → TreeNode for context menus
-// ---------------------------------------------------------------------------
-
 /**
  * Build a lookup map from file path to TreeNode, useful for quickly
  * retrieving descendant folder paths in context menus.
@@ -116,10 +104,6 @@ export const useTreeNodeMap = (tree: Array<TreeNode>): Map<string, TreeNode> => 
     return map;
   }, [tree]);
 };
-
-// ---------------------------------------------------------------------------
-// useCollapseChildren — collapse a folder and all its descendants
-// ---------------------------------------------------------------------------
 
 /**
  * Returns a callback that collapses a folder and all its descendant folders.

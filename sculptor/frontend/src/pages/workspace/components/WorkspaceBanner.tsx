@@ -157,7 +157,6 @@ export const WorkspaceBanner = (): ReactElement | null => {
 
   return (
     <div ref={containerRef} className={styles.banner} data-testid={ElementIds.WORKSPACE_BANNER}>
-      {/* Repo segment */}
       {!hiddenPriorities.has(2) &&
         (repoPath ? (
           <div data-collapse-priority="2">
@@ -173,10 +172,8 @@ export const WorkspaceBanner = (): ReactElement | null => {
           <Skeleton width="120px" height="16px" />
         ))}
 
-      {/* Chevron separator */}
       <span className={styles.chevronSeparator}>&rsaquo;</span>
 
-      {/* Branch name */}
       {branchName ? (
         <Tooltip
           content={isCopied ? "Copied!" : "Workspace branch — click to copy"}
@@ -192,7 +189,6 @@ export const WorkspaceBanner = (): ReactElement | null => {
         <Skeleton width="160px" height="16px" />
       )}
 
-      {/* Arrow + target branch */}
       {shouldShowTargetBranch && (
         <>
           <span className={styles.arrowSeparator}>&rarr;</span>
@@ -219,7 +215,6 @@ export const WorkspaceBanner = (): ReactElement | null => {
         </>
       )}
 
-      {/* "from" + source branch (non-GitLab repos) */}
       {!shouldShowTargetBranch && workspace.sourceBranch && (
         <>
           <Text size="1" className={styles.fromLabel}>
@@ -231,17 +226,14 @@ export const WorkspaceBanner = (): ReactElement | null => {
         </>
       )}
 
-      {/* Spacer */}
       <div className={styles.spacer} data-spacer />
 
-      {/* Diff summary */}
       {!hiddenPriorities.has(1) && (
         <div data-collapse-priority="1">
           <DiffSummary workspaceId={workspaceID} />
         </div>
       )}
 
-      {/* PR button */}
       {!hiddenPriorities.has(4) && shouldShowTargetBranch && (
         <div data-collapse-priority="4">
           <PrButton

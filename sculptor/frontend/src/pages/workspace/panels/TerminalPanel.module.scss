@@ -64,7 +64,6 @@
   padding: var(--space-2) var(--space-3) 0;
 
   /* stylelint-disable selector-class-pattern -- xterm library class names */
-  // Make xterm fill the container
   :global(.xterm) {
     height: 100%;
     width: 100%;
