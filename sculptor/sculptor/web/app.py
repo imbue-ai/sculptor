@@ -237,7 +237,6 @@ from sculptor.web.derived import CodingAgentTaskView
 from sculptor.web.derived import TaskInterface
 from sculptor.web.derived import TaskViewTypes
 from sculptor.web.derived import create_initial_task_view
-from sculptor.web.derived import scan_terminal_signal_state
 from sculptor.web.message_conversion import convert_agent_messages_to_task_update
 from sculptor.web.middleware import App
 from sculptor.web.middleware import DecoratedAPIRouter
@@ -258,6 +257,8 @@ from sculptor.web.streams import Scope
 from sculptor.web.streams import ServerStopped
 from sculptor.web.streams import StreamingUpdate
 from sculptor.web.streams import stream_everything
+from sculptor.web.terminal_input import TerminalDeliveryResult
+from sculptor.web.terminal_input import deliver_prompt_to_terminal_agent
 from sculptor.web.ui_actions import next_webview_seq
 from sculptor.web.ui_actions import publish_ui_action
 from sculptor.web.upload_diagnostics import upload_diagnostics as perform_upload_diagnostics
@@ -1884,6 +1885,8 @@ class CIBabysitterWorkspaceStateResponse(SerializableModel):
     retry_cap: int
     retired: bool
     at_cap: bool
+    disabled_reason: str | None = None
+    disabled_reason_is_transient: bool = False
 
 
 class CIBabysitterPauseRequest(SerializableModel):
@@ -1903,6 +1906,8 @@ def _build_ci_babysitter_state_response(
             retry_cap=config.ci_babysitter.retry_cap,
             retired=False,
             at_cap=False,
+            disabled_reason=None,
+            disabled_reason_is_transient=False,
         )
     return CIBabysitterWorkspaceStateResponse(
         workspace_id=workspace_id,
@@ -1911,6 +1916,8 @@ def _build_ci_babysitter_state_response(
         retry_cap=config.ci_babysitter.retry_cap,
         retired=snapshot.retired,
         at_cap=snapshot.at_cap,
+        disabled_reason=snapshot.disabled_reason,
+        disabled_reason_is_transient=snapshot.disabled_reason_is_transient,
     )
 
 
@@ -3407,13 +3414,6 @@ def post_agent_signal(
     return Response(status_code=204)
 
 
-# Bracketed-paste markers: TUIs that support them (Claude Code's included)
-# treat the wrapped block as one paste and do not auto-submit on embedded
-# newlines, so the program — not us — controls submission.
-_BRACKETED_PASTE_START = b"\x1b[200~"
-_BRACKETED_PASTE_END = b"\x1b[201~"
-
-
 @router.post("/api/v1/agents/{agent_id}/terminal/input", status_code=204)
 def post_agent_terminal_input(
     agent_id: str,
@@ -3439,42 +3439,23 @@ def post_agent_terminal_input(
         # 404 for chat agents too — don't leak the task type.
         raise HTTPException(status_code=404, detail=f"Terminal agent {agent_id} not found")
 
-    # Guard 1: only registrations that opted in. Plain terminals and
-    # non-opt-in registrations NEVER receive writes — a bare shell would
-    # execute the prompt as commands.
-    agent_config = input_data.agent_config
-    if not isinstance(agent_config, RegisteredTerminalAgentConfig) or not agent_config.accepts_automated_prompts:
-        raise HTTPException(status_code=409, detail="this agent does not accept automated prompts")
-
-    # Guard 2: the program must be at its prompt — the latest signal of the
-    # CURRENT run must be IDLE or WAITING (answering a question is a primary
-    # use case). "Run started but no signals yet" is NOT enough: a registered
-    # agent whose hooks are broken degrades to plain-terminal behavior,
-    # and we must not write into an unknown state. The check is
-    # inherently racy (the program may go busy between check and write) —
-    # acceptable: it prevents the systematic misuse, not a TOCTOU-proof lock.
-    run_started, latest_signal = scan_terminal_signal_state(
-        services.task_service.get_live_messages_for_task(task.object_id)
+    # All three security guards and the bracketed-paste write live in the
+    # shared helper so this endpoint and the CI Babysitter stay identically
+    # gated. Map each non-DELIVERED result to the status/detail the endpoint
+    # has always returned — the integration test and the frontend's
+    # enable/disable logic depend on these exact 409s.
+    result = deliver_prompt_to_terminal_agent(
+        task,
+        input_request.text,
+        submit=input_request.submit,
+        task_service=services.task_service,
     )
-    if not run_started or latest_signal not in (TerminalStatusSignal.IDLE, TerminalStatusSignal.WAITING):
+    if result is TerminalDeliveryResult.NOT_OPT_IN:
+        raise HTTPException(status_code=409, detail="this agent does not accept automated prompts")
+    if result is TerminalDeliveryResult.NOT_AT_PROMPT:
         raise HTTPException(status_code=409, detail="agent is busy or not at its prompt")
-
-    # Guard 3: a live PTY to write into.
-    terminal_manager = get_terminal_manager(make_agent_terminal_id(task.object_id))
-    if terminal_manager is None:
+    if result is TerminalDeliveryResult.NO_PTY:
         raise HTTPException(status_code=409, detail="terminal not running")
-
-    text = input_request.text
-    if "\n" in text:
-        # One write for the paste block, one for the submit — mirrors how a
-        # human pastes then hits Enter.
-        terminal_manager.write(_BRACKETED_PASTE_START + text.encode() + _BRACKETED_PASTE_END)
-        if input_request.submit:
-            terminal_manager.write(b"\r")
-    else:
-        terminal_manager.write(text.encode() + (b"\r" if input_request.submit else b""))
-    # Log the event, never the text — prompts can embed user content.
-    logger.info("Wrote automated prompt ({} chars) to terminal agent {}", len(text), task.object_id)
     return Response(status_code=204)
 
 

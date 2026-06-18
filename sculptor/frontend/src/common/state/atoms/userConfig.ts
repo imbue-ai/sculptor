@@ -135,6 +135,12 @@ export const ciBabysitterMergeConflictPromptAtom = atom<string>(
   (get) => get(ciBabysitterConfigAtom)?.mergeConflictPrompt ?? DEFAULT_CI_BABYSITTER_MERGE_CONFLICT_PROMPT,
 );
 
+// Which agent the babysitter drives: the discriminated union from the backend
+// (MRU | Claude | Pi | Registered{registrationId}); null until config loads.
+export const ciBabysitterAgentAtom = atom<NonNullable<CiBabysitterConfig["agent"]> | null>(
+  (get) => get(ciBabysitterConfigAtom)?.agent ?? null,
+);
+
 // File browser settings
 export const fileBrowserSplitRatioAtom = atom<number>((get) => get(userConfigAtom)?.fileBrowserDefaultSplitRatio ?? 50);
 
