@@ -22,7 +22,6 @@ class TestHardDeleteTasksMissingWorkspaceId(MigrationTestFixture):
         return "593675cc4b70"
 
     def seed(self, connection: sa.engine.Connection) -> None:
-        # Insert a project
         connection.execute(
             sa.text("""
                 INSERT INTO project (

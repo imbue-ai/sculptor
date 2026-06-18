@@ -96,11 +96,6 @@ def _captured_query(cmd: list[str]) -> str:
     raise AssertionError(f"no query= argument found in command: {cmd}")
 
 
-# ---------------------------------------------------------------------------
-# Open PR with matching target → normal open status
-# ---------------------------------------------------------------------------
-
-
 def test_open_pr_matching_target() -> None:
     with _patch_cli(_graphql_handler([_open_node(100, base_ref="main")])):
         result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
@@ -108,11 +103,6 @@ def test_open_pr_matching_target() -> None:
     assert result.pr_state == "open"
     assert result.pr_iid == 100
     assert result.mismatched_pr_iid is None
-
-
-# ---------------------------------------------------------------------------
-# Open PR with mismatched target → pr_state=none + mismatch fields
-# ---------------------------------------------------------------------------
 
 
 def test_open_pr_mismatched_target() -> None:
@@ -125,22 +115,12 @@ def test_open_pr_mismatched_target() -> None:
     assert result.mismatched_pr_web_url == "https://github.com/org/repo/pull/200"
 
 
-# ---------------------------------------------------------------------------
-# No PRs at all → pr_state=none, no mismatch
-# ---------------------------------------------------------------------------
-
-
 def test_no_prs_at_all() -> None:
     with _patch_cli(_graphql_handler([])):
         result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
 
     assert result.pr_state == "none"
     assert result.mismatched_pr_iid is None
-
-
-# ---------------------------------------------------------------------------
-# Merged PR with matching target → pr_state=merged
-# ---------------------------------------------------------------------------
 
 
 def test_merged_pr_matching_target() -> None:
@@ -150,11 +130,6 @@ def test_merged_pr_matching_target() -> None:
     assert result.pr_state == "merged"
     assert result.pr_iid == 300
     assert result.mismatched_pr_iid is None
-
-
-# ---------------------------------------------------------------------------
-# Multiple open PRs, one matches target → normal open status
-# ---------------------------------------------------------------------------
 
 
 def test_multiple_open_prs_one_matches() -> None:
@@ -171,11 +146,6 @@ def test_multiple_open_prs_one_matches() -> None:
     assert result.mismatched_pr_iid is None
 
 
-# ---------------------------------------------------------------------------
-# Multiple open PRs, none match target → mismatch with first
-# ---------------------------------------------------------------------------
-
-
 def test_multiple_open_prs_none_match() -> None:
     nodes = [
         _open_node(500, base_ref="develop"),
@@ -190,11 +160,6 @@ def test_multiple_open_prs_none_match() -> None:
     assert result.mismatched_pr_target_branch == "develop"
 
 
-# ---------------------------------------------------------------------------
-# Closed-not-merged PR with matching target → pr_state=closed
-# ---------------------------------------------------------------------------
-
-
 def test_closed_pr_matching_target() -> None:
     with _patch_cli(_graphql_handler([_closed_node(800, base_ref="main")])):
         result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
@@ -203,11 +168,6 @@ def test_closed_pr_matching_target() -> None:
     assert result.pr_iid == 800
     assert result.pr_title == "PR #800"
     assert result.pr_web_url == "https://github.com/org/repo/pull/800"
-
-
-# ---------------------------------------------------------------------------
-# Both a merged and a closed PR target this branch → merged wins
-# ---------------------------------------------------------------------------
 
 
 def test_merged_takes_precedence_over_closed() -> None:
@@ -223,11 +183,6 @@ def test_merged_takes_precedence_over_closed() -> None:
 
     assert result.pr_state == "merged"
     assert result.pr_iid == 820
-
-
-# ---------------------------------------------------------------------------
-# Open PR detail (checks, reviews, comments) comes from the single graphql call
-# ---------------------------------------------------------------------------
 
 
 def test_open_pr_details_fetched_in_single_graphql_call() -> None:
@@ -364,11 +319,6 @@ def test_unknown_field_usage_error_not_classified_as_not_authenticated() -> None
 
     assert result.error_category != "not_authenticated"
     assert result.error_category == "transient"
-
-
-# ---------------------------------------------------------------------------
-# Rate-limit errors surface as a rate_limited category
-# ---------------------------------------------------------------------------
 
 
 def test_rate_limit_surfaces_error() -> None:

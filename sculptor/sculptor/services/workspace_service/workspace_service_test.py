@@ -157,7 +157,6 @@ def test_delete_workspace(
     test_project: Project,
 ) -> None:
     """Test deleting a workspace."""
-    # Create workspace
     with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
         workspace = test_service_collection.workspace_service.create_workspace(
             project=test_project,
@@ -174,7 +173,6 @@ def test_delete_workspace(
         existing_workspace = transaction.get_workspace(workspace_id)
         assert existing_workspace is not None
 
-    # Delete workspace
     with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
         test_service_collection.workspace_service.delete_workspace(workspace_id, transaction)
 
@@ -204,7 +202,6 @@ def test_workspace_lookup_via_transaction(
     This verifies the design that workspace lookups should use the transaction
     directly, not WorkspaceService methods.
     """
-    # Create workspace
     with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
         workspace = test_service_collection.workspace_service.create_workspace(
             project=test_project,
@@ -234,7 +231,6 @@ def test_workspace_list_via_transaction(
     This verifies the design that workspace lookups should use the transaction
     directly, not WorkspaceService methods.
     """
-    # Create two workspaces
     with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
         workspace1 = test_service_collection.workspace_service.create_workspace(
             project=test_project,
@@ -341,7 +337,6 @@ def test_refresh_workspace_diff_creates_diff_artifact(
         )
         workspace_id = workspace.object_id
 
-    # Refresh diff (no longer takes transaction, returns None)
     test_service_collection.workspace_service.refresh_workspace_diff(workspace_id)
 
     # Verify workspace has diff_status=READY and diff_updated_at set
@@ -402,7 +397,6 @@ def test_maybe_refresh_workspace_diff_always_refreshes(
         )
         workspace_id = workspace.object_id
 
-    # Maybe refresh (no longer takes transaction, returns None)
     test_service_collection.workspace_service.maybe_refresh_workspace_diff(workspace_id)
 
     # Verify workspace has diff_status=READY and diff_updated_at set
@@ -549,7 +543,6 @@ def test_delete_workspace_removes_environment_directory(
     rmtree.  This test verifies the full lifecycle: create workspace -> create
     environment -> delete workspace -> directory eventually gone.
     """
-    # Create workspace
     with test_service_collection.data_model_service.open_transaction(request_id=RequestID()) as transaction:
         workspace = test_service_collection.workspace_service.create_workspace(
             project=test_project,

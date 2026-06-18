@@ -112,9 +112,6 @@ def test_get_session_token_returns_204_and_sets_cookie_even_when_header_not_set(
     assert "test_token" in response.headers["set-cookie"]
 
 
-# The remaining tests go below.
-
-
 def _create_workspace(
     transaction: DataModelTransaction,
     services: CompleteServiceCollection,
@@ -672,11 +669,6 @@ def test_get_artifact_data_returns_422_if_agent_id_is_not_valid(
     assert response.status_code == 404
 
 
-# =====================
-# Workspace auto-deletion and orphaned task protection tests
-# =====================
-
-
 def test_delete_agent_does_not_delete_workspace_when_other_agents_exist(
     client: TestClient, test_services: CompleteServiceCollection, test_project: Project
 ) -> None:
@@ -687,17 +679,14 @@ def test_delete_agent_does_not_delete_workspace_when_other_agents_exist(
         task_1 = _create_task_in_workspace(transaction, user_session, test_project, test_services, workspace)
         task_2 = _create_task_in_workspace(transaction, user_session, test_project, test_services, workspace)
 
-    # Delete task_1
     response = client.delete(f"/api/v1/workspaces/{workspace.object_id}/agents/{task_1.object_id}")
     assert response.status_code in (200, 204)
 
-    # Verify workspace still exists
     with user_session.open_transaction(test_services) as transaction:
         remaining_workspace = transaction.get_workspace(workspace.object_id)
         assert remaining_workspace is not None, "Workspace should still exist when another task uses it"
         assert not remaining_workspace.is_deleted
 
-    # Verify task_2 still exists
     with user_session.open_transaction(test_services) as transaction:
         remaining_task = test_services.task_service.get_task(task_2.object_id, transaction)
         assert remaining_task is not None
@@ -713,11 +702,10 @@ def test_delete_last_agent_preserves_workspace(
         workspace = _create_workspace(transaction, test_services, test_project, description="solo workspace")
         task = _create_task_in_workspace(transaction, user_session, test_project, test_services, workspace)
 
-    # Delete the only agent
     response = client.delete(f"/api/v1/workspaces/{workspace.object_id}/agents/{task.object_id}")
     assert response.status_code in (200, 204)
 
-    # Verify workspace still exists (agents are managed independently from workspaces)
+    # Workspace survives because agents are managed independently from workspaces.
     with user_session.open_transaction(test_services) as transaction:
         remaining_workspace = transaction.get_workspace(workspace.object_id)
         assert remaining_workspace is not None, "Workspace should survive when its last agent is deleted"
@@ -733,7 +721,6 @@ def test_restore_agent_fails_when_workspace_deleted(
         workspace = _create_workspace(transaction, test_services, test_project, description="restore test workspace")
         task = _create_task_in_workspace(transaction, user_session, test_project, test_services, workspace)
 
-    # Set task to FAILED state
     with user_session.open_transaction(test_services) as transaction:
         fetched_task = test_services.task_service.get_task(task.object_id, transaction)
         assert fetched_task is not None
@@ -741,20 +728,14 @@ def test_restore_agent_fails_when_workspace_deleted(
         # pyrefly: ignore [missing-attribute]
         transaction.upsert_task(updated_task)
 
-    # Delete the workspace directly
     with user_session.open_transaction(test_services) as transaction:
         test_services.workspace_service.delete_workspace(workspace.object_id, transaction)
 
-    # Attempt to restore — should fail with 404 because workspace is gone
+    # Restore should fail with 404 because the workspace is gone.
     response = client.post(
         f"/api/v1/workspaces/{workspace.object_id}/agents/{task.object_id}/restore",
     )
     assert response.status_code == 404
-
-
-# =====================
-# Mark read / unread tests
-# =====================
 
 
 def test_mark_read_sets_last_read_at(
@@ -796,13 +777,11 @@ def test_mark_unread_clears_last_read_at(
         workspace = _create_workspace(transaction, test_services, test_project)
         task = _create_task_in_workspace(transaction, user_session, test_project, test_services, workspace)
 
-    # First mark as read
     response = client.patch(
         f"/api/v1/workspaces/{workspace.object_id}/agents/{task.object_id}/mark-read",
     )
     assert response.status_code == 200
 
-    # Then mark as unread
     response = client.patch(
         f"/api/v1/workspaces/{workspace.object_id}/agents/{task.object_id}/mark-unread",
     )
@@ -826,9 +805,6 @@ def test_mark_unread_returns_404_if_agent_does_not_exist(
     assert response.status_code == 404
 
 
-# --- Auto-send intro help message tests ---
-
-
 def test_create_agent_sends_intro_message_for_first_agent(
     client: TestClient, test_services: CompleteServiceCollection, test_project: Project
 ) -> None:
@@ -845,7 +821,6 @@ def test_create_agent_sends_intro_message_for_first_agent(
     assert response.status_code == 200
     agent_id = response.json()["id"]
 
-    # Verify the intro message was persisted in the DB
     with user_session.open_transaction(test_services) as transaction:
         saved_messages = test_services.task_service.get_saved_messages_for_task(TaskID(agent_id), transaction)
     assert len(saved_messages) == 1
@@ -860,12 +835,10 @@ def test_create_agent_does_not_send_intro_message_when_agents_exist(
     """Users with existing agents should not get an auto-sent intro message."""
     user_session = authenticate_anonymous(test_services, RequestID())
 
-    # Create a workspace with an existing agent
     with user_session.open_transaction(test_services) as transaction:
         workspace = _create_workspace(transaction, test_services, test_project)
         _create_task_in_workspace(transaction, user_session, test_project, test_services, workspace)
 
-    # Create a second agent in the same workspace
     response = client.post(
         f"/api/v1/workspaces/{workspace.object_id}/agents",
         json=model_dump(CreateAgentRequest(model=LLMModel.CLAUDE_4_SONNET), is_camel_case=True),
@@ -873,7 +846,6 @@ def test_create_agent_does_not_send_intro_message_when_agents_exist(
     assert response.status_code == 200
     agent_id = response.json()["id"]
 
-    # No intro message should be in the DB for the new agent
     with user_session.open_transaction(test_services) as transaction:
         saved_messages = test_services.task_service.get_saved_messages_for_task(TaskID(agent_id), transaction)
     assert len(saved_messages) == 0

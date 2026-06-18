@@ -15,7 +15,6 @@ OutputCaputurerOutT = TypeVar("OutputCaputurerOutT", bound=tuple[str, bool] | in
 OutputCapturer = Callable[[], tuple[Callable[[str, bool], None], list[OutputCaputurerOutT]]]
 
 
-# Pytest fixtures for callback creation
 @pytest.fixture
 def output_capturer() -> OutputCapturer:
     """Fixture that returns a function to create output capture callbacks."""
@@ -70,7 +69,6 @@ def failing_callback() -> OutputCapturer:
     return _create_callback
 
 
-# Test functions for run_streaming
 def test_run_streaming_simple_output(output_capturer: OutputCapturer) -> None:
     """Test streaming a simple echo command."""
     on_output, captured_output = output_capturer()
@@ -107,7 +105,6 @@ def test_run_streaming_mixed_stdout_stderr(output_capturer: OutputCapturer) -> N
     assert result.returncode == 0
     assert len(captured_output) == 2
 
-    # Find stdout and stderr lines
     stdout_lines = [line for line, is_stdout in captured_output if is_stdout]
     stderr_lines = [line for line, is_stdout in captured_output if not is_stdout]
 
@@ -128,9 +125,7 @@ def test_run_streaming_no_trailing_newline(output_capturer: OutputCapturer) -> N
     result = run_streaming(["echo", "-n", "no newline"], on_output)
 
     assert result.returncode == 0
-    # No callback should be triggered since there's no complete line
     assert len(captured_output) == 1
-    # But the output should still be in the result
     assert result.stdout == "no newline"
 
 
@@ -152,13 +147,11 @@ def test_run_streaming_real_time_output(timestamp_capturer: TimestampCapturer) -
     start_time = time.time()
     on_output, captured_output = timestamp_capturer(start_time)
 
-    # Command that outputs lines with delays
     result = run_streaming(["sh", "-c", "echo 'immediate'; sleep 0.5; echo 'delayed'"], on_output)
 
     assert result.returncode == 0
     assert len(captured_output) == 2
 
-    # First line should come immediately
     assert captured_output[0][1] < 0.1
     # Second line should come after ~0.5 seconds
     assert captured_output[1][1] > 0.4
@@ -168,7 +161,6 @@ def test_run_streaming_callback_order(output_capturer: OutputCapturer) -> None:
     """Test that callbacks are called in the correct order."""
     on_output, captured_output = output_capturer()
 
-    # Generate numbered lines to verify order
     result = run_streaming(["sh", "-c", 'for i in 1 2 3 4 5; do echo "Line $i"; done'], on_output)
 
     assert result.returncode == 0
@@ -193,8 +185,8 @@ def test_run_streaming_large_lines(output_capturer: OutputCapturer) -> None:
     assert len(captured_output) == 1
     # The output should be exactly line_size ' ' characters + 1 newline
     assert len(captured_output[0][0]) == line_size + 1  # +1 for the newline that echo adds
-    assert captured_output[0][0].startswith(" " * 100)  # Check it starts with whitespaces
-    assert captured_output[0][0].endswith("\n")  # Check it ends with newline
+    assert captured_output[0][0].startswith(" " * 100)
+    assert captured_output[0][0].endswith("\n")
     assert captured_output[0][1] is True
 
 
@@ -210,14 +202,11 @@ def test_run_streaming_with_timeout(output_capturer: OutputCapturer) -> None:
     """Test streaming with timeout."""
     on_output, captured_output = output_capturer()
 
-    # Command that will timeout
     with pytest.raises(ProcessError):
         run_streaming(["sh", "-c", "echo 'before sleep'; sleep 10; echo 'after sleep'"], on_output, timeout=0.5)
 
-    # Should have captured output before timeout
     assert len(captured_output) >= 1
     assert captured_output[0][0] == "before sleep\n"
-    # Should not have captured output after timeout
     assert not any("after sleep" in line for line, _ in captured_output)
 
 
@@ -230,12 +219,10 @@ def test_run_streaming_with_shutdown_event(output_capturer: OutputCapturer) -> N
         time.sleep(0.5)
         shutdown_event.set()
 
-    # Start thread to trigger shutdown
     shutdown_thread = threading.Thread(target=_set_shutdown)
     shutdown_thread.start()
 
     try:
-        # Command that outputs lines slowly
         result = run_streaming(
             ["sh", "-c", 'for i in 1 2 3 4 5; do echo "Line $i"; sleep 0.3; done'],
             on_output,
@@ -244,7 +231,6 @@ def test_run_streaming_with_shutdown_event(output_capturer: OutputCapturer) -> N
             is_checked=False,
         )
 
-        # Should have captured some but not all lines
         assert len(captured_output) >= 2
         assert captured_output[0][0] == "Line 1\n"
         assert captured_output[1][0] == "Line 2\n"
@@ -258,7 +244,6 @@ def test_run_streaming_non_zero_exit(output_capturer: OutputCapturer) -> None:
     """Test streaming with non-zero exit code."""
     on_output, captured_output = output_capturer()
 
-    # Command that outputs then fails
     with pytest.raises(ProcessError) as exc_info:
         run_streaming(["sh", "-c", "echo 'before failure'; exit 42"], on_output, is_checked=True)
 
@@ -285,7 +270,6 @@ def test_run_streaming_with_cwd(output_capturer: OutputCapturer) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
 
-        # Create test files
         (tmpdir_path / "test1.txt").touch()
         (tmpdir_path / "test2.txt").touch()
 
@@ -302,7 +286,6 @@ def test_run_streaming_partial_lines(output_capturer: OutputCapturer) -> None:
     """Test handling of output that doesn't end with newline in the middle."""
     on_output, captured_output = output_capturer()
 
-    # This command outputs a partial line followed by a complete line
     result = run_streaming(["sh", "-c", "printf 'partial'; sleep 0.1; echo ' complete'"], on_output)
 
     assert result.returncode == 0
@@ -311,5 +294,4 @@ def test_run_streaming_partial_lines(output_capturer: OutputCapturer) -> None:
     line, is_stdout = captured_output[0]
     assert line == "partial complete\n"
     assert is_stdout
-    # The full output is captured in the result
     assert result.stdout == "partial complete\n"

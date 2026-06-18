@@ -164,7 +164,6 @@ class TestDropProductLoggingColumns(MigrationTestFixture):
         )
 
     def verify(self, connection: sa.engine.Connection) -> None:
-        # The dropped columns must be gone from every affected table.
         for table in ("project", "project_latest"):
             columns = {row[1] for row in connection.execute(sa.text(f"PRAGMA table_info({table})"))}
             assert "is_loggable" not in columns, f"is_loggable column still exists in {table}"
@@ -185,7 +184,6 @@ class TestDropProductLoggingColumns(MigrationTestFixture):
         assert "user_settings_before_insert" not in triggers, "user_settings_before_insert trigger was not dropped"
         assert "project_before_insert" not in triggers, "project_before_insert trigger was not dropped"
 
-        # The seeded rows (and their surviving columns) must be preserved.
         project_row = connection.execute(
             sa.text("SELECT name FROM project WHERE object_id = :object_id"),
             {"object_id": PROJECT_ID},
