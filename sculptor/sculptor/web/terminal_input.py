@@ -6,6 +6,7 @@ write through this single helper so their security guards can never drift
 apart. Kept framework-free (no FastAPI) so the coordinator can call it.
 """
 
+import time
 from enum import StrEnum
 
 from loguru import logger
@@ -26,6 +27,16 @@ from sculptor.web.derived import scan_terminal_signal_state
 # newlines, so the program — not us — controls submission.
 _BRACKETED_PASTE_START = b"\x1b[200~"
 _BRACKETED_PASTE_END = b"\x1b[201~"
+
+# Pause between writing the bracketed-paste body and writing the submit Enter.
+# A TUI (Claude Code) shows "Pasting text…" while it finalizes a bracketed
+# paste; an Enter that arrives before it leaves paste mode is absorbed into the
+# paste instead of submitting, so the prompt never lands and the driven turn
+# never completes. Verified against real claude: the back-to-back write fails
+# and ~0.2s suffices; this leaves margin for a loaded machine. The babysitter
+# drive is off-thread so this costs it nothing; the endpoint adds <1s to a
+# user-triggered submit.
+_PASTE_SUBMIT_DELAY_SECONDS = 0.75
 
 
 class TerminalDeliveryResult(StrEnum):
@@ -91,6 +102,9 @@ def deliver_prompt_to_terminal_agent(
     # the prompt's length or whether it spans multiple lines.
     terminal_manager.write(_BRACKETED_PASTE_START + text.encode() + _BRACKETED_PASTE_END)
     if submit:
+        # Let the TUI leave "Pasting text…" before the Enter, so the Enter
+        # submits the paste instead of being absorbed into it.
+        time.sleep(_PASTE_SUBMIT_DELAY_SECONDS)
         terminal_manager.write(b"\r")
     # Log the event, never the text — prompts can embed user content.
     logger.info("Wrote automated prompt ({} chars) to terminal agent {}", len(text), task.object_id)

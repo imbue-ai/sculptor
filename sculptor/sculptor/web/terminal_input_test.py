@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Generator
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 
 from sculptor.database.models import AgentTaskInputsV2
@@ -40,9 +41,19 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
     unregister_terminal_manager,
 )
 from sculptor.tasks.handlers.run_terminal_agent.terminal_session import make_agent_terminal_id
+from sculptor.web import terminal_input
 from sculptor.web.auth import authenticate_anonymous
 from sculptor.web.terminal_input import TerminalDeliveryResult
 from sculptor.web.terminal_input import deliver_prompt_to_terminal_agent
+
+
+@pytest.fixture(autouse=True)
+def _no_real_paste_submit_delay(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The helper pauses between the paste and the submit Enter in production;
+    skip the real wait in tests (the one test that asserts the pause overrides
+    this with its own recorder)."""
+    monkeypatch.setattr(terminal_input.time, "sleep", lambda _seconds: None)
+
 
 _OPT_IN_CONFIG = RegisteredTerminalAgentConfig(
     registration_id="claude-code",
@@ -396,6 +407,61 @@ def test_helper_reports_no_pty_when_terminal_missing(
 
     result = deliver_prompt_to_terminal_agent(task, "hello", task_service=services.task_service)
     assert result is TerminalDeliveryResult.NO_PTY
+
+
+def test_submit_carriage_return_is_paused_after_the_paste(
+    test_already_started_services: CompleteServiceCollection,
+    test_project: Project,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The submit Enter must be written only AFTER a pause that follows the
+    # bracketed-paste body. A real TUI (Claude Code) shows "Pasting text…" while
+    # it finalizes a bracketed paste; an Enter that arrives in that window is
+    # absorbed into the paste instead of submitting it, so the prompt never
+    # lands / the driven turn never completes (the agent shows as perpetually
+    # running). Verified against real claude: the back-to-back write fails and a
+    # short pause fixes it. This pins the pause to occur between the body write
+    # and the carriage-return write.
+    services = test_already_started_services
+    task = _create_task(services, test_project, _OPT_IN_CONFIG)
+    _seed_run_start(services, task.object_id)
+    _seed_signal(services, task.object_id, TerminalStatusSignal.IDLE)
+
+    with _registered_manager(task.object_id, tmp_path) as manager:
+        # Record (duration, writes-so-far) at each sleep so we can prove the
+        # pause lands after the body and before the Enter.
+        paused: list[tuple[float, int]] = []
+        monkeypatch.setattr(terminal_input.time, "sleep", lambda s: paused.append((s, len(manager.written))))
+
+        result = deliver_prompt_to_terminal_agent(task, "hello", task_service=services.task_service)
+
+        assert result is TerminalDeliveryResult.DELIVERED
+        assert manager.written == [b"\x1b[200~hello\x1b[201~", b"\r"]
+        # Exactly one pause, of the configured duration, after the body write
+        # (1 write done) and before the Enter.
+        assert paused == [(terminal_input._PASTE_SUBMIT_DELAY_SECONDS, 1)]
+
+
+def test_draft_without_submit_does_not_pause(
+    test_already_started_services: CompleteServiceCollection,
+    test_project: Project,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # No Enter is sent for a draft, so there is nothing to pause for.
+    services = test_already_started_services
+    task = _create_task(services, test_project, _OPT_IN_CONFIG)
+    _seed_run_start(services, task.object_id)
+    _seed_signal(services, task.object_id, TerminalStatusSignal.IDLE)
+
+    with _registered_manager(task.object_id, tmp_path) as manager:
+        paused: list[float] = []
+        monkeypatch.setattr(terminal_input.time, "sleep", lambda s: paused.append(s))
+        result = deliver_prompt_to_terminal_agent(task, "draft", submit=False, task_service=services.task_service)
+        assert result is TerminalDeliveryResult.DELIVERED
+        assert manager.written == [b"\x1b[200~draft\x1b[201~"]
+        assert paused == []
 
 
 def test_helper_delivers_multiline_with_bracketed_paste(
