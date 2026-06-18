@@ -114,6 +114,29 @@ def _install_fake_glab(fake_bin_dir: Path, script: str) -> None:
     script_path.chmod(script_path.stat().st_mode | stat.S_IEXEC)
 
 
+_FAKE_GITHUB_REMOTE = "https://github.com/test-org/test-repo.git"
+
+# Fake `gh` returning one OPEN PR that GitHub reports as CONFLICTING. The
+# backend issues a single `gh api graphql` query; this node carries
+# "mergeable":"CONFLICTING", so a backend that surfaces PR merge conflicts maps
+# it to has_conflicts=True and the babysitter fires on the very first poll (a
+# merge conflict needs no baseline change, unlike a pipeline failure -- see
+# transitions.classify_transitions). A backend that ignores the mergeable field
+# (the SCU-1529 bug) leaves has_conflicts=None and no babysitter tab appears.
+_FAKE_GH_CONFLICTING_PR_SCRIPT = """\
+#!/bin/bash
+if [[ "$*" == *"graphql"* ]]; then
+    echo '{"data":{"repository":{"pullRequests":{"nodes":[{"number":42,"title":"Test PR","url":"https://github.com/test/repo/pull/42","state":"OPEN","baseRefName":"main","mergeable":"CONFLICTING","commits":{"nodes":[{"commit":{"statusCheckRollup":null}}]},"latestReviews":{"nodes":[]},"reviewThreads":{"nodes":[]}}]}}}}'
+fi
+"""
+
+
+def _install_fake_gh(fake_bin_dir: Path, script: str) -> None:
+    script_path = fake_bin_dir / "gh"
+    script_path.write_text(textwrap.dedent(script))
+    script_path.chmod(script_path.stat().st_mode | stat.S_IEXEC)
+
+
 def _install_state_driven_glab(instance: SculptorInstance, state_file: Path, pipeline_id_file: Path) -> None:
     _install_fake_glab(
         instance.fake_bin_dir,
@@ -160,6 +183,10 @@ def _enable_babysitter(instance: SculptorInstance) -> None:
 
 
 _PIPELINE_PROMPT_FRAGMENT = "Investigate the failing pipeline for this MR"
+
+# Fragment of the default merge-conflict prompt (user_config.CIBabysitterConfig).
+# Chosen to be provider-neutral so the assertion survives the "MR"/"PR" wording.
+_MERGE_CONFLICT_PROMPT_FRAGMENT = "merge conflict with its base branch"
 
 
 def _bump_pipeline_id_after_baseline(page, pipeline_id_file: Path, new_id: str) -> None:
@@ -451,3 +478,32 @@ def test_restart_reuses_existing_babysitter_tab(
 
         expect(pipeline_prompts).to_have_count(2, timeout=60_000)
         expect(agent_tabs.get_agent_tab_by_name("CI Babysitter")).to_have_count(1)
+
+
+@user_story("to have the CI Babysitter automatically resolve a merge conflict on a GitHub PR")
+def test_github_pr_merge_conflict_creates_babysitter(sculptor_instance_: SculptorInstance) -> None:
+    """When a GitHub PR opened from a workspace has a merge conflict, the
+    coordinator spawns a 'CI Babysitter' agent tab and delivers the configured
+    merge-conflict prompt -- at parity with GitLab MR conflict handling.
+
+    Regression for SCU-1529: the GitHub PR status path never surfaced
+    has_conflicts (the `gh api graphql` query didn't request `mergeable`, and
+    the parser didn't map it), so the coordinator's MERGE_CONFLICT transition
+    never fired for PRs and no babysitter tab ever appeared. A merge conflict
+    surfaces on the first poll, so -- unlike the pipeline-failure scenarios --
+    no baseline bump is needed.
+    """
+    _enable_babysitter(sculptor_instance_)
+    _install_fake_gh(sculptor_instance_.fake_bin_dir, _FAKE_GH_CONFLICTING_PR_SCRIPT)
+    _set_remote(sculptor_instance_, _FAKE_GITHUB_REMOTE)
+
+    start_task_and_wait_for_ready(sculptor_instance_.page, "say hello")
+
+    agent_tabs = PlaywrightAgentTabBarElement(sculptor_instance_.page)
+    babysitter_tab = agent_tabs.get_agent_tab_by_name("CI Babysitter")
+    expect(babysitter_tab.first).to_be_visible(timeout=60_000)
+
+    babysitter_tab.first.click()
+    alpha_chat = get_alpha_chat_view(sculptor_instance_.page)
+    conflict_prompt_messages = alpha_chat.get_messages().filter(has_text=_MERGE_CONFLICT_PROMPT_FRAGMENT)
+    expect(conflict_prompt_messages.first).to_be_visible()
