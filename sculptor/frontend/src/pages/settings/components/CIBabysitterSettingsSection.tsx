@@ -96,7 +96,7 @@ export const CIBabysitterSettingsSection = ({ onSettingChange }: CIBabysitterSet
   };
 
   return (
-    <SettingsSectionLayout description="When enabled, Sculptor watches open MRs and asks an AI agent to fix CI failures and merge conflicts automatically. Currently only available for GitLab MRs. Coming soon for GitHub PRs.">
+    <SettingsSectionLayout description="When enabled, Sculptor watches open MRs and PRs and asks an AI agent to fix CI failures and merge conflicts automatically.">
       <SettingRow
         title="Enable CI Babysitter"
         description="Spawn a per-workspace babysitter agent when an MR's pipeline fails or develops a merge conflict."
