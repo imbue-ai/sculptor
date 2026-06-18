@@ -235,6 +235,13 @@ _REACTION_WINDOW_SECONDS: float = 120.0
 # re-checks shutdown / process-exit; small so an exit is noticed promptly.
 _STDOUT_QUEUE_POLL_SECONDS: float = 0.1
 
+# Input-queue wait between turns. While async tasks/reactions are pending, poll
+# briefly so their out-of-band completions surface promptly; when idle, wait
+# longer to avoid busy-polling (a new user message wakes the queue immediately
+# either way, and the longer wait bounds shutdown latency).
+_TASK_POLL_SECONDS: float = 0.1
+_IDLE_WAIT_SECONDS: float = 1.0
+
 
 def _pi_version_in_range(version: str) -> bool:
     try:
@@ -991,14 +998,19 @@ class PiAgent(DefaultAgentWrapper):
 
     def _process_message_queue(self) -> None:
         while not self._shutdown_event.is_set():
+            # Poll quickly only while async tasks/reactions are pending, so their
+            # out-of-band completions surface promptly between turns; otherwise wait
+            # longer to avoid idle busy-polling. No task can start during this wait
+            # (tasks launch from within a turn), so the relaxed wait never delays
+            # surfacing a completion.
+            has_pending_tasks = self._has_background_tasks()
+            timeout = _TASK_POLL_SECONDS if has_pending_tasks else _IDLE_WAIT_SECONDS
             try:
-                # A short poll so that, while background or sub-agent tasks are in
-                # flight, we promptly pick up their out-of-band completions between turns.
-                message = self._input_agent_messages.get(timeout=0.1)
+                message = self._input_agent_messages.get(timeout=timeout)
             except Empty:
                 # Sculptor only drains pi's stdout during a turn; when a background or
                 # sub-agent task is running, surface its completion live while we're idle.
-                if self._has_background_tasks():
+                if has_pending_tasks:
                     self._drain_idle_background_events()
                 continue
             if isinstance(message, ClearContextUserMessage):
