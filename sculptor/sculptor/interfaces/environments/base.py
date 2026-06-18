@@ -41,9 +41,7 @@ class Environment(BaseModel, abc.ABC):
     concurrency_group: ConcurrencyGroup
     _terminal_manager: TerminalManager | None = PrivateAttr(default=None)
 
-    # ===== Capability Properties =====
-    # These properties advertise which features each environment supports.
-    # Code should check these properties instead of using isinstance() checks.
+    # Code should check these capability properties instead of using isinstance() checks.
 
     @property
     @abc.abstractmethod

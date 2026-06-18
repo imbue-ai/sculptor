@@ -47,11 +47,6 @@ class ModelOption(SerializableModel):
     display_name: str
 
 
-# ==================================
-# Backend Message Type Definitions
-# ==================================
-
-
 class AgentMessageSource(StrEnum):
     """
     Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)

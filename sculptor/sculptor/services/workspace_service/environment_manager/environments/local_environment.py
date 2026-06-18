@@ -103,8 +103,6 @@ class LocalEnvironment(Environment):
         """
         self._sculpt_terminal_env_vars = env_vars
 
-    # ===== Capability Properties =====
-
     @property
     def supports_terminal(self) -> bool:
         """Local environments support terminal via direct pty management."""

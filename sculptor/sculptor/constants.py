@@ -79,8 +79,6 @@ class ElementIDs(StrEnum):
     REPO_PATH_DROPDOWN_SHORTCUT_HINT = "REPO_PATH_DROPDOWN_SHORTCUT_HINT"
     REPO_PATH_DROPDOWN_ALERT_OK = "REPO_PATH_DROPDOWN_ALERT_OK"
 
-    # Task Modal
-
     # Command Palette (replaces the legacy Search Modal; Cmd+K)
     COMMAND_PALETTE_OPEN_BUTTON = "COMMAND_PALETTE_OPEN_BUTTON"
     COMMAND_PALETTE = "COMMAND_PALETTE"
@@ -182,8 +180,6 @@ class ElementIDs(StrEnum):
     LIGHTBOX_NAV_PREVIOUS = "LIGHTBOX_NAV_PREVIOUS"
     LIGHTBOX_NAV_NEXT = "LIGHTBOX_NAV_NEXT"
     LIGHTBOX_COUNTER = "LIGHTBOX_COUNTER"
-
-    # Artifact Panel
 
     # File Browser Panel
     FILE_BROWSER_PANEL = "FILE_BROWSER_PANEL"
@@ -341,8 +337,6 @@ class ElementIDs(StrEnum):
     # Report Problem ("Give Feedback") popover
     REPORT_PROBLEM_POPOVER = "REPORT_PROBLEM_POPOVER"
 
-    # These show up in multiple places
-
     # Onboarding page
     ONBOARDING_WELCOME_STEP = "ONBOARDING_WELCOME_STEP"
     ONBOARDING_EMAIL_INPUT = "ONBOARDING_EMAIL_INPUT"
@@ -453,8 +447,6 @@ class ElementIDs(StrEnum):
     PI_INSTALL_BUTTON = "pi-install-button"
     PI_INSTALL_PROGRESS = "pi-install-progress"
     PI_UP_TO_DATE = "pi-up-to-date"
-
-    # Onboarding install flow
 
     # Custom backend settings (in Experimental tab)
     SETTINGS_CUSTOM_BACKEND_COMMAND = "SETTINGS_CUSTOM_BACKEND_COMMAND"

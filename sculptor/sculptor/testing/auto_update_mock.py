@@ -200,10 +200,6 @@ class MockSculptorElectronAPI:
         self._page.evaluate("localStorage.removeItem('__sculptor_mock_enabled'); delete window.sculptor")
         full_spa_reload(self._page)
 
-    # ------------------------------------------------------------------
-    # Pushing status events (simulates main → renderer)
-    # ------------------------------------------------------------------
-
     def push_status(self, status: Mapping[str, object]) -> None:
         """Invoke the callback registered by ``useAutoUpdateListener``."""
         self._page.evaluate(
@@ -224,20 +220,12 @@ class MockSculptorElectronAPI:
             status,
         )
 
-    # ------------------------------------------------------------------
-    # IPC call recording (renderer → main)
-    # ------------------------------------------------------------------
-
     def get_ipc_calls(self, *, method: str | None = None) -> list[dict[str, object]]:
         """Return recorded IPC calls, optionally filtered by method name."""
         calls: list[dict[str, object]] = self._page.evaluate("window.sculptor._ipcCalls")
         if method is not None:
             calls = [c for c in calls if c["method"] == method]
         return calls
-
-    # ------------------------------------------------------------------
-    # Configuring IPC failures
-    # ------------------------------------------------------------------
 
     def configure_ipc_failure(self, method: str, error_message: str) -> None:
         """Make a specific IPC method reject with an error.

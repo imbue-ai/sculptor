@@ -35,11 +35,9 @@ def record_phase_duration(report: pytest.TestReport) -> None:
     report.user_properties.append((f"duration_{report.when}", duration_s))
 
 
-# ---------------------------------------------------------------------------
 # JSONL timeline — one line per test phase with absolute timestamps, worker
 # ID and PID so that CPU profiling data (pidstat) can be cross-referenced
 # with individual test execution windows.
-# ---------------------------------------------------------------------------
 
 _TIMELINE_PATH = os.environ.get("TEST_TIMELINE_PATH")
 _timeline_file = None  # lazily opened on first write

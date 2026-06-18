@@ -511,13 +511,6 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
         request_finished_messages = {
             x.request_id for x in self._messages if isinstance(x, PersistentRequestCompleteAgentMessage)
         }
-        # NOTE: this used to exclude ``RequestStoppedAgentMessage`` as a workaround
-        # for an older bug — interrupted/SIGTERM'd chats were re-delivered to
-        # Claude on the next agent run, and the exclusion kept status pinned at
-        # RUNNING during that re-processing window. With those bugs fixed at the
-        # runner layer the
-        # re-processing no longer happens, so a RequestStopped really does mean
-        # "this chat is settled — agent is idle, user can send a new message."
         # If the agent has emitted an AskUserQuestion / ExitPlanMode whose
         # answer hasn't arrived yet, the task is WAITING regardless of
         # whether the in-flight request has formally completed. Under the

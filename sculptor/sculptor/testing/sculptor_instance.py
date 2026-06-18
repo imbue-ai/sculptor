@@ -177,10 +177,6 @@ class SculptorInstance:
         """
         return self.server.url
 
-    # ------------------------------------------------------------------
-    # Between-test cleanup
-    # ------------------------------------------------------------------
-
     def _create_fresh_repo(self) -> None:
         """Reset the project repo to a known state for the next test.
 

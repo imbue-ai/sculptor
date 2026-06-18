@@ -186,10 +186,6 @@ class AutoUpdateTestServer:
         if self._thread is not None:
             self._thread.join(timeout=_THREAD_JOIN_TIMEOUT_SECONDS)
 
-    # ------------------------------------------------------------------
-    # Test helpers
-    # ------------------------------------------------------------------
-
     def set_update(
         self,
         version: str,
@@ -279,11 +275,6 @@ class AutoUpdateTestServer:
         with self._state.lock:
             self._state.request_paths.clear()
             self._state.request_user_agents.clear()
-
-
-# ---------------------------------------------------------------------------
-# Pytest fixture
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture(scope="session")

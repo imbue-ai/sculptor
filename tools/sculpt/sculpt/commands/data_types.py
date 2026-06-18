@@ -9,9 +9,6 @@ from pydantic import BaseModel
 from pydantic import Field
 
 
-# -- Workspace outputs --------------------------------------------------------
-
-
 class WorkspaceCreateOutput(BaseModel):
     """Output of ``sculpt workspace create --json``."""
 
@@ -77,9 +74,6 @@ class WorkspaceDeleteOutput(BaseModel):
     id: str = Field(description="Deleted workspace ID")
 
 
-# -- Repo outputs -------------------------------------------------------------
-
-
 class RepoItem(BaseModel):
     """Single item in ``sculpt repo list --json`` / ``sculpt repo show --json``."""
 
@@ -88,9 +82,6 @@ class RepoItem(BaseModel):
     path: str = Field(description="Local filesystem path")
     accessible: bool = Field(description="Whether the path is accessible")
     created_at: str | None = Field(description="ISO 8601 datetime of creation")
-
-
-# -- Agent outputs ------------------------------------------------------------
 
 
 class AgentCreateOutput(BaseModel):
@@ -182,9 +173,6 @@ class AgentInterruptOutput(BaseModel):
     id: str = Field(description="Interrupted agent ID")
 
 
-# -- Run output ---------------------------------------------------------------
-
-
 class RunOutput(BaseModel):
     """Output of ``sculpt run --json``."""
 
@@ -193,9 +181,6 @@ class RunOutput(BaseModel):
     strategy: str = Field(description="Workspace initialization strategy")
     model: str = Field(description="LLM model identifier")
     prompt: str = Field(description="The task prompt")
-
-
-# -- Error output -------------------------------------------------------------
 
 
 class ErrorOutput(BaseModel):

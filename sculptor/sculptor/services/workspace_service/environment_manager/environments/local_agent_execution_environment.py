@@ -86,8 +86,6 @@ class LocalAgentExecutionEnvironment(AgentExecutionEnvironment):
         host_state_path.mkdir(parents=True, exist_ok=True)
         host_artifacts_path.mkdir(parents=True, exist_ok=True)
 
-    # ===== Properties =====
-
     # TODO(SCU-135): Remove this property when git/diff operations move to workspace level.
     # This property exists to support EnvironmentAcquiredRunnerMessage.environment field,
     # which will be removed when workspace-level API endpoints replace task-level access.
@@ -109,8 +107,6 @@ class LocalAgentExecutionEnvironment(AgentExecutionEnvironment):
     def concurrency_group(self) -> ConcurrencyGroup:
         """The concurrency group for process and thread management."""
         return self._environment.concurrency_group
-
-    # ===== Path Management =====
 
     def get_state_path(self) -> Path:
         """Get the per-task state directory path.
@@ -150,8 +146,6 @@ class LocalAgentExecutionEnvironment(AgentExecutionEnvironment):
         """Convert a host filesystem path to an environment path."""
         return self._environment.to_environment_path(path)
 
-    # ===== File Operations =====
-
     def exists(self, path: str) -> bool:
         """Check if a path exists in the environment."""
         return self._environment.exists(path)
@@ -172,8 +166,6 @@ class LocalAgentExecutionEnvironment(AgentExecutionEnvironment):
     def delete_file_or_directory(self, path: str) -> None:
         """Delete a file or directory from the environment."""
         return self._environment.delete_file_or_directory(path)
-
-    # ===== Process Management =====
 
     def run_process_in_background(
         self,
@@ -233,13 +225,9 @@ class LocalAgentExecutionEnvironment(AgentExecutionEnvironment):
             on_output=on_output,
         )
 
-    # ===== Tool Binary Resolution =====
-
     def get_tool_binary_path(self, tool: Dependency) -> str | None:
         """Resolve the path to a tool binary."""
         return self._dependency_management_service.resolve_binary_path(tool)
-
-    # ===== System Configuration =====
 
     def get_system_prompt(self) -> str | None:
         """Get the environment-specific system prompt content."""
@@ -248,8 +236,6 @@ class LocalAgentExecutionEnvironment(AgentExecutionEnvironment):
     def get_project_env_var_names(self) -> list[str]:
         """Get the names of project-configured environment variables."""
         return self._environment.get_project_env_var_names()
-
-    # ===== Terminal Management =====
 
     def start_terminal_manager(
         self,

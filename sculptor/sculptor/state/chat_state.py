@@ -12,10 +12,6 @@ from sculptor.foundation.pydantic_serialization import build_discriminator
 from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import ToolUseID
 
-# ========================
-# Chat Type Definitions
-# ========================
-
 
 class ContentBlock(SerializableModel):
     object_type: str = Field(..., description="Type discriminator for content blocks")
@@ -228,11 +224,6 @@ class ChatMessage(SerializableModel):
         default=None,
         description="Interface that sent this message, e.g. 'sculpt'",
     )
-
-
-# ========================
-# AskUserQuestion Types
-# ========================
 
 
 class QuestionOption(SerializableModel):

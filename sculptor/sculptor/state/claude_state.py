@@ -109,11 +109,6 @@ def split_text_and_media(text: str) -> list[TextBlock | FileBlock]:
     return result
 
 
-# ===========================================
-# Parsed Agent Message Type Definitions
-# ===========================================
-
-
 class ParsedStreamEvent(SerializableModel, ABC):
     pass
 
@@ -328,11 +323,6 @@ ParsedAgentResponsePassthrough = (
 
 # the tool results are not parsed in this kind of message
 ParsedAgentResponseTypeSimple = ParsedAgentResponsePassthrough | ParsedUserResponseTypeSimple
-
-
-# ===========================================
-# Parsing claude code json files
-# ===========================================
 
 
 def get_tool_invocation_string(tool_name: str, tool_input: ToolInput, _tool_result: str | None = None) -> str:
