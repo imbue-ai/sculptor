@@ -2,6 +2,8 @@ import type { Plugin } from "vite";
 import { describe, expect, it } from "vitest";
 
 import {
+  collectHostVersions,
+  collectStubs,
   HOST_VERSIONS_MODULE_ID,
   parseSdkValueExports,
   pluginRuntimeStubs,
@@ -103,19 +105,22 @@ describe("renderStub", () => {
     // A name present in both sources is bound (and emitted) exactly once.
     expect(out.match(/export const version /g)).toHaveLength(1);
     expect(out).toContain("export const version = host_reactDOMClient.version;");
-    // The guard checks every host key the stub depends on.
-    expect(out).toContain("if (!host || !host.reactDOMClient || !host.reactDOM) {");
+    // The guard names every required host key, so an absent one is reported.
+    expect(out).toContain('const __missing = ["reactDOMClient","reactDOM"].filter');
   });
 
-  it("skips names that are not valid identifiers", () => {
+  it("skips names that are not valid identifiers or are reserved words", () => {
     const config: RuntimeModuleConfig = {
       file: "x.js",
       sources: [{ specifier: "x", hostKey: "x" }],
     };
-    const out = renderStub(config, keys({ x: ["ok", "with-dash", "1bad"] }));
+    const out = renderStub(config, keys({ x: ["ok", "with-dash", "1bad", "delete", "class"] }));
     expect(out).toContain("export const ok = host_x.ok;");
     expect(out).not.toContain("with-dash");
     expect(out).not.toContain("1bad");
+    // Reserved words would emit `export const delete = ...`, which won't parse.
+    expect(out).not.toContain("export const delete");
+    expect(out).not.toContain("export const class");
   });
 });
 
@@ -161,6 +166,60 @@ describe("pluginRuntimeStubs (host-versions virtual module)", () => {
   it("ignores unrelated module ids", () => {
     const plugin: Plugin = pluginRuntimeStubs();
     expect(callHook(plugin.resolveId, "some-other-module")).toBeUndefined();
+  });
+});
+
+describe("collectStubs (real installed namespaces)", () => {
+  // Exercises the namespace-reading path end to end: dynamic-imports the real
+  // shared packages, reads the SDK barrel from source, and renders every stub.
+  it("generates a stub per module with names from the real namespaces", async () => {
+    const stubs = await collectStubs(process.cwd());
+
+    // One stub per configured module (filenames the import map references).
+    expect([...stubs.keys()].sort()).toEqual([
+      "jotai.js",
+      "lucide-react.js",
+      "radix-themes.js",
+      "react-dom.js",
+      "react-jsx-runtime.js",
+      "react.js",
+      "sculptor-plugin-sdk.js",
+      "tanstack-react-query.js",
+    ]);
+
+    // react: a representative hook from the actual namespace, plus the default.
+    const react = stubs.get("react.js") as string;
+    expect(react).toContain("export const useState = host_react.useState;");
+    expect(react).toContain("export default host_react;");
+
+    // tanstack: the deliberate API boundary holds against the real namespace.
+    const tanstack = stubs.get("tanstack-react-query.js") as string;
+    expect(tanstack).toContain("export const useQuery =");
+    expect(tanstack).not.toContain("export const QueryClient ");
+    expect(tanstack).not.toContain("export const QueryClientProvider ");
+
+    // lucide: the Proxy escape hatch plus enumerated icons (thousands of them).
+    const lucide = stubs.get("lucide-react.js") as string;
+    expect(lucide).toContain("export default new Proxy(");
+    expect((lucide.match(/^export const /gm) ?? []).length).toBeGreaterThan(1000);
+
+    // SDK: names parsed from the first-party barrel, not an npm namespace.
+    const sdk = stubs.get("sculptor-plugin-sdk.js") as string;
+    expect(sdk).toContain("export const usePluginSetting = host_sdk.usePluginSetting;");
+    expect(sdk).toContain("export const PanelHeader = host_sdk.PanelHeader;");
+  });
+
+  it("is byte-stable across repeated runs", async () => {
+    const a = await collectStubs(process.cwd());
+    const b = await collectStubs(process.cwd());
+    for (const [file, content] of a) expect(b.get(file)).toBe(content);
+  });
+
+  it("reads a real version for every embedded package", () => {
+    const versions = collectHostVersions(process.cwd());
+    for (const pkg of ["react", "react-dom", "jotai", "@tanstack/react-query", "@radix-ui/themes", "lucide-react"]) {
+      expect(versions[pkg]).toMatch(/^\d+\.\d+\.\d+/);
+    }
   });
 });
 

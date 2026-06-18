@@ -113,8 +113,62 @@ const GENERATED_HEADER =
 
 const IDENTIFIER_RE = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 
+// Names that are valid-looking identifiers but illegal as an `export const`
+// binding in a strict-mode ES module. A package is unlikely to export one, but
+// if it did we'd emit a stub that fails to parse — skip them instead.
+const RESERVED_NAMES: ReadonlySet<string> = new Set([
+  "default",
+  "arguments",
+  "await",
+  "break",
+  "case",
+  "catch",
+  "class",
+  "const",
+  "continue",
+  "debugger",
+  "delete",
+  "do",
+  "else",
+  "enum",
+  "eval",
+  "export",
+  "extends",
+  "false",
+  "finally",
+  "for",
+  "function",
+  "if",
+  "implements",
+  "import",
+  "in",
+  "instanceof",
+  "interface",
+  "let",
+  "new",
+  "null",
+  "package",
+  "private",
+  "protected",
+  "public",
+  "return",
+  "static",
+  "super",
+  "switch",
+  "this",
+  "throw",
+  "true",
+  "try",
+  "typeof",
+  "var",
+  "void",
+  "while",
+  "with",
+  "yield",
+]);
+
 /** A namespace member is re-exportable only as a valid, non-reserved identifier. */
-const isExportableName = (name: string): boolean => name !== "default" && IDENTIFIER_RE.test(name);
+const isExportableName = (name: string): boolean => !RESERVED_NAMES.has(name) && IDENTIFIER_RE.test(name);
 
 const localBinding = (hostKey: string): string => `host_${hostKey}`;
 
@@ -140,11 +194,14 @@ export const renderStub = (
   }
 
   const hostKeys = [...new Set(config.sources.map((s) => s.hostKey))];
-  const missingGuard = hostKeys.map((k) => `!host.${k}`).join(" || ");
 
   const lines: Array<string> = [GENERATED_HEADER + "const host = window.__SCULPTOR_HOST__;"];
-  lines.push(`if (!host || ${missingGuard}) {`);
-  lines.push(`  throw new Error("Sculptor plugin runtime: window.__SCULPTOR_HOST__.${hostKeys[0]} missing.");`);
+  // Report every required key that is actually absent, not just the first one.
+  lines.push(`const __missing = ${JSON.stringify(hostKeys)}.filter((k) => !host || !host[k]);`);
+  lines.push("if (__missing.length) {");
+  lines.push(
+    '  throw new Error("Sculptor plugin runtime: window.__SCULPTOR_HOST__ missing " + __missing.join(", ") + ".");',
+  );
   lines.push("}");
   for (const hostKey of hostKeys) lines.push(`const ${localBinding(hostKey)} = host.${hostKey};`);
 
@@ -218,38 +275,46 @@ const readInstalledVersion = (root: string, pkg: string): string => {
   return manifest.version;
 };
 
+/** Read the installed version of every embedded package, resolved under `root`. */
+export const collectHostVersions = (root: string): Record<string, string> => {
+  const versions: Record<string, string> = {};
+  for (const pkg of VERSION_PACKAGES) versions[pkg] = readInstalledVersion(root, pkg);
+  return versions;
+};
+
+/**
+ * Generate every stub's content, keyed by output filename. Reads each shared
+ * package's actual installed namespace (and the first-party SDK barrel from
+ * source), resolved under `root`. This is the build-time path the dev
+ * middleware and `generateBundle` both rely on.
+ */
+export const collectStubs = async (root: string): Promise<Map<string, string>> => {
+  // Resolve each distinct specifier's namespace once. npm packages come from
+  // their installed ESM namespace; the first-party SDK barrel from source.
+  const specifiers = new Set(RUNTIME_MODULES.flatMap((m) => m.sources.map((s) => s.specifier)));
+  const keysBySpecifier = new Map<string, ReadonlyArray<string>>();
+  for (const specifier of specifiers) {
+    if (specifier === SDK_SPECIFIER) {
+      const source = fs.readFileSync(path.join(root, SDK_SOURCE_PATH), "utf8");
+      keysBySpecifier.set(specifier, parseSdkValueExports(source));
+    } else {
+      const namespace = (await import(specifier)) as Record<string, unknown>;
+      keysBySpecifier.set(specifier, Object.keys(namespace));
+    }
+  }
+  const stubs = new Map<string, string>();
+  for (const config of RUNTIME_MODULES) stubs.set(config.file, renderStub(config, keysBySpecifier));
+  return stubs;
+};
+
 export const pluginRuntimeStubs = (): Plugin => {
   let root = process.cwd();
   let stubsPromise: Promise<Map<string, string>> | null = null;
   let versionsPromise: Promise<Record<string, string>> | null = null;
 
-  const buildVersions = (): Record<string, string> => {
-    const versions: Record<string, string> = {};
-    for (const pkg of VERSION_PACKAGES) versions[pkg] = readInstalledVersion(root, pkg);
-    return versions;
-  };
   const ensureVersions = (): Promise<Record<string, string>> =>
-    (versionsPromise ??= Promise.resolve().then(buildVersions));
-
-  const buildStubs = async (): Promise<Map<string, string>> => {
-    // Resolve each distinct specifier's namespace once. npm packages come from
-    // their installed ESM namespace; the first-party SDK barrel from source.
-    const specifiers = new Set(RUNTIME_MODULES.flatMap((m) => m.sources.map((s) => s.specifier)));
-    const keysBySpecifier = new Map<string, ReadonlyArray<string>>();
-    for (const specifier of specifiers) {
-      if (specifier === SDK_SPECIFIER) {
-        const source = fs.readFileSync(path.join(root, SDK_SOURCE_PATH), "utf8");
-        keysBySpecifier.set(specifier, parseSdkValueExports(source));
-      } else {
-        const namespace = (await import(specifier)) as Record<string, unknown>;
-        keysBySpecifier.set(specifier, Object.keys(namespace));
-      }
-    }
-    const stubs = new Map<string, string>();
-    for (const config of RUNTIME_MODULES) stubs.set(config.file, renderStub(config, keysBySpecifier));
-    return stubs;
-  };
-  const ensureStubs = (): Promise<Map<string, string>> => (stubsPromise ??= buildStubs());
+    (versionsPromise ??= Promise.resolve().then(() => collectHostVersions(root)));
+  const ensureStubs = (): Promise<Map<string, string>> => (stubsPromise ??= collectStubs(root));
 
   return {
     name: "sculptor:plugin-runtime-stubs",
