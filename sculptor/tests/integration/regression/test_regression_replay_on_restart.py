@@ -141,7 +141,7 @@ def test_chat_does_not_replay_after_shutdown_during_auq_wait(
 
     Reproduces hypothesis #4: the v1 loop's AUQ branch deliberately clears
     ``user_input_message_being_processed = None`` while waiting for the
-    answer (commit ``792c82176dc6``). Hypothesis #1's original fix keyed off
+    answer. Hypothesis #1's original fix keyed off
     that local, so it missed this case — the chat that triggered the AUQ
     never got recorded as processed, and on the next run it was re-delivered
     to Claude (which re-emitted the AUQ tool block, duplicating the panel
@@ -171,8 +171,7 @@ def test_chat_does_not_replay_after_shutdown_during_auq_wait(
         _open_workspace_after_restart(instance.page)
         # With the fix: BUILDING → READY (no replay; the historical AUQ
         # block doesn't pin to WAITING because the derived-status walk
-        # breaks on the persisted RequestStopped, per MR !1200's derived.py
-        # change). With the bug: BUILDING → RUNNING → WAITING (Claude
+        # breaks on the persisted RequestStopped). With the bug: BUILDING → RUNNING → WAITING (Claude
         # re-emits AUQ on the replayed chat), and ``READY`` is never
         # reached, so this expect times out.
         expect(_agent_tab(instance.page)).to_have_attribute(

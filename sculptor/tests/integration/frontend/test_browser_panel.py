@@ -144,7 +144,7 @@ def test_browser_panel_navigation_tour(
 ) -> None:
     """End-to-end tour of the navigation contract on a single panel.
 
-    Combines Task 2.5's navigate / address-bar / back-forward / refresh /
+    Combines the navigate / address-bar / back-forward / refresh /
     target=_blank / fresh-state / invalid-URL cases into one long-running
     test on a single Sculptor instance.
     """

@@ -1,9 +1,8 @@
 """Integration tests for the agent-tasks UI (StatusPill popover).
 
-The agent-tasks UI lives in the StatusPill popover (the legacy
-``TodoListPanel`` was deprecated). These tests verify that TaskCreate /
-TaskUpdate calls produced by the agent surface in the popover and update as
-the agent reports completion.
+The agent-tasks UI lives in the StatusPill popover. These tests verify that
+TaskCreate / TaskUpdate calls produced by the agent surface in the popover and
+update as the agent reports completion.
 """
 
 from playwright.sync_api import expect

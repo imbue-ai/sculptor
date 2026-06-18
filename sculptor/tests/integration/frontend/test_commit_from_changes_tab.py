@@ -35,14 +35,12 @@ def test_commit_button_sends_commit_message(sculptor_instance_: SculptorInstance
     # Open Changes tab (Uncommitted scope — commit only applies to uncommitted changes)
     task_page.activate_changes_panel(scope="uncommitted")
 
-    # Verify there's a file in the changes tree
     changes_tree = get_changes_tree(page)
     expect(changes_tree).to_be_visible()
     tree_rows = changes_tree.get_tree_rows()
     expect(tree_rows).to_have_count(1)
     expect(tree_rows.first).to_contain_text("hello.py")
 
-    # The commit button should be visible and clickable
     commit_btn = task_page.get_commit_button()
     expect(commit_btn).to_be_visible()
     expect(commit_btn).to_contain_text("Commit 1 change")

@@ -42,7 +42,6 @@ def test_scope_picker_defaults_to_all(sculptor_instance_: SculptorInstance) -> N
     task_page.activate_changes_panel()
     task_page.click_review_all()
 
-    # Verify the scope picker inside the diff panel is visible and shows "All".
     # The Changes tab also renders its own DiffScopePicker, so we scope to the
     # diff panel to avoid a strict-mode violation from two matching elements.
     diff_panel = task_page.get_diff_panel()
@@ -65,7 +64,6 @@ def test_expand_toggle_expands_and_collapses(sculptor_instance_: SculptorInstanc
     task_page.activate_changes_panel()
     task_page.click_review_all()
 
-    # Click the expand toggle
     diff_panel = task_page.get_diff_panel()
     expand_toggle = diff_panel.get_expand_toggle()
     expect(expand_toggle).to_be_visible()

@@ -45,7 +45,6 @@ def test_alpha_search_flow(sculptor_instance_: SculptorInstance) -> None:
     search_input = search_bar.get_search_input()
     expect(search_input).to_be_visible()
 
-    # Type search query
     search_input.fill("zymurgy")
 
     # Verify match counter shows matches
@@ -56,11 +55,9 @@ def test_alpha_search_flow(sculptor_instance_: SculptorInstance) -> None:
     # Navigate to next match with Enter
     search_input.press("Enter")
 
-    # Verify counter updated
     expect(counter).to_contain_text("2/")
 
     # Close search with Escape
     search_input.press("Escape")
 
-    # Search bar should be hidden
     expect(search_input).not_to_be_visible()

@@ -37,11 +37,9 @@ fake_claude:write_file `{
     alpha_view = get_alpha_chat_view(page)
     expect(alpha_view).to_be_visible()
 
-    # Turn footer should be visible with file count
     turn_footers = alpha_view.get_turn_footers()
     expect(turn_footers.first).to_be_visible()
 
-    # Footer should contain "1 file" for the single written file
     expect(turn_footers.first).to_contain_text("1 file")
 
 
@@ -71,12 +69,9 @@ fake_claude:multi_step `{
     alpha_view = get_alpha_chat_view(page)
     expect(alpha_view).to_be_visible()
 
-    # Turn footer should show file count
     turn_footers = alpha_view.get_turn_footers()
     expect(turn_footers.first).to_be_visible()
 
-    # Footer should contain "2 files" for the two written files
     expect(turn_footers.first).to_contain_text("2 files")
 
-    # Footer should also contain token info
     expect(turn_footers.first).to_contain_text("tokens")

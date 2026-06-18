@@ -19,9 +19,6 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
-# ---------------------------------------------------------------------------
-# Prompt for test 1: multiple sequential Read + Glob calls
-# ---------------------------------------------------------------------------
 MULTI_READ_AND_GLOB_PROMPT = """\
 fake_claude:multi_step `{
   "steps": [
@@ -84,9 +81,6 @@ fake_claude:multi_step `{
 }`"""
 
 
-# ---------------------------------------------------------------------------
-# Prompt for test 2: background bash then read the output file
-# ---------------------------------------------------------------------------
 BACKGROUND_BASH_THEN_READ_PROMPT = """\
 fake_claude:multi_step `{
   "steps": [

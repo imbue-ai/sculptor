@@ -55,7 +55,6 @@ fake_claude:multi_step `{
         chat_panel = task_page.get_chat_panel()
         wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-        # Open the StatusPill popover and verify task rows are visible.
         tasks_popover = PlaywrightAgentTasksPopoverElement(instance.page)
         tasks_popover.open()
         rows = tasks_popover.get_rows()
@@ -74,7 +73,6 @@ fake_claude:multi_step `{
         expect(workspace_tab).to_be_visible()
         workspace_tab.click()
 
-        # Wait for the agent tab to appear and click it to get to the task page.
         agent_tab_bar = PlaywrightAgentTabBarElement(instance.page)
         agent_tab = agent_tab_bar.get_agent_tabs().first
         expect(agent_tab).to_be_visible(timeout=_BUILD_TIMEOUT_MS)

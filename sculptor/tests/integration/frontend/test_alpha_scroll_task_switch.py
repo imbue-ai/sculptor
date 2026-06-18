@@ -51,7 +51,6 @@ def test_scroll_position_restored_on_task_switch(sculptor_instance_: SculptorIns
         }}"""
     )
 
-    # Record position
     pos_a = get_alpha_scroll_position(page)
 
     # Switch to task B via workspace tab (no reload)

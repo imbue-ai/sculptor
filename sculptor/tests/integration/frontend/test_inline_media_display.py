@@ -65,11 +65,9 @@ def test_assistant_img_tag_renders_file_preview(
 
     messages = chat_panel.get_messages()
 
-    # The assistant message (index 1) should contain the rendered file preview
     assistant_message = messages.nth(1)
     expect_message_to_have_role(message=assistant_message, role=ElementIDs.ASSISTANT_MESSAGE)
 
-    # The FileBlock should have been delivered and rendered as a FILE_PREVIEW_CONTAINER
     file_preview_container = assistant_message.get_by_test_id(ElementIDs.FILE_PREVIEW_CONTAINER)
     expect(file_preview_container).to_have_count(1)
 
@@ -192,7 +190,6 @@ def test_assistant_img_tag_persists_after_tool_call(
     file_preview_container = assistant_message.get_by_test_id(ElementIDs.FILE_PREVIEW_CONTAINER)
     expect(file_preview_container).to_have_count(1)
 
-    # The text content should also be visible
     expect(assistant_message).to_contain_text("Here is a screenshot")
     expect(assistant_message).to_contain_text("Done.")
 
@@ -292,13 +289,11 @@ def test_assistant_img_tag_persists_after_restart(
 
     # Phase 2: Restart and verify the image persisted
     with sculptor_instance_factory_.spawn_instance() as instance:
-        # Navigate to the workspace
         new_task_page = PlaywrightTaskPage(page=instance.page)
         workspace_tab = new_task_page.get_workspace_tabs().first
         expect(workspace_tab).to_be_visible()
         workspace_tab.click()
 
-        # Wait for the chat to load with the persisted messages
         chat_panel = new_task_page.get_chat_panel()
         wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
@@ -310,7 +305,6 @@ def test_assistant_img_tag_persists_after_restart(
         file_preview_container = assistant_message.get_by_test_id(ElementIDs.FILE_PREVIEW_CONTAINER)
         expect(file_preview_container).to_have_count(1)
 
-        # The surrounding text should also be visible
         expect(assistant_message).to_contain_text("Here is a screenshot")
         expect(assistant_message).to_contain_text("Done.")
 
@@ -325,7 +319,6 @@ def test_assistant_multiple_images_render_as_thumbnail_strip(
     The FILE_PREVIEW_LIST container should use flex-direction: row so images appear
     side by side, matching the layout used in user messages.
     """
-    # Create a second test image for the strip
     temp_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
     second_image_path = temp_file.name
     temp_file.close()
@@ -413,13 +406,11 @@ def test_assistant_img_tag_persists_after_tool_call_and_restart(
 
     # Phase 2: Restart and verify the image persisted
     with sculptor_instance_factory_.spawn_instance() as instance:
-        # Navigate to the workspace
         new_task_page = PlaywrightTaskPage(page=instance.page)
         workspace_tab = new_task_page.get_workspace_tabs().first
         expect(workspace_tab).to_be_visible()
         workspace_tab.click()
 
-        # Wait for the chat to load with the persisted messages
         chat_panel = new_task_page.get_chat_panel()
         wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
@@ -431,6 +422,5 @@ def test_assistant_img_tag_persists_after_tool_call_and_restart(
         file_preview_container = assistant_message.get_by_test_id(ElementIDs.FILE_PREVIEW_CONTAINER)
         expect(file_preview_container).to_have_count(1)
 
-        # The surrounding text should also be visible
         expect(assistant_message).to_contain_text("Here is a screenshot")
         expect(assistant_message).to_contain_text("Done.")

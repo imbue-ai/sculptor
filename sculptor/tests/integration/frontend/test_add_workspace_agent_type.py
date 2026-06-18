@@ -1,10 +1,9 @@
 """Add Workspace form's first-agent type picker.
 
-Replaces the old workspace-harness picker tests: agent type is per-agent,
-so the form's picker chooses the type of the workspace's *first agent* via
-createWorkspaceAgent. The select is always visible (Terminal is available to
-everyone); only the pi option is gated behind the experimental pi-agent
-flag.
+Agent type is per-agent, so the form's picker chooses the type of the
+workspace's *first agent* via createWorkspaceAgent. The select is always
+visible (Terminal is available to everyone); only the pi option is gated
+behind the experimental pi-agent flag.
 """
 
 from playwright.sync_api import expect

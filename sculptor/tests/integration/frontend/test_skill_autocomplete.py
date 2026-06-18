@@ -78,8 +78,6 @@ def test_workspace_skill_appears_in_autocomplete_popover(sculptor_instance_: Scu
         except AssertionError:
             if attempt == 4:
                 raise
-            # Clear the input and retry — Escape dismisses the popover,
-            # then select-all + delete clears the text.
             page.keyboard.press("Escape")
             expect(mention_list).not_to_be_visible()
             page.keyboard.press(f"{mod_key}+a")
@@ -202,7 +200,6 @@ def test_slash_command_persists_as_chip_after_reload(sculptor_instance_: Sculpto
     page.keyboard.press("Enter")
     expect(mention_list).not_to_be_visible()
 
-    # The skill chip should be rendered as a mention span.
     mention_span = chat_panel.get_mention_spans()
     expect(mention_span).to_be_visible()
     expect(mention_span).to_contain_text(skill_name)

@@ -60,7 +60,6 @@ def test_discard_file_removes_from_changes(sculptor_instance_: SculptorInstance)
     expect(discard_row).to_have_count(1)
     discard_row.hover()
 
-    # Click the discard button
     discard_button = changes_panel.get_discard_button(discard_row)
     expect(discard_button).to_be_visible()
     discard_button.click()
@@ -71,7 +70,6 @@ def test_discard_file_removes_from_changes(sculptor_instance_: SculptorInstance)
     expect(dialog).to_contain_text("discard_me.py")
     expect(dialog).to_contain_text("cannot be undone")
 
-    # Confirm the discard
     changes_panel.get_discard_dialog_confirm().click()
 
     # Dialog should close and the file should be removed from the list
@@ -103,7 +101,6 @@ def test_discard_cancel_preserves_file(sculptor_instance_: SculptorInstance) -> 
     discard_row.hover()
     changes_panel.get_discard_button(discard_row).click()
 
-    # Cancel the dialog
     dialog = changes_panel.get_discard_dialog()
     expect(dialog).to_be_visible()
     changes_panel.get_discard_dialog_cancel().click()

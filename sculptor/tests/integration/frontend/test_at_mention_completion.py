@@ -38,14 +38,11 @@ def test_at_mention_opens_suggestion_popup(sculptor_instance_: SculptorInstance)
     chat_input = chat_panel.get_chat_input()
     expect(chat_input).to_be_visible()
 
-    # Type '@' to trigger the mention suggestion
     chat_input.press_sequentially("@")
 
-    # The mention list should appear with file suggestions
     mention_list = chat_panel.get_mention_list()
     expect(mention_list).to_be_visible()
 
-    # Should have at least one suggestion item
     items = chat_panel.get_mention_items()
     expect(items.first).to_be_visible()
 
@@ -59,13 +56,12 @@ def test_at_mention_filters_by_query(sculptor_instance_: SculptorInstance) -> No
     chat_input = chat_panel.get_chat_input()
     expect(chat_input).to_be_visible()
 
-    # Type '@stuff' — the test repo has a root-level 'stuff.txt' file
+    # The test repo has a root-level 'stuff.txt' file.
     chat_input.press_sequentially("@stuff")
 
     mention_list = chat_panel.get_mention_list()
     expect(mention_list).to_be_visible()
 
-    # At least one item should match 'stuff'
     items = chat_panel.get_mention_items()
     expect(items.first).to_be_visible()
     expect(items.first).to_contain_text("stuff")
@@ -87,13 +83,10 @@ def test_at_mention_select_with_enter(sculptor_instance_: SculptorInstance) -> N
     expect(mention_list).to_be_visible()
     expect(chat_panel.get_mention_items().first).to_be_visible()
 
-    # Press Enter to select the first suggestion
     chat_input.press("Enter")
 
-    # The mention list should disappear after selection
     expect(mention_list).not_to_be_visible()
 
-    # The editor should now contain a mention span with the file name
     mention_span = chat_panel.get_mention_spans()
     expect(mention_span).to_be_visible()
     expect(mention_span).to_contain_text("stuff")
@@ -121,13 +114,10 @@ def test_at_mention_select_with_click(sculptor_instance_: SculptorInstance) -> N
     # Remember the text of the first suggestion
     first_item_text = items.first.inner_text()
 
-    # Click the first suggestion
     items.first.click()
 
-    # The mention list should disappear
     expect(mention_list).not_to_be_visible()
 
-    # The editor should contain a mention span with the selected file name.
     mention_span = chat_panel.get_mention_spans()
     expect(mention_span).to_be_visible()
     expect(mention_span).to_contain_text(first_item_text)
@@ -142,16 +132,13 @@ def test_at_mention_escape_closes_popup(sculptor_instance_: SculptorInstance) ->
     chat_input = chat_panel.get_chat_input()
     expect(chat_input).to_be_visible()
 
-    # Type '@' to open suggestions
     chat_input.press_sequentially("@")
 
     mention_list = chat_panel.get_mention_list()
     expect(mention_list).to_be_visible()
 
-    # Press Escape to dismiss
     chat_input.press("Escape")
 
-    # The mention list should disappear
     expect(mention_list).not_to_be_visible()
 
     # No mention should have been inserted
@@ -195,7 +182,6 @@ def test_at_mention_persists_as_styled_span_after_workspace_switch(
     chat_input = chat_panel.get_chat_input()
     expect(chat_input).to_be_visible()
 
-    # Type '@stuff' to bring up the suggestion list then select with Enter
     chat_input.press_sequentially("@stuff")
     mention_list = chat_panel.get_mention_list()
     expect(mention_list).to_be_visible()

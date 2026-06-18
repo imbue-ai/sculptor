@@ -26,10 +26,8 @@ def test_prompt_draft_persists_from_task_page(sculptor_instance_: SculptorInstan
 
     task_page = start_task_and_wait_for_ready(sculptor_instance_.page, prompt=task_text)
 
-    # Type a follow-up message
     task_page.get_chat_panel().get_chat_input().fill(follow_up_text)
 
-    # Verify that we can reload and the prompt draft persists
     soft_reload_page(task_page)
     expect(task_page.get_chat_panel().get_chat_input()).to_have_text(follow_up_text)
 
@@ -40,23 +38,19 @@ def test_prompt_drafts_persist_on_multiple_tasks_and_home_page(sculptor_instance
     page = sculptor_instance_.page
     follow_up_text = "This is a follow-up message draft."
 
-    # Create a workspace/agent
     task_page = start_task_and_wait_for_ready(page, prompt="Hello, this is a test message!")
     chat_panel = task_page.get_chat_panel()
 
     # Type a follow-up message draft in chat input (don't send it)
     chat_panel.get_chat_input().fill(follow_up_text)
 
-    # Navigate away to Add Workspace page
     task_page.get_add_workspace_button().click()
     add_workspace_page = PlaywrightAddWorkspacePage(page=page)
     expect(add_workspace_page.get_submit_button()).to_be_visible()
 
-    # Navigate back to the first workspace tab
     task_page.get_workspace_tabs().first.click()
     expect(task_page.get_chat_panel()).to_be_visible()
 
-    # Verify the draft text is still there
     task_page = PlaywrightTaskPage(page=page)
     expect(task_page.get_chat_panel().get_chat_input()).to_have_text(follow_up_text)
 
@@ -69,7 +63,6 @@ def test_starting_text(sculptor_instance_: SculptorInstance) -> None:
     task_page = start_task_and_wait_for_ready(sculptor_instance_.page, prompt=task_text)
     chat_panel = task_page.get_chat_panel()
 
-    # Wait for initial exchange to complete
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
     messages = chat_panel.get_messages()
@@ -92,10 +85,8 @@ def test_send_message_after_task_start(sculptor_instance_: SculptorInstance) -> 
 
     send_chat_message(chat_panel=chat_panel, message="This is a second test message! Please respond briefly!")
 
-    # Verify assistant has responded to both messages
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=4)
 
-    # Verify both user messages appear
     messages = chat_panel.get_messages()
 
     expect_message_to_have_role(message=messages.nth(0), role=ElementIDs.USER_MESSAGE)
@@ -118,23 +109,18 @@ def test_send_multiple_messages(sculptor_instance_: SculptorInstance) -> None:
     chat_input = chat_panel.get_chat_input()
     expect(chat_input).to_have_text("")
 
-    # Send second message and verify conversation flow
     send_chat_message(
         chat_panel=chat_panel, message="Hello this is test message two of three! Please respond briefly!"
     )
 
-    # Ensure assistant has responded before continuing
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=4)
 
-    # Send third message to test extended conversation handling
     send_chat_message(
         chat_panel=chat_panel, message="Hello this is test message three of three! Please respond briefly!"
     )
 
-    # Wait for complete conversation with all assistant responses
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=6)
 
-    # Verify all messages appear in correct order
     messages = chat_panel.get_messages()
     expect_message_to_have_role(message=messages.nth(0), role=ElementIDs.USER_MESSAGE)
     expect(messages.nth(0)).to_contain_text("Hello this is test message one of three! Please respond briefly!")
@@ -171,15 +157,12 @@ def test_remove_queued_message_and_continue(sculptor_instance_: SculptorInstance
     delete_queued_message_button = chat_panel.get_delete_queued_message_button().last
     delete_queued_message_button.click()
 
-    # Expect there to be no queued messages after all the messages have been sent and responded to
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=4)
     expect(chat_panel.get_queued_message_bar()).to_have_count(0)
 
-    # Send a new message to verify conversation can continue normally
     chat_input.fill("Hello this is test message four of four! Please respond briefly!")
     chat_panel.get_send_button().click()
 
-    # Verify final state
     messages = chat_panel.get_messages()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=6)
     expect_message_to_have_role(message=messages.nth(0), role=ElementIDs.USER_MESSAGE)
@@ -207,34 +190,27 @@ def test_model_selection(sculptor_instance_: SculptorInstance) -> None:
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    # Verify we can see and interact with the model selector
     model_selector = chat_panel.get_model_selector()
     expect(model_selector).to_be_visible()
 
-    # Switch to the second fake model
     select_model_by_name(chat_panel=chat_panel, model_name=FAKE_CLAUDE_2_MODEL_NAME)
 
-    # Send a message using the second model
     send_chat_message(
         chat_panel=chat_panel,
         message='fake_claude:text `{"text": "Hello from Fake Claude 2"}`',
     )
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=4)
 
-    # Verify the model selector still shows "Fake Claude 2" after the response
     expect(model_selector).to_contain_text("Fake Claude 2", ignore_case=True)
 
-    # Switch back to the first fake model
     select_model_by_name(chat_panel=chat_panel, model_name=FAKE_CLAUDE_MODEL_NAME)
 
-    # Send a message using the first model
     send_chat_message(
         chat_panel=chat_panel,
         message='fake_claude:text `{"text": "Hello from Fake Claude again"}`',
     )
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=6)
 
-    # Verify the model selector shows "Fake Claude" again
     expect(model_selector).to_contain_text("Fake Claude", ignore_case=True)
 
 
@@ -243,14 +219,12 @@ def test_model_selector_updates_when_switching_tasks(sculptor_instance_: Sculpto
     """Test that the model selector displays the correct model when navigating between workspace tabs."""
     page = sculptor_instance_.page
 
-    # Create first workspace with Fake Claude
     start_task_and_wait_for_ready(
         page,
         prompt='fake_claude:text `{"text": "Task 1 response"}`',
         model_name=FAKE_CLAUDE_MODEL_NAME,
     )
 
-    # Create second workspace with Fake Claude 2
     start_task_and_wait_for_ready(
         page,
         prompt='fake_claude:text `{"text": "Task 2 response"}`',
@@ -265,7 +239,6 @@ def test_model_selector_updates_when_switching_tasks(sculptor_instance_: Sculpto
     expect(model_selector).to_be_visible()
     expect(model_selector).to_contain_text("Fake Claude 2", ignore_case=True)
 
-    # Navigate to first workspace tab and verify its model
     workspace_tabs.first.click()
     first_task_page = PlaywrightTaskPage(page=page)
     first_chat_panel = first_task_page.get_chat_panel()

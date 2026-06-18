@@ -25,11 +25,9 @@ from tests.integration.real_claude.helpers import wait_for_any_assistant_text
 def test_very_long_prompt_via_stdin(sculptor_instance_: SculptorInstance) -> None:
     """Verify the stdin JSON protocol handles large prompts correctly.
 
-    The old approach used a file redirect (< instructions_file); the new one
-    sends the prompt inline as a JSON message on stdin. This tests that large
-    payloads don't get truncated or cause pipe buffer issues.
+    This tests that large payloads don't get truncated or cause pipe buffer
+    issues.
     """
-    # Build a ~10,000 character prompt with 500 items
     items = "\n".join(f"Item {i}: ALPHA-{i:03d}" for i in range(1, 501))
     prompt = f"I am going to give you a long list of items. At the end, I will ask a question.\n{items}\nWhat is Item 250? Reply in the format: ITEM-250-IS: <value>"
     task_page = create_workspace_and_send(sculptor_instance_, prompt)
@@ -104,11 +102,9 @@ def test_interrupt_then_ask_user_question(sculptor_instance_: SculptorInstance) 
         ("Ask me a question using AskUserQuestion: 'Continue with ocean essay?' with options ['Yes', 'No']."),
     )
 
-    # Wait for the question panel
     ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=RESPONSE_TIMEOUT_MS)
 
-    # Answer and verify agent continues
     ask_panel.select_option_by_text("Yes")
     ask_panel.submit()
 
@@ -132,20 +128,16 @@ def test_interrupt_then_plan_mode(sculptor_instance_: SculptorInstance) -> None:
     wait_for_any_assistant_text(chat_panel)
     interrupt_agent(chat_panel)
 
-    # Now enter plan mode
     send_no_wait(
         chat_panel,
         ("Enter plan mode. Present a plan with 3 steps to create a simple Python script. Then ask for approval."),
     )
 
-    # Wait for approval prompt
     ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=RESPONSE_TIMEOUT_MS)
 
-    # Approve
     ask_panel.select_option_by_text("Approve")
     ask_panel.submit()
 
-    # Agent should execute
     expect(chat_panel.get_thinking_indicator()).not_to_be_visible(timeout=RESPONSE_TIMEOUT_MS)
     assert_no_errors(chat_panel)

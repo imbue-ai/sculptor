@@ -1,18 +1,4 @@
-"""Integration tests for zen mode and focus mode.
-
-Tests cover:
-- Zen mode keyboard shortcut (Cmd+Shift+\\) hides all UI chrome and panels
-- Exiting zen mode restores all UI chrome and panels
-- Focus mode keyboard shortcut (Cmd+\\) hides panels but keeps chrome
-- Exiting focus mode while in zen mode exits both (full escape)
-- Zen mode preserves pre-existing focus mode on exit
-- Exit button appears and functions correctly in zen mode
-- Panel toggles in zen mode persist on exit
-- Workspace tab navigation (Cmd+[ / Cmd+]) works in zen mode
-- Exit button is hidden by default (opacity 0) but attached to DOM
-- Exit button appears on hover over the top-left hot zone
-- Exit button disappears when mouse leaves the hot zone
-"""
+"""Integration tests for zen mode and focus mode."""
 
 from playwright.sync_api import expect
 

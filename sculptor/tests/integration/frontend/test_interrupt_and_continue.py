@@ -55,7 +55,6 @@ def test_interrupt_initial_message_immediately(sculptor_instance_: SculptorInsta
 
     _interrupt_agent_before_any_output(chat_panel=chat_panel)
 
-    # Verify no InterruptFailure warning is shown to the user.
     expect(chat_panel.get_messages().filter(has_text="InterruptFailure")).to_have_count(0)
     expect(chat_panel.get_messages().filter(has_text="Failed to interrupt")).to_have_count(0)
 
@@ -72,10 +71,8 @@ def test_interrupt_shows_stopped_indicator(sculptor_instance_: SculptorInstance)
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    # Verify initial text appeared
     expect(chat_panel.get_messages().nth(1)).to_contain_text("Here is some content.")
 
-    # Send a slow message and interrupt it
     send_chat_message(chat_panel=chat_panel, message=_SLEEP_PROMPT)
     _interrupt_agent_before_any_output(chat_panel=chat_panel)
 
@@ -198,14 +195,11 @@ def test_interrupt_and_continue(sculptor_instance_: SculptorInstance) -> None:
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    # Send a slow message and interrupt it
     send_chat_message(chat_panel=chat_panel, message=_SLEEP_PROMPT)
     _interrupt_agent_before_any_output(chat_panel=chat_panel)
 
-    # Verify the Stopped marker is present
     expect(chat_panel.get_messages().last).to_contain_text("Stopped")
 
-    # Send a follow-up message and verify the agent can still respond
     send_chat_message(
         chat_panel=chat_panel,
         message='fake_claude:text `{"text": "Follow-up response."}`',

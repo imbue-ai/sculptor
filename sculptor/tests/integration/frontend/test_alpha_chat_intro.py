@@ -91,7 +91,6 @@ def test_intro_text_renders_above_first_message(sculptor_instance_: SculptorInst
     # Send the very first message.
     send_chat_message(chat_panel, 'fake_claude:text `{"text": "Hello"}`')
 
-    # Wait for messages to fully render (replaces wait_for_function + sleep).
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
     # Scroll to the very top so both the intro and the first message are

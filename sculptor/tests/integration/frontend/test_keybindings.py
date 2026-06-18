@@ -47,7 +47,6 @@ def test_search_filters_keybindings(sculptor_instance_: SculptorInstance) -> Non
     """Searching should filter keybindings by name or description."""
     keybindings = _navigate_to_keybindings(sculptor_instance_)
 
-    # Search for "search"
     keybindings.search("search")
 
     # "Command palette" and "Chat search" should be visible
@@ -57,7 +56,6 @@ def test_search_filters_keybindings(sculptor_instance_: SculptorInstance) -> Non
     # Unrelated bindings should be hidden
     expect(keybindings.get_keybinding_row("new_workspace")).to_have_count(0)
 
-    # Clear search, all should be visible again
     keybindings.clear_search()
     expect(keybindings.get_keybinding_row("new_workspace")).to_be_visible()
 
@@ -76,7 +74,6 @@ def test_record_new_keybinding(sculptor_instance_: SculptorInstance) -> None:
     # in test_duplicate_detection_reassign.
     keybindings.set_keybinding("command_palette", f"{mod}+j")
 
-    # Verify the display updates
     display = keybindings.get_keybinding_display_text("command_palette")
     expect(display).to_contain_text("J")
 
@@ -90,10 +87,8 @@ def test_clear_keybinding(sculptor_instance_: SculptorInstance) -> None:
     """Clearing a keybinding should show 'Click to set'."""
     keybindings = _navigate_to_keybindings(sculptor_instance_)
 
-    # Clear the "Help" keybinding
     keybindings.clear_keybinding("help")
 
-    # Verify it shows "Click to set"
     display = keybindings.get_keybinding_display_text("help")
     expect(display).to_contain_text("Click to set")
 
@@ -115,7 +110,6 @@ def test_reset_all_to_defaults(sculptor_instance_: SculptorInstance) -> None:
     display = keybindings.get_keybinding_display_text("command_palette")
     expect(display).to_contain_text("J")
 
-    # Reset all
     keybindings.reset_all_to_defaults()
 
     # Verify it reverts (default is Meta+K -> displays as ⌘K or Ctrl+K)
@@ -141,7 +135,6 @@ def test_duplicate_detection_reassign(sculptor_instance_: SculptorInstance) -> N
     expect(warning).to_be_visible()
     expect(warning).to_contain_text("Command palette")
 
-    # Click Reassign
     keybindings.click_reassign()
 
     # "Help" should now show the new binding
@@ -173,7 +166,6 @@ def test_duplicate_detection_cancel(sculptor_instance_: SculptorInstance) -> Non
     warning = keybindings.get_conflict_warning()
     expect(warning).to_be_visible()
 
-    # Click Cancel
     keybindings.click_cancel_conflict()
 
     # Warning should disappear
@@ -321,9 +313,7 @@ def test_help_dialog_hides_unbound(sculptor_instance_: SculptorInstance) -> None
     keybindings.reset_all_to_defaults()
 
 
-# ---------------------------------------------------------------------------
 # Functional tests — verify keybindings trigger the correct actions
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.release
@@ -338,7 +328,6 @@ def test_keybindings_suppressed_when_overlay_open(sculptor_instance_: SculptorIn
     keybindings.reset_all_to_defaults()
     blur_active_element(page)
 
-    # Count workspace tabs before
     layout = PlaywrightProjectLayoutPage(page=page)
     initial_tab_count = layout.get_workspace_tabs().count()
 
@@ -378,11 +367,9 @@ def test_default_command_palette_keybinding_works(sculptor_instance_: SculptorIn
     blur_active_element(page)
     layout = PlaywrightProjectLayoutPage(page=page)
 
-    # Press the default binding for command_palette
     mod = get_playwright_modifier_key()
     layout.press_keyboard_shortcut(f"{mod}+k")
 
-    # Search modal should open
     palette = layout.get_command_palette()
     expect(palette).to_be_visible()
 
@@ -407,11 +394,9 @@ def test_customized_keybinding_is_honored(sculptor_instance_: SculptorInstance) 
     # keybindings row in Settings now displays the new binding. The same
     # `userConfigAtom -> keybindingsAtom` chain feeds both the settings
     # UI and the global keyboard-shortcut handler, so once the row
-    # reflects "J" the global handler has the new binding too. Replaces
-    # a fixed `wait_for_timeout(1000)` that was race-prone in CI.
+    # reflects "J" the global handler has the new binding too.
     expect(keybindings.get_keybinding_display_text("command_palette")).to_contain_text("J")
 
-    # Navigate away from settings.
     blur_active_element(page)
     layout = PlaywrightProjectLayoutPage(page=page)
 

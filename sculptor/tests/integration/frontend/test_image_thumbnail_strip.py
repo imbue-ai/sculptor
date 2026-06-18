@@ -272,14 +272,12 @@ def test_thumbnails_use_object_fit_cover(
     expect(thumbnails.nth(0)).to_have_css("object-fit", "cover")
 
 
-# ---------------------------------------------------------------------------
 # Alpha chat view tests
 #
 # Strategy: attach files and send in classic view (where _attach_and_send
 # works with ASSISTANT_MESSAGE/USER_MESSAGE selectors), then switch to
 # alpha view for layout assertions.  This verifies that AlphaUserMessage
 # renders existing file blocks correctly.
-# ---------------------------------------------------------------------------
 
 
 def _get_alpha_preview_list(page: Page) -> Locator:

@@ -82,8 +82,7 @@ def test_no_error_block_after_restart_during_pending_auq(
         # before asserting absence of the error block. The AUQ ToolUseBlock
         # is in the persisted ResponseBlockAgentMessage and re-renders on
         # restart; the block may be collapsed (hidden) by default, so check
-        # existence via to_have_count(1) rather than visibility (matching
-        # the pattern in test_regression_auq_failure_stuck.py). Without this
+        # existence via to_have_count(1) rather than visibility. Without this
         # gate, asserting "error block absent" would pass spuriously before
         # any messages have hydrated.
         task_page_after = PlaywrightTaskPage(page=instance.page)

@@ -39,10 +39,6 @@ from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.resources import invalidate_shared_instance
 from sculptor.testing.sculptor_instance import SculptorInstance
 
-# ---------------------------------------------------------------------------
-# Session-scoped fixture: set env vars before the Electron process starts
-# ---------------------------------------------------------------------------
-
 
 @pytest.fixture(scope="session", autouse=True)
 def _auto_update_electron_env(
@@ -128,11 +124,6 @@ def _reset_auto_update_state(
     auto_update_server.set_no_update()
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
 def _open_version_popover(page: Page) -> PlaywrightVersionPopoverElement:
     """Open the version popover by clicking the version trigger."""
     popover = PlaywrightVersionPopoverElement(page)
@@ -147,11 +138,6 @@ def _click_check_for_updates(page: Page) -> None:
     button = update.get_check_button()
     expect(button).to_be_visible()
     button.click()
-
-
-# ---------------------------------------------------------------------------
-# E1: Happy path — update available → download → ready
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.release
@@ -188,11 +174,6 @@ def test_update_available_and_ready(
     expect(version_popover.get_update_dot()).to_be_visible()
 
 
-# ---------------------------------------------------------------------------
-# E2: No update available
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.release
 @pytest.mark.electron
 def test_no_update_available_shows_up_to_date(
@@ -214,11 +195,6 @@ def test_no_update_available_shows_up_to_date(
         "Up to date",
         timeout=30_000,
     )
-
-
-# ---------------------------------------------------------------------------
-# E3: Download failure — artifact missing → error
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.release
@@ -244,11 +220,6 @@ def test_download_failure_shows_error(
     )
 
 
-# ---------------------------------------------------------------------------
-# E4: Network failure — server unreachable → error
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.release
 @pytest.mark.electron
 def test_network_failure_shows_error(
@@ -270,11 +241,6 @@ def test_network_failure_shows_error(
         )
     finally:
         auto_update_server.set_online()
-
-
-# ---------------------------------------------------------------------------
-# E5a: Channel switch — STABLE → RC (verify RC feed path)
-# ---------------------------------------------------------------------------
 
 
 def _enable_channel_select(page: Page, auto_update_server: AutoUpdateTestServer) -> None:  # noqa: F811
@@ -317,11 +283,6 @@ def test_channel_switch_stable_to_rc(
     # Verify the server saw a request on the RC path (/slim-rc/...).
     paths = auto_update_server.get_request_paths()
     assert any("/slim-rc/" in p for p in paths), f"Expected RC feed path in {paths}"
-
-
-# ---------------------------------------------------------------------------
-# E5b: Channel switch — RC → STABLE after RC download
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.release
@@ -389,11 +350,6 @@ def test_channel_switch_rc_to_stable_after_download(
     # Verify the server saw requests on the STABLE path (/slim/, not /slim-rc/).
     paths = auto_update_server.get_request_paths()
     assert any("/slim/" in p and "/slim-rc/" not in p for p in paths), f"Expected STABLE feed path in {paths}"
-
-
-# ---------------------------------------------------------------------------
-# E9: User-Agent identifies Sculptor
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.electron

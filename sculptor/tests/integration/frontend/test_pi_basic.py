@@ -4,9 +4,8 @@ Creates a workspace with ``agent_type=pi``, sends a user message, and asserts th
 FakePi assistant response renders. Spot-checks that the most prominent
 Claude-only affordances (sub-agent pill, fast-mode toggle) are suppressed and
 the skills panel renders its empty state. The plan-mode toggle is NOT here: pi
-now supports the interactive backchannel, so that toggle is available — its
-gating is covered by test_pi_capability_gating.py. Per-capability parity is the
-responsibility of test_pi_capability_gating.py.
+supports the interactive backchannel, so that toggle is available — its
+gating is covered by test_pi_capability_gating.py.
 """
 
 from playwright.sync_api import expect
@@ -109,7 +108,7 @@ def test_pi_workspace_suppresses_claude_only_surfaces(
     expect(chat_panel.get_chat_input()).to_be_visible()
     expect(chat_panel.get_send_button()).to_be_visible()
 
-    # The plan-mode toggle is intentionally NOT asserted absent here: pi now
+    # The plan-mode toggle is intentionally NOT asserted absent here: pi
     # supports the interactive backchannel, so the toggle renders (its gating is
     # covered by test_pi_capability_gating.py).
     expect(page.get_by_test_id(ElementIDs.FAST_MODE_TOGGLE)).to_have_count(0)
