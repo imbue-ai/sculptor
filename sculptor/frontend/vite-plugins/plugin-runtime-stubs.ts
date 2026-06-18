@@ -94,6 +94,16 @@ const RUNTIME_MODULES: ReadonlyArray<RuntimeModuleConfig> = [
   { file: "sculptor-plugin-sdk.js", sources: [{ specifier: SDK_SPECIFIER, hostKey: "sdk" }] },
 ];
 
+/**
+ * The bare specifiers the import map resolves to host singletons — i.e. exactly
+ * what a compiled plugin bundle must mark external so it shares the host's
+ * instances instead of bundling its own copy. Derived from `RUNTIME_MODULES`
+ * so a plugin build's externals can't drift from what the stubs provide.
+ */
+export const RUNTIME_MODULE_SPECIFIERS: ReadonlyArray<string> = [
+  ...new Set(RUNTIME_MODULES.flatMap((module) => module.sources.map((source) => source.specifier))),
+];
+
 /** Packages whose installed versions are embedded for future manifest validation. */
 const VERSION_PACKAGES: ReadonlyArray<string> = [
   "react",

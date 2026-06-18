@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { defineConfig, loadEnv, type UserConfig } from "vite";
 
+import { bundledPlugins } from "./vite-plugins/bundled-plugins.ts";
 import { pluginRuntimeStubs } from "./vite-plugins/plugin-runtime-stubs.ts";
 
 // This is just a backup function to use in case SCULPTOR_SENTRY_RELEASE_ID is not set.
@@ -73,6 +74,7 @@ function externalizeXterm(): import("vite").Plugin {
 const ENABLED_PLUGINS = [
   externalizeXterm(),
   pluginRuntimeStubs(),
+  bundledPlugins(),
   react({
     plugins: [
       [
