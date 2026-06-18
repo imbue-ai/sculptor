@@ -1351,7 +1351,17 @@ def workspace_read_file(
             raise HTTPException(status_code=400, detail="Workspace environment not found")
 
         task_repo_path = environment.get_working_directory()
-        file_path = task_repo_path / read_file_request.file_path
+        requested_path = read_file_request.file_path
+        if requested_path == "~" or requested_path.startswith("~/"):
+            # A leading ~ addresses the environment's home directory, not a
+            # literal "~" entry under the workspace. Expand it against the
+            # environment's home (which may differ from the host process's
+            # $HOME) so a chip like ~/notes.txt opens the home file instead of
+            # <workspace>/~/notes.txt. The absolute result then flows through
+            # the host-readable direct-read path below.
+            file_path = environment.get_user_home_directory() / requested_path[2:]
+        else:
+            file_path = task_repo_path / requested_path
 
         # Try the workspace environment first (handles workspace-relative files).
         # Fall back to reading directly from the host filesystem for any
