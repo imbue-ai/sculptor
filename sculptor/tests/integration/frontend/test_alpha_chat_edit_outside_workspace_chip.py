@@ -23,10 +23,12 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
-# An absolute path outside the agent's workspace/code directory, mirroring how
-# the global Claude memory dir lives outside the repo. A leading-slash path makes
-# fake_claude's ``Path(cwd) / file_path`` resolve to exactly this location.
-_OUTSIDE_DIR = "/tmp/sculptor_outside_ws_edit_test"
+# A path outside the agent's workspace/code directory, mirroring how the global
+# Claude memory dir lives outside the repo. It is expressed relative to the
+# agent's cwd (the workspace) with a leading ``..`` so it resolves to a sibling
+# of the workspace, which is still inside the harness's per-test temp tree (and
+# therefore cleaned up) but outside the DiffTracker's code directory.
+_OUTSIDE_DIR = "../sculptor_outside_ws_edit_test"
 _OUTSIDE_FILE = f"{_OUTSIDE_DIR}/memory_notes.md"
 
 # bash creates the out-of-workspace file (rendered as a bash block, not a chip),
