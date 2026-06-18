@@ -17,15 +17,19 @@ from sculpt.client import Client
 from sculpt.client.api.default import create_workspace_agent
 from sculpt.client.api.default import delete_workspace_agent
 from sculpt.client.api.default import interrupt_workspace_agent
+from sculpt.client.api.default import list_terminal_agent_registrations
 from sculpt.client.api.default import list_workspace_agents
 from sculpt.client.api.default import rename_workspace_agent
 from sculpt.client.api.default import send_workspace_agent_messages
+from sculpt.client.models.agent_type_name import AgentTypeName
 from sculpt.client.models.coding_agent_task_view import CodingAgentTaskView
 from sculpt.client.models.create_agent_request import CreateAgentRequest
 from sculpt.client.models.http_validation_error import HTTPValidationError
 from sculpt.client.models.rename_agent_request import RenameAgentRequest
 from sculpt.client.models.send_message_request import SendMessageRequest
 from sculpt.client.models.task_status import TaskStatus
+from sculpt.client.models.terminal_agent_registration import TerminalAgentRegistration
+from sculpt.client.types import UNSET
 from sculpt.commands._follow_helpers import follow_and_stream_messages
 from sculpt.commands._follow_helpers import get_session_token_safe
 from sculpt.commands._follow_helpers import handle_exit_reason
@@ -53,6 +57,12 @@ from sculpt.formatting import handle_connection_error
 from sculpt.formatting import is_tty
 from sculpt.formatting import overwrite_lines
 from sculpt.formatting import truncate
+from sculpt.harness import HarnessSelection
+from sculpt.harness import available_harness_names
+from sculpt.harness import read_most_recently_used_harness
+from sculpt.harness import resolve_builtin_harness
+from sculpt.harness import resolve_harness_name
+from sculpt.harness import write_most_recently_used_harness
 from sculpt.message_formatting import format_message
 from sculpt.resolve import resolve_agent_id
 from sculpt.resolve import resolve_by_prefix
@@ -114,6 +124,45 @@ def _format_snapshot_datetime(iso_str: str) -> str:
         return iso_str
 
 
+def _fetch_terminal_agent_registrations(client: Client, json_output: bool) -> list[TerminalAgentRegistration]:
+    """Fetch the registered terminal agents the server currently offers."""
+    try:
+        result = list_terminal_agent_registrations.sync(client=client)
+    except httpx.ConnectError:
+        handle_connection_error(json_output)
+    if result is None:
+        cli_error("Failed to list harnesses", detail="No response from server", json_output=json_output)
+    return result.registrations
+
+
+def _resolve_harness_selection(harness: str | None, client: Client, json_output: bool) -> HarnessSelection:
+    """Resolve the requested harness, or fall back to the most-recently-used one.
+
+    An explicit choice is validated against the built-in harnesses (Claude,
+    Pi, Terminal) and the server's registered terminal agents, and becomes
+    the new MRU. With no choice, the previously used harness is reused,
+    defaulting to Claude the first time.
+    """
+    if harness is None:
+        mru = read_most_recently_used_harness()
+        if mru is not None:
+            return mru
+        return HarnessSelection(agent_type=AgentTypeName.CLAUDE)
+
+    builtin = resolve_builtin_harness(harness)
+    if builtin is not None:
+        write_most_recently_used_harness(builtin)
+        return builtin
+
+    registrations = _fetch_terminal_agent_registrations(client, json_output)
+    selection = resolve_harness_name(harness, registrations)
+    if selection is None:
+        valid = ", ".join(available_harness_names(registrations))
+        cli_error(f"Invalid harness '{harness}'. Valid options: {valid}", json_output=json_output)
+    write_most_recently_used_harness(selection)
+    return selection
+
+
 @agent_app.command("create")
 def create(
     workspace: str | None = typer.Option(None, "--workspace", "-w", help="Workspace ID (or set SCULPT_WORKSPACE_ID)"),
@@ -122,6 +171,14 @@ def create(
         "opus", "--model", "-m", help="The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m])"
     ),
     name: str | None = typer.Option(None, "--name", help="Agent name"),
+    harness: str | None = typer.Option(
+        None,
+        "--harness",
+        help=(
+            "Harness to create: Claude, Pi, Terminal, or a registered terminal agent"
+            + " by name (e.g. 'Claude CLI'). Defaults to the most-recently-used harness."
+        ),
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
     base_url: str | None = typer.Option(None, "--base-url", "-u", help="The Sculptor server URL"),
 ) -> None:
@@ -141,12 +198,18 @@ def create(
 
     llm_model = MODEL_MAPPING[model_lower]
 
+    selection = _resolve_harness_selection(harness, client, json_output)
+    if prompt and selection.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED):
+        cli_error("Terminal agents do not take an initial prompt (--prompt)", json_output=json_output)
+
     request = CreateAgentRequest(
         prompt=prompt,
         model=llm_model if prompt else None,
         interface="API",
         name=name,
         sent_via="sculpt",
+        agent_type=selection.agent_type,
+        registration_id=selection.registration_id if selection.registration_id is not None else UNSET,
     )
 
     try:
