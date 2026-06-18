@@ -146,9 +146,9 @@ build_frontend_app() (
   export npm_config_target_arch="$ELECTRON_ARCH"
   export ELECTRON_ARCH="$ELECTRON_ARCH"
 
-  # Your existing "uv" environment vars step; preserve exact semantics
-  # (eval ensures npm sees the variables in this subshell)
-  eval "$(uv run --project sculptor builder setup-build-vars production)"
+  # Inject telemetry/build env vars (eval so npm sees them in this subshell).
+  # Defaults to production; CI sets SCULPTOR_BUILD_ENV=dev for non-release builds.
+  eval "$(uv run --project sculptor builder setup-build-vars "${SCULPTOR_BUILD_ENV:-production}")"
 
 
   # <REPLACEMENT> begins here. We want to run:
