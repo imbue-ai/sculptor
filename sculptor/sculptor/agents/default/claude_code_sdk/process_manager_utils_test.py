@@ -4,6 +4,9 @@ from unittest.mock import MagicMock
 
 from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.claude_code_sdk.harness import CLAUDE_CODE_HARNESS
+from sculptor.agents.default.claude_code_sdk.process_manager_utils import _create_synthetic_diff_from_tool_input
+from sculptor.agents.default.claude_code_sdk.process_manager_utils import _create_tool_content
+from sculptor.agents.default.claude_code_sdk.process_manager_utils import _extract_edits
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import get_claude_command
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import get_user_instructions
 from sculptor.agents.default.claude_code_sdk.process_manager_utils import parse_claude_code_json_lines
@@ -13,6 +16,7 @@ from sculptor.agents.testing.fake_claude_jsonl import make_tool_use_block
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
+from sculptor.interfaces.agents.tool_names import AgentToolName
 from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import LocalEnvironmentID
 from sculptor.primitives.ids import ProjectID
@@ -25,6 +29,7 @@ from sculptor.services.workspace_service.environment_manager.environments.local_
 from sculptor.services.workspace_service.setup_command_runner import FailedSetup
 from sculptor.services.workspace_service.setup_command_runner import RunningSetup
 from sculptor.state.chat_state import AskUserQuestionData
+from sculptor.state.chat_state import DiffToolContent
 from sculptor.state.chat_state import GenericToolContent
 from sculptor.state.chat_state import QuestionOption
 from sculptor.state.chat_state import UserQuestion
@@ -586,3 +591,99 @@ def test_failed_edit_on_unchanged_file_preserves_error_text(
         f"Failed Edit on unchanged file must not synthesize a DiffToolContent; got {type(block.content).__name__}: {block.content!r}"
     )
     assert "File has not been read yet" in block.content.text
+
+
+# ---------------------------------------------------------------------------
+# Synthetic-diff fallback for file-change tools whose DiffTracker diff is None
+# (e.g. files outside the workspace, like the global Claude memory dir).
+# ---------------------------------------------------------------------------
+
+
+def _count_diff_line_changes(diff: str) -> tuple[int, int]:
+    """Mirror the frontend's getLineCounts: skip the 5-line header, then count
+    ``+``/``-`` lines (ignoring ``@@``/``+++``/``---``)."""
+    added = removed = 0
+    for line in diff.split("\n")[5:]:
+        if line.startswith(("@@", "+++", "---")):
+            continue
+        if line.startswith("+"):
+            added += 1
+        elif line.startswith("-"):
+            removed += 1
+    return added, removed
+
+
+def test_extract_edits_handles_single_edit() -> None:
+    pairs = _extract_edits({"old_string": "a", "new_string": "b"})
+    assert pairs == [("a", "b")]
+
+
+def test_extract_edits_handles_multi_edit() -> None:
+    pairs = _extract_edits({"edits": [{"old_string": "a", "new_string": "b"}, {"old_string": "c", "new_string": "d"}]})
+    assert pairs == [("a", "b"), ("c", "d")]
+
+
+def test_extract_edits_returns_empty_when_fields_missing() -> None:
+    assert _extract_edits({}) == []
+    assert _extract_edits({"old_string": "a"}) == []
+
+
+def test_synthetic_diff_for_edit_carries_path_and_counts() -> None:
+    """An Edit synthesizes a diff naming the file, with accurate +/- counts."""
+    diff = _create_synthetic_diff_from_tool_input(
+        AgentToolName.EDIT, "/outside/memory/notes.md", {"old_string": "old", "new_string": "new\nline"}
+    )
+    assert diff is not None
+    assert diff.startswith("diff --git a//outside/memory/notes.md b//outside/memory/notes.md")
+    # getLineCounts slices off the 5-line header, then counts changes.
+    assert _count_diff_line_changes(diff) == (2, 1)
+
+
+def test_synthetic_diff_for_multi_edit_sums_all_hunks() -> None:
+    diff = _create_synthetic_diff_from_tool_input(
+        AgentToolName.MULTI_EDIT,
+        "/outside/memory/notes.md",
+        {"edits": [{"old_string": "a", "new_string": "b"}, {"old_string": "c\nd", "new_string": "e"}]},
+    )
+    assert diff is not None
+    # 3 removals (a, c, d) and 2 additions (b, e) across both hunks.
+    assert _count_diff_line_changes(diff) == (2, 3)
+
+
+def test_synthetic_diff_for_write_uses_content() -> None:
+    diff = _create_synthetic_diff_from_tool_input(
+        AgentToolName.WRITE, "/outside/memory/notes.md", {"content": "line1\nline2"}
+    )
+    assert diff is not None
+    assert "+line1" in diff and "+line2" in diff
+
+
+def test_synthetic_diff_returns_none_without_usable_input() -> None:
+    assert _create_synthetic_diff_from_tool_input(AgentToolName.EDIT, "/x", {}) is None
+    assert _create_synthetic_diff_from_tool_input(AgentToolName.WRITE, "/x", {"content": ""}) is None
+
+
+def test_create_tool_content_synthesizes_diff_for_successful_edit_without_tracker() -> None:
+    """A successful Edit with no DiffTracker diff still yields a path-bearing DiffToolContent."""
+    content = _create_tool_content(
+        AgentToolName.EDIT,
+        {"file_path": "/outside/notes.md", "old_string": "a", "new_string": "b"},
+        "File edited successfully.",
+        diff_tracker=None,
+        is_error=False,
+    )
+    assert isinstance(content, DiffToolContent)
+    assert content.file_path == "/outside/notes.md"
+
+
+def test_create_tool_content_preserves_error_text_for_failed_edit() -> None:
+    """A failed Edit must keep its error text as GenericToolContent, not a phantom diff."""
+    content = _create_tool_content(
+        AgentToolName.EDIT,
+        {"file_path": "/outside/notes.md", "old_string": "a", "new_string": "b"},
+        "<tool_use_error>File has not been read yet.</tool_use_error>",
+        diff_tracker=None,
+        is_error=True,
+    )
+    assert isinstance(content, GenericToolContent)
+    assert "File has not been read yet" in content.text

@@ -15,7 +15,14 @@ from sculptor.testing.user_stories import user_story
 
 @user_story("to see edit tool calls rendered as chips in the alpha view")
 def test_chip_row_renders_for_edit_tool(sculptor_instance_: SculptorInstance) -> None:
-    """edit_file tool calls render as a chip row with a file chip."""
+    """An edit_file tool call renders as its own file chip.
+
+    Regression guard: an in-workspace edit often produces no diff from the diff
+    tracker. The backend used to fall back to generic content (no file path) for
+    such an edit, and the frontend silently dropped the chip — so the write and
+    edit here are separate turns (separate chip rows), and the edit's chip is the
+    one that used to vanish. Both must now render: two file chips, one per turn.
+    """
     page = sculptor_instance_.page
 
     # First create the file so the edit has something to work with
@@ -35,12 +42,15 @@ fake_claude:multi_step `{
     alpha_view = get_alpha_chat_view(page)
     expect(alpha_view).to_be_visible()
 
-    # Write + edit on the same file are merged into a single chip
+    # The write and the edit are separate turns, so each renders its own chip.
+    # The edit's chip is the one that previously disappeared when the edit had no
+    # diff; it must now be present.
     file_chips = alpha_view.get_file_chips()
-    expect(file_chips).to_have_count(1)
+    expect(file_chips).to_have_count(2)
 
-    # The chip should reference the edited file
+    # Both chips reference the same target file.
     expect(file_chips.first).to_contain_text("edit_target.txt")
+    expect(file_chips.last).to_contain_text("edit_target.txt")
 
 
 @user_story("to preview the diff by hovering over a file chip")
@@ -133,7 +143,13 @@ fake_claude:write_file `{
 def test_chip_row_edit_after_write_same_file(
     sculptor_instance_: SculptorInstance,
 ) -> None:
-    """Writing then editing the same file merges into a single chip."""
+    """Writing a file in one turn then editing it in the next renders both chips.
+
+    The write and the edit arrive as separate assistant turns, so each renders
+    in its own chip row. The edit produces no diff from the diff tracker, so its
+    chip used to be silently dropped — leaving only the write chip. Both must now
+    render: one chip per turn, each referencing the file.
+    """
     page = sculptor_instance_.page
 
     task_page = start_task_and_wait_for_ready(
@@ -149,11 +165,13 @@ fake_claude:multi_step `{
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    # Write + edit on the same file are merged into a single chip
+    # Separate turns render separate chips; the edit's chip is the one that used
+    # to vanish when the edit had no diff.
     alpha_view = get_alpha_chat_view(page)
     file_chips = alpha_view.get_file_chips()
-    expect(file_chips).to_have_count(1)
+    expect(file_chips).to_have_count(2)
     expect(file_chips.first).to_contain_text("write_edit.txt")
+    expect(file_chips.last).to_contain_text("write_edit.txt")
 
 
 @user_story("to see separate chip rows when a bash tool appears between file tools")
