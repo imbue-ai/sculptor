@@ -18,10 +18,16 @@ that extension's tool names. Sub-agents ARE supported — the pinned
 `sculptor_subagent` extension spawns each child as its own `pi` process and
 streams structured per-child progress that the adapter renders as nested,
 attributed child messages under the parent `Agent` tool (see `subagent.py` and
-`extensions/sculptor_subagent.ts`), so `supports_sub_agents` is `True`. Still
-`False`: fast mode, and background tasks (pi-core has no background-execution
-primitive — verdict (iv) deferral). The `capabilities()` override is the
-truthful declaration that consumers gate on.
+`extensions/sculptor_subagent.ts`), so `supports_sub_agents` is `True`. Background
+tasks ARE supported — the pinned `sculptor_background` extension starts a shell
+command in the background, returns immediately so the LAUNCHING TURN YIELDS (the
+user keeps chatting while the task runs), and reports its lifecycle out-of-band;
+the adapter maps that onto the harness-agnostic
+`BackgroundTaskStarted`/`BackgroundTaskNotification` contracts and surfaces the
+completion via an idle-drain between turns (see `background.py` and
+`extensions/sculptor_background.ts`), so `supports_background_tasks` is `True`.
+Still `False`: fast mode (no natural mapping to pi's models). The
+`capabilities()` override is the truthful declaration that consumers gate on.
 
 Agent construction is owned by the registry
 (`harness_registry.create_agent_for_run`), not this module, so the pi
@@ -110,7 +116,20 @@ class PiHarness(Harness):
             # stays empty: pi exposes no numeric auto-compact threshold on the
             # wire.
             supports_compaction=True,
-            supports_background_tasks=False,
+            # Pi starts background work through the Sculptor-pinned
+            # `sculptor_background` extension: the `background` tool spawns a
+            # detached shell command and returns immediately, so the LAUNCHING
+            # TURN YIELDS (the user keeps chatting while the task runs). Its
+            # lifecycle is reported out-of-band — start via the tool result,
+            # completion via a structured `notify`. The adapter (agent_wrapper +
+            # background.py) maps those onto the harness-agnostic
+            # BackgroundTaskStarted/Notification contracts and surfaces the
+            # completion via an idle-drain between turns. A backgrounded task is
+            # NOT killed by interrupting a later turn (it is independent of the
+            # launching turn); it is cancelled only on shutdown (in-environment
+            # kill + session_shutdown + isolate_process_group), so no background
+            # process is orphaned.
+            supports_background_tasks=True,
             # Pi persists a per-task JSONL session and relaunches against it with
             # --session-dir/--session-id (see agent_wrapper.PiAgent.start), so a
             # conversation survives an agent-process restart — true.

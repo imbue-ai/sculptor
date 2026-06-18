@@ -24,13 +24,13 @@ finished file-mutating tool (`edit`/`write`/`bash`) additionally triggers
 `on_diff_needed` so the workspace diff is regenerated — pi runs the tools
 against the workspace itself and emits no other signal that files changed.
 
-Sub-agents (`supports_sub_agents=True`) ride the same tool-execution lane: the
-pinned `sculptor_subagent` extension's `subagent` tool (mapped to Claude's
-`Agent`) streams a structured per-child payload in its accumulated
-`partialResult`, which the adapter (`_emit_subagent_children` + `subagent.py`)
-parses into nested child `ResponseBlockAgentMessage`s carrying
-`parent_tool_use_id`, so children group under the parent exactly as Claude's
-sub-agents do.
+Sub-agents (`supports_sub_agents=True`) yield immediately: the pinned
+`sculptor_subagent` extension's `subagent` tool (mapped to Claude's `Agent`)
+returns a launch snapshot and reports a structured per-child payload out-of-band
+on completion. The adapter (`_emit_subagent_started` +
+`_handle_subagent_completion` + `subagent.py`) records the task, then surfaces the
+children as nested `ResponseBlockAgentMessage`s carrying `parent_tool_use_id` plus
+a completion notification, so children group under the parent.
 
 Wire-protocol reference: the pi RPC protocol notes (pi 0.78.0).
 """
@@ -43,7 +43,6 @@ import re
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
-from dataclasses import field
 from pathlib import Path
 from queue import Empty
 from queue import Queue
@@ -65,6 +64,9 @@ from sculptor.agents.pi_agent.backchannel import PLAN_APPROVAL_DIALOG_TITLE
 from sculptor.agents.pi_agent.backchannel import build_ask_user_question_data
 from sculptor.agents.pi_agent.backchannel import extension_ui_response_body
 from sculptor.agents.pi_agent.backchannel import is_plan_approval
+from sculptor.agents.pi_agent.background import BackgroundTaskCompletion
+from sculptor.agents.pi_agent.background import parse_background_completion
+from sculptor.agents.pi_agent.background import parse_background_start
 from sculptor.agents.pi_agent.harness import PiHarness
 from sculptor.agents.pi_agent.output_processor import AgentMessage
 from sculptor.agents.pi_agent.output_processor import ExtensionUiRequest
@@ -98,8 +100,11 @@ from sculptor.agents.pi_agent.prompt_assembly import build_image_block
 from sculptor.agents.pi_agent.prompt_assembly import save_attachments_to_environment
 from sculptor.agents.pi_agent.prompt_assembly import split_image_and_path_attachments
 from sculptor.agents.pi_agent.subagent import SubagentChild
+from sculptor.agents.pi_agent.subagent import SubagentCompletion
 from sculptor.agents.pi_agent.subagent import build_child_content_blocks
-from sculptor.agents.pi_agent.subagent import parse_subagent_progress
+from sculptor.agents.pi_agent.subagent import parse_subagent_completion
+from sculptor.agents.pi_agent.subagent import parse_subagent_start
+from sculptor.agents.pi_agent.tool_rendering import BACKGROUND_TOOL_NAME
 from sculptor.agents.pi_agent.tool_rendering import SUBAGENT_DISPLAY_NAME
 from sculptor.agents.pi_agent.tool_rendering import build_tool_result_content
 from sculptor.agents.pi_agent.tool_rendering import extract_text_from_tool_payload
@@ -111,6 +116,8 @@ from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingDoneAgentMessage
+from sculptor.interfaces.agents.agent import BackgroundTaskNotificationAgentMessage
+from sculptor.interfaces.agents.agent import BackgroundTaskStartedAgentMessage
 from sculptor.interfaces.agents.agent import ClearContextUserMessage
 from sculptor.interfaces.agents.agent import ContextClearedMessage
 from sculptor.interfaces.agents.agent import InterruptProcessUserMessage
@@ -192,9 +199,14 @@ _INTERRUPT_ESCALATION_GRACE_SECONDS: float = 5.0
 # build as well as a repo checkout, then written into the environment at launch.
 _BACKCHANNEL_EXTENSION_FILENAME: str = "sculptor_backchannel.ts"
 # The sub-agent extension shipped with Sculptor (package data; see pyproject.toml).
-# Registers the `subagent` tool that spawns child `pi` processes and streams
-# structured per-child progress the adapter renders nested (see subagent.py).
+# Registers the `subagent` tool that spawns child `pi` processes, yields
+# immediately, and reports its lifecycle out-of-band, rendered nested (see
+# subagent.py).
 _SUBAGENT_EXTENSION_FILENAME: str = "sculptor_subagent.ts"
+# The background-task extension shipped with Sculptor (package data; see
+# pyproject.toml). Registers the `background` tool that starts a shell command
+# in the background and reports its lifecycle out-of-band (see background.py).
+_BACKGROUND_EXTENSION_FILENAME: str = "sculptor_background.ts"
 _EXTENSIONS_SOURCE_DIR: Path = Path(__file__).resolve().parent / "extensions"
 
 # Prepended to a turn's prompt while the agent is in plan mode. Drives the pi
@@ -213,9 +225,22 @@ The user's request follows:
 # (ChatInput.tsx `wsTimeout`) so a wedged `new_session` fails rather than hanging the UI.
 _CLEAR_CONTEXT_TIMEOUT_SECONDS: float = 10.0
 
+# After a background/sub-agent completion, the extension wakes the agent with
+# `sendUserMessage`; Sculptor keeps the idle-drain alive this long to consume the
+# resulting reaction turn. Bounds the wait so a reaction that never arrives (the
+# wake-up errored) cannot keep the drain polling forever.
+_REACTION_WINDOW_SECONDS: float = 120.0
+
 # How long each blocking read of pi's stdout queue waits before the drain loop
 # re-checks shutdown / process-exit; small so an exit is noticed promptly.
 _STDOUT_QUEUE_POLL_SECONDS: float = 0.1
+
+# Input-queue wait between turns. While async tasks/reactions are pending, poll
+# briefly so their out-of-band completions surface promptly; when idle, wait
+# longer to avoid busy-polling (a new user message wakes the queue immediately
+# either way, and the longer wait bounds shutdown latency).
+_TASK_POLL_SECONDS: float = 0.1
+_IDLE_WAIT_SECONDS: float = 1.0
 
 
 def _pi_version_in_range(version: str) -> bool:
@@ -248,13 +273,15 @@ class _ToolCall:
     # Accumulated (not delta) tool output from the latest `tool_execution_update`,
     # used as the result text if `tool_execution_end` carries no result body.
     partial_text: str = ""
-    # True for the sub-agent tool (mapped to Claude's `Agent`): its lane events
-    # carry a structured per-child payload the adapter renders as nested child
-    # messages instead of a single result. See `_emit_subagent_children`.
+    # True for the sub-agent tool (mapped to Claude's `Agent`): its result carries
+    # a structured launch payload (`subagent.py`); it yields immediately, and the
+    # children's nested rendering + completion is surfaced out-of-band. See
+    # `_emit_subagent_started`.
     is_subagent: bool = False
-    # Child ids whose nested ChatMessage has already been emitted, so the
-    # accumulated (re-sent-every-update) payload emits each child exactly once.
-    emitted_child_ids: set[str] = field(default_factory=set)
+    # True for the background tool: its result carries a structured launch
+    # payload (`background.py`) the adapter turns into a BackgroundTaskStarted
+    # message + a tracked pending task, instead of a one-shot result.
+    is_background: bool = False
 
 
 # Matches a leading slash-command token (`/name`) and captures the remainder
@@ -342,6 +369,34 @@ class _TurnState:
         self.first_message_id = AgentMessageID()
 
 
+def _format_background_completion(completion: BackgroundTaskCompletion) -> str:
+    """The assistant text surfaced when a background task finishes.
+
+    Renders the completion in the conversation (the background tool itself is not
+    a sub-agent, so message_conversion does not synthesize a child for it). The
+    summary is the tail of the command's combined stdout/stderr.
+    """
+    verb = "completed" if completion.status == "completed" else completion.status
+    exit_note = "" if completion.exit_code is None else f" (exit code {completion.exit_code})"
+    header = f"Background task {verb}{exit_note}."
+    summary = completion.summary.strip()
+    return f"{header}\n\n{summary}" if summary else header
+
+
+def _format_subagent_completion(completion: SubagentCompletion) -> str:
+    """The summary surfaced when a sub-agent task finishes.
+
+    Rides the completion `BackgroundTaskNotificationAgentMessage`; for an `Agent`
+    parent, message_conversion turns it into the synthetic completion child that
+    settles the sub-agent pill.
+    """
+    done = sum(1 for child in completion.children if child.status == "done")
+    failed = sum(1 for child in completion.children if child.status == "error")
+    total = len(completion.children)
+    verb = "completed" if completion.status == "completed" else completion.status
+    return f"Sub-agents {verb}: {done} done, {failed} failed (of {total})."
+
+
 class PiAgent(DefaultAgentWrapper):
     # Narrows the inherited `harness: Harness` field — the registry owns
     # construction, so no agent↔harness import cycle exists.
@@ -400,6 +455,28 @@ class PiAgent(DefaultAgentWrapper):
     # Serializes stdin writes: the prompt pump, the answer-delivery thread, and
     # `wait()`'s abort can all write to pi's stdin.
     _send_lock: Lock = PrivateAttr(default_factory=Lock)
+    # In-flight background tasks (background_task_id -> the detached child's
+    # process-group id), tracked at the AGENT level so they outlive the launching
+    # turn: a `background` tool yields its turn immediately (the user keeps
+    # chatting), and the task's completion is surfaced out-of-band later. The pgid
+    # lets `wait()` SIGTERM each child's group in the environment on shutdown (the
+    # child is detached, so it escapes pi's own group — `session_shutdown` in the
+    # extension is the other half of the no-orphan guarantee). Mutated only on the
+    # message-processing thread; the lock guards `wait()`'s cross-thread read.
+    _background_tasks: dict[str, int] = PrivateAttr(default_factory=dict)
+    # In-flight sub-agent tasks (task_id -> the detached children's process-group
+    # ids), tracked at the AGENT level so they outlive the launching turn: the
+    # `subagent` tool yields immediately and the children's nested rendering is
+    # surfaced out-of-band on completion. Guarded by `_background_tasks_lock` (it
+    # protects both task dicts).
+    _subagent_tasks: dict[str, tuple[int, ...]] = PrivateAttr(default_factory=dict)
+    _background_tasks_lock: Lock = PrivateAttr(default_factory=Lock)
+    # Count of surfaced completions whose auto-resume reaction turn (the
+    # extension's `sendUserMessage`) has not yet been consumed, with a deadline.
+    # Keeps the idle-drain alive to catch the reaction. Mutated only on the
+    # message-processing thread.
+    _awaiting_reaction_count: int = PrivateAttr(default=0)
+    _awaiting_reaction_deadline: float = PrivateAttr(default=0.0)
 
     def start(self, secrets: Mapping[str, str | Secret]) -> None:
         # Resolve and validate the pi binary BEFORE super().start so the
@@ -480,6 +557,13 @@ class PiAgent(DefaultAgentWrapper):
             command,
             secrets=merged_secrets,
             open_stdin=True,
+            # Make pi its own process-group leader so a Stop/shutdown signal
+            # cascades to its descendants — including any `background` tool child
+            # that did not opt into its own group — mirroring the Claude CLI
+            # (process_manager.py). The no-orphan guarantee on shutdown; the
+            # background extension's `session_shutdown` handler and Sculptor's
+            # per-task in-environment kill (on interrupt) complete the picture.
+            isolate_process_group=True,
         )
         if is_resume:
             # Best-effort guard against SILENT context loss: confirm pi actually
@@ -574,6 +658,12 @@ class PiAgent(DefaultAgentWrapper):
             raise AgentCrashed("Agent crashed", exit_code=None, metadata=None) from self._exception
 
         self._shutdown_event.set()
+        # No orphans on shutdown: kill each background child's (detached) process
+        # group in the environment. The extension's `session_shutdown` handler is
+        # the other half; this is the belt-and-suspenders that does not depend on pi
+        # shutting down gracefully. Done before close_stdin so the kills are issued
+        # while the environment is still fully up.
+        self._cancel_all_background_tasks()
         process = self._process
         if process is not None:
             try:
@@ -698,7 +788,11 @@ class PiAgent(DefaultAgentWrapper):
         extension_args: list[str] = []
         loaded_paths: list[str] = []
         state_path = self.environment.get_state_path()
-        for filename in (_BACKCHANNEL_EXTENSION_FILENAME, _SUBAGENT_EXTENSION_FILENAME):
+        for filename in (
+            _BACKCHANNEL_EXTENSION_FILENAME,
+            _SUBAGENT_EXTENSION_FILENAME,
+            _BACKGROUND_EXTENSION_FILENAME,
+        ):
             content = (_EXTENSIONS_SOURCE_DIR / filename).read_text(encoding="utf-8")
             destination = state_path / filename
             self.environment.write_file(str(destination), content)
@@ -904,9 +998,16 @@ class PiAgent(DefaultAgentWrapper):
 
     def _process_message_queue(self) -> None:
         while not self._shutdown_event.is_set():
+            # No task can start during an idle wait: tasks launch only from within a turn.
+            has_pending_tasks = self._has_background_tasks()
+            timeout = _TASK_POLL_SECONDS if has_pending_tasks else _IDLE_WAIT_SECONDS
             try:
-                message = self._input_agent_messages.get(timeout=0.5)
+                message = self._input_agent_messages.get(timeout=timeout)
             except Empty:
+                # Sculptor only drains pi's stdout during a turn; when a background or
+                # sub-agent task is running, surface its completion live while we're idle.
+                if has_pending_tasks:
+                    self._drain_idle_background_events()
                 continue
             if isinstance(message, ClearContextUserMessage):
                 # Between-turns reset: this loop processes one message at a time,
@@ -914,6 +1015,31 @@ class PiAgent(DefaultAgentWrapper):
                 self._handle_clear_context(message)
                 continue
             self._run_prompt_turn(message)
+
+    def _has_background_tasks(self) -> bool:
+        with self._background_tasks_lock:
+            if self._background_tasks or self._subagent_tasks:
+                return True
+        return self._is_awaiting_reaction()
+
+    def _is_awaiting_reaction(self) -> bool:
+        """True while a completion's auto-resume reaction turn is still expected.
+
+        Bounded by a deadline so a reaction that never arrives (the wake-up
+        errored) cannot keep the idle-drain polling forever.
+        """
+        if self._awaiting_reaction_count <= 0:
+            return False
+        if time.monotonic() >= self._awaiting_reaction_deadline:
+            self._awaiting_reaction_count = 0
+            return False
+        return True
+
+    def _note_awaiting_reaction(self) -> None:
+        """Record a surfaced completion so the idle-drain stays alive to consume the
+        reaction turn the extension triggers via `sendUserMessage`."""
+        self._awaiting_reaction_count += 1
+        self._awaiting_reaction_deadline = time.monotonic() + _REACTION_WINDOW_SECONDS
 
     def _run_prompt_turn(self, message: ChatInputUserMessage) -> None:
         self._update_plan_mode_from_message(message)
@@ -1162,6 +1288,9 @@ class PiAgent(DefaultAgentWrapper):
                 self._handle_response_event(parsed, state)
                 return False
             case ExtensionUiRequest():
+                # Backchannel dialogs and background-task completion notifies; never
+                # a turn boundary (dialogs hold the turn via the answer round-trip;
+                # a completion reconciles into the turn but `agent_end` ends it).
                 self._handle_extension_ui_request(parsed)
                 return False
             case ParsedAgentStart():
@@ -1321,6 +1450,7 @@ class PiAgent(DefaultAgentWrapper):
                     claude_input=dict(block.input),
                     assistant_message_id=state.assistant_message_id,
                     is_subagent=block.name == SUBAGENT_DISPLAY_NAME,
+                    is_background=block.name == BACKGROUND_TOOL_NAME,
                 )
                 # Remember the backchannel tool call so the dialog it opens next
                 # adopts its id as the question's tool_use_id (see
@@ -1402,6 +1532,7 @@ class PiAgent(DefaultAgentWrapper):
             claude_input=claude_input,
             assistant_message_id=state.assistant_message_id,
             is_subagent=claude_name == SUBAGENT_DISPLAY_NAME,
+            is_background=claude_name == BACKGROUND_TOOL_NAME,
         )
         text_blocks: tuple[ContentBlockTypes, ...] = (
             (TextBlock(text=state.accumulated_text),) if state.accumulated_text else ()
@@ -1427,9 +1558,6 @@ class PiAgent(DefaultAgentWrapper):
         if info is None:
             return
         info.partial_text = extract_text_from_tool_payload(parsed.partial_result)
-        if info.is_subagent:
-            # Stream each child's nested activity as it finishes.
-            self._emit_subagent_children(parsed.partial_result, info, parsed.tool_call_id, include_running=False)
 
     def _handle_tool_execution_end(self, parsed: ParsedToolExecutionEnd, state: _TurnState) -> None:
         """Finish a tool call: refresh the workspace diff, then emit its result block."""
@@ -1457,9 +1585,19 @@ class PiAgent(DefaultAgentWrapper):
             assistant_message_id = info.assistant_message_id
             fallback_text = info.partial_text
             if info.is_subagent:
-                # Flush any child not yet emitted (including one still running at
-                # an aborted parent end) before the parent's result block lands.
-                self._emit_subagent_children(parsed.result, info, tool_call_id, include_running=True)
+                # The `subagent` tool returned immediately with a launch snapshot;
+                # surface it as a started sub-agent task (tracked at the agent
+                # level) and yield. The children's nested rendering + completion is
+                # surfaced out-of-band (`_handle_subagent_completion`). The result
+                # block below still renders the "Started …" launch acknowledgement.
+                self._emit_subagent_started(parsed.result, tool_call_id)
+            if info.is_background:
+                # The `background` tool returned immediately with a launch
+                # snapshot; surface it as a started background task. The turn then
+                # ends normally (the user keeps chatting); the task's completion
+                # is surfaced out-of-band. The normal result block below still
+                # renders the "Started …" acknowledgement.
+                self._emit_background_started(parsed.result, tool_call_id)
         else:
             # No registration (no toolCall block and no start seen) — map the
             # name with empty input (the end event carries no args).
@@ -1482,36 +1620,32 @@ class PiAgent(DefaultAgentWrapper):
             )
         )
 
-    def _emit_subagent_children(
-        self,
-        result_payload: Any,
-        info: _ToolCall,
-        parent_tool_call_id: str,
-        include_running: bool,
-    ) -> None:
-        """Emit each finished child of a sub-agent call as a nested ChatMessage.
+    def _emit_subagent_started(self, result_payload: Any, parent_tool_call_id: str) -> None:
+        """Turn a `subagent` tool's launch result into a started sub-agent task.
 
-        The extension re-sends the full `{v, children}` snapshot on every
-        `tool_execution_update` (and at `_end`), so this parses the accumulated
-        value and emits each child exactly once (tracked by
-        `info.emitted_child_ids`). Each child becomes its own
-        `ResponseBlockAgentMessage` carrying `parent_tool_use_id =
-        parent_tool_call_id`, which message_conversion groups under the parent
-        `Agent` tool block — the same attribution Claude's sub-agents use.
-
-        With `include_running=False` only terminal children are emitted; at the
-        parent's end (`include_running=True`) any remaining child is flushed too.
+        Parses the structured launch snapshot (`subagent.py`); on success records the
+        task (with its children's process-group ids) at the AGENT level so it outlives
+        this turn, and emits `BackgroundTaskStartedAgentMessage` against the parent
+        `Agent` tool-use id (the frontend's background-sub-agent pill). The launching
+        turn then ends — the user keeps chatting while the children run, and their
+        nested rendering + completion is surfaced out-of-band
+        (`_handle_subagent_completion`). A malformed/absent snapshot degrades to no
+        sub-agent lifecycle (the call already rendered as an ordinary tool result).
         """
-        progress = parse_subagent_progress(result_payload)
-        if progress is None:
+        started = parse_subagent_start(result_payload)
+        if started is None:
             return
-        for child in progress.children:
-            if child.child_id in info.emitted_child_ids:
-                continue
-            if not include_running and not child.is_terminal:
-                continue
-            info.emitted_child_ids.add(child.child_id)
-            self._emit_child_message(child, parent_tool_call_id)
+        with self._background_tasks_lock:
+            self._subagent_tasks[started.task_id] = started.pgids
+        self._output_messages.put(
+            BackgroundTaskStartedAgentMessage(
+                message_id=AgentMessageID(),
+                background_task_id=started.task_id,
+                tool_use_id=started.tool_call_id or parent_tool_call_id,
+                description=f"{started.count} sub-agent(s)" if started.count else started.label,
+                task_type=started.label,
+            )
+        )
 
     def _emit_child_message(self, child: SubagentChild, parent_tool_call_id: str) -> None:
         # A fresh message id and assistant_message_id per child so each renders
@@ -1527,8 +1661,244 @@ class PiAgent(DefaultAgentWrapper):
             )
         )
 
+    def _handle_subagent_completion(self, completion: SubagentCompletion) -> None:
+        """Reconcile a sub-agent task's completion into the conversation.
+
+        Drops the task from the agent-level set, emits each child nested under the
+        parent `Agent` tool block (`parent_tool_use_id`), and emits
+        `BackgroundTaskNotificationAgentMessage` to clear the started indicator — for
+        an `Agent` parent, message_conversion turns that into the synthetic
+        completion child that settles the sub-agent pill. Safe to call inside a
+        turn's drain OR out-of-band (the caller supplies the request cycle in the
+        latter case — see `_emit_subagent_completion_out_of_band`).
+        """
+        with self._background_tasks_lock:
+            self._subagent_tasks.pop(completion.task_id, None)
+        for child in completion.children:
+            self._emit_child_message(child, completion.tool_call_id)
+        self._output_messages.put(
+            BackgroundTaskNotificationAgentMessage(
+                message_id=AgentMessageID(),
+                background_task_id=completion.task_id,
+                tool_use_id=completion.tool_call_id,
+                status=completion.status,
+                summary=_format_subagent_completion(completion),
+            )
+        )
+
+    def _emit_subagent_completion_out_of_band(self, completion: SubagentCompletion) -> None:
+        """Surface a sub-agent completion that arrived between turns, live.
+
+        Wraps the completion in its own minimal request cycle (RequestStarted →
+        children + notification → RequestSuccess) so message_conversion renders the
+        nested children as standalone assistant messages even though no user turn is
+        in flight — the out-of-band analogue of the in-turn path. The request id is
+        fresh (the completion is not a reply to a user message).
+        """
+        request_id = AgentMessageID()
+        self._output_messages.put(RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=request_id))
+        try:
+            self._handle_subagent_completion(completion)
+        finally:
+            self._output_messages.put(
+                RequestSuccessAgentMessage(message_id=AgentMessageID(), request_id=request_id, interrupted=False)
+            )
+
+    def _emit_background_started(self, result_payload: Any, parent_tool_call_id: str) -> None:
+        """Turn a `background` tool's launch result into a started background task.
+
+        Parses the structured launch snapshot (`background.py`); on success records
+        the task (with its child process-group id) at the AGENT level so it outlives
+        this turn, and emits `BackgroundTaskStartedAgentMessage`. The launching turn
+        then ends normally (`_handle_agent_end`) — the user keeps chatting while the
+        task runs, and its completion is surfaced out-of-band
+        (`_drain_idle_background_events`). A malformed/absent snapshot degrades to no
+        background lifecycle (the call already rendered as an ordinary tool result).
+        """
+        started = parse_background_start(result_payload)
+        if started is None:
+            return
+        with self._background_tasks_lock:
+            self._background_tasks[started.task_id] = started.pgid
+        self._output_messages.put(
+            BackgroundTaskStartedAgentMessage(
+                message_id=AgentMessageID(),
+                background_task_id=started.task_id,
+                tool_use_id=started.tool_call_id or parent_tool_call_id,
+                description=started.command,
+                task_type=started.label,
+            )
+        )
+
+    def _handle_background_completion(self, completion: BackgroundTaskCompletion) -> None:
+        """Reconcile a background task's completion into the conversation.
+
+        Drops the task from the agent-level set and emits
+        `BackgroundTaskNotificationAgentMessage` plus an assistant block carrying the
+        summary, so the completion (or failure) is visible. The summary MUST be
+        advertised as a partial then the final block (paired ids) so the LIVE stream
+        reducer renders it: a lone final block with no preceding partial renders only
+        on reload (the live/reload divergence). Safe to call inside a turn's drain OR
+        out-of-band (the caller supplies the request cycle in the latter case — see
+        `_emit_background_completion_out_of_band`).
+        """
+        with self._background_tasks_lock:
+            self._background_tasks.pop(completion.task_id, None)
+        self._output_messages.put(
+            BackgroundTaskNotificationAgentMessage(
+                message_id=AgentMessageID(),
+                background_task_id=completion.task_id,
+                tool_use_id=completion.tool_call_id,
+                status=completion.status,
+                summary=completion.summary,
+                duration_seconds=(completion.duration_ms / 1000.0) if completion.duration_ms is not None else None,
+            )
+        )
+        summary_message_id = AgentMessageID()
+        summary_assistant_id = AssistantMessageID(generate_id())
+        summary_blocks: tuple[ContentBlockTypes, ...] = (TextBlock(text=_format_background_completion(completion)),)
+        self._output_messages.put(
+            PartialResponseBlockAgentMessage(
+                assistant_message_id=summary_assistant_id,
+                first_response_message_id=summary_message_id,
+                content=summary_blocks,
+            )
+        )
+        self._output_messages.put(
+            ResponseBlockAgentMessage(
+                message_id=summary_message_id,
+                role="assistant",
+                assistant_message_id=summary_assistant_id,
+                content=summary_blocks,
+            )
+        )
+
+    def _emit_background_completion_out_of_band(self, completion: BackgroundTaskCompletion) -> None:
+        """Surface a background completion that arrived between turns, live.
+
+        Wraps the completion in its own minimal request cycle (RequestStarted →
+        notification + summary → RequestSuccess) so message_conversion renders it as a
+        standalone assistant message even though no user turn is in flight — the
+        out-of-band analogue of the in-turn path. The request id is fresh (the
+        completion is not a reply to a user message)."""
+        request_id = AgentMessageID()
+        self._output_messages.put(RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=request_id))
+        try:
+            self._handle_background_completion(completion)
+        finally:
+            self._output_messages.put(
+                RequestSuccessAgentMessage(message_id=AgentMessageID(), request_id=request_id, interrupted=False)
+            )
+
+    def _drain_idle_background_events(self) -> None:
+        """Between turns, surface task completions and consume any auto-resume turn.
+
+        Sculptor drains pi's stdout only during a turn, so a completion `notify`
+        (and the reaction turn the extension triggers via `sendUserMessage`) firing
+        while the user is idle would otherwise sit unseen. While a task is in flight
+        — or a completion is awaiting its reaction turn — `_process_message_queue`
+        calls this between user messages: a completion is surfaced out-of-band, and a
+        pi-initiated turn (the auto-resume reaction) is consumed in its own request
+        cycle. Runs on the message-processing thread (the sole stdout reader).
+        """
+        process = self._process
+        if process is None:
+            return
+        out_queue = process.get_queue()
+        while not self._shutdown_event.is_set():
+            try:
+                line, is_stdout = out_queue.get_nowait()
+            except Empty:
+                return
+            if not is_stdout:
+                continue
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                event = json.loads(stripped)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(event, dict):
+                continue
+            parsed = parse_rpc_message(event)
+            if isinstance(parsed, ParsedAgentStart):
+                # The extension woke the agent (`sendUserMessage`) after a completion;
+                # consume its reaction turn in its own request cycle.
+                self._awaiting_reaction_count = max(0, self._awaiting_reaction_count - 1)
+                self._consume_reaction_turn()
+                continue
+            if isinstance(parsed, ExtensionUiRequest) and parsed.method == "notify":
+                completion = parse_background_completion(parsed.message)
+                if completion is not None:
+                    self._emit_background_completion_out_of_band(completion)
+                    self._note_awaiting_reaction()
+                    continue
+                sub_completion = parse_subagent_completion(parsed.message)
+                if sub_completion is not None:
+                    self._emit_subagent_completion_out_of_band(sub_completion)
+                    self._note_awaiting_reaction()
+
+    def _consume_reaction_turn(self) -> None:
+        """Consume a pi-initiated turn — the auto-resume reaction the extension
+        triggered via `sendUserMessage` on completion — in its own request cycle so
+        it renders as a standalone assistant turn. The triggering `agent_start` has
+        already been read; `_consume_until_turn_end` consumes the rest through
+        `agent_end`. A turn-level failure is logged, not raised: an auto-resume
+        reaction must not tear down the session.
+        """
+        request_id = AgentMessageID()
+        self._output_messages.put(RequestStartedAgentMessage(message_id=AgentMessageID(), request_id=request_id))
+        self._turn_in_flight.set()
+        interrupted = False
+        try:
+            self._consume_until_turn_end()
+        except PiCrashError as error:
+            logger.info("PiAgent auto-resume reaction turn failed: {}", error)
+            interrupted = True
+        finally:
+            self._turn_in_flight.clear()
+            self._output_messages.put(
+                RequestSuccessAgentMessage(message_id=AgentMessageID(), request_id=request_id, interrupted=interrupted)
+            )
+
+    def _cancel_all_background_tasks(self) -> None:
+        """SIGTERM every still-running background and sub-agent child by signalling its process group.
+
+        Each child is spawned detached (its own group leader), so it escapes pi's
+        process group; killing the negative pgid INSIDE the environment tears down
+        just that child tree without touching pi. Called on shutdown (`wait`) as the
+        no-orphan guarantee, alongside the extension's `session_shutdown` handler.
+        Best-effort and idempotent — a child that already exited is a no-op. NOT
+        called on a turn interrupt: a backgrounded task runs independently of the
+        turn that launched it and must survive the user stopping a later turn.
+        """
+        process = self._process
+        with self._background_tasks_lock:
+            pgids = list(self._background_tasks.values())
+            self._background_tasks.clear()
+            for group in self._subagent_tasks.values():
+                pgids.extend(group)
+            self._subagent_tasks.clear()
+        for pgid in pgids:
+            if process is not None and pgid > 0:
+                try:
+                    self.environment.run_process_to_completion(
+                        ["bash", "-c", f"kill -TERM -{pgid} 2>/dev/null || true"],
+                        secrets={},
+                        timeout=5.0,
+                        is_checked_after=False,
+                    )
+                except Exception as e:  # noqa: BLE001
+                    logger.debug("PiAgent async-task cancel for pgid {} failed: {}", pgid, e)
+
     def _handle_agent_end(self, parsed: ParsedAgentEnd, state: _TurnState) -> bool:
         """Turn boundary — return True so the dispatcher yields control.
+
+        A turn that launched a background task ends here like any other (the task
+        runs independently; its completion is surfaced out-of-band — see
+        `_drain_idle_background_events`), so the user is unblocked the moment the
+        task starts.
 
         Per-message finalization happens in `_handle_message_end`, which
         emits each `ResponseBlockAgentMessage` with the IDs its partials
@@ -1620,16 +1990,39 @@ class PiAgent(DefaultAgentWrapper):
         )
 
     def _handle_extension_ui_request(self, parsed: ExtensionUiRequest) -> None:
-        """Map a backchannel dialog onto an AskUserQuestion and hold the turn.
+        """Dispatch an extension UI request (never a turn boundary).
 
-        Our extension only opens blocking `select` (multiple-choice / plan
-        approval) and `input` (free-form) dialogs. Each becomes an
-        `AskUserQuestionAgentMessage`, and the request id is recorded so
-        `_deliver_question_answer` can post the matching `extension_ui_response`.
-        pi blocks until then (we never set a `timeout`), so the consume loop just
-        keeps draining stdout — the turn is not over. Fire-and-forget methods
-        (`notify`/`setStatus`/…) need no response and are ignored.
+        Two of our pinned extensions speak this lane:
+        - The backchannel extension opens blocking `select` (multiple-choice /
+          plan approval) and `input` (free-form) dialogs. Each becomes an
+          `AskUserQuestionAgentMessage`, and the request id is recorded so
+          `_deliver_question_answer` can post the matching `extension_ui_response`.
+          pi blocks until then (we never set a `timeout`), so the turn stays open
+          while the consume loop keeps draining.
+        - The background-task extension reports a task's completion as a
+          fire-and-forget `notify` carrying our structured marker; that reconciles
+          the task into the current turn (the turn ends at its own `agent_end` — a
+          backgrounded task does not hold it open).
+
+        Any other fire-and-forget method (`setStatus`/…) or a foreign `notify`
+        needs no response and is ignored.
         """
+        if parsed.method == "notify":
+            completion = parse_background_completion(parsed.message)
+            if completion is not None:
+                # A task that completes while a user turn is in flight is reconciled
+                # into that turn; the reaction the extension triggers (deliverAs
+                # "followUp") runs after this turn and is consumed by the idle-drain.
+                self._handle_background_completion(completion)
+                self._note_awaiting_reaction()
+                return
+            sub_completion = parse_subagent_completion(parsed.message)
+            if sub_completion is not None:
+                self._handle_subagent_completion(sub_completion)
+                self._note_awaiting_reaction()
+                return
+            logger.debug("PiAgent ignoring non-task notify extension_ui_request")
+            return
         if parsed.method not in ("select", "input"):
             logger.debug("PiAgent ignoring non-dialog extension_ui_request method: {}", parsed.method)
             return

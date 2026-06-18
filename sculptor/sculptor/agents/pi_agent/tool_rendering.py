@@ -60,6 +60,18 @@ SUBAGENT_TOOL_NAME: str = "subagent"
 # under the parent exactly as Claude's sub-agents render.
 SUBAGENT_DISPLAY_NAME: str = "Agent"
 
+# The tool name pi exposes for the Sculptor-pinned background-task extension
+# (`extensions/sculptor_background.ts`); MUST match the `name` that extension
+# registers. The adapter (`agent_wrapper` + `background.py`) keys on this to
+# detect the launching tool call and parse its structured lifecycle payloads.
+# It is deliberately NOT mapped onto a Claude name: it passes through
+# `map_pi_tool_call` unchanged so the frontend renders the launch call
+# generically (name + command + "started" result), while the background-task
+# lifecycle is surfaced through the harness-agnostic BackgroundTask* contracts.
+# Mapping it onto "Agent" would mis-route it into the sub-agent child-synthesis
+# path (message_conversion only synthesizes children for Agent/Task parents).
+BACKGROUND_TOOL_NAME: str = "background"
+
 
 def _summarize_subagent_tasks(pi_args: Mapping[str, Any]) -> tuple[str, str]:
     """Derive `(subagent_type, prompt)` for the Claude-shaped `Agent` input.
@@ -67,16 +79,25 @@ def _summarize_subagent_tasks(pi_args: Mapping[str, Any]) -> tuple[str, str]:
     The pi sub-agent tool takes either a single `{task}` or a parallel
     `{tasks: [{task, label?}]}`. The frontend's `buildSubagentMetadataMap` reads
     `subagent_type` (the pill's label) and `prompt` (its task text) off the
-    `Agent` tool input, so map onto those: a single task keeps its text; a
-    parallel batch summarizes the count and joins the task lines.
+    `Agent` tool input. A single task keeps its text; a parallel batch becomes
+    one `"<label>: <task>"` line per child, separated by a blank line. The blank
+    line keeps each child distinct in the popover (rendered markdown, where a
+    lone newline is only a soft break and would run the tasks together), and the
+    plain `<label>:` prefix also reads cleanly in the collapsed pill, which shows
+    the prompt as plain text rather than markdown.
     """
     tasks = pi_args.get("tasks")
     if isinstance(tasks, list) and tasks:
-        lines: list[str] = []
-        for entry in tasks:
-            if isinstance(entry, dict):
-                lines.append(_first_str(entry, "task"))
-        return f"subagent (x{len(tasks)})", "\n".join(line for line in lines if line)
+        sections: list[str] = []
+        for index, entry in enumerate(tasks, start=1):
+            if not isinstance(entry, dict):
+                continue
+            task_text = _first_str(entry, "task")
+            if not task_text:
+                continue
+            label = _first_str(entry, "label") or f"Sub-agent {index}"
+            sections.append(f"{label}: {task_text}")
+        return f"subagent (x{len(tasks)})", "\n\n".join(sections)
     return "subagent", _first_str(pi_args, "task", "prompt")
 
 

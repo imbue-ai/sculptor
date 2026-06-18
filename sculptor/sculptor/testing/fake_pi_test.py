@@ -648,3 +648,42 @@ def test_fake_pi_command_grammar_matches_fake_claude_shape(directive: str, expec
     events = _parse_jsonl(result.stdout)
     update = _first_update(events)
     assert update.assistant_message_event.get("delta") == expected_first_delta
+
+
+def test_fake_pi_background_directive_emits_started_payload_agent_end_then_completion_notify() -> None:
+    """The `background` directive reproduces the yield-early wire shape:
+
+    a `background` tool launch (tool_execution_end carrying the versioned
+    `{task}` payload), the launching run's `agent_end` (the turn ends there), then a
+    fire-and-forget completion `notify` carrying the structured marker — and NO
+    second agent_end. With no `wait_path` the notify is emitted inline right after
+    agent_end (out-of-band from Sculptor's view, since it has yielded the turn).
+    """
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=_send_prompt(
+            'fake_pi:background `{"id": "bgX", "command": "sleep 1", "label": "build", "summary": "all done"}`'
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+    events = _parse_jsonl(result.stdout)
+
+    tool_ends = _by_type(events, "tool_execution_end")
+    assert len(tool_ends) == 1
+    task = tool_ends[0]["result"]["details"]["task"]
+    assert tool_ends[0]["toolName"] == "background"
+    assert task["taskId"] == "bgt_bgX"
+    assert task["toolCallId"] == "bgX"
+    assert task["status"] == "running"
+
+    # Exactly one agent_end — the launching run's. The directive must NOT let
+    # _run_turn emit a second one (the held-open shape ends on the notify).
+    assert len(_by_type(events, "agent_end")) == 1
+
+    notifies = [e for e in _by_type(events, "extension_ui_request") if e.get("method") == "notify"]
+    assert len(notifies) == 1
+    completion = json.loads(notifies[0]["message"])["sculptorBackgroundTask"]
+    assert completion["taskId"] == "bgt_bgX"
+    assert completion["status"] == "completed"
+    assert completion["summary"] == "all done"

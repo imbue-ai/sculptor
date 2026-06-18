@@ -11,8 +11,8 @@ from sculptor.state.chat_state import ToolUseBlock
 
 def test_pi_harness_capabilities() -> None:
     # A capability is true only where Sculptor has a pi-side mechanism for it
-    # (see PiHarness.capabilities for the per-flag why). Pi now carries all but
-    # fast mode and background tasks.
+    # (see PiHarness.capabilities for the per-flag why). Pi now carries every
+    # flag but fast mode (no natural mapping to pi's models).
     assert PI_HARNESS.capabilities() == HarnessCapabilities(
         supports_chat_interface=True,
         supports_interactive_backchannel=True,
@@ -22,7 +22,7 @@ def test_pi_harness_capabilities() -> None:
         supports_fast_mode=False,
         supports_context_reset=True,
         supports_compaction=True,
-        supports_background_tasks=False,
+        supports_background_tasks=True,
         supports_session_resume=True,
         supports_tool_use_rendering=True,
         supports_file_attachments=True,

@@ -84,6 +84,10 @@ class ExtensionUiRequest(SerializableModel):
     # `options`. Other method-specific fields ride `extra="allow"`.
     title: str | None = None
     options: list[str] | None = None
+    # The `notify` method's text payload. Sculptor's background-task extension
+    # encodes its structured completion marker here, so the dispatcher parses it
+    # (`background.py`) onto a BackgroundTaskNotification (RPC §5.3 notify).
+    message: str | None = None
 
 
 # --- Lane 3: session events (the AgentSessionEvent union, RPC §5.2) --------

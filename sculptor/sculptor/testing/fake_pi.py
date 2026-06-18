@@ -149,6 +149,10 @@ class _TurnBuilder(MutableModel):
     prompt_text: str = ""
     images: list[dict] = Field(default_factory=list)
     _ui_counter: int = 0
+    # Set by the `background` directive: it emits the launching run's `agent_end`
+    # itself (the launch yields immediately; the completion fires out-of-band on a
+    # daemon thread), so `_run_turn` must NOT emit its own trailing agent_end.
+    suppress_turn_end: bool = False
 
     def emit(self, text: str) -> None:
         self.chunks.append(text)
@@ -348,6 +352,20 @@ def _emit_agent_end(text: str) -> None:
     )
 
 
+def _emit_reaction_turn(ack: str) -> None:
+    """Emit the out-of-band reaction turn pi runs when the extension wakes the agent
+    via `sendUserMessage` after a completion: an assistant acknowledgement bracketed
+    by agent_start/agent_end, so Sculptor consumes it as the auto-resume reaction."""
+    _emit({"type": "agent_start"})
+    _emit(
+        {
+            "type": "message_end",
+            "message": {"role": "assistant", "content": [{"type": "text", "text": ack}], "stopReason": "stop"},
+        }
+    )
+    _emit_agent_end(ack)
+
+
 def _emit_aborted_agent_end(text: str) -> None:
     """Emit the interrupted-turn boundary: an `agent_end` whose assistant message
     carries `stopReason:"aborted"` plus the partial text streamed so far.
@@ -510,26 +528,42 @@ def _handle_tool_call(args: dict, builder: _TurnBuilder, abort_event: Event, sta
 
 
 def _handle_subagent(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
-    """Script a sub-agent tool call: emit a `subagent` toolCall block, then the
-    tool-execution lane with the STRUCTURED per-child payload under
-    `result.details` (the shape `sculptor_subagent.ts` emits, parsed by
-    `subagent.py`). Lets a deterministic UI test render the nested sub-agent
-    group without spawning real child `pi` processes.
+    """Script a sub-agent tool call and its out-of-band completion (yield-early).
+
+    Reproduces the wire shape `sculptor_subagent.ts` emits, without spawning real
+    child `pi` processes: the `subagent` toolCall block + tool-execution lane whose
+    `result.details` carry the versioned LAUNCH payload (`{v, task}`, parsed by
+    `subagent.py`), then the launching run's `agent_end`. The launching turn ENDS
+    there — the user is unblocked and keeps chatting while the children run (the
+    agent does not hold the turn open). Because this directive emits the run's
+    `agent_end` itself, it sets ``builder.suppress_turn_end`` so `_run_turn` does
+    not emit a second end.
+
+    The completion `notify` (the structured marker Sculptor maps to nested child
+    messages + a BackgroundTaskNotification) is emitted OUT-OF-BAND on a daemon
+    thread — after an optional `wait_path` hold — so fake pi stays responsive to the
+    user's next prompt while the children "run". Sculptor surfaces it via its
+    idle-drain. With no `wait_path` the completion fires right after the launch
+    turn's `agent_end`, so it is genuinely out-of-band.
 
     Args (all optional)::
 
         {"id": "sa1",                   # parent tool-call id
-         "children": [                  # structured child snapshots
+         "task": "...",                 # the single-task argument
+         "children": [                  # per-child completion snapshots
              {"childId": "c0", "label": "subagent", "task": "...",
               "status": "done",
               "events": [{"seq":0,"kind":"tool_call","toolCallId":"ct1",
                           "toolName":"read","args":{...}},
-                         {"seq":1,"kind":"text","text":"..."}]}]}
+                         {"seq":1,"kind":"text","text":"..."}]}],
+         "status": "completed",         # or "failed"
+         "pgids": [123], "wait_path": "...", "timeout_seconds": 120}
 
     With no `children` a single trivial done child is scripted so the simplest
     directive still renders a nested group.
     """
     tool_call_id = str(args.get("id") or "sa1")
+    task_id = f"sat_{tool_call_id}"
     children = args.get("children")
     if not isinstance(children, list) or not children:
         children = [
@@ -542,41 +576,217 @@ def _handle_subagent(args: dict, builder: _TurnBuilder, abort_event: Event, stat
             }
         ]
     task_arg = {"task": str(args.get("task", "investigate"))}
-    payload = {"v": 1, "children": children}
+    count = len(children)
+    label = "subagent" if count == 1 else f"{count} sub-agents"
+    pgids = args.get("pgids") if isinstance(args.get("pgids"), list) else []
 
-    # Close the issuing assistant message with the subagent toolCall block.
+    # Launch: close the issuing assistant message with the subagent toolCall block,
+    # then the tool-execution lane carrying the structured LAUNCH payload.
     content: list[dict] = []
     if builder.full_text:
         content.append({"type": "text", "text": builder.full_text})
     content.append({"type": "toolCall", "id": tool_call_id, "name": "subagent", "arguments": task_arg})
     _emit({"type": "message_end", "message": {"role": "assistant", "content": content, "stopReason": "toolUse"}})
     builder.chunks.clear()
-
-    # Tool-execution lane: the accumulated structured payload rides under
-    # `partialResult.details` / `result.details`.
     _emit({"type": "tool_execution_start", "toolCallId": tool_call_id, "toolName": "subagent", "args": task_arg})
-    update_result = _tool_text_payload("running")
-    update_result["details"] = payload
-    _emit(
-        {
-            "type": "tool_execution_update",
+    start_result = _tool_text_payload(f"Started {count} sub-agent(s)")
+    # `"v": 1` MUST match SUBAGENT_PAYLOAD_VERSION (subagent.py / sculptor_subagent.ts).
+    start_result["details"] = {
+        "v": 1,
+        "task": {
+            "taskId": task_id,
             "toolCallId": tool_call_id,
-            "toolName": "subagent",
-            "args": task_arg,
-            "partialResult": update_result,
-        }
-    )
-    end_result = _tool_text_payload("sub-agents complete")
-    end_result["details"] = payload
+            "label": label,
+            "pgids": pgids,
+            "count": count,
+            "status": "running",
+        },
+    }
     _emit(
         {
             "type": "tool_execution_end",
             "toolCallId": tool_call_id,
             "toolName": "subagent",
-            "result": end_result,
+            "result": start_result,
             "isError": False,
         }
     )
+
+    # End the launching run NOW (yield-early): the user is unblocked while the
+    # children run. Suppress _run_turn's trailing end (we emitted agent_end here).
+    _emit_agent_end(builder.full_text)
+    builder.suppress_turn_end = True
+
+    status = str(args.get("status", "completed"))
+    # `"sculptorSubagentTask"` MUST match SUBAGENT_NOTIFY_MARKER (subagent.py).
+    completion = {
+        "v": 1,
+        "taskId": task_id,
+        "toolCallId": tool_call_id,
+        "status": status,
+        "children": children,
+    }
+    notify_event = {
+        "type": "extension_ui_request",
+        "id": builder.next_ui_request_id(),
+        "method": "notify",
+        "notifyType": "info" if status == "completed" else "warning",
+        "message": json.dumps({"sculptorSubagentTask": completion}, separators=(",", ":")),
+    }
+    # Optionally script the auto-resume reaction turn pi runs when the extension
+    # wakes the agent (sendUserMessage) after the completion notify.
+    reaction = args.get("reaction")
+
+    def _emit_completion() -> None:
+        _emit(notify_event)
+        if isinstance(reaction, str) and reaction:
+            _emit_reaction_turn(reaction)
+
+    wait_path = args.get("wait_path")
+    if wait_path:
+        # Hold the completion on a daemon thread until a sentinel file appears, so a
+        # test can send a mid-flight prompt (which fake pi answers, since this turn
+        # already returned) before the children "complete". `_emit` serializes on
+        # _STDOUT_LOCK, so the out-of-band notify never interleaves a later turn.
+        timeout_seconds = float(args.get("timeout_seconds", 120))
+
+        def _emit_completion_when_ready() -> None:
+            sentinel = Path(wait_path)
+            deadline = time.monotonic() + timeout_seconds
+            while not sentinel.exists():
+                if time.monotonic() >= deadline:
+                    return  # give up; the test's completion assertion will fail loudly
+                time.sleep(0.05)
+            _emit_completion()
+
+        threading.Thread(target=_emit_completion_when_ready, name="fake-pi-subagent-completion", daemon=True).start()
+    else:
+        # No hold: emit right after the launch run's agent_end. Sculptor has already
+        # yielded the turn there, so this is still genuinely out-of-band (its
+        # idle-drain surfaces it) — but synchronous, so a one-shot headless run
+        # observes it before exiting on EOF.
+        _emit_completion()
+
+
+def _handle_background(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
+    """Script a background-task tool call and its out-of-band completion (yield-early).
+
+    Reproduces the wire shape `sculptor_background.ts` emits, without spawning a
+    real process: the `background` toolCall block + tool-execution lane whose
+    `result.details` carry the versioned launch payload (`{v, task}`, parsed by
+    `background.py`), then the launching run's `agent_end`. The launching turn ENDS
+    there — the user is unblocked and keeps chatting while the task runs (the agent
+    does not hold the turn open). Because this directive emits the run's `agent_end`
+    itself, it sets ``builder.suppress_turn_end`` so `_run_turn` does not emit a
+    second end.
+
+    The completion `notify` (the structured marker Sculptor maps to a
+    BackgroundTaskNotification) is emitted OUT-OF-BAND — after the launch turn's
+    `agent_end`, so Sculptor surfaces it via its idle-drain rather than within the
+    turn. With a `wait_path` it is held on a daemon thread until the sentinel file
+    appears (so a test can send a mid-flight prompt first); with no `wait_path` it
+    is emitted synchronously right after `agent_end`, so a one-shot headless run
+    observes it before exiting on EOF.
+
+    Args (all optional): `id` (tool-call id), `command`, `label`, `pgid`,
+    `status` ("completed"/"failed"), `exit_code`, `summary`, `duration_ms`,
+    `wait_path`, `timeout_seconds`.
+    """
+    tool_call_id = str(args.get("id") or "bgtc1")
+    task_id = f"bgt_{tool_call_id}"
+    command = str(args.get("command", "sleep 1"))
+    label = str(args.get("label", "background"))
+    pgid = int(args.get("pgid", 0))
+    arguments = {"command": command, "label": label}
+
+    # Launch: close the issuing assistant message with the toolCall block, then
+    # the tool-execution lane carrying the structured launch payload.
+    content: list[dict] = []
+    if builder.full_text:
+        content.append({"type": "text", "text": builder.full_text})
+    content.append({"type": "toolCall", "id": tool_call_id, "name": "background", "arguments": arguments})
+    _emit({"type": "message_end", "message": {"role": "assistant", "content": content, "stopReason": "toolUse"}})
+    builder.chunks.clear()
+    _emit({"type": "tool_execution_start", "toolCallId": tool_call_id, "toolName": "background", "args": arguments})
+    start_result = _tool_text_payload(f"Started background task {label} (pid {pgid}): {command}")
+    # `"v": 1` MUST match BACKGROUND_PAYLOAD_VERSION (background.py / sculptor_background.ts).
+    start_result["details"] = {
+        "v": 1,
+        "task": {
+            "taskId": task_id,
+            "toolCallId": tool_call_id,
+            "label": label,
+            "command": command,
+            "pgid": pgid,
+            "status": "running",
+        },
+    }
+    _emit(
+        {
+            "type": "tool_execution_end",
+            "toolCallId": tool_call_id,
+            "toolName": "background",
+            "result": start_result,
+            "isError": False,
+        }
+    )
+
+    # End the launching run NOW (yield-early): the user is unblocked while the task
+    # runs. Suppress _run_turn's trailing end (we emitted agent_end ourselves).
+    _emit_agent_end(builder.full_text)
+    builder.suppress_turn_end = True
+
+    status = str(args.get("status", "completed"))
+    # `"sculptorBackgroundTask"` MUST match BACKGROUND_NOTIFY_MARKER (background.py).
+    completion = {
+        "v": 1,
+        "taskId": task_id,
+        "toolCallId": tool_call_id,
+        "status": status,
+        "exitCode": int(args.get("exit_code", 0)),
+        "summary": str(args.get("summary", "background task done")),
+        "durationMs": int(args.get("duration_ms", 1000)),
+    }
+    notify_event = {
+        "type": "extension_ui_request",
+        "id": builder.next_ui_request_id(),
+        "method": "notify",
+        "notifyType": "info" if status == "completed" else "warning",
+        "message": json.dumps({"sculptorBackgroundTask": completion}, separators=(",", ":")),
+    }
+    # Optionally script the auto-resume reaction turn pi runs when the extension
+    # wakes the agent (sendUserMessage) after the completion notify.
+    reaction = args.get("reaction")
+
+    def _emit_completion() -> None:
+        _emit(notify_event)
+        if isinstance(reaction, str) and reaction:
+            _emit_reaction_turn(reaction)
+
+    wait_path = args.get("wait_path")
+    if wait_path:
+        # Hold the completion on a daemon thread until a sentinel file appears, so a
+        # test can send a mid-flight prompt (which fake pi answers, since this turn
+        # already returned) before the task "completes". `_emit` serializes on
+        # _STDOUT_LOCK, so the out-of-band notify never interleaves a later turn.
+        timeout_seconds = float(args.get("timeout_seconds", 120))
+
+        def _emit_completion_when_ready() -> None:
+            sentinel = Path(wait_path)
+            deadline = time.monotonic() + timeout_seconds
+            while not sentinel.exists():
+                if time.monotonic() >= deadline:
+                    return  # give up; the test's completion assertion will fail loudly
+                time.sleep(0.05)
+            _emit_completion()
+
+        threading.Thread(target=_emit_completion_when_ready, name="fake-pi-bg-completion", daemon=True).start()
+    else:
+        # No hold: emit right after the launch run's agent_end. Sculptor has already
+        # yielded the turn there, so this is still genuinely out-of-band (its
+        # idle-drain surfaces it) — but synchronous, so a one-shot headless run
+        # observes it before exiting on EOF.
+        _emit_completion()
 
 
 def _handle_sleep(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
@@ -699,6 +909,7 @@ _COMMAND_REGISTRY: dict[str, Callable[[dict, _TurnBuilder, Event, _SessionState]
     "stream_text": _handle_stream_text,
     "tool_call": _handle_tool_call,
     "subagent": _handle_subagent,
+    "background": _handle_background,
     "sleep": _handle_sleep,
     "wait_for_file": _handle_wait_for_file,
     "recall": _handle_recall,
@@ -793,6 +1004,12 @@ def _run_turn(
     except _TurnAborted:
         # Record the (partial) turn for resume, like a completed one.
         _emit_aborted_agent_end(builder.full_text)
+        state.record_turn(prompt_text)
+        return
+    if builder.suppress_turn_end:
+        # The `background` directive already emitted the launching run's
+        # `agent_end` and the completion notify (the held-open shape); do not
+        # emit a second end.
         state.record_turn(prompt_text)
         return
     if not builder.has_text:
