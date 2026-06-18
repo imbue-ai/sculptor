@@ -15,8 +15,8 @@ export const useWorkspacePluginContext = (): WorkspacePluginContextValue => {
   const ctx = useContext(WorkspacePluginContext);
   if (!ctx) {
     throw new Error(
-      "Plugin SDK: useWorkspaceTasks / useWorkspaceId / useWorkspaceBranch called outside a workspace " +
-        "plugin mount. These hooks require the host's WorkspacePluginContext provider in the component tree.",
+      "Plugin SDK: useWorkspaceTasks called outside a workspace plugin mount. It requires the host's " +
+        "WorkspacePluginContext provider in the component tree (use useCurrentWorkspace in an overlay).",
     );
   }
   return ctx;
