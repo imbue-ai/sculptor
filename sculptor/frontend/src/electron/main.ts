@@ -977,6 +977,10 @@ const registerAppProtocolHandler = (): void => {
       return new Response("Bad request", { status: 400 });
     }
     let target = resolved;
+    // TODO(SCU-1517): this serves one fixed bundle at startup, so a sync stat
+    // is fine. Once the handler also serves plugins from arbitrary local
+    // directories at runtime, switch existsSync (and the read below) to async
+    // fs.promises to keep the main process thread non-blocking.
     if (!fs.existsSync(target)) {
       if (shouldFallbackToIndex(target)) {
         target = path.join(bundleDir, "index.html");
