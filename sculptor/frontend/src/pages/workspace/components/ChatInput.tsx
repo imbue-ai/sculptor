@@ -6,6 +6,7 @@ import { posthog } from "posthog-js";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { HTTPException } from "~/common/Errors.ts";
 import { isTextBlock } from "~/common/Guards.ts";
 import { useKeybinding, useKeybindingDisplayText } from "~/common/keybindings/hooks.ts";
 import { getModelCapabilities } from "~/common/modelCapabilities.ts";
@@ -425,8 +426,11 @@ export const ChatInput = ({
           path: { workspace_id: workspaceID, agent_id: taskID },
           body: { provider: option.provider, modelId: option.modelId },
         });
-      } catch {
-        setToast({ title: `Failed to switch to ${option.displayName}`, type: ToastType.ERROR });
+      } catch (error) {
+        // The endpoint returns a 400 carrying the harness's rejection message
+        // (e.g. pi's "Model not found"); surface it so the failure is actionable.
+        const detail = error instanceof HTTPException ? error.detail : undefined;
+        setToast({ title: `Failed to switch to ${option.displayName}`, description: detail, type: ToastType.ERROR });
       }
     },
     [taskID, workspaceID],
