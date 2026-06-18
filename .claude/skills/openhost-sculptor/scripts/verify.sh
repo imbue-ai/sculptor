@@ -1,10 +1,13 @@
 #!/bin/sh
 # Verify a deployed Sculptor OpenHost app: right code live, serving, clean boot.
 # All over the CLI / HTTP — no SSH.
+#
+# Usage: verify.sh <host>     e.g. verify.sh sculptor.<your-zone>
+# <host> is your instance's public host — the one per-machine value. See SKILL.md
+# ("Config") for where it lives (.sculptor/.env) and how to obtain it.
 set -eu
-SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
-. "$SCRIPT_DIR/_common.sh"
-: "${HOST:?could not derive HOST — is the oh CLI installed and logged in? (oh instance list)}"
+APP=sculptor
+HOST=${1:?usage: verify.sh <host> (e.g. sculptor.<your-zone>); see SKILL.md "Config"}
 
 echo "== app status (confirm branch + sha match what you deployed) =="
 oh app status "$APP"

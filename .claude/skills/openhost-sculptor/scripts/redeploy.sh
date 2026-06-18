@@ -7,8 +7,9 @@
 # the persistent app_data survives. `oh app remove` blocks until the app is gone,
 # so the deploy that follows can reuse the name immediately.
 set -eu
-SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
-. "$SCRIPT_DIR/_common.sh"
+APP=sculptor
+REPO=https://github.com/imbue-ai/sculptor
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 echo "Redeploying '$APP' at $REPO@$BRANCH (keeping data)..."
 oh app remove "$APP" --keep-data

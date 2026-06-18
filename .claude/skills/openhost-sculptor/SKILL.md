@@ -5,8 +5,9 @@ description: |
   app (built from source via openhost.Dockerfile). Covers fresh deploys, updating
   or switching the deployed branch while keeping data, health-checking the live
   instance, and a full CLI-only reset to a fresh-onboarding instance. Wraps the
-  `oh` CLI; config is auto-derived (openhost.toml + git remote + oh CLI), and the
-  common flows are one-command scripts in this skill's scripts/ folder.
+  `oh` CLI; the app name and repo are hardcoded in the scripts and the only
+  per-machine value (your instance host) lives in .sculptor/.env. The common
+  flows are one-command scripts in this skill's scripts/ folder.
 user-invocable: true
 ---
 
@@ -23,25 +24,34 @@ into the host for any normal flow. The four common flows are wrapped in scripts
 under `scripts/`; the raw `oh` commands they run are shown alongside so you know
 what each does.
 
-## Config (auto-derived — no config file)
+## Config
 
-There's nothing to fill in. `scripts/_common.sh` derives the four values every
-script needs, so any of them work from a fresh checkout:
+This skill is Sculptor-specific, so the values are baked into the scripts — no
+config file to set up:
 
-- `APP` — the app name, from `[app].name` in `openhost.toml` at the repo root.
-- `REPO` — the GitHub repo to build from, from the `origin` remote (normalized,
-  e.g. `git@github.com:imbue-ai/sculptor.git` → `https://github.com/imbue-ai/sculptor`).
-- `BRANCH` — the repo's current git branch.
-- `HOST` — the public URL host for `verify.sh`, derived as `$APP` under the
-  default `oh` instance's domain (`oh instance list`), e.g. `sculptor.<zone-domain>`.
+- `APP` — `sculptor`, hardcoded in each script.
+- `REPO` — `https://github.com/imbue-ai/sculptor`, hardcoded in each script.
+- `BRANCH` — the repo's current git branch (`git rev-parse --abbrev-ref HEAD`).
+- `HOST` — the public URL host that `verify.sh` curls (e.g. `sculptor.<your-zone>`).
+  This is the **only per-machine value** — it embeds a personal subdomain, so it
+  isn't committed. It lives in `.sculptor/.env` (gitignored via `**/.env`) as
+  `OPENHOST_HOST`. `verify.sh` takes it as an argument; getting it from
+  `.sculptor/.env` is the caller's job (see Verify below) — the script does no
+  file I/O or prompting.
 
-To run ad-hoc `oh` commands in a shell with the same values, source `_common.sh`
-the way the scripts do (set `SCRIPT_DIR` to the `scripts/` folder first):
+When you need `HOST` and `.sculptor/.env` doesn't have it yet, ask the user for
+their instance host and save it so future runs don't have to ask:
 
 ```bash
-SCRIPT_DIR=.claude/skills/openhost-sculptor/scripts
-. "$SCRIPT_DIR/_common.sh"
-echo "$APP $REPO $BRANCH $HOST"
+echo "OPENHOST_HOST=sculptor.<your-zone>" >>.sculptor/.env   # gitignored
+```
+
+To run ad-hoc `oh` commands in a shell, just use those values directly, e.g.:
+
+```bash
+oh app status sculptor
+oh app deploy "https://github.com/imbue-ai/sculptor@$(git rev-parse --abbrev-ref HEAD)" \
+  --name sculptor --grant-permissions-v2 --wait
 ```
 
 ## Prereqs
@@ -74,9 +84,9 @@ Knowing how the container is wired explains the deploy and reset behavior below.
 
 ## Deploy / update
 
-Each script derives its config via `_common.sh` (`BRANCH` is the current git
-branch) and runs `oh` with `--wait` (the from-source build takes **~10 min** — uv sync,
-frontend `npm install` / `generate-api` / `build`; don't assume it's instant).
+Each script deploys the current git branch (`BRANCH`) and runs `oh` with `--wait`
+(the from-source build takes **~10 min** — uv sync, frontend `npm install` /
+`generate-api` / `build`; don't assume it's instant).
 
 ### Fresh deploy — app name not yet in use
 
@@ -104,10 +114,13 @@ always means remove + deploy (i.e. `redeploy.sh`).
 
 ## Verify
 
-After a deploy, confirm all three with one script:
+After a deploy, confirm all three with one script. It takes your instance host as
+an argument — load it from `.sculptor/.env` (see Config; add it there first if
+missing):
 
 ```bash
-.claude/skills/openhost-sculptor/scripts/verify.sh
+. .sculptor/.env   # sets OPENHOST_HOST
+.claude/skills/openhost-sculptor/scripts/verify.sh "$OPENHOST_HOST"
 ```
 
 It checks:
