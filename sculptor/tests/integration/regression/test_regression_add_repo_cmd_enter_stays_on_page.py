@@ -38,47 +38,30 @@ def test_add_repo_cmd_enter_stays_on_add_workspace_page(
     """
     page = sculptor_instance_.page
 
-    # Step 1: Create a second git repo to add via the dialog.
     target_repo_name = "cmd-enter-target-repo"
     target_repo = test_repo_factory_.create_repo(name=target_repo_name, branch="main")
     target_repo_path = str(target_repo.base_path.resolve())
 
-    # Step 2: Navigate to the Add Workspace page. This mounts NewWorkspaceForm
-    # (and its global Cmd+Enter listener), with the initial project selected.
     navigate_to_add_workspace_page(page)
     add_ws_page = PlaywrightAddWorkspacePage(page=page)
-    # Wait until the form is fully ready: the Create workspace button only
-    # becomes enabled once the repo info and the branch-name preview have
-    # loaded. This is the state in which the page's Cmd+Enter handler would
-    # actually create a workspace (it bails early on an empty branch name), so
-    # it's required to faithfully reproduce the bug.
+    # The page's Cmd+Enter handler bails on an empty branch name, so wait for the
+    # submit button to enable (branch-name preview loaded) before triggering it.
     expect(add_ws_page.get_submit_button()).to_be_enabled(timeout=30_000)
 
-    # Step 3: Open the repo selector and choose the add-repository option.
+    # Open the add-repository dialog from the repo selector.
     add_ws_page.get_project_selector().click()
     add_ws_page.get_open_new_repo_button().click()
     add_repo_dialog = add_ws_page.get_add_repo_dialog()
     expect(add_repo_dialog).to_be_visible()
 
-    # Step 4: Type the new repo's path and press Cmd+Enter to add it.
+    # Add the repo with Cmd+Enter; a successful add closes the dialog.
     path_input = add_repo_dialog.get_path_input()
     path_input.fill(target_repo_path)
     path_input.press(f"{get_playwright_modifier_key()}+Enter")
-
-    # The repo is validated and added, so the dialog closes.
     expect(add_repo_dialog).to_be_hidden(timeout=30_000)
 
-    # Regression: Cmd+Enter inside the dialog must ONLY add the repo. Before the
-    # fix, the Add Workspace page's global "Cmd+Enter creates the workspace"
-    # listener also fired, creating a workspace and navigating to its chat panel.
-    # We must instead stay on the Add Workspace page.
-    #
-    # The Create workspace button is the robust signal: if the bug fired, the
-    # form would flip to its pending state (button disabled) and then unmount as
-    # the page navigated to the new workspace's chat, so the button would never
-    # be enabled here again.
+    # Cmd+Enter must only add the repo: we stay on the Add Workspace page with
+    # the new repo selected and no workspace created.
     expect(add_ws_page.get_submit_button()).to_be_enabled(timeout=30_000)
-    # The newly added repo is selected on the (still-present) Add Workspace page.
     expect(add_ws_page.get_project_selector()).to_contain_text(target_repo_name)
-    # And no workspace chat was ever opened.
     expect(add_ws_page.get_chat_panel()).not_to_be_visible()
