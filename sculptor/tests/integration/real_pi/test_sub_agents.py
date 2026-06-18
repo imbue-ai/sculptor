@@ -67,8 +67,13 @@ def test_pi_subagent_yields_interactive_and_completes(sculptor_instance_: Sculpt
     task_page = create_pi_workspace_and_send(sculptor_instance_, prompt, wait_for_finish=True)
     chat_panel = task_page.get_chat_panel()
 
-    # Interactive WHILE the sub-agent runs (its sleep is still going): a follow-up is
-    # answered without any Stop.
+    # Yield-early is observable: the sub-agent child is still running now — the launch
+    # turn ended while the child's `sleep` continues. Had pi held the turn open until
+    # the child finished, no child would be running here.
+    running = wait_for_process_count(_is_child_pi, 1, at_least=True, timeout_s=30)
+    assert running >= 1, "sub-agent child not running after launch — yield-early not observable"
+
+    # Interactive WHILE the sub-agent runs: a follow-up is answered without any Stop.
     send_no_wait(chat_panel, f"Reply with exactly {reply_marker} and nothing else.")
     expect(chat_panel.get_assistant_messages().filter(has_text=reply_marker).first).to_be_visible(
         timeout=RESPONSE_TIMEOUT_MS
