@@ -17,7 +17,7 @@
 #     -e SCULPTOR_API_PORT=8080 \
 #     sculptor-backend-dev
 
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \

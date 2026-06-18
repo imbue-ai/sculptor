@@ -14,7 +14,7 @@
 #     sculptor_backend/sculptor_backend   (+ _internal/)
 #     sculpt/sculpt                       (+ _internal/)
 
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \

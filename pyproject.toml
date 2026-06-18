@@ -1,7 +1,7 @@
 [project]
 name = "sculptor-workspace"
 version = "0.0.1"
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.13,<3.14"
 license = { text = "MIT" }
 dependencies = [
     "pydevd-pycharm>=251.23774.123",
@@ -53,7 +53,9 @@ sculptor = { workspace = true }
 cache-keys = [{ git = { commit = true } }]
 
 package = false
-required-version = ">=0.7.22"
+# 0.8.13 is the first uv whose bundled python-downloads metadata includes
+# cpython 3.13.7, which the sidecar builder scripts pin.
+required-version = ">=0.8.13"
 
 [tool.ruff]
 line-length = 119

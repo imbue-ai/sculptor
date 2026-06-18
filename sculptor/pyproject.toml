@@ -58,7 +58,7 @@ dependencies = [
     "watchdog>=6.0.0",
     "websockets>=15.0.1",
 ]
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 
 [tool.uv.sources]
 sculpt = { workspace = true }

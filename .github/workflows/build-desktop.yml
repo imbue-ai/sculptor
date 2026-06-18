@@ -183,7 +183,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20.13.1
+          node-version: 24.13.0
           cache: npm
           cache-dependency-path: sculptor/frontend/package-lock.json
 
@@ -193,7 +193,7 @@ jobs:
       - name: Install nvm (macOS)
         if: matrix.os == 'darwin'
         # The frontend recipes source $NVM_DIR/nvm.sh (justfile nvm_use); the
-        # macos-14 runner has no nvm. The recipe runs `nvm install 20.13.1`.
+        # macos-14 runner has no nvm. The recipe runs `nvm install 24.13.0`.
         run: |
           export NVM_DIR="$HOME/.nvm"
           curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash

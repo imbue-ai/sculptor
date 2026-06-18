@@ -13,9 +13,9 @@ trap 'rm -rf "$TEMP_ENV"' EXIT
 
 # If no PYKEY was provided, choose a deterministic default on macOS
 if [[ -z "$PYKEY" && "$(uname -s)" == "Darwin" ]]; then
-  PYKEY="cpython-3.11.13-macos-aarch64-none"
+  PYKEY="cpython-3.13.7-macos-aarch64-none"
 elif [[ -z "$PYKEY" ]]; then
-  PYKEY="3.11.13"
+  PYKEY="3.13.7"
 fi
 
 ARCH_PREFIX=""
