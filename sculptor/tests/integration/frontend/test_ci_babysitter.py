@@ -26,10 +26,12 @@ from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
 from sculptor.testing.elements.pr_popover import PlaywrightPrPopoverElement
 from sculptor.testing.elements.terminal import get_agent_terminal_panel
 from sculptor.testing.elements.terminal import wait_for_xterm_substring
+from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import full_spa_reload
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
+from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
 
 # A registered terminal program that opts into automated prompts: it signals
@@ -384,3 +386,68 @@ def test_settings_selector_lists_only_driveable_harnesses(sculptor_instance_: Sc
     finally:
         opt_in.unlink(missing_ok=True)
         no_opt_in.unlink(missing_ok=True)
+
+
+@user_story("to keep a single CI Babysitter tab across restarts instead of a duplicate")
+def test_restart_reuses_existing_babysitter_tab(
+    sculptor_instance_factory_: SculptorInstanceFactory, tmp_path: Path
+) -> None:
+    """A CI failure after a backend restart reuses the existing 'CI Babysitter'
+    tab instead of spawning a duplicate.
+
+    Regression for SCU-1530. The coordinator tracked the babysitter task id
+    only in memory, so after a restart it no longer knew a babysitter task
+    already existed for the workspace and created a second one — leaving two
+    'CI Babysitter' tabs. The fix re-adopts the persisted babysitter task, so a
+    post-restart failure delivers its prompt to the existing tab.
+    """
+    state_file = tmp_path / "glab_state"
+    pipeline_id_file = tmp_path / "pipeline_id"
+    state_file.write_text("failed")
+    pipeline_id_file.write_text("100")
+
+    # First launch: a failed pipeline spawns the one-and-only babysitter tab and
+    # delivers the configured prompt to it.
+    with sculptor_instance_factory_.spawn_instance() as instance:
+        _enable_babysitter(instance)
+        _install_state_driven_glab(instance, state_file, pipeline_id_file)
+        _set_remote(instance, _FAKE_GITLAB_REMOTE)
+
+        start_task_and_wait_for_ready(instance.page, "say hello")
+        _bump_pipeline_id_after_baseline(instance.page, pipeline_id_file, "101")
+
+        agent_tabs = PlaywrightAgentTabBarElement(instance.page)
+        babysitter_tab = agent_tabs.get_agent_tab_by_name("CI Babysitter")
+        expect(babysitter_tab).to_have_count(1, timeout=60_000)
+        babysitter_tab.first.click()
+        alpha_chat = get_alpha_chat_view(instance.page)
+        pipeline_prompts = alpha_chat.get_messages().filter(has_text=_PIPELINE_PROMPT_FRAGMENT)
+        expect(pipeline_prompts).to_have_count(1)
+
+    # Restart against the same database, then drive another CI failure. The
+    # coordinator's in-memory babysitter_task_id is gone after the restart, so
+    # it must re-discover the persisted babysitter task rather than create a new
+    # one.
+    with sculptor_instance_factory_.spawn_instance() as instance:
+        layout = PlaywrightProjectLayoutPage(page=instance.page)
+        workspace_tab = layout.get_workspace_tabs().first
+        expect(workspace_tab).to_be_visible()
+        workspace_tab.click()
+
+        agent_tabs = PlaywrightAgentTabBarElement(instance.page)
+        babysitter_tab = agent_tabs.get_agent_tab_by_name("CI Babysitter")
+        expect(babysitter_tab).to_have_count(1)
+        babysitter_tab.first.click()
+        alpha_chat = get_alpha_chat_view(instance.page)
+        pipeline_prompts = alpha_chat.get_messages().filter(has_text=_PIPELINE_PROMPT_FRAGMENT)
+        expect(pipeline_prompts).to_have_count(1)
+
+        # Re-establish the post-restart baseline poll (still at id=101), then
+        # bump so a fresh PIPELINE_FAILED transition fires. With the fix this is
+        # delivered to the existing babysitter tab (its prompt count goes to 2)
+        # and there is still exactly one tab. With the bug a duplicate
+        # 'CI Babysitter' tab is created instead.
+        _bump_pipeline_id_after_baseline(instance.page, pipeline_id_file, "102")
+
+        expect(pipeline_prompts).to_have_count(2, timeout=60_000)
+        expect(agent_tabs.get_agent_tab_by_name("CI Babysitter")).to_have_count(1)
