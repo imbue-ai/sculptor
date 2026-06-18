@@ -67,6 +67,7 @@ from sculptor.state.messages import AgentMessageSource
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
+from sculptor.state.messages import ModelOption
 from sculptor.state.messages import ResponseBlockAgentMessage
 from sculptor.utils.functional import first
 from sculptor.web.data_types import PrApproval  # noqa: F401 — re-exported for existing import sites
@@ -410,6 +411,20 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
     @property
     def harness_capabilities(self) -> HarnessCapabilities:
         return self._resolve_harness().capabilities()
+
+    @computed_field
+    @property
+    def available_models(self) -> list[ModelOption]:
+        """The models the harness offers in its switcher (empty when it sources
+        none and the frontend falls back to its built-in list)."""
+        return self._resolve_harness().get_available_models(self.task_state)
+
+    @computed_field
+    @property
+    def selected_model_id(self) -> str | None:
+        """The model_id the switcher should show as selected, or None when the
+        harness tracks no per-task selection."""
+        return self._resolve_harness().get_selected_model_id(self.task_state)
 
     @computed_field
     @property

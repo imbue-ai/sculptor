@@ -39,6 +39,7 @@ from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import EffortLevel
 from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
+from sculptor.state.messages import ModelOption
 from sculptor.state.messages import PersistentAgentMessage
 from sculptor.state.messages import PersistentMessage
 from sculptor.state.messages import PersistentUserMessage
@@ -104,6 +105,21 @@ class ClearContextUserMessage(PersistentUserMessage):
     object_type: str = Field(default="ClearContextUserMessage")
 
 
+class SetModelUserMessage(PersistentUserMessage):
+    """Switch the running agent's model out-of-band (the pi `set_model` path).
+
+    Persistent like `ClearContextUserMessage` so the harness picks it up through
+    the task runner and runs it between turns. Carries the `(provider, model_id)`
+    of the chosen `ModelOption`; the pi adapter issues pi's `set_model` RPC and,
+    on success, updates the persisted current model. Claude never receives this —
+    its model rides each turn as `ChatInputUserMessage.model_name`.
+    """
+
+    object_type: str = Field(default="SetModelUserMessage")
+    provider: str = Field(description="The chosen model's provider (e.g. 'anthropic')")
+    model_id: str = Field(description="The chosen model's id (pi's `modelId`)")
+
+
 class UserQuestionAnswerMessage(PersistentUserMessage):
     object_type: str = Field(default="UserQuestionAnswerMessage")
     answers: dict[str, str] = Field(description="Map from question text to answer text")
@@ -131,6 +147,7 @@ class RemoveQueuedMessageUserMessage(EphemeralUserMessage):
 PersistentUserMessageUnion = (
     Annotated[ChatInputUserMessage, Tag("ChatInputUserMessage")]
     | Annotated[ClearContextUserMessage, Tag("ClearContextUserMessage")]
+    | Annotated[SetModelUserMessage, Tag("SetModelUserMessage")]
     | Annotated[UserQuestionAnswerMessage, Tag("UserQuestionAnswerMessage")]
 )
 EphemeralUserMessageUnion = (
@@ -427,6 +444,21 @@ class AutoCompactingDoneAgentMessage(EphemeralAgentMessage):
     object_type: str = "AutoCompactingDoneAgentMessage"
 
 
+class ModelsAvailableAgentMessage(EphemeralAgentMessage):
+    """Carries the harness's model catalog + current selection onto task state.
+
+    A harness with a dynamic catalog (pi) emits this once at agent start; the
+    run-agent handler maps it onto `AgentTaskStateV2.available_models` /
+    `current_model` (which the harness's `get_available_models` /
+    `get_selected_model_id` then read). Ephemeral: the durable record is the
+    persisted task state, re-derived on each agent start, not the message log.
+    """
+
+    object_type: str = "ModelsAvailableAgentMessage"
+    available_models: tuple[ModelOption, ...] = ()
+    current_model: ModelOption | None = None
+
+
 class AskUserQuestionAgentMessage(EphemeralAgentMessage):
     object_type: str = "AskUserQuestionAgentMessage"
     question_data: AskUserQuestionData
@@ -462,6 +494,7 @@ EphemeralAgentMessageUnion = (
     | Annotated[PlanModeAgentMessage, Tag("PlanModeAgentMessage")]
     | Annotated[AutoCompactingAgentMessage, Tag("AutoCompactingAgentMessage")]
     | Annotated[AutoCompactingDoneAgentMessage, Tag("AutoCompactingDoneAgentMessage")]
+    | Annotated[ModelsAvailableAgentMessage, Tag("ModelsAvailableAgentMessage")]
 )
 AgentMessageUnion = PersistentAgentMessageUnion | EphemeralAgentMessageUnion
 # this is necessary because pydantic won't let us use PersistentMessageTypes, which already has a discriminator, to make MessageTypes

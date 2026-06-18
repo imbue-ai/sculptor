@@ -1,3 +1,5 @@
+import re
+
 from playwright.sync_api import Locator
 from playwright.sync_api import Page
 from playwright.sync_api import expect
@@ -81,7 +83,9 @@ def create_task(
     model_selector = page.get_by_test_id(ElementIDs.MODEL_SELECTOR)
     model_selector.click()
     # Use exact text matching to distinguish e.g. "Fake Claude" from "Fake Claude 2"
-    target = page.get_by_test_id(ElementIDs.MODEL_OPTION).filter(has=page.get_by_text(model_name, exact=True))
+    target = page.get_by_test_id(re.compile(rf"^{re.escape(ElementIDs.MODEL_OPTION)}-")).filter(
+        has=page.get_by_text(model_name, exact=True)
+    )
     expect(target).to_be_visible(timeout=10_000)
     target.click()
 
@@ -97,7 +101,9 @@ def select_home_page_model(page: Page, model_name: str) -> None:
     """
     model_selector = page.get_by_test_id(ElementIDs.MODEL_SELECTOR)
     model_selector.click()
-    target = page.get_by_test_id(ElementIDs.MODEL_OPTION).filter(has=page.get_by_text(model_name, exact=True))
+    target = page.get_by_test_id(re.compile(rf"^{re.escape(ElementIDs.MODEL_OPTION)}-")).filter(
+        has=page.get_by_text(model_name, exact=True)
+    )
     expect(target).to_be_visible(timeout=10_000)
     target.click()
 

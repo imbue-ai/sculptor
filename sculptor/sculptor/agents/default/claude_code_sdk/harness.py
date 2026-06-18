@@ -149,6 +149,7 @@ class ClaudeCodeHarness(Harness):
             supports_file_attachments=True,
             supports_interruption=True,
             supports_file_references=True,
+            supports_model_selection=True,
         )
 
     def is_ask_user_question_tool(self, tool_name: str) -> bool:

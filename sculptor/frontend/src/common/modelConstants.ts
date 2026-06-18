@@ -1,4 +1,4 @@
-import { LlmModel } from "~/api";
+import { LlmModel, type ModelOption } from "~/api";
 
 const modelNames: Partial<Record<LlmModel, { short: string; long: string }>> = {
   [LlmModel.CLAUDE_4_OPUS]: { short: "Opus (1M)", long: "Claude 4.8 Opus (1M)" },
@@ -17,3 +17,44 @@ const modelNames: Partial<Record<LlmModel, { short: string; long: string }>> = {
 
 export const getModelShortName = (model: LlmModel): string => modelNames[model]?.short || "Unknown";
 export const getModelLongName = (model: LlmModel): string => modelNames[model]?.long || "Unknown";
+
+const providerDisplayNames: Record<string, string> = {
+  anthropic: "Anthropic",
+  openrouter: "OpenRouter",
+  deepseek: "DeepSeek",
+  google: "Google",
+  openai: "OpenAI",
+  "amazon-bedrock": "Amazon Bedrock",
+};
+
+/**
+ * The human-friendly label for a model provider, used as the group header in the
+ * pi model switcher. Unknown providers fall back to a capitalized form of the
+ * raw provider string.
+ */
+export const getProviderDisplayName = (provider: string): string =>
+  providerDisplayNames[provider] ?? `${provider.charAt(0).toUpperCase()}${provider.slice(1)}`;
+
+/**
+ * Route a model-switcher value change to the correct apply path.
+ *
+ * With a non-empty backend list (pi) the chosen `ModelOption` is applied
+ * out-of-band via `onBackendModelChange`; otherwise the value is a Claude
+ * `LlmModel` applied per-turn via `onModelChange`. A backend value with no
+ * matching option is ignored.
+ */
+export const routeModelChange = (
+  next: string,
+  backendModels: ReadonlyArray<ModelOption> | undefined,
+  onModelChange: (model: LlmModel) => void,
+  onBackendModelChange?: (option: ModelOption) => void,
+): void => {
+  if (backendModels !== undefined && backendModels.length > 0) {
+    const option = backendModels.find((candidate) => candidate.modelId === next);
+    if (option !== undefined) {
+      onBackendModelChange?.(option);
+    }
+    return;
+  }
+  onModelChange(next as LlmModel);
+};

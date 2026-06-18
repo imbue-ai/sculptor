@@ -296,14 +296,15 @@ export const AddWorkspacePage = (): ReactElement => {
         ? "claude"
         : (agentTypeValue as StoredAgentType);
 
-      // Create first agent (no prompt in the simplified form). Terminal
-      // agents (plain and registered) have no model concept, so the
-      // default-model preference only applies to chat types.
-      const isTerminalType = effectiveAgentType === "terminal" || effectiveAgentType === "registered";
+      // Create first agent (no prompt in the simplified form). Only Claude
+      // consumes a creation-time model: terminal/registered agents have no
+      // model concept, and pi selects from its own catalog in-task, so it
+      // starts on pi's default rather than a Claude model it would ignore.
+      const shouldSendCreationModel = effectiveAgentType === "claude";
       const agentResponse = await createWorkspaceAgent({
         path: { workspace_id: workspaceId },
         body: {
-          model: isTerminalType ? undefined : (defaultModelPreference as LlmModel),
+          model: shouldSendCreationModel ? (defaultModelPreference as LlmModel) : undefined,
           agentType: effectiveAgentType,
           registrationId: effectiveRegistrationId,
         },

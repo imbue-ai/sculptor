@@ -22,6 +22,13 @@ The preflight-failure path (`fake_pi:error`) emits a `response` with
 when the prompt is rejected before the agent starts (e.g. missing API
 key).
 
+The in-run failure path (`fake_pi:turn_error`) instead accepts the prompt
+(`response success:true`), starts the agent, then ends the assistant message
+with `stopReason:"error"` and an empty body carrying the reason on
+`errorMessage` — matching pi's wire shape when a turn fails mid-run (e.g. the
+selected model's provider has no key). PiAgent surfaces that reason as a
+clean, actionable error.
+
 `abort` is acknowledged with a `response` envelope and, like real pi, leaves
 the process alive for the next prompt — it does NOT exit. If a turn is in
 flight, abort preempts it and emits an `agent_end` whose assistant message
@@ -59,6 +66,12 @@ fresh id with empty history (mirroring pi's ``/clear``), so a post-reset
 ``recall`` finds nothing and ``get_state`` reports the new id with messageCount
 0 — the hook the context-reset integration test asserts on. Real pi persists a
 JSONL transcript; FakePi only needs enough to prove resume + reset continuity.
+
+Model selection: ``get_available_models`` returns a fixed catalog (``_FAKE_PI_MODELS``)
+and ``get_state`` reports a current model, so PiAgent surfaces them onto task state
+and the chat switcher offers pi's own models. ``set_model`` echoes the chosen model
+back and updates the current model, so a switch persists for a following ``get_state``
+— the hook the model-selection integration test asserts on.
 
 Wire-protocol reference: the pi RPC protocol notes (pi 0.78.0).
 """
@@ -104,6 +117,21 @@ _POLL_INTERVAL_SECONDS = 0.05
 # into `/skill:<name>` (FakePi only ever sees the already-rewritten text).
 _SKILL_INVOCATION_REGEX = re.compile(r"^/skill:(\S+)")
 _SKILL_FOLLOWED_PREFIX = "[FakePi] followed skill: "
+
+# The fixed model catalog `get_available_models` reports — pi's `Model` wire shape
+# ({id, name, provider}). Display names are deliberately FakePi-specific (not any
+# Claude `getModelLongName` label) so a test can assert pi's own models populate the
+# switcher and Claude's hardcoded names do not. The ids skip the blacklisted /
+# dated-pin shapes PiAgent curates away, so the catalog survives curation intact.
+_FAKE_PI_MODELS: list[dict[str, str]] = [
+    {"id": "fake-pi-opus-4-8", "name": "FakePi Opus 4.8", "provider": "anthropic"},
+    {"id": "fake-pi-sonnet-4-6", "name": "FakePi Sonnet 4.6", "provider": "anthropic"},
+    {"id": "fake-pi-haiku-4-5", "name": "FakePi Haiku 4.5", "provider": "anthropic"},
+]
+
+# The model `get_state` reports as current until a `set_model` changes it (pi
+# defaults to its newest model; FakePi mirrors that with the first catalog entry).
+_DEFAULT_FAKE_PI_MODEL: dict[str, str] = _FAKE_PI_MODELS[0]
 
 
 def _skill_invocation_name(prompt_text: str) -> str | None:
@@ -205,6 +233,10 @@ class _SessionState(MutableModel):
     session_file: Path | None
     message_count: int = 0
     user_messages: list[str] = Field(default_factory=list)
+    # The model `get_state` reports as current; a `set_model` updates it in place.
+    # In-memory only (not persisted): the model-selection test exercises a switch
+    # within one process, and PiAgent re-fetches the model at every start.
+    current_model: dict[str, str] = Field(default_factory=lambda: dict(_DEFAULT_FAKE_PI_MODEL))
 
     @classmethod
     def load(cls, session_dir: Path | None, session_id: str) -> "_SessionState":
@@ -340,6 +372,22 @@ def _tool_text_payload(text: str) -> dict:
 
 def _emit_user_message_end(text: str) -> None:
     _emit({"type": "message_end", "message": _user_message(text)})
+
+
+def _emit_error_message_end(error_message: str) -> None:
+    """Emit pi's in-run failure boundary: an assistant `message_end` with an
+    empty body, `stopReason:"error"`, and the reason on `errorMessage`.
+
+    Mirrors what real pi emits when a turn fails mid-run (e.g. the selected
+    model's provider has no key): no in-stream error event, no content, the
+    reason carried only on `errorMessage`. PiAgent raises on consuming this.
+    """
+    _emit(
+        {
+            "type": "message_end",
+            "message": {"role": "assistant", "content": [], "stopReason": "error", "errorMessage": error_message},
+        }
+    )
 
 
 def _emit_agent_end(text: str) -> None:
@@ -941,17 +989,70 @@ def _find_error_directive(directives: Iterable[str]) -> str | None:
     return None
 
 
+def _find_turn_error_directive(directives: Iterable[str]) -> str | None:
+    """If any `fake_pi:turn_error` directive is present, return its message."""
+    for directive in directives:
+        name, args = _parse_directive(directive)
+        if name == "turn_error":
+            return str(args.get("message", "fake_pi turn error"))
+    return None
+
+
 def _emit_state(prompt_id: str | None, state: _SessionState) -> None:
     """Answer a `get_state` command with pi's `RpcSessionState` shape (RPC §5.1).
 
-    Only the fields PiAgent's resume verification reads are populated:
-    ``sessionId`` (always) and ``messageCount`` (>0 after a resumed turn);
-    ``sessionFile`` when the session is persisted.
+    Populates the fields PiAgent reads: ``sessionId`` (always) and
+    ``messageCount`` (>0 after a resumed turn) for resume verification,
+    ``sessionFile`` when persisted, and ``model`` (the current model) which
+    PiAgent surfaces as the switcher's selection.
     """
-    data: dict = {"sessionId": state.session_id, "messageCount": state.message_count}
+    data: dict = {
+        "sessionId": state.session_id,
+        "messageCount": state.message_count,
+        "model": state.current_model,
+    }
     if state.session_file is not None:
         data["sessionFile"] = str(state.session_file)
     payload: dict = {"type": "response", "command": "get_state", "success": True, "data": data}
+    if prompt_id:
+        payload["id"] = prompt_id
+    _emit(payload)
+
+
+def _emit_available_models(prompt_id: str | None) -> None:
+    """Answer a `get_available_models` command with the fixed catalog (RPC §5.1).
+
+    Returns `_FAKE_PI_MODELS` under `data.models`, the shape PiAgent maps to
+    `ModelOption`s and curates for the switcher.
+    """
+    payload: dict = {
+        "type": "response",
+        "command": "get_available_models",
+        "success": True,
+        "data": {"models": _FAKE_PI_MODELS},
+    }
+    if prompt_id:
+        payload["id"] = prompt_id
+    _emit(payload)
+
+
+def _emit_set_model(prompt_id: str | None, model: dict[str, str]) -> None:
+    """Acknowledge a `set_model` command, echoing the now-current model in `data`.
+
+    Mirrors pi returning the selected `Model`; PiAgent reads it as the new current
+    model. An unknown model id is rejected with `success:false` (pi's `Model not
+    found` shape) so the failure-toast path stays exercisable.
+    """
+    known = any(candidate["id"] == model["id"] for candidate in _FAKE_PI_MODELS)
+    if not known:
+        payload = {
+            "type": "response",
+            "command": "set_model",
+            "success": False,
+            "error": f"Model not found: {model.get('provider', '')}/{model['id']}",
+        }
+    else:
+        payload = {"type": "response", "command": "set_model", "success": True, "data": model}
     if prompt_id:
         payload["id"] = prompt_id
     _emit(payload)
@@ -990,6 +1091,16 @@ def _run_turn(
     error_message = _find_error_directive(directives)
     if error_message is not None:
         _emit_response("prompt", success=False, prompt_id=prompt_id, error=error_message)
+        return
+    turn_error_message = _find_turn_error_directive(directives)
+    if turn_error_message is not None:
+        # In-run failure: the prompt is accepted and the agent starts, but the
+        # turn ends in error (see _emit_error_message_end). PiAgent raises on the
+        # error message_end, so no agent_end follows.
+        _emit_response("prompt", success=True, prompt_id=prompt_id)
+        _emit({"type": "agent_start"})
+        _emit_user_message_end(prompt_text)
+        _emit_error_message_end(turn_error_message)
         return
     builder = _TurnBuilder(prompt_id=prompt_id, prompt_text=prompt_text, images=images)
     _emit_response("prompt", success=True, prompt_id=prompt_id)
@@ -1064,9 +1175,9 @@ def _run_rpc_loop(system_prompt: str, session_dir: Path | None, session_id: str)
                 # Out-of-band: route to a blocked `ui_request` directive (see
                 # _handle_ui_request); the main loop never processes these.
                 _UI_RESPONSE_QUEUE.put(payload)
-            elif event_type in ("prompt", "get_state", "new_session"):
-                # In-order: queued so get_state / new_session observe preceding
-                # turns' state (and the reset lands strictly between turns).
+            elif event_type in ("prompt", "get_state", "new_session", "get_available_models", "set_model"):
+                # In-order: queued so get_state / new_session / set_model observe
+                # preceding turns' state (and a switch lands strictly between turns).
                 command_queue.put(payload)
         # Unblock any `ui_request` still waiting when stdin closes at shutdown.
         _UI_RESPONSE_QUEUE.put({"cancelled": True})
@@ -1086,6 +1197,22 @@ def _run_rpc_loop(system_prompt: str, session_dir: Path | None, session_id: str)
         command_id = payload.get("id") if isinstance(payload.get("id"), str) else None
         if payload.get("type") == "get_state":
             _emit_state(command_id, state)
+            continue
+        if payload.get("type") == "get_available_models":
+            _emit_available_models(command_id)
+            continue
+        if payload.get("type") == "set_model":
+            # Update the current model so a following get_state reflects the switch,
+            # then ack with the now-current model (mirrors pi's set_model).
+            requested = {
+                "id": str(payload.get("modelId", "")),
+                "name": str(payload.get("modelId", "")),
+                "provider": str(payload.get("provider", "anthropic")),
+            }
+            known = next((m for m in _FAKE_PI_MODELS if m["id"] == requested["id"]), None)
+            if known is not None:
+                state.current_model = dict(known)
+            _emit_set_model(command_id, known if known is not None else requested)
             continue
         if payload.get("type") == "new_session":
             # Mirror pi's `/clear`: reset to a fresh session with empty history,

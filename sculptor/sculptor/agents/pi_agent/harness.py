@@ -39,11 +39,13 @@ from __future__ import annotations
 from sculptor.agents.pi_agent.backchannel import ASK_USER_QUESTION_TOOL_NAME
 from sculptor.agents.pi_agent.backchannel import EXIT_PLAN_MODE_TOOL_NAME
 from sculptor.agents.pi_agent.backchannel import build_ask_user_question_data
+from sculptor.database.models import AgentTaskStateV2
 from sculptor.interfaces.agents.harness import Harness
 from sculptor.interfaces.agents.harness import HarnessCapabilities
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.state.chat_state import AskUserQuestionData
 from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.messages import ModelOption
 
 # Pi has no MCP / AskUserQuestion / ExitPlanMode surface; the Claude
 # prompt's tool-instructions block is deliberately absent. Names Sculptor
@@ -150,7 +152,27 @@ class PiHarness(Harness):
             # Pi resolves @-mention path references via its own file-reading loop,
             # the same as Claude — true.
             supports_file_references=True,
+            # Pi switches models in-session: get_available_models lists pi's own
+            # catalog and set_model honors a pick (see the get_available_models
+            # override and agent_wrapper's set_model handling).
+            supports_model_selection=True,
         )
+
+    def get_available_models(self, task_state: AgentTaskStateV2 | None) -> list[ModelOption]:
+        # The agent fetches and curates pi's catalog at start and persists it on
+        # the task state (agent_wrapper._fetch_models_into_state); the switcher
+        # reads it from here. Empty until the agent has run, or when task_state
+        # is absent — the frontend then falls back to its built-in list.
+        if task_state is None:
+            return []
+        return list(task_state.available_models)
+
+    def get_selected_model_id(self, task_state: AgentTaskStateV2 | None) -> str | None:
+        # The model_id pi reported as current at start (get_state.model), or None
+        # until the agent has run / when task_state is absent.
+        if task_state is None or task_state.current_model is None:
+            return None
+        return task_state.current_model.model_id
 
     def is_ask_user_question_tool(self, tool_name: str) -> bool:
         return tool_name == ASK_USER_QUESTION_TOOL_NAME

@@ -50,6 +50,7 @@ from sculptor.state.chat_state import ContentBlock
 from sculptor.state.chat_state import ToolInput
 from sculptor.state.chat_state import ToolInteractiveRole
 from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.messages import ModelOption
 
 
 class HarnessCapabilities(SerializableModel):
@@ -91,6 +92,7 @@ class HarnessCapabilities(SerializableModel):
     supports_file_attachments: bool
     supports_interruption: bool
     supports_file_references: bool
+    supports_model_selection: bool
 
 
 class AgentRunContext(BaseModel):
@@ -141,7 +143,24 @@ class Harness(BaseModel, abc.ABC):
             supports_file_attachments=False,
             supports_interruption=False,
             supports_file_references=False,
+            supports_model_selection=False,
         )
+
+    def get_available_models(self, task_state: AgentTaskStateV2 | None) -> list[ModelOption]:
+        """The models this harness offers in its switcher, or `[]` when it
+        sources none (the frontend then falls back to its built-in default list).
+
+        A harness with a dynamic catalog (pi) returns the list its agent fetched
+        and stored on `task_state`; one with a static catalog maps it here. The
+        base offers nothing, mirroring the all-`False` `capabilities()` default.
+        """
+        return []
+
+    def get_selected_model_id(self, task_state: AgentTaskStateV2 | None) -> str | None:
+        """The `model_id` of the task's currently-selected model, or `None` when
+        the harness does not track one (the frontend then uses its own selection
+        state)."""
+        return None
 
     def is_ask_user_question_tool(self, tool_name: str) -> bool:
         return False

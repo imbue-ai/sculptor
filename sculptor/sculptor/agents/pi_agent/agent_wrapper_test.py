@@ -22,10 +22,13 @@ from unittest.mock import patch
 
 import pytest
 
+from sculptor.agents.pi_agent.agent_wrapper import PI_PROBE_SESSION_DIR_NAME
 from sculptor.agents.pi_agent.agent_wrapper import PI_SESSION_DIR_NAME
 from sculptor.agents.pi_agent.agent_wrapper import PI_SESSION_ID_STATE_FILE
 from sculptor.agents.pi_agent.agent_wrapper import PiAgent
 from sculptor.agents.pi_agent.agent_wrapper import _TurnState
+from sculptor.agents.pi_agent.agent_wrapper import _curate_models
+from sculptor.agents.pi_agent.agent_wrapper import _model_option_from_pi
 from sculptor.agents.pi_agent.agent_wrapper import _render_synthesized_skill
 from sculptor.agents.pi_agent.agent_wrapper import _rewrite_skill_invocation
 from sculptor.agents.pi_agent.backchannel import DISMISSED_ANSWER_VALUE
@@ -50,6 +53,7 @@ from sculptor.interfaces.agents.agent import ClearContextUserMessage
 from sculptor.interfaces.agents.agent import ContextClearedMessage
 from sculptor.interfaces.agents.agent import EphemeralUserMessage
 from sculptor.interfaces.agents.agent import InterruptProcessUserMessage
+from sculptor.interfaces.agents.agent import ModelsAvailableAgentMessage
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import PiAgentConfig
 from sculptor.interfaces.agents.agent import PlanModeAgentMessage
@@ -59,6 +63,7 @@ from sculptor.interfaces.agents.agent import RequestSkippedAgentMessage
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
 from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
+from sculptor.interfaces.agents.agent import SetModelUserMessage
 from sculptor.interfaces.agents.agent import StopAgentUserMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
 from sculptor.interfaces.agents.errors import PiBinaryNotFoundError
@@ -74,6 +79,7 @@ from sculptor.state.chat_state import ToolResultBlock
 from sculptor.state.chat_state import ToolUseBlock
 from sculptor.state.chat_state import make_plan_approval_question
 from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import ModelOption
 from sculptor.state.messages import ResponseBlockAgentMessage
 
 _PROMPT_ID = "prompt-1"
@@ -1485,6 +1491,131 @@ def test_clear_context_runs_after_an_in_flight_chat_turn() -> None:
     assert order == ["turn", "clear"]
 
 
+def test_push_message_enqueues_set_model_returns_true() -> None:
+    """A SetModelUserMessage goes on the same FIFO as chat turns — handled, not dead-lettered."""
+    agent = _make_agent()
+    set_model = SetModelUserMessage(message_id=AgentMessageID(), provider="anthropic", model_id="claude-haiku-4-5")
+    with expect_exact_logged_errors([]):
+        handled = agent._push_message(set_model)
+    assert handled is True
+    assert agent._input_agent_messages.get_nowait() is set_model
+
+
+def test_set_model_success_emits_new_current_model_and_resolves() -> None:
+    """A successful set_model sends the RPC, re-emits the catalog with the new current model, and RequestSuccess."""
+    agent = _make_agent()
+    agent._available_models = (
+        ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="Claude Opus 4.8"),
+        ModelOption(provider="anthropic", model_id="claude-haiku-4-5", display_name="Claude Haiku 4.5"),
+    )
+    process = _make_process(
+        [
+            _event(
+                {
+                    "type": "response",
+                    "command": "set_model",
+                    "success": True,
+                    "id": "cmd-set",
+                    "data": {"id": "claude-haiku-4-5", "name": "Claude Haiku 4.5", "provider": "anthropic"},
+                }
+            )
+        ]
+    )
+    agent._process = process
+    with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-set"]):
+        agent._handle_set_model(
+            SetModelUserMessage(message_id=AgentMessageID(), provider="anthropic", model_id="claude-haiku-4-5")
+        )
+
+    # set_model was written to pi's stdin, id-correlated, carrying provider + modelId.
+    writes = [call.args[0] for call in process.write_stdin.call_args_list]
+    assert any('"type":"set_model"' in w and '"cmd-set"' in w and '"claude-haiku-4-5"' in w for w in writes)
+
+    emitted = _drain(agent._output_messages)
+    carriers = [m for m in emitted if isinstance(m, ModelsAvailableAgentMessage)]
+    assert len(carriers) == 1
+    carrier = carriers[0]
+    # The catalog is unchanged; only the current model follows the switch.
+    assert [option.model_id for option in carrier.available_models] == ["claude-opus-4-8", "claude-haiku-4-5"]
+    assert carrier.current_model is not None
+    assert carrier.current_model.model_id == "claude-haiku-4-5"
+    # Terminal RequestSuccess, no failure.
+    assert any(isinstance(m, RequestSuccessAgentMessage) for m in emitted)
+    assert not any(isinstance(m, RequestFailureAgentMessage) for m in emitted)
+
+
+def test_set_model_failure_on_success_false_surfaces_error_without_mutation() -> None:
+    """set_model success:false → RequestFailure, no current-model carrier, handler does not raise."""
+    agent = _make_agent()
+    agent._available_models = (ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="Opus"),)
+    agent._process = _make_process(
+        [
+            _event(
+                {
+                    "type": "response",
+                    "command": "set_model",
+                    "success": False,
+                    "id": "cmd-set",
+                    "error": "Model not found: anthropic/claude-nope",
+                }
+            )
+        ]
+    )
+    with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-set"]):
+        # Must NOT raise out of the handler — the AgentClientError path reports and continues.
+        agent._handle_set_model(
+            SetModelUserMessage(message_id=AgentMessageID(), provider="anthropic", model_id="claude-nope")
+        )
+    emitted = _drain(agent._output_messages)
+    failures = [m for m in emitted if isinstance(m, RequestFailureAgentMessage)]
+    assert len(failures) == 1
+    # The failure carries pi's error so the frontend can toast it.
+    assert "Model not found" in str(failures[0].error.args[0])
+    # No current-model mutation on failure.
+    assert not any(isinstance(m, ModelsAvailableAgentMessage) for m in emitted)
+
+
+def test_set_model_failure_on_no_response_surfaces_error() -> None:
+    """No set_model ack (process exited / timeout) → failed request, no carrier, no crash."""
+    agent = _make_agent()
+    # Empty queue + is_finished True ⇒ _consume_until_command_response returns None at once.
+    agent._process = _make_process([])
+    with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-set"]):
+        agent._handle_set_model(
+            SetModelUserMessage(message_id=AgentMessageID(), provider="anthropic", model_id="claude-haiku-4-5")
+        )
+    emitted = _drain(agent._output_messages)
+    assert any(isinstance(m, RequestFailureAgentMessage) for m in emitted)
+    assert not any(isinstance(m, ModelsAvailableAgentMessage) for m in emitted)
+
+
+def test_set_model_runs_after_an_in_flight_chat_turn() -> None:
+    """FIFO ordering: a set_model queued behind a chat turn runs after the turn ends.
+
+    Same one-at-a-time guarantee as the context reset, so the set_model RPC's
+    response is consumed only between turns.
+    """
+    agent = _make_agent()
+    agent._process = MagicMock()
+    order: list[str] = []
+    with (
+        patch.object(agent, "_consume_until_turn_end", side_effect=lambda prompt_id="": order.append("turn")),
+        patch.object(agent, "_handle_set_model", side_effect=lambda message: order.append("set_model")),
+    ):
+        agent._input_agent_messages.put(ChatInputUserMessage(text="hi"))
+        agent._input_agent_messages.put(
+            SetModelUserMessage(message_id=AgentMessageID(), provider="anthropic", model_id="claude-haiku-4-5")
+        )
+        worker = threading.Thread(target=agent._process_message_queue)
+        worker.start()
+        deadline = time.monotonic() + 5.0
+        while len(order) < 2 and time.monotonic() < deadline:
+            time.sleep(0.02)
+        agent._shutdown_event.set()
+        worker.join(timeout=5.0)
+    assert order == ["turn", "set_model"]
+
+
 def _make_start_env(persisted_session_id: str | None = None) -> MagicMock:
     """A MagicMock environment that lets PiAgent.start() run past the binary /
     version preflight and into the session-launch logic.
@@ -1740,6 +1871,44 @@ def test_unprocessable_image_error_reaches_user_no_silent_drop() -> None:
     with pytest.raises(PiCrashError) as exc_info:
         agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
     assert "Could not process image" in str(exc_info.value)
+
+
+def test_message_end_error_surfaces_pi_reason_not_generic_placeholder() -> None:
+    """A turn that ends in error with no body must surface pi's real reason.
+
+    Mirrors the real pi wire shape for a provider-auth failure (selecting a
+    model whose provider has no key): pi emits no in-stream error event and an
+    empty assistant message carrying the failure on ``errorMessage`` with
+    ``stopReason:"error"``. PiAgent must lift that reason into a clean,
+    actionable message rather than the generic "pi message ended in error"
+    placeholder (which drops pi's reason entirely).
+    """
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event(
+                {
+                    "type": "message_end",
+                    "message": {
+                        "role": "assistant",
+                        "content": [],
+                        "stopReason": "error",
+                        "errorMessage": "401 Authentication Fails, Your api key: ****0000 is invalid",
+                    },
+                }
+            ),
+        ]
+    )
+    with pytest.raises(PiCrashError) as exc_info:
+        agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+    text = str(exc_info.value)
+    # The generic placeholder must NOT be what the user sees.
+    assert "pi message ended in error" not in text
+    # An auth / unavailable-model failure leads with actionable guidance.
+    assert "another model" in text.lower() or "different model" in text.lower()
+    # pi's real reason is preserved as detail so debugging isn't lost.
+    assert "401" in text or "Authentication" in text
 
 
 def _drain(queue: Queue) -> list:
@@ -2676,3 +2845,248 @@ def test_interrupt_does_not_kill_background_task() -> None:
     agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
     _assert_no_kill(agent)
     assert _BG_TASK_ID in agent._background_tasks
+
+
+# --- Model catalog (get_available_models curation + start-time fetch) --------
+
+# The raw get_available_models payload captured live from real pi 0.78.0 (24
+# Anthropic models): the obsolete claude-3-* family plus dated-pin duplicates of
+# the 4.x models alongside their friendly aliases. The curation fixture below
+# asserts what the switcher should be left with.
+_RAW_PI_MODELS: list[dict[str, Any]] = [
+    {"id": "claude-3-5-haiku-20241022", "name": "Claude Haiku 3.5", "provider": "anthropic"},
+    {"id": "claude-3-5-haiku-latest", "name": "Claude Haiku 3.5 (latest)", "provider": "anthropic"},
+    {"id": "claude-3-5-sonnet-20240620", "name": "Claude Sonnet 3.5", "provider": "anthropic"},
+    {"id": "claude-3-5-sonnet-20241022", "name": "Claude Sonnet 3.5 v2", "provider": "anthropic"},
+    {"id": "claude-3-7-sonnet-20250219", "name": "Claude Sonnet 3.7", "provider": "anthropic"},
+    {"id": "claude-3-haiku-20240307", "name": "Claude Haiku 3", "provider": "anthropic"},
+    {"id": "claude-3-opus-20240229", "name": "Claude Opus 3", "provider": "anthropic"},
+    {"id": "claude-3-sonnet-20240229", "name": "Claude Sonnet 3", "provider": "anthropic"},
+    {"id": "claude-haiku-4-5", "name": "Claude Haiku 4.5 (latest)", "provider": "anthropic"},
+    {"id": "claude-haiku-4-5-20251001", "name": "Claude Haiku 4.5", "provider": "anthropic"},
+    {"id": "claude-opus-4-0", "name": "Claude Opus 4 (latest)", "provider": "anthropic"},
+    {"id": "claude-opus-4-1", "name": "Claude Opus 4.1 (latest)", "provider": "anthropic"},
+    {"id": "claude-opus-4-1-20250805", "name": "Claude Opus 4.1", "provider": "anthropic"},
+    {"id": "claude-opus-4-20250514", "name": "Claude Opus 4", "provider": "anthropic"},
+    {"id": "claude-opus-4-5", "name": "Claude Opus 4.5 (latest)", "provider": "anthropic"},
+    {"id": "claude-opus-4-5-20251101", "name": "Claude Opus 4.5", "provider": "anthropic"},
+    {"id": "claude-opus-4-6", "name": "Claude Opus 4.6", "provider": "anthropic"},
+    {"id": "claude-opus-4-7", "name": "Claude Opus 4.7", "provider": "anthropic"},
+    {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic"},
+    {"id": "claude-sonnet-4-0", "name": "Claude Sonnet 4 (latest)", "provider": "anthropic"},
+    {"id": "claude-sonnet-4-20250514", "name": "Claude Sonnet 4", "provider": "anthropic"},
+    {"id": "claude-sonnet-4-5", "name": "Claude Sonnet 4.5 (latest)", "provider": "anthropic"},
+    {"id": "claude-sonnet-4-5-20250929", "name": "Claude Sonnet 4.5", "provider": "anthropic"},
+    {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6", "provider": "anthropic"},
+]
+
+# The curated, newest-first result for `_RAW_PI_MODELS`: the claude-3-* family and
+# every dated-pin duplicate dropped, leaving the friendly aliases sorted newest
+# major.minor first (ties broken by id for determinism).
+_CURATED_PI_MODEL_IDS: list[str] = [
+    "claude-opus-4-8",
+    "claude-opus-4-7",
+    "claude-opus-4-6",
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5",
+    "claude-opus-4-5",
+    "claude-sonnet-4-5",
+    "claude-opus-4-1",
+    "claude-opus-4-0",
+    "claude-sonnet-4-0",
+]
+
+
+def _options_from_raw(raw: list[dict[str, Any]]) -> list[ModelOption]:
+    options = [_model_option_from_pi(m) for m in raw]
+    return [option for option in options if option is not None]
+
+
+def test_curate_models_drops_blacklist_and_dated_and_sorts_newest_first() -> None:
+    """Curation drops obsolete claude-3-* + dated-pin duplicates, newest-first."""
+    curated = _curate_models(_options_from_raw(_RAW_PI_MODELS), current_model=None)
+    assert [option.model_id for option in curated] == _CURATED_PI_MODEL_IDS
+    # Display names ride through from pi's `name`, and provider is preserved.
+    opus_4_8 = next(option for option in curated if option.model_id == "claude-opus-4-8")
+    assert opus_4_8.display_name == "Claude Opus 4.8"
+    assert opus_4_8.provider == "anthropic"
+
+
+def test_curate_models_keeps_current_model_even_when_a_rule_would_drop_it() -> None:
+    """The current model is never dropped — the switcher must not show an empty selection."""
+    current = ModelOption(provider="anthropic", model_id="claude-3-opus-20240229", display_name="Claude Opus 3")
+    curated = _curate_models(_options_from_raw(_RAW_PI_MODELS), current_model=current)
+    assert current in curated
+    # Everything else still curated; only the blacklisted current survives the blacklist.
+    assert "claude-3-5-haiku-20241022" not in {option.model_id for option in curated}
+
+
+def test_curate_models_keeps_current_model_absent_from_catalog() -> None:
+    """A current model pi did not list is appended so it can still be shown selected."""
+    current = ModelOption(provider="anthropic", model_id="claude-opus-9-9", display_name="Claude Opus 9.9")
+    curated = _curate_models(_options_from_raw(_RAW_PI_MODELS), current_model=current)
+    assert current in curated
+    # Newest major.minor wins, so the fictional 9.9 sorts to the front.
+    assert curated[0].model_id == "claude-opus-9-9"
+
+
+def test_model_option_from_pi_defaults_provider_and_name() -> None:
+    # Missing provider defaults to anthropic; missing name falls back to the id.
+    option = _model_option_from_pi({"id": "claude-opus-4-8"})
+    assert option == ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="claude-opus-4-8")
+    # A row with no usable id is dropped.
+    assert _model_option_from_pi({"name": "no id"}) is None
+
+
+def _models_response(raw_models: list[dict[str, Any]]) -> str:
+    return _event(
+        {
+            "type": "response",
+            "command": "get_available_models",
+            "success": True,
+            "id": "cmd-models",
+            "data": {"models": raw_models},
+        }
+    )
+
+
+def _state_response_with_model(model: dict[str, Any] | None) -> str:
+    return _event(
+        {
+            "type": "response",
+            "command": "get_state",
+            "success": True,
+            "id": "cmd-state",
+            "data": {"sessionId": "s", "messageCount": 1, "model": model},
+        }
+    )
+
+
+def test_fetch_models_into_state_emits_curated_catalog_and_current_model() -> None:
+    """At start the agent fetches + curates pi's catalog and emits it with the current model."""
+    agent = _make_agent()
+    current_raw = {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic"}
+    agent._process = _make_process([_models_response(_RAW_PI_MODELS), _state_response_with_model(current_raw)])
+    with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-models", "cmd-state"]):
+        agent._fetch_models_into_state()
+
+    emitted = [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+    assert len(emitted) == 1
+    message = emitted[0]
+    assert [option.model_id for option in message.available_models] == _CURATED_PI_MODEL_IDS
+    assert message.current_model is not None
+    assert message.current_model.model_id == "claude-opus-4-8"
+
+
+def test_fetch_models_into_state_emits_nothing_when_pi_lists_no_models() -> None:
+    """No catalog + no current model → no carrier message (switcher falls back to defaults)."""
+    agent = _make_agent()
+    agent._process = _make_process([_models_response([]), _state_response_with_model(None)])
+    with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-models", "cmd-state"]):
+        agent._fetch_models_into_state()
+    assert not [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+
+
+def _make_probe_env(probe_process: MagicMock) -> MagicMock:
+    """A MagicMock environment whose binary + version preflight pass and whose
+    `run_process_in_background` returns `probe_process` (the canned probe RPC)."""
+    env = MagicMock(spec=AgentExecutionEnvironment)
+    env.get_tool_binary_path.return_value = "/bin/pi"
+    version_result = MagicMock()
+    version_result.stdout = ""
+    version_result.stderr = "pi 0.78.0\n"
+    env.run_process_to_completion.return_value = version_result
+    env.get_state_path.return_value = Path("/fake/state")
+    env.run_process_in_background.return_value = probe_process
+    return env
+
+
+def test_fetch_available_models_probe_returns_curated_catalog_and_current_model() -> None:
+    """The pre-message probe launches pi, fetches + curates the catalog, and returns
+    it with the current model — without leaving the agent's message-loop process set."""
+    current_raw = {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic"}
+    probe_process = _make_process([_models_response(_RAW_PI_MODELS), _state_response_with_model(current_raw)])
+    env = _make_probe_env(probe_process)
+    agent = _make_agent(env)
+    with patch(
+        "sculptor.agents.pi_agent.agent_wrapper.generate_id",
+        side_effect=["probe-sess", "cmd-models", "cmd-state"],
+    ):
+        available_models, current_model = agent.fetch_available_models_probe(secrets={})
+
+    assert [option.model_id for option in available_models] == _CURATED_PI_MODEL_IDS
+    assert current_model is not None and current_model.model_id == "claude-opus-4-8"
+    # The probe shuts its process down and does NOT leave it as the agent's
+    # message-loop process (start() owns that), so the normal lifecycle is intact.
+    probe_process.close_stdin.assert_called_once()
+    probe_process.terminate.assert_called_once()
+    assert agent._process is None
+    # No ModelsAvailableAgentMessage is emitted — the probe returns its result
+    # directly (the run-agent handler persists it), it does not stream a carrier.
+    assert not [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+
+
+def test_fetch_available_models_probe_launches_distinct_probe_session_dir() -> None:
+    """The probe spawns a minimal `pi --mode rpc` against a throwaway probe session
+    dir (never the real PI_SESSION_DIR_NAME) with no extensions / skills / prompt."""
+    probe_process = _make_process(
+        [_models_response(_RAW_PI_MODELS), _state_response_with_model({"id": "claude-opus-4-8"})]
+    )
+    env = _make_probe_env(probe_process)
+    agent = _make_agent(env)
+    with patch(
+        "sculptor.agents.pi_agent.agent_wrapper.generate_id",
+        side_effect=["probe-sess", "cmd-models", "cmd-state"],
+    ):
+        agent.fetch_available_models_probe(secrets={})
+
+    env.run_process_in_background.assert_called_once()
+    command = list(env.run_process_in_background.call_args.args[0])
+    assert command[:3] == ["/bin/pi", "--mode", "rpc"]
+    session_dir = command[command.index("--session-dir") + 1]
+    assert session_dir == str(Path("/fake/state") / PI_PROBE_SESSION_DIR_NAME)
+    assert session_dir != str(Path("/fake/state") / PI_SESSION_DIR_NAME)
+    # A distinct, probe-scoped id; never the persisted real session id.
+    assert command[command.index("--session-id") + 1] == "probe-probe-sess"
+    # Minimal launch: discovery off, and no -e / --append-system-prompt / --skill.
+    assert "--no-extensions" in command
+    assert "-e" not in command
+    assert "--append-system-prompt" not in command
+    assert "--skill" not in command
+
+
+def test_fetch_available_models_probe_returns_empty_when_binary_missing() -> None:
+    """No pi binary → empty result (the switcher falls back to defaults), no launch."""
+    env = MagicMock(spec=AgentExecutionEnvironment)
+    env.get_tool_binary_path.return_value = None
+    agent = _make_agent(env)
+    assert agent.fetch_available_models_probe(secrets={}) == ([], None)
+    env.run_process_in_background.assert_not_called()
+
+
+def test_fetch_available_models_probe_returns_empty_on_version_mismatch() -> None:
+    """An out-of-range pi version → empty result, and the probe never launches a process."""
+    env = MagicMock(spec=AgentExecutionEnvironment)
+    env.get_tool_binary_path.return_value = "/bin/pi"
+    version_result = MagicMock()
+    version_result.stdout = ""
+    version_result.stderr = "pi 0.1.0\n"
+    env.run_process_to_completion.return_value = version_result
+    agent = _make_agent(env)
+    assert agent.fetch_available_models_probe(secrets={}) == ([], None)
+    env.run_process_in_background.assert_not_called()
+
+
+def test_fetch_available_models_probe_returns_empty_when_pi_lists_no_models() -> None:
+    """Empty catalog + no current model → empty result and the probe still shuts down."""
+    probe_process = _make_process([_models_response([]), _state_response_with_model(None)])
+    env = _make_probe_env(probe_process)
+    agent = _make_agent(env)
+    with patch(
+        "sculptor.agents.pi_agent.agent_wrapper.generate_id",
+        side_effect=["probe-sess", "cmd-models", "cmd-state"],
+    ):
+        assert agent.fetch_available_models_probe(secrets={}) == ([], None)
+    probe_process.close_stdin.assert_called_once()
+    probe_process.terminate.assert_called_once()
+    assert agent._process is None

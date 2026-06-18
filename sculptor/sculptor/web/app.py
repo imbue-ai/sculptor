@@ -80,6 +80,8 @@ from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessa
 from sculptor.interfaces.agents.agent import PiAgentConfig
 from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageUserMessage
+from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
+from sculptor.interfaces.agents.agent import SetModelUserMessage
 from sculptor.interfaces.agents.agent import TerminalAgentConfig
 from sculptor.interfaces.agents.agent import TerminalAgentSignalRunnerMessage
 from sculptor.interfaces.agents.agent import TerminalStatusSignal
@@ -209,6 +211,7 @@ from sculptor.web.data_types import RecentWorkspaceResponse
 from sculptor.web.data_types import RenameAgentRequest
 from sculptor.web.data_types import RepoInfo
 from sculptor.web.data_types import SendMessageRequest
+from sculptor.web.data_types import SetModelRequest
 from sculptor.web.data_types import SetTelemetryRequest
 from sculptor.web.data_types import SignalEventRequest
 from sculptor.web.data_types import SkillInfo
@@ -2286,6 +2289,72 @@ def interrupt_workspace_agent(
             )
 
 
+@router.post("/api/v1/workspaces/{workspace_id}/agents/{agent_id}/set_model")
+def set_workspace_agent_model(
+    workspace_id: str,
+    agent_id: str,
+    request: Request,
+    set_model_request: SetModelRequest,
+    user_session: UserSession = Depends(get_user_session),
+) -> None:
+    """Switch a running agent's model (the pi out-of-band `set_model` path).
+
+    Used by harnesses with a backend model list (pi); Claude's model rides each
+    turn instead. The request blocks until the agent resolves the switch and
+    returns 400 with the agent's error message when the switch is rejected (e.g.
+    pi reports "Model not found"), so the frontend can toast it.
+    """
+    services = get_services_from_request_or_websocket(request)
+
+    with user_session.open_transaction(services) as transaction:
+        workspace = _get_workspace_or_404(workspace_id, transaction)
+        task = _validate_agent_in_workspace(agent_id, workspace, transaction, services)
+        # Defense-in-depth mirror of the frontend model-selection gate: a harness
+        # that cannot switch models must not be sent a SetModelUserMessage. A task
+        # whose inputs are not an agent config cannot support model selection.
+        if not isinstance(task.input_data, AgentTaskInputsV2):
+            raise HTTPException(
+                status_code=400,
+                detail="model selection is not supported for this agent",
+            )
+        harness = get_harness_for_config(task.input_data.agent_config)
+        if not harness.capabilities().supports_model_selection:
+            raise HTTPException(
+                status_code=400,
+                detail="model selection requires a harness that supports it",
+            )
+        # supports_model_selection also covers per-turn switching (Claude); the
+        # out-of-band set_model RPC is only honored by a harness that sources a
+        # backend model list (pi). A harness without a catalog has no
+        # SetModelUserMessage handler, so reject it rather than block the request
+        # forever on a message nothing resolves.
+        model_state = task.current_state if isinstance(task.current_state, AgentTaskStateV2) else None
+        if not harness.get_available_models(model_state):
+            raise HTTPException(
+                status_code=400,
+                detail="this agent does not support switching models",
+            )
+
+    message_id = AgentMessageID()
+    with await_request_outcome(message_id, task.object_id, services) as outcome:
+        with user_session.open_transaction(services) as transaction:
+            services.task_service.create_message(
+                message=SetModelUserMessage(
+                    message_id=message_id,
+                    provider=set_model_request.provider,
+                    model_id=set_model_request.model_id,
+                ),
+                task_id=task.object_id,
+                transaction=transaction,
+            )
+    # The adapter resolves a rejected switch (e.g. pi "Model not found") as a
+    # RequestFailure; surface it to the caller so the frontend toasts it.
+    terminal = outcome[0] if outcome else None
+    if isinstance(terminal, RequestFailureAgentMessage):
+        detail = str(terminal.error.args[0]) if terminal.error.args else "Failed to set model"
+        raise HTTPException(status_code=400, detail=detail)
+
+
 @router.post("/api/v1/workspaces/{workspace_id}/agents/{agent_id}/btw")
 def btw_agent(
     workspace_id: str,
@@ -2406,6 +2475,35 @@ def await_message_response(
             else:
                 if isinstance(update, PersistentRequestCompleteAgentMessage):
                     if update.request_id == message_id:
+                        break
+
+
+@contextlib.contextmanager
+def await_request_outcome(
+    message_id: AgentMessageID,
+    task_id: TaskID,
+    services: CompleteServiceCollection,
+) -> Iterator[list[PersistentRequestCompleteAgentMessage]]:
+    """Like `await_message_response`, but captures the terminal request message.
+
+    Yields a one-element list the caller reads after the block to inspect the
+    outcome (e.g. distinguish RequestSuccess from RequestFailure and surface the
+    failure to the HTTP caller). The list is empty only if the subscription is
+    torn down before the request resolves.
+    """
+    outcome: list[PersistentRequestCompleteAgentMessage] = []
+    with services.task_service.subscribe_to_task(task_id) as updates_queue:
+        yield outcome
+        logger.debug("Waiting for outcome of message {} in task {}", message_id, task_id)
+        while True:
+            try:
+                update = updates_queue.get(timeout=1.0)
+            except queue.Empty:
+                pass
+            else:
+                if isinstance(update, PersistentRequestCompleteAgentMessage):
+                    if update.request_id == message_id:
+                        outcome.append(update)
                         break
 
 
