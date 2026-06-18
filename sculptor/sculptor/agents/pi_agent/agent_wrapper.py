@@ -998,11 +998,7 @@ class PiAgent(DefaultAgentWrapper):
 
     def _process_message_queue(self) -> None:
         while not self._shutdown_event.is_set():
-            # Poll quickly only while async tasks/reactions are pending, so their
-            # out-of-band completions surface promptly between turns; otherwise wait
-            # longer to avoid idle busy-polling. No task can start during this wait
-            # (tasks launch from within a turn), so the relaxed wait never delays
-            # surfacing a completion.
+            # No task can start during an idle wait: tasks launch only from within a turn.
             has_pending_tasks = self._has_background_tasks()
             timeout = _TASK_POLL_SECONDS if has_pending_tasks else _IDLE_WAIT_SECONDS
             try:

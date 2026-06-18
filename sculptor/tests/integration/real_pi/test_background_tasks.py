@@ -61,9 +61,8 @@ def test_pi_background_task_yields_interactive_and_completes(
     task_page = create_pi_workspace_and_send(sculptor_instance_, prompt, wait_for_finish=True)
     chat_panel = task_page.get_chat_panel()
 
-    # Yield-early is observable: the backgrounded `sleep` is still running now — the
-    # launch turn ended while it runs. Had pi held the turn open until the command
-    # finished, nothing would be running here.
+    # Yield-early, observably: the backgrounded `sleep` is still running now (the
+    # launch turn ended while it runs) — a held-open turn would have finished it first.
     sleep_running = lambda cmdline: "sleep 8" in " ".join(cmdline)  # noqa: E731
     running = wait_for_process_count(sleep_running, 1, at_least=True, timeout_s=30)
     assert running >= 1, "backgrounded sleep not running after launch — yield-early not observable"
