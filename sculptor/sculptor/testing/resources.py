@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import sys
@@ -22,6 +23,8 @@ from sculptor.config.user_config import UserConfig
 from sculptor.constants import ElementIDs
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.concurrency_group import ConcurrencyGroupState
+from sculptor.primitives.ids import create_organization_id
+from sculptor.primitives.ids import create_user_id
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.dependency_stubs import apply_stubs_from_request
@@ -45,10 +48,10 @@ from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.sculptor_instance import create_packaged_electron_instance_factory
 from sculptor.testing.sculptor_instance import create_sculptor_instance_factory
 from sculptor.testing.server_utils import SculptorServer
-from sculptor.testing.server_utils import _start_server_process_and_validate_readiness
 from sculptor.testing.server_utils import get_sculptor_command_backend_only
 from sculptor.testing.server_utils import get_testing_environment
 from sculptor.testing.server_utils import get_v1_frontend_path
+from sculptor.testing.server_utils import start_server_process_and_validate_readiness
 from sculptor.testing.subprocess_utils import Forwarder
 from sculptor.testing.test_repo_factory import TestRepoFactory
 
@@ -248,7 +251,7 @@ def _get_or_create_shared_instance(
     # Start the backend process
     t0 = time.monotonic()
     env = {k: str(v) for k, v in {**os.environ, **environment}.items() if v is not None}
-    server_process = _start_server_process_and_validate_readiness(command, env)
+    server_process = start_server_process_and_validate_readiness(command, env)
     forwarder = Forwarder(server_process)
     forwarder.start()
     server = SculptorServer(process=server_process, port=backend_port)
@@ -291,10 +294,16 @@ def _get_or_create_shared_instance(
     logger.info("[timing] SPA initial render: {:.2f}s", time.monotonic() - t2)
     logger.info("[timing] Total instance startup: {:.2f}s", time.monotonic() - t0)
 
+    # Capture the SPA's own origin (sculptor://app in Electron, the backend URL
+    # in browser mode) now that it has rendered, so between-test resets navigate
+    # to the renderer rather than the backend API URL.
+    frontend_url = page.url.split("#")[0].rstrip("/")
+
     # Build the instance
     instance = SculptorInstance(
         server=server,
         page=page,
+        frontend_url=frontend_url,
         repo=initial_repo,
         sculptor_folder=sculptor_folder,
         fake_bin_dir=fake_bin_dir,
@@ -307,9 +316,9 @@ def _get_or_create_shared_instance(
     )
 
     # Cache on config for session reuse
-    config._sculptor_instance = instance  # pyre-ignore[16]
+    config._sculptor_instance = instance
     if use_electron:
-        config._electron_frontend = electron_frontend  # pyre-ignore[16]
+        config._electron_frontend = electron_frontend
 
     # Register session-level teardown via pytest finalizer (not atexit) so it
     # runs while Playwright's session fixtures are still alive.
@@ -440,6 +449,8 @@ def _create_packaged_instance(
     instance = SculptorInstance(
         server=server,
         page=page,
+        # base_url above was derived from page.url, so it is the SPA's origin.
+        frontend_url=base_url,
         repo=initial_repo,
         sculptor_folder=sculptor_folder,
         fake_bin_dir=fake_bin_dir,
@@ -553,6 +564,7 @@ def _create_custom_command_instance(
     instance = SculptorInstance(
         server=server,
         page=page,
+        frontend_url=page.url.split("#")[0].rstrip("/"),
         repo=initial_repo,
         sculptor_folder=sculptor_folder,
         fake_bin_dir=fake_bin_dir,
@@ -704,15 +716,11 @@ custom_sculptor_folder_populator = pytest.mark.custom_sculptor_folder
 
 def _make_test_user_config(claude_path: str = "claude") -> UserConfig:
     """Create a UserConfig with test defaults."""
-    import hashlib
-
-    import sculptor.primitives.ids
-
     test_email = "test@imbue.com"
     return UserConfig(
         user_email=test_email,
-        user_id=sculptor.primitives.ids.create_user_id(test_email),
-        organization_id=sculptor.primitives.ids.create_organization_id(test_email),
+        user_id=create_user_id(test_email),
+        organization_id=create_organization_id(test_email),
         instance_id=hashlib.md5(os.urandom(64)).hexdigest(),
         is_error_reporting_enabled=True,
         is_product_analytics_enabled=True,

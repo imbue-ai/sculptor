@@ -22,27 +22,38 @@ from unittest.mock import patch
 
 import pytest
 
+from sculptor.agents.pi_agent.agent_wrapper import PI_PROBE_SESSION_DIR_NAME
 from sculptor.agents.pi_agent.agent_wrapper import PI_SESSION_DIR_NAME
 from sculptor.agents.pi_agent.agent_wrapper import PI_SESSION_ID_STATE_FILE
 from sculptor.agents.pi_agent.agent_wrapper import PiAgent
+from sculptor.agents.pi_agent.agent_wrapper import _TurnState
+from sculptor.agents.pi_agent.agent_wrapper import _curate_models
+from sculptor.agents.pi_agent.agent_wrapper import _model_option_from_pi
 from sculptor.agents.pi_agent.agent_wrapper import _render_synthesized_skill
 from sculptor.agents.pi_agent.agent_wrapper import _rewrite_skill_invocation
 from sculptor.agents.pi_agent.backchannel import DISMISSED_ANSWER_VALUE
 from sculptor.agents.pi_agent.backchannel import PLAN_APPROVAL_DIALOG_TITLE
 from sculptor.agents.pi_agent.backchannel import PLAN_APPROVAL_HEADER
+from sculptor.agents.pi_agent.background import BACKGROUND_NOTIFY_MARKER
+from sculptor.agents.pi_agent.background import BACKGROUND_PAYLOAD_VERSION
 from sculptor.agents.pi_agent.harness import PI_HARNESS
 from sculptor.agents.pi_agent.output_processor import AgentMessage
+from sculptor.agents.pi_agent.output_processor import ParsedAgentEnd
 from sculptor.agents.pi_agent.output_processor import ParsedUnknownEvent
 from sculptor.agents.pi_agent.output_processor import extract_tool_call_blocks
 from sculptor.agents.pi_agent.output_processor import parse_rpc_message
+from sculptor.agents.pi_agent.subagent import SUBAGENT_NOTIFY_MARKER
 from sculptor.foundation.async_monkey_patches_test import expect_exact_logged_errors
 from sculptor.interfaces.agents.agent import AskUserQuestionAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingAgentMessage
 from sculptor.interfaces.agents.agent import AutoCompactingDoneAgentMessage
+from sculptor.interfaces.agents.agent import BackgroundTaskNotificationAgentMessage
+from sculptor.interfaces.agents.agent import BackgroundTaskStartedAgentMessage
 from sculptor.interfaces.agents.agent import ClearContextUserMessage
 from sculptor.interfaces.agents.agent import ContextClearedMessage
 from sculptor.interfaces.agents.agent import EphemeralUserMessage
 from sculptor.interfaces.agents.agent import InterruptProcessUserMessage
+from sculptor.interfaces.agents.agent import ModelsAvailableAgentMessage
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import PiAgentConfig
 from sculptor.interfaces.agents.agent import PlanModeAgentMessage
@@ -52,6 +63,7 @@ from sculptor.interfaces.agents.agent import RequestSkippedAgentMessage
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
 from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
+from sculptor.interfaces.agents.agent import SetModelUserMessage
 from sculptor.interfaces.agents.agent import StopAgentUserMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
 from sculptor.interfaces.agents.errors import PiBinaryNotFoundError
@@ -67,6 +79,7 @@ from sculptor.state.chat_state import ToolResultBlock
 from sculptor.state.chat_state import ToolUseBlock
 from sculptor.state.chat_state import make_plan_approval_question
 from sculptor.state.messages import ChatInputUserMessage
+from sculptor.state.messages import ModelOption
 from sculptor.state.messages import ResponseBlockAgentMessage
 
 _PROMPT_ID = "prompt-1"
@@ -159,7 +172,13 @@ def _tool_execution_end(tool_call_id: str, name: str, result: Any = None, is_err
 
 def _tool_use_blocks(messages: list) -> list[ToolUseBlock]:
     """Every ToolUseBlock across all emitted partial/response messages, in order."""
-    return [block for m in messages for block in m.content if isinstance(block, ToolUseBlock)]
+    return [
+        block
+        for m in messages
+        if isinstance(m, (ResponseBlockAgentMessage, PartialResponseBlockAgentMessage))
+        for block in m.content
+        if isinstance(block, ToolUseBlock)
+    ]
 
 
 def _tool_result_blocks(messages: list) -> list[ToolResultBlock]:
@@ -1472,6 +1491,131 @@ def test_clear_context_runs_after_an_in_flight_chat_turn() -> None:
     assert order == ["turn", "clear"]
 
 
+def test_push_message_enqueues_set_model_returns_true() -> None:
+    """A SetModelUserMessage goes on the same FIFO as chat turns — handled, not dead-lettered."""
+    agent = _make_agent()
+    set_model = SetModelUserMessage(message_id=AgentMessageID(), provider="anthropic", model_id="claude-haiku-4-5")
+    with expect_exact_logged_errors([]):
+        handled = agent._push_message(set_model)
+    assert handled is True
+    assert agent._input_agent_messages.get_nowait() is set_model
+
+
+def test_set_model_success_emits_new_current_model_and_resolves() -> None:
+    """A successful set_model sends the RPC, re-emits the catalog with the new current model, and RequestSuccess."""
+    agent = _make_agent()
+    agent._available_models = (
+        ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="Claude Opus 4.8"),
+        ModelOption(provider="anthropic", model_id="claude-haiku-4-5", display_name="Claude Haiku 4.5"),
+    )
+    process = _make_process(
+        [
+            _event(
+                {
+                    "type": "response",
+                    "command": "set_model",
+                    "success": True,
+                    "id": "cmd-set",
+                    "data": {"id": "claude-haiku-4-5", "name": "Claude Haiku 4.5", "provider": "anthropic"},
+                }
+            )
+        ]
+    )
+    agent._process = process
+    with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-set"]):
+        agent._handle_set_model(
+            SetModelUserMessage(message_id=AgentMessageID(), provider="anthropic", model_id="claude-haiku-4-5")
+        )
+
+    # set_model was written to pi's stdin, id-correlated, carrying provider + modelId.
+    writes = [call.args[0] for call in process.write_stdin.call_args_list]
+    assert any('"type":"set_model"' in w and '"cmd-set"' in w and '"claude-haiku-4-5"' in w for w in writes)
+
+    emitted = _drain(agent._output_messages)
+    carriers = [m for m in emitted if isinstance(m, ModelsAvailableAgentMessage)]
+    assert len(carriers) == 1
+    carrier = carriers[0]
+    # The catalog is unchanged; only the current model follows the switch.
+    assert [option.model_id for option in carrier.available_models] == ["claude-opus-4-8", "claude-haiku-4-5"]
+    assert carrier.current_model is not None
+    assert carrier.current_model.model_id == "claude-haiku-4-5"
+    # Terminal RequestSuccess, no failure.
+    assert any(isinstance(m, RequestSuccessAgentMessage) for m in emitted)
+    assert not any(isinstance(m, RequestFailureAgentMessage) for m in emitted)
+
+
+def test_set_model_failure_on_success_false_surfaces_error_without_mutation() -> None:
+    """set_model success:false → RequestFailure, no current-model carrier, handler does not raise."""
+    agent = _make_agent()
+    agent._available_models = (ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="Opus"),)
+    agent._process = _make_process(
+        [
+            _event(
+                {
+                    "type": "response",
+                    "command": "set_model",
+                    "success": False,
+                    "id": "cmd-set",
+                    "error": "Model not found: anthropic/claude-nope",
+                }
+            )
+        ]
+    )
+    with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-set"]):
+        # Must NOT raise out of the handler — the AgentClientError path reports and continues.
+        agent._handle_set_model(
+            SetModelUserMessage(message_id=AgentMessageID(), provider="anthropic", model_id="claude-nope")
+        )
+    emitted = _drain(agent._output_messages)
+    failures = [m for m in emitted if isinstance(m, RequestFailureAgentMessage)]
+    assert len(failures) == 1
+    # The failure carries pi's error so the frontend can toast it.
+    assert "Model not found" in str(failures[0].error.args[0])
+    # No current-model mutation on failure.
+    assert not any(isinstance(m, ModelsAvailableAgentMessage) for m in emitted)
+
+
+def test_set_model_failure_on_no_response_surfaces_error() -> None:
+    """No set_model ack (process exited / timeout) → failed request, no carrier, no crash."""
+    agent = _make_agent()
+    # Empty queue + is_finished True ⇒ _consume_until_command_response returns None at once.
+    agent._process = _make_process([])
+    with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-set"]):
+        agent._handle_set_model(
+            SetModelUserMessage(message_id=AgentMessageID(), provider="anthropic", model_id="claude-haiku-4-5")
+        )
+    emitted = _drain(agent._output_messages)
+    assert any(isinstance(m, RequestFailureAgentMessage) for m in emitted)
+    assert not any(isinstance(m, ModelsAvailableAgentMessage) for m in emitted)
+
+
+def test_set_model_runs_after_an_in_flight_chat_turn() -> None:
+    """FIFO ordering: a set_model queued behind a chat turn runs after the turn ends.
+
+    Same one-at-a-time guarantee as the context reset, so the set_model RPC's
+    response is consumed only between turns.
+    """
+    agent = _make_agent()
+    agent._process = MagicMock()
+    order: list[str] = []
+    with (
+        patch.object(agent, "_consume_until_turn_end", side_effect=lambda prompt_id="": order.append("turn")),
+        patch.object(agent, "_handle_set_model", side_effect=lambda message: order.append("set_model")),
+    ):
+        agent._input_agent_messages.put(ChatInputUserMessage(text="hi"))
+        agent._input_agent_messages.put(
+            SetModelUserMessage(message_id=AgentMessageID(), provider="anthropic", model_id="claude-haiku-4-5")
+        )
+        worker = threading.Thread(target=agent._process_message_queue)
+        worker.start()
+        deadline = time.monotonic() + 5.0
+        while len(order) < 2 and time.monotonic() < deadline:
+            time.sleep(0.02)
+        agent._shutdown_event.set()
+        worker.join(timeout=5.0)
+    assert order == ["turn", "set_model"]
+
+
 def _make_start_env(persisted_session_id: str | None = None) -> MagicMock:
     """A MagicMock environment that lets PiAgent.start() run past the binary /
     version preflight and into the session-launch logic.
@@ -1487,6 +1631,11 @@ def _make_start_env(persisted_session_id: str | None = None) -> MagicMock:
     env.run_process_to_completion.return_value = version_result
     env.get_state_path.return_value = Path("/fake/state")
     env.get_system_prompt.return_value = ""
+    # start() discovers skills under the working dir + home dir; give both real
+    # Paths so the skill-source models validate (the dirs need not exist —
+    # discovery finds none).
+    env.get_working_directory.return_value = Path("/fake/working_dir")
+    env.get_user_home_directory.return_value = Path("/fake/home")
 
     def _read_file(path: str, mode: str = "r") -> str:
         if path.endswith(PI_SESSION_ID_STATE_FILE) and persisted_session_id is not None:
@@ -1722,6 +1871,44 @@ def test_unprocessable_image_error_reaches_user_no_silent_drop() -> None:
     with pytest.raises(PiCrashError) as exc_info:
         agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
     assert "Could not process image" in str(exc_info.value)
+
+
+def test_message_end_error_surfaces_pi_reason_not_generic_placeholder() -> None:
+    """A turn that ends in error with no body must surface pi's real reason.
+
+    Mirrors the real pi wire shape for a provider-auth failure (selecting a
+    model whose provider has no key): pi emits no in-stream error event and an
+    empty assistant message carrying the failure on ``errorMessage`` with
+    ``stopReason:"error"``. PiAgent must lift that reason into a clean,
+    actionable message rather than the generic "pi message ended in error"
+    placeholder (which drops pi's reason entirely).
+    """
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event(
+                {
+                    "type": "message_end",
+                    "message": {
+                        "role": "assistant",
+                        "content": [],
+                        "stopReason": "error",
+                        "errorMessage": "401 Authentication Fails, Your api key: ****0000 is invalid",
+                    },
+                }
+            ),
+        ]
+    )
+    with pytest.raises(PiCrashError) as exc_info:
+        agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+    text = str(exc_info.value)
+    # The generic placeholder must NOT be what the user sees.
+    assert "pi message ended in error" not in text
+    # An auth / unavailable-model failure leads with actionable guidance.
+    assert "another model" in text.lower() or "different model" in text.lower()
+    # pi's real reason is preserved as detail so debugging isn't lost.
+    assert "401" in text or "Authentication" in text
 
 
 def _drain(queue: Queue) -> list:
@@ -2089,17 +2276,16 @@ def test_render_synthesized_skill_escapes_frontmatter() -> None:
     assert rendered.endswith("Body text")
 
 
-# --- Sub-agents (structured per-child progress → nested child messages) ------
+# --- Sub-agents (yield-early launch → out-of-band nested completion) ---------
+
+_SA_TOOL_CALL_ID = "sa1"
+_SA_TASK_ID = f"sat_{_SA_TOOL_CALL_ID}"
+_SA_PGIDS = (5151, 5252)
 
 
 def _subagent_child(child_id: str, status: str, events: list[dict[str, Any]], label: str = "subagent") -> dict:
     """One child entry in the wire shape sculptor_subagent.ts emits."""
     return {"childId": child_id, "label": label, "task": "do a thing", "status": status, "events": events}
-
-
-def _subagent_envelope(children: list[dict]) -> dict:
-    """The {content, details} result envelope carrying the structured payload."""
-    return {"content": [{"type": "text", "text": "summary"}], "details": {"v": 1, "children": children}}
 
 
 def _read_child_events() -> list[dict[str, Any]]:
@@ -2110,108 +2296,797 @@ def _read_child_events() -> list[dict[str, Any]]:
     ]
 
 
+def _subagent_start_result(
+    task_id: str = _SA_TASK_ID,
+    tool_call_id: str = _SA_TOOL_CALL_ID,
+    label: str = "2 sub-agents",
+    pgids: tuple[int, ...] = _SA_PGIDS,
+    count: int = 2,
+) -> dict[str, Any]:
+    """The {content, details} envelope the `subagent` tool returns on launch."""
+    return {
+        "content": [{"type": "text", "text": f"Started {count} sub-agent(s)"}],
+        "details": {
+            "v": 1,
+            "task": {
+                "taskId": task_id,
+                "toolCallId": tool_call_id,
+                "label": label,
+                "pgids": list(pgids),
+                "count": count,
+                "status": "running",
+            },
+        },
+    }
+
+
+def _subagent_notify(
+    children: list[dict],
+    task_id: str = _SA_TASK_ID,
+    tool_call_id: str = _SA_TOOL_CALL_ID,
+    status: str = "completed",
+) -> dict[str, Any]:
+    """The fire-and-forget completion notify the extension emits out-of-band."""
+    return {
+        "type": "extension_ui_request",
+        "id": "uireq-sa-1",
+        "method": "notify",
+        "notifyType": "info" if status == "completed" else "warning",
+        "message": json.dumps(
+            {
+                SUBAGENT_NOTIFY_MARKER: {
+                    "v": 1,
+                    "taskId": task_id,
+                    "toolCallId": tool_call_id,
+                    "status": status,
+                    "children": children,
+                }
+            }
+        ),
+    }
+
+
 def _child_messages(emitted: list) -> list[ResponseBlockAgentMessage]:
     return [m for m in emitted if isinstance(m, ResponseBlockAgentMessage) and m.parent_tool_use_id is not None]
 
 
-def _run_subagent_turn(updates: list[dict], end_payload: dict) -> list:
-    """Drive one sub-agent tool call (toolCall block → lane updates → end)."""
-    agent = _make_agent()
-    events = [
+def _subagent_launch_events() -> list:
+    """The launch run: toolCall block → tool_execution_end with the launch payload → agent_end."""
+    return [
         _event({"type": "agent_start"}),
         _event(
             {
                 "type": "message_end",
-                "message": _assistant_msg_with_content([_tool_call_block("sa1", "subagent", {"task": "investigate"})]),
+                "message": _assistant_msg_with_content(
+                    [_tool_call_block(_SA_TOOL_CALL_ID, "subagent", {"task": "investigate"})]
+                ),
             }
         ),
-        _event(_tool_execution_start("sa1", "subagent", {"task": "investigate"})),
+        _event(_tool_execution_start(_SA_TOOL_CALL_ID, "subagent", {"task": "investigate"})),
+        _event(_tool_execution_end(_SA_TOOL_CALL_ID, "subagent", result=_subagent_start_result())),
+        _event({"type": "agent_end", "messages": [], "willRetry": False}),
     ]
-    for payload in updates:
-        events.append(
-            _event(
-                {
-                    "type": "tool_execution_update",
-                    "toolCallId": "sa1",
-                    "toolName": "subagent",
-                    "args": {"task": "investigate"},
-                    "partialResult": payload,
-                }
-            )
-        )
-    events.append(_event(_tool_execution_end("sa1", "subagent", result=end_payload)))
-    events.append(_event({"type": "agent_end", "messages": [], "willRetry": False}))
-    agent._process = _make_process(events)
+
+
+def test_subagent_launch_yields_turn_immediately() -> None:
+    """A `subagent` call surfaces as a started task and the launch turn ENDS right away
+    (yield-early): the user is unblocked while the children run. The task is tracked at
+    the agent level, and a completion that arrives AFTER agent_end is NOT consumed by
+    the launch turn (it is surfaced out-of-band later)."""
+    agent = _make_agent()
+    agent._process = _make_process(
+        _subagent_launch_events() + [_event(_subagent_notify([_subagent_child("c0", "done", _read_child_events())]))]
+    )
     agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
-    return _drain(agent._output_messages)
+    emitted = _drain(agent._output_messages)
+
+    started = _bg_started(emitted)
+    assert len(started) == 1
+    assert started[0].background_task_id == _SA_TASK_ID
+    assert started[0].tool_use_id == _SA_TOOL_CALL_ID
+    # The launch turn ended at agent_end without draining the completion.
+    assert _bg_notifications(emitted) == []
+    assert _child_messages(emitted) == []
+    assert agent._subagent_tasks.get(_SA_TASK_ID) == _SA_PGIDS
 
 
-def test_subagent_parent_renders_as_agent_block() -> None:
-    """The pi `subagent` tool maps to Claude's `Agent` so the frontend pills it."""
-    payload = _subagent_envelope([_subagent_child("c0", "done", _read_child_events())])
-    emitted = _run_subagent_turn(updates=[payload], end_payload=payload)
+def test_subagent_parent_renders_as_agent_block_with_launch_ack() -> None:
+    """The pi `subagent` tool maps to Claude's `Agent` (so the frontend pills it); the
+    launch turn renders the parent block and its "Started …" result acknowledgement."""
+    agent = _make_agent()
+    agent._process = _make_process(_subagent_launch_events())
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+    emitted = _drain(agent._output_messages)
+
     use_blocks = _tool_use_blocks(emitted)
-    assert any(b.id == "sa1" and b.name == "Agent" for b in use_blocks)
+    assert any(b.id == _SA_TOOL_CALL_ID and b.name == "Agent" for b in use_blocks)
+    results = [
+        b
+        for m in emitted
+        if isinstance(m, ResponseBlockAgentMessage)
+        for b in m.content
+        if isinstance(b, ToolResultBlock)
+    ]
+    assert any(str(b.tool_use_id) == _SA_TOOL_CALL_ID for b in results)
 
 
-def test_subagent_emits_nested_child_message_with_parent_attribution() -> None:
-    """A finished child becomes its own ChatMessage carrying parent_tool_use_id =
-    the parent Agent tool id, with the child's own tool call + text nested."""
-    payload = _subagent_envelope([_subagent_child("c0", "done", _read_child_events())])
-    emitted = _run_subagent_turn(updates=[payload], end_payload=payload)
+def test_subagent_completion_in_turn_reconciles() -> None:
+    """A task that completes while a user turn is in flight is reconciled into that turn
+    (nested children + notification), and stops being tracked."""
+    agent = _make_agent()
+    agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event(_subagent_notify([_subagent_child("c0", "done", _read_child_events())])),
+            _event({"type": "agent_end", "messages": [_assistant_msg("done")], "willRetry": False}),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+    emitted = _drain(agent._output_messages)
+
+    children = _child_messages(emitted)
+    assert len(children) == 1
+    assert children[0].parent_tool_use_id == _SA_TOOL_CALL_ID
+    notes = _bg_notifications(emitted)
+    assert len(notes) == 1
+    assert notes[0].tool_use_id == _SA_TOOL_CALL_ID
+    assert _SA_TASK_ID not in agent._subagent_tasks
+
+
+def test_subagent_idle_drain_surfaces_completion_out_of_band() -> None:
+    """Between turns, a sub-agent completion is surfaced in its own request cycle
+    (RequestStarted → nested children + notification → RequestSuccess) so it renders
+    live while the user is idle."""
+    agent = _make_agent()
+    agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
+    agent._process = _make_process([_event(_subagent_notify([_subagent_child("c0", "done", _read_child_events())]))])
+
+    agent._drain_idle_background_events()
+    emitted = _drain(agent._output_messages)
+
+    assert any(isinstance(m, RequestStartedAgentMessage) for m in emitted)
+    assert any(isinstance(m, RequestSuccessAgentMessage) for m in emitted)
+    assert len(_child_messages(emitted)) == 1
+    notes = _bg_notifications(emitted)
+    assert len(notes) == 1
+    types = [type(m).__name__ for m in emitted]
+    assert types.index("RequestStartedAgentMessage") < types.index("BackgroundTaskNotificationAgentMessage")
+    assert types.index("BackgroundTaskNotificationAgentMessage") < types.index("RequestSuccessAgentMessage")
+    assert _SA_TASK_ID not in agent._subagent_tasks
+
+
+def test_subagent_completion_emits_nested_child_with_parent_attribution() -> None:
+    """A completed child becomes its own ChatMessage carrying parent_tool_use_id = the
+    parent Agent tool id, with the child's own tool call + result + text nested."""
+    agent = _make_agent()
+    agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
+    agent._process = _make_process([_event(_subagent_notify([_subagent_child("c0", "done", _read_child_events())]))])
+    agent._drain_idle_background_events()
+    emitted = _drain(agent._output_messages)
 
     children = _child_messages(emitted)
     assert len(children) == 1
     child_msg = children[0]
-    assert child_msg.parent_tool_use_id == "sa1"
-    # The child's own read renders nested: a Read tool block + its result + text.
+    assert child_msg.parent_tool_use_id == _SA_TOOL_CALL_ID
     names = [b.name for b in child_msg.content if isinstance(b, ToolUseBlock)]
     results = [b for b in child_msg.content if isinstance(b, ToolResultBlock)]
     texts = [b.text for b in child_msg.content if isinstance(b, TextBlock)]
     assert names == ["Read"]
-    assert results and results[0].tool_use_id == "sa1:c0:ct1"
+    assert results and str(results[0].tool_use_id) == "sa1:c0:ct1"
     assert "It has one line." in texts
 
 
-def test_subagent_child_emitted_exactly_once_across_accumulated_updates() -> None:
-    """partialResult is accumulated and re-sent; a done child whose snapshot
-    repeats on every update (and again at end) is emitted only once."""
-    payload = _subagent_envelope([_subagent_child("c0", "done", _read_child_events())])
-    # Same done child snapshot three times (two updates + end).
-    emitted = _run_subagent_turn(updates=[payload, payload], end_payload=payload)
-    assert len(_child_messages(emitted)) == 1
-
-
-def test_subagent_streams_child_when_it_finishes_mid_run() -> None:
-    """A child that is still running in the first snapshot, then done in the
-    next, is emitted as soon as it reaches a terminal status."""
-    running = _subagent_envelope([_subagent_child("c0", "running", [])])
-    done = _subagent_envelope([_subagent_child("c0", "done", _read_child_events())])
-    emitted = _run_subagent_turn(updates=[running, done], end_payload=done)
-    children = _child_messages(emitted)
-    assert len(children) == 1
-    assert children[0].parent_tool_use_id == "sa1"
-
-
-def test_subagent_running_child_flushed_at_parent_end() -> None:
-    """A child still 'running' when the parent tool ends (e.g. aborted) is still
-    flushed as an attributed message so no sub-agent work silently vanishes."""
-    running = _subagent_envelope([_subagent_child("c0", "running", [])])
-    emitted = _run_subagent_turn(updates=[running], end_payload=running)
-    children = _child_messages(emitted)
-    assert len(children) == 1
-    assert children[0].parent_tool_use_id == "sa1"
-
-
-def test_subagent_emits_one_child_message_per_child_in_parallel() -> None:
+def test_subagent_completion_emits_one_child_message_per_child_in_parallel() -> None:
     """Two parallel children each become their own attributed nested message."""
-    payload = _subagent_envelope(
+    agent = _make_agent()
+    agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
+    agent._process = _make_process(
         [
-            _subagent_child("c0", "done", _read_child_events(), label="subagent 1"),
-            _subagent_child("c1", "done", _read_child_events(), label="subagent 2"),
+            _event(
+                _subagent_notify(
+                    [
+                        _subagent_child("c0", "done", _read_child_events(), label="subagent 1"),
+                        _subagent_child("c1", "done", _read_child_events(), label="subagent 2"),
+                    ]
+                )
+            )
         ]
     )
-    emitted = _run_subagent_turn(updates=[payload], end_payload=payload)
+    agent._drain_idle_background_events()
+    emitted = _drain(agent._output_messages)
+
     children = _child_messages(emitted)
-    assert {m.parent_tool_use_id for m in children} == {"sa1"}
+    assert {m.parent_tool_use_id for m in children} == {_SA_TOOL_CALL_ID}
     assert len(children) == 2
+
+
+def test_subagent_completion_failed_surfaces_error_status_and_child() -> None:
+    """A sub-agent that finishes failed surfaces status="failed" on the completion
+    notification and still renders the (failed) child nested under the parent — so a
+    failure is visible, not silently dropped."""
+    agent = _make_agent()
+    agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
+    error_child = _subagent_child("c0", "error", [], label="scout")
+    agent._process = _make_process([_event(_subagent_notify([error_child], status="failed"))])
+
+    agent._drain_idle_background_events()
+    emitted = _drain(agent._output_messages)
+
+    notes = _bg_notifications(emitted)
+    assert len(notes) == 1
+    assert notes[0].status == "failed"
+    children = _child_messages(emitted)
+    assert len(children) == 1
+    # An error child with no events still surfaces as an attributed "failed" bubble.
+    texts = [b.text for b in children[0].content if isinstance(b, TextBlock)]
+    assert any("failed" in text.lower() for text in texts)
+    assert _SA_TASK_ID not in agent._subagent_tasks
+
+
+def test_shutdown_cancels_subagent_tasks() -> None:
+    """`_cancel_all_background_tasks` SIGTERMs each sub-agent child's group in-environment."""
+    agent = _make_agent()
+    agent._process = _make_process([])
+    agent._subagent_tasks["sat_x"] = (777, 888)
+    agent._cancel_all_background_tasks()
+    assert agent._subagent_tasks == {}
+    _assert_killed_pgid(agent, 777)
+    _assert_killed_pgid(agent, 888)
+
+
+def test_interrupt_does_not_kill_subagent_task() -> None:
+    """Stopping a turn must NOT kill a running sub-agent task: it is independent of the
+    turn that launched it, so it survives the interrupt."""
+    agent = _make_agent()
+    agent._interrupt_pending.set()
+    agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event(_text_delta_update("typing", "typing")),
+            _event(
+                {
+                    "type": "agent_end",
+                    "messages": [_assistant_msg("typing", stop_reason="aborted")],
+                    "willRetry": False,
+                }
+            ),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+    _assert_no_kill(agent)
+    assert _SA_TASK_ID in agent._subagent_tasks
+
+
+def _reaction_turn_events(ack: str) -> list:
+    """A pi-initiated reaction turn (the extension's `sendUserMessage` wake-up):
+    `agent_start` with NO preceding `response` ack, then the assistant reaction."""
+    return [
+        _event({"type": "agent_start"}),
+        _event({"type": "message_end", "message": _assistant_msg(ack)}),
+        _event({"type": "agent_end", "messages": [_assistant_msg(ack)], "willRetry": False}),
+    ]
+
+
+def _main_agent_texts(emitted: list) -> list[str]:
+    return [
+        block.text
+        for m in emitted
+        if isinstance(m, ResponseBlockAgentMessage) and m.parent_tool_use_id is None
+        for block in m.content
+        if isinstance(block, TextBlock)
+    ]
+
+
+def test_subagent_completion_triggers_auto_resume_reaction() -> None:
+    """After a sub-agent completion the extension wakes the agent (sendUserMessage);
+    the idle-drain consumes the pi-initiated reaction turn out-of-band so the agent's
+    reaction renders, and the await-reaction guard clears."""
+    agent = _make_agent()
+    agent._subagent_tasks[_SA_TASK_ID] = _SA_PGIDS
+    ack = "Acknowledged: my sub-agent finished — continuing the work."
+    agent._process = _make_process(
+        [_event(_subagent_notify([_subagent_child("c0", "done", _read_child_events())]))] + _reaction_turn_events(ack)
+    )
+    agent._drain_idle_background_events()
+    emitted = _drain(agent._output_messages)
+
+    assert len(_bg_notifications(emitted)) == 1
+    assert any(ack in text for text in _main_agent_texts(emitted)), _main_agent_texts(emitted)
+    types = [type(m).__name__ for m in emitted]
+    assert "RequestStartedAgentMessage" in types and "RequestSuccessAgentMessage" in types
+    assert agent._awaiting_reaction_count == 0
+
+
+def test_background_completion_triggers_auto_resume_reaction() -> None:
+    """After a background-task completion the extension wakes the agent; the idle-drain
+    consumes the pi-initiated reaction turn so the agent's reaction renders."""
+    agent = _make_agent()
+    agent._background_tasks[_BG_TASK_ID] = _BG_PGID
+    ack = "Acknowledged: my background task finished — continuing the work."
+    agent._process = _make_process([_event(_background_notify())] + _reaction_turn_events(ack))
+    agent._drain_idle_background_events()
+    emitted = _drain(agent._output_messages)
+
+    assert len(_bg_notifications(emitted)) == 1
+    assert any(ack in text for text in _main_agent_texts(emitted)), _main_agent_texts(emitted)
+    assert agent._awaiting_reaction_count == 0
+
+
+def test_idle_drain_gives_up_awaiting_reaction_past_deadline() -> None:
+    """A completion whose reaction never arrives must not keep the drain awaiting
+    forever: once the window elapses, `_has_background_tasks` reports no work."""
+    agent = _make_agent()
+    agent._note_awaiting_reaction()
+    assert agent._has_background_tasks() is True
+    agent._awaiting_reaction_deadline = 0.0  # force the window to have elapsed
+    assert agent._has_background_tasks() is False
+    assert agent._awaiting_reaction_count == 0
+
+
+# --- Background tasks (yield-early launch → out-of-band completion) ----------
+
+_BG_TOOL_CALL_ID = "bgtc1"
+_BG_TASK_ID = f"bgt_{_BG_TOOL_CALL_ID}"
+_BG_PGID = 4242
+
+
+def _background_start_result(
+    task_id: str = _BG_TASK_ID,
+    tool_call_id: str = _BG_TOOL_CALL_ID,
+    command: str = "sleep 1",
+    label: str = "build",
+    pgid: int = _BG_PGID,
+) -> dict[str, Any]:
+    """The {content, details} envelope the `background` tool returns on launch."""
+    return {
+        "content": [{"type": "text", "text": f"Started background task {label} (pid {pgid}): {command}"}],
+        "details": {
+            "v": BACKGROUND_PAYLOAD_VERSION,
+            "task": {
+                "taskId": task_id,
+                "toolCallId": tool_call_id,
+                "label": label,
+                "command": command,
+                "pgid": pgid,
+                "status": "running",
+            },
+        },
+    }
+
+
+def _background_notify(
+    task_id: str = _BG_TASK_ID,
+    tool_call_id: str = _BG_TOOL_CALL_ID,
+    status: str = "completed",
+    exit_code: int = 0,
+    summary: str = "build ok",
+    duration_ms: int = 1500,
+) -> dict[str, Any]:
+    """The fire-and-forget completion notify the extension emits out-of-band."""
+    return {
+        "type": "extension_ui_request",
+        "id": "uireq-1",
+        "method": "notify",
+        "notifyType": "info" if status == "completed" else "warning",
+        "message": json.dumps(
+            {
+                BACKGROUND_NOTIFY_MARKER: {
+                    "v": BACKGROUND_PAYLOAD_VERSION,
+                    "taskId": task_id,
+                    "toolCallId": tool_call_id,
+                    "status": status,
+                    "exitCode": exit_code,
+                    "summary": summary,
+                    "durationMs": duration_ms,
+                }
+            }
+        ),
+    }
+
+
+def _bg_started(messages: list) -> list[BackgroundTaskStartedAgentMessage]:
+    return [m for m in messages if isinstance(m, BackgroundTaskStartedAgentMessage)]
+
+
+def _bg_notifications(messages: list) -> list[BackgroundTaskNotificationAgentMessage]:
+    return [m for m in messages if isinstance(m, BackgroundTaskNotificationAgentMessage)]
+
+
+def _assert_killed_pgid(agent: PiAgent, pgid: int) -> None:
+    """Assert Sculptor issued an in-environment SIGTERM to the child's process group."""
+    env = agent.environment
+    assert isinstance(env, MagicMock)
+    calls = env.run_process_to_completion.call_args_list
+    commands = [c.args[0] for c in calls if c.args and isinstance(c.args[0], list)]
+    assert any(f"kill -TERM -{pgid}" in part for cmd in commands for part in cmd), commands
+
+
+def _assert_no_kill(agent: PiAgent) -> None:
+    """Assert Sculptor issued NO in-environment kill (a backgrounded task survives)."""
+    env = agent.environment
+    assert isinstance(env, MagicMock)
+    commands = [
+        c.args[0] for c in env.run_process_to_completion.call_args_list if c.args and isinstance(c.args[0], list)
+    ]
+    assert not any("kill -TERM -" in part for cmd in commands for part in cmd), commands
+
+
+def _summary_texts(messages: list, *, partial: bool) -> list[str]:
+    kind = PartialResponseBlockAgentMessage if partial else ResponseBlockAgentMessage
+    return [
+        block.text
+        for m in messages
+        if isinstance(m, kind)
+        for block in m.content
+        if isinstance(block, TextBlock) and "Background task" in block.text
+    ]
+
+
+def test_background_launch_yields_turn_immediately() -> None:
+    """A `background` call surfaces as a started task and the launch turn ENDS right
+    away (yield-early): the user is unblocked while the task runs. The task is tracked
+    at the agent level, and a completion notify arriving AFTER agent_end is NOT
+    consumed by the launch turn (it is surfaced out-of-band later)."""
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event(_tool_execution_start(_BG_TOOL_CALL_ID, "background", {"command": "sleep 1", "label": "build"})),
+            _event(_tool_execution_end(_BG_TOOL_CALL_ID, "background", result=_background_start_result())),
+            _event({"type": "agent_end", "messages": [_assistant_msg("on it")], "willRetry": False}),
+            # A completion that arrives after agent_end must NOT be drained by this
+            # turn — yield-early means the turn already returned at agent_end.
+            _event(_background_notify()),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+    emitted = _drain(agent._output_messages)
+
+    started = _bg_started(emitted)
+    assert len(started) == 1
+    assert started[0].background_task_id == _BG_TASK_ID
+    assert started[0].tool_use_id == _BG_TOOL_CALL_ID
+    assert started[0].description == "sleep 1"
+    assert started[0].task_type == "build"
+
+    # The turn ended at agent_end without waiting for completion, so no
+    # notification was emitted by this turn and the task is still tracked.
+    assert _bg_notifications(emitted) == []
+    assert _BG_TASK_ID in agent._background_tasks
+
+
+def test_agent_end_yields_even_with_pending_background_task() -> None:
+    """`_handle_agent_end` returns True (ends the turn) even while a background task runs."""
+    agent = _make_agent()
+    agent._background_tasks[_BG_TASK_ID] = _BG_PGID
+    end = ParsedAgentEnd(type="agent_end", messages=[], will_retry=False)
+    assert agent._handle_agent_end(end, _TurnState(prompt_id=_PROMPT_ID)) is True
+
+
+def test_background_completion_in_turn_reconciles() -> None:
+    """A task that completes while a user turn is in flight is reconciled into that
+    turn (notification + summary), and stops being tracked."""
+    agent = _make_agent()
+    agent._background_tasks[_BG_TASK_ID] = _BG_PGID
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event(_background_notify()),
+            _event({"type": "agent_end", "messages": [_assistant_msg("done")], "willRetry": False}),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+    emitted = _drain(agent._output_messages)
+
+    notes = _bg_notifications(emitted)
+    assert len(notes) == 1
+    assert notes[0].background_task_id == _BG_TASK_ID
+    assert notes[0].duration_seconds == 1.5
+    assert any("completed" in s for s in _summary_texts(emitted, partial=False))
+    # Streamed as a partial too, so the LIVE reducer renders it (not only on reload).
+    assert _summary_texts(emitted, partial=True)
+    assert _BG_TASK_ID not in agent._background_tasks
+
+
+def test_idle_drain_surfaces_completion_out_of_band() -> None:
+    """Between turns, a completion notify is surfaced in its own request cycle
+    (RequestStarted → notification + summary → RequestSuccess) so it renders live
+    while the user is idle."""
+    agent = _make_agent()
+    agent._background_tasks[_BG_TASK_ID] = _BG_PGID
+    agent._process = _make_process([_event(_background_notify(status="failed", exit_code=1, summary="boom"))])
+
+    agent._drain_idle_background_events()
+    emitted = _drain(agent._output_messages)
+
+    assert any(isinstance(m, RequestStartedAgentMessage) for m in emitted)
+    assert any(isinstance(m, RequestSuccessAgentMessage) for m in emitted)
+    notes = _bg_notifications(emitted)
+    assert len(notes) == 1 and notes[0].status == "failed"
+    # The order is RequestStarted ... RequestSuccess, with the notification between.
+    types = [type(m).__name__ for m in emitted]
+    assert types.index("RequestStartedAgentMessage") < types.index("BackgroundTaskNotificationAgentMessage")
+    assert types.index("BackgroundTaskNotificationAgentMessage") < types.index("RequestSuccessAgentMessage")
+    assert any("failed" in s for s in _summary_texts(emitted, partial=False))
+    assert _BG_TASK_ID not in agent._background_tasks
+
+
+def test_shutdown_cancels_background_tasks() -> None:
+    """`_cancel_all_background_tasks` SIGTERMs each child's group in-environment and clears tracking."""
+    agent = _make_agent()
+    agent._process = _make_process([])
+    agent._background_tasks["bgt_x"] = 999
+    agent._cancel_all_background_tasks()
+    assert agent._background_tasks == {}
+    _assert_killed_pgid(agent, 999)
+
+
+def test_interrupt_does_not_kill_background_task() -> None:
+    """Stopping a turn must NOT kill a background task: the task is independent of the
+    turn that launched it, so it survives the interrupt."""
+    agent = _make_agent()
+    agent._interrupt_pending.set()
+    agent._background_tasks[_BG_TASK_ID] = _BG_PGID
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event(_text_delta_update("typing", "typing")),
+            _event(
+                {
+                    "type": "agent_end",
+                    "messages": [_assistant_msg("typing", stop_reason="aborted")],
+                    "willRetry": False,
+                }
+            ),
+        ]
+    )
+    agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+    _assert_no_kill(agent)
+    assert _BG_TASK_ID in agent._background_tasks
+
+
+# --- Model catalog (get_available_models curation + start-time fetch) --------
+
+# The raw get_available_models payload captured live from real pi 0.78.0 (24
+# Anthropic models): the obsolete claude-3-* family plus dated-pin duplicates of
+# the 4.x models alongside their friendly aliases. The curation fixture below
+# asserts what the switcher should be left with.
+_RAW_PI_MODELS: list[dict[str, Any]] = [
+    {"id": "claude-3-5-haiku-20241022", "name": "Claude Haiku 3.5", "provider": "anthropic"},
+    {"id": "claude-3-5-haiku-latest", "name": "Claude Haiku 3.5 (latest)", "provider": "anthropic"},
+    {"id": "claude-3-5-sonnet-20240620", "name": "Claude Sonnet 3.5", "provider": "anthropic"},
+    {"id": "claude-3-5-sonnet-20241022", "name": "Claude Sonnet 3.5 v2", "provider": "anthropic"},
+    {"id": "claude-3-7-sonnet-20250219", "name": "Claude Sonnet 3.7", "provider": "anthropic"},
+    {"id": "claude-3-haiku-20240307", "name": "Claude Haiku 3", "provider": "anthropic"},
+    {"id": "claude-3-opus-20240229", "name": "Claude Opus 3", "provider": "anthropic"},
+    {"id": "claude-3-sonnet-20240229", "name": "Claude Sonnet 3", "provider": "anthropic"},
+    {"id": "claude-haiku-4-5", "name": "Claude Haiku 4.5 (latest)", "provider": "anthropic"},
+    {"id": "claude-haiku-4-5-20251001", "name": "Claude Haiku 4.5", "provider": "anthropic"},
+    {"id": "claude-opus-4-0", "name": "Claude Opus 4 (latest)", "provider": "anthropic"},
+    {"id": "claude-opus-4-1", "name": "Claude Opus 4.1 (latest)", "provider": "anthropic"},
+    {"id": "claude-opus-4-1-20250805", "name": "Claude Opus 4.1", "provider": "anthropic"},
+    {"id": "claude-opus-4-20250514", "name": "Claude Opus 4", "provider": "anthropic"},
+    {"id": "claude-opus-4-5", "name": "Claude Opus 4.5 (latest)", "provider": "anthropic"},
+    {"id": "claude-opus-4-5-20251101", "name": "Claude Opus 4.5", "provider": "anthropic"},
+    {"id": "claude-opus-4-6", "name": "Claude Opus 4.6", "provider": "anthropic"},
+    {"id": "claude-opus-4-7", "name": "Claude Opus 4.7", "provider": "anthropic"},
+    {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic"},
+    {"id": "claude-sonnet-4-0", "name": "Claude Sonnet 4 (latest)", "provider": "anthropic"},
+    {"id": "claude-sonnet-4-20250514", "name": "Claude Sonnet 4", "provider": "anthropic"},
+    {"id": "claude-sonnet-4-5", "name": "Claude Sonnet 4.5 (latest)", "provider": "anthropic"},
+    {"id": "claude-sonnet-4-5-20250929", "name": "Claude Sonnet 4.5", "provider": "anthropic"},
+    {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6", "provider": "anthropic"},
+]
+
+# The curated, newest-first result for `_RAW_PI_MODELS`: the claude-3-* family and
+# every dated-pin duplicate dropped, leaving the friendly aliases sorted newest
+# major.minor first (ties broken by id for determinism).
+_CURATED_PI_MODEL_IDS: list[str] = [
+    "claude-opus-4-8",
+    "claude-opus-4-7",
+    "claude-opus-4-6",
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5",
+    "claude-opus-4-5",
+    "claude-sonnet-4-5",
+    "claude-opus-4-1",
+    "claude-opus-4-0",
+    "claude-sonnet-4-0",
+]
+
+
+def _options_from_raw(raw: list[dict[str, Any]]) -> list[ModelOption]:
+    options = [_model_option_from_pi(m) for m in raw]
+    return [option for option in options if option is not None]
+
+
+def test_curate_models_drops_blacklist_and_dated_and_sorts_newest_first() -> None:
+    """Curation drops obsolete claude-3-* + dated-pin duplicates, newest-first."""
+    curated = _curate_models(_options_from_raw(_RAW_PI_MODELS), current_model=None)
+    assert [option.model_id for option in curated] == _CURATED_PI_MODEL_IDS
+    # Display names ride through from pi's `name`, and provider is preserved.
+    opus_4_8 = next(option for option in curated if option.model_id == "claude-opus-4-8")
+    assert opus_4_8.display_name == "Claude Opus 4.8"
+    assert opus_4_8.provider == "anthropic"
+
+
+def test_curate_models_keeps_current_model_even_when_a_rule_would_drop_it() -> None:
+    """The current model is never dropped — the switcher must not show an empty selection."""
+    current = ModelOption(provider="anthropic", model_id="claude-3-opus-20240229", display_name="Claude Opus 3")
+    curated = _curate_models(_options_from_raw(_RAW_PI_MODELS), current_model=current)
+    assert current in curated
+    # Everything else still curated; only the blacklisted current survives the blacklist.
+    assert "claude-3-5-haiku-20241022" not in {option.model_id for option in curated}
+
+
+def test_curate_models_keeps_current_model_absent_from_catalog() -> None:
+    """A current model pi did not list is appended so it can still be shown selected."""
+    current = ModelOption(provider="anthropic", model_id="claude-opus-9-9", display_name="Claude Opus 9.9")
+    curated = _curate_models(_options_from_raw(_RAW_PI_MODELS), current_model=current)
+    assert current in curated
+    # Newest major.minor wins, so the fictional 9.9 sorts to the front.
+    assert curated[0].model_id == "claude-opus-9-9"
+
+
+def test_model_option_from_pi_defaults_provider_and_name() -> None:
+    # Missing provider defaults to anthropic; missing name falls back to the id.
+    option = _model_option_from_pi({"id": "claude-opus-4-8"})
+    assert option == ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="claude-opus-4-8")
+    # A row with no usable id is dropped.
+    assert _model_option_from_pi({"name": "no id"}) is None
+
+
+def _models_response(raw_models: list[dict[str, Any]]) -> str:
+    return _event(
+        {
+            "type": "response",
+            "command": "get_available_models",
+            "success": True,
+            "id": "cmd-models",
+            "data": {"models": raw_models},
+        }
+    )
+
+
+def _state_response_with_model(model: dict[str, Any] | None) -> str:
+    return _event(
+        {
+            "type": "response",
+            "command": "get_state",
+            "success": True,
+            "id": "cmd-state",
+            "data": {"sessionId": "s", "messageCount": 1, "model": model},
+        }
+    )
+
+
+def test_fetch_models_into_state_emits_curated_catalog_and_current_model() -> None:
+    """At start the agent fetches + curates pi's catalog and emits it with the current model."""
+    agent = _make_agent()
+    current_raw = {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic"}
+    agent._process = _make_process([_models_response(_RAW_PI_MODELS), _state_response_with_model(current_raw)])
+    with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-models", "cmd-state"]):
+        agent._fetch_models_into_state()
+
+    emitted = [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+    assert len(emitted) == 1
+    message = emitted[0]
+    assert [option.model_id for option in message.available_models] == _CURATED_PI_MODEL_IDS
+    assert message.current_model is not None
+    assert message.current_model.model_id == "claude-opus-4-8"
+
+
+def test_fetch_models_into_state_emits_nothing_when_pi_lists_no_models() -> None:
+    """No catalog + no current model → no carrier message (switcher falls back to defaults)."""
+    agent = _make_agent()
+    agent._process = _make_process([_models_response([]), _state_response_with_model(None)])
+    with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-models", "cmd-state"]):
+        agent._fetch_models_into_state()
+    assert not [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+
+
+def _make_probe_env(probe_process: MagicMock) -> MagicMock:
+    """A MagicMock environment whose binary + version preflight pass and whose
+    `run_process_in_background` returns `probe_process` (the canned probe RPC)."""
+    env = MagicMock(spec=AgentExecutionEnvironment)
+    env.get_tool_binary_path.return_value = "/bin/pi"
+    version_result = MagicMock()
+    version_result.stdout = ""
+    version_result.stderr = "pi 0.78.0\n"
+    env.run_process_to_completion.return_value = version_result
+    env.get_state_path.return_value = Path("/fake/state")
+    env.run_process_in_background.return_value = probe_process
+    return env
+
+
+def test_fetch_available_models_probe_returns_curated_catalog_and_current_model() -> None:
+    """The pre-message probe launches pi, fetches + curates the catalog, and returns
+    it with the current model — without leaving the agent's message-loop process set."""
+    current_raw = {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic"}
+    probe_process = _make_process([_models_response(_RAW_PI_MODELS), _state_response_with_model(current_raw)])
+    env = _make_probe_env(probe_process)
+    agent = _make_agent(env)
+    with patch(
+        "sculptor.agents.pi_agent.agent_wrapper.generate_id",
+        side_effect=["probe-sess", "cmd-models", "cmd-state"],
+    ):
+        available_models, current_model = agent.fetch_available_models_probe(secrets={})
+
+    assert [option.model_id for option in available_models] == _CURATED_PI_MODEL_IDS
+    assert current_model is not None and current_model.model_id == "claude-opus-4-8"
+    # The probe shuts its process down and does NOT leave it as the agent's
+    # message-loop process (start() owns that), so the normal lifecycle is intact.
+    probe_process.close_stdin.assert_called_once()
+    probe_process.terminate.assert_called_once()
+    assert agent._process is None
+    # No ModelsAvailableAgentMessage is emitted — the probe returns its result
+    # directly (the run-agent handler persists it), it does not stream a carrier.
+    assert not [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+
+
+def test_fetch_available_models_probe_launches_distinct_probe_session_dir() -> None:
+    """The probe spawns a minimal `pi --mode rpc` against a throwaway probe session
+    dir (never the real PI_SESSION_DIR_NAME) with no extensions / skills / prompt."""
+    probe_process = _make_process(
+        [_models_response(_RAW_PI_MODELS), _state_response_with_model({"id": "claude-opus-4-8"})]
+    )
+    env = _make_probe_env(probe_process)
+    agent = _make_agent(env)
+    with patch(
+        "sculptor.agents.pi_agent.agent_wrapper.generate_id",
+        side_effect=["probe-sess", "cmd-models", "cmd-state"],
+    ):
+        agent.fetch_available_models_probe(secrets={})
+
+    env.run_process_in_background.assert_called_once()
+    command = list(env.run_process_in_background.call_args.args[0])
+    assert command[:3] == ["/bin/pi", "--mode", "rpc"]
+    session_dir = command[command.index("--session-dir") + 1]
+    assert session_dir == str(Path("/fake/state") / PI_PROBE_SESSION_DIR_NAME)
+    assert session_dir != str(Path("/fake/state") / PI_SESSION_DIR_NAME)
+    # A distinct, probe-scoped id; never the persisted real session id.
+    assert command[command.index("--session-id") + 1] == "probe-probe-sess"
+    # Minimal launch: discovery off, and no -e / --append-system-prompt / --skill.
+    assert "--no-extensions" in command
+    assert "-e" not in command
+    assert "--append-system-prompt" not in command
+    assert "--skill" not in command
+
+
+def test_fetch_available_models_probe_returns_empty_when_binary_missing() -> None:
+    """No pi binary → empty result (the switcher falls back to defaults), no launch."""
+    env = MagicMock(spec=AgentExecutionEnvironment)
+    env.get_tool_binary_path.return_value = None
+    agent = _make_agent(env)
+    assert agent.fetch_available_models_probe(secrets={}) == ([], None)
+    env.run_process_in_background.assert_not_called()
+
+
+def test_fetch_available_models_probe_returns_empty_on_version_mismatch() -> None:
+    """An out-of-range pi version → empty result, and the probe never launches a process."""
+    env = MagicMock(spec=AgentExecutionEnvironment)
+    env.get_tool_binary_path.return_value = "/bin/pi"
+    version_result = MagicMock()
+    version_result.stdout = ""
+    version_result.stderr = "pi 0.1.0\n"
+    env.run_process_to_completion.return_value = version_result
+    agent = _make_agent(env)
+    assert agent.fetch_available_models_probe(secrets={}) == ([], None)
+    env.run_process_in_background.assert_not_called()
+
+
+def test_fetch_available_models_probe_returns_empty_when_pi_lists_no_models() -> None:
+    """Empty catalog + no current model → empty result and the probe still shuts down."""
+    probe_process = _make_process([_models_response([]), _state_response_with_model(None)])
+    env = _make_probe_env(probe_process)
+    agent = _make_agent(env)
+    with patch(
+        "sculptor.agents.pi_agent.agent_wrapper.generate_id",
+        side_effect=["probe-sess", "cmd-models", "cmd-state"],
+    ):
+        assert agent.fetch_available_models_probe(secrets={}) == ([], None)
+    probe_process.close_stdin.assert_called_once()
+    probe_process.terminate.assert_called_once()
+    assert agent._process is None

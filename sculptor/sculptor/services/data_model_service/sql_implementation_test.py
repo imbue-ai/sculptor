@@ -289,6 +289,22 @@ def test_there_are_no_missing_json_schema_migrations() -> None:
     )
 
 
+def test_frozen_json_schema_baseline_covers_every_persisted_model() -> None:
+    """The frozen baseline must be non-empty and cover every persisted model.
+
+    ``get_potentially_breaking_changes`` only inspects keys that exist in the frozen
+    baseline, so an empty (or partial) baseline silently disables the JSON-column
+    durability guard checked by ``test_there_are_no_missing_json_schema_migrations``.
+    See SCU-1523, where the file was ``{}`` and the guard was permanently green.
+    """
+    frozen_schemas = get_frozen_database_model_nested_json_schemas()
+    latest_schemas = get_json_schemas_of_all_nested_models(tuple(AUTOMANAGED_MODEL_CLASSES))
+    empty_baseline_message = f"frozen_pydantic_schemas.json is empty; the JSON-column durability guard is silently disabled. Run `{BUMP_MIGRATIONS_COMMAND}` to regenerate the baseline."
+    assert frozen_schemas, empty_baseline_message
+    missing_models_message = f"The frozen baseline does not cover the same models as the live registry ({sorted(frozen_schemas)} vs {sorted(latest_schemas)}); the durability guard would not inspect the missing models. Run `{BUMP_MIGRATIONS_COMMAND}`."
+    assert set(frozen_schemas.keys()) == set(latest_schemas.keys()), missing_models_message
+
+
 # ============================================================================
 # MIGRATION CORRECTNESS TESTS
 # These tests verify that the Alembic migration chain produces a correct
@@ -460,6 +476,7 @@ def test_triggers_work_after_migration() -> None:
             # Build column values from the model's field definitions
             field_values: dict[str, Any] = {}
             for field_name, field in model_cls.model_fields.items():
+                assert field.annotation is not None
                 field_values[field_name] = _generate_synthetic_value(field_name, field.annotation)
 
             # Insert a row into the snapshots table
@@ -563,7 +580,9 @@ def test_in_memory_migration_runner_drops_preexisting_triggers() -> None:
         # Full init: migrate to head AND create all auto-managed triggers, as a prior startup would.
         initialize_db_from_connection(connection, IN_MEMORY_SQLITE)
         triggers_before = connection.execute(text("SELECT count(*) FROM sqlite_master WHERE type='trigger'")).scalar()
-        assert triggers_before > 0, "expected auto-managed triggers to exist after initialization"
+        assert triggers_before is not None and triggers_before > 0, (
+            "expected auto-managed triggers to exist after initialization"
+        )
 
         # Re-run migrations through the production runner (a no-op upgrade to head).
         _run_migrations_on_connection(connection)
@@ -586,7 +605,7 @@ def test_file_migration_runner_drops_preexisting_triggers(tmp_path: Path) -> Non
     initialize_db(engine)
     with engine.connect() as connection:
         before = connection.execute(text("SELECT count(*) FROM sqlite_master WHERE type='trigger'")).scalar()
-    assert before > 0, "expected auto-managed triggers to exist after initialization"
+    assert before is not None and before > 0, "expected auto-managed triggers to exist after initialization"
 
     # Run migrations through the file-database runner (env.py).
     _run_migrations_on_database_url(url, get_alembic_script_location())
@@ -1558,7 +1577,7 @@ def test_update_project_fields_rejects_bad_inputs(
     # These runtime tests exercise the defense-in-depth belt inside
     # ``_update_model_fields`` for callers that might bypass static typing
     # (e.g. dynamic dict unpacking from untyped sources).  We drive the
-    # internal helper directly so no pyre-ignore is needed.
+    # internal helper directly so no type suppression is needed.
     with service.open_transaction(RequestID()) as transaction:
         assert isinstance(transaction, SQLTransaction)
         with pytest.raises(ValueError, match="at least one field"):
@@ -1635,7 +1654,9 @@ def test_update_project_fields_writes_exactly_one_snapshot_row(
             text("SELECT COUNT(*) FROM project WHERE object_id = :oid"), {"oid": str(project.object_id)}
         ).scalar()
 
+    # pyrefly: ignore [unsupported-operation]
     assert after_rows == before_rows + 1, (
+        # pyrefly: ignore [unsupported-operation]
         f"Expected exactly one new snapshot row; got delta={after_rows - before_rows}"
     )
 
@@ -1728,6 +1749,8 @@ def test_update_project_fields_stress_disjoint_concurrent_writers(
             barrier.wait(timeout=10)
             for i in range(iterations):
                 with service.open_transaction(RequestID()) as transaction:
+                    # dynamic per-thread field names can't be statically typed against the TypedDict kwargs
+                    # pyrefly: ignore [bad-argument-type]
                     transaction.update_project_fields(project.object_id, **{field_name: f"{field_name}_iter_{i}"})
         except BaseException as e:
             with errors_lock:
@@ -2039,7 +2062,9 @@ def test_update_workspace_fields_writes_exactly_one_snapshot_row(
             text("SELECT COUNT(*) FROM workspace WHERE object_id = :oid"), {"oid": str(workspace_id)}
         ).scalar()
 
+    # pyrefly: ignore [unsupported-operation]
     assert after_rows == before_rows + 1, (
+        # pyrefly: ignore [unsupported-operation]
         f"Expected exactly one new snapshot row; got delta={after_rows - before_rows}"
     )
 

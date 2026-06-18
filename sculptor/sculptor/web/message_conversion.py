@@ -1,8 +1,6 @@
 """Converts agent messages to chat messages for the frontend."""
 
 import datetime
-from dataclasses import dataclass
-from dataclasses import field
 from typing import Sequence
 
 from loguru import logger
@@ -71,7 +69,6 @@ ERROR_MESSAGE_TYPES = (
 WARNING_MESSAGE_TYPES = (WarningAgentMessage,)
 
 
-@dataclass
 class _StreamingState:
     """Mutable streaming state tracked across message processing.
 
@@ -81,23 +78,24 @@ class _StreamingState:
     caused by exactly that kind of partial reset.
     """
 
-    is_active: bool = False
-    start_index: int = 0
-    pending_tool_results: list[ToolResultBlock] = field(default_factory=list)
-    message_was_streamed: bool = False
-    # SDK assistant_message_ids delivered via streaming partials this request.
-    # Spans the whole session (only reset() clears it) so a late persistence
-    # ResponseBlockAgentMessage still dedupes after UserQuestionAnswerMessage
-    # reset message_was_streamed.
-    streamed_assistant_message_ids: set[AssistantMessageID] = field(default_factory=set)
-    # first_response_message_id of the partial that built the current streaming
-    # segment. A new streamed turn is detected by a CHANGE in this id between
-    # partials — not by comparing against in_progress_chat_message.id, which stays
-    # pinned to the FIRST turn's id and so mis-fired complete_segment on every
-    # growing partial of a re-minted later turn (the "double printing"/staircase
-    # bug). Preserved across complete_segment (so the next turn's first partial
-    # sees the change); only reset() clears it.
-    current_segment_first_response_id: AgentMessageID | None = None
+    def __init__(self) -> None:
+        self.is_active: bool = False
+        self.start_index: int = 0
+        self.pending_tool_results: list[ToolResultBlock] = []
+        self.message_was_streamed: bool = False
+        # SDK assistant_message_ids delivered via streaming partials this request.
+        # Spans the whole session (only reset() clears it) so a late persistence
+        # ResponseBlockAgentMessage still dedupes after UserQuestionAnswerMessage
+        # reset message_was_streamed.
+        self.streamed_assistant_message_ids: set[AssistantMessageID] = set()
+        # first_response_message_id of the partial that built the current streaming
+        # segment. A new streamed turn is detected by a CHANGE in this id between
+        # partials — not by comparing against in_progress_chat_message.id, which stays
+        # pinned to the FIRST turn's id and so mis-fired complete_segment on every
+        # growing partial of a re-minted later turn (the "double printing"/staircase
+        # bug). Preserved across complete_segment (so the next turn's first partial
+        # sees the change); only reset() clears it.
+        self.current_segment_first_response_id: AgentMessageID | None = None
 
     def reset(self) -> None:
         """Reset all streaming state to initial values.
@@ -276,19 +274,19 @@ def convert_agent_messages_to_task_update(
         elif isinstance(msg, RequestStartedAgentMessage):
             assert isinstance(msg.request_id, AgentMessageID)
             # Promote queued message to completed (if one exists for this request)
-            promoted = False
+            is_promoted = False
             for i, message in enumerate(queued_chat_messages):
                 if message.id == msg.request_id:
                     previously_queued_message = queued_chat_messages.pop(i)
                     completed_message_by_id[previously_queued_message.id] = previously_queued_message
                     completed_chat_messages.append(previously_queued_message)
-                    promoted = True
+                    is_promoted = True
                     break
             # Only update current_request_id for real content requests (matched a
             # queued message) or when idle.  Lifecycle requests like
             # RemoveQueuedMessage emit their own RequestStarted/RequestSuccess pair
             # which must not clobber the active content request's ID.
-            if promoted or current_request_id is None:
+            if is_promoted or current_request_id is None:
                 current_request_id = msg.request_id
 
         elif isinstance(msg, RemoveQueuedMessageAgentMessage):
@@ -375,7 +373,7 @@ def convert_agent_messages_to_task_update(
             # partial just overwrote them with the original ToolUseBlocks.
             for result in streaming.pending_tool_results:
                 content = list(in_progress_chat_message.content)
-                content, _replaced = _replace_tool_use_with_result(content, result, harness)
+                content, _is_replaced = _replace_tool_use_with_result(content, result, harness)
                 in_progress_chat_message = in_progress_chat_message.model_copy(update={"content": tuple(content)})
 
         elif isinstance(msg, ResponseBlockAgentMessage):
@@ -467,9 +465,9 @@ def convert_agent_messages_to_task_update(
             #     (output_processor's _used_first_response_id branch), where
             #     the prior two conditions miss because the flushed
             #     ChatMessage is keyed under first_response_message_id.
-            already_completed = msg.message_id in completed_message_by_id
-            assistant_already_streamed = msg.assistant_message_id in streaming.streamed_assistant_message_ids
-            if streaming.message_was_streamed or already_completed or assistant_already_streamed:
+            is_already_completed = msg.message_id in completed_message_by_id
+            is_assistant_already_streamed = msg.assistant_message_id in streaming.streamed_assistant_message_ids
+            if streaming.message_was_streamed or is_already_completed or is_assistant_already_streamed:
                 # The in-progress message was built by streaming partials.  The SDK emits
                 # the full assistant message (text + tool_use blocks) as a non-streaming
                 # ResponseBlockAgentMessage for DB persistence after streaming ends.
@@ -496,6 +494,29 @@ def convert_agent_messages_to_task_update(
                         msg.approximate_creation_time,
                         harness,
                     )
+
+                # SCU-512: the buffered persistence copy re-asserts the turn's
+                # ToolUseBlocks.  If a tool_result arrived mid-stream it overwrote
+                # its ToolUseBlock in place (``_replace_tool_use_with_result`` does
+                # ``content[i] = result``), discarding the tool input.  For diff
+                # tools (Edit/Write/MultiEdit) that input carries the old_string/
+                # new_string the frontend needs to render the diff, so a dropped
+                # ToolUseBlock leaves a bare ToolResultBlock that shows as an empty
+                # pill.  Restore any ToolUseBlock the streamed copy no longer holds
+                # (by id) so the pairing — and the input — survive.
+                if in_progress_chat_message is not None:
+                    existing_tool_use_ids = {
+                        block.id for block in in_progress_chat_message.content if isinstance(block, ToolUseBlock)
+                    }
+                    restored_tool_uses = tuple(
+                        block
+                        for block in msg.content
+                        if isinstance(block, ToolUseBlock) and block.id not in existing_tool_use_ids
+                    )
+                    if restored_tool_uses:
+                        in_progress_chat_message = _restore_overwritten_tool_uses(
+                            in_progress_chat_message, restored_tool_uses
+                        )
             else:
                 # Non-streaming (or historical replay) - append content as usual
                 in_progress_chat_message = _handle_response_blocks(
@@ -524,7 +545,7 @@ def convert_agent_messages_to_task_update(
                         if reconstructed_question is not None:
                             pending_user_question = reconstructed_question
                         else:
-                            logger.info(
+                            logger.debug(
                                 "Skipping AskUserQuestion pending state from persisted ToolUseBlock with invalid input: {}",
                                 block.input,
                             )
@@ -957,16 +978,17 @@ def _handle_response_blocks(
         # `_replace_tool_use_with_result` requires.
         block = block.model_copy(update={"interactive_role": harness.classify_tool_ui_role(block.tool_name)})
         # Try to replace matching tool use with result
-        content, replaced = _replace_tool_use_with_result(content, block, harness)
+        content, is_replaced = _replace_tool_use_with_result(content, block, harness)
 
-        # assert replaced, "No tool use found for result"
-        if not replaced:
+        if not is_replaced:
             content.append(block)
 
     return in_progress.model_copy(update={"content": tuple(content)})
 
 
-def _replace_tool_use_with_result(content: list, result: ToolResultBlock, harness: Harness) -> tuple[list, bool]:
+def _replace_tool_use_with_result(
+    content: list[ContentBlockTypes], result: ToolResultBlock, harness: Harness
+) -> tuple[list[ContentBlockTypes], bool]:
     """Try to replace a tool use block with its result.
 
     Returns (updated_content, was_replaced).
@@ -994,6 +1016,37 @@ def _replace_tool_use_with_result(content: list, result: ToolResultBlock, harnes
             content[i] = result
             return content, True
     return content, False
+
+
+def _restore_overwritten_tool_uses(
+    in_progress: ChatMessage,
+    tool_uses: Sequence[ToolUseBlock],
+) -> ChatMessage:
+    """Re-insert ToolUseBlocks that a mid-stream tool_result overwrote in place.
+
+    SCU-512: while streaming, ``_replace_tool_use_with_result`` swaps a
+    ToolUseBlock for its ToolResultBlock (``content[i] = result``), which drops
+    the tool input.  For diff tools that input is the only source of the diff the
+    frontend renders.  When the buffered persistence message later re-asserts the
+    ToolUseBlock, this restores it: each tool_use is inserted immediately before
+    its matching ToolResultBlock (paired by ``tool_use_id``) so the frontend
+    renders the pair; if no matching result is present it is appended.
+    """
+    content = list(in_progress.content)
+    for tool_use in tool_uses:
+        insert_at = next(
+            (
+                i
+                for i, block in enumerate(content)
+                if isinstance(block, ToolResultBlock) and block.tool_use_id == tool_use.id
+            ),
+            None,
+        )
+        if insert_at is None:
+            content.append(tool_use)
+        else:
+            content.insert(insert_at, tool_use)
+    return in_progress.model_copy(update={"content": tuple(content)})
 
 
 def _handle_partial_response(
@@ -1036,8 +1089,8 @@ def _add_context_summary_to_message(
     in_progress: ChatMessage | None,
     message: ContextSummaryMessage,
 ) -> ChatMessage:
-    """Add error block to message."""
-    # although all elements of `ContextSummaryMessage` are `Message`s, pyre doesn't play nice with pydantic
+    """Add a context summary block to the message."""
+    # although all elements of `ContextSummaryMessage` are `Message`s, keep the runtime assert as a defensive guard
     assert isinstance(message, Message)
 
     context_summary_block = ContextSummaryBlock(
@@ -1074,7 +1127,7 @@ def _add_error_to_message(
     message: ErrorMessageUnion,
 ) -> ChatMessage:
     """Add error block to message."""
-    # although all elements of `ErrorMessageUnion` are `ErrorMessage`s, pyre doesn't play nice with pydantic, so we do the assert to make it understand message's attributes
+    # although all elements of `ErrorMessageUnion` are `ErrorMessage`s, keep the runtime assert as a defensive guard
     assert isinstance(message, ErrorMessage)
     error = message.error
     chat_message_id = message.message_id
@@ -1106,7 +1159,7 @@ def _add_warning_to_message(in_progress: ChatMessage | None, message: WarningMes
     traceback = None
     warning_type = None
 
-    # although WarningMessage is a Message, pyre doesn't play nice with pydantic, so we do the assert to make it understand message's attributes
+    # although WarningMessage is a Message, keep the runtime assert as a defensive guard
     assert isinstance(message, Message)
     error = message.error
 

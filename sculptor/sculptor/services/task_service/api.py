@@ -1,5 +1,6 @@
 from abc import ABC
 from abc import abstractmethod
+from collections.abc import Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from queue import Queue
@@ -21,6 +22,7 @@ from sculptor.primitives.ids import WorkspaceID
 from sculptor.primitives.service import Service
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.state.messages import Message
+from sculptor.state.messages import ModelOption
 
 
 class TaskMessageContainer(FrozenModel):
@@ -62,6 +64,23 @@ class TaskService(Service, ABC):
     def mark_unread(self, task_id: TaskID, transaction: DataModelTransaction) -> Task: ...
 
     @abstractmethod
+    def update_available_models(
+        self,
+        task_id: TaskID,
+        available_models: Sequence[ModelOption],
+        current_model: ModelOption | None,
+        transaction: DataModelTransaction,
+    ) -> Task | None:
+        """Persist a harness's model catalog onto the task and publish the update.
+
+        Writes `available_models` / `current_model` onto the task's
+        `AgentTaskStateV2` and registers the same task-update publish a message
+        write does, so a live switcher refreshes even though no message was
+        created. A no-op (returns None) when the catalog already matches or the
+        task is missing / not an agent task. The DB title is preserved so a
+        concurrent rename is not clobbered."""
+
+    @abstractmethod
     def restore_task(self, task_id: TaskID, transaction: DataModelTransaction) -> Task: ...
 
     @abstractmethod
@@ -95,7 +114,7 @@ class TaskService(Service, ABC):
         self, user_reference: UserReference
     ) -> Generator[Queue[TaskMessageContainer], None, None]:
         """
-        Returns a queue that receives all task messages some user's tasks.
+        Returns a queue that receives all task messages for some user's tasks.
 
         Note that for efficiency, only the Message objects used by SimpleAgentView are returned.
         """

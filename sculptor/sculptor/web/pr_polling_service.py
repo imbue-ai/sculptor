@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
 from queue import Queue
+from typing import Literal
 
 from loguru import logger
 from pydantic import PrivateAttr
@@ -41,6 +42,11 @@ from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import PrStatusInfo
 from sculptor.web.mr_status import fetch_mr_status
 from sculptor.web.pr_status import fetch_pr_status
+
+# Git host providers we know how to poll. Matches ``PrStatusInfo.error_provider``.
+_Provider = Literal["github", "gitlab"]
+# The terminal/non-terminal PR states. Matches ``PrStatusInfo.pr_state``.
+_PrState = Literal["none", "open", "merged", "closed"]
 
 # Re-enqueue delay when a poll returns None — either the workspace is still
 # initializing (no working_dir yet) or _execute_poll caught an exception.
@@ -78,7 +84,7 @@ _RATE_LIMIT_COOLDOWN_SECONDS = 60.0
 _TERMINAL_STATE_MULTIPLIER = 10
 
 
-def _compute_poll_delay(config: UserConfig, *, is_open: bool, pr_state: str) -> float:
+def _compute_poll_delay(config: UserConfig, *, is_open: bool, pr_state: _PrState) -> float:
     """Compute the next-poll delay for a workspace from the user's settings.
 
     Closed workspaces get ``pr_poll_interval_seconds * pr_poll_closed_multiplier``.
@@ -127,13 +133,13 @@ class _HostThrottle:
         self._min_interval = min_interval
         self._lock = threading.Lock()
         self._next_allowed_start = 0.0
-        self._cooldown_until: dict[str, float] = {}
+        self._cooldown_until: dict[_Provider, float] = {}
 
-    def cooldown_remaining(self, provider: str) -> float:
+    def cooldown_remaining(self, provider: _Provider) -> float:
         with self._lock:
             return max(0.0, self._cooldown_until.get(provider, 0.0) - time.monotonic())
 
-    def enter_cooldown(self, provider: str, seconds: float) -> None:
+    def enter_cooldown(self, provider: _Provider, seconds: float) -> None:
         with self._lock:
             until = time.monotonic() + seconds
             # Extend an existing cooldown, never shorten it.
@@ -590,8 +596,8 @@ class PrPollingService(Service):
         with self._observer_lock:
             if result != self._cache.get(job.workspace_id):
                 self._cache[job.workspace_id] = result
-                for queue in self._observers:
-                    queue.put(result)
+                for observer_queue in self._observers:
+                    observer_queue.put(result)
 
         if result.error_category == "rate_limited" and result.error_provider is not None:
             # A host cooldown was just set for this provider — wait it out
@@ -614,6 +620,8 @@ class PrPollingService(Service):
         with self._worker_sleep_lock:
             if not self._worker_sleep_until:
                 return
+            # dict.get never returns None for the dict's own keys
+            # pyrefly: ignore [no-matching-overload]
             sleepiest_index = max(self._worker_sleep_until, key=self._worker_sleep_until.get)
             if scheduled_time >= self._worker_sleep_until[sleepiest_index]:
                 return
@@ -646,7 +654,7 @@ class PrPollingService(Service):
             )
             return None
 
-    def _respect_throttle(self, provider: str) -> _CooldownDeferred | None:
+    def _respect_throttle(self, provider: _Provider) -> _CooldownDeferred | None:
         """Apply the global throttle before an API-backed poll.
 
         Returns a ``_CooldownDeferred`` if ``provider`` is currently in
@@ -664,7 +672,7 @@ class PrPollingService(Service):
             self._shutdown_event.wait(timeout=wait)
         return None
 
-    def _note_rate_limit(self, status: PrStatusInfo, provider: str) -> None:
+    def _note_rate_limit(self, status: PrStatusInfo, provider: _Provider) -> None:
         """Start a host cooldown for ``provider`` if the poll was rate-limited."""
         if status.error_category == "rate_limited":
             self._throttle.enter_cooldown(provider, _RATE_LIMIT_COOLDOWN_SECONDS)

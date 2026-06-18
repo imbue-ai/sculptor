@@ -22,6 +22,13 @@ The preflight-failure path (`fake_pi:error`) emits a `response` with
 when the prompt is rejected before the agent starts (e.g. missing API
 key).
 
+The in-run failure path (`fake_pi:turn_error`) instead accepts the prompt
+(`response success:true`), starts the agent, then ends the assistant message
+with `stopReason:"error"` and an empty body carrying the reason on
+`errorMessage` — matching pi's wire shape when a turn fails mid-run (e.g. the
+selected model's provider has no key). PiAgent surfaces that reason as a
+clean, actionable error.
+
 `abort` is acknowledged with a `response` envelope and, like real pi, leaves
 the process alive for the next prompt — it does NOT exit. If a turn is in
 flight, abort preempts it and emits an `agent_end` whose assistant message
@@ -60,6 +67,12 @@ fresh id with empty history (mirroring pi's ``/clear``), so a post-reset
 0 — the hook the context-reset integration test asserts on. Real pi persists a
 JSONL transcript; FakePi only needs enough to prove resume + reset continuity.
 
+Model selection: ``get_available_models`` returns a fixed catalog (``_FAKE_PI_MODELS``)
+and ``get_state`` reports a current model, so PiAgent surfaces them onto task state
+and the chat switcher offers pi's own models. ``set_model`` echoes the chosen model
+back and updates the current model, so a switch persists for a following ``get_state``
+— the hook the model-selection integration test asserts on.
+
 Wire-protocol reference: the pi RPC protocol notes (pi 0.78.0).
 """
 
@@ -75,13 +88,14 @@ import time
 import uuid
 from collections.abc import Callable
 from collections.abc import Iterable
-from dataclasses import dataclass
-from dataclasses import field
 from pathlib import Path
 from queue import Empty
 from queue import Queue
 from threading import Event
 
+from pydantic import Field
+
+from sculptor.foundation.pydantic_serialization import MutableModel
 from sculptor.services.dependency_management_service import PI_VERSION_RANGE
 
 # Mirrors FakeClaude's ``fake_claude:`` directive prefix; keeps the grammar
@@ -92,12 +106,32 @@ _COMMAND_REGEX = re.compile(r"fake_pi:\S+(?:\s+`[^`]*`)?")
 
 _DEFAULT_RESPONSE_TEXT = "[FakePi] Task completed."
 
+# Polling cadence (seconds) for abort-preemptible waits and the main command
+# loop: directive handlers re-check the abort flag and the loop re-checks for
+# stdin EOF at this interval, so neither blocks indefinitely.
+_POLL_INTERVAL_SECONDS = 0.05
+
 # A prompt rewritten to pi's skill-invocation shape (`/skill:<name> [args]`).
 # When such a prompt carries no `fake_pi:` directive, FakePi echoes that it
 # "followed" the skill so tests can assert PiAgent rewrote a picked `/name`
 # into `/skill:<name>` (FakePi only ever sees the already-rewritten text).
 _SKILL_INVOCATION_REGEX = re.compile(r"^/skill:(\S+)")
 _SKILL_FOLLOWED_PREFIX = "[FakePi] followed skill: "
+
+# The fixed model catalog `get_available_models` reports — pi's `Model` wire shape
+# ({id, name, provider}). Display names are deliberately FakePi-specific (not any
+# Claude `getModelLongName` label) so a test can assert pi's own models populate the
+# switcher and Claude's hardcoded names do not. The ids skip the blacklisted /
+# dated-pin shapes PiAgent curates away, so the catalog survives curation intact.
+_FAKE_PI_MODELS: list[dict[str, str]] = [
+    {"id": "fake-pi-opus-4-8", "name": "FakePi Opus 4.8", "provider": "anthropic"},
+    {"id": "fake-pi-sonnet-4-6", "name": "FakePi Sonnet 4.6", "provider": "anthropic"},
+    {"id": "fake-pi-haiku-4-5", "name": "FakePi Haiku 4.5", "provider": "anthropic"},
+]
+
+# The model `get_state` reports as current until a `set_model` changes it (pi
+# defaults to its newest model; FakePi mirrors that with the first catalog entry).
+_DEFAULT_FAKE_PI_MODEL: dict[str, str] = _FAKE_PI_MODELS[0]
 
 
 def _skill_invocation_name(prompt_text: str) -> str | None:
@@ -114,6 +148,10 @@ class _TurnAborted(Exception):
     """Raised inside a directive when an ``abort`` preempts the running turn."""
 
 
+class FakePiWaitTimeoutError(RuntimeError):
+    """Raised when a ``fake_pi:wait_for_file`` directive's sentinel never appears."""
+
+
 # stdout is written from two threads (the stdin reader emits the abort ack; the
 # main loop emits turn events), so serialize whole lines to avoid interleaving.
 _STDOUT_LOCK = threading.Lock()
@@ -126,8 +164,7 @@ _STDOUT_LOCK = threading.Lock()
 _UI_RESPONSE_QUEUE: "Queue[dict]" = Queue()
 
 
-@dataclass
-class _TurnBuilder:
+class _TurnBuilder(MutableModel):
     """Accumulates the text emitted by directives in a single turn.
 
     Carries the turn's received inputs (the prompt text and any `images[]`
@@ -136,10 +173,14 @@ class _TurnBuilder:
     """
 
     prompt_id: str | None = None
-    chunks: list[str] = field(default_factory=list)
+    chunks: list[str] = Field(default_factory=list)
     prompt_text: str = ""
-    images: list[dict] = field(default_factory=list)
+    images: list[dict] = Field(default_factory=list)
     _ui_counter: int = 0
+    # Set by the `background` directive: it emits the launching run's `agent_end`
+    # itself (the launch yields immediately; the completion fires out-of-band on a
+    # daemon thread), so `_run_turn` must NOT emit its own trailing agent_end.
+    suppress_turn_end: bool = False
 
     def emit(self, text: str) -> None:
         self.chunks.append(text)
@@ -179,8 +220,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parsed
 
 
-@dataclass
-class _SessionState:
+class _SessionState(MutableModel):
     """FakePi's on-disk session, keyed by ``session_id`` within ``--session-dir``.
 
     A relaunched FakePi given the same dir + id reloads this, so a
@@ -192,7 +232,11 @@ class _SessionState:
     session_id: str
     session_file: Path | None
     message_count: int = 0
-    user_messages: list[str] = field(default_factory=list)
+    user_messages: list[str] = Field(default_factory=list)
+    # The model `get_state` reports as current; a `set_model` updates it in place.
+    # In-memory only (not persisted): the model-selection test exercises a switch
+    # within one process, and PiAgent re-fetches the model at every start.
+    current_model: dict[str, str] = Field(default_factory=lambda: dict(_DEFAULT_FAKE_PI_MODEL))
 
     @classmethod
     def load(cls, session_dir: Path | None, session_id: str) -> "_SessionState":
@@ -330,6 +374,22 @@ def _emit_user_message_end(text: str) -> None:
     _emit({"type": "message_end", "message": _user_message(text)})
 
 
+def _emit_error_message_end(error_message: str) -> None:
+    """Emit pi's in-run failure boundary: an assistant `message_end` with an
+    empty body, `stopReason:"error"`, and the reason on `errorMessage`.
+
+    Mirrors what real pi emits when a turn fails mid-run (e.g. the selected
+    model's provider has no key): no in-stream error event, no content, the
+    reason carried only on `errorMessage`. PiAgent raises on consuming this.
+    """
+    _emit(
+        {
+            "type": "message_end",
+            "message": {"role": "assistant", "content": [], "stopReason": "error", "errorMessage": error_message},
+        }
+    )
+
+
 def _emit_agent_end(text: str) -> None:
     _emit(
         {
@@ -338,6 +398,20 @@ def _emit_agent_end(text: str) -> None:
             "willRetry": False,
         }
     )
+
+
+def _emit_reaction_turn(ack: str) -> None:
+    """Emit the out-of-band reaction turn pi runs when the extension wakes the agent
+    via `sendUserMessage` after a completion: an assistant acknowledgement bracketed
+    by agent_start/agent_end, so Sculptor consumes it as the auto-resume reaction."""
+    _emit({"type": "agent_start"})
+    _emit(
+        {
+            "type": "message_end",
+            "message": {"role": "assistant", "content": [{"type": "text", "text": ack}], "stopReason": "stop"},
+        }
+    )
+    _emit_agent_end(ack)
 
 
 def _emit_aborted_agent_end(text: str) -> None:
@@ -502,26 +576,42 @@ def _handle_tool_call(args: dict, builder: _TurnBuilder, abort_event: Event, sta
 
 
 def _handle_subagent(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
-    """Script a sub-agent tool call: emit a `subagent` toolCall block, then the
-    tool-execution lane with the STRUCTURED per-child payload under
-    `result.details` (the shape `sculptor_subagent.ts` emits, parsed by
-    `subagent.py`). Lets a deterministic UI test render the nested sub-agent
-    group without spawning real child `pi` processes.
+    """Script a sub-agent tool call and its out-of-band completion (yield-early).
+
+    Reproduces the wire shape `sculptor_subagent.ts` emits, without spawning real
+    child `pi` processes: the `subagent` toolCall block + tool-execution lane whose
+    `result.details` carry the versioned LAUNCH payload (`{v, task}`, parsed by
+    `subagent.py`), then the launching run's `agent_end`. The launching turn ENDS
+    there — the user is unblocked and keeps chatting while the children run (the
+    agent does not hold the turn open). Because this directive emits the run's
+    `agent_end` itself, it sets ``builder.suppress_turn_end`` so `_run_turn` does
+    not emit a second end.
+
+    The completion `notify` (the structured marker Sculptor maps to nested child
+    messages + a BackgroundTaskNotification) is emitted OUT-OF-BAND on a daemon
+    thread — after an optional `wait_path` hold — so fake pi stays responsive to the
+    user's next prompt while the children "run". Sculptor surfaces it via its
+    idle-drain. With no `wait_path` the completion fires right after the launch
+    turn's `agent_end`, so it is genuinely out-of-band.
 
     Args (all optional)::
 
         {"id": "sa1",                   # parent tool-call id
-         "children": [                  # structured child snapshots
+         "task": "...",                 # the single-task argument
+         "children": [                  # per-child completion snapshots
              {"childId": "c0", "label": "subagent", "task": "...",
               "status": "done",
               "events": [{"seq":0,"kind":"tool_call","toolCallId":"ct1",
                           "toolName":"read","args":{...}},
-                         {"seq":1,"kind":"text","text":"..."}]}]}
+                         {"seq":1,"kind":"text","text":"..."}]}],
+         "status": "completed",         # or "failed"
+         "pgids": [123], "wait_path": "...", "timeout_seconds": 120}
 
     With no `children` a single trivial done child is scripted so the simplest
     directive still renders a nested group.
     """
     tool_call_id = str(args.get("id") or "sa1")
+    task_id = f"sat_{tool_call_id}"
     children = args.get("children")
     if not isinstance(children, list) or not children:
         children = [
@@ -534,41 +624,217 @@ def _handle_subagent(args: dict, builder: _TurnBuilder, abort_event: Event, stat
             }
         ]
     task_arg = {"task": str(args.get("task", "investigate"))}
-    payload = {"v": 1, "children": children}
+    count = len(children)
+    label = "subagent" if count == 1 else f"{count} sub-agents"
+    pgids = args.get("pgids") if isinstance(args.get("pgids"), list) else []
 
-    # Close the issuing assistant message with the subagent toolCall block.
+    # Launch: close the issuing assistant message with the subagent toolCall block,
+    # then the tool-execution lane carrying the structured LAUNCH payload.
     content: list[dict] = []
     if builder.full_text:
         content.append({"type": "text", "text": builder.full_text})
     content.append({"type": "toolCall", "id": tool_call_id, "name": "subagent", "arguments": task_arg})
     _emit({"type": "message_end", "message": {"role": "assistant", "content": content, "stopReason": "toolUse"}})
     builder.chunks.clear()
-
-    # Tool-execution lane: the accumulated structured payload rides under
-    # `partialResult.details` / `result.details`.
     _emit({"type": "tool_execution_start", "toolCallId": tool_call_id, "toolName": "subagent", "args": task_arg})
-    update_result = _tool_text_payload("running")
-    update_result["details"] = payload
-    _emit(
-        {
-            "type": "tool_execution_update",
+    start_result = _tool_text_payload(f"Started {count} sub-agent(s)")
+    # `"v": 1` MUST match SUBAGENT_PAYLOAD_VERSION (subagent.py / sculptor_subagent.ts).
+    start_result["details"] = {
+        "v": 1,
+        "task": {
+            "taskId": task_id,
             "toolCallId": tool_call_id,
-            "toolName": "subagent",
-            "args": task_arg,
-            "partialResult": update_result,
-        }
-    )
-    end_result = _tool_text_payload("sub-agents complete")
-    end_result["details"] = payload
+            "label": label,
+            "pgids": pgids,
+            "count": count,
+            "status": "running",
+        },
+    }
     _emit(
         {
             "type": "tool_execution_end",
             "toolCallId": tool_call_id,
             "toolName": "subagent",
-            "result": end_result,
+            "result": start_result,
             "isError": False,
         }
     )
+
+    # End the launching run NOW (yield-early): the user is unblocked while the
+    # children run. Suppress _run_turn's trailing end (we emitted agent_end here).
+    _emit_agent_end(builder.full_text)
+    builder.suppress_turn_end = True
+
+    status = str(args.get("status", "completed"))
+    # `"sculptorSubagentTask"` MUST match SUBAGENT_NOTIFY_MARKER (subagent.py).
+    completion = {
+        "v": 1,
+        "taskId": task_id,
+        "toolCallId": tool_call_id,
+        "status": status,
+        "children": children,
+    }
+    notify_event = {
+        "type": "extension_ui_request",
+        "id": builder.next_ui_request_id(),
+        "method": "notify",
+        "notifyType": "info" if status == "completed" else "warning",
+        "message": json.dumps({"sculptorSubagentTask": completion}, separators=(",", ":")),
+    }
+    # Optionally script the auto-resume reaction turn pi runs when the extension
+    # wakes the agent (sendUserMessage) after the completion notify.
+    reaction = args.get("reaction")
+
+    def _emit_completion() -> None:
+        _emit(notify_event)
+        if isinstance(reaction, str) and reaction:
+            _emit_reaction_turn(reaction)
+
+    wait_path = args.get("wait_path")
+    if wait_path:
+        # Hold the completion on a daemon thread until a sentinel file appears, so a
+        # test can send a mid-flight prompt (which fake pi answers, since this turn
+        # already returned) before the children "complete". `_emit` serializes on
+        # _STDOUT_LOCK, so the out-of-band notify never interleaves a later turn.
+        timeout_seconds = float(args.get("timeout_seconds", 120))
+
+        def _emit_completion_when_ready() -> None:
+            sentinel = Path(wait_path)
+            deadline = time.monotonic() + timeout_seconds
+            while not sentinel.exists():
+                if time.monotonic() >= deadline:
+                    return  # give up; the test's completion assertion will fail loudly
+                time.sleep(0.05)
+            _emit_completion()
+
+        threading.Thread(target=_emit_completion_when_ready, name="fake-pi-subagent-completion", daemon=True).start()
+    else:
+        # No hold: emit right after the launch run's agent_end. Sculptor has already
+        # yielded the turn there, so this is still genuinely out-of-band (its
+        # idle-drain surfaces it) — but synchronous, so a one-shot headless run
+        # observes it before exiting on EOF.
+        _emit_completion()
+
+
+def _handle_background(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
+    """Script a background-task tool call and its out-of-band completion (yield-early).
+
+    Reproduces the wire shape `sculptor_background.ts` emits, without spawning a
+    real process: the `background` toolCall block + tool-execution lane whose
+    `result.details` carry the versioned launch payload (`{v, task}`, parsed by
+    `background.py`), then the launching run's `agent_end`. The launching turn ENDS
+    there — the user is unblocked and keeps chatting while the task runs (the agent
+    does not hold the turn open). Because this directive emits the run's `agent_end`
+    itself, it sets ``builder.suppress_turn_end`` so `_run_turn` does not emit a
+    second end.
+
+    The completion `notify` (the structured marker Sculptor maps to a
+    BackgroundTaskNotification) is emitted OUT-OF-BAND — after the launch turn's
+    `agent_end`, so Sculptor surfaces it via its idle-drain rather than within the
+    turn. With a `wait_path` it is held on a daemon thread until the sentinel file
+    appears (so a test can send a mid-flight prompt first); with no `wait_path` it
+    is emitted synchronously right after `agent_end`, so a one-shot headless run
+    observes it before exiting on EOF.
+
+    Args (all optional): `id` (tool-call id), `command`, `label`, `pgid`,
+    `status` ("completed"/"failed"), `exit_code`, `summary`, `duration_ms`,
+    `wait_path`, `timeout_seconds`.
+    """
+    tool_call_id = str(args.get("id") or "bgtc1")
+    task_id = f"bgt_{tool_call_id}"
+    command = str(args.get("command", "sleep 1"))
+    label = str(args.get("label", "background"))
+    pgid = int(args.get("pgid", 0))
+    arguments = {"command": command, "label": label}
+
+    # Launch: close the issuing assistant message with the toolCall block, then
+    # the tool-execution lane carrying the structured launch payload.
+    content: list[dict] = []
+    if builder.full_text:
+        content.append({"type": "text", "text": builder.full_text})
+    content.append({"type": "toolCall", "id": tool_call_id, "name": "background", "arguments": arguments})
+    _emit({"type": "message_end", "message": {"role": "assistant", "content": content, "stopReason": "toolUse"}})
+    builder.chunks.clear()
+    _emit({"type": "tool_execution_start", "toolCallId": tool_call_id, "toolName": "background", "args": arguments})
+    start_result = _tool_text_payload(f"Started background task {label} (pid {pgid}): {command}")
+    # `"v": 1` MUST match BACKGROUND_PAYLOAD_VERSION (background.py / sculptor_background.ts).
+    start_result["details"] = {
+        "v": 1,
+        "task": {
+            "taskId": task_id,
+            "toolCallId": tool_call_id,
+            "label": label,
+            "command": command,
+            "pgid": pgid,
+            "status": "running",
+        },
+    }
+    _emit(
+        {
+            "type": "tool_execution_end",
+            "toolCallId": tool_call_id,
+            "toolName": "background",
+            "result": start_result,
+            "isError": False,
+        }
+    )
+
+    # End the launching run NOW (yield-early): the user is unblocked while the task
+    # runs. Suppress _run_turn's trailing end (we emitted agent_end ourselves).
+    _emit_agent_end(builder.full_text)
+    builder.suppress_turn_end = True
+
+    status = str(args.get("status", "completed"))
+    # `"sculptorBackgroundTask"` MUST match BACKGROUND_NOTIFY_MARKER (background.py).
+    completion = {
+        "v": 1,
+        "taskId": task_id,
+        "toolCallId": tool_call_id,
+        "status": status,
+        "exitCode": int(args.get("exit_code", 0)),
+        "summary": str(args.get("summary", "background task done")),
+        "durationMs": int(args.get("duration_ms", 1000)),
+    }
+    notify_event = {
+        "type": "extension_ui_request",
+        "id": builder.next_ui_request_id(),
+        "method": "notify",
+        "notifyType": "info" if status == "completed" else "warning",
+        "message": json.dumps({"sculptorBackgroundTask": completion}, separators=(",", ":")),
+    }
+    # Optionally script the auto-resume reaction turn pi runs when the extension
+    # wakes the agent (sendUserMessage) after the completion notify.
+    reaction = args.get("reaction")
+
+    def _emit_completion() -> None:
+        _emit(notify_event)
+        if isinstance(reaction, str) and reaction:
+            _emit_reaction_turn(reaction)
+
+    wait_path = args.get("wait_path")
+    if wait_path:
+        # Hold the completion on a daemon thread until a sentinel file appears, so a
+        # test can send a mid-flight prompt (which fake pi answers, since this turn
+        # already returned) before the task "completes". `_emit` serializes on
+        # _STDOUT_LOCK, so the out-of-band notify never interleaves a later turn.
+        timeout_seconds = float(args.get("timeout_seconds", 120))
+
+        def _emit_completion_when_ready() -> None:
+            sentinel = Path(wait_path)
+            deadline = time.monotonic() + timeout_seconds
+            while not sentinel.exists():
+                if time.monotonic() >= deadline:
+                    return  # give up; the test's completion assertion will fail loudly
+                time.sleep(0.05)
+            _emit_completion()
+
+        threading.Thread(target=_emit_completion_when_ready, name="fake-pi-bg-completion", daemon=True).start()
+    else:
+        # No hold: emit right after the launch run's agent_end. Sculptor has already
+        # yielded the turn there, so this is still genuinely out-of-band (its
+        # idle-drain surfaces it) — but synchronous, so a one-shot headless run
+        # observes it before exiting on EOF.
+        _emit_completion()
 
 
 def _handle_sleep(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
@@ -580,7 +846,7 @@ def _handle_sleep(args: dict, builder: _TurnBuilder, abort_event: Event, state: 
     while time.monotonic() < deadline:
         if abort_event.is_set():
             raise _TurnAborted()
-        time.sleep(0.05)
+        time.sleep(_POLL_INTERVAL_SECONDS)
 
 
 def _handle_report_inputs(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
@@ -607,8 +873,10 @@ def _handle_wait_for_file(args: dict, builder: _TurnBuilder, abort_event: Event,
         if abort_event.is_set():
             raise _TurnAborted()
         if time.monotonic() >= deadline:
-            raise RuntimeError(f"fake_pi:wait_for_file timed out after {timeout_seconds}s waiting for {sentinel}")
-        time.sleep(0.05)
+            raise FakePiWaitTimeoutError(
+                f"fake_pi:wait_for_file timed out after {timeout_seconds}s waiting for {sentinel}"
+            )
+        time.sleep(_POLL_INTERVAL_SECONDS)
 
 
 def _handle_recall(args: dict, builder: _TurnBuilder, abort_event: Event, state: _SessionState) -> None:
@@ -689,6 +957,7 @@ _COMMAND_REGISTRY: dict[str, Callable[[dict, _TurnBuilder, Event, _SessionState]
     "stream_text": _handle_stream_text,
     "tool_call": _handle_tool_call,
     "subagent": _handle_subagent,
+    "background": _handle_background,
     "sleep": _handle_sleep,
     "wait_for_file": _handle_wait_for_file,
     "recall": _handle_recall,
@@ -720,17 +989,70 @@ def _find_error_directive(directives: Iterable[str]) -> str | None:
     return None
 
 
+def _find_turn_error_directive(directives: Iterable[str]) -> str | None:
+    """If any `fake_pi:turn_error` directive is present, return its message."""
+    for directive in directives:
+        name, args = _parse_directive(directive)
+        if name == "turn_error":
+            return str(args.get("message", "fake_pi turn error"))
+    return None
+
+
 def _emit_state(prompt_id: str | None, state: _SessionState) -> None:
     """Answer a `get_state` command with pi's `RpcSessionState` shape (RPC §5.1).
 
-    Only the fields PiAgent's resume verification reads are populated:
-    ``sessionId`` (always) and ``messageCount`` (>0 after a resumed turn);
-    ``sessionFile`` when the session is persisted.
+    Populates the fields PiAgent reads: ``sessionId`` (always) and
+    ``messageCount`` (>0 after a resumed turn) for resume verification,
+    ``sessionFile`` when persisted, and ``model`` (the current model) which
+    PiAgent surfaces as the switcher's selection.
     """
-    data: dict = {"sessionId": state.session_id, "messageCount": state.message_count}
+    data: dict = {
+        "sessionId": state.session_id,
+        "messageCount": state.message_count,
+        "model": state.current_model,
+    }
     if state.session_file is not None:
         data["sessionFile"] = str(state.session_file)
     payload: dict = {"type": "response", "command": "get_state", "success": True, "data": data}
+    if prompt_id:
+        payload["id"] = prompt_id
+    _emit(payload)
+
+
+def _emit_available_models(prompt_id: str | None) -> None:
+    """Answer a `get_available_models` command with the fixed catalog (RPC §5.1).
+
+    Returns `_FAKE_PI_MODELS` under `data.models`, the shape PiAgent maps to
+    `ModelOption`s and curates for the switcher.
+    """
+    payload: dict = {
+        "type": "response",
+        "command": "get_available_models",
+        "success": True,
+        "data": {"models": _FAKE_PI_MODELS},
+    }
+    if prompt_id:
+        payload["id"] = prompt_id
+    _emit(payload)
+
+
+def _emit_set_model(prompt_id: str | None, model: dict[str, str]) -> None:
+    """Acknowledge a `set_model` command, echoing the now-current model in `data`.
+
+    Mirrors pi returning the selected `Model`; PiAgent reads it as the new current
+    model. An unknown model id is rejected with `success:false` (pi's `Model not
+    found` shape) so the failure-toast path stays exercisable.
+    """
+    known = any(candidate["id"] == model["id"] for candidate in _FAKE_PI_MODELS)
+    if not known:
+        payload = {
+            "type": "response",
+            "command": "set_model",
+            "success": False,
+            "error": f"Model not found: {model.get('provider', '')}/{model['id']}",
+        }
+    else:
+        payload = {"type": "response", "command": "set_model", "success": True, "data": model}
     if prompt_id:
         payload["id"] = prompt_id
     _emit(payload)
@@ -770,6 +1092,16 @@ def _run_turn(
     if error_message is not None:
         _emit_response("prompt", success=False, prompt_id=prompt_id, error=error_message)
         return
+    turn_error_message = _find_turn_error_directive(directives)
+    if turn_error_message is not None:
+        # In-run failure: the prompt is accepted and the agent starts, but the
+        # turn ends in error (see _emit_error_message_end). PiAgent raises on the
+        # error message_end, so no agent_end follows.
+        _emit_response("prompt", success=True, prompt_id=prompt_id)
+        _emit({"type": "agent_start"})
+        _emit_user_message_end(prompt_text)
+        _emit_error_message_end(turn_error_message)
+        return
     builder = _TurnBuilder(prompt_id=prompt_id, prompt_text=prompt_text, images=images)
     _emit_response("prompt", success=True, prompt_id=prompt_id)
     _emit({"type": "agent_start"})
@@ -783,6 +1115,12 @@ def _run_turn(
     except _TurnAborted:
         # Record the (partial) turn for resume, like a completed one.
         _emit_aborted_agent_end(builder.full_text)
+        state.record_turn(prompt_text)
+        return
+    if builder.suppress_turn_end:
+        # The `background` directive already emitted the launching run's
+        # `agent_end` and the completion notify (the held-open shape); do not
+        # emit a second end.
         state.record_turn(prompt_text)
         return
     if not builder.has_text:
@@ -837,9 +1175,9 @@ def _run_rpc_loop(system_prompt: str, session_dir: Path | None, session_id: str)
                 # Out-of-band: route to a blocked `ui_request` directive (see
                 # _handle_ui_request); the main loop never processes these.
                 _UI_RESPONSE_QUEUE.put(payload)
-            elif event_type in ("prompt", "get_state", "new_session"):
-                # In-order: queued so get_state / new_session observe preceding
-                # turns' state (and the reset lands strictly between turns).
+            elif event_type in ("prompt", "get_state", "new_session", "get_available_models", "set_model"):
+                # In-order: queued so get_state / new_session / set_model observe
+                # preceding turns' state (and a switch lands strictly between turns).
                 command_queue.put(payload)
         # Unblock any `ui_request` still waiting when stdin closes at shutdown.
         _UI_RESPONSE_QUEUE.put({"cancelled": True})
@@ -851,7 +1189,7 @@ def _run_rpc_loop(system_prompt: str, session_dir: Path | None, session_id: str)
     exit_code = 0
     while True:
         try:
-            payload = command_queue.get(timeout=0.05)
+            payload = command_queue.get(timeout=_POLL_INTERVAL_SECONDS)
         except Empty:
             if stdin_closed.is_set() and command_queue.empty():
                 break
@@ -859,6 +1197,22 @@ def _run_rpc_loop(system_prompt: str, session_dir: Path | None, session_id: str)
         command_id = payload.get("id") if isinstance(payload.get("id"), str) else None
         if payload.get("type") == "get_state":
             _emit_state(command_id, state)
+            continue
+        if payload.get("type") == "get_available_models":
+            _emit_available_models(command_id)
+            continue
+        if payload.get("type") == "set_model":
+            # Update the current model so a following get_state reflects the switch,
+            # then ack with the now-current model (mirrors pi's set_model).
+            requested = {
+                "id": str(payload.get("modelId", "")),
+                "name": str(payload.get("modelId", "")),
+                "provider": str(payload.get("provider", "anthropic")),
+            }
+            known = next((m for m in _FAKE_PI_MODELS if m["id"] == requested["id"]), None)
+            if known is not None:
+                state.current_model = dict(known)
+            _emit_set_model(command_id, known if known is not None else requested)
             continue
         if payload.get("type") == "new_session":
             # Mirror pi's `/clear`: reset to a fresh session with empty history,

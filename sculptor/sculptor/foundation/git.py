@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Sequence
 from typing import TextIO
 
+from loguru import logger
+
 
 def is_path_in_git_repo(path: Path) -> bool:
     """Check if a path is in a git repository."""
@@ -74,28 +76,24 @@ def get_git_repo_root() -> Path:
 
 
 def get_repo_url_from_folder(repo_path: Path) -> str:
-    try:
-        repo_url = subprocess.check_output(
-            ["git", "remote", "get-url", "origin"], cwd=repo_path, universal_newlines=True
-        ).strip()
-    except (subprocess.CalledProcessError, OSError):
-        raise
-    else:
-        if repo_url.startswith("git@"):
-            # convert ssh url to https
-            repo_url = repo_url.replace(":", "/")
-            repo_url = f"https://{repo_url[4:]}"
-        if "https://oauth2:" in repo_url:
-            # remove the oauth2 prefix
-            # repo_url is something like https://oauth2:{token}@gitlab.com/.../.git
-            # change it to https://gitlab.com/.../.git
-            # This will happen if repo was originallycloned using oauth2
-            suffix = repo_url.split("@")[-1]
-            repo_url = "https://" + suffix
-        return repo_url
+    """Return the ``origin`` remote URL for ``repo_path``, normalized to an https URL."""
+    repo_url = subprocess.check_output(
+        ["git", "remote", "get-url", "origin"], cwd=repo_path, universal_newlines=True
+    ).strip()
+    if repo_url.startswith("git@"):
+        # convert ssh url to https
+        repo_url = repo_url.replace(":", "/")
+        repo_url = f"https://{repo_url[4:]}"
+    if "https://oauth2:" in repo_url:
+        # strip the oauth2 credentials left over from an oauth2 clone,
+        # e.g. https://oauth2:{token}@gitlab.com/.../.git -> https://gitlab.com/.../.git
+        suffix = repo_url.split("@")[-1]
+        repo_url = "https://" + suffix
+    return repo_url
 
 
 def get_repo_base_path() -> Path:
+    """Return the repo root containing this module, falling back to its grandparent directory."""
     working_directory = Path(__file__).parent
     try:
         return Path(
@@ -110,7 +108,7 @@ def get_repo_base_path() -> Path:
 
 def _run_command_and_capture_output(args: Sequence[str], cwd: Path | None = None) -> str:
     arg_str = " ".join(shlex.quote(arg) for arg in args)
-    print(f"Running command: {arg_str}", file=sys.stderr)
+    logger.debug("Running command: {}", arg_str)
     with subprocess.Popen(args, text=True, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as proc:
         with StringIO() as output:
             _handle_output(proc, output, sys.stderr)

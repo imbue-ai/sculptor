@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from sculptor.web.data_types import SkillInfo
+from sculptor.web.skills import SkillSourceDirectory
 from sculptor.web.skills import SkillSourceKind
 from sculptor.web.skills import _parse_skill_frontmatter
 from sculptor.web.skills import _scan_commands_directory
@@ -480,10 +481,10 @@ def test_get_skill_source_directories_lists_repo_and_home_in_order() -> None:
     home = Path("/home/dev")
     result = get_skill_source_directories(repo, home_path=home)
     assert result == [
-        (repo / ".claude" / "skills", SkillSourceKind.SKILL_DIR, None),
-        (repo / ".claude" / "commands", SkillSourceKind.COMMAND_FILES, None),
-        (home / ".claude" / "skills", SkillSourceKind.SKILL_DIR, None),
-        (home / ".claude" / "commands", SkillSourceKind.COMMAND_FILES, None),
+        SkillSourceDirectory(path=repo / ".claude" / "skills", kind=SkillSourceKind.SKILL_DIR, namespace=None),
+        SkillSourceDirectory(path=repo / ".claude" / "commands", kind=SkillSourceKind.COMMAND_FILES, namespace=None),
+        SkillSourceDirectory(path=home / ".claude" / "skills", kind=SkillSourceKind.SKILL_DIR, namespace=None),
+        SkillSourceDirectory(path=home / ".claude" / "commands", kind=SkillSourceKind.COMMAND_FILES, namespace=None),
     ]
 
 
@@ -496,7 +497,9 @@ def test_get_skill_source_directories_puts_plugins_first_with_namespace(tmp_path
 
     result = get_skill_source_directories(repo, plugin_dirs=[plugin_dir], home_path=home)
 
-    assert result[0] == (plugin_dir / "skills", SkillSourceKind.SKILL_DIR, "sculptor")
+    assert result[0] == SkillSourceDirectory(
+        path=plugin_dir / "skills", kind=SkillSourceKind.SKILL_DIR, namespace="sculptor"
+    )
     # The repo/home sources follow the plugin source.
     assert [s.path for s in result[1:]] == [
         repo / ".claude" / "skills",

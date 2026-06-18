@@ -168,7 +168,9 @@ def test_write_launch_command_waits_for_shell_output(tmp_path: Path) -> None:
 def test_write_launch_command_times_out_and_writes_anyway() -> None:
     manager = _FakeSilentManager()
 
-    write_launch_command(manager, "claude", timeout_seconds=0.05)  # pyre-ignore[6]
+    # _FakeSilentManager duck-types LocalTerminalManager for this test
+    # pyrefly: ignore [bad-argument-type]
+    write_launch_command(manager, "claude", timeout_seconds=0.05)
 
     assert manager.writes == [b"claude\n"]
     # The readiness callback must not leak.

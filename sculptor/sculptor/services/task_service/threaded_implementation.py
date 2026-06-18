@@ -44,13 +44,12 @@ class ThreadRunner(Runner):
 
     def join(self, timeout: float | None = None) -> None:
         assert self._thread is not None
-        # send the shutdown signal to the task
         self._thread.join(timeout)
 
     def exception(self) -> BaseException | None:
         if self._thread is None:
             return None
-        return self._thread._exception
+        return self._thread.exception_raw
 
     def get_name(self) -> str:
         if self._thread is None:

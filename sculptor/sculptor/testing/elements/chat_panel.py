@@ -1,3 +1,5 @@
+import re
+
 from playwright.sync_api import Locator
 from playwright.sync_api import expect
 
@@ -216,8 +218,12 @@ class PlaywrightChatPanelElement(PlaywrightFilePreviewAndUploadMixin, Playwright
         return self.get_by_test_id(ElementIDs.MODEL_SELECTOR)
 
     def get_model_options(self) -> Locator:
-        """Get all model options in the dropdown."""
-        return self._page.get_by_test_id(ElementIDs.MODEL_OPTION)
+        """All model options in the dropdown (each testid is ``MODEL_OPTION-<model id>``)."""
+        return self._page.get_by_test_id(re.compile(rf"^{re.escape(ElementIDs.MODEL_OPTION)}-"))
+
+    def get_model_option(self, model_id: str) -> Locator:
+        """The dropdown option for a specific model id (testid ``MODEL_OPTION-<model id>``)."""
+        return self._page.get_by_test_id(f"{ElementIDs.MODEL_OPTION}-{model_id}")
 
     def get_fast_mode_toggle(self) -> Locator:
         return self.get_by_test_id(ElementIDs.FAST_MODE_TOGGLE)
@@ -295,7 +301,7 @@ def wait_for_completed_message_count(
     expect(chat_panel.get_thinking_indicator()).not_to_be_visible(**kwargs)
 
 
-def send_chat_message(chat_panel, message: str) -> None:
+def send_chat_message(chat_panel: PlaywrightChatPanelElement, message: str) -> None:
     """Send a message in chat and verify input is cleared."""
     chat_input = chat_panel.get_chat_input()
     type_into_tiptap(chat_panel._page, chat_input, message)

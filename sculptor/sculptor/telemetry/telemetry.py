@@ -16,8 +16,7 @@ class TelemetryInfo(SerializableModel):
     the frontend (which owns telemetry reporting).
     """
 
-    # Putting the User Config into this object is a smell. The UserConfig can and will change idependently of this
-    # model, and that can lead to all sorts of issues. Consider refactoring this code.
+    # UserConfig can change independently of this model, which risks the two falling out of sync.
     user_config: UserConfig
     sculptor_version: str
     sculptor_execution_instance_id: str

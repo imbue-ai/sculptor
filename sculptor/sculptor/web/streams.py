@@ -1,7 +1,6 @@
 import time
 from collections import defaultdict
 from contextlib import ExitStack
-from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from queue import Empty
@@ -28,6 +27,7 @@ from sculptor.database.models import Workspace
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.event_utils import CompoundEvent
 from sculptor.foundation.event_utils import ReadOnlyEvent
+from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.foundation.pydantic_serialization import SerializableModel
 from sculptor.interfaces.environments.base import STATE_DIRECTORY
 from sculptor.primitives.ids import AgentMessageID
@@ -349,8 +349,7 @@ def _narrow_by_workspace_id(
     return {wid: v for wid, v in d.items() if wid in scoped_workspace_ids}
 
 
-@dataclass(frozen=True)
-class _ScopeProjection:
+class _ScopeProjection(FrozenModel):
     """Pre-computed projection state for a non-`all` scope.
 
     All three narrow scopes reduce to the same shape: a subset of task views
@@ -539,7 +538,7 @@ def stream_everything(
         if register_pr_observer:
             assert pr_polling_service is not None
             pr_polling_service.add_observer(updates_queue_loosely_typed)
-        if btw_service:
+        if btw_service is not None:
             btw_service.add_observer_queue(updates_queue_loosely_typed)
         add_ui_action_subscriber(updates_queue_loosely_typed.put_nowait)
         try:
@@ -645,21 +644,7 @@ def stream_everything(
                         )
                         # Suppress duplicate dependencies status pushes
                         if incremental_update.dependencies_status == last_yielded_deps_status:
-                            incremental_update = StreamingUpdate(
-                                task_views_by_task_id=incremental_update.task_views_by_task_id,
-                                task_update_by_task_id=incremental_update.task_update_by_task_id,
-                                user_update=incremental_update.user_update,
-                                workspace_branch_by_workspace_id=incremental_update.workspace_branch_by_workspace_id,
-                                workspace_remote_branches_by_workspace_id=incremental_update.workspace_remote_branches_by_workspace_id,
-                                pr_status_by_workspace_id=incremental_update.pr_status_by_workspace_id,
-                                finished_request_ids=incremental_update.finished_request_ids,
-                                dependencies_status=None,
-                                workspace_setup_status_by_workspace_id=incremental_update.workspace_setup_status_by_workspace_id,
-                                workspace_setup_output_by_workspace_id=incremental_update.workspace_setup_output_by_workspace_id,
-                                btw_update=incremental_update.btw_update,
-                                ui_open_file_by_workspace_id=incremental_update.ui_open_file_by_workspace_id,
-                                ui_webview_command_by_workspace_id=incremental_update.ui_webview_command_by_workspace_id,
-                            )
+                            incremental_update = incremental_update.model_copy(update={"dependencies_status": None})
                         else:
                             last_yielded_deps_status = incremental_update.dependencies_status
                         yield project_for_scope(incremental_update, scope, frozenset(project_workspace_ids))
@@ -676,7 +661,7 @@ def stream_everything(
                 dependency_management_service.remove_observer_queue(updates_queue_loosely_typed)
             if pr_polling_service is not None:
                 pr_polling_service.remove_observer(updates_queue_loosely_typed)
-            if btw_service:
+            if btw_service is not None:
                 btw_service.remove_observer_queue(updates_queue_loosely_typed)
             remove_ui_action_subscriber(updates_queue_loosely_typed.put_nowait)
 

@@ -27,6 +27,11 @@ export type PanelDefinition = {
   contextMenuItems?: ReadonlyArray<ContextMenuItem>;
   isBuiltin?: boolean;
   defaultEnabled?: boolean;
+  /**
+   * Set by the plugin loader when this panel was contributed by a plugin.
+   * Lets the settings UI surface a badge and group panels by origin.
+   */
+  pluginId?: string;
 };
 
 // Layout sides — groups of zones toggled together by the bottom bar buttons

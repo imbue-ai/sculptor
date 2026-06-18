@@ -6044,3 +6044,121 @@ def test_pi_ask_user_question_role_stamped_when_delivered_via_partial_first() ->
     blocks = [b for b in state.in_progress_chat_message.content if isinstance(b, ToolUseBlock)]
     assert len(blocks) == 1, "the duplicate final block must not double-render"
     assert blocks[0].interactive_role == "ask_user_question"
+
+
+def test_streamed_edit_tool_use_input_survives_mid_stream_tool_result() -> None:
+    """Regression test for SCU-512: a streamed Edit's ToolUseBlock input must not be
+    lost when its tool_result arrives mid-stream.
+
+    While ``is_streaming_active`` is True the tool_result ``ResponseBlockAgentMessage``
+    runs through the streaming branch, which replaces the Edit ``ToolUseBlock`` in
+    place with its ``ToolResultBlock`` — dropping the rich input (``old_string`` /
+    ``new_string`` / ``file_path``). The buffered final ``ResponseBlockAgentMessage``
+    re-asserts the Edit ``ToolUseBlock`` for persistence, but the
+    ``message_was_streamed`` branch used to filter every ``ToolUseBlock`` out as
+    "already streamed", so the input was never restored. The resulting ``ChatMessage``
+    held only a bare ``ToolResultBlock`` (no diff / no input args), which renders as
+    an empty/minimal pill — easily mistaken for "the Edit didn't show up at all".
+
+    Message order mirrors the real output_processor stream for an Edit:
+      1. PartialResponseBlockAgentMessage [Edit ToolUseBlock(input)]  (streaming starts)
+      2. ResponseBlockAgentMessage [Edit ToolResultBlock]  (mid-stream; overwrites tool_use)
+      3. StreamingMessageCompleteAgentMessage
+      4. ResponseBlockAgentMessage [Edit ToolUseBlock(input)]  (buffered persistence copy)
+      5. RequestSuccessAgentMessage
+    """
+    task_id = TaskID()
+    completed_by_id: dict[AgentMessageID, ChatMessage] = {}
+
+    user_message = ChatInputUserMessage(
+        text="Remove the comment.",
+        model_name=LLMModel.CLAUDE_4_SONNET,
+    )
+    edit_tool_use_id = ToolUseID("toolu_edit_scu512")
+    assistant_message_id = AssistantMessageID("assistant-edit-scu512")
+    assistant_chat_message_id = AgentMessageID()  # "ID1" — first_response_message_id
+
+    edit_input = {"file_path": "/x.py", "old_string": "a", "new_string": "b"}
+    edit_tool_block = ToolUseBlock(id=edit_tool_use_id, name="Edit", input=edit_input)
+
+    request_started = RequestStartedAgentMessage(request_id=user_message.message_id)
+
+    # 1. Streaming partial carrying the Edit tool_use with full input.
+    partial = PartialResponseBlockAgentMessage(
+        assistant_message_id=assistant_message_id,
+        message_id=AgentMessageID(),
+        first_response_message_id=assistant_chat_message_id,
+        content=(edit_tool_block,),
+    )
+
+    # 2. Tool result arrives mid-stream (is_streaming_active=True). GenericToolContent
+    #    matches the real session where the diff was not embedded in the result, so the
+    #    diff can only be reconstructed from the surviving ToolUseBlock input.
+    mid_stream_result = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=assistant_message_id,
+        message_id=AgentMessageID(),
+        content=(
+            ToolResultBlock(
+                tool_use_id=edit_tool_use_id,
+                tool_name="Edit",
+                invocation_string="/x.py",
+                content=GenericToolContent(text="The file /x.py has been updated successfully."),
+            ),
+        ),
+    )
+
+    # 3. Streaming completes.
+    streaming_complete = StreamingMessageCompleteAgentMessage(message_id=AgentMessageID())
+
+    # 4. Buffered persistence copy re-asserts the Edit tool_use under the same
+    #    first_response_message_id (this is the copy that must restore the input).
+    buffered_persistence = ResponseBlockAgentMessage(
+        role="assistant",
+        assistant_message_id=assistant_message_id,
+        message_id=assistant_chat_message_id,
+        content=(edit_tool_block,),
+    )
+
+    request_success = _make_request_success(request_id=user_message.message_id)
+
+    state = convert_agent_messages_to_task_update(
+        [
+            user_message,
+            request_started,
+            partial,
+            mid_stream_result,
+            streaming_complete,
+            buffered_persistence,
+            request_success,
+        ],
+        task_id=task_id,
+        harness=CLAUDE_CODE_HARNESS,
+        completed_message_by_id=completed_by_id,
+        current_state=None,
+    )
+
+    assistant_messages = [m for m in state.chat_messages if m.role == ChatMessageRole.ASSISTANT]
+    assert len(assistant_messages) == 1, (
+        f"Expected exactly one finalized assistant ChatMessage, got {len(assistant_messages)}."
+    )
+    completed = assistant_messages[0]
+
+    # The Edit ToolUseBlock with its original input must survive so the frontend can
+    # render the diff (old_string -> new_string). On main the content is a bare
+    # ToolResultBlock and this assertion fails.
+    tool_use_blocks = [b for b in completed.content if isinstance(b, ToolUseBlock)]
+    block_types = [type(b).__name__ for b in completed.content]
+    assert len(tool_use_blocks) == 1, (
+        f"Expected the Edit ToolUseBlock to survive, but content was {block_types}. The streamed Edit input was dropped."
+    )
+    surviving = tool_use_blocks[0]
+    assert surviving.id == edit_tool_use_id
+    assert surviving.input.get("old_string") == "a"
+    assert surviving.input.get("new_string") == "b"
+    assert surviving.input.get("file_path") == "/x.py"
+
+    # The tool_result must still be present (paired with the tool_use by tool_use_id).
+    tool_result_blocks = [b for b in completed.content if isinstance(b, ToolResultBlock)]
+    assert len(tool_result_blocks) == 1
+    assert tool_result_blocks[0].tool_use_id == str(edit_tool_use_id)

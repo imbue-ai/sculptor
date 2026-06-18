@@ -48,11 +48,7 @@ def get_potentially_breaking_changes(old_schemas: Schemas, new_schemas: Schemas)
     """
     Checks if the new schemas are potentially breaking compatibility with the old schemas.
 
-    Args:
-        old_schemas (Schemas): The old schemas.
-        new_schemas (Schemas): The new schemas.
-
-    Returns: A tuple of string messages describing the potentially breaking changes.
+    Returns a tuple of string messages describing the potentially breaking changes.
 
     Specifically:
         - If a database model has been entirely removed or added, it's considered compatible (since it would be caught by SQL schema migration).
@@ -89,13 +85,18 @@ def get_potentially_breaking_changes(old_schemas: Schemas, new_schemas: Schemas)
 
                 new_type_schema = new_field_schema[old_type_name]
 
-                # drop the description fields because they can change without breaking anything
-                if "description" in old_type_schema:
-                    del old_type_schema["description"]
-                if "description" in new_type_schema:
-                    del new_type_schema["description"]
+                # Compare without the description fields, which can change without breaking anything.
+                # Build copies rather than mutating the caller's input schemas.
+                old_type_schema_to_compare = {
+                    key: value for key, value in old_type_schema.items() if key != "description"
+                }
+                new_type_schema_to_compare = {
+                    key: value for key, value in new_type_schema.items() if key != "description"
+                }
 
-                if json.dumps(old_type_schema, sort_keys=True) != json.dumps(new_type_schema, sort_keys=True):
+                if json.dumps(old_type_schema_to_compare, sort_keys=True) != json.dumps(
+                    new_type_schema_to_compare, sort_keys=True
+                ):
                     messages.append(
                         f"Schema of type '{old_type_name}' has changed for field '{field_name}' of model '{model_name}'."
                     )

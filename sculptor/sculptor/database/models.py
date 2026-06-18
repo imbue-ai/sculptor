@@ -2,6 +2,7 @@ import datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
+from typing import Any
 
 from pydantic import Tag
 
@@ -25,6 +26,7 @@ from sculptor.primitives.ids import UserSettingsID
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.state.messages import AgentMessageSource
 from sculptor.state.messages import LLMModel
+from sculptor.state.messages import ModelOption
 
 TaskID = AgentTaskID
 
@@ -194,6 +196,13 @@ class AgentTaskStateV2(BaseTaskState):
     # Terminal agents only: the shell pid of the handler's last PTY spawn,
     # used to reap a crash-surviving shell before relaunching.
     terminal_shell_pid: int | None = None
+    # pi agents only: the curated model catalog the agent fetched from pi at
+    # start (get_available_models), surfaced by the pi harness's
+    # get_available_models so the chat switcher offers pi's real models.
+    available_models: list[ModelOption] = []
+    # pi agents only: the model pi reported as current at start (get_state.model),
+    # surfaced by the pi harness's get_selected_model_id as the switcher's value.
+    current_model: ModelOption | None = None
 
 
 class NoOpTaskStateV1(BaseTaskState):
@@ -281,7 +290,7 @@ class SavedAgentMessage(DatabaseModel):
     # it's here so that we can not bother to include partial messages in some queries.
     is_partial: bool
 
-    def model_post_init(self, __context) -> None:
+    def model_post_init(self, context: Any) -> None:
         if self.object_id != self.message.message_id:
             raise ValueError(
                 f"SavedAgentMessage object_id {self.object_id} does not match message ID {self.message.message_id}."

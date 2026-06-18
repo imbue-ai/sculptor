@@ -9,3 +9,11 @@ type ImportMetaEnv = {
 type ImportMeta = {
   readonly env: ImportMetaEnv;
 };
+
+/**
+ * Virtual module provided by the plugin-runtime-stubs Vite plugin. Exposes the
+ * host's installed version of each shared package, embedded at build time.
+ */
+declare module "virtual:sculptor/plugin-host-versions" {
+  export const hostPackageVersions: Readonly<Record<string, string>>;
+}

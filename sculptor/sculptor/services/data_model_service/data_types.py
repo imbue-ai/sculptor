@@ -17,6 +17,8 @@ from sculptor.database.models import TaskID
 from sculptor.database.models import UserSettings
 from sculptor.database.models import Workspace
 from sculptor.database.workspace_enums import DiffStatus
+from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.foundation.pydantic_serialization import MutableModel
 from sculptor.interfaces.agents.tasks import TaskState
 from sculptor.primitives.ids import OrganizationReference
@@ -25,6 +27,27 @@ from sculptor.primitives.ids import RequestID
 from sculptor.primitives.ids import TransactionID
 from sculptor.primitives.ids import UserReference
 from sculptor.primitives.ids import WorkspaceID
+
+
+class WorkspaceListingRow(FrozenModel):
+    """One denormalized cross-project workspace row from ``get_all_workspaces``.
+
+    Fixed-key structured data, so it is a typed model rather than an ad-hoc dict.
+    Field types mirror the web layer's ``RecentWorkspaceResponse`` so the same raw
+    SQL values coerce identically; the web layer maps this onto that response.
+    """
+
+    object_id: WorkspaceID
+    project_id: ProjectID
+    description: str
+    initialization_strategy: WorkspaceInitializationStrategy
+    source_branch: str | None
+    is_deleted: bool
+    is_open: bool
+    created_at: datetime.datetime
+    project_name: str
+    agent_count: int
+    last_activity_at: datetime.datetime
 
 
 class ProjectFieldUpdate(TypedDict, total=False):
@@ -189,7 +212,7 @@ class DataModelTransaction(MutableModel, ABC):
         """
 
     @abstractmethod
-    def get_all_workspaces(self) -> list[dict[str, Any]]:
+    def get_all_workspaces(self) -> list[WorkspaceListingRow]:
         """Get cross-project workspace listing with denormalized fields, ordered by recent activity."""
 
 

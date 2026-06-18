@@ -293,7 +293,7 @@ class SendMessageRequest(RequestModel):
 
 class AnswerQuestionRequest(RequestModel):
     answers: dict[str, str]
-    notes: dict[str, str] = {}
+    notes: dict[str, str] = Field(default_factory=dict)
     question_data: AskUserQuestionData
     tool_use_id: str
     model: LLMModel
@@ -302,6 +302,13 @@ class AnswerQuestionRequest(RequestModel):
 class BtwRequest(RequestModel):
     question: str
     request_id: str
+
+
+class SetModelRequest(RequestModel):
+    # The chosen ModelOption's identity. Sent only for harnesses with a backend
+    # model list (pi); the pi adapter issues pi's `set_model` RPC with these.
+    provider: str
+    model_id: str
 
 
 class WorkspaceSetupCommandRequest(RequestModel):

@@ -3,16 +3,19 @@
 from sculptor.agents.pi_agent.backchannel import ASK_USER_QUESTION_TOOL_NAME
 from sculptor.agents.pi_agent.backchannel import EXIT_PLAN_MODE_TOOL_NAME
 from sculptor.agents.pi_agent.harness import PI_HARNESS
+from sculptor.database.models import AgentTaskStateV2
 from sculptor.interfaces.agents.harness import HarnessCapabilities
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.primitives.ids import ToolUseID
+from sculptor.primitives.ids import WorkspaceID
 from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.messages import ModelOption
 
 
 def test_pi_harness_capabilities() -> None:
     # A capability is true only where Sculptor has a pi-side mechanism for it
-    # (see PiHarness.capabilities for the per-flag why). Pi now carries all but
-    # fast mode and background tasks.
+    # (see PiHarness.capabilities for the per-flag why). Pi now carries every
+    # flag but fast mode (no natural mapping to pi's models).
     assert PI_HARNESS.capabilities() == HarnessCapabilities(
         supports_chat_interface=True,
         supports_interactive_backchannel=True,
@@ -22,12 +25,13 @@ def test_pi_harness_capabilities() -> None:
         supports_fast_mode=False,
         supports_context_reset=True,
         supports_compaction=True,
-        supports_background_tasks=False,
+        supports_background_tasks=True,
         supports_session_resume=True,
         supports_tool_use_rendering=True,
         supports_file_attachments=True,
         supports_interruption=True,
         supports_file_references=True,
+        supports_model_selection=True,
     )
 
 
@@ -119,3 +123,38 @@ def test_pi_hidden_system_prompt_omits_mcp_tool_instructions() -> None:
     assert "mcp__sculptor" not in lowered, "Pi has no Sculptor MCP tools — addendum must be absent"
     assert "askuserquestion" not in lowered
     assert "exitplanmode" not in lowered
+
+
+def _task_state_with_models(
+    available_models: list[ModelOption], current_model: ModelOption | None
+) -> AgentTaskStateV2:
+    return AgentTaskStateV2(
+        workspace_id=WorkspaceID(),
+        available_models=available_models,
+        current_model=current_model,
+    )
+
+
+def test_pi_harness_get_available_models_reads_task_state() -> None:
+    # The agent persists pi's curated catalog on task state; the harness surfaces it.
+    opus = ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="Claude Opus 4.8")
+    sonnet = ModelOption(provider="anthropic", model_id="claude-sonnet-4-6", display_name="Claude Sonnet 4.6")
+    state = _task_state_with_models([opus, sonnet], current_model=opus)
+    assert PI_HARNESS.get_available_models(state) == [opus, sonnet]
+
+
+def test_pi_harness_get_available_models_empty_when_unpopulated_or_none() -> None:
+    # Empty until the agent has run, and empty when there is no task state.
+    assert PI_HARNESS.get_available_models(_task_state_with_models([], current_model=None)) == []
+    assert PI_HARNESS.get_available_models(None) == []
+
+
+def test_pi_harness_get_selected_model_id_reads_current_model() -> None:
+    opus = ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="Claude Opus 4.8")
+    state = _task_state_with_models([opus], current_model=opus)
+    assert PI_HARNESS.get_selected_model_id(state) == "claude-opus-4-8"
+
+
+def test_pi_harness_get_selected_model_id_none_when_unset_or_no_state() -> None:
+    assert PI_HARNESS.get_selected_model_id(_task_state_with_models([], current_model=None)) is None
+    assert PI_HARNESS.get_selected_model_id(None) is None

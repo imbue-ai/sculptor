@@ -1,38 +1,49 @@
-"""Parse the Sculptor sub-agent extension's structured per-child progress.
+"""Parse the Sculptor sub-agent extension's structured lifecycle payloads.
 
 pi-core has no sub-agent protocol surface, so Sculptor ships a pinned extension
 (`extensions/sculptor_subagent.ts`) that registers a `subagent` tool. The tool
-spawns each child as its own `pi` process and emits, over the parent tool's
-streaming result (`tool_execution_update.partialResult` / the final
-`tool_execution_end.result`), a STRUCTURED per-child lifecycle payload under the
-result envelope's `details`:
+spawns each child as its own `pi` process and returns IMMEDIATELY (the agent
+keeps control; the turn does not block), then reports completion out-of-band.
+Two payloads cross the wire, both parsed here:
 
-    {"v": 1, "children": [
-        {"childId", "label", "task", "status": "running"|"done"|"error",
-         "stopReason"?, "exitCode"?,
-         "events": [
-             {"seq", "kind": "tool_call",   "toolCallId", "toolName", "args"},
-             {"seq", "kind": "tool_result", "toolCallId", "text", "isError"},
-             {"seq", "kind": "text",        "text"}]}]}
+START — the tool result's `{content, details}` envelope, with the task under
+`details.task`:
 
-The structured shape lets the adapter render each child's activity as nested,
-attributed blocks — a parent `Agent` tool with the child's own tool calls and
-text grouped beneath it (`parent_tool_use_id`), matching Claude's sub-agent
-rendering.
+    {"v": 1, "task": {"taskId", "toolCallId", "label", "pgids": [int, ...],
+                      "count": int, "status": "running"}}
 
-`partialResult` is ACCUMULATED, not a delta: each update re-sends the full
-children/events snapshot, so this module re-parses the whole value idempotently
-(it never appends). Parsing is permissive — the payload crosses a subprocess
-boundary, so a malformed value or unknown version yields `None` (the call then
-renders as a plain `Agent` tool block) and a bad event is skipped.
+COMPLETION — a fire-and-forget `notify` whose `message` string is JSON carrying
+the marker key, under which the full per-child snapshot rides:
 
-Wire contract shared with `extensions/sculptor_subagent.ts`: the version and
-field names below MUST match what that extension emits. Changing one means
-editing both in the same change.
+    {"sculptorSubagentTask": {"v": 1, "taskId", "toolCallId",
+        "status": "completed"|"failed",
+        "children": [
+            {"childId", "label", "task", "status": "running"|"done"|"error",
+             "stopReason"?, "exitCode"?,
+             "events": [
+                 {"seq", "kind": "tool_call",   "toolCallId", "toolName", "args"},
+                 {"seq", "kind": "tool_result", "toolCallId", "text", "isError"},
+                 {"seq", "kind": "text",        "text"}]}]}}
+
+The adapter (`agent_wrapper`) maps START onto a started indicator (recording the
+children's `pgids` so a shutdown can SIGTERM those groups in the environment) and
+COMPLETION onto nested, attributed child blocks — a parent `Agent` tool with each
+child's own tool calls and text grouped beneath it (`parent_tool_use_id`) — plus
+a completion notification.
+
+Parsing is permissive — these payloads cross a subprocess / extension boundary,
+so a malformed value or unknown version yields `None` (the caller then treats the
+`subagent` call as an ordinary tool with no sub-agent lifecycle) and a bad event
+is skipped.
+
+Wire contract shared with `extensions/sculptor_subagent.ts`: the version, the
+marker key, and the field names below MUST match what that extension emits.
+Changing one means editing both in the same change.
 """
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from pydantic import BaseModel
@@ -51,8 +62,9 @@ from sculptor.state.claude_state import get_tool_invocation_string
 # `extensions/sculptor_subagent.ts`.
 SUBAGENT_PAYLOAD_VERSION: int = 1
 
-# Child statuses that mean the child has finished.
-_TERMINAL_STATUSES: frozenset[str] = frozenset({"done", "error"})
+# Top-level key under which the completion payload rides the `notify` message
+# string. MUST match `SUBAGENT_NOTIFY_MARKER` in `extensions/sculptor_subagent.ts`.
+SUBAGENT_NOTIFY_MARKER: str = "sculptorSubagentTask"
 
 
 class SubagentChildEvent(BaseModel):
@@ -78,20 +90,32 @@ class SubagentChild(BaseModel):
     exit_code: int | None = None
     events: list[SubagentChildEvent] = []
 
-    @property
-    def is_terminal(self) -> bool:
-        return self.status in _TERMINAL_STATUSES
+
+class SubagentStart(BaseModel):
+    """The launch snapshot from a `subagent` tool's result `details`."""
+
+    task_id: str
+    tool_call_id: str
+    label: str = "subagent"
+    # Each detached child's process-group id (pgid == pid). The adapter records
+    # them so a shutdown can SIGTERM each group in the environment without
+    # touching the pi process. May be empty if no child produced a pid.
+    pgids: tuple[int, ...] = ()
+    count: int = 0
+    status: str = "running"
 
 
-class SubagentProgress(BaseModel):
-    """The full, re-parseable per-update snapshot of all children."""
+class SubagentCompletion(BaseModel):
+    """The completion snapshot from the out-of-band `notify` marker."""
 
-    version: int
+    task_id: str
+    tool_call_id: str
+    status: str
     children: list[SubagentChild] = []
 
 
 def _coerce_int(value: Any) -> int | None:
-    return value if isinstance(value, bool) is False and isinstance(value, int) else None
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
 def _parse_event(raw: Any) -> SubagentChildEvent | None:
@@ -141,13 +165,23 @@ def _parse_child(raw: Any) -> SubagentChild | None:
     )
 
 
-def parse_subagent_progress(payload: Any) -> SubagentProgress | None:
-    """Re-parse the full accumulated sub-agent payload from a result envelope.
+def _parse_children(raw_children: Any) -> list[SubagentChild]:
+    children: list[SubagentChild] = []
+    if isinstance(raw_children, list):
+        for entry in raw_children:
+            child = _parse_child(entry)
+            if child is not None:
+                children.append(child)
+    return children
 
-    `payload` is a `tool_execution_update.partialResult` or
-    `tool_execution_end.result` — the `{content, details}` envelope. The
-    structured progress lives under `details`. Returns `None` (degrade to plain
-    rendering) when the envelope carries no recognized, version-matched payload.
+
+def parse_subagent_start(payload: Any) -> SubagentStart | None:
+    """Parse the `subagent` tool result envelope into a launch snapshot.
+
+    `payload` is a `tool_execution_end.result` — the `{content, details}`
+    envelope. The structured task lives under `details.task`. Returns `None`
+    (the call then renders as an ordinary tool with no sub-agent lifecycle)
+    when the envelope carries no recognized, version-matched task.
     """
     if not isinstance(payload, dict):
         return None
@@ -156,14 +190,67 @@ def parse_subagent_progress(payload: Any) -> SubagentProgress | None:
         return None
     if details.get("v") != SUBAGENT_PAYLOAD_VERSION:
         return None
-    raw_children = details.get("children")
-    children: list[SubagentChild] = []
-    if isinstance(raw_children, list):
-        for entry in raw_children:
-            child = _parse_child(entry)
-            if child is not None:
-                children.append(child)
-    return SubagentProgress(version=SUBAGENT_PAYLOAD_VERSION, children=children)
+    task = details.get("task")
+    if not isinstance(task, dict):
+        return None
+    task_id = task.get("taskId")
+    tool_call_id = task.get("toolCallId")
+    if not isinstance(task_id, str) or not task_id:
+        return None
+    if not isinstance(tool_call_id, str) or not tool_call_id:
+        return None
+    raw_pgids = task.get("pgids")
+    pgids: tuple[int, ...] = ()
+    if isinstance(raw_pgids, list):
+        pgids = tuple(p for p in (_coerce_int(entry) for entry in raw_pgids) if p is not None and p > 0)
+    count = _coerce_int(task.get("count"))
+    return SubagentStart(
+        task_id=task_id,
+        tool_call_id=tool_call_id,
+        label=task.get("label") if isinstance(task.get("label"), str) and task.get("label") else "subagent",
+        pgids=pgids,
+        count=count if count is not None else 0,
+        status=task.get("status") if isinstance(task.get("status"), str) else "running",
+    )
+
+
+def parse_subagent_completion(message: Any) -> SubagentCompletion | None:
+    """Parse a `notify` message string into a completion snapshot.
+
+    `message` is the `extension_ui_request.message` of a fire-and-forget
+    `notify`. It is JSON carrying `{SUBAGENT_NOTIFY_MARKER: {...}}`, under which
+    the full per-child snapshot rides. Returns `None` for any notify that is not
+    our sub-agent marker (a foreign/ordinary notify, or the background marker),
+    so the caller can ignore it.
+    """
+    if not isinstance(message, str) or not message:
+        return None
+    try:
+        decoded = json.loads(message)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(decoded, dict):
+        return None
+    payload = decoded.get(SUBAGENT_NOTIFY_MARKER)
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("v") != SUBAGENT_PAYLOAD_VERSION:
+        return None
+    task_id = payload.get("taskId")
+    tool_call_id = payload.get("toolCallId")
+    status = payload.get("status")
+    if not isinstance(task_id, str) or not task_id:
+        return None
+    if not isinstance(tool_call_id, str) or not tool_call_id:
+        return None
+    if not isinstance(status, str) or not status:
+        return None
+    return SubagentCompletion(
+        task_id=task_id,
+        tool_call_id=tool_call_id,
+        status=status,
+        children=_parse_children(payload.get("children")),
+    )
 
 
 def build_child_content_blocks(child: SubagentChild, parent_tool_call_id: str) -> tuple[ContentBlockTypes, ...]:

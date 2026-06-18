@@ -1,6 +1,7 @@
 // Electron renderer Vite build. Shares its plugin pipeline with the web build
 // via vite.base.config.ts; only the renderer-specific knobs live here:
-// base "./" (relative paths so it loads via file://), outDir .vite/build/renderer
+// base "/" (absolute paths; the packaged renderer is served from the
+// sculptor://app origin, not file://), outDir .vite/build/renderer
 // (electron-forge owns that path), and API_URL_BASE undefined so the renderer
 // falls back to the port the preload injects (window.sculptor.backendPort).
 import path from "node:path";
@@ -41,8 +42,15 @@ export default defineConfig(({ command, mode }): UserConfig => {
       },
     },
     clearScreen: false,
-    // Makes asset paths relative so it works even if you load via file:// later
-    base: "./",
+    // Use an absolute asset base so the built index.html references
+    // `/assets/...`. The packaged renderer is served from the real
+    // `sculptor://app` origin (and the Vite dev server in development), not
+    // `file://`, so absolute paths resolve against the origin root regardless
+    // of the document's path — the app-scheme handler serves `/assets/...`
+    // directly. A relative base (`./`) instead resolves assets against the
+    // document directory, which breaks if the document path ever gains a
+    // trailing segment (e.g. `index.html/`).
+    base: "/",
     plugins: sharedPlugins(root),
     envPrefix: "SCULPTOR_",
     resolve: sharedResolve(root),

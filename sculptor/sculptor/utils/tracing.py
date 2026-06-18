@@ -38,6 +38,7 @@ from threading import Lock
 from typing import Any
 from typing import IO
 from typing import Iterable
+from typing import Sequence
 
 # Synthetic PIDs for non-backend sources. Chosen well above the typical OS
 # pid range so they cannot collide with the real backend pid or its children.
@@ -114,7 +115,7 @@ def start_tracing(output_path: Path) -> None:
     _tracer.start()
 
 
-def add_external_events(events: list[dict[str, Any]], source_pid: int) -> None:
+def add_external_events(events: Sequence[dict[str, Any]], source_pid: int) -> None:
     """Buffer Chrome-JSON events from a non-backend source. Tags each event
     with the supplied synthetic ``pid``. Drops events missing required Chrome
     JSON fields and applies a hard cap on the buffer size (oldest first) so a
@@ -211,7 +212,7 @@ def _stream_events_batched(events: Iterable[dict[str, Any]], f: IO[str]) -> None
         _flush_event_batch(batch, f, is_first_batch)
 
 
-def _flush_event_batch(batch: list[dict[str, Any]], f: IO[str], is_first_batch: bool) -> None:
+def _flush_event_batch(batch: Sequence[dict[str, Any]], f: IO[str], is_first_batch: bool) -> None:
     # ``json.dumps`` on a list produces ``[e1,e2,...]``; stripping the outer
     # brackets gives a JSON-array-element fragment we can splice between
     # ``[`` and ``]`` written by the caller. ``separators=(',', ':')`` matches

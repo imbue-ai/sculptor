@@ -1,4 +1,3 @@
-import subprocess
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -70,5 +69,4 @@ def generate_test_project_repo(
         repo = MockRepoState.build_locally(
             state=initial_state, local_dir=repo_dir, concurrency_group=concurrency_group
         )
-        subprocess.run(["git", "remote", "add", "origin", str(repo_dir)])
         yield repo

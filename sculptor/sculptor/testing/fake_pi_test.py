@@ -279,6 +279,31 @@ def test_fake_pi_rpc_error_directive_emits_failure_response_and_no_session_event
     assert _by_type(events, "agent_end") == []
 
 
+def test_fake_pi_rpc_turn_error_directive_emits_in_run_error_message_end() -> None:
+    prompt = 'fake_pi:turn_error `{"message": "401 Authentication Fails"}`'
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=_send_prompt(prompt),
+    )
+
+    assert result.returncode == 0
+    events = _parse_jsonl(result.stdout)
+    # The prompt is accepted (success:true) and the agent starts — unlike the
+    # preflight `error` path.
+    response = RpcResponse.model_validate(events[0])
+    assert response.command == "prompt"
+    assert response.success is True
+    assert _by_type(events, "agent_start") != []
+    # The turn ends in an assistant message_end carrying the reason on
+    # errorMessage with an empty body and stopReason "error".
+    assistant_ends = [e for e in _by_type(events, "message_end") if e["message"]["role"] == "assistant"]
+    assert len(assistant_ends) == 1
+    error_end = assistant_ends[0]
+    assert error_end["message"]["stopReason"] == "error"
+    assert error_end["message"]["content"] == []
+    assert error_end["message"]["errorMessage"] == "401 Authentication Fails"
+
+
 def test_fake_pi_rpc_default_response_when_no_directives_present() -> None:
     result = _run_fake_pi(
         ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
@@ -583,6 +608,78 @@ def test_fake_pi_get_state_reports_session_id_and_message_count(tmp_path: Path) 
     assert resumed_state["data"]["messageCount"] == 2
 
 
+def _get_state_command(command_id: str = "gs") -> str:
+    return json.dumps({"type": "get_state", "id": command_id}) + "\n"
+
+
+def test_fake_pi_get_available_models_returns_fixed_catalog() -> None:
+    """get_available_models answers with the FakePi catalog in pi's Model shape.
+
+    PiAgent reads `data.models` ({id, name, provider}) to populate the switcher.
+    """
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=json.dumps({"type": "get_available_models", "id": "gm"}) + "\n",
+    )
+    assert result.returncode == 0
+    response = next(e for e in _parse_jsonl(result.stdout) if e.get("command") == "get_available_models")
+    assert response["success"] is True
+    assert response["id"] == "gm"
+    models = response["data"]["models"]
+    assert [m["id"] for m in models] == ["fake-pi-opus-4-8", "fake-pi-sonnet-4-6", "fake-pi-haiku-4-5"]
+    # Each carries pi's Model fields the adapter maps to a ModelOption.
+    assert all({"id", "name", "provider"} <= set(m) for m in models)
+
+
+def test_fake_pi_get_state_reports_default_current_model() -> None:
+    """get_state carries the current model (the first catalog entry by default).
+
+    PiAgent surfaces this as the switcher's selected model.
+    """
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=_get_state_command(),
+    )
+    assert result.returncode == 0
+    state = next(e for e in _parse_jsonl(result.stdout) if e.get("command") == "get_state")
+    assert state["data"]["model"]["id"] == "fake-pi-opus-4-8"
+
+
+def test_fake_pi_set_model_acks_with_chosen_model_and_updates_current() -> None:
+    """set_model echoes the chosen model, and a following get_state reports it as current."""
+    set_model = json.dumps({"type": "set_model", "id": "sm", "provider": "anthropic", "modelId": "fake-pi-haiku-4-5"})
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=set_model + "\n" + _get_state_command("gs2"),
+    )
+    assert result.returncode == 0
+    events = _parse_jsonl(result.stdout)
+    ack = next(e for e in events if e.get("command") == "set_model")
+    assert ack["success"] is True
+    assert ack["id"] == "sm"
+    assert ack["data"]["id"] == "fake-pi-haiku-4-5"
+    # The switch persists: the later get_state now reports the chosen model.
+    state = next(e for e in events if e.get("command") == "get_state")
+    assert state["data"]["model"]["id"] == "fake-pi-haiku-4-5"
+
+
+def test_fake_pi_set_model_rejects_unknown_model() -> None:
+    """An unknown model id is rejected (pi's `Model not found` shape) and current is unchanged."""
+    set_model = json.dumps({"type": "set_model", "id": "sm", "provider": "anthropic", "modelId": "fake-pi-nope"})
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=set_model + "\n" + _get_state_command("gs2"),
+    )
+    assert result.returncode == 0
+    events = _parse_jsonl(result.stdout)
+    ack = next(e for e in events if e.get("command") == "set_model")
+    assert ack["success"] is False
+    assert "Model not found" in ack["error"]
+    # The current model is left on the default after a rejected switch.
+    state = next(e for e in events if e.get("command") == "get_state")
+    assert state["data"]["model"]["id"] == "fake-pi-opus-4-8"
+
+
 def test_fake_pi_rpc_rejects_non_rpc_mode_with_exit_2() -> None:
     result = _run_fake_pi(["--mode", "something-else"])
 
@@ -648,3 +745,42 @@ def test_fake_pi_command_grammar_matches_fake_claude_shape(directive: str, expec
     events = _parse_jsonl(result.stdout)
     update = _first_update(events)
     assert update.assistant_message_event.get("delta") == expected_first_delta
+
+
+def test_fake_pi_background_directive_emits_started_payload_agent_end_then_completion_notify() -> None:
+    """The `background` directive reproduces the yield-early wire shape:
+
+    a `background` tool launch (tool_execution_end carrying the versioned
+    `{task}` payload), the launching run's `agent_end` (the turn ends there), then a
+    fire-and-forget completion `notify` carrying the structured marker — and NO
+    second agent_end. With no `wait_path` the notify is emitted inline right after
+    agent_end (out-of-band from Sculptor's view, since it has yielded the turn).
+    """
+    result = _run_fake_pi(
+        ["--mode", "rpc", "--no-session", "--append-system-prompt", ""],
+        stdin_input=_send_prompt(
+            'fake_pi:background `{"id": "bgX", "command": "sleep 1", "label": "build", "summary": "all done"}`'
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+    events = _parse_jsonl(result.stdout)
+
+    tool_ends = _by_type(events, "tool_execution_end")
+    assert len(tool_ends) == 1
+    task = tool_ends[0]["result"]["details"]["task"]
+    assert tool_ends[0]["toolName"] == "background"
+    assert task["taskId"] == "bgt_bgX"
+    assert task["toolCallId"] == "bgX"
+    assert task["status"] == "running"
+
+    # Exactly one agent_end — the launching run's. The directive must NOT let
+    # _run_turn emit a second one (the held-open shape ends on the notify).
+    assert len(_by_type(events, "agent_end")) == 1
+
+    notifies = [e for e in _by_type(events, "extension_ui_request") if e.get("method") == "notify"]
+    assert len(notifies) == 1
+    completion = json.loads(notifies[0]["message"])["sculptorBackgroundTask"]
+    assert completion["taskId"] == "bgt_bgX"
+    assert completion["status"] == "completed"
+    assert completion["summary"] == "all done"

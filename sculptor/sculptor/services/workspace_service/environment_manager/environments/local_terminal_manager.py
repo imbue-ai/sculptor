@@ -5,7 +5,6 @@ Unlike ttyd-based approaches, this keeps the pty alive across WebSocket disconne
 providing VS Code-like terminal persistence.
 """
 
-import dataclasses
 import errno
 import fcntl
 import hashlib
@@ -19,8 +18,10 @@ from pathlib import Path
 from typing import Callable
 
 from loguru import logger
+from pydantic import Field
 
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
+from sculptor.foundation.pydantic_serialization import FrozenModel
 from sculptor.foundation.thread_utils import ObservableThread
 from sculptor.interfaces.terminal_manager import TerminalManager
 from sculptor.services.workspace_service.environment_manager.env_file_parser import load_project_env_vars
@@ -33,9 +34,23 @@ PTY_READ_BUFFER_SIZE = 32768
 # Maximum output buffer size (for replay on reconnect) - ~1MB
 MAX_OUTPUT_BUFFER_SIZE = 1024 * 1024
 
+# Length of the hex-truncated sha256 used as a URL-safe terminal ID.
+_TERMINAL_ID_HASH_LENGTH = 16
 
-@dataclasses.dataclass(frozen=True)
-class TerminalEnvironmentConfig:
+# How long the pty reader blocks in poll(2) before re-checking the stop flag.
+_PTY_POLL_TIMEOUT_MS = 100
+
+# How long to wait for each manager's stop() when shutting down concurrently.
+_MANAGER_STOP_JOIN_TIMEOUT_SECONDS = 5.0
+
+# How long stop() waits for the reader thread to exit before closing the pty.
+_READER_THREAD_JOIN_TIMEOUT_SECONDS = 2.0
+
+# Grace period before the pty child is force-killed during teardown.
+_PTY_FORCE_KILL_SECONDS = 1.0
+
+
+class TerminalEnvironmentConfig(FrozenModel):
     """Environment-level configuration needed to create terminals.
 
     Stored separately from terminal managers so that new terminals can be created
@@ -50,7 +65,7 @@ class TerminalEnvironmentConfig:
     workspace_path: Path
     working_directory: Path
     concurrency_group: ConcurrencyGroup
-    extra_env: dict[str, str] = dataclasses.field(default_factory=dict)
+    extra_env: dict[str, str] = Field(default_factory=dict)
     env_var_override: bool = False
     sculptor_folder: Path | None = None
 
@@ -65,7 +80,7 @@ _registry_lock = threading.Lock()
 def make_terminal_id(environment_id: str, terminal_index: int) -> str:
     """Create a URL-safe terminal ID from an environment ID and terminal index."""
     key = f"{environment_id}:{terminal_index}"
-    return hashlib.sha256(key.encode()).hexdigest()[:16]
+    return hashlib.sha256(key.encode()).hexdigest()[:_TERMINAL_ID_HASH_LENGTH]
 
 
 def get_terminal_manager(terminal_id: str) -> "LocalTerminalManager | None":
@@ -150,7 +165,7 @@ def _stop_managers_concurrently(managers: list["LocalTerminalManager"]) -> None:
     for t in threads:
         t.start()
     for t in threads:
-        t.join(timeout=5.0)
+        t.join(timeout=_MANAGER_STOP_JOIN_TIMEOUT_SECONDS)
 
 
 def stop_terminals_for_environment(environment_id: str) -> None:
@@ -332,7 +347,7 @@ class LocalTerminalManager(TerminalManager):
             is_checked=False,
         )
 
-        logger.info(
+        logger.debug(
             "Terminal started for environment {} (terminal_id={})",
             self._environment_id,
             self._terminal_id,
@@ -385,7 +400,7 @@ class LocalTerminalManager(TerminalManager):
                 # the 100ms timeout bounds how long we wait before re-checking
                 # the stop flag. Any returned event funnels into os.read, whose
                 # EOF/EIO handling below covers shell exit.
-                if not poller.poll(100):
+                if not poller.poll(_PTY_POLL_TIMEOUT_MS):
                     continue
 
                 data = os.read(primary_fd, PTY_READ_BUFFER_SIZE)
@@ -525,7 +540,7 @@ class LocalTerminalManager(TerminalManager):
         if pty_process is None:
             return
         pty_process.close_primary_fd()
-        pty_process.terminate(force_kill_seconds=1.0)
+        pty_process.terminate(force_kill_seconds=_PTY_FORCE_KILL_SECONDS)
         self._pty_process = None
 
     def stop(self) -> None:
@@ -538,7 +553,7 @@ class LocalTerminalManager(TerminalManager):
         # polling a primary fd we are about to close.
         self._stop_reader.set()
         if self._reader_thread is not None:
-            self._reader_thread.join(timeout=2.0)
+            self._reader_thread.join(timeout=_READER_THREAD_JOIN_TIMEOUT_SECONDS)
             self._reader_thread = None
 
         self._close_pty_process()

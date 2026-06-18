@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 from typing import AsyncGenerator
 from typing import Generator
-from unittest.mock import ANY
 from unittest.mock import Mock
 
 import pygit2
@@ -18,7 +17,7 @@ from pytest_mock import MockerFixture
 def mock_loguru_log(mocker: MockerFixture) -> Generator[Mock, None, None]:
     """Mock out the loguru logger for testing.
 
-    Error works, not sure about the other levels. Check them out as you use them.
+    The returned mock exposes a get_errors() helper for retrieving error-level log lines.
     """
     mock = mocker.patch("loguru.logger._log")
     mock.get_errors = lambda: get_loglines_at_level(mock, "error")
@@ -66,5 +65,5 @@ async def initial_commit_repo(empty_temp_git_repo: Path) -> AsyncGenerator[tuple
     yield repo_path, first_commit_hash
 
 
-def get_loglines_at_level(mock_loguru_log: Mock, level: str = ANY) -> list[Any]:
+def get_loglines_at_level(mock_loguru_log: Mock, level: str) -> list[Any]:
     return [call for call in mock_loguru_log.mock_calls if len(call.args) > 1 and str(call.args[0]).lower() == level]

@@ -4,8 +4,8 @@ from playwright.sync_api import Locator
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
-from sculptor.testing.constants import BUILD_TIMEOUT_SECS
-from sculptor.testing.constants import RUNNING_TIMEOUT_SECS
+from sculptor.testing.constants import BUILD_TIMEOUT_SECONDS
+from sculptor.testing.constants import RUNNING_TIMEOUT_SECONDS
 from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
 from sculptor.web.derived import TaskStatus
 
@@ -17,16 +17,16 @@ class PlaywrightTaskListElement(PlaywrightIntegrationTestElement):
 
 def wait_for_tasks_to_build(
     task_list: PlaywrightTaskListElement,
-    expected_num_tasks: int | None = None,
+    expected_task_count: int | None = None,
     is_unexpected_error_caused_by_test: bool = False,
 ) -> None:
     """Wait until all tasks are not 'Building', fail if any become 'Error'."""
     tasks = task_list.get_tasks()
-    if expected_num_tasks is not None:
-        expect(tasks).to_have_count(expected_num_tasks)
+    if expected_task_count is not None:
+        expect(tasks).to_have_count(expected_task_count)
 
     for task in tasks.all():
-        expect(task).not_to_have_attribute("data-status", TaskStatus.BUILDING, timeout=BUILD_TIMEOUT_SECS * 1000)
+        expect(task).not_to_have_attribute("data-status", TaskStatus.BUILDING, timeout=BUILD_TIMEOUT_SECONDS * 1000)
         if not is_unexpected_error_caused_by_test:
             expect(task).not_to_have_attribute("data-status", TaskStatus.ERROR)
 
@@ -43,7 +43,7 @@ def wait_for_tasks_to_finish(
         expect(task).to_have_attribute(
             "data-status",
             re.compile("|".join([TaskStatus.READY, TaskStatus.WAITING, TaskStatus.ERROR, TaskStatus.REQUEST_ERROR])),
-            timeout=RUNNING_TIMEOUT_SECS * 1000,
+            timeout=RUNNING_TIMEOUT_SECONDS * 1000,
         )
         if not is_unexpected_error_caused_by_test:
             expect(task).not_to_have_attribute("data-status", TaskStatus.ERROR)

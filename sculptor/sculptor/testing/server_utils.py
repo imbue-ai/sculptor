@@ -5,10 +5,10 @@ import selectors
 import signal
 import subprocess
 import time
+from collections.abc import Generator
+from collections.abc import Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator
-from typing import Sequence
 
 import attr
 import pytest
@@ -27,6 +27,15 @@ LOCAL_HOST_URL = "http://127.0.0.1"
 READY_MESSAGE_V1 = "Server is ready to accept requests!"
 
 _ANTHROPIC_API_KEY_FILE = Path.home() / ".anthropic_api_key"
+
+# How long to wait for the server to exit gracefully after SIGTERM before escalating to SIGKILL.
+_SERVER_TERMINATION_TIMEOUT_SECONDS = 60
+# How long to wait for the server to exit gracefully during startup-failure cleanup before SIGKILL.
+_STARTUP_KILL_TERMINATION_TIMEOUT_SECONDS = 5
+# Short grace period to reap the process after sending SIGKILL.
+_SERVER_KILL_GRACE_SECONDS = 2
+# Size of each os.read() chunk when draining the server's stdout pipe.
+_STDOUT_READ_CHUNK_BYTES = 4096
 
 
 def get_anthropic_api_key() -> str | None:
@@ -48,7 +57,7 @@ def get_anthropic_api_key() -> str | None:
 class SculptorServer:
     """A sculptor server holds a sculptor process for testing."""
 
-    process: subprocess.Popen
+    process: subprocess.Popen[str]
     port: int
     is_unexpected_error_caused_by_test: bool = False
 
@@ -106,7 +115,7 @@ class SculptorFactory:
         command = get_sculptor_command_backend_only(project_path, port=self.port)
 
         env = {k: str(v) for k, v in {**os.environ, **environment}.items() if v is not None}
-        server = _start_server_process_and_validate_readiness(command, env)
+        server = start_server_process_and_validate_readiness(command, env)
         forwarder = Forwarder(server)
         forwarder.start()
         specimen_server = SculptorServer(process=server, port=self.port)
@@ -140,24 +149,22 @@ class SculptorFactory:
         if server.stdout:
             try:
                 server.stdout.close()
-            except Exception:
+            except OSError:
                 pass
         try:
-            server.wait(timeout=60)
+            server.wait(timeout=_SERVER_TERMINATION_TIMEOUT_SECONDS)
         except subprocess.TimeoutExpired:
             logger.warning("Sculptor server did not terminate gracefully, killing process group.")
             try:
                 os.killpg(os.getpgid(server.pid), signal.SIGKILL)
             except ProcessLookupError:
                 pass
-            server.wait(2)
+            server.wait(_SERVER_KILL_GRACE_SECONDS)
 
         # If there was an error in the logs *during the test*, that is sufficient for us to mark this task as failed
         # (even if the test didn't realize it failed). Teardown-induced errors are excluded via the snapshot above.
-        if specimen_server.is_unexpected_error_caused_by_test:
-            pass
-        elif failure_line_during_test is not None:
-            raise Exception(f"Sculptor server encountered emitted a line with ERROR: {failure_line_during_test}")
+        if not specimen_server.is_unexpected_error_caused_by_test and failure_line_during_test is not None:
+            raise RuntimeError(f"Sculptor server emitted a line with ERROR: {failure_line_during_test}")
 
 
 def get_v1_frontend_path() -> Path:
@@ -176,7 +183,7 @@ def get_testing_environment(
 
     environment["STATIC_FILES_PATH"] = str(static_files_path.absolute())
 
-    environment[SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG] = sculptor_folder
+    environment[SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG] = str(sculptor_folder)
     environment["DATABASE_URL"] = database_url
     environment["TESTING__INTEGRATION_ENABLED"] = "true"
     environment["SENTRY_DSN"] = None
@@ -184,13 +191,9 @@ def get_testing_environment(
     # running tests from a terminal spawned by Sculptor). If inherited, the backend would
     # require session token authentication, but the Electron frontend generates its own token.
     environment["SESSION_TOKEN"] = None
-    # Unset CLAUDECODE to prevent inheriting it from the parent environment (e.g., when
-    # running tests from within a Claude Code session). If inherited, Claude CLI refuses to
-    # start with "Claude Code cannot be launched inside another Claude Code session."
-    environment["CLAUDECODE"] = None
-
-    # Unset CLAUDECODE and CLAUDE_CODE_ENTRYPOINT to prevent the nested claude CLI from
-    # detecting it's inside an existing Claude Code session and refusing to start.
+    # Unset CLAUDECODE and CLAUDE_CODE_ENTRYPOINT to prevent the nested claude CLI from detecting
+    # it's inside an existing Claude Code session (e.g., when running tests from within one) and
+    # refusing to start with "Claude Code cannot be launched inside another Claude Code session."
     environment["CLAUDECODE"] = None
     environment["CLAUDE_CODE_ENTRYPOINT"] = None
 
@@ -226,7 +229,7 @@ def get_sculptor_command_backend_only(
 _SERVER_STARTUP_TIMEOUT_SECONDS = 120
 
 
-def _start_server_process_and_validate_readiness(command: Sequence[str], env: dict[str, str]) -> subprocess.Popen[str]:
+def start_server_process_and_validate_readiness(command: Sequence[str], env: dict[str, str]) -> subprocess.Popen[str]:
     # Use start_new_session=True so we can terminate the entire process group during cleanup.
     server = subprocess.Popen(
         command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env, start_new_session=True
@@ -262,7 +265,7 @@ def _start_server_process_and_validate_readiness(command: Sequence[str], env: di
             if not events:
                 break  # timeout
 
-            raw_bytes = os.read(stdout_fd, 4096)
+            raw_bytes = os.read(stdout_fd, _STDOUT_READ_CHUNK_BYTES)
             if not raw_bytes:
                 break  # EOF — process exited
 
@@ -295,12 +298,12 @@ def _start_server_process_and_validate_readiness(command: Sequence[str], env: di
     except ProcessLookupError:
         pass
     try:
-        server.wait(timeout=5)
+        server.wait(timeout=_STARTUP_KILL_TERMINATION_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
         try:
             os.killpg(os.getpgid(server.pid), signal.SIGKILL)
         except ProcessLookupError:
             pass
-        server.wait(2)
+        server.wait(_SERVER_KILL_GRACE_SECONDS)
 
     raise RuntimeError(error_msg)

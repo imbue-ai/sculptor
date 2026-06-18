@@ -203,7 +203,7 @@ export const ReposSection = ({ setToast }: { setToast: (toast: ToastContent | nu
             data-testid={ElementIds.SETTINGS_ADD_REPO_BUTTON}
           >
             <PlusIcon size={14} />
-            Add repository
+            Add new repository
           </Button>
         </Box>
       </SettingsSectionLayout>

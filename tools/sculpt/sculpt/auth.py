@@ -19,7 +19,7 @@ def get_default_base_url() -> str:
     return f"http://localhost:{port}"
 
 
-MODEL_MAPPING = {
+MODEL_MAPPING: dict[str, LLMModel] = {
     "haiku": LLMModel.CLAUDE_4_HAIKU,
     "sonnet": LLMModel.CLAUDE_4_SONNET_200K,
     "sonnet[1m]": LLMModel.CLAUDE_4_SONNET,

@@ -109,7 +109,7 @@ class AgentExecutionEnvironment(Protocol):
         In clone mode this is the cloned repository (e.g. {workspace_root}/code/).
         In in-place mode this is the user's original repository path.
 
-        This may differ from get_workspace_path() which returns the
+        This may differ from get_root_path() which returns the
         environment's root directory.
         """
         ...

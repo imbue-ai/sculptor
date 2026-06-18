@@ -4,6 +4,8 @@ import itertools
 import json
 import re
 from collections.abc import Callable
+from collections.abc import Mapping
+from collections.abc import Sequence
 from typing import TypeVar
 
 import playwright
@@ -75,9 +77,12 @@ def navigate_to_home_page(page: Page) -> None:
         expect(workspace_rows.first.or_(empty_state)).to_be_visible(timeout=10000)
         return
 
-    # Home button not visible — navigate via URL.
+    # Home button not visible — navigate via URL. Append the hash directly to
+    # the base (no extra "/"): an injected slash would turn a document path
+    # like ".../index.html" into ".../index.html/", breaking relative-to-
+    # document asset resolution under the sculptor://app origin.
     base_url = page.url.split("#")[0].rstrip("/")
-    page.goto(f"{base_url}/#/home")
+    page.goto(f"{base_url}#/home")
     workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
     empty_state = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_EMPTY_STATE)
     expect(workspace_rows.first.or_(empty_state)).to_be_visible(timeout=10000)
@@ -162,7 +167,7 @@ def delete_all_workspaces_via_ui(page: Page) -> None:
     confirm_dialog = page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_DIALOG)
 
     # Phase 1: Delete all open workspace tabs.
-    for i in range(_MAX_WORKSPACE_DELETE_ITERATIONS):
+    for _ in range(_MAX_WORKSPACE_DELETE_ITERATIONS):
         if workspace_tabs.count() == 0:
             break
         workspace_tabs.first.click(button="right")
@@ -212,7 +217,7 @@ def delete_all_workspaces_via_ui(page: Page) -> None:
     # navigate_to_home_page already waits for workspace rows or empty state.
     workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
 
-    for i in range(_MAX_WORKSPACE_DELETE_ITERATIONS):
+    for _ in range(_MAX_WORKSPACE_DELETE_ITERATIONS):
         if workspace_rows.count() == 0:
             break
         delete_button = workspace_rows.first.get_by_test_id(ElementIDs.WORKSPACE_ROW_CONTEXT_MENU_DELETE)
@@ -462,9 +467,17 @@ def request_with_retry(
 
 
 def navigate_to_settings_page(page: Page, **_kwargs: object) -> PlaywrightSettingsPage:
-    """Navigate to the settings page via direct URL."""
-    base_url = page.url.split("#")[0].rstrip("/")
-    page.goto(f"{base_url}/#/settings")
+    """Navigate to the settings page by setting the SPA hash route.
+
+    Mirrors how a user reaches settings: a hash-only navigation within the
+    already-loaded SPA, with no document reload. Assigning
+    ``window.location.hash`` fires a ``hashchange`` event the hash router
+    handles, so this avoids re-fetching ``index.html`` (and its assets)
+    altogether — important under the ``sculptor://app`` origin, where the
+    built renderer references assets via absolute paths and a fresh document
+    navigation is unnecessary just to change routes.
+    """
+    page.evaluate("window.location.hash = '/settings'")
     return PlaywrightSettingsPage(page=page)
 
 
@@ -503,7 +516,7 @@ def upload_file_via_api(page: Page, *, name: str, mime_type: str, content: bytes
 
 
 def send_message_via_api(
-    page: Page, *, message: str, files: list[str], model: LLMModel = LLMModel.CLAUDE_4_OPUS_200K
+    page: Page, *, message: str, files: Sequence[str], model: LLMModel = LLMModel.CLAUDE_4_OPUS_200K
 ) -> None:
     """Send a chat message (with attached upload ids) to the active agent via the API.
 
@@ -559,13 +572,18 @@ def navigate_away_and_back(page: Page) -> None:
     page.goto(current_url)
 
 
-def full_spa_reload(page: Page, target_hash: str = "/#/") -> None:
+def full_spa_reload(page: Page, target_hash: str = "#/") -> None:
     """Force a full SPA unload/reload by navigating through ``about:blank``.
 
     Hash-only navigation (e.g. from ``/#/ws/1`` to ``/#/``) does not unload
     the SPA, so cached Jotai atoms and in-memory state persist.  Going through
     ``about:blank`` first forces the browser to fully tear down and re-create
     the page, clearing all in-memory state.
+
+    ``target_hash`` is appended directly to the base URL, so it must start with
+    ``#`` (not ``/#``): an injected slash would turn a document path like
+    ``.../index.html`` into ``.../index.html/`` and break relative-to-document
+    asset resolution under the sculptor://app origin.
     """
     base_url = page.url.split("#")[0].rstrip("/")
     page.goto("about:blank")
@@ -576,7 +594,7 @@ def full_spa_reload(page: Page, target_hash: str = "/#/") -> None:
     page.wait_for_load_state("domcontentloaded")
 
 
-def set_local_storage_items(page: Page, items: dict[str, str]) -> None:
+def set_local_storage_items(page: Page, items: Mapping[str, str]) -> None:
     """Set multiple localStorage key-value pairs in the browser.
 
     Used to simulate pre-existing user state (e.g. panel layouts saved by a

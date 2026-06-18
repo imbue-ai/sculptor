@@ -34,6 +34,19 @@ class EffortLevel(StrEnum):
     MAX = "max"
 
 
+class ModelOption(SerializableModel):
+    """One model a harness offers in its switcher.
+
+    `provider` and `model_id` identify the model on the harness's own terms
+    (pi sends them back as a `set_model` selection; for the Claude harness
+    `model_id` is the `LLMModel` value). `display_name` is the selector label.
+    """
+
+    provider: str
+    model_id: str
+    display_name: str
+
+
 # ==================================
 # Backend Message Type Definitions
 # ==================================
@@ -41,7 +54,7 @@ class EffortLevel(StrEnum):
 
 class AgentMessageSource(StrEnum):
     """
-    Messages can come the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)
+    Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)
     """
 
     # Messages coming directly from the agent from inside the environment.

@@ -1,3 +1,5 @@
+import re
+
 from playwright.sync_api import Locator
 from playwright.sync_api import Page
 from playwright.sync_api import expect
@@ -76,15 +78,16 @@ def create_task(
     expect(task_input).to_have_attribute("contenteditable", "true")
     type_into_tiptap(task_starter._page, task_input, task_text)
 
-    # Select model if specified
-    if model_name is not None:
-        page: Page = task_starter._page
-        model_selector = page.get_by_test_id(ElementIDs.MODEL_SELECTOR)
-        model_selector.click()
-        # Use exact text matching to distinguish e.g. "Fake Claude" from "Fake Claude 2"
-        target = page.get_by_test_id(ElementIDs.MODEL_OPTION).filter(has=page.get_by_text(model_name, exact=True))
-        expect(target).to_be_visible(timeout=10_000)
-        target.click()
+    # Select the model.
+    page: Page = task_starter._page
+    model_selector = page.get_by_test_id(ElementIDs.MODEL_SELECTOR)
+    model_selector.click()
+    # Use exact text matching to distinguish e.g. "Fake Claude" from "Fake Claude 2"
+    target = page.get_by_test_id(re.compile(rf"^{re.escape(ElementIDs.MODEL_OPTION)}-")).filter(
+        has=page.get_by_text(model_name, exact=True)
+    )
+    expect(target).to_be_visible(timeout=10_000)
+    target.click()
 
     expect(task_starter.get_start_button()).to_be_enabled()
     task_starter.get_start_button().click()
@@ -98,12 +101,16 @@ def select_home_page_model(page: Page, model_name: str) -> None:
     """
     model_selector = page.get_by_test_id(ElementIDs.MODEL_SELECTOR)
     model_selector.click()
-    target = page.get_by_test_id(ElementIDs.MODEL_OPTION).filter(has=page.get_by_text(model_name, exact=True))
+    target = page.get_by_test_id(re.compile(rf"^{re.escape(ElementIDs.MODEL_OPTION)}-")).filter(
+        has=page.get_by_text(model_name, exact=True)
+    )
     expect(target).to_be_visible(timeout=10_000)
     target.click()
 
 
-def select_branch(task_starter, branch_name: str, is_using_uncommitted_changes: bool = False) -> None:
+def select_branch(
+    task_starter: PlaywrightTaskStarterElement, branch_name: str, is_using_uncommitted_changes: bool = False
+) -> None:
     branch_selector = task_starter.get_branch_selector()
     branch_selector.click()
     branch_options = task_starter.get_branch_options()
@@ -171,7 +178,7 @@ def select_existing_workspace(task_starter: PlaywrightTaskStarterElement, worksp
     workspace_option.click()
 
 
-def set_home_page_system_prompt(task_starter, system_prompt: str) -> None:
+def set_home_page_system_prompt(task_starter: PlaywrightTaskStarterElement, system_prompt: str) -> None:
     system_prompt_open_button = task_starter.get_system_prompt_open_button()
     system_prompt_open_button.click()
     system_prompt_input_box = task_starter.get_system_prompt_input_box()

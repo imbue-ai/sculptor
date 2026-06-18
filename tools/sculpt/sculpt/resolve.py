@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 from collections.abc import Callable
+from http import HTTPStatus
 from pathlib import Path
 from typing import TypeVar
 
@@ -54,13 +55,13 @@ def resolve_agent_id(base_url: str, prefix_or_id: str, json_output: bool) -> str
         response = resolve_agent_by_prefix.sync_detailed(prefix=prefix_or_id, client=client)
     except httpx.ConnectError:
         handle_connection_error(json_output)
-    if response.status_code == 404:
+    if response.status_code == HTTPStatus.NOT_FOUND:
         cli_error(f"Agent not found for '{prefix_or_id}'", json_output=json_output)
-    if response.status_code == 409:
+    if response.status_code == HTTPStatus.CONFLICT:
         # The server's detail string includes the matching ids; surface the full
         # message verbatim so the user can pick a longer prefix.
         cli_error(_extract_detail(response.content) or f"Ambiguous prefix '{prefix_or_id}'", json_output=json_output)
-    if response.status_code != 200 or response.parsed is None:
+    if response.status_code != HTTPStatus.OK or response.parsed is None:
         cli_error(f"Failed to resolve agent prefix (status {response.status_code})", json_output=json_output)
     parsed = response.parsed
     if isinstance(parsed, HTTPValidationError):
@@ -134,7 +135,7 @@ def _resolve_from_repo(repo: str, client: Client) -> str:
         typer.echo("Error: Could not connect to Sculptor server", err=True)
         raise typer.Exit(code=1) from None
 
-    if response.status_code == 200:
+    if response.status_code == HTTPStatus.OK:
         parsed = response.parsed
         if isinstance(parsed, Project):
             typer.echo(f"Initialized repo for {absolute_path}", err=True)
@@ -142,7 +143,7 @@ def _resolve_from_repo(repo: str, client: Client) -> str:
 
     detail = _extract_detail(response.content)
 
-    if response.status_code == 409 and detail is not None and "already added" in detail:
+    if response.status_code == HTTPStatus.CONFLICT and detail is not None and "already added" in detail:
         # The server has the repo registered under a (possibly worktree-resolved)
         # canonical path. Reuse it so `sculpt run --repo X` and
         # `sculpt workspace create --repo X` are idempotent — without this,
@@ -155,7 +156,7 @@ def _resolve_from_repo(repo: str, client: Client) -> str:
         # No matching project in the listing — fall through and surface
         # the 'already added' detail so the user has something to debug.
 
-    if response.status_code == 422:
+    if response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY:
         parsed = response.parsed
         typer.echo(f"Error: Validation error - {parsed}", err=True)
         raise typer.Exit(code=1)

@@ -148,7 +148,7 @@ def test_changes_tab_updates_on_target_branch_change(sculptor_instance_: Sculpto
 
     # Change target branch to origin/feature-refresh-test (same as HEAD)
     workspace_id = _extract_workspace_id(page.url)
-    base_url = page.url.split("#")[0].rstrip("/")
+    base_url = sculptor_instance_.backend_api_url.rstrip("/")
     response = page.request.patch(
         f"{base_url}/api/v1/workspaces/{workspace_id}",
         data={"target_branch": "origin/feature-refresh-test"},

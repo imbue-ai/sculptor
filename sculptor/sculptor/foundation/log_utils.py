@@ -87,16 +87,16 @@ def fix_full_location(record: "loguru.Record") -> str:
 
 
 def format_task_id(async_task_id: str) -> str:
+    """Right-justify a task ID to a fixed width so log columns stay aligned."""
     return async_task_id[:TASK_ID_MESSAGE_WIDTH].rjust(TASK_ID_MESSAGE_WIDTH)
 
 
 def ensure_core_log_levels_configured(additional_log_levels: Mapping[str, int] | None = None) -> None:
-    from loguru import logger
-
-    logger.trace("configuring detail and ExceptionPriority log levels")
+    """Register the DETAIL and ExceptionPriority log levels, plus any additional levels, idempotently."""
+    loguru.logger.trace("configuring detail and ExceptionPriority log levels")
     for level, no, color in LOG_LEVEL_NO_COLOR_TUPLES:
         try:
-            logger.level(level, no=no, color=color)
+            loguru.logger.level(level, no=no, color=color)
         except (TypeError, ValueError) as e:
             is_level_already_set_thus_ok = "already exists, you can't update its severity no" in str(e)
             if not is_level_already_set_thus_ok:
@@ -105,10 +105,10 @@ def ensure_core_log_levels_configured(additional_log_levels: Mapping[str, int] |
     if additional_log_levels is None:
         return
 
-    logger.trace("configuring additional log levels {}", additional_log_levels)
+    loguru.logger.trace("configuring additional log levels {}", additional_log_levels)
     for level_name, level_no in additional_log_levels.items():
         try:
-            logger.level(level_name, no=level_no)
+            loguru.logger.level(level_name, no=level_no)
         except (TypeError, ValueError) as e:
             is_level_already_set_thus_ok = "already exists, you can't update its severity no" in str(e)
             if not is_level_already_set_thus_ok:

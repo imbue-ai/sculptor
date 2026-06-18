@@ -1,7 +1,7 @@
 """add setup state columns to workspace
 
 Revision ID: b5a4106e6118
-Revises: c8d4e5f6a7b8
+Revises: 059f36aaa193
 Create Date: 2026-04-27 14:11:45.667093
 
 """

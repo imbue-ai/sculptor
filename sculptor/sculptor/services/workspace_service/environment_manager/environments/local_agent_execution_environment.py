@@ -246,6 +246,7 @@ class LocalAgentExecutionEnvironment(AgentExecutionEnvironment):
         return self._environment.get_system_prompt()
 
     def get_project_env_var_names(self) -> list[str]:
+        """Get the names of project-configured environment variables."""
         return self._environment.get_project_env_var_names()
 
     # ===== Terminal Management =====

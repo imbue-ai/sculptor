@@ -37,7 +37,7 @@ def _get_project_id(instance: SculptorInstance, retries: int = 3) -> str:
     Retries on transient connection errors (e.g. ECONNRESET) that can
     occur under heavy CI load.
     """
-    base_url = instance.base_url.rstrip("/")
+    base_url = instance.backend_api_url.rstrip("/")
     for attempt in range(retries):
         try:
             response = instance.page.request.get(f"{base_url}/api/v1/projects/active")
@@ -64,7 +64,7 @@ def _run_sculpt(instance: SculptorInstance, args: list[str]) -> tuple[int, str]:
         "SCULPT_PROJECT_ID": project_id,
     }
 
-    full_args = args + ["--base-url", instance.base_url, "--json"]
+    full_args = args + ["--base-url", instance.backend_api_url, "--json"]
     result = subprocess.run(
         [sys.executable, "-m", "sculpt.main"] + full_args,
         capture_output=True,
@@ -87,7 +87,7 @@ def _run_sculpt_raw(instance: SculptorInstance, args: list[str]) -> tuple[int, s
         "SCULPT_PROJECT_ID": project_id,
     }
 
-    full_args = args + ["--base-url", instance.base_url]
+    full_args = args + ["--base-url", instance.backend_api_url]
     result = subprocess.run(
         [sys.executable, "-m", "sculpt.main"] + full_args,
         capture_output=True,

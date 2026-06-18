@@ -18,10 +18,16 @@ that extension's tool names. Sub-agents ARE supported — the pinned
 `sculptor_subagent` extension spawns each child as its own `pi` process and
 streams structured per-child progress that the adapter renders as nested,
 attributed child messages under the parent `Agent` tool (see `subagent.py` and
-`extensions/sculptor_subagent.ts`), so `supports_sub_agents` is `True`. Still
-`False`: fast mode, and background tasks (pi-core has no background-execution
-primitive — verdict (iv) deferral). The `capabilities()` override is the
-truthful declaration that consumers gate on.
+`extensions/sculptor_subagent.ts`), so `supports_sub_agents` is `True`. Background
+tasks ARE supported — the pinned `sculptor_background` extension starts a shell
+command in the background, returns immediately so the LAUNCHING TURN YIELDS (the
+user keeps chatting while the task runs), and reports its lifecycle out-of-band;
+the adapter maps that onto the harness-agnostic
+`BackgroundTaskStarted`/`BackgroundTaskNotification` contracts and surfaces the
+completion via an idle-drain between turns (see `background.py` and
+`extensions/sculptor_background.ts`), so `supports_background_tasks` is `True`.
+Still `False`: fast mode (no natural mapping to pi's models). The
+`capabilities()` override is the truthful declaration that consumers gate on.
 
 Agent construction is owned by the registry
 (`harness_registry.create_agent_for_run`), not this module, so the pi
@@ -33,11 +39,13 @@ from __future__ import annotations
 from sculptor.agents.pi_agent.backchannel import ASK_USER_QUESTION_TOOL_NAME
 from sculptor.agents.pi_agent.backchannel import EXIT_PLAN_MODE_TOOL_NAME
 from sculptor.agents.pi_agent.backchannel import build_ask_user_question_data
+from sculptor.database.models import AgentTaskStateV2
 from sculptor.interfaces.agents.harness import Harness
 from sculptor.interfaces.agents.harness import HarnessCapabilities
 from sculptor.interfaces.environments.agent_execution_environment import Dependency
 from sculptor.state.chat_state import AskUserQuestionData
 from sculptor.state.chat_state import ToolUseBlock
+from sculptor.state.messages import ModelOption
 
 # Pi has no MCP / AskUserQuestion / ExitPlanMode surface; the Claude
 # prompt's tool-instructions block is deliberately absent. Names Sculptor
@@ -110,7 +118,20 @@ class PiHarness(Harness):
             # stays empty: pi exposes no numeric auto-compact threshold on the
             # wire.
             supports_compaction=True,
-            supports_background_tasks=False,
+            # Pi starts background work through the Sculptor-pinned
+            # `sculptor_background` extension: the `background` tool spawns a
+            # detached shell command and returns immediately, so the LAUNCHING
+            # TURN YIELDS (the user keeps chatting while the task runs). Its
+            # lifecycle is reported out-of-band — start via the tool result,
+            # completion via a structured `notify`. The adapter (agent_wrapper +
+            # background.py) maps those onto the harness-agnostic
+            # BackgroundTaskStarted/Notification contracts and surfaces the
+            # completion via an idle-drain between turns. A backgrounded task is
+            # NOT killed by interrupting a later turn (it is independent of the
+            # launching turn); it is cancelled only on shutdown (in-environment
+            # kill + session_shutdown + isolate_process_group), so no background
+            # process is orphaned.
+            supports_background_tasks=True,
             # Pi persists a per-task JSONL session and relaunches against it with
             # --session-dir/--session-id (see agent_wrapper.PiAgent.start), so a
             # conversation survives an agent-process restart — true.
@@ -131,7 +152,27 @@ class PiHarness(Harness):
             # Pi resolves @-mention path references via its own file-reading loop,
             # the same as Claude — true.
             supports_file_references=True,
+            # Pi switches models in-session: get_available_models lists pi's own
+            # catalog and set_model honors a pick (see the get_available_models
+            # override and agent_wrapper's set_model handling).
+            supports_model_selection=True,
         )
+
+    def get_available_models(self, task_state: AgentTaskStateV2 | None) -> list[ModelOption]:
+        # The agent fetches and curates pi's catalog at start and persists it on
+        # the task state (agent_wrapper._fetch_models_into_state); the switcher
+        # reads it from here. Empty until the agent has run, or when task_state
+        # is absent — the frontend then falls back to its built-in list.
+        if task_state is None:
+            return []
+        return list(task_state.available_models)
+
+    def get_selected_model_id(self, task_state: AgentTaskStateV2 | None) -> str | None:
+        # The model_id pi reported as current at start (get_state.model), or None
+        # until the agent has run / when task_state is absent.
+        if task_state is None or task_state.current_model is None:
+            return None
+        return task_state.current_model.model_id
 
     def is_ask_user_question_tool(self, tool_name: str) -> bool:
         return tool_name == ASK_USER_QUESTION_TOOL_NAME

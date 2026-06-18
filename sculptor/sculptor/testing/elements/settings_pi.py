@@ -68,7 +68,7 @@ class PlaywrightPiSettingsElement(PlaywrightIntegrationTestElement):
         """Locator for any sign-in / auth affordance.
 
         pi authenticates via env-var injection, never an interactive login, so
-        the section must never render a sign-in surface (REQ-SVC-4). Used only
-        for absence assertions.
+        the section must never render a sign-in surface. Used only for absence
+        assertions.
         """
         return self.get_by_text(re.compile(r"sign in", re.IGNORECASE))

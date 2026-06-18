@@ -8,6 +8,28 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <!--
+      Import map for runtime-loaded frontend plugins. Each specifier resolves
+      to a tiny stub that re-exports from window.__SCULPTOR_HOST__, ensuring
+      plugins share the host's singleton instances of React, Jotai, Radix,
+      etc. The host populates window.__SCULPTOR_HOST__ during boot, before
+      any plugin is loaded.
+    -->
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "/plugin-runtime/react.js",
+          "react/jsx-runtime": "/plugin-runtime/react-jsx-runtime.js",
+          "react-dom": "/plugin-runtime/react-dom.js",
+          "react-dom/client": "/plugin-runtime/react-dom.js",
+          "jotai": "/plugin-runtime/jotai.js",
+          "@tanstack/react-query": "/plugin-runtime/tanstack-react-query.js",
+          "@radix-ui/themes": "/plugin-runtime/radix-themes.js",
+          "lucide-react": "/plugin-runtime/lucide-react.js",
+          "@sculptor/plugin-sdk": "/plugin-runtime/sculptor-plugin-sdk.js"
+        }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -3,6 +3,10 @@ from playwright.sync_api import Page
 
 from sculptor.constants import ElementIDs
 
+# A point inside the top-left hot zone that reveals the zen mode exit button on hover.
+_EXIT_HOT_ZONE_HOVER_X = 100
+_EXIT_HOT_ZONE_HOVER_Y = 40
+
 
 class PlaywrightZenModeElement:
     """POM for zen mode exit controls."""
@@ -14,4 +18,4 @@ class PlaywrightZenModeElement:
         return self._page.get_by_test_id(ElementIDs.EXIT_ZEN_MODE_BUTTON)
 
     def hover_exit_hot_zone(self) -> None:
-        self._page.mouse.move(100, 40)
+        self._page.mouse.move(_EXIT_HOT_ZONE_HOVER_X, _EXIT_HOT_ZONE_HOVER_Y)

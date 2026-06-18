@@ -67,7 +67,7 @@ def test_agent_count_matches_between_settings_and_diagnostics(
     5. Assert they match
     """
     page = sculptor_instance_.page
-    base_url = sculptor_instance_.base_url
+    base_url = sculptor_instance_.backend_api_url
 
     # Create a workspace with an agent that asks a user question.
     # This keeps the agent in RUNNING state, waiting for user input.

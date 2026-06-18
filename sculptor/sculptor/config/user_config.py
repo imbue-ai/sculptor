@@ -1,15 +1,22 @@
 import os
 from enum import StrEnum
+from typing import Annotated
 from typing import Any
 from typing import Literal
 
 from loguru import logger
 from pydantic import Field
+from pydantic import Tag
 from pydantic import model_validator
 from pydantic.alias_generators import to_camel
 
 from sculptor.config.custom_actions import CustomActionsConfig
 from sculptor.foundation.pydantic_serialization import SerializableModel
+from sculptor.foundation.pydantic_serialization import build_discriminator
+
+# The free-disk warning threshold is this multiple of the hard minimum, so warnings
+# fire before tasks are blocked outright.
+_FREE_DISK_GB_WARN_LIMIT_MULTIPLIER: float = 3.0
 
 
 class UpdateChannel(StrEnum):
@@ -83,6 +90,46 @@ class PanelLayoutConfig(SerializableModel):
     zone_order: dict[str, list[str]] = Field(default_factory=dict)
 
 
+class BabysitterAgentMRU(SerializableModel):
+    """Inherit the workspace's most-recently-used agent type (the default)."""
+
+    object_type: str = "mru"
+
+
+class BabysitterAgentClaude(SerializableModel):
+    """Always use a Claude chat agent, regardless of the workspace MRU."""
+
+    object_type: str = "claude"
+
+
+class BabysitterAgentPi(SerializableModel):
+    """Always use a Pi chat agent. Only valid when the pi agent is enabled;
+    that validity is enforced by the resolver, not this model.
+    """
+
+    object_type: str = "pi"
+
+
+class BabysitterAgentRegistered(SerializableModel):
+    """Always drive a specific registered terminal agent, by registration id."""
+
+    object_type: str = "registered"
+    registration_id: str
+
+
+# Discriminated union of which agent the CI Babysitter should use. Tagged by
+# ``object_type`` (mirrors AgentConfigTypes in interfaces/agents/agent.py) so the
+# harness kind and any registration_id are explicit and validated, and so
+# serialized configs keep round-tripping by their stable discriminator.
+BabysitterAgentChoice = Annotated[
+    Annotated[BabysitterAgentMRU, Tag("mru")]
+    | Annotated[BabysitterAgentClaude, Tag("claude")]
+    | Annotated[BabysitterAgentPi, Tag("pi")]
+    | Annotated[BabysitterAgentRegistered, Tag("registered")],
+    build_discriminator(),
+]
+
+
 class CIBabysitterConfig(SerializableModel):
     """Settings for the CI Babysitter — Sculptor watches open MRs and prompts an
     agent to fix pipeline failures and merge conflicts. Experimental; off by default.
@@ -103,6 +150,10 @@ class CIBabysitterConfig(SerializableModel):
     merge_conflict_prompt: str = Field(
         default="This MR has a merge conflict with its base branch. Fetch the latest, then rebase against the base branch, resolve all conflicts, and force-push the result.",
         description="Prompt sent to the CI Babysitter agent when an MR develops a merge conflict with its base branch.",
+    )
+    agent: BabysitterAgentChoice = Field(
+        default_factory=BabysitterAgentMRU,
+        description="Which agent the CI Babysitter uses: most-recently-used (the default — inherits the workspace's most recent driveable agent type), or a pinned harness (Claude, Pi, or a specific registered terminal agent).",
     )
 
 
@@ -253,16 +304,21 @@ class UserConfig(SerializableModel):
         default=False,
         description="When enabled, the agent-type menus offer the experimental pi agent. Off by default. Gates only the creation entry point — an existing pi agent keeps running regardless.",
     )
+    enable_frontend_plugins: bool = Field(
+        default=False,
+        description="When enabled, the frontend plugin system loads runtime plugins and shows the Plugins settings section. Off by default. Enabling applies immediately; disabling takes effect after an app reload (already-loaded plugins are not unloaded mid-session).",
+    )
     default_fast_mode: bool = Field(
         default=False,
         description="When enabled, new agents default to fast mode",
     )
+    # pyrefly: ignore [bad-assignment]
     default_effort_level: Literal["low", "medium", "high", "xhigh", "max"] = Field(
         default="xhigh",
         description="Default thinking effort level for new agents (low, medium, high, xhigh, max)",
     )
 
-    @model_validator(mode="before")  # pyre-ignore[56]: pyre doesn't understand pydantic
+    @model_validator(mode="before")
     @classmethod
     def _migrate_claude_binary_mode(cls, data: Any) -> Any:
         """Migrate old claude_binary_mode + dependency_paths.claude into unified dependency_paths.claude.
@@ -298,7 +354,7 @@ class UserConfig(SerializableModel):
                     paths[claude_key] = old_mode
         return data
 
-    @model_validator(mode="before")  # pyre-ignore[56]: pyre doesn't understand pydantic
+    @model_validator(mode="before")
     @classmethod
     def _sanitize_custom_actions(cls, data: Any) -> Any:
         """Discard custom_actions if it doesn't match the expected schema.
@@ -319,7 +375,7 @@ class UserConfig(SerializableModel):
 
     @property
     def free_disk_gb_warn_limit(self) -> float:
-        return self.min_free_disk_gb * 3.0
+        return self.min_free_disk_gb * _FREE_DISK_GB_WARN_LIMIT_MULTIPLIER
 
 
 # At Runtime, ensure that all fields in PrivacySettings are also in UserConfig
@@ -334,8 +390,9 @@ def _generate_user_config_field_enum() -> type[StrEnum]:
         # Convert field name to SCREAMING_SNAKE_CASE for enum constant
         enum_name = field_name.upper()
         fields[enum_name] = to_camel(field_name)
-    # pyre thinks this is an instance of a StrEnum because it doesn't understand enums
-    return StrEnum("UserConfigField", fields)  # pyre-ignore[7, 19]
+    # type checkers think this returns a StrEnum instance because they don't model functional enum creation
+    # pyrefly: ignore [bad-return]
+    return StrEnum("UserConfigField", fields)
 
 
 UserConfigField: type[StrEnum] = _generate_user_config_field_enum()

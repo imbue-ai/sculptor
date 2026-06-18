@@ -1,18 +1,33 @@
 /**
- * Sculptor sub-agent extension.
+ * Sculptor sub-agent extension (yield-early / async).
  *
- * Gives a pi (`--mode rpc`) agent the sub-agent capability Sculptor exposes for
- * Claude. Registers a single `subagent` tool that delegates work to child
- * agents, each running as its own isolated `pi` process (single task, or a
- * capped parallel batch). It streams a STRUCTURED, versioned per-child lifecycle
- * payload under the tool result's `details` so the Sculptor adapter can render
- * each child's activity as nested, attributed blocks (a parent entry with the
- * child's own tool calls and text grouped beneath it) — Claude-parity sub-agent
- * rendering.
+ * Registers a single `subagent` tool that delegates work to child agents, each
+ * running as its own isolated `pi` process (single task, or a capped batch). The
+ * tool returns IMMEDIATELY (the agent keeps control; the turn does NOT block on
+ * the children), and the children keep running detached. When the whole batch
+ * finishes, the extension reports completion OUT-OF-BAND via `ctx.ui.notify`
+ * carrying a STRUCTURED, versioned per-child payload the Sculptor adapter renders
+ * as nested, attributed blocks (a parent `Agent` entry with each child's own tool
+ * calls and text grouped beneath it).
  *
- * `partialResult` is ACCUMULATED, not a delta, so every `onUpdate` re-sends the
- * full `{ v, children }` snapshot; the Python adapter re-parses it idempotently
- * (`subagent.py`) and emits each child exactly once.
+ * Lifecycle:
+ * - START: the tool's result `details` carry `{ v, task }` with the task id, the
+ *   launching tool-call id, every child's process-group id (`pgids`), and the
+ *   child count. The adapter records the pgids (so Sculptor can SIGTERM the child
+ *   groups INSIDE the environment on shutdown) and emits a started indicator. The
+ *   launching turn then ends — the user keeps chatting while the children run.
+ * - COMPLETION: a fire-and-forget `notify` carrying
+ *   `{ "<MARKER>": { v, taskId, toolCallId, status, children } }`. The adapter
+ *   parses the marker and surfaces each child nested under the parent, plus a
+ *   completion notification that clears the started indicator.
+ * - CLEANUP (no orphans): every live child is tracked and killed on
+ *   `session_shutdown` (quit / SIGTERM / reload / new / resume / fork),
+ *   complementing the per-task in-environment group `kill` Sculptor issues on
+ *   shutdown.
+ *
+ * Each child is spawned `detached` so it leads its OWN process group: Sculptor
+ * (and this extension) can SIGTERM just that group (negative pgid) without
+ * touching the pi process or sibling children.
  *
  * Pinned with the pi binary as one immutable unit (PI_VERSION_RANGE in
  * `dependency_management_service`). It is NOT user-visible or user-configurable
@@ -24,27 +39,33 @@
  *
  * Wire contract shared with the Python side
  * (`sculptor/agents/pi_agent/subagent.py` and `tool_rendering.py`): the tool
- * NAME and the payload VERSION + field names below MUST match the constants
- * there. Changing one means editing both files in the same change.
+ * NAME, the payload VERSION, the notify MARKER key, and the field names below
+ * MUST match the constants there. Changing one means editing both files in the
+ * same change.
  */
 
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
 // MUST match tool_rendering.py: SUBAGENT_TOOL_NAME.
 const SUBAGENT_TOOL_NAME = "subagent";
 // MUST match subagent.py: SUBAGENT_PAYLOAD_VERSION.
 const SUBAGENT_PAYLOAD_VERSION = 1;
+// MUST match subagent.py: SUBAGENT_NOTIFY_MARKER. The top-level key under which
+// the completion payload rides the `notify` message string.
+const SUBAGENT_NOTIFY_MARKER = "sculptorSubagentTask";
 
-// Caps so a runaway prompt cannot spawn unbounded child processes.
+// Cap so a runaway prompt cannot spawn unbounded child processes. All children
+// are spawned at once (detached) up to this cap; the cap is the resource bound.
 const MAX_TASKS = 8;
-const MAX_CONCURRENCY = 4;
-// Per-child bounds so the accumulated (re-sent-every-update) payload stays bounded.
+// Per-child bounds so the accumulated completion payload stays bounded.
 const MAX_EVENTS_PER_CHILD = 200;
 const MAX_EVENT_TEXT_BYTES = 8 * 1024;
+// SIGTERM, then SIGKILL after this if the child ignores it.
+const KILL_ESCALATION_MS = 3000;
 
 type ChildEventKind = "text" | "tool_call" | "tool_result";
 
@@ -68,10 +89,19 @@ interface ChildState {
 	events: ChildEvent[];
 }
 
-interface SubagentPayload {
-	v: number;
-	children: ChildState[];
+// One in-flight sub-agent batch, keyed by taskId, so `session_shutdown` can reap
+// every child it spawned.
+interface LiveTask {
+	taskId: string;
+	kill: () => void;
 }
+
+const liveTasks = new Map<string, LiveTask>();
+
+// The session-scoped context captured at session_start. The completion `notify`
+// fires from a DETACHED callback after the tool returned, so it uses the session
+// ctx (not the per-tool ctx, whose lifetime ends with the tool call).
+let sessionCtx: ExtensionContext | undefined;
 
 function truncateText(text: string): string {
 	if (Buffer.byteLength(text, "utf8") <= MAX_EVENT_TEXT_BYTES) return text;
@@ -114,129 +144,162 @@ function getPiInvocation(args: string[]): { command: string; args: string[] } {
 	return { command: "pi", args };
 }
 
-async function mapWithConcurrencyLimit<TIn, TOut>(
-	items: TIn[],
-	concurrency: number,
-	fn: (item: TIn, index: number) => Promise<TOut>,
-): Promise<TOut[]> {
-	if (items.length === 0) return [];
-	const limit = Math.max(1, Math.min(concurrency, items.length));
-	const results: TOut[] = new Array(items.length);
-	let nextIndex = 0;
-	const workers = new Array(limit).fill(null).map(async () => {
-		while (true) {
-			const current = nextIndex++;
-			if (current >= items.length) return;
-			results[current] = await fn(items[current], current);
+// Kill a detached child's whole process group (negative pgid) so any grandchild
+// it spawned dies too; fall back to the bare process when no pgid is known.
+function killGroup(pgid: number, proc: ReturnType<typeof spawn>): void {
+	const term = () => {
+		try {
+			if (pgid > 0) process.kill(-pgid, "SIGTERM");
+			else proc.kill("SIGTERM");
+		} catch {
+			/* already gone */
 		}
-	});
-	await Promise.all(workers);
-	return results;
+	};
+	term();
+	setTimeout(() => {
+		try {
+			if (pgid > 0) process.kill(-pgid, "SIGKILL");
+			else if (!proc.killed) proc.kill("SIGKILL");
+		} catch {
+			/* already gone */
+		}
+	}, KILL_ESCALATION_MS);
 }
 
-// Run one child to completion, mutating `child` as its events arrive and
-// invoking `emit` (the accumulated snapshot) on every change.
-async function runChild(child: ChildState, signal: AbortSignal | undefined, emit: () => void): Promise<void> {
+// Spawn one child SYNCHRONOUSLY (so its pgid is known immediately for the launch
+// payload), wiring its stdout into `child` as events arrive. Returns the pgid, a
+// kill handle, and a promise that resolves when the child exits. No streaming
+// callback: the agent has yielded, so events accumulate for the single
+// completion `notify`.
+function startChild(child: ChildState, signal: AbortSignal | undefined): {
+	pgid: number;
+	kill: () => void;
+	done: Promise<void>;
+} {
 	let seq = 0;
 	const push = (event: Omit<ChildEvent, "seq">) => {
 		if (child.events.length >= MAX_EVENTS_PER_CHILD) return;
 		child.events.push({ seq: seq++, ...event });
-		emit();
 	};
 
 	const args = ["--mode", "json", "-p", "--no-session", `Task: ${child.task}`];
 	const invocation = getPiInvocation(args);
+	// detached: the child leads its OWN process group so it (and any grandchild)
+	// can be torn down via the negative pgid without touching pi.
+	const proc = spawn(invocation.command, invocation.args, {
+		detached: true,
+		shell: false,
+		stdio: ["ignore", "pipe", "pipe"],
+	});
+	const pgid = proc.pid ?? -1;
 	let wasAborted = false;
+	let buffer = "";
 
-	const exitCode = await new Promise<number>((resolve) => {
-		const proc = spawn(invocation.command, invocation.args, { shell: false, stdio: ["ignore", "pipe", "pipe"] });
-		let buffer = "";
-		const processLine = (line: string) => {
-			if (!line.trim()) return;
-			let event: any;
-			try {
-				event = JSON.parse(line);
-			} catch {
-				return;
-			}
-			// Tool calls + their results come from the tool-execution lane (clean
-			// {toolCallId, toolName, args} / {result, isError}); assistant TEXT
-			// comes from message_end. The issuing message's toolCall content block
-			// is deliberately NOT captured here so a call is recorded once.
-			if (event.type === "tool_execution_start") {
-				push({
-					kind: "tool_call",
-					toolCallId: String(event.toolCallId ?? ""),
-					toolName: String(event.toolName ?? ""),
-					args: typeof event.args === "object" && event.args ? event.args : {},
-				});
-			} else if (event.type === "tool_execution_end") {
-				push({
-					kind: "tool_result",
-					toolCallId: String(event.toolCallId ?? ""),
-					toolName: String(event.toolName ?? ""),
-					text: truncateText(resultText(event.result)),
-					isError: Boolean(event.isError),
-				});
-			} else if (event.type === "message_end" && event.message?.role === "assistant") {
-				for (const part of event.message.content ?? []) {
-					if (part?.type === "text" && typeof part.text === "string" && part.text) {
-						push({ kind: "text", text: truncateText(part.text) });
-					}
-				}
-				if (event.message.stopReason) child.stopReason = String(event.message.stopReason);
-			}
-		};
-		proc.stdout.on("data", (data) => {
-			buffer += data.toString();
-			const lines = buffer.split("\n");
-			buffer = lines.pop() || "";
-			for (const line of lines) processLine(line);
-		});
-		proc.on("close", (code) => {
-			if (buffer.trim()) processLine(buffer);
-			resolve(code ?? 0);
-		});
-		proc.on("error", () => resolve(1));
-		// Parent abort (Sculptor's Stop → pi `abort` → this AbortSignal) kills the
-		// child process tree so no orphan `pi` survives the interrupt.
-		if (signal) {
-			const kill = () => {
-				wasAborted = true;
-				proc.kill("SIGTERM");
-				setTimeout(() => {
-					if (!proc.killed) proc.kill("SIGKILL");
-				}, 3000);
-			};
-			if (signal.aborted) kill();
-			else signal.addEventListener("abort", kill, { once: true });
+	const processLine = (line: string) => {
+		if (!line.trim()) return;
+		let event: any;
+		try {
+			event = JSON.parse(line);
+		} catch {
+			return;
 		}
+		// Tool calls + their results come from the tool-execution lane (clean
+		// {toolCallId, toolName, args} / {result, isError}); assistant TEXT comes
+		// from message_end. The issuing message's toolCall content block is NOT
+		// captured here, so a call is recorded once.
+		if (event.type === "tool_execution_start") {
+			push({
+				kind: "tool_call",
+				toolCallId: String(event.toolCallId ?? ""),
+				toolName: String(event.toolName ?? ""),
+				args: typeof event.args === "object" && event.args ? event.args : {},
+			});
+		} else if (event.type === "tool_execution_end") {
+			push({
+				kind: "tool_result",
+				toolCallId: String(event.toolCallId ?? ""),
+				toolName: String(event.toolName ?? ""),
+				text: truncateText(resultText(event.result)),
+				isError: Boolean(event.isError),
+			});
+		} else if (event.type === "message_end" && event.message?.role === "assistant") {
+			for (const part of event.message.content ?? []) {
+				if (part?.type === "text" && typeof part.text === "string" && part.text) {
+					push({ kind: "text", text: truncateText(part.text) });
+				}
+			}
+			if (event.message.stopReason) child.stopReason = String(event.message.stopReason);
+		}
+	};
+
+	proc.stdout?.on("data", (data) => {
+		buffer += data.toString();
+		const lines = buffer.split("\n");
+		buffer = lines.pop() || "";
+		for (const line of lines) processLine(line);
 	});
 
-	child.exitCode = exitCode;
-	if (wasAborted || child.stopReason === "aborted") {
-		child.status = "error";
-		child.stopReason = child.stopReason || "aborted";
-	} else if (exitCode !== 0 || child.stopReason === "error") {
-		child.status = "error";
-	} else {
-		child.status = "done";
+	const kill = () => {
+		wasAborted = true;
+		killGroup(pgid, proc);
+	};
+
+	const done = new Promise<void>((resolve) => {
+		proc.on("close", (code) => {
+			if (buffer.trim()) processLine(buffer);
+			child.exitCode = code ?? 0;
+			if (wasAborted || child.stopReason === "aborted") {
+				child.status = "error";
+				child.stopReason = child.stopReason || "aborted";
+			} else if ((code ?? 0) !== 0 || child.stopReason === "error") {
+				child.status = "error";
+			} else {
+				child.status = "done";
+			}
+			resolve();
+		});
+		proc.on("error", () => {
+			child.status = "error";
+			child.exitCode = child.exitCode ?? 1;
+			resolve();
+		});
+	});
+
+	// The parent tool's signal only fires while execute is pending (the brief
+	// pre-return window); after that the child is detached and reaped on
+	// session_shutdown / by Sculptor's in-env group kill.
+	if (signal) {
+		if (signal.aborted) kill();
+		else signal.addEventListener("abort", kill, { once: true });
 	}
-	emit();
+
+	return { pgid, kill, done };
 }
 
 export default function sculptorSubagentExtension(pi: ExtensionAPI): void {
+	pi.on("session_start", async (_event, ctx) => {
+		sessionCtx = ctx;
+	});
+
+	// No orphans: kill every still-running child when the session tears down.
+	pi.on("session_shutdown", async (_event, _ctx) => {
+		for (const task of liveTasks.values()) task.kill();
+		liveTasks.clear();
+	});
+
 	pi.registerTool({
 		name: SUBAGENT_TOOL_NAME,
 		label: "Sub-agent",
 		description:
-			"Delegate a task to a sub-agent that runs in its own isolated context and " +
-			"reports back when done. Provide a single `task`, or `tasks` (a list) to run " +
-			"several sub-agents in parallel. Use this to parallelize independent work or " +
-			"to keep a large investigation out of the main context.",
-		promptSnippet: "Delegate a task to an isolated sub-agent",
+			"Delegate a task to a sub-agent that runs in its own isolated context in the " +
+			"BACKGROUND and reports back when done. Provide a single `task`, or `tasks` (a " +
+			"list) to run several sub-agents in parallel. The call returns immediately — you " +
+			"keep working while the sub-agents run, and you are notified when they finish. " +
+			"Use this to parallelize independent work or to keep a large investigation out of " +
+			"the main context.",
+		promptSnippet: "Delegate a task to an isolated background sub-agent",
 		promptGuidelines: [
-			`Use ${SUBAGENT_TOOL_NAME} to delegate a self-contained task (or several parallel tasks) to isolated sub-agents.`,
+			`Use ${SUBAGENT_TOOL_NAME} to delegate a self-contained task (or several parallel tasks) to isolated sub-agents; the call returns immediately and you are notified on completion.`,
 		],
 		parameters: Type.Object({
 			task: Type.Optional(Type.String({ description: "A single task to delegate to one sub-agent." })),
@@ -250,7 +313,7 @@ export default function sculptorSubagentExtension(pi: ExtensionAPI): void {
 				),
 			),
 		}),
-		async execute(_toolCallId, params, signal, onUpdate, _ctx) {
+		async execute(toolCallId, params, signal, _onUpdate, _ctx) {
 			const requested =
 				Array.isArray(params.tasks) && params.tasks.length > 0
 					? params.tasks.map((t, i) => ({ task: t.task, label: t.label || `subagent ${i + 1}` }))
@@ -261,7 +324,7 @@ export default function sculptorSubagentExtension(pi: ExtensionAPI): void {
 			if (requested.length === 0) {
 				return {
 					content: [{ type: "text", text: "No task provided. Pass `task` or a non-empty `tasks` list." }],
-					details: { v: SUBAGENT_PAYLOAD_VERSION, children: [] } satisfies SubagentPayload,
+					details: { v: SUBAGENT_PAYLOAD_VERSION, task: null },
 				};
 			}
 
@@ -274,25 +337,68 @@ export default function sculptorSubagentExtension(pi: ExtensionAPI): void {
 				events: [],
 			}));
 
-			const snapshot = (): SubagentPayload => ({ v: SUBAGENT_PAYLOAD_VERSION, children });
-			const summaryText = () => {
+			const taskId = `sat_${toolCallId}`;
+			const label = children.length === 1 ? children[0].label : `${children.length} sub-agents`;
+
+			// Spawn every child synchronously (detached) so all pgids are known NOW
+			// and reported in the launch payload; their output is processed and the
+			// batch is awaited asynchronously, after this returns.
+			const handles = children.map((child) => startChild(child, signal));
+			const pgids = handles.map((h) => h.pgid).filter((p) => p > 0);
+			const killAll = () => {
+				for (const h of handles) h.kill();
+			};
+			liveTasks.set(taskId, { taskId, kill: killAll });
+
+			// Out-of-band completion: when the whole batch settles, fire a single
+			// fire-and-forget notify carrying the full per-child snapshot. The turn
+			// has already ended, so Sculptor surfaces this via its idle-drain.
+			void Promise.all(handles.map((h) => h.done)).then(() => {
+				liveTasks.delete(taskId);
+				const status = children.some((c) => c.status === "error") ? "failed" : "completed";
 				const done = children.filter((c) => c.status === "done").length;
 				const failed = children.filter((c) => c.status === "error").length;
-				const running = children.filter((c) => c.status === "running").length;
-				return `sub-agents: ${done} done, ${failed} failed, ${running} running (of ${children.length})`;
-			};
-			const emit = () => {
-				onUpdate?.({ content: [{ type: "text", text: summaryText() }], details: snapshot() });
-			};
-			emit();
-
-			await mapWithConcurrencyLimit(children, MAX_CONCURRENCY, async (child) => {
-				await runChild(child, signal, emit);
+				try {
+					sessionCtx?.ui.notify(
+						JSON.stringify({
+							[SUBAGENT_NOTIFY_MARKER]: {
+								v: SUBAGENT_PAYLOAD_VERSION,
+								taskId,
+								toolCallId,
+								status,
+								children,
+							},
+						}),
+						status === "completed" ? "info" : "warning",
+					);
+				} catch {
+					/* session torn down between completion and notify; nothing to surface */
+				}
+				// Wake the calling agent so it can react to the completion. sendUserMessage
+				// triggers a turn when the agent is idle; deliverAs "followUp" queues it
+				// behind an in-flight user turn instead of interrupting it.
+				try {
+					pi.sendUserMessage(
+						`Your delegated sub-agent task (${label}) finished: ${status} — ${done}/${children.length} done, ${failed} failed.`,
+						{ deliverAs: "followUp" },
+					);
+				} catch {
+					/* session torn down; nothing to deliver */
+				}
 			});
 
+			// Return immediately: the agent keeps control; the turn does not block.
 			return {
-				content: [{ type: "text", text: summaryText() }],
-				details: snapshot(),
+				content: [
+					{
+						type: "text",
+						text: `Started ${children.length} sub-agent(s): ${children.map((c) => c.label).join(", ")}`,
+					},
+				],
+				details: {
+					v: SUBAGENT_PAYLOAD_VERSION,
+					task: { taskId, toolCallId, label, pgids, count: children.length, status: "running" },
+				},
 			};
 		},
 	});

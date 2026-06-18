@@ -10,7 +10,7 @@ class PlaywrightCompactionBarElement(PlaywrightIntegrationTestElement):
         The context indicator is an SVG arc button with aria-label like "85% context remaining".
         """
         aria_label = self.get_attribute("aria-label") or ""
-        remaining_percentage = re.search(r"(\d+)% context remaining", aria_label)
-        if remaining_percentage is None:
+        match = re.search(r"(\d+)% context remaining", aria_label)
+        if match is None:
             raise ValueError(f"Could not parse context remaining from aria-label: {aria_label!r}")
-        return int(remaining_percentage.group(1))
+        return int(match.group(1))

@@ -34,14 +34,18 @@ from sculptor.testing.playwright_utils import navigate_to_frontend
 from sculptor.testing.port_manager import PortManager
 from sculptor.testing.repo_resources import get_test_project_state
 from sculptor.testing.server_utils import SculptorServer
-from sculptor.testing.server_utils import _start_server_process_and_validate_readiness
 from sculptor.testing.server_utils import get_sculptor_command_backend_only
 from sculptor.testing.server_utils import get_testing_environment
 from sculptor.testing.server_utils import get_v1_frontend_path
+from sculptor.testing.server_utils import start_server_process_and_validate_readiness
 from sculptor.testing.subprocess_utils import Forwarder
 
 _DEFAULT_TIMEOUT_MS = 30_000
 _DEFAULT_VIEWPORT = {"width": 1400, "height": 900}
+_VITE_POLL_INTERVAL_SECONDS = 1
+_VITE_POLL_REQUEST_TIMEOUT_SECONDS = 2
+_BACKEND_SHUTDOWN_TIMEOUT_SECONDS = 10
+_VITE_SHUTDOWN_TIMEOUT_SECONDS = 5
 
 
 def _make_test_user_config() -> UserConfig:
@@ -200,7 +204,7 @@ class ManualTestHarness:
         deadline = time.monotonic() + timeout_seconds
         while time.monotonic() < deadline:
             try:
-                resp = requests.get(vite_url, timeout=2)
+                resp = requests.get(vite_url, timeout=_VITE_POLL_REQUEST_TIMEOUT_SECONDS)
                 if resp.status_code == 200:
                     logger.info("Vite dev server ready at {}", vite_url)
                     return
@@ -208,7 +212,7 @@ class ManualTestHarness:
                 pass
             if self._vite_process is not None and self._vite_process.poll() is not None:
                 raise RuntimeError(f"Vite process exited with code {self._vite_process.returncode}")
-            time.sleep(1)
+            time.sleep(_VITE_POLL_INTERVAL_SECONDS)
         raise TimeoutError(f"Vite dev server did not start within {timeout_seconds}s")
 
     def _start_backend_and_vite(self) -> None:
@@ -247,7 +251,7 @@ class ManualTestHarness:
         # Start the backend
         env = {k: str(v) for k, v in {**os.environ, **environment}.items() if v is not None}
         logger.info("Starting backend on port {}", self._port)
-        server_process = _start_server_process_and_validate_readiness(command, env)
+        server_process = start_server_process_and_validate_readiness(command, env)
         self._forwarder = Forwarder(server_process)
         self._forwarder.start()
         self._server = SculptorServer(process=server_process, port=self._port)
@@ -315,9 +319,9 @@ class ManualTestHarness:
                 try:
                     process.stdout.close()
                 except Exception:
-                    pass
+                    logger.debug("Failed to close backend stdout during teardown")
             try:
-                process.wait(timeout=10)
+                process.wait(timeout=_BACKEND_SHUTDOWN_TIMEOUT_SECONDS)
             except Exception:
                 try:
                     os.killpg(os.getpgid(process.pid), signal.SIGKILL)
@@ -333,7 +337,7 @@ class ManualTestHarness:
             except ProcessLookupError:
                 pass
             try:
-                self._vite_process.wait(timeout=5)
+                self._vite_process.wait(timeout=_VITE_SHUTDOWN_TIMEOUT_SECONDS)
             except Exception:
                 try:
                     os.killpg(os.getpgid(self._vite_process.pid), signal.SIGKILL)

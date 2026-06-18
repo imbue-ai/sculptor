@@ -40,8 +40,7 @@ class PlaywrightKeybindingsSettingsElement(PlaywrightIntegrationTestElement):
 
     def clear_search(self) -> None:
         """Clear the search bar."""
-        search_input = self._locator.get_by_test_id(ElementIDs.SETTINGS_KEYBINDINGS_SEARCH)
-        search_input.fill("")
+        self.get_search_field().fill("")
 
     def reset_all_to_defaults(self) -> None:
         """Click the 'Reset all to defaults' button."""

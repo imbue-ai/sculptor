@@ -1,5 +1,7 @@
-import logging
+from collections.abc import Sequence
+from typing import Any
 
+from loguru import logger
 from playwright.sync_api import Locator
 from playwright.sync_api import Page
 from playwright.sync_api import expect
@@ -9,8 +11,6 @@ from tenacity import stop_after_attempt
 from tenacity import wait_fixed
 
 from sculptor.constants import ElementIDs
-
-logger = logging.getLogger(__name__)
 
 
 def wait_for_tiptap_ready(page: Page, *, timeout_ms: int = 10_000) -> None:
@@ -49,7 +49,7 @@ def wait_for_tiptap_ready(page: Page, *, timeout_ms: int = 10_000) -> None:
             }})"""
         )
     except Exception as exc:
-        logger.debug("wait_for_tiptap_ready timed out after %dms: %s", timeout_ms, exc)
+        logger.debug("wait_for_tiptap_ready timed out after {}ms: {}", timeout_ms, exc)
 
 
 class PlaywrightIntegrationTestElement(Locator):
@@ -64,7 +64,7 @@ class PlaywrightIntegrationTestElement(Locator):
         self._page = page
         self._locator = locator
 
-    def __getattr__(self, attr):
+    def __getattr__(self, attr: str) -> Any:
         return getattr(self._locator, attr)
 
 
@@ -199,7 +199,7 @@ def set_tiptap_markdown(locator: Locator, markdown: str) -> None:
     )
 
 
-def type_paragraphs_into_tiptap(locator: Locator, paragraphs: list[str]) -> None:
+def type_paragraphs_into_tiptap(locator: Locator, paragraphs: Sequence[str]) -> None:
     """Insert multiple paragraphs separated by real paragraph breaks.
 
     Unlike ``type_into_tiptap`` (which uses ``tr.insertText`` and creates hard
@@ -265,7 +265,7 @@ def type_with_delay(locator: Locator, text: str, delay: int) -> None:
 # NOTE: This is an exception to our rule against using .type() in tests.
 # TipTap's ordered list input rule triggers on "1. " being typed through
 # keyboard events — .fill() and insertText() bypass this entirely.
-def type_ordered_list_then_text(page: Page, locator: Locator, items: list[str], trailing_text: str) -> None:
+def type_ordered_list_then_text(page: Page, locator: Locator, items: Sequence[str], trailing_text: str) -> None:
     """Type an ordered list followed by text using real keyboard input.
 
     Types ``1. <first item>`` to trigger TipTap's ordered list input rule,

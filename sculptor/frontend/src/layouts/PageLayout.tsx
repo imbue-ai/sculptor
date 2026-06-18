@@ -1,7 +1,7 @@
 import { Flex } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Outlet } from "react-router-dom";
 
 import { useSyncActiveTabFromRoute } from "../common/hooks/useSyncActiveTabFromRoute.ts";
@@ -33,6 +33,9 @@ import { VersionDisplay } from "../components/VersionDisplay.tsx";
 import { WarningStatusBanner } from "../components/WarningStatusBanner.tsx";
 import { useAutoUpdateListener } from "../hooks/useAutoUpdateListener.ts";
 import { workspaceDefaultLayout, workspacePanels } from "../pages/workspace/panels/workspacePanels.ts";
+import { PluginLoader } from "../plugins/PluginLoader.tsx";
+import { PluginOverlays } from "../plugins/PluginOverlays.tsx";
+import { pluginPanelsAtom } from "../plugins/pluginRegistry.ts";
 import { usePageLayoutKeyboardShortcuts } from "./hooks/usePageLayoutKeyboardShortcuts.ts";
 import styles from "./PageLayout.module.scss";
 
@@ -42,6 +45,8 @@ type PageLayoutProps = {
 
 export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): ReactElement => {
   const isZenModeActive = useAtomValue(zenModeActiveAtom);
+  const pluginPanels = useAtomValue(pluginPanelsAtom);
+  const combinedPanels = useMemo(() => [...workspacePanels, ...pluginPanels], [pluginPanels]);
   const backendStatus = useAtomValue(backendStatusAtom);
   const deleteErrorToast = useAtomValue(deleteErrorToastAtom);
   const setDeleteErrorToast = useSetAtom(deleteErrorToastAtom);
@@ -118,7 +123,9 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
         {/* In zen mode, render a draggable region so the top window edge
             remains draggable. */}
         {isZenModeActive && <TitleBar className={styles.zenTitleBar} />}
-        <PanelRegistryProvider panels={workspacePanels} defaultLayout={workspaceDefaultLayout}>
+        <PluginLoader />
+        <PluginOverlays />
+        <PanelRegistryProvider panels={combinedPanels} defaultLayout={workspaceDefaultLayout}>
           <Outlet />
         </PanelRegistryProvider>
         {showVersionIndicator && !isZenModeActive && (

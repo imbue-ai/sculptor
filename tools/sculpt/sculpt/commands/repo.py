@@ -1,9 +1,11 @@
+import datetime
 import json
 
 import typer
 
 from sculpt.auth import get_authenticated_client
 from sculpt.auth import get_default_base_url
+from sculpt.client.models.project import Project
 from sculpt.commands.data_types import RepoItem
 from sculpt.formatting import format_datetime
 from sculpt.formatting import format_table
@@ -12,10 +14,27 @@ from sculpt.resolve import fetch_projects
 from sculpt.resolve import repo_path_from_url
 from sculpt.resolve import resolve_by_prefix
 
+_NAME_DISPLAY_MAX_LENGTH = 20
+_PATH_DISPLAY_MAX_LENGTH = 50
+
 repo_app = typer.Typer(
     name="repo",
     help="Manage repos.",
 )
+
+
+def _repo_item_from_project(project: Project) -> RepoItem:
+    """Build the JSON output model for a single repo from a project."""
+    created_at = (
+        project.created_at.isoformat() if isinstance(project.created_at, datetime.datetime) else None
+    )
+    return RepoItem(
+        id=project.object_id,
+        name=project.name,
+        path=repo_path_from_url(project.user_git_repo_url),
+        accessible=project.is_path_accessible,
+        created_at=created_at,
+    )
 
 
 @repo_app.command("list")
@@ -29,16 +48,7 @@ def list_cmd(
     projects = fetch_projects(client)
 
     if json_output:
-        items = [
-            RepoItem(
-                id=p.object_id,
-                name=p.name,
-                path=repo_path_from_url(p.user_git_repo_url),
-                accessible=p.is_path_accessible,
-                created_at=p.created_at.isoformat() if hasattr(p.created_at, "isoformat") else None,
-            )
-            for p in projects
-        ]
+        items = [_repo_item_from_project(p) for p in projects]
         typer.echo(json.dumps([item.model_dump() for item in items], indent=2))
         return
 
@@ -50,8 +60,8 @@ def list_cmd(
     rows = [
         [
             p.object_id,
-            truncate(p.name, 20),
-            truncate(repo_path_from_url(p.user_git_repo_url), 50),
+            truncate(p.name, _NAME_DISPLAY_MAX_LENGTH),
+            truncate(repo_path_from_url(p.user_git_repo_url), _PATH_DISPLAY_MAX_LENGTH),
             "yes" if p.is_path_accessible else "no",
         ]
         for p in projects
@@ -73,14 +83,7 @@ def show(
     project = resolve_by_prefix(repo_id, projects, lambda p: p.object_id)
 
     if json_output:
-        output = RepoItem(
-            id=project.object_id,
-            name=project.name,
-            path=repo_path_from_url(project.user_git_repo_url),
-            accessible=project.is_path_accessible,
-            created_at=project.created_at.isoformat() if hasattr(project.created_at, "isoformat") else None,
-        )
-        typer.echo(output.model_dump_json(indent=2))
+        typer.echo(_repo_item_from_project(project).model_dump_json(indent=2))
         return
 
     path = repo_path_from_url(project.user_git_repo_url)
@@ -90,6 +93,6 @@ def show(
         f"Path: {path}",
         f"Accessible: {'yes' if project.is_path_accessible else 'no'}",
     ]
-    if hasattr(project.created_at, "isoformat"):
+    if isinstance(project.created_at, datetime.datetime):
         lines.append(f"Created: {format_datetime(project.created_at)}")
     typer.echo("\n".join(lines))

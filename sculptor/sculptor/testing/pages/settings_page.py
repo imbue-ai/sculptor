@@ -5,6 +5,7 @@ from sculptor.constants import ElementIDs
 from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
 from sculptor.testing.elements.settings_actions import PlaywrightActionsSettingsElement
 from sculptor.testing.elements.settings_agent import PlaywrightAgentSettingsElement
+from sculptor.testing.elements.settings_ci_babysitter import PlaywrightCIBabysitterSettingsElement
 from sculptor.testing.elements.settings_claude_cli import PlaywrightClaudeCliSettingsElement
 from sculptor.testing.elements.settings_env_vars import PlaywrightEnvVarsSettingsElement
 from sculptor.testing.elements.settings_experimental import PlaywrightExperimentalSettingsElement
@@ -12,6 +13,7 @@ from sculptor.testing.elements.settings_git import PlaywrightGitSettingsElement
 from sculptor.testing.elements.settings_keybindings import PlaywrightKeybindingsSettingsElement
 from sculptor.testing.elements.settings_panels import PlaywrightPanelsSettingsElement
 from sculptor.testing.elements.settings_pi import PlaywrightPiSettingsElement
+from sculptor.testing.elements.settings_plugins import PlaywrightPluginsSettingsElement
 from sculptor.testing.elements.settings_privacy import PlaywrightPrivacySettingsElement
 from sculptor.testing.elements.settings_repositories import PlaywrightRepositoriesSettingsElement
 from sculptor.testing.elements.settings_theme_builder import PlaywrightThemeBuilderSettingsElement
@@ -48,7 +50,6 @@ class PlaywrightSettingsPage(PlaywrightProjectLayoutPage):
     def click_on_keybindings(self) -> PlaywrightKeybindingsSettingsElement:
         """Navigate to Keybindings settings and return the section element."""
         self._get_keybindings_nav().click()
-        # Return the keybindings settings section scoped to the page
         return PlaywrightKeybindingsSettingsElement(locator=self._get_settings_content(), page=self._page)
 
     def click_on_panels(self) -> PlaywrightPanelsSettingsElement:
@@ -60,6 +61,15 @@ class PlaywrightSettingsPage(PlaywrightProjectLayoutPage):
         """Navigate to Pi (experimental) settings and return the section element."""
         self._get_pi_nav().click()
         return PlaywrightPiSettingsElement(locator=self._get_settings_content(), page=self._page)
+
+    def click_on_plugins(self) -> PlaywrightPluginsSettingsElement:
+        """Navigate to Plugins settings and return the section element.
+
+        The Plugins nav item is gated on the experimental frontend-plugins flag,
+        so this only works on an instance with that flag enabled.
+        """
+        self.get_plugins_nav().click()
+        return PlaywrightPluginsSettingsElement(locator=self._get_settings_content(), page=self._page)
 
     def click_on_privacy(self) -> PlaywrightPrivacySettingsElement:
         """Navigate to Privacy settings and return the section element."""
@@ -80,6 +90,11 @@ class PlaywrightSettingsPage(PlaywrightProjectLayoutPage):
         """Navigate to Git settings and return the section element."""
         self._get_git_nav().click()
         return PlaywrightGitSettingsElement(locator=self._get_settings_content(), page=self._page)
+
+    def click_on_ci(self) -> PlaywrightCIBabysitterSettingsElement:
+        """Navigate to CI Babysitter settings and return the section element."""
+        self._get_ci_nav().click()
+        return PlaywrightCIBabysitterSettingsElement(locator=self._get_settings_content(), page=self._page)
 
     def click_on_env_vars(self) -> PlaywrightEnvVarsSettingsElement:
         """Navigate to Environment Variables settings and return the section element."""
@@ -116,6 +131,14 @@ class PlaywrightSettingsPage(PlaywrightProjectLayoutPage):
         """Get the Panels navigation item."""
         return self.get_by_test_id(ElementIDs.SETTINGS_NAV_PANELS)
 
+    def get_plugins_nav(self) -> Locator:
+        """Get the Plugins navigation item.
+
+        The Plugins section is gated on the experimental frontend-plugins
+        flag, so this locator is expected to be absent unless that flag is on.
+        """
+        return self.get_by_test_id(ElementIDs.SETTINGS_NAV_PLUGINS)
+
     def _get_pi_nav(self) -> Locator:
         """Get the Pi (experimental) navigation item."""
         return self.get_by_test_id(ElementIDs.SETTINGS_NAV_PI)
@@ -135,6 +158,10 @@ class PlaywrightSettingsPage(PlaywrightProjectLayoutPage):
     def _get_git_nav(self) -> Locator:
         """Get the Git navigation item."""
         return self.get_by_test_id(ElementIDs.SETTINGS_NAV_GIT)
+
+    def _get_ci_nav(self) -> Locator:
+        """Get the CI Babysitter navigation item."""
+        return self.get_by_test_id(ElementIDs.SETTINGS_NAV_CI)
 
     def _get_env_vars_nav(self) -> Locator:
         """Get the Environment Variables navigation item."""

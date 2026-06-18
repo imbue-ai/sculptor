@@ -41,6 +41,9 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import AbstractSet
+from collections.abc import Mapping
+from collections.abc import Sequence
 
 SLACK_API = "https://slack.com/api/"
 
@@ -52,7 +55,7 @@ class ApprovalAborted(Exception):
     """Raised on SIGTERM/SIGINT so the finally-block can mark the message."""
 
 
-def slack_call(method: str, token: str, params: dict[str, str], retries: int = 4) -> dict:
+def slack_call(method: str, token: str, params: Mapping[str, str], retries: int = 4) -> dict:
     """POST to a Slack Web API method (form-encoded) and return the JSON body.
 
     Retries on 429 (honoring Retry-After) and transient network errors. Raises
@@ -99,7 +102,7 @@ def normalize_first_word(text: str) -> str:
 
 
 def scan_for_decision(
-    messages: list[dict], parent_ts: str, approvers: set[str], minimum: int
+    messages: Sequence[Mapping[str, str]], parent_ts: str, approvers: AbstractSet[str], minimum: int
 ) -> tuple[str, str] | None:
     """Return (decision, user_id) for the thread, or None if undecided.
 

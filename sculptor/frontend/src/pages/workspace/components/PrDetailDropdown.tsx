@@ -71,10 +71,15 @@ export const PrDetailDropdown = ({ prStatus, gitProvider }: PrDetailDropdownProp
   const isPaused = babysitterState?.paused ?? false;
   const isRetired = babysitterState?.retired ?? false;
   const isAtCap = babysitterState?.atCap ?? false;
+  const disabledReason = babysitterState?.disabledReason ?? null;
+  // A persistent reason (MRU non-driveable / pinned harness unavailable) means
+  // the babysitter is inert until the user fixes the cause; a transient reason
+  // ("will retry on the next failure") still leaves the pause toggle meaningful.
+  const isPersistentlyDisabled = disabledReason != null && !(babysitterState?.disabledReasonIsTransient ?? false);
   // Status line always shows something so flipping the toggle isn't a
   // visual no-op. Retired splits on prState so the user understands why
-  // the toggle is disabled. "Active" subsumes both idle and "agent has
-  // been triggered" — the babysitter tab itself signals the latter.
+  // the toggle is disabled. A disabled reason takes precedence over
+  // "Active"/"At retry cap" so a non-driveable workspace never reads "Active".
   let babysitterStatusText: string;
   if (babysitterState == null) {
     babysitterStatusText = "Loading…";
@@ -84,6 +89,8 @@ export const PrDetailDropdown = ({ prStatus, gitProvider }: PrDetailDropdownProp
     babysitterStatusText = "Retired (MR closed)";
   } else if (isRetired) {
     babysitterStatusText = "Retired";
+  } else if (disabledReason != null) {
+    babysitterStatusText = disabledReason;
   } else if (isPaused) {
     babysitterStatusText = "Paused";
   } else if (isAtCap) {
@@ -163,9 +170,9 @@ export const PrDetailDropdown = ({ prStatus, gitProvider }: PrDetailDropdownProp
               <Text className={styles.sectionTitle}>CI Babysitter</Text>
               <Switch
                 data-testid={ElementIds.PR_BABYSITTER_PAUSE_TOGGLE}
-                checked={!isPaused}
+                checked={!isPaused && !isPersistentlyDisabled}
                 onCheckedChange={handlePauseChange}
-                disabled={isRetired}
+                disabled={isRetired || isPersistentlyDisabled}
               />
             </Flex>
             <Text size="1" color="gray" data-testid={ElementIds.PR_BABYSITTER_STATUS}>

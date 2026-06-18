@@ -8,8 +8,11 @@ implemented.
 """
 
 import datetime
+import threading
+import time
 from contextlib import contextmanager
 from pathlib import Path
+from queue import Queue
 from typing import Any
 from typing import Generator
 from typing import Literal
@@ -18,6 +21,10 @@ from typing import cast
 import pytest
 from pydantic import PrivateAttr
 
+from sculptor.config.user_config import BabysitterAgentClaude
+from sculptor.config.user_config import BabysitterAgentMRU
+from sculptor.config.user_config import BabysitterAgentPi
+from sculptor.config.user_config import BabysitterAgentRegistered
 from sculptor.config.user_config import CIBabysitterConfig
 from sculptor.config.user_config import UserConfig
 from sculptor.database.models import AgentTaskInputsV2
@@ -27,11 +34,17 @@ from sculptor.database.models import Task
 from sculptor.database.models import TaskID
 from sculptor.database.models import Workspace
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
+from sculptor.foundation.async_monkey_patches_test import expect_at_least_logged_errors
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.interfaces.agents.agent import ClaudeCodeSDKAgentConfig
+from sculptor.interfaces.agents.agent import EnvironmentAcquiredRunnerMessage
 from sculptor.interfaces.agents.agent import MessageTypes
 from sculptor.interfaces.agents.agent import PiAgentConfig
+from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.interfaces.agents.agent import TerminalAgentConfig
+from sculptor.interfaces.agents.agent import TerminalAgentSignalRunnerMessage
+from sculptor.interfaces.agents.agent import TerminalStatusSignal
+from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import OrganizationReference
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import RequestID
@@ -40,15 +53,20 @@ from sculptor.primitives.ids import UserReference
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.services.ci_babysitter_service import coordinator as coordinator_module
 from sculptor.services.ci_babysitter_service.coordinator import CIBabysitterCoordinator
+from sculptor.services.ci_babysitter_service.coordinator import ChatAgent
+from sculptor.services.ci_babysitter_service.coordinator import Disabled
+from sculptor.services.ci_babysitter_service.coordinator import DriveableTerminal
 from sculptor.services.ci_babysitter_service.transitions import Transition
 from sculptor.services.data_model_service.api import DataModelService
 from sculptor.services.data_model_service.data_types import DataModelTransaction
 from sculptor.services.git_repo_service.api import GitRepoService
 from sculptor.services.git_repo_service.git_repos import ReadOnlyGitRepo
 from sculptor.services.task_service.api import TaskService
+from sculptor.services.terminal_agent_registry.registry import TerminalAgentRegistration
 from sculptor.services.workspace_service.api import WorkspaceService
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
+from sculptor.state.messages import Message
 from sculptor.web.derived import PrStatusInfo
 from sculptor.web.pr_polling_service import PrPollingService
 
@@ -144,6 +162,15 @@ class _StubTaskService(TaskService):
     def mark_unread(self, task_id: TaskID, transaction: DataModelTransaction) -> Task:
         return _stub(task_id, transaction)
 
+    def update_available_models(
+        self,
+        task_id: TaskID,
+        available_models: Any,
+        current_model: Any,
+        transaction: DataModelTransaction,
+    ) -> Any:
+        return _stub(task_id, available_models, current_model, transaction)
+
     def restore_task(self, task_id: TaskID, transaction: DataModelTransaction) -> Task:
         return _stub(task_id, transaction)
 
@@ -223,7 +250,7 @@ class _StubGitRepo(ReadOnlyGitRepo):
 
 
 # Set abstract methods on stub classes that may have inherited abstracts we
-# haven't enumerated. The explicit stubs above satisfy pyre; this hides any
+# haven't enumerated. The explicit stubs above satisfy the type checker; this hides any
 # parent-class abstracts at runtime that we don't actually need.
 for _stub_cls in (_StubTransaction, _StubDataModelService, _StubTaskService, _StubGitRepo):
     _stub_cls.__abstractmethods__ = frozenset()
@@ -239,10 +266,11 @@ class _StubGitRepoService(GitRepoService):
 
 
 # WorkspaceService has many abstracts; tests don't call any. Build a stub
-# class dynamically so pyre sees ``_make_workspace_service`` as returning a
+# class dynamically so the type checker sees ``_make_workspace_service`` as returning a
 # real ``WorkspaceService`` without an abstract-instantiation error.
 def _make_workspace_service(concurrency_group: ConcurrencyGroup) -> WorkspaceService:
     cls = type("_StubWorkspaceService", (WorkspaceService,), {})
+    # pyrefly: ignore [missing-attribute]
     cls.__abstractmethods__ = frozenset()
     return cast(WorkspaceService, cls(concurrency_group=concurrency_group))
 
@@ -271,6 +299,9 @@ class _FakeEnv:
             initialization_strategy=WorkspaceInitializationStrategy.CLONE,
         )
         self.tasks_by_id: dict[TaskID, Task] = {}
+        # Most-recent-first agent tasks the resolver sees through the coordinator's
+        # own transactions (used by get_state_snapshot's proactive resolve).
+        self.tasks: list[Task] = []
 
 
 class _FakeTransaction(_StubTransaction):
@@ -282,6 +313,10 @@ class _FakeTransaction(_StubTransaction):
 
     def get_workspace(self, workspace_id: WorkspaceID) -> Workspace | None:
         return self._env.workspace if workspace_id == self._env.workspace.object_id else None
+
+    def get_tasks_for_project(self, project_id: ProjectID, input_data_classes: Any = None) -> list[Task]:
+        del project_id, input_data_classes
+        return list(self._env.tasks)
 
     def get_project(self, project_id: ProjectID) -> Project | None:
         return self._env.project if project_id == self._env.project.object_id else None
@@ -302,15 +337,30 @@ class _FakeDataModelService(_StubDataModelService):
         yield _FakeTransaction(self._env)
 
 
+def _ready_terminal_messages() -> list[Message]:
+    """Seed messages for which scan_terminal_signal_state reports run-started + IDLE."""
+    return [
+        EnvironmentAcquiredRunnerMessage.model_construct(message_id=AgentMessageID(), environment=None),
+        TerminalAgentSignalRunnerMessage(signal=TerminalStatusSignal.IDLE),
+    ]
+
+
 class _FakeTaskService(_StubTaskService):
     _env: _FakeEnv = PrivateAttr()
     _create_task_calls: list[Task] = PrivateAttr(default_factory=list)
     _create_message_calls: list[tuple[ChatInputUserMessage, TaskID]] = PrivateAttr(default_factory=list)
     _delete_task_calls: list[TaskID] = PrivateAttr(default_factory=list)
+    # Messages the terminal-readiness subscription is seeded with. Defaults to an
+    # already-at-prompt program so terminal-drive tests deliver; the never-ready
+    # test sets this to []. The live queue is exposed so a test can push more
+    # messages after the worker subscribes.
+    _seeded_terminal_messages: list[Message] = PrivateAttr(default_factory=list)
+    _live_terminal_queue: "Queue[Message] | None" = PrivateAttr(default=None)
 
     def __init__(self, env: _FakeEnv, concurrency_group: ConcurrencyGroup) -> None:
         super().__init__(concurrency_group=concurrency_group, task_sync_dir=Path("/tmp"))
         self._env = env
+        self._seeded_terminal_messages = _ready_terminal_messages()
 
     @property
     def create_task_calls(self) -> list[Task]:
@@ -342,6 +392,22 @@ class _FakeTaskService(_StubTaskService):
     def delete_task(self, task_id: TaskID, transaction: DataModelTransaction) -> None:
         del transaction
         self._delete_task_calls.append(task_id)
+
+    @property
+    def live_terminal_queue(self) -> "Queue[Message] | None":
+        return self._live_terminal_queue
+
+    @contextmanager
+    def subscribe_to_task(self, task_id: TaskID) -> Generator["Queue[Message]", None, None]:
+        del task_id
+        queue: "Queue[Message]" = Queue()
+        for message in self._seeded_terminal_messages:
+            queue.put(message)
+        self._live_terminal_queue = queue
+        try:
+            yield queue
+        finally:
+            self._live_terminal_queue = None
 
 
 class _FakeGitRepo(_StubGitRepo):
@@ -746,9 +812,9 @@ def test_pipeline_failed_dispatch_dedupes_per_pipeline_id(
     assert state.last_dispatched_pipeline_failed_id == 2
 
 
-# Chat-agent config inheritance for babysitter tasks:
-# the babysitter inherits the config TYPE of the workspace's most recent chat
-# agent; terminal agents are skipped; fallback is Claude.
+# Agent resolution for babysitter tasks: _resolve_babysitter_agent maps the
+# user's setting (MRU or a pinned harness) + the workspace's most-recent agent
+# to a ChatAgent / DriveableTerminal / Disabled result.
 
 
 class _TasksTransaction(_FakeTransaction):
@@ -785,44 +851,527 @@ def _make_agent_task(
     )
 
 
-def test_babysitter_inherits_pi_config_from_most_recent_chat_agent(
+def _make_config_with_agent(agent: Any, enable_pi_agent: bool = False) -> UserConfig:
+    return UserConfig(
+        user_email="test@example.com",
+        user_id="u",
+        organization_id="o",
+        instance_id="i",
+        enable_pi_agent=enable_pi_agent,
+        ci_babysitter=CIBabysitterConfig(enabled=True, agent=agent),
+    )
+
+
+def _opt_in_registration(registration_id: str = "claude-code") -> TerminalAgentRegistration:
+    return TerminalAgentRegistration(
+        registration_id=registration_id,
+        display_name="Claude Code",
+        launch_command="claude",
+        accepts_automated_prompts=True,
+    )
+
+
+def _revoked_registration(registration_id: str = "claude-code") -> TerminalAgentRegistration:
+    return TerminalAgentRegistration(
+        registration_id=registration_id,
+        display_name="Claude Code",
+        launch_command="claude",
+        accepts_automated_prompts=False,
+    )
+
+
+def _resolve(coordinator: CIBabysitterCoordinator, env: _FakeEnv, config: UserConfig, tasks: list[Task]) -> Any:
+    return coordinator._resolve_babysitter_agent(
+        env.workspace_id, env.project_id, config, _TasksTransaction(env, tasks)
+    )
+
+
+def test_mru_most_recent_claude_resolves_chat_claude(
     env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup
 ) -> None:
     coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
-    tasks = [
-        _make_agent_task(env, ClaudeCodeSDKAgentConfig(), "2026-01-01T00:00:00"),
-        _make_agent_task(env, PiAgentConfig(), "2026-01-02T00:00:00"),
-    ]
-    config = coordinator._select_chat_agent_config_for_workspace(
-        env.workspace_id, env.project_id, _TasksTransaction(env, tasks)
-    )
-    assert isinstance(config, PiAgentConfig)
+    tasks = [_make_agent_task(env, ClaudeCodeSDKAgentConfig(), "2026-01-01T00:00:00")]
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentMRU()), tasks)
+    assert isinstance(result, ChatAgent)
+    assert isinstance(result.config, ClaudeCodeSDKAgentConfig)
 
 
-def test_babysitter_skips_terminal_agents_when_inheriting_config(
+def test_mru_most_recent_pi_resolves_pi_when_enabled(
     env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup
 ) -> None:
     coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
-    # Terminal agent is the most recent — it must be skipped, so pi wins.
-    tasks = [
-        _make_agent_task(env, PiAgentConfig(), "2026-01-01T00:00:00"),
-        _make_agent_task(env, TerminalAgentConfig(), "2026-01-02T00:00:00"),
-    ]
-    config = coordinator._select_chat_agent_config_for_workspace(
-        env.workspace_id, env.project_id, _TasksTransaction(env, tasks)
+    tasks = [_make_agent_task(env, PiAgentConfig(), "2026-01-01T00:00:00")]
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentMRU(), enable_pi_agent=True), tasks)
+    assert isinstance(result, ChatAgent)
+    assert isinstance(result.config, PiAgentConfig)
+
+
+def test_mru_most_recent_pi_falls_back_to_claude_when_pi_disabled(
+    env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    # MRU is best-effort: an MRU Pi while Pi is disabled must not brick the
+    # babysitter — fall back to Claude (unlike a *pinned* Pi, which goes Disabled).
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    tasks = [_make_agent_task(env, PiAgentConfig(), "2026-01-01T00:00:00")]
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentMRU(), enable_pi_agent=False), tasks)
+    assert isinstance(result, ChatAgent)
+    assert isinstance(result.config, ClaudeCodeSDKAgentConfig)
+
+
+def test_mru_most_recent_driveable_terminal_resolves_driveable(
+    env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _opt_in_registration(_id))
+    terminal_config = RegisteredTerminalAgentConfig(
+        registration_id="claude-code",
+        display_name="Claude Code",
+        launch_command="claude",
+        accepts_automated_prompts=True,
     )
-    assert isinstance(config, PiAgentConfig)
+    tasks = [_make_agent_task(env, terminal_config, "2026-01-01T00:00:00")]
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentMRU()), tasks)
+    assert isinstance(result, DriveableTerminal)
+    assert result.config.registration_id == "claude-code"
+    assert result.config.accepts_automated_prompts is True
 
 
-def test_babysitter_falls_back_to_claude_with_only_terminal_agents(
+def test_mru_most_recent_plain_terminal_is_disabled(
     env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup
 ) -> None:
     coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
     tasks = [_make_agent_task(env, TerminalAgentConfig(), "2026-01-01T00:00:00")]
-    config = coordinator._select_chat_agent_config_for_workspace(
-        env.workspace_id, env.project_id, _TasksTransaction(env, tasks)
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentMRU()), tasks)
+    assert isinstance(result, Disabled)
+    assert result.reason == coordinator_module._DISABLED_REASON_MRU_NON_DRIVEABLE
+    assert result.transient is False
+
+
+def test_mru_most_recent_registered_with_revoked_opt_in_is_disabled(
+    env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The task's stamped opt-in may be stale; the live registration revoked it.
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _revoked_registration(_id))
+    terminal_config = RegisteredTerminalAgentConfig(
+        registration_id="claude-code",
+        display_name="Claude Code",
+        launch_command="claude",
+        accepts_automated_prompts=True,
     )
-    assert isinstance(config, ClaudeCodeSDKAgentConfig)
+    tasks = [_make_agent_task(env, terminal_config, "2026-01-01T00:00:00")]
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentMRU()), tasks)
+    assert isinstance(result, Disabled)
+    assert result.reason == coordinator_module._DISABLED_REASON_MRU_NON_DRIVEABLE
+
+
+def test_mru_no_prior_task_resolves_chat_claude(env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup) -> None:
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentMRU()), [])
+    assert isinstance(result, ChatAgent)
+    assert isinstance(result.config, ClaudeCodeSDKAgentConfig)
+
+
+def test_mru_does_not_skip_terminal_to_reach_older_chat(
+    env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    # Most-recent is a plain terminal, older is Claude. The resolver must NOT
+    # skip the terminal to reach the older chat agent — it goes Disabled.
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    tasks = [
+        _make_agent_task(env, ClaudeCodeSDKAgentConfig(), "2026-01-01T00:00:00"),
+        _make_agent_task(env, TerminalAgentConfig(), "2026-01-02T00:00:00"),
+    ]
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentMRU()), tasks)
+    assert isinstance(result, Disabled)
+    assert result.reason == coordinator_module._DISABLED_REASON_MRU_NON_DRIVEABLE
+
+
+def test_pinned_claude_resolves_chat_claude(env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup) -> None:
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    # A most-recent Pi must be ignored when Claude is pinned.
+    tasks = [_make_agent_task(env, PiAgentConfig(), "2026-01-01T00:00:00")]
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentClaude()), tasks)
+    assert isinstance(result, ChatAgent)
+    assert isinstance(result.config, ClaudeCodeSDKAgentConfig)
+
+
+def test_pinned_pi_resolves_pi_when_enabled(env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup) -> None:
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentPi(), enable_pi_agent=True), [])
+    assert isinstance(result, ChatAgent)
+    assert isinstance(result.config, PiAgentConfig)
+
+
+def test_pinned_pi_is_disabled_when_pi_disabled(env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup) -> None:
+    # A *pinned* Pi while Pi is disabled goes Disabled — no silent fallback.
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentPi(), enable_pi_agent=False), [])
+    assert isinstance(result, Disabled)
+    assert result.reason == coordinator_module._DISABLED_REASON_PINNED_UNAVAILABLE
+
+
+def test_pinned_registered_available_resolves_driveable(
+    env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _opt_in_registration(_id))
+    result = _resolve(
+        coordinator, env, _make_config_with_agent(BabysitterAgentRegistered(registration_id="claude-code")), []
+    )
+    assert isinstance(result, DriveableTerminal)
+    assert result.config.registration_id == "claude-code"
+
+
+def test_pinned_registered_unavailable_is_disabled(
+    env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: None)
+    result = _resolve(coordinator, env, _make_config_with_agent(BabysitterAgentRegistered(registration_id="gone")), [])
+    assert isinstance(result, Disabled)
+    assert result.reason == coordinator_module._DISABLED_REASON_PINNED_UNAVAILABLE
+
+
+def test_deliver_prompt_to_agent_writes_to_terminal_via_helper(
+    env: _FakeEnv, test_root_concurrency_group: ConcurrencyGroup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The seam dispatches a registered-terminal task through the Task 1.1 helper.
+    coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
+    terminal_config = RegisteredTerminalAgentConfig(
+        registration_id="claude-code",
+        display_name="Claude Code",
+        launch_command="claude",
+        accepts_automated_prompts=True,
+    )
+    task = _make_agent_task(env, terminal_config, "2026-01-01T00:00:00")
+    calls: list[tuple[TaskID, str, bool]] = []
+
+    def _fake_deliver(received_task: Task, text: str, *, submit: bool, task_service: Any) -> Any:
+        del task_service
+        calls.append((received_task.object_id, text, submit))
+        return coordinator_module.TerminalDeliveryResult.DELIVERED
+
+    monkeypatch.setattr(coordinator_module, "deliver_prompt_to_terminal_agent", _fake_deliver)
+    result = coordinator.deliver_prompt_to_agent(task, "fix the pipeline", _make_user_config())
+
+    assert result is coordinator_module.TerminalDeliveryResult.DELIVERED
+    assert calls == [(task.object_id, "fix the pipeline", True)]
+    # No chat message was queued for the terminal path.
+    assert task_service.create_message_calls == []
+
+
+# Terminal-drive worker: the babysitter offloads a registered-terminal drive to
+# a worker thread, tracks a transient disabled-reason, and coalesces overlapping
+# drives. Tests pin a registered agent so resolution returns DriveableTerminal.
+
+
+def _make_terminal_config(failed_prompt: str = "FAILED_PROMPT", retry_cap: int = 3) -> UserConfig:
+    return UserConfig(
+        user_email="test@example.com",
+        user_id="u",
+        organization_id="o",
+        instance_id="i",
+        ci_babysitter=CIBabysitterConfig(
+            enabled=True,
+            retry_cap=retry_cap,
+            pipeline_failed_prompt=failed_prompt,
+            agent=BabysitterAgentRegistered(registration_id="claude-code"),
+        ),
+    )
+
+
+def _wait_until(predicate: Any, timeout: float = 2.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return
+        time.sleep(0.01)
+    assert predicate(), "condition not met within timeout"
+
+
+def test_terminal_drive_worker_delivers_and_clears_transient_reason(
+    env: _FakeEnv,
+    patch_user_config: _ConfigSlot,
+    test_root_concurrency_group: ConcurrencyGroup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    patch_user_config.config = _make_terminal_config()
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _opt_in_registration(_id))
+    calls: list[tuple[str, bool]] = []
+
+    def _fake(task: Task, text: str, *, submit: bool, task_service: Any) -> Any:
+        del task, task_service
+        calls.append((text, submit))
+        return coordinator_module.TerminalDeliveryResult.DELIVERED
+
+    monkeypatch.setattr(coordinator_module, "deliver_prompt_to_terminal_agent", _fake)
+    coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
+    _seed_baseline(coordinator, env.workspace_id)
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+    state = coordinator._state[env.workspace_id]
+    _wait_until(lambda: not state.is_terminal_drive_in_progress)
+
+    assert calls == [("FAILED_PROMPT", True)]
+    assert state.transient_disabled_reason is None
+    assert state.retry_count == 1
+    # A terminal task was created and driven via the PTY, not a chat message.
+    assert len(task_service.create_task_calls) == 1
+    assert task_service.create_message_calls == []
+
+
+def test_terminal_drive_failure_sets_transient_reason_and_counts_retry(
+    env: _FakeEnv,
+    patch_user_config: _ConfigSlot,
+    test_root_concurrency_group: ConcurrencyGroup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    patch_user_config.config = _make_terminal_config()
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _opt_in_registration(_id))
+
+    def _fake(task: Task, text: str, *, submit: bool, task_service: Any) -> Any:
+        del task, text, submit, task_service
+        return coordinator_module.TerminalDeliveryResult.NOT_AT_PROMPT
+
+    monkeypatch.setattr(coordinator_module, "deliver_prompt_to_terminal_agent", _fake)
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    _seed_baseline(coordinator, env.workspace_id)
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+    state = coordinator._state[env.workspace_id]
+    _wait_until(lambda: not state.is_terminal_drive_in_progress)
+
+    assert state.transient_disabled_reason == coordinator_module._TRANSIENT_REASON_UNREACHABLE
+    # A failed drive still counts against retry_cap.
+    assert state.retry_count == 1
+
+
+def test_overlapping_terminal_drive_coalesces(
+    env: _FakeEnv,
+    patch_user_config: _ConfigSlot,
+    test_root_concurrency_group: ConcurrencyGroup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    patch_user_config.config = _make_terminal_config()
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _opt_in_registration(_id))
+    calls: list[str] = []
+
+    def _fake(task: Task, text: str, *, submit: bool, task_service: Any) -> Any:
+        del task, submit, task_service
+        calls.append(text)
+        return coordinator_module.TerminalDeliveryResult.DELIVERED
+
+    monkeypatch.setattr(coordinator_module, "deliver_prompt_to_terminal_agent", _fake)
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    _seed_baseline(coordinator, env.workspace_id)
+    state = coordinator._state[env.workspace_id]
+
+    # Simulate a drive already in flight: a second failure (new pipeline_id) must
+    # not start a racing worker.
+    state.is_terminal_drive_in_progress = True
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+
+    assert calls == []
+    # Coalesced dispatch does not bump retry/dedup bookkeeping for this cycle.
+    assert state.retry_count == 0
+
+
+def test_terminal_drive_in_progress_clears_on_worker_exception(
+    env: _FakeEnv,
+    patch_user_config: _ConfigSlot,
+    test_root_concurrency_group: ConcurrencyGroup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    patch_user_config.config = _make_terminal_config()
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _opt_in_registration(_id))
+
+    def _boom(task: Task, text: str, *, submit: bool, task_service: Any) -> Any:
+        del task, text, submit, task_service
+        raise RuntimeError("pty exploded")
+
+    monkeypatch.setattr(coordinator_module, "deliver_prompt_to_terminal_agent", _boom)
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    _seed_baseline(coordinator, env.workspace_id)
+
+    with expect_at_least_logged_errors({"CIBabysitterCoordinator: terminal drive failed for workspace="}):
+        coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+        state = coordinator._state[env.workspace_id]
+        # A worker exception must never park the workspace with the guard stuck on.
+        _wait_until(lambda: not state.is_terminal_drive_in_progress)
+    assert state.is_terminal_drive_in_progress is False
+
+
+def test_terminal_drive_in_progress_clears_on_spawn_failure(
+    env: _FakeEnv,
+    patch_user_config: _ConfigSlot,
+    test_root_concurrency_group: ConcurrencyGroup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # If the worker thread can't even be spawned, the worker's finally never
+    # runs, so dispatch must clear the in-progress guard itself — otherwise the
+    # workspace is parked forever — and must not bump the retry count (no drive
+    # was attempted).
+    patch_user_config.config = _make_terminal_config()
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _opt_in_registration(_id))
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+
+    def _raise(group: Any, *, target: Any, args: Any, name: str) -> None:
+        del group, target, args, name
+        raise RuntimeError("thread pool exhausted")
+
+    monkeypatch.setattr(type(coordinator.concurrency_group), "start_new_thread", _raise)
+    _seed_baseline(coordinator, env.workspace_id)
+
+    with expect_at_least_logged_errors({"CIBabysitterCoordinator: failed to start terminal drive for workspace="}):
+        coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+    state = coordinator._state[env.workspace_id]
+    assert state.is_terminal_drive_in_progress is False
+    assert state.retry_count == 0
+
+
+def test_terminal_drive_does_not_block_consumer_loop(
+    env: _FakeEnv,
+    patch_user_config: _ConfigSlot,
+    test_root_concurrency_group: ConcurrencyGroup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # _dispatch_prompt must return promptly even when the write blocks; the
+    # write happens on the worker, not the consumer thread.
+    patch_user_config.config = _make_terminal_config()
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _opt_in_registration(_id))
+    release = threading.Event()
+    started = threading.Event()
+
+    def _blocking(task: Task, text: str, *, submit: bool, task_service: Any) -> Any:
+        del task, text, submit, task_service
+        started.set()
+        release.wait(timeout=5.0)
+        return coordinator_module.TerminalDeliveryResult.DELIVERED
+
+    monkeypatch.setattr(coordinator_module, "deliver_prompt_to_terminal_agent", _blocking)
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    _seed_baseline(coordinator, env.workspace_id)
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+    # The dispatch returned while the worker is still blocked inside the write.
+    assert started.wait(timeout=2.0)
+    state = coordinator._state[env.workspace_id]
+    assert state.is_terminal_drive_in_progress is True
+    release.set()
+    _wait_until(lambda: not state.is_terminal_drive_in_progress)
+
+
+def test_terminal_drive_waits_for_idle_then_delivers(
+    env: _FakeEnv,
+    patch_user_config: _ConfigSlot,
+    test_root_concurrency_group: ConcurrencyGroup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A freshly-spawned program is not at its prompt yet: the subscription is
+    # seeded empty, and the IDLE signal is pushed after the worker subscribes.
+    patch_user_config.config = _make_terminal_config()
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _opt_in_registration(_id))
+    calls: list[str] = []
+
+    def _fake(task: Task, text: str, *, submit: bool, task_service: Any) -> Any:
+        del task, submit, task_service
+        calls.append(text)
+        return coordinator_module.TerminalDeliveryResult.DELIVERED
+
+    monkeypatch.setattr(coordinator_module, "deliver_prompt_to_terminal_agent", _fake)
+    coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
+    task_service._seeded_terminal_messages = []  # program has not reached its prompt yet
+    _seed_baseline(coordinator, env.workspace_id)
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+    state = coordinator._state[env.workspace_id]
+
+    # The worker is now blocked in the readiness wait. Push the readiness signal.
+    _wait_until(lambda: task_service.live_terminal_queue is not None)
+    queue = task_service.live_terminal_queue
+    assert queue is not None
+    for message in _ready_terminal_messages():
+        queue.put(message)
+
+    _wait_until(lambda: not state.is_terminal_drive_in_progress)
+    assert calls == ["FAILED_PROMPT"]
+    assert state.transient_disabled_reason is None
+
+
+def test_terminal_drive_never_ready_times_out(
+    env: _FakeEnv,
+    patch_user_config: _ConfigSlot,
+    test_root_concurrency_group: ConcurrencyGroup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    patch_user_config.config = _make_terminal_config()
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _opt_in_registration(_id))
+    monkeypatch.setattr(coordinator_module, "_TERMINAL_READINESS_BACKSTOP_SECONDS", 0.3)
+    monkeypatch.setattr(coordinator_module, "_TERMINAL_READINESS_POLL_SECONDS", 0.05)
+    calls: list[str] = []
+
+    def _fake(task: Task, text: str, *, submit: bool, task_service: Any) -> Any:
+        del task, submit, task_service
+        calls.append(text)
+        return coordinator_module.TerminalDeliveryResult.DELIVERED
+
+    monkeypatch.setattr(coordinator_module, "deliver_prompt_to_terminal_agent", _fake)
+    coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
+    task_service._seeded_terminal_messages = []  # never reaches its prompt
+    _seed_baseline(coordinator, env.workspace_id)
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+    state = coordinator._state[env.workspace_id]
+    _wait_until(lambda: not state.is_terminal_drive_in_progress)
+
+    # No write happened, but the attempt counted and the transient reason is set.
+    assert calls == []
+    assert state.transient_disabled_reason == coordinator_module._TRANSIENT_REASON_UNREACHABLE
+    assert state.retry_count == 1
+
+
+def test_terminal_drive_retries_reuse_same_task(
+    env: _FakeEnv,
+    patch_user_config: _ConfigSlot,
+    test_root_concurrency_group: ConcurrencyGroup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Two failures (new pipeline_id each) within retry_cap reuse one terminal task.
+    patch_user_config.config = _make_terminal_config()
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _opt_in_registration(_id))
+    calls: list[str] = []
+
+    def _fake(task: Task, text: str, *, submit: bool, task_service: Any) -> Any:
+        del task, submit, task_service
+        calls.append(text)
+        return coordinator_module.TerminalDeliveryResult.DELIVERED
+
+    monkeypatch.setattr(coordinator_module, "deliver_prompt_to_terminal_agent", _fake)
+    coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
+    _seed_baseline(coordinator, env.workspace_id)
+    state = coordinator._state[env.workspace_id]
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+    _wait_until(lambda: not state.is_terminal_drive_in_progress)
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=2))
+    _wait_until(lambda: not state.is_terminal_drive_in_progress)
+
+    assert len(task_service.create_task_calls) == 1  # one task reused across retries
+    assert len(calls) == 2
+    assert state.retry_count == 2
+
+
+def test_transient_reason_clears_on_pipeline_passed(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    _seed_baseline(coordinator, env.workspace_id)
+    state = coordinator._state[env.workspace_id]
+    state.transient_disabled_reason = "stale hiccup"
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="passed", pipeline_id=1))
+    assert state.transient_disabled_reason is None
 
 
 def test_select_model_for_workspace_skips_terminal_agents(
@@ -840,3 +1389,88 @@ def test_select_model_for_workspace_skips_terminal_agents(
         env.workspace_id, env.project_id, _make_user_config(), _TasksTransaction(env, tasks)
     )
     assert model == LLMModel.CLAUDE_4_OPUS
+
+
+# get_state_snapshot proactively recomputes the persistent disabled-reason on
+# every read and surfaces the stored transient reason.
+
+
+def test_snapshot_surfaces_persistent_reason_for_plain_terminal_mru(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    coordinator.set_paused(env.workspace_id, False)  # create per-workspace state
+    # Most-recent agent is a plain terminal — never driveable. No failure yet.
+    env.tasks = [_make_agent_task(env, TerminalAgentConfig(), "2026-01-01T00:00:00")]
+
+    snapshot = coordinator.get_state_snapshot(env.workspace_id)
+    assert snapshot is not None
+    assert snapshot.disabled_reason == coordinator_module._DISABLED_REASON_MRU_NON_DRIVEABLE
+    assert snapshot.disabled_reason_is_transient is False
+
+
+def test_snapshot_reason_self_heals_when_mru_becomes_driveable(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    coordinator.set_paused(env.workspace_id, False)
+    env.tasks = [_make_agent_task(env, TerminalAgentConfig(), "2026-01-01T00:00:00")]
+    before = coordinator.get_state_snapshot(env.workspace_id)
+    assert before is not None
+    assert before.disabled_reason is not None
+
+    # The user opens a Claude chat agent — the reason is recomputed, not stored.
+    env.tasks = [_make_agent_task(env, ClaudeCodeSDKAgentConfig(), "2026-01-02T00:00:00")]
+    after = coordinator.get_state_snapshot(env.workspace_id)
+    assert after is not None
+    assert after.disabled_reason is None
+
+
+def test_snapshot_surfaces_pinned_unavailable_reason(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    patch_user_config.config = _make_config_with_agent(BabysitterAgentPi(), enable_pi_agent=False)
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    coordinator.set_paused(env.workspace_id, False)
+
+    snapshot = coordinator.get_state_snapshot(env.workspace_id)
+    assert snapshot is not None
+    assert snapshot.disabled_reason == coordinator_module._DISABLED_REASON_PINNED_UNAVAILABLE
+
+
+def test_snapshot_surfaces_transient_reason_for_driveable_terminal(
+    env: _FakeEnv,
+    patch_user_config: _ConfigSlot,
+    test_root_concurrency_group: ConcurrencyGroup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(coordinator_module, "get_registration", lambda _id: _opt_in_registration(_id))
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    coordinator.set_paused(env.workspace_id, False)
+    terminal_config = RegisteredTerminalAgentConfig(
+        registration_id="claude-code",
+        display_name="Claude Code",
+        launch_command="claude",
+        accepts_automated_prompts=True,
+    )
+    env.tasks = [_make_agent_task(env, terminal_config, "2026-01-01T00:00:00")]
+    coordinator._state[env.workspace_id].transient_disabled_reason = coordinator_module._TRANSIENT_REASON_UNREACHABLE
+
+    snapshot = coordinator.get_state_snapshot(env.workspace_id)
+    assert snapshot is not None
+    # The MRU resolves driveable (no persistent reason), so the stored transient
+    # reason is surfaced and flagged transient (the babysitter will retry).
+    assert snapshot.disabled_reason == coordinator_module._TRANSIENT_REASON_UNREACHABLE
+    assert snapshot.disabled_reason_is_transient is True
+
+
+def test_snapshot_has_no_reason_for_healthy_chat_mru(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    coordinator.set_paused(env.workspace_id, False)
+    env.tasks = [_make_agent_task(env, ClaudeCodeSDKAgentConfig(), "2026-01-01T00:00:00")]
+
+    snapshot = coordinator.get_state_snapshot(env.workspace_id)
+    assert snapshot is not None
+    assert snapshot.disabled_reason is None

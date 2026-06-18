@@ -4,7 +4,7 @@
 //
 //   - vite.web.config.ts      (web / OpenHost):  base "/",  outDir dist,
 //                                                 API_URL_BASE "" (same-origin)
-//   - vite.renderer.config.ts (Electron renderer): base "./", outDir
+//   - vite.renderer.config.ts (Electron renderer): base "/", outDir
 //                                                 .vite/build/renderer,
 //                                                 API_URL_BASE undefined
 //                                                 (preload injects the port)
@@ -16,6 +16,8 @@ import path from "node:path";
 
 import react from "@vitejs/plugin-react-swc";
 import type { Plugin } from "vite";
+
+import { pluginRuntimeStubs } from "./vite-plugins/plugin-runtime-stubs.ts";
 
 /**
  * Exclude ``@xterm/xterm`` from the bundle and serve it as a standalone
@@ -74,6 +76,7 @@ export function externalizeXterm(root: string): Plugin {
 /** Plugins shared by the web and Electron-renderer builds. */
 export const sharedPlugins = (root: string): Array<Plugin> => [
   externalizeXterm(root),
+  pluginRuntimeStubs(),
   react({
     plugins: [
       [

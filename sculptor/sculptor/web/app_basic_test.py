@@ -53,6 +53,7 @@ from sculptor.web.auth import authenticate_anonymous
 from sculptor.web.data_types import AgentTypeName
 from sculptor.web.data_types import CreateAgentRequest
 from sculptor.web.data_types import SendMessageRequest
+from sculptor.web.data_types import SetModelRequest
 from sculptor.web.data_types import StartTaskRequest
 
 # Check session token enforcement on the telemetry endpoint.
@@ -533,6 +534,48 @@ def test_send_message_rejects_enter_plan_mode_when_harness_lacks_backchannel(
     assert response.status_code == 400
 
 
+def test_set_model_rejects_harness_without_model_selection(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    """The set-model endpoint mirrors the frontend model-selection gate: a harness
+    that advertises `supports_model_selection=False` (HelloHarness) must reject the
+    request rather than dispatch a SetModelUserMessage it cannot honor."""
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+        task = _create_task_in_workspace(transaction, user_session, test_project, test_services, workspace)
+    response = client.post(
+        f"/api/v1/workspaces/{workspace.object_id}/agents/{task.object_id}/set_model",
+        json=model_dump(SetModelRequest(provider="anthropic", model_id="claude-haiku-4-5"), is_camel_case=True),
+    )
+    assert response.status_code == 400, response.text
+
+
+def test_set_model_rejects_claude_harness_without_a_backend_catalog(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    """Claude advertises `supports_model_selection=True` but switches per turn and
+    sources no backend catalog. The out-of-band set-model endpoint must reject it
+    rather than enqueue a SetModelUserMessage the Claude wrapper never resolves,
+    which would hang the request waiting for a terminal outcome."""
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+        task = _create_task_in_workspace(
+            transaction,
+            user_session,
+            test_project,
+            test_services,
+            workspace,
+            agent_config=ClaudeCodeSDKAgentConfig(),
+        )
+    response = client.post(
+        f"/api/v1/workspaces/{workspace.object_id}/agents/{task.object_id}/set_model",
+        json=model_dump(SetModelRequest(provider="anthropic", model_id="claude-haiku-4-5"), is_camel_case=True),
+    )
+    assert response.status_code == 400, response.text
+
+
 def test_update_naming_pattern_performs_update(
     client: TestClient, test_services: CompleteServiceCollection, test_project: Project
 ) -> None:
@@ -695,7 +738,7 @@ def test_restore_agent_fails_when_workspace_deleted(
         fetched_task = test_services.task_service.get_task(task.object_id, transaction)
         assert fetched_task is not None
         updated_task = fetched_task.evolve(fetched_task.ref().outcome, TaskState.FAILED)
-        # pyre-fixme[16]: only TaskAndDataModelTransaction has upsert_task, not DataModelTransaction
+        # pyrefly: ignore [missing-attribute]
         transaction.upsert_task(updated_task)
 
     # Delete the workspace directly

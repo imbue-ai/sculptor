@@ -65,7 +65,8 @@ def run_git_command_local(
             stderr=e.stderr,
         ) from e
     except ProcessTimeoutError:
-        # Should not be possible given we passed no timeout to run_process_to_completion
+        # Re-raise timeouts unchanged so the broad ProcessError handler below does not wrap them:
+        # ProcessTimeoutError always carries returncode=None, which would trip that handler's assert.
         raise
     except ProcessError as e:
         assert e.returncode is not None, f"Only ProcessTimeoutError should be throwable with a None returncode: {e}"

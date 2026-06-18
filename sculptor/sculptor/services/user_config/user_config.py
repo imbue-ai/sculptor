@@ -1,7 +1,9 @@
 import hashlib
 import os
 import tomllib
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import tomlkit
 from loguru import logger
@@ -17,11 +19,7 @@ class InvalidConfigError(Exception):
     """Exception raised when the configuration is invalid."""
 
     def __init__(self, error: Exception) -> None:
-        """Initialize with validation errors.
-
-        Args:
-            errors: List of validation errors
-        """
+        """Wrap the underlying error in a user-facing config-load message."""
         self.message = f"Unhandled error loading your config file:\n{error}"
         super().__init__(self.message)
 
@@ -79,6 +77,7 @@ TELEMETRY_DISABLED_PRIVACY_SETTINGS = PrivacySettings(
 
 
 def get_privacy_settings_for_telemetry(is_enabled: bool) -> PrivacySettings:
+    """Return the canonical privacy settings for the given telemetry consent."""
     return TELEMETRY_ENABLED_PRIVACY_SETTINGS if is_enabled else TELEMETRY_DISABLED_PRIVACY_SETTINGS
 
 
@@ -111,6 +110,7 @@ def get_config_path() -> Path:
 
 
 def load_config(config_path: Path) -> UserConfig:
+    """Load and validate a UserConfig from the given TOML file."""
     assert config_path.exists(), f"Config file does not exist at {config_path}"
 
     try:
@@ -126,21 +126,22 @@ def load_config(config_path: Path) -> UserConfig:
             config = UserConfig(**config_dict)
             return config
     except ValidationError as e:
-        raise InvalidConfigError(e)
+        raise InvalidConfigError(e) from e
 
 
-def _sanitize_for_toml(data: dict) -> dict:
+def _sanitize_for_toml(data: Mapping[str, Any]) -> dict[str, Any]:
     """Recursively convert None values to empty strings for TOML compatibility.
 
     model_dump(exclude_none=True) only excludes top-level None fields,
     not None values inside dict-typed fields. TOML cannot represent None,
     so we convert them to empty strings to preserve the "explicitly cleared" state.
     """
-    result = {}
+    result: dict[str, Any] = {}
     for key, value in data.items():
         if value is None:
             result[key] = ""
         elif isinstance(value, dict):
+            # pyrefly: ignore [unsupported-operation]
             result[key] = _sanitize_for_toml(value)
         else:
             result[key] = value
@@ -182,6 +183,7 @@ _DEFAULT_CONFIG_INSTANCE: UserConfig = _generate_default_user_config_instance()
 
 
 def get_default_user_config_instance() -> UserConfig:
+    """Return the process-wide default (anonymized) user config instance."""
     return _DEFAULT_CONFIG_INSTANCE
 
 

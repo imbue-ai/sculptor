@@ -1708,13 +1708,13 @@ def _run_sculpt(instance: SculptorInstance, args: list[str]) -> tuple[int, str, 
     Automatically injects --base-url and sets the SCULPT_PROJECT_ID
     environment variable so the CLI can resolve the project.
     """
-    base_url = instance.base_url.rstrip("/")
+    base_url = instance.backend_api_url.rstrip("/")
     response = instance.page.request.get(f"{base_url}/api/v1/projects/active")
     projects = response.json()
     project_id = projects[0]["objectId"] if projects else ""
 
     env = {**os.environ, "SCULPT_PROJECT_ID": project_id}
-    full_args = args + ["--base-url", instance.base_url]
+    full_args = args + ["--base-url", instance.backend_api_url]
     result = subprocess.run(
         [sys.executable, "-m", "sculpt.main"] + full_args,
         capture_output=True,
