@@ -14,9 +14,11 @@ FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# libnss-wrapper lets the entrypoint present a passwd/group entry for the
+# arbitrary runtime UID without making /etc/passwd writable (see entrypoint below).
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        git curl ca-certificates xz-utils && \
+        git curl ca-certificates xz-utils libnss-wrapper && \
     rm -rf /var/lib/apt/lists/*
 
 # Node.js 22 — for the frontend build and the API-client codegen.
@@ -53,15 +55,15 @@ RUN cd /app/sculptor/frontend && \
 
 # --- Runtime setup ---------------------------------------------------------
 
-# Rename Ubuntu's stock 'ubuntu' user (UID 1000) to 'sculptor'; the entrypoint
-# remaps its UID to whatever rootless podman assigns at runtime. World-writable
-# /etc/passwd lets that remap happen as a non-root user. /app is made world
-# read/executable so the runtime UID can run the built venv and read the UI.
+# Rename Ubuntu's stock 'ubuntu' user (UID 1000) to 'sculptor'. At runtime
+# rootless podman assigns an arbitrary UID/GID; the entrypoint uses nss_wrapper
+# to present a matching passwd/group entry, so /etc/passwd stays read-only (no
+# `chmod 666`). /app is made world read/executable so the runtime UID can run the
+# built venv and read the UI.
 RUN usermod -l sculptor -d /home/sculptor -m ubuntu && \
     groupmod -n sculptor ubuntu && \
     mkdir -p /home/sculptor && chmod 777 /home/sculptor && \
     mkdir -p /data && chmod 777 /data && \
-    chmod 666 /etc/passwd && \
     chmod -R a+rX /app /opt/uv-python
 
 ENV HOME=/home/sculptor
@@ -82,19 +84,27 @@ RUN git -c user.email="sculptor@container" -c user.name="Sculptor" init && \
     chmod -R 777 /workspace && \
     git config --system safe.directory '*'
 
-# Minimal entrypoint: give the runtime UID a valid /etc/passwd entry (rootless
-# podman assigns an arbitrary UID), then exec the command. No binary download —
-# we run from the source built above. Written with printf to avoid heredoc
-# portability concerns across build backends.
-RUN printf '%s\n' \
+# Minimal entrypoint: rootless podman assigns an arbitrary UID/GID with no
+# matching /etc/passwd entry, which breaks anything that calls getpwuid (e.g.
+# $HOME and username lookups). Rather than make /etc/passwd writable, use
+# nss_wrapper: write passwd/group files to a writable tmp location with an entry
+# for the runtime UID/GID and point the NSS layer at them via LD_PRELOAD, leaving
+# the real /etc/passwd read-only. No binary download — we run from the source
+# built above. The nss_wrapper lib path is resolved at build time and baked in.
+# printf avoids heredoc portability concerns across build backends.
+RUN NSS_WRAPPER_LIB="$(dpkg -L libnss-wrapper | grep -m1 '/libnss_wrapper\.so$')" && \
+    : "${NSS_WRAPPER_LIB:?libnss_wrapper.so not found}" && \
+    printf '%s\n' \
     '#!/bin/sh' \
     'uid=$(id -u)' \
     'if ! getent passwd "$uid" >/dev/null 2>&1; then' \
     '  gid=$(id -g)' \
-    '  tmp=$(mktemp /tmp/passwd.XXXXXX)' \
-    '  sed "s/^sculptor:x:1000:1000:/sculptor:x:${uid}:${gid}:/" /etc/passwd > "$tmp"' \
-    '  cat "$tmp" > /etc/passwd' \
-    '  rm -f "$tmp"' \
+    '  pw=$(mktemp /tmp/passwd.XXXXXX)' \
+    '  gr=$(mktemp /tmp/group.XXXXXX)' \
+    '  sed "s/^sculptor:x:1000:1000:/sculptor:x:${uid}:${gid}:/" /etc/passwd > "$pw"' \
+    '  sed "s/^sculptor:x:1000:/sculptor:x:${gid}:/" /etc/group > "$gr"' \
+    '  export NSS_WRAPPER_PASSWD="$pw" NSS_WRAPPER_GROUP="$gr"' \
+    "  export LD_PRELOAD=$NSS_WRAPPER_LIB" \
     'fi' \
     'exec "$@"' \
     > /usr/local/bin/openhost-entrypoint.sh && \
