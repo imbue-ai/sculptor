@@ -4,9 +4,9 @@ from typing import Any
 
 import pytest
 import respx
-from click.exceptions import Exit
 from httpx import Response
 from sculpt.resolve import resolve_agent_id
+from typer import Exit
 
 
 def _mock_session(base_url: str = "http://localhost:5050") -> None:

@@ -184,6 +184,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20.13.1
+          cache: npm
+          cache-dependency-path: sculptor/frontend/package-lock.json
 
       - name: Setup just
         uses: extractions/setup-just@v2

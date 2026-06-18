@@ -5,8 +5,7 @@ requires-python = ">=3.11,<3.13"
 license = { text = "MIT" }
 dependencies = [
     "pydevd-pycharm>=251.23774.123",
-    "pyjson5==1.6.9",
-    "mcp>=1.9.1",
+    "mcp>=1.23.0,<2",
     "fastmcp>=2.1.2",
     "junit2html>=31.0.2",
 ]
@@ -52,15 +51,6 @@ sculptor = { workspace = true }
 
 [tool.uv]
 cache-keys = [{ git = { commit = true } }]
-override-dependencies = [
-    "colorama==0.4.4",
-    "editdistance>=0.6.2",
-    "fsspec==2023.5.0",
-    "htmldate==1.5.1",
-    "lxml==4.9.2",
-    "s3fs==2024.6.1",
-]
-
 
 package = false
 required-version = ">=0.7.22"
@@ -110,7 +100,7 @@ dev = [
     "pydevd>=3.3.0",
     "pyrefly>=1.0.0",
     "pytest-watcher>=0.4.3",
-    # Ruff uses minor versions to signal breaking changes until 1.0.0 is reached.
     "pytest-xdist>=3.8.0",
-    "ruff~=0.12.8",
+    # Ruff uses minor versions to signal breaking changes until 1.0.0 is reached.
+    "ruff~=0.15.17",
 ]

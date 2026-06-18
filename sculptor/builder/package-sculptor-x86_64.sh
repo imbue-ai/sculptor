@@ -134,7 +134,7 @@ build_frontend_app() (
   rm -rf .node_modules/.cache ~/.cache/electron ~/.cache/electron-builder 2>/dev/null || true
 
   # Install JS deps
-  npm_with_node install --force
+  npm_with_node ci
 
   # Backend & assets
   just sidecar "cpython-3.11.13-macos-x86_64-none"
@@ -253,7 +253,7 @@ make_worktree_and_stage_assets
 
         # Let us nuke the old node_modules and get new ones
         rm -rf node_modules
-        npm install --foreground-scripts
+        npm ci --foreground-scripts
 
         npx --no-install electron-forge make \
           --platform=darwin \

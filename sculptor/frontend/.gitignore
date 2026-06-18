@@ -29,7 +29,6 @@ out/
 *.sw?
 
 sculptor_schema.json
-package-lock.json
 generated-*.ts
 
 # Lint caches

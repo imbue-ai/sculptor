@@ -154,7 +154,7 @@ export function initializeTelemetry(): void {
 
   posthog.init(FRONTEND_POSTHOG_TOKEN, {
     ...buildPostHogConfig(null),
-    loaded: (loadedPosthog: PostHog) => {
+    loaded: (loadedPosthog) => {
       // Source is the only super property we know pre-handshake. Other
       // session properties get registered when telemetry_info arrives.
       loadedPosthog.register({ source: "sculptor_frontend" });

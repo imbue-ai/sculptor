@@ -32,7 +32,6 @@ dependencies = [
     "filelock>=3.8.0",
     "humanfriendly>=10.0",
     "httpx",
-    "json5>=0.9.0",
     "loguru",
     "pathspec",
     "posthog==5.4.0",
@@ -48,7 +47,7 @@ dependencies = [
     "requests>=2.28.0",
     "splinter>=0.19.0",
     "sqlalchemy",
-    "tblib==2.0.0",
+    "tblib>=3.1",
     "tenacity>=8.2.2",
     "tomlkit>=0.13.0",
     "traceback-with-variables>=2.2.0",
@@ -114,6 +113,9 @@ dev = [
     "inline-snapshot",
     "moto[s3]",
     "pillow>=11.0.0",
+    # playwright's bundled Chromium must match Electron's (1.53 <-> Electron 37,
+    # 1.60 <-> Electron 42) for connect_over_cdp; bump together with Electron.
+    # Keep the frontend package.json "playwright" devDependency on the same pin.
     "playwright==1.53.0",
     "pylint==3.2.6",
     "pyrefly>=1.0.0",

@@ -13,7 +13,7 @@ from typer.testing import CliRunner
 
 @pytest.fixture
 def runner() -> CliRunner:
-    return CliRunner(mix_stderr=False)
+    return CliRunner()
 
 
 def _mock_session(base_url: str = "http://localhost:5050") -> None:
@@ -133,7 +133,7 @@ class TestWorkspaceCreate:
         result = runner.invoke(app, ["workspace", "create", "--repo", "/tmp/test", "--json"])
 
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["id"] == "ws_test123"
         assert data["repo_id"] == "prj_test123"
         assert data["strategy"] == "CLONE"
@@ -188,7 +188,7 @@ class TestWorkspaceCreate:
         assert request_body["initializationStrategy"] == "WORKTREE"
         assert request_body["sourceBranch"] == "main"
         assert request_body["requestedBranchName"] == "dev/fix-thing"
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["strategy"] == "WORKTREE"
 
     @respx.mock
@@ -331,7 +331,7 @@ class TestWorkspaceList:
         result = runner.invoke(app, ["workspace", "list", "--all", "--json"])
 
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert len(data) == 1
         assert data[0]["id"] == "ws_test123"
         assert data[0]["repo_path"] == "/Users/test/projects/test-project"
@@ -400,7 +400,7 @@ class TestWorkspaceShow:
         result = runner.invoke(app, ["workspace", "show", "ws_test123", "--json"])
 
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["id"] == "ws_test123"
         assert data["repo_path"] == "/Users/test/projects/test-project"
 
@@ -471,7 +471,7 @@ class TestWorkspaceRename:
         result = runner.invoke(app, ["workspace", "rename", "ws_test123", "New description", "--json"])
 
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["id"] == "ws_test123"
         assert data["description"] == "New description"
 
@@ -560,7 +560,7 @@ class TestWorkspaceDelete:
         result = runner.invoke(app, ["workspace", "delete", "ws_test123", "--yes", "--json"])
 
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["deleted"] is True
         assert data["id"] == "ws_test123"
 

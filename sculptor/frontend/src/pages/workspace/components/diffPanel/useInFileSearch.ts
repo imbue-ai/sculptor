@@ -26,9 +26,10 @@ type UseInFileSearchResult = {
 
 /**
  * Walk the DOM tree (including shadow roots) to find text nodes containing
- * searchable diff content. Only text inside Pierre's `[data-column-content]`
- * elements is collected — this excludes line-number gutters, hunk separators,
- * expand buttons, and any other diff chrome.
+ * searchable diff content. Only text inside Pierre's code containers is
+ * collected — this excludes line-number gutters, hunk separators, expand
+ * buttons, and any other diff chrome. @pierre/diffs 1.2 marks them with
+ * `data-code` (1.0 used `data-column-content`; both are accepted).
  */
 const collectTextNodes = (root: Node): Array<Text> => {
   const textNodes: Array<Text> = [];
@@ -41,7 +42,8 @@ const collectTextNodes = (root: Node): Array<Text> => {
       return;
     }
 
-    const isContentColumn = node instanceof HTMLElement && node.hasAttribute("data-column-content");
+    const isContentColumn =
+      node instanceof HTMLElement && (node.hasAttribute("data-code") || node.hasAttribute("data-column-content"));
 
     // Traverse into shadow root if available
     if (node instanceof HTMLElement && node.shadowRoot) {

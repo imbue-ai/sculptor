@@ -56,7 +56,7 @@ timeout --signal=KILL 600 uv run --project sculptor -m playwright install --with
 # offload.toml's post_patch_cmd.
 (
   cd sculptor/frontend
-  timeout --signal=KILL 600 npm install --force
+  timeout --signal=KILL 600 npm ci
   node /app/scripts/fix-bin-wrappers.js
 )
 

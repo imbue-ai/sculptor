@@ -1,5 +1,5 @@
 import type { FileDiffMetadata, FileDiffOptions } from "@pierre/diffs";
-import { getSingularPatch } from "@pierre/diffs";
+import { getSingularPatch, processFile } from "@pierre/diffs";
 import { FileDiff, PatchDiff } from "@pierre/diffs/react";
 import { useAtomValue } from "jotai";
 import type { ErrorInfo, ReactElement, ReactNode, RefObject } from "react";
@@ -152,10 +152,18 @@ export const PierreDiffView = ({
       // file content.  Without this, the last hunk line and the first expansion
       // line merge into a single Shiki line, shifting all subsequent line numbers.
       const normalizedDiff = diffString.endsWith("\n") ? diffString : diffString + "\n";
-      const metadata = getSingularPatch(normalizedDiff);
-      metadata.oldLines = oldLines;
-      metadata.newLines = newLines;
-      return metadata;
+      // @pierre/diffs 1.2 indexes hunks into deletionLines/additionLines, so
+      // full file contents must be supplied at parse time via processFile —
+      // overwriting the arrays on a getSingularPatch() result would leave the
+      // hunk line indices pointing at partial-mode offsets and corrupt the
+      // rendered diff.
+      const parsed = getSingularPatch(normalizedDiff);
+      return (
+        processFile(normalizedDiff, {
+          oldFile: { name: parsed.prevName ?? parsed.name, contents: oldLines.join("") },
+          newFile: { name: parsed.name, contents: newLines.join("") },
+        }) ?? null
+      );
     } catch {
       return null;
     }

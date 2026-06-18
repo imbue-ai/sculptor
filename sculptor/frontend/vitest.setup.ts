@@ -19,6 +19,15 @@ try {
   HTMLCanvasElement.prototype.getContext = (() => null) as HTMLCanvasElement["getContext"];
 }
 
+// The Placeholder extension in @tiptap/extensions (since 3.21) tracks the
+// visible viewport via EditorView.posAtCoords, which needs
+// document.elementFromPoint — jsdom has no layout and does not implement it.
+// Returning null makes posAtCoords bail out, so the plugin falls back to the
+// full-document scan it used before viewport tracking existed.
+if (typeof document.elementFromPoint !== "function") {
+  Document.prototype.elementFromPoint = (): Element | null => null;
+}
+
 // react-resizable-panels requires ResizeObserver, which is not available in jsdom.
 global.ResizeObserver = class {
   observe(): void {}

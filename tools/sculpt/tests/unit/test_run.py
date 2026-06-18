@@ -13,7 +13,7 @@ from typer.testing import CliRunner
 
 @pytest.fixture
 def runner() -> CliRunner:
-    return CliRunner(mix_stderr=False)
+    return CliRunner()
 
 
 def _mock_session(base_url: str = "http://localhost:5050") -> None:
@@ -157,7 +157,7 @@ class TestRun:
         result = runner.invoke(app, ["run", "Fix the bug", "--repo", "/tmp/test", "--json"])
 
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["workspace_id"] == "ws_newrun123"
         assert data["agent_id"] == "tsk_abc123def456"
         assert data["prompt"] == "Fix the bug"
@@ -218,7 +218,7 @@ class TestRun:
         assert request_body["initializationStrategy"] == "WORKTREE"
         assert request_body["sourceBranch"] == "main"
         assert request_body["requestedBranchName"] == "dev/fix-bug"
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["strategy"] == "WORKTREE"
 
     @respx.mock

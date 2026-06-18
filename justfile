@@ -722,7 +722,6 @@ clean:
     cd "{{justfile_directory()}}/sculptor"
     echo "Cleaning up..."
     rm -rf frontend/node_modules
-    rm -rf frontend/package-lock.json
     rm -rf sculptor/web/frontend
     find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
     find . -name "*.pyc" -delete 2>/dev/null || true
@@ -791,7 +790,7 @@ install-frontend: && generate-api
         return 0
       fi
       echo "Installing frontend dependencies..."
-      npm install --force
+      npm ci
     }
     quiet_by_default install-frontend _do_install_frontend
 
@@ -1039,7 +1038,7 @@ build-desktop-app--x86_64:
     just refresh-assets
     just sidecar "cpython-3.11.13-macos-x86_64-none"
     cd "{{justfile_directory()}}/sculptor/frontend"
-    npm install --force
+    npm ci
     eval $(uv run --project sculptor builder setup-build-vars "${MODE:-dev}") && npm run electron:package -- --  --platform=darwin --arch=x64
     mkdir -p "{{justfile_directory()}}/dist/Darwin-x86_64"
     cp -r out/Sculptor-darwin-x64/ "{{justfile_directory()}}/dist/darwin-x86_64"
@@ -1285,7 +1284,7 @@ test-unit-frontend:
       if [ ! -f "$stamp" ] \
           || [ package.json -nt "$stamp" ] \
           || [ package-lock.json -nt "$stamp" ]; then
-        npm install
+        npm ci
       else
         echo "Frontend dependencies up to date, skipping npm install."
       fi
