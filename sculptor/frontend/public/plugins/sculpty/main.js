@@ -8,8 +8,7 @@
  * all down. (It deliberately does NOT use `registerOverlay`; that exists for
  * React overlays. The point of this example is the bare-metal escape hatch.)
  *
- * Sculpty has two independent axes (see sculpty-explore.{js,html} for the
- * side-by-side study that produced this design):
+ * Sculpty has two independent axes:
  *
  *   • MOOD — which squiggle it shows. One of three feeling logos, picked
  *     automatically from how busy you are: long idle → `sleeping` (sage), normal
