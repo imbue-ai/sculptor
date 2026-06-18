@@ -90,10 +90,10 @@ def test_terminal_text_is_legible_in_light_mode(sculptor_instance_: SculptorInst
         color = get_xterm_theme_color(page, entry)
         assert color, (
             f"light-mode theme.{entry} is not set — it falls back to xterm.js's "
-            f"dark-tuned default, which is white-on-white against {background!r}"
+            + f"dark-tuned default, which is white-on-white against {background!r}"
         )
         ratio = _contrast_ratio(color, background)
         assert ratio >= _MIN_CONTRAST_RATIO, (
             f"light-mode theme.{entry} ({color}) has contrast {ratio:.2f}:1 against "
-            f"background {background} — below the {_MIN_CONTRAST_RATIO}:1 legibility floor"
+            + f"background {background} — below the {_MIN_CONTRAST_RATIO}:1 legibility floor"
         )
