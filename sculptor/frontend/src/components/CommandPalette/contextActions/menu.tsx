@@ -1,11 +1,12 @@
 import { ContextMenu } from "@radix-ui/themes";
-import { FolderOpenIcon } from "lucide-react";
+import { Copy, FolderOpenIcon, GitBranch, Stethoscope } from "lucide-react";
 import type { ReactElement } from "react";
 import { Fragment } from "react";
 
-import type { ExternalApp, Workspace } from "../../../api";
+import { ElementIds, type ExternalApp, type Workspace } from "../../../api";
 import { getOpenWithItems } from "../../../common/openInApp/items.tsx";
 import type { AccentColor } from "../../../common/state/atoms/themeBuilder";
+import { useWorkspaceBranch } from "../../../common/state/hooks/useWorkspaceBranch.ts";
 import type { Agent, AgentAction, ContextActionShared, WorkspaceAction } from "./types.ts";
 
 type RenderMenuProps<TAction extends ContextActionShared, TTarget> = {
@@ -30,11 +31,13 @@ type RenderMenuProps<TAction extends ContextActionShared, TTarget> = {
   /**
    * Optional content to splice into the rendered menu immediately after
    * the action with the given id. Used by `WorkspaceContextMenuContent`
-   * to inject the "Open in..." submenu inside the existing group rather
-   * than tacking it onto the end of the menu. The injected node receives
-   * no leading separator — it inherits the group of the preceding action.
+   * to inject the "Open in..." submenu after `open_pr` and the copy group
+   * after `rename`, inside the existing groups rather than tacking them
+   * onto the end of the menu. Each injected node receives no leading
+   * separator — it inherits the group of the preceding action. Multiple
+   * entries may target the same action id; they render in array order.
    */
-  injectAfter?: { actionId: string; content: ReactElement };
+  injectAfter?: ReadonlyArray<{ actionId: string; content: ReactElement }>;
 };
 
 const renderMenuItems = <TAction extends ContextActionShared, TTarget>(
@@ -71,9 +74,11 @@ const renderMenuItems = <TAction extends ContextActionShared, TTarget>(
         </ContextMenu.Item>
       </Fragment>,
     );
-    if (props.injectAfter && props.injectAfter.actionId === action.id) {
-      out.push(<Fragment key={`__inject_after_${action.id}`}>{props.injectAfter.content}</Fragment>);
-    }
+    (props.injectAfter ?? [])
+      .filter((inj) => inj.actionId === action.id)
+      .forEach((inj, i) => {
+        out.push(<Fragment key={`__inject_after_${action.id}_${i}`}>{inj.content}</Fragment>);
+      });
   });
   return out;
 };
@@ -105,6 +110,10 @@ export const WorkspaceContextMenuContent = ({
    */
   openInRuntime?: OpenInRuntime;
 }): ReactElement => {
+  // Branch info is pushed over the WebSocket, so this is a plain atom read
+  // (no fetch). Fall back to the source branch when the live branch hasn't
+  // arrived yet — mirrors how `ClosedWorkspaceRow` picks a branch to show.
+  const branch = useWorkspaceBranch(workspace.objectId)?.currentBranch ?? workspace.sourceBranch ?? null;
   const isOpenInVisible =
     openInRuntime != null && openInRuntime.canOpenInOS() && openInRuntime.isMacUi() && getOpenWithItems().length > 0;
   // Render the Open-in submenu inline, immediately after the `open_pr`
@@ -125,6 +134,51 @@ export const WorkspaceContextMenuContent = ({
       </ContextMenu.SubContent>
     </ContextMenu.Sub>
   ) : null;
+  // Injected into the "Rename" group (right after the rename row, no leading
+  // separator). The name lives on the workspace object and the branch is a
+  // plain atom read (pushed over the WebSocket), so both copy synchronously;
+  // only the opaque id is tucked away in Diagnostics.
+  const copyGroup = (
+    <>
+      <ContextMenu.Item
+        data-testid={ElementIds.TAB_CONTEXT_MENU_COPY_WORKSPACE_NAME}
+        disabled={!workspace.description}
+        onSelect={async (): Promise<void> => {
+          if (workspace.description) {
+            await navigator.clipboard.writeText(workspace.description);
+          }
+        }}
+      >
+        <Copy size={14} /> Copy workspace name
+      </ContextMenu.Item>
+      <ContextMenu.Item
+        data-testid={ElementIds.TAB_CONTEXT_MENU_COPY_BRANCH}
+        disabled={!branch}
+        onSelect={async (): Promise<void> => {
+          if (branch) {
+            await navigator.clipboard.writeText(branch);
+          }
+        }}
+      >
+        <GitBranch size={14} /> Copy branch
+      </ContextMenu.Item>
+      <ContextMenu.Sub>
+        <ContextMenu.SubTrigger data-testid={ElementIds.TAB_CONTEXT_MENU_DIAGNOSTICS}>
+          <Stethoscope size={14} /> Diagnostics
+        </ContextMenu.SubTrigger>
+        <ContextMenu.SubContent>
+          <ContextMenu.Item
+            data-testid={ElementIds.TAB_CONTEXT_MENU_COPY_WORKSPACE_ID}
+            onSelect={async (): Promise<void> => {
+              await navigator.clipboard.writeText(workspace.objectId);
+            }}
+          >
+            Copy workspace id
+          </ContextMenu.Item>
+        </ContextMenu.SubContent>
+      </ContextMenu.Sub>
+    </>
+  );
   return (
     <ContextMenu.Content size="1" onCloseAutoFocus={(e): void => e.preventDefault()}>
       {renderMenuItems<WorkspaceAction, Workspace>({
@@ -132,7 +186,10 @@ export const WorkspaceContextMenuContent = ({
         target: workspace,
         destructiveColor,
         performFor: (action) => (): void | Promise<void> => action.perform(workspace),
-        injectAfter: openInSub != null ? { actionId: "open_pr", content: openInSub } : undefined,
+        injectAfter: [
+          ...(openInSub != null ? [{ actionId: "open_pr", content: openInSub }] : []),
+          { actionId: "rename", content: copyGroup },
+        ],
       })}
     </ContextMenu.Content>
   );
@@ -147,6 +204,22 @@ export const AgentContextMenuContent = ({
   agent: Agent;
   trailing?: ReactElement;
 }): ReactElement => {
+  // Copy name + the Diagnostics submenu (`trailing`) are injected right after
+  // "Mark unread" (no leading separator) so they sit in the top group above
+  // the divider that sets the destructive Delete apart on its own.
+  const copyName = (
+    <ContextMenu.Item
+      data-testid={ElementIds.TAB_CONTEXT_MENU_COPY_AGENT_NAME}
+      disabled={!agent.title}
+      onSelect={async (): Promise<void> => {
+        if (agent.title) {
+          await navigator.clipboard.writeText(agent.title);
+        }
+      }}
+    >
+      <Copy size={14} /> Copy agent name
+    </ContextMenu.Item>
+  );
   return (
     <ContextMenu.Content size="1" onCloseAutoFocus={(e): void => e.preventDefault()}>
       {renderMenuItems<AgentAction, Agent>({
@@ -154,13 +227,11 @@ export const AgentContextMenuContent = ({
         target: agent,
         destructiveColor: "red",
         performFor: (action) => (): void | Promise<void> => action.perform(agent),
+        injectAfter: [
+          { actionId: "mark_unread", content: copyName },
+          ...(trailing != null ? [{ actionId: "mark_unread", content: trailing }] : []),
+        ],
       })}
-      {trailing != null ? (
-        <>
-          <ContextMenu.Separator />
-          {trailing}
-        </>
-      ) : null}
     </ContextMenu.Content>
   );
 };

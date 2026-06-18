@@ -1,6 +1,6 @@
 import { ContextMenu, DropdownMenu, Flex, IconButton } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { ChevronDownIcon, PlusIcon } from "lucide-react";
+import { ChevronDownIcon, PlusIcon, Stethoscope } from "lucide-react";
 import { posthog } from "posthog-js";
 import type { ReactElement, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -86,6 +86,14 @@ const DiagnosticsSubMenu = ({ workspaceID, agentId }: { workspaceID: string; age
         Debug View
       </ContextMenu.CheckboxItem>
       <ContextMenu.Separator />
+      <ContextMenu.Item
+        data-testid={ElementIds.TAB_CONTEXT_MENU_COPY_AGENT_ID}
+        onSelect={async () => {
+          await navigator.clipboard.writeText(agentId);
+        }}
+      >
+        Copy agent id
+      </ContextMenu.Item>
       <ContextMenu.Item
         data-testid={ElementIds.TAB_CONTEXT_MENU_COPY_SESSION_ID}
         disabled={!sessionId}
@@ -465,7 +473,7 @@ export const AgentTabs = (): ReactElement | null => {
           trailing={
             <ContextMenu.Sub>
               <ContextMenu.SubTrigger data-testid={ElementIds.TAB_CONTEXT_MENU_DIAGNOSTICS}>
-                Diagnostics
+                <Stethoscope size={14} /> Diagnostics
               </ContextMenu.SubTrigger>
               <DiagnosticsSubMenu workspaceID={workspaceID} agentId={tabId} />
             </ContextMenu.Sub>
