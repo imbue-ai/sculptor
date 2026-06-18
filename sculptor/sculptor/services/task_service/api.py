@@ -64,6 +64,16 @@ class TaskService(Service, ABC):
     def mark_unread(self, task_id: TaskID, transaction: DataModelTransaction) -> Task: ...
 
     @abstractmethod
+    def rename_task(self, task_id: TaskID, title: str, transaction: DataModelTransaction) -> Task:
+        """Set an agent task's title and publish the update.
+
+        Writes `title` onto the task's `AgentTaskStateV2` and registers the same
+        task-update publish a message write does, so live subscribers refresh
+        even though the rename created no message. Without this an idle terminal
+        agent's tab keeps its old name until a tab switch forces a re-fetch
+        (SCU-1531)."""
+
+    @abstractmethod
     def update_available_models(
         self,
         task_id: TaskID,
