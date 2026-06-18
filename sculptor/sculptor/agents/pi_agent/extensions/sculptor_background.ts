@@ -143,19 +143,22 @@ export default function sculptorBackgroundExtension(pi: ExtensionAPI): void {
 			child.stderr?.on("data", appendOutput);
 
 			const start = Date.now();
+			// Signal the child's whole process group (negative pgid) so any grandchild
+			// it spawned (a shell pipeline, a server) dies too; fall back to the bare
+			// process when no pgid is known.
 			const kill = () => {
 				try {
-					child.kill("SIGTERM");
+					if (pgid > 0) process.kill(-pgid, "SIGTERM");
+					else child.kill("SIGTERM");
 				} catch {
 					/* already gone */
 				}
 				setTimeout(() => {
-					if (!child.killed) {
-						try {
-							child.kill("SIGKILL");
-						} catch {
-							/* already gone */
-						}
+					try {
+						if (pgid > 0) process.kill(-pgid, "SIGKILL");
+						else if (!child.killed) child.kill("SIGKILL");
+					} catch {
+						/* already gone */
 					}
 				}, KILL_ESCALATION_MS);
 			};
