@@ -216,6 +216,8 @@ def _list_for_project(client: object, project_id: str, json_output: bool) -> Non
                 description=w.description,
                 strategy=w.initialization_strategy.value,
                 source_branch=w.source_branch,
+                target_branch=w.target_branch,
+                requested_branch_name=w.requested_branch_name,
                 is_deleted=w.is_deleted,
             )
             for w in result
