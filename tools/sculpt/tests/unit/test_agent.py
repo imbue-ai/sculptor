@@ -103,6 +103,19 @@ def _task_response_dict(
     }
 
 
+def _mock_registrations(*registrations: dict[str, Any]) -> None:
+    respx.get("http://localhost:5050/api/v1/terminal-agent-registrations").mock(
+        return_value=Response(200, json={"registrations": list(registrations)})
+    )
+
+
+_CLAUDE_CLI_REGISTRATION = {
+    "registrationId": "claude-code",
+    "displayName": "Claude CLI",
+    "launchCommand": "claude",
+}
+
+
 def _mock_workspaces(*object_ids: str) -> None:
     workspaces = [
         {
@@ -208,6 +221,81 @@ class TestAgentCreate:
         )
 
         assert result.exit_code == 1
+
+
+class TestAgentCreateHarness:
+    @respx.mock
+    def test_create_with_harness_pi_sends_pi_agent_type(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_workspaces("ws_test123")
+        route = respx.post("http://localhost:5050/api/v1/workspaces/ws_test123/agents").mock(
+            return_value=Response(200, json=_task_response_dict())
+        )
+
+        result = runner.invoke(app, ["agent", "create", "-w", "ws_test123", "--harness", "Pi"])
+
+        assert result.exit_code == 0
+        body = json.loads(route.calls.last.request.content)
+        assert body["agentType"] == "pi"
+
+    @respx.mock
+    def test_create_with_harness_terminal_sends_terminal_agent_type(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_workspaces("ws_test123")
+        route = respx.post("http://localhost:5050/api/v1/workspaces/ws_test123/agents").mock(
+            return_value=Response(200, json=_task_response_dict())
+        )
+
+        result = runner.invoke(app, ["agent", "create", "-w", "ws_test123", "--harness", "Terminal"])
+
+        assert result.exit_code == 0
+        body = json.loads(route.calls.last.request.content)
+        assert body["agentType"] == "terminal"
+
+    @respx.mock
+    def test_create_with_harness_claude_cli_resolves_registered_agent(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_workspaces("ws_test123")
+        _mock_registrations(_CLAUDE_CLI_REGISTRATION)
+        route = respx.post("http://localhost:5050/api/v1/workspaces/ws_test123/agents").mock(
+            return_value=Response(200, json=_task_response_dict())
+        )
+
+        result = runner.invoke(app, ["agent", "create", "-w", "ws_test123", "--harness", "Claude CLI"])
+
+        assert result.exit_code == 0
+        body = json.loads(route.calls.last.request.content)
+        assert body["agentType"] == "registered"
+        assert body["registrationId"] == "claude-code"
+
+    @respx.mock
+    def test_create_without_harness_defaults_to_most_recently_used(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_workspaces("ws_test123")
+        route = respx.post("http://localhost:5050/api/v1/workspaces/ws_test123/agents").mock(
+            return_value=Response(200, json=_task_response_dict())
+        )
+
+        first = runner.invoke(app, ["agent", "create", "-w", "ws_test123", "--harness", "Pi"])
+        assert first.exit_code == 0
+
+        second = runner.invoke(app, ["agent", "create", "-w", "ws_test123"])
+        assert second.exit_code == 0
+
+        body = json.loads(route.calls.last.request.content)
+        assert body["agentType"] == "pi"
+
+    @respx.mock
+    def test_create_with_invalid_harness_errors_and_lists_valid_options(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_workspaces("ws_test123")
+        _mock_registrations()
+
+        result = runner.invoke(app, ["agent", "create", "-w", "ws_test123", "--harness", "Bogus"])
+
+        assert result.exit_code == 1
+        assert "Claude" in result.stderr
+        assert "Terminal" in result.stderr
 
 
 class TestAgentList:
