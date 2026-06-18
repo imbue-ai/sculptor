@@ -97,8 +97,15 @@ export default defineConfig(({ command, mode }): UserConfig => {
       },
     },
     clearScreen: false,
-    // Makes asset paths relative so it works even if you load via file:// later
-    base: "./",
+    // Use an absolute asset base so the built index.html references
+    // `/assets/...`. The packaged renderer is served from the real
+    // `sculptor://app` origin (and the Vite dev server in development), not
+    // `file://`, so absolute paths resolve against the origin root regardless
+    // of the document's path — the app-scheme handler serves `/assets/...`
+    // directly. A relative base (`./`) instead resolves assets against the
+    // document directory, which breaks if the document path ever gains a
+    // trailing segment (e.g. `index.html/`).
+    base: "/",
     plugins: ENABLED_PLUGINS,
     envPrefix: "SCULPTOR_",
     resolve: {
