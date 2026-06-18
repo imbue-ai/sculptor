@@ -35,9 +35,10 @@ export const usePinnedIds = (workspaceId: string | null): PinnedIds => {
 
   const unpin = useCallback(
     (identifier: string): void => {
+      if (!workspaceId) return;
       setRaw(JSON.stringify(pinnedIds.filter((id) => id !== identifier)));
     },
-    [pinnedIds, setRaw],
+    [workspaceId, pinnedIds, setRaw],
   );
 
   return { pinnedIds, pin, unpin };

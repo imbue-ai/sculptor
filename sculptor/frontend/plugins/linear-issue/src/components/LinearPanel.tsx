@@ -32,7 +32,13 @@ export const LinearPanel = (): ReactElement => {
       return (
         <Flex direction="column" gap="2">
           {tickets.map((ticket) => (
-            <TicketSection key={ticket.issue.identifier} ticket={ticket} onUnpin={unpin} />
+            <TicketSection
+              // Include isPrimary so a ticket that becomes (or stops being) the
+              // workspace's primary remounts and re-derives its default open state.
+              key={`${ticket.issue.identifier}:${ticket.isPrimary}`}
+              ticket={ticket}
+              onUnpin={unpin}
+            />
           ))}
         </Flex>
       );
