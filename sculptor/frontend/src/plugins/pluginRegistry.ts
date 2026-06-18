@@ -41,11 +41,30 @@ export const pluginSourcesAtom = atomWithStorage<ReadonlyArray<string>>("sculpto
   getOnInit: true,
 });
 
+/**
+ * Sources the user has explicitly disabled, persisted to localStorage. A
+ * disabled source stays on the list (built-in or user) but is not loaded:
+ * its `activate()` never runs and it contributes no panels/overlays/settings.
+ * This is what lets the user opt out of a built-in plugin, or silence a
+ * remotely-pulled-in source, without deleting the reference entirely.
+ *
+ * `getOnInit: true` for the same reason as `pluginSourcesAtom`: the manager's
+ * synchronous bootstrap (before any component mounts) must see the persisted
+ * value, or a source the user disabled would load anyway on the next launch.
+ */
+export const pluginDisabledSourcesAtom = atomWithStorage<ReadonlyArray<string>>(
+  "sculptor-plugin-disabled-sources",
+  [],
+  undefined,
+  { getOnInit: true },
+);
+
 /** Per-source load status, keyed by the source string (built-in + user). */
 export type PluginSourceState =
   | { status: "loading"; isBuiltin: boolean }
   | { status: "loaded"; isBuiltin: boolean; manifest: PluginManifest }
-  | { status: "error"; isBuiltin: boolean; phase: string; message: string };
+  | { status: "error"; isBuiltin: boolean; phase: string; message: string }
+  | { status: "disabled"; isBuiltin: boolean };
 
 /**
  * Runtime status for every source the manager has tried to load. Not

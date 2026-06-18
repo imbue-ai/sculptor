@@ -144,6 +144,47 @@ def _exercise_valid_load_and_remove(plugins: PlaywrightPluginsSettingsElement, s
     expect(plugins.get_source_row(source)).to_have_count(0)
 
 
+def _exercise_disable_and_enable(plugins: PlaywrightPluginsSettingsElement, server: PluginFixtureServer) -> None:
+    """A loaded source can be disabled (parked, not loaded) and re-enabled.
+
+    Disabling is the opt-out path: the source stays on the list but does not
+    load, so a remotely-pulled-in plugin can be silenced without deleting the
+    reference. Re-enabling loads it again. (That the disabled choice survives a
+    relaunch is covered by the manager's bootstrap unit test.)
+    """
+    source = server.add_plugin(
+        "toggle-me",
+        manifest=_valid_manifest("toggle-me", name="Toggle Me"),
+        entry_js=_VALID_PLUGIN_JS,
+    )
+
+    plugins.add_source(source)
+    plugins.expect_loaded(source, name="Toggle Me", version="0.1.0")
+
+    # Disable: the row stays on the list but parks in the disabled state.
+    plugins.set_enabled(source, enabled=False)
+    plugins.expect_disabled(source)
+
+    # Re-enable: it loads again from scratch.
+    plugins.set_enabled(source, enabled=True)
+    plugins.expect_loaded(source, name="Toggle Me", version="0.1.0")
+
+    plugins.remove_source(source)
+    expect(plugins.get_source_row(source)).to_have_count(0)
+
+
+@custom_sculptor_folder_populator.with_args(_enable_frontend_plugins_populator)
+def test_plugin_source_can_be_disabled_and_re_enabled(sculptor_instance_factory_: SculptorInstanceFactory) -> None:
+    """A loaded source can be disabled without removal and later re-enabled."""
+    with (
+        sculptor_instance_factory_.spawn_instance() as instance,
+        spawn_plugin_fixture_server() as server,
+    ):
+        settings_page = navigate_to_settings_page(page=instance.page)
+        plugins = settings_page.click_on_plugins()
+        _exercise_disable_and_enable(plugins, server)
+
+
 @custom_sculptor_folder_populator.with_args(_enable_frontend_plugins_populator)
 def test_plugin_source_error_modes(sculptor_instance_factory_: SculptorInstanceFactory) -> None:
     """Every malformed-source mode settles the row into an error at its phase.

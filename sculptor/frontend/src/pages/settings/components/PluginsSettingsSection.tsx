@@ -1,4 +1,4 @@
-import { Badge, Button, Flex, IconButton, Spinner, Text, TextField, Tooltip } from "@radix-ui/themes";
+import { Badge, Button, Flex, IconButton, Spinner, Switch, Text, TextField, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useStore } from "jotai";
 import { Plus, RotateCw, Settings2, Trash2 } from "lucide-react";
 import { type ComponentType, type ReactElement, useState } from "react";
@@ -47,7 +47,7 @@ export const PluginsSettingsSection = (): ReactElement => {
   };
 
   return (
-    <SettingsSectionLayout description="Plugins extend Sculptor with new panels and behavior. Point at a URL or directory that contains a manifest.json; sources are saved locally and re-loaded each launch.">
+    <SettingsSectionLayout description="Plugins extend Sculptor with new panels and behavior. Point at a URL or directory that contains a manifest.json; sources are saved locally and re-loaded each launch. Use the switch to disable a plugin without removing it.">
       <Flex gap="2" align="center" mb="4">
         <TextField.Root
           style={{ flexGrow: 1 }}
@@ -96,6 +96,7 @@ type SourceRowProps = {
 
 const SourceRow = ({ source, state, store, setIsBusy }: SourceRowProps): ReactElement => {
   const isBuiltin = state?.isBuiltin ?? false;
+  const isDisabled = state?.status === "disabled";
   const settingsComponents = useAtomValue(pluginSettingsComponentsAtom);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -106,6 +107,15 @@ const SourceRow = ({ source, state, store, setIsBusy }: SourceRowProps): ReactEl
     setIsBusy(true);
     try {
       await pluginManager.reloadSource(store, source);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleToggle = async (enabled: boolean): Promise<void> => {
+    setIsBusy(true);
+    try {
+      await pluginManager.setSourceEnabled(store, source, enabled);
     } finally {
       setIsBusy(false);
     }
@@ -123,7 +133,11 @@ const SourceRow = ({ source, state, store, setIsBusy }: SourceRowProps): ReactEl
       data-status={state?.status ?? "loading"}
       data-phase={state?.status === "error" ? state.phase : undefined}
     >
-      <Flex justify="between" align="center" gap="3" py="3">
+      {/* Anchor the controls to the top (align="start") so they stay put when
+          the left column grows — e.g. enabling an invalid source adds a
+          "failed" badge and an error message, which must not shove the switch
+          down. */}
+      <Flex justify="between" align="start" gap="3" py="3">
         <Flex direction="column" gap="1" style={{ minWidth: 0, flexGrow: 1 }}>
           <Flex align="center" gap="2">
             {state?.status === "loaded" ? (
@@ -143,6 +157,11 @@ const SourceRow = ({ source, state, store, setIsBusy }: SourceRowProps): ReactEl
                 bundled
               </Badge>
             )}
+            {isDisabled && (
+              <Badge size="1" color="gray" variant="soft">
+                disabled
+              </Badge>
+            )}
             {(!state || state.status === "loading") && <Spinner size="1" />}
             {state?.status === "error" && (
               <Badge size="1" color="red" variant="soft">
@@ -160,7 +179,11 @@ const SourceRow = ({ source, state, store, setIsBusy }: SourceRowProps): ReactEl
           )}
         </Flex>
         <Flex align="center" gap="2">
-          {SettingsComponent && (
+          {/* Settings and reload only show while the source is enabled (loaded).
+              They sit to the LEFT of the switch so toggling the source — which
+              shows/hides them — never shifts the switch horizontally; only the
+              always-present Remove stays to its right. */}
+          {!isDisabled && SettingsComponent && (
             <Tooltip content="Settings">
               <IconButton
                 variant={isSettingsOpen ? "soft" : "ghost"}
@@ -174,17 +197,35 @@ const SourceRow = ({ source, state, store, setIsBusy }: SourceRowProps): ReactEl
               </IconButton>
             </Tooltip>
           )}
-          <Tooltip content="Reload">
-            <IconButton
-              variant="ghost"
-              size="1"
-              color="gray"
-              aria-label={`Reload ${source}`}
-              onClick={() => void handleReload()}
-              data-testid={ElementIds.SETTINGS_PLUGINS_SOURCE_RELOAD}
-            >
-              <RotateCw size={14} />
-            </IconButton>
+          {!isDisabled && (
+            <Tooltip content="Reload">
+              <IconButton
+                variant="ghost"
+                size="1"
+                color="gray"
+                aria-label={`Reload ${source}`}
+                onClick={() => void handleReload()}
+                data-testid={ElementIds.SETTINGS_PLUGINS_SOURCE_RELOAD}
+              >
+                <RotateCw size={14} />
+              </IconButton>
+            </Tooltip>
+          )}
+          {/* The enable/disable switch is always present — it is how the user
+              opts out of a built-in plugin or mutes a remote source without
+              removing it. Wrap it in a span so the Tooltip trigger's own
+              `data-state` lands on the span, not the Switch — otherwise it
+              clobbers the Switch's `data-state="checked"/"unchecked"` and the
+              track loses its on/off coloring. */}
+          <Tooltip content={isDisabled ? "Enable" : "Disable"}>
+            <span style={{ display: "inline-flex" }}>
+              <Switch
+                checked={!isDisabled}
+                onCheckedChange={(value) => void handleToggle(value)}
+                aria-label={`${isDisabled ? "Enable" : "Disable"} ${source}`}
+                data-testid={ElementIds.SETTINGS_PLUGINS_SOURCE_TOGGLE}
+              />
+            </span>
           </Tooltip>
           {!isBuiltin && (
             <Tooltip content="Remove">
