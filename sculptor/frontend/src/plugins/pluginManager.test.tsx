@@ -6,6 +6,7 @@ import type { PanelDefinition } from "~/components/panels/types.ts";
 
 import { PluginManager, resolveEntryUrl, validateManifest } from "./pluginManager.tsx";
 import {
+  pluginDisabledSourcesAtom,
   pluginPanelsAtom,
   pluginSettingsComponentsAtom,
   pluginSourcesAtom,
@@ -193,6 +194,88 @@ describe("PluginManager", () => {
 
     expect(loaded).toEqual(["/plugins/alpha/manifest.json"]);
     expect(store.get(pluginSourcesAtom)).toEqual(["/plugins/alpha"]);
+  });
+
+  it("disabling a loaded source unloads it, keeps it on the list, and persists the choice", async () => {
+    const store = createStore();
+    const loader = makeDeferredLoader();
+    const manager = new PluginManager({ loadOne: loader.loadOne, builtinSources: [] });
+
+    const pending = manager.addSource(store, "/plugins/alpha");
+    loader.release(0);
+    await pending;
+    expect(store.get(pluginPanelsAtom)).toHaveLength(1);
+
+    await manager.setSourceEnabled(store, "/plugins/alpha", false);
+
+    // The panel is gone, but the source stays on the list and is marked
+    // disabled (persisted so the next launch keeps it off).
+    expect(store.get(pluginPanelsAtom)).toEqual([]);
+    expect(store.get(pluginSourcesAtom)).toEqual(["/plugins/alpha"]);
+    expect(store.get(pluginDisabledSourcesAtom)).toEqual(["/plugins/alpha"]);
+    expect(store.get(pluginSourceStatesAtom)["/plugins/alpha"]).toMatchObject({ status: "disabled" });
+    expect(loader.calls[0].activateDispose).toHaveBeenCalled();
+  });
+
+  it("re-enabling a disabled source loads it again", async () => {
+    const store = createStore();
+    const loader = makeDeferredLoader();
+    const manager = new PluginManager({ loadOne: loader.loadOne, builtinSources: [] });
+
+    const pending = manager.addSource(store, "/plugins/alpha");
+    loader.release(0);
+    await pending;
+    await manager.setSourceEnabled(store, "/plugins/alpha", false);
+
+    const reEnable = manager.setSourceEnabled(store, "/plugins/alpha", true);
+    loader.release(1);
+    await reEnable;
+
+    expect(store.get(pluginDisabledSourcesAtom)).toEqual([]);
+    expect(store.get(pluginPanelsAtom).map((p) => p.id)).toEqual(["alpha"]);
+    expect(store.get(pluginSourceStatesAtom)["/plugins/alpha"]).toMatchObject({ status: "loaded" });
+  });
+
+  it("bootstrap parks a disabled source without loading it", async () => {
+    const store = createStore();
+    store.set(pluginSourcesAtom, ["/plugins/user-one"]);
+    store.set(pluginDisabledSourcesAtom, ["/plugins/user-one", "/plugins/builtin"]);
+    const loaded: Array<string> = [];
+    const loadOne = async (url: string): Promise<LoadedPlugin | PluginLoadError> => {
+      loaded.push(url);
+      return { manifest: manifestFor(url) };
+    };
+    const manager = new PluginManager({ loadOne, builtinSources: ["/plugins/builtin"] });
+
+    manager.bootstrap(store);
+    await flushMicrotasks();
+
+    // Neither the disabled builtin nor the disabled user source loads, yet both
+    // appear in the status map as "disabled" so the settings UI can list them.
+    expect(loaded).toEqual([]);
+    expect(store.get(pluginSourceStatesAtom)["/plugins/builtin"]).toMatchObject({
+      status: "disabled",
+      isBuiltin: true,
+    });
+    expect(store.get(pluginSourceStatesAtom)["/plugins/user-one"]).toMatchObject({
+      status: "disabled",
+      isBuiltin: false,
+    });
+  });
+
+  it("removing a disabled source clears its disabled flag so a re-add starts enabled", async () => {
+    const store = createStore();
+    const loader = makeDeferredLoader();
+    const manager = new PluginManager({ loadOne: loader.loadOne, builtinSources: [] });
+
+    const pending = manager.addSource(store, "/plugins/alpha");
+    loader.release(0);
+    await pending;
+    await manager.setSourceEnabled(store, "/plugins/alpha", false);
+    manager.removeSource(store, "/plugins/alpha");
+
+    expect(store.get(pluginDisabledSourcesAtom)).toEqual([]);
+    expect(store.get(pluginSourcesAtom)).toEqual([]);
   });
 
   it("settles a throwing loader into an error state instead of stuck loading", async () => {
