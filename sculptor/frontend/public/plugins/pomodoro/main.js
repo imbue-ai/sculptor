@@ -16,6 +16,11 @@
  *
  * The task label is persisted with `usePluginSetting`, so it survives reloads
  * and is the kind of thing an agent could pre-fill when it spins the timer up.
+ *
+ * Timer state is persisted too (as an absolute deadline, so a reload honors the
+ * elapsed wall-clock). A phase never silently rolls into the next: when it
+ * ends, the timer pauses on the following phase and fires a desktop
+ * notification, so a break is something you start on purpose.
  */
 
 import { createElement as h, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -51,6 +56,30 @@ const clampPos = (p, w, h) => ({
 const durationFor = (mode) => (mode === "work" ? WORK_SECONDS : BREAK_SECONDS);
 const flip = (mode) => (mode === "work" ? "break" : "work");
 
+// Injected once so the "phase ended" dot can pulse (inline styles can't define
+// keyframes). Cleaned up by the activate() disposer.
+const STYLE_ID = "sculptor-pomodoro-styles";
+const PULSE_NAME = "sculptor-pomodoro-pulse";
+const ensureStyles = () => {
+  if (typeof document === "undefined" || document.getElementById(STYLE_ID)) return;
+  const el = document.createElement("style");
+  el.id = STYLE_ID;
+  el.textContent = `@keyframes ${PULSE_NAME} { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.7); opacity: 0.45; } }`;
+  document.head.appendChild(el);
+};
+
+// Desktop notification on phase end, so the timer is reliable when you're not
+// looking at the pill. Best-effort: silent if the browser has no Notification
+// API or permission wasn't granted.
+const notifyPhaseEnd = (endedMode) => {
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+  try {
+    new Notification(endedMode === "work" ? "Focus done — time for a break." : "Break over — back to focus.");
+  } catch {
+    /* some browsers only allow Notification from a service worker; ignore */
+  }
+};
+
 // The timer is persisted via usePluginSetting too, so a hard reload or plugin
 // refresh re-derives it instead of resetting. The trick: while running we store
 // `endsAt` (an absolute epoch-ms deadline), not a countdown — so on reload we
@@ -67,22 +96,12 @@ const parseTimer = (raw) => {
   return null;
 };
 
-// If a running deadline (and maybe several phases after it) passed while away,
-// walk forward to the phase that contains `now`, alternating work/break, so we
-// resume in the right place rather than showing a stale 00:00.
-const rollForward = (mode, endsAt, now) => {
-  let m = mode;
-  let end = endsAt;
-  while (now >= end) {
-    m = flip(m);
-    end += durationFor(m) * 1000;
-  }
-  return { mode: m, endsAt: end };
-};
-
 const remainingSeconds = (endsAt, now) => Math.max(0, Math.ceil((endsAt - now) / 1000));
 
-// Re-derive the live phase from the persisted record at mount time.
+// Re-derive the live phase from the persisted record at mount time. A running
+// phase whose deadline already passed while we were away counts as completed:
+// land on the next phase, paused and full, awaiting a deliberate start — never
+// silently running on into a break nobody took.
 const derivePhase = (raw, now) => {
   const t = parseTimer(raw);
   if (!t) return { mode: "work", running: false, endsAt: null, secondsLeft: WORK_SECONDS };
@@ -90,13 +109,19 @@ const derivePhase = (raw, now) => {
     const secondsLeft = typeof t.secondsLeft === "number" ? t.secondsLeft : durationFor(t.mode);
     return { mode: t.mode, running: false, endsAt: null, secondsLeft };
   }
-  const rolled = rollForward(t.mode, t.endsAt, now);
-  return { mode: rolled.mode, running: true, endsAt: rolled.endsAt, secondsLeft: remainingSeconds(rolled.endsAt, now) };
+  if (now >= t.endsAt) {
+    const next = flip(t.mode);
+    return { mode: next, running: false, endsAt: null, secondsLeft: durationFor(next) };
+  }
+  return { mode: t.mode, running: true, endsAt: t.endsAt, secondsLeft: remainingSeconds(t.endsAt, now) };
 };
 
 const Pomodoro = () => {
   const [task, setTask] = usePluginSetting("task");
   const [expanded, setExpanded] = useState(false);
+  // True after a phase auto-completes into a paused next phase: drives the
+  // attention pulse until the user acts. Any control click clears it.
+  const [chime, setChime] = useState(false);
 
   // Single source of truth for the timer, mirrored to the persisted record.
   // `nowMs` is just a 1s re-render pulse; the displayed time is *derived* from
@@ -167,19 +192,17 @@ const Pomodoro = () => {
   }, [expanded]);
 
   // While running, pulse a re-render each second; when the deadline passes,
-  // advance to the next phase (rolling through any we slept past) and persist.
+  // pause on the next phase (full duration), signal, and persist. Pausing — not
+  // auto-running — means a break is never spent without noticing.
   useEffect(() => {
     if (!running || phase.endsAt == null) return;
     const tick = () => {
       const now = Date.now();
       if (now >= phase.endsAt) {
-        const rolled = rollForward(phase.mode, phase.endsAt, now);
-        persist({
-          mode: rolled.mode,
-          running: true,
-          endsAt: rolled.endsAt,
-          secondsLeft: remainingSeconds(rolled.endsAt, now),
-        });
+        const next = flip(phase.mode);
+        persist({ mode: next, running: false, endsAt: null, secondsLeft: durationFor(next) });
+        setChime(true);
+        notifyPhaseEnd(phase.mode);
       } else {
         setNowMs(now);
       }
@@ -190,12 +213,24 @@ const Pomodoro = () => {
   }, [running, phase.endsAt, phase.mode]);
 
   const start = () => {
+    // Ask for notification permission on the first deliberate start (a user
+    // gesture), so phase-end alerts can fire later.
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      void Notification.requestPermission();
+    }
     const now = Date.now();
+    setChime(false);
     persist({ mode, running: true, endsAt: now + secondsLeft * 1000, secondsLeft });
     setNowMs(now);
   };
-  const pause = () => persist({ mode, running: false, endsAt: null, secondsLeft });
-  const reset = () => persist({ mode, running: false, endsAt: null, secondsLeft: durationFor(mode) });
+  const pause = () => {
+    setChime(false);
+    persist({ mode, running: false, endsAt: null, secondsLeft });
+  };
+  const reset = () => {
+    setChime(false);
+    persist({ mode, running: false, endsAt: null, secondsLeft: durationFor(mode) });
+  };
 
   const accent = mode === "work" ? "var(--accent-9)" : "var(--grass-9)";
 
@@ -218,7 +253,15 @@ const Pomodoro = () => {
   };
 
   const dot = h("span", {
-    style: { width: 8, height: 8, borderRadius: "50%", background: accent, flexShrink: 0 },
+    style: {
+      width: 8,
+      height: 8,
+      borderRadius: "50%",
+      background: accent,
+      flexShrink: 0,
+      // Pulse while a finished phase is waiting to be started.
+      animation: chime && !running ? `${PULSE_NAME} 1s ease-in-out infinite` : undefined,
+    },
   });
 
   const time = h(
@@ -252,7 +295,7 @@ const Pomodoro = () => {
       {
         style: { flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--gray-11)" },
       },
-      task || (mode === "work" ? "Focus" : "Break"),
+      mode === "work" ? task || "Focus" : "Break",
     ),
     h("button", { onClick: () => setExpanded((e) => !e), style: linkBtn() }, expanded ? "▾" : "▸"),
   );
@@ -285,6 +328,7 @@ const Pomodoro = () => {
         {
           onClick: () => {
             const next = flip(mode);
+            setChime(false);
             persist({ mode: next, running: false, endsAt: null, secondsLeft: durationFor(next) });
           },
           style: linkBtn(),
@@ -326,5 +370,10 @@ const linkBtn = () => ({
 });
 
 export default function activate(api) {
-  return api.registerOverlay({ id: "pomodoro", component: Pomodoro });
+  ensureStyles();
+  const dispose = api.registerOverlay({ id: "pomodoro", component: Pomodoro });
+  return () => {
+    dispose();
+    document.getElementById(STYLE_ID)?.remove();
+  };
 }
