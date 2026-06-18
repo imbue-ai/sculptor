@@ -681,11 +681,12 @@ def _handle_background(args: dict, builder: _TurnBuilder, abort_event: Event, st
     second end.
 
     The completion `notify` (the structured marker Sculptor maps to a
-    BackgroundTaskNotification) is emitted OUT-OF-BAND on a daemon thread — after an
-    optional `wait_path` hold — so fake pi stays responsive to the user's next
-    prompt while the task "runs". Sculptor surfaces it via its idle-drain. With no
-    `wait_path` the completion fires after a brief delay (still after the launch
-    turn's `agent_end`, so it is genuinely out-of-band).
+    BackgroundTaskNotification) is emitted OUT-OF-BAND — after the launch turn's
+    `agent_end`, so Sculptor surfaces it via its idle-drain rather than within the
+    turn. With a `wait_path` it is held on a daemon thread until the sentinel file
+    appears (so a test can send a mid-flight prompt first); with no `wait_path` it
+    is emitted synchronously right after `agent_end`, so a one-shot headless run
+    observes it before exiting on EOF.
 
     Args (all optional): `id` (tool-call id), `command`, `label`, `pgid`,
     `status` ("completed"/"failed"), `exit_code`, `summary`, `duration_ms`,
