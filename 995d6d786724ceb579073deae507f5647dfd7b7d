@@ -1,8 +1,8 @@
 {
-  "offload-electron.toml": {
+  "offload.toml": {
     "image_id": "im-Uf35CxT68ETNGwDvEDX4UG"
   },
-  "offload.toml": {
+  "offload-electron.toml": {
     "image_id": "im-Uf35CxT68ETNGwDvEDX4UG"
   }
 }
