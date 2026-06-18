@@ -5,6 +5,7 @@ import { useCallback, useEffect } from "react";
 import type { RepoInfo } from "~/api";
 import { ElementIds } from "~/api";
 import { useKeybinding, useKeybindingDisplayText } from "~/common/keybindings/hooks.ts";
+import { isDismissibleOverlayOpen } from "~/common/overlayUtils.ts";
 import { useModifiedEnter } from "~/common/ShortcutUtils.ts";
 import { KeyboardHint } from "~/components/KeyboardHint.tsx";
 
@@ -71,10 +72,12 @@ export const NewWorkspaceForm = ({
   // Allow Cmd+Enter to submit from anywhere on the page, not just the input
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent): void => {
-      if (e.key === "Enter" && isModifierPressed(e)) {
-        e.preventDefault();
-        onSubmit();
-      }
+      if (e.key !== "Enter" || !isModifierPressed(e)) return;
+      // An overlay open over the page (e.g. the Add Repository dialog) owns
+      // Cmd+Enter for its own action; don't also create the workspace.
+      if (isDismissibleOverlayOpen()) return;
+      e.preventDefault();
+      onSubmit();
     };
 
     document.addEventListener("keydown", handleGlobalKeyDown);
