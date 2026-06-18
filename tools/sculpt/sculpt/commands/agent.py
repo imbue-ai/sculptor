@@ -119,7 +119,7 @@ def create(
     workspace: str | None = typer.Option(None, "--workspace", "-w", help="Workspace ID (or set SCULPT_WORKSPACE_ID)"),
     prompt: str | None = typer.Option(None, "--prompt", "-p", help="The task prompt"),
     model: str = typer.Option(
-        "opus", "--model", "-m", help="The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m])"
+        "opus", "--model", "-m", help="The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m], fable)"
     ),
     name: str | None = typer.Option(None, "--name", help="Agent name"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
@@ -420,7 +420,7 @@ def send(
     message: str = typer.Argument(..., help="Message to send"),
     workspace: str | None = typer.Option(None, "--workspace", "-w", help="Workspace ID (or set SCULPT_WORKSPACE_ID)"),
     model: str = typer.Option(
-        "opus", "--model", "-m", help="The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m])"
+        "opus", "--model", "-m", help="The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m], fable)"
     ),
     file: list[str] | None = typer.Option(None, "--file", help="Files to include (repeatable)"),
     follow: bool = typer.Option(False, "--follow", "-f", help="Stream the agent's response after sending"),
