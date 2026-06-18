@@ -176,7 +176,12 @@ describe("collectStubs (real installed namespaces)", () => {
     const stubs = await collectStubs(process.cwd());
 
     // One stub per configured module (filenames the import map references).
-    expect([...stubs.keys()].sort()).toEqual([
+    expect(
+      [...stubs.keys()].sort(),
+      "Generated stub set changed. If you added or removed a shared package, update " +
+        "RUNTIME_MODULES in vite-plugins/plugin-runtime-stubs.ts, this expected list, " +
+        "the import map in index.html, and window.__SCULPTOR_HOST__ in hostRuntime.ts.",
+    ).toEqual([
       "jotai.js",
       "lucide-react.js",
       "radix-themes.js",
@@ -209,11 +214,13 @@ describe("collectStubs (real installed namespaces)", () => {
     expect(sdk).toContain("export const PanelHeader = host_sdk.PanelHeader;");
   });
 
-  // A canary: well-known bindings every stub is expected to re-export. If a
-  // package's namespace stops being read (rename, resolution change, the import
-  // silently returning {}), these fail by name instead of surfacing as an
-  // `undefined` import inside a plugin at runtime. Not exhaustive — full SDK
-  // surface coverage belongs to plugin SDK testing — just an obvious tripwire.
+  // A canary: a few well-known bindings every stub is expected to re-export. It
+  // is a presence (subset) check, so growing a package's surface never trips it
+  // — only a binding *disappearing* does. That happens in two cases: generation
+  // regressed (a package's namespace stopped being read — a real bug to fix), or
+  // the binding was legitimately renamed/removed upstream (then update the list
+  // below). Not exhaustive — full SDK surface coverage belongs to plugin SDK
+  // testing — just an obvious tripwire against the silent-`undefined` failure.
   const WELL_KNOWN_EXPORTS: Record<string, ReadonlyArray<string>> = {
     "react.js": ["useState", "useEffect", "useMemo", "useRef", "useContext", "createContext", "forwardRef"],
     "react-jsx-runtime.js": ["jsx", "jsxs", "Fragment"],
@@ -229,9 +236,14 @@ describe("collectStubs (real installed namespaces)", () => {
     const stubs = await collectStubs(process.cwd());
     for (const [file, names] of Object.entries(WELL_KNOWN_EXPORTS)) {
       const stub = stubs.get(file);
-      expect(stub, `missing stub: ${file}`).toBeDefined();
+      expect(stub, `No stub generated for "${file}" — check RUNTIME_MODULES.`).toBeDefined();
       for (const name of names) {
-        expect(stub, `${file} should export ${name}`).toContain(`export const ${name} = `);
+        expect(
+          stub,
+          `"${file}" no longer re-exports "${name}". Either generation regressed (the host ` +
+            `package's namespace isn't being read — a bug), or "${name}" was renamed/removed ` +
+            `upstream — if so, update WELL_KNOWN_EXPORTS in this test.`,
+        ).toContain(`export const ${name} = `);
       }
     }
   });
