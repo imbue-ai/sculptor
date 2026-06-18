@@ -2,13 +2,27 @@ import { execSync, spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as readline from "node:readline";
+import { pathToFileURL } from "node:url";
 
 import { randomBytes } from "crypto";
 import type { MenuItemConstructorOptions } from "electron";
-import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, shell, webContents } from "electron";
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  globalShortcut,
+  ipcMain,
+  Menu,
+  net,
+  protocol,
+  shell,
+  webContents,
+} from "electron";
 import Store from "electron-store";
 
 import type { AnyBackendStatus, SculptorDevInfo } from "../shared/types";
+import { APP_SCHEME, getAppRendererUrl, resolveRequestToFilePath, shouldFallbackToIndex } from "./appProtocol";
 import { initAutoUpdater } from "./autoUpdater";
 import type { ZoomCommand } from "./constants";
 import {
@@ -31,6 +45,7 @@ import {
 } from "./constants";
 import { createDevIcon } from "./devIcon";
 import { PORT } from "./electronOnlyUtils";
+import { migrateLocalStorageToAppScheme, MIGRATION_BLANK_PATH } from "./localStorageMigration";
 import { finalizeLogger, getSculptorFolder, logger } from "./logger";
 import { registerTestIpcHandlers } from "./testIpcHandlers";
 import {
@@ -50,6 +65,34 @@ const IS_MAC = process.platform === "darwin";
 const IS_LINUX = process.platform === "linux";
 
 /* eslint-enable @typescript-eslint/naming-convention */
+
+// Mark the custom app scheme as a standard, secure, fetch-capable origin. This
+// must run before the app's "ready" event, so it lives at module top level.
+// The handler that actually serves files is registered after the app is ready
+// (see registerAppProtocolHandler). In a plain `npm run dev` the renderer
+// loads over http from the Vite dev server and this scheme goes unused; the
+// integration tests opt in via SCULPTOR_USE_APP_SCHEME=1 (see below).
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: APP_SCHEME,
+    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true },
+  },
+]);
+
+// In production the renderer always loads from the custom sculptor://app
+// origin. In development it normally loads straight from the Vite dev server
+// over http (HMR, fast iteration), but integration tests set
+// SCULPTOR_USE_APP_SCHEME=1 to exercise the real app-scheme origin without a
+// packaged build: the handler then proxies every request to the Vite dev
+// server (injected here as its origin), so Vite still transforms and serves
+// the renderer while each request rides sculptor://app.
+const APP_SCHEME_DEV_SERVER_ORIGIN =
+  IS_DEVELOPMENT && process.env.SCULPTOR_USE_APP_SCHEME === "1"
+    ? `http://127.0.0.1:${process.env.SCULPTOR_FRONTEND_PORT || "5173"}`
+    : null;
+
+/** Whether the renderer is loaded from sculptor://app (vs. the dev server URL). */
+const shouldUseAppScheme = !IS_DEVELOPMENT || APP_SCHEME_DEV_SERVER_ORIGIN !== null;
 
 // When running from source, SCULPTOR_ICON_LABEL controls the large text at the
 // top of the dev icon (e.g. "src", "pytest") and SCULPTOR_FRONTEND_PORT is
@@ -105,6 +148,10 @@ let window: BrowserWindow | null = null;
 let currentBackendStatus: AnyBackendStatus = { status: "loading", payload: { message: "Initializing..." } };
 let stderrBuffer = "";
 let isQuitting = false;
+// True only during the one-time startup localStorage migration, which opens and
+// destroys a transient window before the main window exists. Destroying it would
+// otherwise fire window-all-closed and quit the app mid-startup (see the handler).
+let isMigrating = false;
 let autoUpdaterManager: ReturnType<typeof initAutoUpdater> = null;
 let isInCustomCommandMode = false;
 let customCommandBackendUrl: string | null = null;
@@ -733,21 +780,20 @@ const createWindow = async (): Promise<void> => {
     });
   }
 
-  const appUrl = IS_DEVELOPMENT
-    ? // The standard way to get the dev server URL is using MAIN_WINDOW_VITE_DEV_SERVER_URL,
-      // populated by Vite using its define mechanism.
-      // However, defines are substituted during compilation and reflected in the compiled JavaScript,
-      // so this creates a race condition when launching multiple dev instances at the same time,
-      // which is exactly what we do during integration tests:
-      // different instances will compete to write their respective frontend URLs to the compiled file,
-      // so other instances may load an Electron window with the wrong URL.
-      //
-      // So instead,
-      // we construct the frontend URL using SCULPTOR_FRONTEND_PORT, which is populated at runtime,
-      // so different dev instances will open their corresponding frontend URLs correctly.
-      `http://localhost:${process.env.SCULPTOR_FRONTEND_PORT || "5173"}`
-    : // Note: we load the built frontend from a file in production which requires us to circumvent CORS in the backend.
-      `file://${path.join(app.getAppPath(), ".vite/build/renderer/index.html")}`;
+  // In production (and tests that opt in via SCULPTOR_USE_APP_SCHEME) the
+  // renderer loads from the custom, secure sculptor://app origin served by the
+  // app protocol instead of file://. A real origin makes absolute paths, fetch,
+  // dynamic import, and CSP behave like a normal web page; the backend CORS
+  // allowlist accepts it (see sculptor/web/app.py). In plain development it
+  // loads straight from the Vite dev server over http.
+  //
+  // We construct the dev server URL from SCULPTOR_FRONTEND_PORT (populated at
+  // runtime) rather than MAIN_WINDOW_VITE_DEV_SERVER_URL: that Vite define is
+  // substituted at compile time, so concurrent dev instances (as in integration
+  // tests) would race to write it and could open the wrong URL.
+  const appUrl = shouldUseAppScheme
+    ? getAppRendererUrl()
+    : `http://localhost:${process.env.SCULPTOR_FRONTEND_PORT || "5173"}`;
 
   logger.info("[main] Initial URL:", appUrl);
   await window.loadURL(appUrl);
@@ -911,7 +957,69 @@ const createWindow = async (): Promise<void> => {
   });
 };
 
+/**
+ * Serve the built renderer bundle over the custom `sculptor://app` scheme.
+ * Maps each request to a file inside the bundle directory (with a path-
+ * traversal guard) and streams it back via `net.fetch`, which infers the MIME
+ * type from the extension. Extensionless misses fall back to the SPA shell.
+ * This file-serving branch is the packaged-build path; under
+ * SCULPTOR_USE_APP_SCHEME=1 (integration tests) the handler instead proxies to
+ * the Vite dev server. Only a plain `npm run dev` never hits this handler.
+ */
+const registerAppProtocolHandler = (): void => {
+  const bundleDir = path.join(app.getAppPath(), ".vite/build/renderer");
+  protocol.handle(APP_SCHEME, async (request) => {
+    const { pathname, search } = new URL(request.url);
+    // Blank doc for the one-time localStorage origin migration: lets the main
+    // process open a page on this origin to write without booting the renderer.
+    if (pathname === MIGRATION_BLANK_PATH) {
+      return new Response('<!doctype html><meta charset="utf-8"><title>migrating</title>', {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    }
+
+    if (APP_SCHEME_DEV_SERVER_ORIGIN !== null) {
+      // Test/dev: proxy to the Vite dev server, preserving path + query so its
+      // on-the-fly module transforms and asset requests resolve there. (The
+      // app's API/WebSocket traffic goes straight to the backend via absolute
+      // URLs, so it never reaches this handler.)
+      return net.fetch(`${APP_SCHEME_DEV_SERVER_ORIGIN}${pathname}${search}`);
+    }
+    const resolved = resolveRequestToFilePath(bundleDir, request.url);
+    if (resolved === null) {
+      return new Response("Bad request", { status: 400 });
+    }
+    let target = resolved;
+    // TODO(SCU-1517): this serves one fixed bundle at startup, so a sync stat
+    // is fine. Once the handler also serves plugins from arbitrary local
+    // directories at runtime, switch existsSync (and the read below) to async
+    // fs.promises to keep the main process thread non-blocking.
+    if (!fs.existsSync(target)) {
+      if (shouldFallbackToIndex(target)) {
+        target = path.join(bundleDir, "index.html");
+      } else {
+        return new Response("Not found", { status: 404 });
+      }
+    }
+    return net.fetch(pathToFileURL(target).toString());
+  });
+};
+
 app.whenReady().then(async () => {
+  // Register the app-scheme file handler before any window loads from it.
+  registerAppProtocolHandler();
+
+  // One-time: carry renderer localStorage from the legacy file:// origin to
+  // sculptor://app before any window loads, so an in-place upgrade keeps the
+  // user's layout, theme, tabs, etc. Gated, capped, and never throws.
+  if (app.isPackaged && shouldUseAppScheme && !isInPytest) {
+    // Suppress the window-all-closed quit while the migration's transient window
+    // opens and closes (the main window doesn't exist yet). Cleared once the
+    // main window is created, below.
+    isMigrating = true;
+    await migrateLocalStorageToAppScheme(store);
+  }
+
   traceMark("electron.app_ready");
   // Create application menu
   createApplicationMenu();
@@ -1043,6 +1151,10 @@ app.whenReady().then(async () => {
   // We can only create the window _after_ the handlers have been defined, because createWindow() invokes preload.ts
   // which depends on the handlers.
   await createWindow();
+
+  // Main window exists now, so the migration's transient-window quit suppression
+  // is no longer needed (any future window-all-closed is a real user close).
+  isMigrating = false;
 
   // Initialize auto-updater (no-op for unpackaged/dev builds)
   autoUpdaterManager = initAutoUpdater(window!, store, () => {
@@ -1269,6 +1381,15 @@ function killProcessAndWait(process: ReturnType<typeof spawn>, timeoutMs: number
 
 app.on("window-all-closed", (): void => {
   logger.info("[main] window-all-closed fired, isQuitting=%s, platform=%s", isQuitting, process.platform);
+
+  // The one-time localStorage migration opens and closes a transient window
+  // before the main window is created; its close leaves zero windows. Ignore
+  // that so the app doesn't quit itself mid-startup (the main window is on its
+  // way). Cleared once createWindow() returns.
+  if (isMigrating) {
+    logger.info("[main] window-all-closed during migration — ignoring");
+    return;
+  }
 
   if (IS_DEVELOPMENT && isQuitting) {
     // In dev mode, CTRL-C kills the Vite dev server simultaneously, crashing

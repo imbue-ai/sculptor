@@ -94,7 +94,7 @@ def test_zone_with_no_panels_is_hidden_on_load(sculptor_instance_: SculptorInsta
 
     # Capture the workspace URL hash so we can reload to it after injecting localStorage
     current_url = page.url
-    target_hash = "/#/" + current_url.split("#/", 1)[1] if "#/" in current_url else "/#/"
+    target_hash = "#/" + current_url.split("#/", 1)[1] if "#/" in current_url else "#/"
 
     # Step 2: Inject inconsistent localStorage state where bottom-right is
     # marked visible but has no panels assigned to it.  This simulates a
@@ -185,7 +185,7 @@ def test_stale_panel_id_pruned_from_persisted_layout(sculptor_instance_: Sculpto
     expect(files_icon).to_be_visible()
 
     current_url = page.url
-    target_hash = "/#/" + current_url.split("#/", 1)[1] if "#/" in current_url else "/#/"
+    target_hash = "#/" + current_url.split("#/", 1)[1] if "#/" in current_url else "#/"
 
     # Inject localStorage with a stale "changes" panel that no longer exists
     # in the registry, alongside the real panels.
