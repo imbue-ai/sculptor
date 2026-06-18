@@ -2324,9 +2324,9 @@ def set_workspace_agent_model(
             )
         # supports_model_selection also covers per-turn switching (Claude); the
         # out-of-band set_model RPC is only honored by a harness that sources a
-        # backend model list (pi). Without a catalog there is no SetModelUserMessage
-        # handler, so the request would wait forever for a terminal outcome — reject
-        # it instead of enqueuing a message that never resolves.
+        # backend model list (pi). A harness without a catalog has no
+        # SetModelUserMessage handler, so reject it rather than block the request
+        # forever on a message nothing resolves.
         model_state = task.current_state if isinstance(task.current_state, AgentTaskStateV2) else None
         if not harness.get_available_models(model_state):
             raise HTTPException(

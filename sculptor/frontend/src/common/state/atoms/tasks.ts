@@ -100,9 +100,9 @@ export const taskModelAtomFamily = atomFamily<string, Atom<string | undefined>>(
   atom((get) => get(taskAtomFamily(taskId))?.model),
 );
 
-// A stable reference for the "no backend list" case so the derived atom below
-// keeps the same identity across unrelated task updates (a fresh `[]` would fail
-// Jotai's Object.is check and re-render every subscriber).
+// A stable reference for the "no backend list" case, so the derived atom below
+// keeps one identity across unrelated task updates instead of a fresh array each
+// recompute.
 const EMPTY_MODEL_OPTIONS: ReadonlyArray<ModelOption> = [];
 
 // The harness's backend-sourced model catalog (pi). A non-capability view field,
