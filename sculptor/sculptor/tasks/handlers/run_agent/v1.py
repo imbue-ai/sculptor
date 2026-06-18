@@ -825,11 +825,12 @@ def _eager_fetch_pi_models_into_state(
     Returns the task state, evolved with the catalog when the probe found one, so
     the caller carries it forward — otherwise `finalize_task_setup`'s later
     evolve-and-upsert (from the in-memory state) would write the catalog back
-    out. Gated to pi via `supports_model_selection` (only pi sources a dynamic
-    catalog; Claude/terminal/hello do not), so non-pi agents are never started
-    eagerly. Best-effort: on any failure the probe returns an empty catalog and
-    the task state is returned unchanged, so the switcher falls back exactly as
-    before.
+    out. Restricted to pi: the `supports_model_selection` check skips harnesses
+    that cannot select a model at all (hello/terminal), and the `PiAgent` check
+    below skips the rest — only pi sources a dynamic catalog via the probe (Claude
+    supports model selection but with a static built-in list). Best-effort: on any
+    failure the probe returns an empty catalog and the task state is returned
+    unchanged, so the switcher falls back exactly as before.
     """
     if not get_harness_for_config(task_data.agent_config).capabilities().supports_model_selection:
         return task_state
@@ -842,9 +843,10 @@ def _eager_fetch_pi_models_into_state(
         workspace_service=services.workspace_service,
         in_testing=in_testing,
     )
-    # supports_model_selection currently implies the pi harness — the probe is a
-    # PiAgent method. If another harness ever sources a dynamic catalog, give it
-    # the same probe seam rather than starting it eagerly here.
+    # Only pi sources a dynamic catalog via this probe (a PiAgent method); Claude
+    # supports model selection but with a static built-in list, so it is not probed
+    # here. If another harness ever sources a dynamic catalog, give it the same
+    # probe seam rather than starting it eagerly here.
     if not isinstance(agent_wrapper, PiAgent):
         return task_state
     secrets = _build_agent_secrets(settings=settings, task=task, task_state=task_state, project=project)
