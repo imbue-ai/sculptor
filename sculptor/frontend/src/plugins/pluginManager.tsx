@@ -9,6 +9,7 @@ import { installHostRuntime } from "./hostRuntime.ts";
 import { PluginContext } from "./PluginContext.tsx";
 import { PluginErrorBoundary } from "./PluginErrorBoundary.tsx";
 import {
+  pluginDisabledSourcesAtom,
   pluginOverlaysAtom,
   pluginPanelsAtom,
   pluginSettingsComponentsAtom,
@@ -182,8 +183,54 @@ export class PluginManager {
     this.installQueryKeyNamespaceGuard();
 
     const userSources = store.get(pluginSourcesAtom);
-    for (const source of this.builtinSources) void this.loadSource(store, source, true);
-    for (const source of userSources) void this.loadSource(store, source, false);
+    for (const source of this.builtinSources) this.bootstrapSource(store, source, true);
+    for (const source of userSources) this.bootstrapSource(store, source, false);
+  }
+
+  /**
+   * Loads a source on boot unless the user has disabled it, in which case the
+   * row settles into a "disabled" state without ever running `activate()`.
+   */
+  private bootstrapSource(store: JotaiStore, source: string, isBuiltin: boolean): void {
+    if (this.isDisabled(store, source)) {
+      this.setSourceState(store, source, { status: "disabled", isBuiltin });
+      return;
+    }
+    void this.loadSource(store, source, isBuiltin);
+  }
+
+  /** Whether the user has disabled this source (persisted across launches). */
+  private isDisabled(store: JotaiStore, source: string): boolean {
+    return store.get(pluginDisabledSourcesAtom).includes(source);
+  }
+
+  /**
+   * Enables or disables a source without removing it from the list. Disabling
+   * unloads its contributions and parks the row in a "disabled" state;
+   * enabling re-loads it from scratch. The disabled set is persisted, so the
+   * choice survives a reload — this is the opt-out for built-in plugins and the
+   * mute switch for remotely-pulled-in sources.
+   */
+  async setSourceEnabled(store: JotaiStore, source: string, enabled: boolean): Promise<void> {
+    const normalized = normalizeSource(source);
+    const isBuiltin =
+      store.get(pluginSourceStatesAtom)[normalized]?.isBuiltin ?? this.builtinSources.includes(normalized);
+    const disabled = store.get(pluginDisabledSourcesAtom);
+
+    if (enabled) {
+      if (!disabled.includes(normalized)) return;
+      store.set(
+        pluginDisabledSourcesAtom,
+        disabled.filter((s) => s !== normalized),
+      );
+      await this.loadSource(store, normalized, isBuiltin);
+    } else {
+      if (!disabled.includes(normalized)) {
+        store.set(pluginDisabledSourcesAtom, [...disabled, normalized]);
+      }
+      this.unloadSource(normalized);
+      this.setSourceState(store, normalized, { status: "disabled", isBuiltin });
+    }
   }
 
   /** Adds a user source (persisted) and loads it immediately. No-op if duplicate. */
@@ -204,6 +251,12 @@ export class PluginManager {
     store.set(
       pluginSourcesAtom,
       store.get(pluginSourcesAtom).filter((s) => s !== source),
+    );
+    // Drop any disabled-flag too, so re-adding the same source later starts
+    // enabled rather than silently inheriting a stale "disabled" choice.
+    store.set(
+      pluginDisabledSourcesAtom,
+      store.get(pluginDisabledSourcesAtom).filter((s) => s !== source),
     );
     this.unloadSource(source);
     this.setSourceState(store, source, undefined);

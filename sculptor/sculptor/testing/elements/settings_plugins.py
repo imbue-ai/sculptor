@@ -51,6 +51,23 @@ class PlaywrightPluginsSettingsElement(PlaywrightIntegrationTestElement):
         """Click the remove (trash) button on a source's row."""
         self.get_source_row(source).get_by_test_id(ElementIDs.SETTINGS_PLUGINS_SOURCE_REMOVE).click()
 
+    def get_toggle(self, source: str) -> Locator:
+        """Locate the enable/disable switch on a source's row."""
+        return self.get_source_row(source).get_by_test_id(ElementIDs.SETTINGS_PLUGINS_SOURCE_TOGGLE)
+
+    def set_enabled(self, source: str, *, enabled: bool) -> None:
+        """Flip a source's enable/disable switch to the desired state (idempotent)."""
+        toggle = self.get_toggle(source)
+        expect(toggle).to_be_visible()
+        target_state = "checked" if enabled else "unchecked"
+        if toggle.get_attribute("data-state") != target_state:
+            toggle.click()
+        expect(toggle).to_have_attribute("data-state", target_state)
+
+    def expect_disabled(self, source: str) -> None:
+        """Assert a source is on the list but disabled (parked, not loaded)."""
+        expect(self.get_source_row(source)).to_have_attribute("data-status", "disabled")
+
     def expect_loaded(self, source: str, *, name: str | None = None, version: str | None = None) -> None:
         """Assert a source finished loading (optionally showing name/version)."""
         row = self.get_source_row(source)
