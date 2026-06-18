@@ -1,16 +1,16 @@
 # Plugin runtime stubs
 
-These files are served at `/plugin-runtime/*` and resolve the bare-specifier
-imports in plugin bundles via the import map declared in `index.html`. Each
-stub re-exports the host's singleton instances from `window.__SCULPTOR_HOST__`,
-which the host populates during boot (see `src/plugins/hostRuntime.ts`).
+The `/plugin-runtime/*.js` stubs resolve the bare-specifier imports in plugin
+bundles (via the import map in `index.html`) to the host's singleton instances,
+read from `window.__SCULPTOR_HOST__` (populated by `src/plugins/hostRuntime.ts`).
 
-If you add a new shared package to the import map, add a stub file here that
-mirrors the named exports that plugin code is expected to use.
+**These files are generated, not checked in.** The `pluginRuntimeStubs` Vite
+plugin (`vite-plugins/plugin-runtime-stubs.ts`) derives each stub's export list
+from the *actual* installed module namespace, serves them in dev, and emits them
+into the build output — so a plugin can import any name the host package really
+exports, instead of a hand-curated subset that silently yielded `undefined`.
 
-TODO(SCU-1488): these stubs are hand-maintained re-export lists — a plugin
-importing an un-enumerated name silently gets `undefined`. Generate them at
-build time with a Vite plugin, from each shared package's actual module
-namespace (plus the default-export escape hatch where one exists). That also
-lets the loader enforce peer-dependency versions, which were dropped from the
-manifest for now precisely because they couldn't be checked.
+To add a new shared package: add it to the import map in `index.html`, expose
+its namespace on `window.__SCULPTOR_HOST__` in `hostRuntime.ts`, and add a
+`RUNTIME_MODULES` entry (and, if its version should be embedded, a
+`VERSION_PACKAGES` entry) in the Vite plugin. No stub file to maintain here.
