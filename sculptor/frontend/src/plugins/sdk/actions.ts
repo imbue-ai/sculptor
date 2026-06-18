@@ -17,7 +17,19 @@
  * and can be upgraded (e.g. to a dedicated Electron bridge) in one place.
  * `noopener,noreferrer` prevents the opened page from reaching back through
  * `window.opener`.
+ *
+ * Only `http(s)` URLs are opened. A URL that doesn't parse or uses another
+ * scheme (`javascript:`, `data:`, …) is refused — this is the blessed seam, so
+ * it stays safe even when the URL comes from external data (e.g. a Linear issue
+ * or attachment URL), mirroring the host's safe-URL policy for rendered links.
  */
 export const openExternal = (url: string): void => {
-  window.open(url, "_blank", "noopener,noreferrer");
+  let resolved: URL;
+  try {
+    resolved = new URL(url, window.location.href);
+  } catch {
+    return;
+  }
+  if (resolved.protocol !== "http:" && resolved.protocol !== "https:") return;
+  window.open(resolved.href, "_blank", "noopener,noreferrer");
 };
