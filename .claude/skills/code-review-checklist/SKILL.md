@@ -163,6 +163,15 @@ This category applies when the stated goal is an MR/PR body produced by an auton
 
 ### Comments
 - Comments describe the code and explain *why*; they are not narration.
+- No incidental history or persuasive rationale — strip comments that explain
+  today's bug fix, argue for the code's correctness, or narrate how the code
+  used to work. The comment should help a future maintainer, not relitigate
+  the change that introduced it.
+- No restating volatile facts from the surrounding code (a count of subclasses,
+  a list of variants/enum cases, the call sites of a function). These pin the
+  comment to a moment in time and rot quickly — follow DRY.
+- No ASCII-art banners or box-drawing section dividers. They add visual noise
+  without conveying anything a plain one-line comment does not.
 - No editorializing — strip frustration, jokes, hedging-as-mood, and
   exaggeration, keeping any underlying fact.
 - No pointers to throwaway docs, tickets, or plan phases — `agent_docs/...`
