@@ -106,7 +106,6 @@ describe("updateWorkspacesAtom", () => {
   it("updates workspace atoms when streaming provides new data", () => {
     const wrapper = createWrapper();
 
-    // Render a hook that uses both the update setter and the workspace getter
     const { result } = renderHook(
       () => {
         const updateWorkspaces = useSetAtom(updateWorkspacesAtom);
@@ -116,7 +115,6 @@ describe("updateWorkspacesAtom", () => {
       { wrapper },
     );
 
-    // Initially no workspace
     expect(result.current.workspace).toBeNull();
 
     // Simulate streaming update
@@ -125,7 +123,6 @@ describe("updateWorkspacesAtom", () => {
       result.current.updateWorkspaces([newWorkspace]);
     });
 
-    // Workspace should now be available
     expect(result.current.workspace).toEqual(newWorkspace);
   });
 
@@ -141,7 +138,6 @@ describe("updateWorkspacesAtom", () => {
       { wrapper },
     );
 
-    // Initially no workspaces
     expect(result.current.workspaces).toHaveLength(0);
 
     // Simulate streaming update with multiple workspaces
@@ -151,7 +147,6 @@ describe("updateWorkspacesAtom", () => {
       result.current.updateWorkspaces([workspace1, workspace2]);
     });
 
-    // Both workspaces should be available
     expect(result.current.workspaces).toHaveLength(2);
   });
 
@@ -184,7 +179,6 @@ describe("updateWorkspacesAtom", () => {
       result.current.updateWorkspaces([deletedWorkspace]);
     });
 
-    // ws_1 should be removed from the workspace list
     expect(result.current.workspaces).toHaveLength(1);
     expect(result.current.workspaces[0].objectId).toBe("ws_2");
 

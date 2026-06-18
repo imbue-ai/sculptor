@@ -24,8 +24,6 @@ vi.mock("../../../api", async (importOriginal) => {
   };
 });
 
-// --- Test Utilities ---
-
 const createAction = (overrides: Partial<CustomAction> = {}): CustomAction => ({
   id: crypto.randomUUID(),
   name: "Test Action",
@@ -58,8 +56,6 @@ const renderCustomActions = (
 
   return renderHook(() => useCustomActions(), { wrapper });
 };
-
-// --- Tests ---
 
 beforeEach(() => {
   vi.clearAllMocks();

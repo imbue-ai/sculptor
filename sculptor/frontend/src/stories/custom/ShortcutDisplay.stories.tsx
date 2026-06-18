@@ -5,8 +5,6 @@ import type { ReactElement } from "react";
 import { formatShortcutForDisplay } from "~/common/ShortcutUtils";
 import { getMetaKey } from "~/electron/utils";
 
-// --- Shortcut definitions with platform-appropriate raw values ---
-
 type ShortcutEntry = {
   raw: string;
   description: string;
@@ -69,8 +67,6 @@ const formatForPlatform = (shortcut: string, isMacOS: boolean): string => {
 };
 
 const metaKeyForPlatform = (isMacOS: boolean): string => (isMacOS ? "⌘" : "Ctrl");
-
-// --- Platform-specific shortcut table ---
 
 const PlatformShortcutTable = ({
   isMacOS,
@@ -162,8 +158,6 @@ const PlatformShortcutTable = ({
   );
 };
 
-// --- Live platform rendering (uses actual runtime detection) ---
-
 const LiveShortcutTable = (): ReactElement => (
   <Flex direction="column" gap="4" style={{ maxWidth: "500px" }}>
     <Heading size="4">Shortcut Display — Live (this platform)</Heading>
@@ -198,8 +192,6 @@ const LiveShortcutTable = (): ReactElement => (
     </Flex>
   </Flex>
 );
-
-// --- Side-by-side comparison ---
 
 const SideBySide = (): ReactElement => (
   <Flex gap="6" wrap="wrap">

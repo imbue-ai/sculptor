@@ -175,7 +175,6 @@ describe("StatusPill", () => {
 
       const { container } = render(<StatusPill {...defaultProps} />, { wrapper: Wrapper });
       expect(screen.getByTestId(ElementIds.STATUS_PILL_LABEL).textContent).toBe("Stopped");
-      // Should render check icon, not an animation
       expect(container.querySelector(".lucide-check")).toBeTruthy();
     });
 
@@ -188,7 +187,6 @@ describe("StatusPill", () => {
       });
 
       const { container } = render(<StatusPill {...defaultProps} isStreaming={true} />, { wrapper: Wrapper });
-      // Active states render an animation component, not the Check icon
       expect(container.querySelector(".lucide-check")).toBeNull();
     });
   });
@@ -246,7 +244,6 @@ describe("StatusPill", () => {
 
       render(<StatusPill {...defaultProps} isStreaming={true} />, { wrapper: Wrapper });
 
-      // Verify no keydown listener was added by the component
       const keydownCalls = addEventListenerSpy.mock.calls.filter(([event]) => (event as string) === "keydown");
       expect(keydownCalls).toHaveLength(0);
 
@@ -265,7 +262,6 @@ describe("StatusPill", () => {
 
       render(<StatusPill {...defaultProps} isStreaming={true} />, { wrapper: Wrapper });
 
-      // Should call useElapsedTime with isVisible=true, isTicking=true, persistKey=taskID
       expect(mockUseElapsedTime).toHaveBeenCalledWith(true, true, "agent-1-init");
     });
 
@@ -279,7 +275,6 @@ describe("StatusPill", () => {
 
       render(<StatusPill {...defaultProps} />, { wrapper: Wrapper });
 
-      // Should call useElapsedTime with isVisible=true, isTicking=false, persistKey=taskID
       expect(mockUseElapsedTime).toHaveBeenCalledWith(true, false, "agent-1-init");
     });
 
@@ -293,7 +288,6 @@ describe("StatusPill", () => {
 
       render(<StatusPill {...defaultProps} />, { wrapper: Wrapper });
 
-      // Should call useElapsedTime with isVisible=false, persistKey=taskID
       expect(mockUseElapsedTime).toHaveBeenCalledWith(false, false, "agent-1-init");
     });
 
@@ -520,8 +514,6 @@ describe("StatusPill", () => {
 
       render(<StatusPill {...defaultProps} isStreaming={true} />, { wrapper: Wrapper });
       const label = screen.getByTestId(ElementIds.STATUS_PILL_LABEL);
-      // "1 / 1 · " is 8 chars; the truncated name is 35 chars + ellipsis = 36.
-      // Whole label is therefore 8 + 36 = 44 chars.
       expect(label.textContent?.endsWith("\u2026")).toBe(true);
       expect(label.textContent?.length).toBeLessThan(longContent.length);
     });

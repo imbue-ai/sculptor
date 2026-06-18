@@ -17,8 +17,6 @@ import { bench, describe } from "vitest";
 const ENTITY_MENTION_RE = /\+\[([^:]+):([^|]+)\|([^\]]+)\]/g;
 const ENTITY_MENTION_FAST_CHECK = "+[";
 
-// --- Test data generators ---
-
 const generateParagraph = (wordCount: number): string => {
   const words = "the quick brown fox jumps over the lazy dog and runs across the field".split(" ");
   const result: Array<string> = [];
@@ -64,7 +62,6 @@ const markdownNoProcessing = (paragraphs: ReadonlyArray<string>): number => {
   let count = 0;
   for (const child of paragraphs) {
     if (typeof child !== "string") continue;
-    // This is what the override did before: return child unchanged
     count += child.length;
   }
   return count;
@@ -149,8 +146,6 @@ const tiptapFastCheckThenDocScan = (contentHasMention: boolean, nodes: ReadonlyA
   }
   return totalReplacements;
 };
-
-// --- Benchmarks ---
 
 describe("AlphaMarkdownBlock: no mentions (typical case)", () => {
   const small = generateDocument(10, 50);

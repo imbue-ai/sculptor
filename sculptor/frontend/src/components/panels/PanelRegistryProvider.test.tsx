@@ -15,8 +15,6 @@ import {
 import { PanelRegistryProvider } from "~/components/panels/PanelRegistryProvider";
 import type { DefaultPanelLayout, PanelDefinition } from "~/components/panels/types.ts";
 
-// ── Test fixtures ────────────────────────────────────────────────────
-
 const INFO_PANEL: PanelDefinition = {
   id: "info",
   displayName: "Info",
@@ -114,8 +112,6 @@ const renderProvider = (
 beforeEach(() => localStorage.clear());
 afterEach(() => localStorage.clear());
 
-// ── Bootstrap behavior ──────────────────────────────────────────────
-
 describe("PanelRegistryProvider — bootstrap", () => {
   it("applies defaultLayout on first mount when no persisted layout exists", () => {
     const store = createStore();
@@ -155,8 +151,6 @@ describe("PanelRegistryProvider — bootstrap", () => {
   });
 });
 
-// ── panelRegistryAtom sync ──────────────────────────────────────────
-
 describe("PanelRegistryProvider — registry sync", () => {
   it("hydrates panelRegistryAtom with initial panels on mount", () => {
     const store = createStore();
@@ -180,8 +174,6 @@ describe("PanelRegistryProvider — registry sync", () => {
     expect(store.get(panelRegistryAtom)).toEqual(EXTENDED_PANELS);
   });
 });
-
-// ── Reconciliation: adding panels ───────────────────────────────────
 
 describe("PanelRegistryProvider — reconciliation (adding panels)", () => {
   it("adds a newly-registered panel to zoneAssignments at its defaultZone", () => {
@@ -231,8 +223,6 @@ describe("PanelRegistryProvider — reconciliation (adding panels)", () => {
     expect(store.get(zoneAssignmentsAtom)[NOTES_PANEL.id]).toBe("bottom-right");
   });
 });
-
-// ── Reconciliation: removing panels ─────────────────────────────────
 
 describe("PanelRegistryProvider — reconciliation (removing panels)", () => {
   it("removes stale panels from zoneAssignments when they disappear from props", () => {
@@ -314,8 +304,6 @@ describe("PanelRegistryProvider — reconciliation (removing panels)", () => {
   });
 });
 
-// ── Idempotency / stability ─────────────────────────────────────────
-
 describe("PanelRegistryProvider — idempotency", () => {
   it("rerendering with the same panels reference does not change state", () => {
     const store = createStore();
@@ -372,11 +360,9 @@ describe("PanelRegistryProvider — idempotency", () => {
 
     expect(store.get(zoneAssignmentsAtom)[NOTES_PANEL.id]).toBe("bottom-right");
 
-    // Toggle off
     rerender({ store, panels: TEST_PANELS, defaultLayout: extendedDefaultLayout });
     expect(store.get(zoneAssignmentsAtom)[NOTES_PANEL.id]).toBeUndefined();
 
-    // Toggle back on
     rerender({ store, panels: EXTENDED_PANELS, defaultLayout: extendedDefaultLayout });
     expect(store.get(zoneAssignmentsAtom)[NOTES_PANEL.id]).toBe("bottom-right");
     expect(store.get(zoneOrderAtom)["bottom-right"]).toContain(NOTES_PANEL.id);

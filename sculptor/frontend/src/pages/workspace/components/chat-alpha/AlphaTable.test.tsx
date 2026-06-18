@@ -25,10 +25,6 @@ afterEach(() => {
   cleanup();
 });
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function twoColumnTable(): React.ReactElement {
   return (
     <AlphaTable>
@@ -58,13 +54,7 @@ function clickCopyButton(container: HTMLElement): void {
   fireEvent.click(button!);
 }
 
-// ---------------------------------------------------------------------------
-// 1. Copy button renders
-// ---------------------------------------------------------------------------
-
 describe("AlphaTable", () => {
-  // Keep existing rendering tests -------------------------------------------
-
   it("renders children inside a table element", () => {
     const { container } = render(
       <AlphaTable>
@@ -169,8 +159,6 @@ describe("AlphaTable", () => {
     expect(container.querySelector("td")!.textContent).toBe("Body");
   });
 
-  // 1. Copy button renders -------------------------------------------------
-
   describe("copy button", () => {
     it("renders a copy button with 'Copy table' aria-label", () => {
       const { container } = render(twoColumnTable());
@@ -185,8 +173,6 @@ describe("AlphaTable", () => {
       expect(button!.querySelector("svg")).toBeTruthy();
     });
   });
-
-  // 2. Markdown copy format -------------------------------------------------
 
   describe("copies table as markdown", () => {
     it("formats a standard table with header, separator, and body rows", () => {
@@ -368,8 +354,6 @@ describe("AlphaTable", () => {
     });
   });
 
-  // 3. Copy feedback (icon state + timer) -----------------------------------
-
   describe("copy feedback", () => {
     beforeEach(() => {
       vi.useFakeTimers();
@@ -444,8 +428,6 @@ describe("AlphaTable", () => {
       vi.advanceTimersByTime(2000);
     });
   });
-
-  // 4. Wrap toggle ----------------------------------------------------------
 
   describe("wrap toggle", () => {
     it("renders the toggle button with 'Switch to wrap' tooltip in scroll mode (default)", () => {

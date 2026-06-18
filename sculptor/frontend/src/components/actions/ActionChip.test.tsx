@@ -128,7 +128,6 @@ describe("ActionChip", () => {
         onMoveToGroup: vi.fn(),
         groups: [createGroup()],
       });
-      // The button should still be rendered
       expect(screen.getByRole("button")).toBeInTheDocument();
     });
 

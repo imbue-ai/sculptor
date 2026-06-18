@@ -397,8 +397,7 @@ describe("EntityMentionList — workspace drill-in", () => {
     fireEvent.click(items[2]);
 
     // No commit fired — clicking a workspace drills in, handled locally, the
-    // same as Tab. A click on a workspace row used to commit it (the bug);
-    // now it opens the workspace's agents.
+    // same as Tab.
     expect(command).not.toHaveBeenCalled();
 
     // Only w1's agent is visible; w2's agent and the workspace rows are gone.

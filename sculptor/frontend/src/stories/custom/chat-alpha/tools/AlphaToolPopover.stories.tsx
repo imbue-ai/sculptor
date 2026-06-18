@@ -17,7 +17,6 @@ import {
 
 const WORKSPACE_CODE_PATH = "/Users/dev/work/this-project";
 
-// Multi-entry pill (Read x3)
 const multiReadPill: PillData = {
   id: "tu-100",
   label: "Read x3",
@@ -34,10 +33,6 @@ const multiReadPill: PillData = {
   ],
 };
 
-// ---------------------------------------------------------------------------
-// Meta
-// ---------------------------------------------------------------------------
-
 const meta = {
   title: "Chat Alpha/Tools/AlphaToolPopover",
   decorators: [
@@ -53,10 +48,6 @@ const meta = {
 export default meta;
 
 type Story = StoryObj<typeof meta>;
-
-// ---------------------------------------------------------------------------
-// Stories
-// ---------------------------------------------------------------------------
 
 /** Single Read tool with file content output. */
 export const ReadTool: Story = {

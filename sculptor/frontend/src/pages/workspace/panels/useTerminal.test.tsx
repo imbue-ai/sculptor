@@ -12,10 +12,6 @@ import {
   useTerminal,
 } from "./useTerminal.ts";
 
-// ---------------------------------------------------------------------------
-// shouldClearActiveTerminal — pure predicate
-// ---------------------------------------------------------------------------
-
 // jsdom's KeyboardEvent constructor drops metaKey/ctrlKey from the init
 // dict, so the existing `ShortcutUtils.test.ts` plain-object pattern is the
 // canonical way to build a key event the matcher will inspect.
@@ -124,10 +120,6 @@ describe("shouldClearActiveTerminal", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// containsTerminalQuery — detect queries in live PTY output (SCU-1249)
-// ---------------------------------------------------------------------------
-
 describe("containsTerminalQuery", () => {
   const ESC = "";
 
@@ -163,10 +155,6 @@ describe("containsTerminalQuery", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// shouldForwardQueryResponse — solicited vs spurious (SCU-1249)
-// ---------------------------------------------------------------------------
-
 describe("shouldForwardQueryResponse", () => {
   it("forwards a response that closely follows a live query (solicited)", () => {
     // gh's CPR arrives a few ms after its DSR query — it must reach the PTY.
@@ -182,9 +170,6 @@ describe("shouldForwardQueryResponse", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// useTerminal — commandActions registration + listener lifecycle
-//
 // We use the default Jotai store and let the hook discover the
 // `clear_terminal` binding through KEYBINDING_DEFINITIONS. We do NOT mock
 // xterm.js: the hook's first effect early-returns when
@@ -192,7 +177,6 @@ describe("shouldForwardQueryResponse", () => {
 // xterm is never constructed and the WebSocket path is never entered. The
 // effects under test (commandActions registration + window keydown listener)
 // don't depend on xterm being initialised.
-// ---------------------------------------------------------------------------
 
 const noopWrapper = ({ children }: { children: ReactNode }): ReactElement => <>{children}</>;
 

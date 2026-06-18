@@ -400,8 +400,8 @@ describe("useAlphaAutoScroll", () => {
   });
 
   it("disengages on any user scroll while engaged, even if still near bottom", () => {
-    // Bug: a tiny scroll (still within BOTTOM_THRESHOLD) during streaming should
-    // disengage auto-scroll. Previously, only scrolling beyond 200px disengaged.
+    // A tiny scroll (still within BOTTOM_THRESHOLD) during streaming should
+    // disengage auto-scroll.
     const el = createMockScrollContainer(1500, 2000, 500); // distance=0, at bottom
     const ref = { current: el };
     const virtualizer = createMockVirtualizer();
@@ -1136,9 +1136,8 @@ describe("useAlphaAutoScroll", () => {
     });
 
     it("merged observer continues tracking isAtBottom after disengage", () => {
-      // KEY regression test: previously Observer 1 (isAtBottom tracking) was
-      // separate and always active during streaming. Now the merged observer
-      // must continue tracking isAtBottom even after disengagement.
+      // The merged observer must continue tracking isAtBottom even after
+      // disengagement.
       const el = createMockScrollContainer(1500, 2000, 500); // distance=0, at bottom
       const ref = { current: el };
       const virtualizer = createMockVirtualizerWithFilling(300, 100);

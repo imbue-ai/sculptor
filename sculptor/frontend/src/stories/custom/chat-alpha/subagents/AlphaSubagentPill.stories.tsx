@@ -12,10 +12,6 @@ import {
   thinkingSubagent,
 } from "../tools/fixtures.ts";
 
-// ---------------------------------------------------------------------------
-// Meta
-// ---------------------------------------------------------------------------
-
 const meta = {
   title: "Chat Alpha/Subagents/AlphaSubagentPill",
   decorators: [
@@ -41,11 +37,7 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-// ---------------------------------------------------------------------------
-// Stories
-// ---------------------------------------------------------------------------
-
-/** Completed Explore subagent with 3 tools and a response. */
+/** Completed Explore subagent with tools and a response. */
 export const Completed: Story = {
   render: (): ReactElement => (
     <AlphaSubagentPill

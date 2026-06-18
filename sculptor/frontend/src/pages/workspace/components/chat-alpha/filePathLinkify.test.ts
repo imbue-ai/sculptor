@@ -9,10 +9,6 @@ import {
   stripLineNumber,
 } from "./filePathLinkify.ts";
 
-// ---------------------------------------------------------------------------
-// isFilePath
-// ---------------------------------------------------------------------------
-
 describe("isFilePath", () => {
   it("detects relative paths", () => {
     expect(isFilePath("src/index.ts")).toBe(true);
@@ -74,10 +70,6 @@ describe("isFilePath", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// stripLineNumber
-// ---------------------------------------------------------------------------
-
 describe("stripLineNumber", () => {
   it("strips trailing :digits", () => {
     expect(stripLineNumber("file.py:42")).toBe("file.py");
@@ -92,10 +84,6 @@ describe("stripLineNumber", () => {
     expect(stripLineNumber("file.py:123:456")).toBe("file.py:123");
   });
 });
-
-// ---------------------------------------------------------------------------
-// resolveNavPath
-// ---------------------------------------------------------------------------
 
 describe("resolveNavPath", () => {
   const workspaceCodePath = "/mock/workspace/code";
@@ -129,10 +117,6 @@ describe("resolveNavPath", () => {
     expect(resolveNavPath("/mock/workspace/code/src/a.ts", "/mock/workspace/code/")).toBe("src/a.ts");
   });
 });
-
-// ---------------------------------------------------------------------------
-// isPathInWorkspace
-// ---------------------------------------------------------------------------
 
 describe("isPathInWorkspace", () => {
   const workspaceCodePath = "/mock/workspace/code";
@@ -171,10 +155,6 @@ describe("isPathInWorkspace", () => {
     expect(isPathInWorkspace("/etc/config.yaml:10", workspaceCodePath)).toBe(false);
   });
 });
-
-// ---------------------------------------------------------------------------
-// splitFilePathSegments
-// ---------------------------------------------------------------------------
 
 describe("splitFilePathSegments", () => {
   it("returns single text segment for plain text", () => {

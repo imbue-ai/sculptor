@@ -12,10 +12,6 @@ import { chatSearchQueryAtom, chatSearchVisibleAtom } from "~/common/state/atoms
 import { useAlphaAutoScroll } from "../useAlphaAutoScroll.ts";
 import { useAlphaSearch } from "../useAlphaSearch.ts";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 const resizeObserverCallbacks = new Set<ResizeObserverCallback>();
 
 class MockResizeObserver {
@@ -58,11 +54,8 @@ const createTestWrapper = (
   return ({ children }: { children: ReactNode }): ReactNode => <Provider store={store}>{children}</Provider>;
 };
 
-// ---------------------------------------------------------------------------
-// Hook under test — mirrors the AlphaChatInterface wiring:
-//   useAlphaAutoScroll + useAlphaSearch + the search-suppression effect.
-// ---------------------------------------------------------------------------
-
+// Mirrors the AlphaChatInterface wiring:
+// useAlphaAutoScroll + useAlphaSearch + the search-suppression effect.
 const useSearchSuppression = (
   scrollContainerRef: React.RefObject<HTMLDivElement | null>,
   isStreaming: boolean,
@@ -81,7 +74,6 @@ const useSearchSuppression = (
   );
   const { isSearchVisible } = useAlphaSearch(messages, virtualizer);
 
-  // This is the exact effect from AlphaChatInterface that we're testing.
   useEffect(() => {
     if (isSearchVisible) {
       setIsSuppressed(true);
@@ -92,10 +84,6 @@ const useSearchSuppression = (
 
   return { isSuppressed, isEngaged: false };
 };
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("search suppresses auto-scroll", () => {
   beforeEach(() => {

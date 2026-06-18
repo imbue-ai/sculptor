@@ -108,9 +108,7 @@ describe("parsePseudoSkillCommand", () => {
 
     it("accepts argless /clear with the trailing space TipTap autocomplete inserts", () => {
       // Selecting `/clear` from the slash-menu autocomplete adds a trailing
-      // space after the mention node. Without this regression test the parser
-      // returned null for the autocomplete-selected case, breaking /clear and
-      // /copy interception in the chat input.
+      // space after the mention node.
       const editor = fakeEditor([
         { type: { name: "mention" }, attrs: { id: "/clear", mentionSuggestionChar: "/" } },
         { type: { name: "text" }, text: " " },

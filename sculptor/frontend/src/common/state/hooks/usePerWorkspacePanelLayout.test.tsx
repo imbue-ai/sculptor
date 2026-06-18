@@ -19,8 +19,6 @@ import type { UserConfig } from "../../../api";
 import { userConfigAtom } from "../atoms/userConfig.ts";
 import { usePerWorkspacePanelLayout } from "./usePerWorkspacePanelLayout.ts";
 
-// ── Test fixtures ────────────────────────────────────────────────────
-
 const TEST_PANELS: ReadonlyArray<PanelDefinition> = [
   {
     id: "files",
@@ -54,8 +52,6 @@ const TEST_PANELS: ReadonlyArray<PanelDefinition> = [
 beforeEach(() => localStorage.clear());
 afterEach(() => localStorage.clear());
 
-// ── Helpers ──────────────────────────────────────────────────────────
-
 const createDefaultStore = (): ReturnType<typeof createStore> =>
   createPanelStore(TEST_PANELS, { useDefaultLayout: true });
 
@@ -79,8 +75,6 @@ const renderPerWorkspaceHook = (
     initialProps: { workspaceId },
   });
 };
-
-// ── Tests ────────────────────────────────────────────────────────────
 
 describe("usePerWorkspacePanelLayout", () => {
   describe("activeWorkspaceIdAtom tracking", () => {

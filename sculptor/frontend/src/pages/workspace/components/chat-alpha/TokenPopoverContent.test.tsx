@@ -93,7 +93,6 @@ describe("TokenPopoverContent", () => {
     } as TurnMetrics;
     renderWithProviders(<TokenPopoverContent turnMetrics={metrics} />);
 
-    // Both rows should show "0" since we default to 0
     const zeros = screen.getAllByText("0");
     expect(zeros).toHaveLength(2);
   });

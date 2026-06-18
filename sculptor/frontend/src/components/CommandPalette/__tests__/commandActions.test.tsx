@@ -10,8 +10,6 @@ import {
   useRegisterCommandAction,
 } from "../commandActions.ts";
 
-// ── Helpers ──────────────────────────────────────────────────────────
-
 type Store = ReturnType<typeof createStore>;
 
 const makeStore = (): Store => createStore();
@@ -48,8 +46,6 @@ const renderRegister = (
 afterEach(() => {
   vi.restoreAllMocks();
 });
-
-// ── Tests ────────────────────────────────────────────────────────────
 
 describe("commandActions", () => {
   describe("useRegisterCommandAction", () => {

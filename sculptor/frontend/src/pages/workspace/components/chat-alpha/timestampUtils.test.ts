@@ -101,7 +101,6 @@ describe("formatTimestamp", () => {
 
 describe("formatHumanTimestamp", () => {
   // Use a fixed "now" so tests don't depend on the real clock.
-  // BASE_TIME is 2026-03-09T14:30:00.000Z
   const now = new Date("2026-03-09T18:00:00.000Z");
 
   it("shows time only for today", () => {
@@ -129,7 +128,6 @@ describe("formatHumanTimestamp", () => {
   });
 
   it("defaults to current time when now is not provided", () => {
-    // Just verify it returns a string without throwing
     const result = formatHumanTimestamp(BASE_TIME);
     expect(typeof result).toBe("string");
     expect(result.length).toBeGreaterThan(0);

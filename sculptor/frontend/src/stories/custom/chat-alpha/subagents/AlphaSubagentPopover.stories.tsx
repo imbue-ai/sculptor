@@ -6,10 +6,6 @@ import { AlphaSubagentPopover } from "~/pages/workspace/components/chat-alpha/Al
 
 import { completedSubagent, noToolsSubagent, thinkingSubagent } from "../tools/fixtures.ts";
 
-// ---------------------------------------------------------------------------
-// Meta
-// ---------------------------------------------------------------------------
-
 const meta = {
   title: "Chat Alpha/Subagents/AlphaSubagentPopover",
   decorators: [
@@ -34,10 +30,6 @@ const meta = {
 export default meta;
 
 type Story = StoryObj<typeof meta>;
-
-// ---------------------------------------------------------------------------
-// Stories
-// ---------------------------------------------------------------------------
 
 /** Completed subagent with prompt, tools, and response sections. */
 export const Completed: Story = {

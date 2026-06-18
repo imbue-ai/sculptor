@@ -42,8 +42,8 @@ const makeMockEditor = (): unknown => {
 };
 
 // Build a suggestion-config skeleton sufficient to drive the items() filter
-// without standing up a real TipTap editor. The entity ref is provided so all
-// six categories are available; the command/render/pluginKey fields aren't
+// without standing up a real TipTap editor. The entity ref is provided so the
+// entity categories are available; the command/render/pluginKey fields aren't
 // exercised by these tests.
 const makeFullPickerConfig = (): ReturnType<typeof createMentionPickerSuggestion> =>
   createMentionPickerSuggestion({

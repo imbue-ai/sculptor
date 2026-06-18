@@ -12,8 +12,6 @@ import type { TabsState } from "../atoms/workspaces";
 import { INVALID_ACTIVE_INDEX } from "../atoms/workspaces";
 import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
 
-// --- Mocks ---------------------------------------------------------------
-
 const mockNavigateToAgent = vi.fn();
 const mockNavigateToWorkspace = vi.fn();
 
@@ -47,8 +45,6 @@ vi.mock("~/common/NavigateUtils.ts", () => ({
     isComponentGalleryRoute: false,
   }),
 }));
-
-// --- Helpers -------------------------------------------------------------
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/array-type
 type AnyWritableAtom = WritableAtom<unknown, any[], any>;
@@ -96,8 +92,6 @@ const createMockTask = (overrides: Partial<CodingAgentTaskView> = {}): CodingAge
     workspaceId: null,
     ...overrides,
   }) as CodingAgentTaskView;
-
-// -------------------------------------------------------------------------
 
 const seedTabsLocalStorage = (state: TabsState): void => {
   localStorage.setItem("sculptor-tabs", JSON.stringify(state));

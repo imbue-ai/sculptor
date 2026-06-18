@@ -5,10 +5,6 @@ import { useState } from "react";
 import { AlphaFileChip } from "~/pages/workspace/components/chat-alpha/AlphaFileChip.tsx";
 import type { ChipData } from "~/pages/workspace/components/chat-alpha/chipRow.types.ts";
 
-// ---------------------------------------------------------------------------
-// Chip data fixtures
-// ---------------------------------------------------------------------------
-
 const completedChip: ChipData = {
   id: "tool-001",
   filePath: "src/components/Button.tsx",
@@ -74,10 +70,7 @@ const largeStatsChip: ChipData = {
   errorContentType: null,
 };
 
-// ---------------------------------------------------------------------------
-// Interactive wrapper — manages open/toggle state for Storybook
-// ---------------------------------------------------------------------------
-
+// Manages open/toggle state for Storybook.
 const InteractiveChip = ({ chipData }: { chipData: ChipData }): ReactElement => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -91,10 +84,6 @@ const InteractiveChip = ({ chipData }: { chipData: ChipData }): ReactElement => 
     />
   );
 };
-
-// ---------------------------------------------------------------------------
-// Meta
-// ---------------------------------------------------------------------------
 
 const meta = {
   title: "Chat Alpha/File Chips/AlphaFileChip",
@@ -119,10 +108,6 @@ const meta = {
 export default meta;
 
 type Story = StoryObj<typeof meta>;
-
-// ---------------------------------------------------------------------------
-// Stories
-// ---------------------------------------------------------------------------
 
 export const Completed: Story = {};
 

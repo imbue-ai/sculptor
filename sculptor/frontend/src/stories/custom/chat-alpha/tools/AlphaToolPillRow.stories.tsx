@@ -11,10 +11,6 @@ import { chatToolDensityAtom } from "~/pages/workspace/components/chat-alpha/ato
 
 import { toolResult, toolUse } from "./fixtures.ts";
 
-// ---------------------------------------------------------------------------
-// Workspace seeding (so `useWorkspaceCodePath` resolves to a real prefix)
-// ---------------------------------------------------------------------------
-
 const STORYBOOK_WORKSPACE_ID = "storybook-ws";
 // `useWorkspaceCodePath` returns `${environmentId}/code` for CLONE workspaces,
 // so the resolved prefix is `/Users/dev/work/sculptor-env/code`.
@@ -35,10 +31,6 @@ const seedWorkspaceStore = (density: "default" | "expanded" = "default"): Return
   store.set(chatToolDensityAtom, density);
   return store;
 };
-
-// ---------------------------------------------------------------------------
-// Fixtures
-// ---------------------------------------------------------------------------
 
 const readBlock = toolUse("pr-001", "Read", { file_path: "src/utils/fetch.ts" });
 const bashBlock = toolUse("pr-002", "Bash", { command: "npm test" });
@@ -78,15 +70,10 @@ const errorResults = new Map<string, ToolResultBlock>([
   [bashBlock.id, toolResult("pr-002", "Bash", "FAIL: fetch is not defined", true)],
 ]);
 
-// ---------------------------------------------------------------------------
-// Mixed in-/outside-workspace fixture: 7 Reads + a Grep + a Bash, with some
-// paths living outside the workspace code path. Demonstrates the
-// `folder-output` icon indicator inside the accordion popover.
-//
-// Inside paths sit under `WORKSPACE_CODE_PATH_PREFIX` and get stripped to a
-// project-relative form. Outside paths retain their full absolute form and
-// get flagged with the icon.
-// ---------------------------------------------------------------------------
+// Mixed in-/outside-workspace fixture demonstrating the `folder-output` icon
+// indicator inside the accordion popover. Inside paths sit under
+// `WORKSPACE_CODE_PATH_PREFIX` and get stripped to a project-relative form.
+// Outside paths retain their full absolute form and get flagged with the icon.
 
 const inside = (p: string): string => `${WORKSPACE_CODE_PATH_PREFIX}/${p}`;
 
@@ -135,10 +122,6 @@ const mixedResults = new Map<string, ToolResultBlock>([
   [mixedBash.id, toolResult("mx-b1", "Bash", "All 42 tests passed.")],
 ]);
 
-// ---------------------------------------------------------------------------
-// Meta
-// ---------------------------------------------------------------------------
-
 const meta = {
   title: "Chat Alpha/Tools/AlphaToolPillRow",
   decorators: [
@@ -165,10 +148,6 @@ const meta = {
 export default meta;
 
 type Story = StoryObj<typeof meta>;
-
-// ---------------------------------------------------------------------------
-// Stories
-// ---------------------------------------------------------------------------
 
 /** Single completed tool. */
 export const SingleTool: Story = {
@@ -210,11 +189,10 @@ export const WithError: Story = {
 };
 
 /**
- * Group of 9 tools (7 Reads + a Grep + a Bash) with a mix of in- and
- * outside-workspace paths. The seeded workspace makes
- * `useWorkspaceCodePath` resolve to a real prefix, so inside paths get
- * stripped to a project-relative form and outside paths keep their full
- * absolute form with the `folder-output` icon. Click the pill to expand
+ * Group of tools with a mix of in- and outside-workspace paths. The seeded
+ * workspace makes `useWorkspaceCodePath` resolve to a real prefix, so inside
+ * paths get stripped to a project-relative form and outside paths keep their
+ * full absolute form with the `folder-output` icon. Click the pill to expand
  * the popover.
  */
 export const MixedWorkspacePaths: Story = {

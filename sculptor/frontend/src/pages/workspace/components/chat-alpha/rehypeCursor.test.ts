@@ -3,10 +3,6 @@ import { describe, expect, it } from "vitest";
 
 import { rehypeCursor } from "./rehypeCursor.ts";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 const text = (value: string): { type: "text"; value: string } => ({ type: "text", value });
 
 const el = (
@@ -43,10 +39,6 @@ const findCursor = (tree: Root): Element | null => {
   };
   return walk(tree.children);
 };
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("rehypeCursor", () => {
   it("no-ops when disabled", () => {

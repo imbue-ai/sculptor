@@ -44,8 +44,6 @@ vi.mock("~/api/sdk.gen", async (importOriginal) => {
   };
 });
 
-// --- Test Utilities ---
-
 const createAction = (overrides: Partial<CustomAction> = {}): CustomAction => ({
   id: crypto.randomUUID(),
   name: "Test Action",
@@ -204,14 +202,11 @@ describe("ActionsPanel", () => {
       const actions = [createAction({ name: "Toggle Action", groupId: "g1", order: 0 })];
       renderActionsPanel({ actions, groups: [group] });
 
-      // Initially visible
       expect(screen.getByText("Toggle Action")).toBeInTheDocument();
 
-      // Click group header to collapse
       fireEvent.click(screen.getByText("My Group"));
       expect(screen.queryByText("Toggle Action")).not.toBeInTheDocument();
 
-      // Click again to expand
       fireEvent.click(screen.getByText("My Group"));
       expect(screen.getByText("Toggle Action")).toBeInTheDocument();
     });
@@ -285,7 +280,6 @@ describe("ActionsPanel", () => {
       const group = createGroup({ id: "g1", name: "Empty Group" });
       const { container } = renderActionsPanel({ actions: [], groups: [group] });
 
-      // The empty group drop zone should not be present when not dragging
       expect(container.querySelector("[data-empty-group-drop]")).not.toBeInTheDocument();
     });
   });

@@ -5,7 +5,6 @@
  *
  * These are visual mock stories — new components are replicated here so that
  * design details can be iterated in Storybook before building the real thing.
- * (Same pattern as StatusPill.stories.tsx.)
  */
 
 import { Badge } from "@radix-ui/themes";
@@ -29,10 +28,6 @@ import {
   DIFF_VALIDATORS_NEW,
   DIFF_WORKSPACE_DATETIME,
 } from "./fixtures/diffData.ts";
-
-// ---------------------------------------------------------------------------
-// Chat layout helpers
-// ---------------------------------------------------------------------------
 
 /** Scrollable chat body container. */
 const ChatBody = ({ children }: { children: ReactElement | Array<ReactElement | null> }): ReactElement => (
@@ -91,10 +86,6 @@ const MsgText = ({ children }: { children: ReactNode }): ReactElement => (
   <p className={chatStyles.messageText}>{children}</p>
 );
 
-// ---------------------------------------------------------------------------
-// Theme helper
-// ---------------------------------------------------------------------------
-
 /**
  * Detect the current Radix theme appearance from the DOM.
  * The Storybook decorator sets `class="light"` or `class="dark"` on the
@@ -115,10 +106,6 @@ const useStoryTheme = (): "light" | "dark" => {
   }, []);
   return theme;
 };
-
-// ---------------------------------------------------------------------------
-// Tool line components
-// ---------------------------------------------------------------------------
 
 /** Non-edit tool (Read, Bash, etc.): collapsed, semi-opaque. */
 const CollapsedToolLine = ({ name, input }: { name: string; input: string }): ReactElement => (
@@ -212,10 +199,6 @@ const SubagentTools = ({ children }: { children: ReactElement | Array<ReactEleme
   <div className={chatStyles.subagentTools}>{children}</div>
 );
 
-// ---------------------------------------------------------------------------
-// Component showcase render functions (isolated stories)
-// ---------------------------------------------------------------------------
-
 const DiffToolLineShowcase = (): ReactElement => (
   <div
     style={{ display: "flex", flexDirection: "column", gap: "16px", padding: "24px", maxWidth: "680px", width: "100%" }}
@@ -265,10 +248,6 @@ const DiffToolLineShowcase = (): ReactElement => (
   </div>
 );
 
-// ---------------------------------------------------------------------------
-// Scenario 1: Simple single-file edit
-// ---------------------------------------------------------------------------
-
 const Scenario1 = (): ReactElement => (
   <ChatBody>
     <MsgShell role="user" timestamp="+0s">
@@ -309,10 +288,6 @@ const Scenario1 = (): ReactElement => (
     </MsgShell>
   </ChatBody>
 );
-
-// ---------------------------------------------------------------------------
-// Scenario 2: Multi-file turn
-// ---------------------------------------------------------------------------
 
 const Scenario2 = (): ReactElement => (
   <ChatBody>
@@ -365,10 +340,6 @@ const Scenario2 = (): ReactElement => (
   </ChatBody>
 );
 
-// ---------------------------------------------------------------------------
-// Scenario 3: Streaming / in progress
-// ---------------------------------------------------------------------------
-
 const Scenario3 = (): ReactElement => (
   <ChatBody>
     <MsgShell role="user" timestamp="+0s">
@@ -395,10 +366,6 @@ const Scenario3 = (): ReactElement => (
     </MsgShell>
   </ChatBody>
 );
-
-// ---------------------------------------------------------------------------
-// Scenario 4: New, deleted, and renamed files
-// ---------------------------------------------------------------------------
 
 const Scenario4 = (): ReactElement => (
   <ChatBody>
@@ -461,10 +428,6 @@ const Scenario4 = (): ReactElement => (
   </ChatBody>
 );
 
-// ---------------------------------------------------------------------------
-// Scenario 5: Error during edit
-// ---------------------------------------------------------------------------
-
 const Scenario5 = (): ReactElement => (
   <ChatBody>
     <MsgShell role="assistant" timestamp="+2s">
@@ -510,10 +473,6 @@ Did you mean one of these?
   </ChatBody>
 );
 
-// ---------------------------------------------------------------------------
-// Scenario 6: Large diff — many files changed
-// ---------------------------------------------------------------------------
-
 const Scenario6 = (): ReactElement => (
   <ChatBody>
     <MsgShell role="user" timestamp="+0s">
@@ -543,10 +502,6 @@ const Scenario6 = (): ReactElement => (
     </MsgShell>
   </ChatBody>
 );
-
-// ---------------------------------------------------------------------------
-// Scenario 7: Multi-turn conversation
-// ---------------------------------------------------------------------------
 
 const Scenario7 = (): ReactElement => (
   <ChatBody>
@@ -623,10 +578,6 @@ const Scenario7 = (): ReactElement => (
   </ChatBody>
 );
 
-// ---------------------------------------------------------------------------
-// Scenario 8: Subagent edits
-// ---------------------------------------------------------------------------
-
 const Scenario8 = (): ReactElement => (
   <ChatBody>
     <MsgShell role="user" timestamp="+0s">
@@ -682,10 +633,6 @@ const Scenario8 = (): ReactElement => (
     </MsgShell>
   </ChatBody>
 );
-
-// ---------------------------------------------------------------------------
-// Meta + Stories
-// ---------------------------------------------------------------------------
 
 const meta = {
   title: "Chat Alpha/Inline Diffs",

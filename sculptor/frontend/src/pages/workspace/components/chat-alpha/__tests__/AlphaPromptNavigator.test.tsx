@@ -9,7 +9,6 @@ import { type ChatMessage, ChatMessageRole } from "~/api";
 
 import { AlphaPromptNavigator } from "../AlphaPromptNavigator.tsx";
 
-// --- ResizeObserver mock ---------------------------------------------------
 // We override the global polyfill from vitest.setup.ts so we can control the
 // contentRect height delivered to the component — this lets us force the
 // rail into its collapsed state without needing >30 messages.
@@ -38,7 +37,6 @@ const triggerResize = (height: number): void => {
   }
 };
 
-// --- ChatMessage factory ---------------------------------------------------
 const makeUserMessage = (id: string, text: string): ChatMessage =>
   ({
     id,
@@ -49,7 +47,6 @@ const makeUserMessage = (id: string, text: string): ChatMessage =>
 const makeMessages = (count: number): ReadonlyArray<ChatMessage> =>
   Array.from({ length: count }, (_, i) => makeUserMessage(`m-${i}`, `prompt ${i + 1}`));
 
-// --- Render helper ---------------------------------------------------------
 type NavigatorProps = React.ComponentProps<typeof AlphaPromptNavigator>;
 
 const renderNavigator = (
@@ -83,7 +80,6 @@ const renderNavigator = (
   return { rendered, onNavigate, scrollContainer };
 };
 
-// --- Setup / teardown ------------------------------------------------------
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", MockResizeObserver);
   resizeObserverCallbacks.clear();

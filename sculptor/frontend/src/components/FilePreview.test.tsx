@@ -62,7 +62,6 @@ describe("FilePreview", () => {
   describe("error state", () => {
     it("renders error icon when isFailed is true", () => {
       renderPreview({ isFailed: true });
-      // Should not render the image
       expect(screen.queryByAltText("Attachment: photo.png")).not.toBeInTheDocument();
     });
 
@@ -83,7 +82,6 @@ describe("FilePreview", () => {
   describe("PDF state", () => {
     it("renders file icon for PDF files", () => {
       renderPreview({ isPdf: true });
-      // Should not render an image element
       expect(screen.queryByAltText("Attachment: photo.png")).not.toBeInTheDocument();
     });
   });

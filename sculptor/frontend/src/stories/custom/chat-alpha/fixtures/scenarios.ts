@@ -4,18 +4,11 @@
  * Each function returns a ReadonlyArray<ChatMessage> focused on one feature
  * category from the feature inventory. Scenarios are meant to be used directly
  * as story args — one scenario per story variant.
- *
- * Future MRs add new scenario functions here (or in new files under fixtures/)
- * without modifying existing ones.
  */
 
 import type { ChatMessage } from "~/api";
 
 import { blocks, msg, resetCounters } from "./messageBuilders.ts";
-
-// ---------------------------------------------------------------------------
-// Basic conversation (messages category)
-// ---------------------------------------------------------------------------
 
 /** Simple multi-turn conversation with text-only messages. */
 export const basicConversation = (): ReadonlyArray<ChatMessage> => {
@@ -27,10 +20,6 @@ export const basicConversation = (): ReadonlyArray<ChatMessage> => {
     msg.assistantText("Of course. I'll wrap the async call in a try/catch block and add proper error types."),
   ];
 };
-
-// ---------------------------------------------------------------------------
-// Tool execution (tools category)
-// ---------------------------------------------------------------------------
 
 /** Conversation with tool_use and tool_result blocks. */
 export const toolExecution = (): ReadonlyArray<ChatMessage> => {
@@ -54,10 +43,6 @@ export const toolExecution = (): ReadonlyArray<ChatMessage> => {
   ];
 };
 
-// ---------------------------------------------------------------------------
-// Error and warning blocks (edge states category)
-// ---------------------------------------------------------------------------
-
 /** Messages showing error and warning system blocks. */
 export const errorsAndWarnings = (): ReadonlyArray<ChatMessage> => {
   resetCounters();
@@ -74,10 +59,6 @@ export const errorsAndWarnings = (): ReadonlyArray<ChatMessage> => {
     ]),
   ];
 };
-
-// ---------------------------------------------------------------------------
-// Context management (edge states / status category)
-// ---------------------------------------------------------------------------
 
 /** Messages showing context summary, context cleared, and resume. */
 export const contextManagement = (): ReadonlyArray<ChatMessage> => {
@@ -96,10 +77,6 @@ export const contextManagement = (): ReadonlyArray<ChatMessage> => {
     msg.assistant([blocks.contextCleared(), blocks.text("Context cleared. Ready for a new task.")]),
   ];
 };
-
-// ---------------------------------------------------------------------------
-// Subagent messages (subagents category)
-// ---------------------------------------------------------------------------
 
 /** Messages with parentToolUseId showing subagent nesting. */
 export const subagentNesting = (): ReadonlyArray<ChatMessage> => {
@@ -131,10 +108,6 @@ export const subagentNesting = (): ReadonlyArray<ChatMessage> => {
     msg.assistantText("The subagent identified the problem. I'll add the fetch mock now."),
   ];
 };
-
-// ---------------------------------------------------------------------------
-// Full kitchen sink (all block types in one scenario)
-// ---------------------------------------------------------------------------
 
 /** Every block type in a single conversation. Useful for view-level stories. */
 export const kitchenSink = (): ReadonlyArray<ChatMessage> => {

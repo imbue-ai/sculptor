@@ -301,10 +301,6 @@ describe("MentionChip", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Entity mention — the third MentionChip variant.
-// ---------------------------------------------------------------------------
-
 const makeTask = (overrides: Partial<CodingAgentTaskView>): CodingAgentTaskView =>
   ({
     id: "task-1",

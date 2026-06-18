@@ -22,8 +22,6 @@ import {
 } from "~/components/panels/atoms.ts";
 import type { PanelDefinition } from "~/components/panels/types.ts";
 
-// ── Test fixtures ────────────────────────────────────────────────────
-
 const TEST_PANELS: ReadonlyArray<PanelDefinition> = [
   {
     id: "info",
@@ -57,8 +55,6 @@ const TEST_PANELS: ReadonlyArray<PanelDefinition> = [
 beforeEach(() => localStorage.clear());
 afterEach(() => localStorage.clear());
 
-// ── isSideVisibleAtom ────────────────────────────────────────────────
-
 describe("isSideVisibleAtom", () => {
   it("returns true when any zone in the side is visible", () => {
     const store = createPanelStore(TEST_PANELS, { useDefaultLayout: true });
@@ -88,8 +84,6 @@ describe("isSideVisibleAtom", () => {
   });
 });
 
-// ── savedSideVisibilityAtom ──────────────────────────────────────────
-
 describe("savedSideVisibilityAtom", () => {
   it("defaults to empty object", () => {
     const store = createStore();
@@ -107,8 +101,6 @@ describe("savedSideVisibilityAtom", () => {
     expect(saved.left).toEqual({ "top-left": true });
   });
 });
-
-// ── Zen mode atoms ──────────────────────────────────────────────────
 
 describe("zenModeActiveAtom", () => {
   it("defaults to false", () => {
@@ -138,8 +130,6 @@ describe("didZenImplyFocusModeAtom", () => {
   });
 });
 
-// ── Focus mode atoms ────────────────────────────────────────────────
-
 describe("focusModeActiveAtom", () => {
   it("defaults to false", () => {
     const store = createStore();
@@ -165,8 +155,6 @@ describe("focusModeSavedVisibilityAtom", () => {
     expect(saved["bottom"]).toBe(false);
   });
 });
-
-// ── panelEnabledAtom ─────────────────────────────────────────────────
 
 describe("panel enabled state", () => {
   it("disabling a non-builtin panel removes it from panelsInZoneAtom", () => {

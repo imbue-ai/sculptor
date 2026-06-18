@@ -89,12 +89,10 @@ describe("generateColorScale", () => {
   describe("scale is monotonic", () => {
     it("light mode: steps 1-9 decrease in lightness, steps 9-12 decrease", () => {
       const scale = generateColorScale("#30a46c", "light");
-      // Steps 1-9 should get progressively darker
       for (let i = 0; i < 8; i++) {
         expect(hexToRgbSum(scale[i])).toBeGreaterThan(hexToRgbSum(scale[i + 1]));
       }
 
-      // Steps 9-12 should get progressively darker
       for (let i = 8; i < 11; i++) {
         expect(hexToRgbSum(scale[i])).toBeGreaterThan(hexToRgbSum(scale[i + 1]));
       }
@@ -102,12 +100,10 @@ describe("generateColorScale", () => {
 
     it("dark mode: steps 1-9 increase in lightness, steps 9-12 increase", () => {
       const scale = generateColorScale("#30a46c", "dark");
-      // Steps 1-9 should get progressively lighter
       for (let i = 0; i < 8; i++) {
         expect(hexToRgbSum(scale[i])).toBeLessThan(hexToRgbSum(scale[i + 1]));
       }
 
-      // Steps 9-12 should get progressively lighter
       for (let i = 8; i < 11; i++) {
         expect(hexToRgbSum(scale[i])).toBeLessThan(hexToRgbSum(scale[i + 1]));
       }

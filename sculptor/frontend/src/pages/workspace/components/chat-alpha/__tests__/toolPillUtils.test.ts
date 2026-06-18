@@ -4,10 +4,6 @@ import type { ToolResultBlock, ToolUseBlock } from "~/api";
 
 import { buildPillData, makeRelative } from "../toolPillUtils.ts";
 
-// ---------------------------------------------------------------------------
-// Factories
-// ---------------------------------------------------------------------------
-
 const makeToolUseBlock = (overrides: Partial<ToolUseBlock> & { id: string; name: string }): ToolUseBlock => ({
   type: "tool_use",
   objectType: "ToolUseBlock",
@@ -26,10 +22,7 @@ const makeToolResultBlock = (toolUseId: string, overrides: Partial<ToolResultBlo
   ...overrides,
 });
 
-// ---------------------------------------------------------------------------
 // makeRelative — used by AlphaToolPopover to display project-relative paths.
-// ---------------------------------------------------------------------------
-
 describe("makeRelative", () => {
   it("strips the workspace prefix from absolute paths under the workspace", () => {
     expect(makeRelative("/workspace/code/src/index.ts", "/workspace/code")).toEqual({
@@ -74,10 +67,7 @@ describe("makeRelative", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // buildPillData – one pill per tool call
-// ---------------------------------------------------------------------------
-
 describe("buildPillData", () => {
   it("produces one pill per tool block, preserving order and labels", () => {
     const blocks = [
@@ -187,10 +177,7 @@ describe("buildPillData", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // buildPillData – result-only blocks (no tool_use)
-// ---------------------------------------------------------------------------
-
 describe("buildPillData – result-only blocks", () => {
   it("emits one pill per result-only block", () => {
     const blocks: Array<ToolResultBlock> = [

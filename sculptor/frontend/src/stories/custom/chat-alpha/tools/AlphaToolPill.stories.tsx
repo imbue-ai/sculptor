@@ -20,18 +20,10 @@ import {
   executingGrepPill,
 } from "./fixtures.ts";
 
-// ---------------------------------------------------------------------------
-// Interactive wrapper
-// ---------------------------------------------------------------------------
-
 const InteractivePill = ({ pillData }: { pillData: PillData }): ReactElement => {
   const [isOpen, setIsOpen] = useState(false);
   return <AlphaToolPill pillData={pillData} isOpen={isOpen} onToggle={() => setIsOpen((o) => !o)} />;
 };
-
-// ---------------------------------------------------------------------------
-// Meta
-// ---------------------------------------------------------------------------
 
 const meta = {
   title: "Chat Alpha/Tools/AlphaToolPill",
@@ -54,10 +46,6 @@ const meta = {
 export default meta;
 
 type Story = StoryObj<typeof meta>;
-
-// ---------------------------------------------------------------------------
-// Stories — one per tool type that renders as a pill
-// ---------------------------------------------------------------------------
 
 export const CompletedRead: Story = {};
 
@@ -101,10 +89,6 @@ export const CompletedReadOutsideWorkspace: Story = {
 export const CompletedGrepOutsideWorkspace: Story = {
   args: { pillData: completedGrepOutsideWorkspacePill },
 };
-
-// ---------------------------------------------------------------------------
-// State variants
-// ---------------------------------------------------------------------------
 
 export const Executing: Story = {
   args: { pillData: executingGrepPill },

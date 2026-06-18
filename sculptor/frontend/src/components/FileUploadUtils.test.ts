@@ -182,7 +182,6 @@ describe("validateFileContent", () => {
 
   it("handles file read errors gracefully", async () => {
     const file = createFileWithContent("broken.png", PNG_HEADER, "image/png");
-    // Override slice to throw
     vi.spyOn(file, "slice").mockImplementation(() => {
       throw new Error("read error");
     });

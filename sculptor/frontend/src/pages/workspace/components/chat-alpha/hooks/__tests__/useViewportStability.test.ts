@@ -82,7 +82,6 @@ describe("useViewportStability", () => {
       result.current.onHeightChange(2);
     });
 
-    // scrollTop should remain unchanged
     expect(el.scrollTop).toBe(500);
   });
 

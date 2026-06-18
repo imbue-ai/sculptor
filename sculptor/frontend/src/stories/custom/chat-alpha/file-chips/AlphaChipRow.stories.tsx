@@ -5,10 +5,6 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ToolResultBlock, ToolUseBlock } from "~/api";
 import { AlphaChipRow } from "~/pages/workspace/components/chat-alpha/AlphaChipRow.tsx";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 const toolUse = (id: string, name: string, filePath: string): ToolUseBlock =>
   ({ type: "tool_use", id, name, input: { file_path: filePath } }) as unknown as ToolUseBlock;
 
@@ -58,17 +54,11 @@ const newFileDiff = `--- /dev/null
 +);
 `;
 
-// ---------------------------------------------------------------------------
-// Fixtures: block arrays + result maps
-// ---------------------------------------------------------------------------
-
-// Single completed edit
 const singleBlocks: Array<ToolUseBlock> = [toolUse("t-001", "Edit", "src/components/Button.tsx")];
 const singleResults = new Map<string, ToolResultBlock>([
   ["t-001", toolResult("t-001", "Edit", sampleDiff, "src/components/Button.tsx")],
 ]);
 
-// Multiple completed edits to different files
 const multiBlocks: Array<ToolUseBlock> = [
   toolUse("t-010", "Edit", "src/components/Button.tsx"),
   toolUse("t-011", "Write", "src/components/Modal.tsx"),
@@ -80,7 +70,6 @@ const multiResults = new Map<string, ToolResultBlock>([
   ["t-012", toolResult("t-012", "Edit", sampleDiff, "src/utils/helpers.ts")],
 ]);
 
-// Mix of completed and executing
 const mixedBlocks: Array<ToolUseBlock> = [
   toolUse("t-020", "Edit", "src/components/Button.tsx"),
   toolUse("t-021", "Edit", "src/utils/format.ts"),
@@ -90,7 +79,6 @@ const mixedResults = new Map<string, ToolResultBlock>([
   ["t-020", toolResult("t-020", "Edit", sampleDiff, "src/components/Button.tsx")],
 ]);
 
-// Error state
 const errorBlocks: Array<ToolUseBlock> = [
   toolUse("t-030", "Edit", "src/components/Button.tsx"),
   toolUse("t-031", "Edit", "src/lib/missing.ts"),
@@ -130,10 +118,6 @@ const manyResults = new Map<string, ToolResultBlock>(
   manyBlocks.map((b) => [b.id, toolResult(b.id, "Edit", sampleDiff, (b.input as { file_path: string }).file_path)]),
 );
 
-// ---------------------------------------------------------------------------
-// Wrapper
-// ---------------------------------------------------------------------------
-
 type WrapperProps = {
   blocks: ReadonlyArray<ToolUseBlock>;
   toolResultMap: Map<string, ToolResultBlock>;
@@ -154,10 +138,6 @@ const Wrapper = ({ blocks, toolResultMap, inProgressMessageId }: WrapperProps): 
     </Routes>
   </MemoryRouter>
 );
-
-// ---------------------------------------------------------------------------
-// Meta
-// ---------------------------------------------------------------------------
 
 const meta = {
   title: "Chat Alpha/File Chips/AlphaChipRow",
@@ -180,10 +160,6 @@ const meta = {
 export default meta;
 
 type Story = StoryObj<typeof meta>;
-
-// ---------------------------------------------------------------------------
-// Stories
-// ---------------------------------------------------------------------------
 
 /** Single completed chip. Click to open popover. */
 export const SingleChip: Story = {};

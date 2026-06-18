@@ -39,8 +39,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// ── Tab Switching ──────────────────────────────────────
-
 describe("tab switching", () => {
   it("calls onActivate with the clicked tab id", () => {
     const onActivate = vi.fn();
@@ -69,8 +67,6 @@ describe("tab switching", () => {
   });
 });
 
-// ── Close Tab ──────────────────────────────────────────
-
 describe("close tab", () => {
   it("calls onClose with the correct tab id when close button is clicked", () => {
     const onClose = vi.fn();
@@ -89,8 +85,6 @@ describe("close tab", () => {
   });
 });
 
-// ── Minimum Tab Enforcement ────────────────────────────
-
 describe("minimum tab enforcement", () => {
   it("does not render close button when only one tab is open", () => {
     const { container } = renderTabBar({ openTabIds: ["tab-1"] });
@@ -103,8 +97,6 @@ describe("minimum tab enforcement", () => {
   });
 });
 
-// ── Drag and Drop Reorder ──────────────────────────────
-
 describe("drag and drop reorder", () => {
   it("renders tabs in the sortable context with correct order", () => {
     const { container } = renderTabBar();
@@ -116,8 +108,6 @@ describe("drag and drop reorder", () => {
     expect(tabs[2]).toHaveAttribute("data-tab-id", "tab-3");
   });
 });
-
-// ── Text Overflow ──────────────────────────────────────
 
 describe("text overflow", () => {
   it("applies ellipsis class to the label element", () => {
@@ -133,23 +123,18 @@ describe("text overflow", () => {
   });
 });
 
-// ── Hover States ───────────────────────────────────────
-
 describe("hover states", () => {
   it("shows close button on hover and removes it on leave", () => {
     const { container } = renderTabBar();
 
     const tab = container.querySelector('[data-tab-id="tab-2"]')!;
 
-    // Before hover - close button not rendered
     expect(tab.querySelector(`[data-testid="${ElementIds.TAB_CLOSE_BUTTON}"]`)).not.toBeInTheDocument();
 
-    // Hover - close button appears
     fireEvent.mouseEnter(tab);
     expect(tab.querySelector(`[data-testid="${ElementIds.TAB_CLOSE_BUTTON}"]`)).toBeInTheDocument();
     expect(tab).toHaveClass("hovered");
 
-    // Leave - close button removed
     fireEvent.mouseLeave(tab);
     expect(tab.querySelector(`[data-testid="${ElementIds.TAB_CLOSE_BUTTON}"]`)).not.toBeInTheDocument();
     expect(tab).not.toHaveClass("hovered");
@@ -163,8 +148,6 @@ describe("hover states", () => {
     expect(closeButton).toBeInTheDocument();
   });
 });
-
-// ── Long Hover Preview ─────────────────────────────────
 
 describe("long hover preview", () => {
   it("renders with HoverCard when preview content is defined", () => {
@@ -184,8 +167,6 @@ describe("long hover preview", () => {
   });
 });
 
-// ── All Open Tabs Rendered ────────────────────────────
-
 describe("all open tabs rendered", () => {
   it("renders all open tabs in the scrollable container", () => {
     const { container } = renderTabBar({
@@ -196,8 +177,6 @@ describe("all open tabs rendered", () => {
     expect(tabs).toHaveLength(3);
   });
 });
-
-// ── Additional: ARIA attributes ────────────────────────────────────
 
 describe("ARIA attributes", () => {
   it("renders the tab bar with role tablist", () => {

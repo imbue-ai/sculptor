@@ -72,8 +72,7 @@ describe("SkillList — row rendering", () => {
   it("shows an empty state when there are no items", () => {
     renderSkillList(makeSkillProps([]));
     expect(screen.getByText("No matching skills")).toBeTruthy();
-    // Hint points the user at where to add skills — part of the empty-state
-    // affordance introduced in the picker redesign.
+    // Hint points the user at where to add skills.
     expect(screen.getByText((content) => content.includes(".claude/skills/"))).toBeTruthy();
   });
 });
