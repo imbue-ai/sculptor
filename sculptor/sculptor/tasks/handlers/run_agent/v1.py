@@ -826,11 +826,11 @@ def _eager_fetch_pi_models_into_state(
     the caller carries it forward — otherwise `finalize_task_setup`'s later
     evolve-and-upsert (from the in-memory state) would write the catalog back
     out. Restricted to pi: the `supports_model_selection` check skips harnesses
-    that cannot select a model at all (hello/terminal), and the `PiAgent` check
-    below skips the rest — only pi sources a dynamic catalog via the probe (Claude
-    supports model selection but with a static built-in list). Best-effort: on any
-    failure the probe returns an empty catalog and the task state is returned
-    unchanged, so the switcher falls back exactly as before.
+    that cannot select a model at all, and the `PiAgent` check below skips the
+    rest — only pi sources a dynamic catalog via the probe (Claude supports model
+    selection but with a static built-in list). Best-effort: on any failure the
+    probe returns an empty catalog and the task state is returned unchanged, so
+    the switcher falls back exactly as before.
     """
     if not get_harness_for_config(task_data.agent_config).capabilities().supports_model_selection:
         return task_state

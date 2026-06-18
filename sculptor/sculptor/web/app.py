@@ -2310,8 +2310,7 @@ def set_workspace_agent_model(
         task = _validate_agent_in_workspace(agent_id, workspace, transaction, services)
         # Defense-in-depth mirror of the frontend model-selection gate: a harness
         # that cannot switch models must not be sent a SetModelUserMessage. A task
-        # whose inputs are not an agent config cannot support model selection, so
-        # reject it with a controlled 400 rather than a 500 from a failed assert.
+        # whose inputs are not an agent config cannot support model selection.
         if not isinstance(task.input_data, AgentTaskInputsV2):
             raise HTTPException(
                 status_code=400,
