@@ -255,7 +255,9 @@ def test_pi_model_switcher_offers_pi_models_and_accepts_a_pick(sculptor_instance
     chat_panel = task_page.get_chat_panel()
 
     default_model_name = _FAKE_PI_MODELS[0]["name"]
+    default_model_id = _FAKE_PI_MODELS[0]["id"]
     other_model_name = _FAKE_PI_MODELS[2]["name"]
+    other_model_id = _FAKE_PI_MODELS[2]["id"]
 
     # The switcher is live (the capability gate is open under pi), not the
     # disabled-with-tooltip placeholder.
@@ -264,16 +266,16 @@ def test_pi_model_switcher_offers_pi_models_and_accepts_a_pick(sculptor_instance
 
     # It shows pi's current model. The catalog is fetched at agent start and
     # persisted on the first message batch, so the selection may land just after
-    # the panel mounts — auto-retried by expect.
-    expect(chat_panel.get_model_selector()).to_contain_text(default_model_name, timeout=15000)
+    # the panel mounts — auto-retried by expect under the default timeout.
+    expect(chat_panel.get_model_selector()).to_contain_text(default_model_name)
 
-    # Open the dropdown: it lists pi's OWN models (display names sourced from pi's
-    # catalog) and never a Claude-only label from the hardcoded PRODUCTION_MODELS.
+    # Open the dropdown: it lists exactly pi's OWN models (targeted by per-model
+    # testid), so a Claude-only entry from the hardcoded PRODUCTION_MODELS would
+    # show up as an extra option. `expect` auto-retries until the options mount.
     chat_panel.get_model_selector().click()
-    option_names = chat_panel.get_model_option_texts()
-    assert default_model_name in option_names, option_names
-    assert other_model_name in option_names, option_names
-    assert "Claude 4.6 Sonnet" not in option_names, option_names
+    expect(chat_panel.get_model_options()).to_have_count(len(_FAKE_PI_MODELS))
+    expect(chat_panel.get_model_option(default_model_id)).to_be_visible()
+    expect(chat_panel.get_model_option(other_model_id)).to_be_visible()
     page.keyboard.press("Escape")
 
     # Picking a different pi model POSTs the set-model endpoint. FakePi accepts the
@@ -305,15 +307,17 @@ def test_fresh_pi_agent_switcher_shows_pi_models_without_a_message(sculptor_inst
     )
     chat_panel = task_page.get_chat_panel()
     default_model_name = _FAKE_PI_MODELS[0]["name"]
+    default_model_id = _FAKE_PI_MODELS[0]["id"]
 
     # With no message sent, the switcher already shows pi's current model.
     expect(chat_panel.get_model_selector()).to_contain_text(default_model_name, timeout=30000)
 
-    # Its dropdown lists pi's models and never a Claude-only label from PRODUCTION_MODELS.
+    # Its dropdown lists exactly pi's models (targeted by per-model testid), so a
+    # Claude-only entry from PRODUCTION_MODELS would show up as an extra option.
+    # `expect` auto-retries until the options mount.
     chat_panel.get_model_selector().click()
-    option_names = chat_panel.get_model_option_texts()
-    assert default_model_name in option_names, option_names
-    assert "Claude 4.6 Sonnet" not in option_names, option_names
+    expect(chat_panel.get_model_options()).to_have_count(len(_FAKE_PI_MODELS))
+    expect(chat_panel.get_model_option(default_model_id)).to_be_visible()
     page.keyboard.press("Escape")
 
 

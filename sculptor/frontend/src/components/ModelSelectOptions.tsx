@@ -46,6 +46,9 @@ const groupModelsByProvider = (models: ReadonlyArray<ModelOption>): ReadonlyArra
 };
 
 type ModelSelectOptionsProps = {
+  // Base test id for the option items. Each item's `data-testid` is suffixed with
+  // its own value (`<optionTestId>-<model id>`) so tests can target a specific
+  // model by id rather than by display text.
   optionTestId?: string;
   // A harness-supplied model list (pi). When provided and non-empty these are
   // rendered grouped by provider (display_name label, model_id value); otherwise
@@ -75,7 +78,11 @@ export const ModelSelectOptions = ({ optionTestId, models }: ModelSelectOptionsP
           <Select.Group key={group.provider}>
             <Select.Label>{getProviderDisplayName(group.provider)}</Select.Label>
             {group.models.map((model) => (
-              <Select.Item key={model.modelId} value={model.modelId} data-testid={optionTestId}>
+              <Select.Item
+                key={model.modelId}
+                value={model.modelId}
+                data-testid={optionTestId === undefined ? undefined : `${optionTestId}-${model.modelId}`}
+              >
                 {model.displayName}
               </Select.Item>
             ))}
@@ -89,7 +96,11 @@ export const ModelSelectOptions = ({ optionTestId, models }: ModelSelectOptionsP
   return (
     <>
       {claudeModels.map((modelValue) => (
-        <Select.Item key={modelValue} value={modelValue} data-testid={optionTestId}>
+        <Select.Item
+          key={modelValue}
+          value={modelValue}
+          data-testid={optionTestId === undefined ? undefined : `${optionTestId}-${modelValue}`}
+        >
           {getModelLongName(modelValue)}
         </Select.Item>
       ))}

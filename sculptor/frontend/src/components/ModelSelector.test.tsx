@@ -84,7 +84,9 @@ describe("ModelSelectOptions", () => {
     expect(within(groups[1]).getByText("OpenRouter")).toBeInTheDocument();
 
     // The provider headers are labels, never selectable model options.
-    const optionTexts = screen.getAllByTestId(ElementIds.MODEL_OPTION).map((item) => item.textContent);
+    const optionTexts = screen
+      .getAllByTestId(new RegExp(`^${ElementIds.MODEL_OPTION}-`))
+      .map((item) => item.textContent);
     expect(optionTexts).not.toContain("Anthropic");
     expect(optionTexts).not.toContain("OpenRouter");
   });
@@ -95,7 +97,7 @@ describe("ModelSelectOptions", () => {
 
     const textsIn = (group: HTMLElement): ReadonlyArray<string | null> =>
       within(group)
-        .getAllByTestId(ElementIds.MODEL_OPTION)
+        .getAllByTestId(new RegExp(`^${ElementIds.MODEL_OPTION}-`))
         .map((item) => item.textContent);
 
     // Interleaving collapses into contiguous groups, each still newest-first.
@@ -103,29 +105,16 @@ describe("ModelSelectOptions", () => {
     expect(textsIn(groups[1])).toEqual(["OpenRouter New", "OpenRouter Old"]);
   });
 
-  it("keeps the MODEL_OPTION test id and model_id value on each grouped item", () => {
-    // A <form> ancestor makes Radix emit a hidden native <option value=…> per
-    // item, exposing each item's model_id value in the DOM.
-    const { container } = render(
-      withStore(
-        <form>
-          <Select.Root open value={MULTI_PROVIDER_MODELS[0].modelId}>
-            <Select.Trigger />
-            <Select.Content>
-              <ModelSelectOptions models={MULTI_PROVIDER_MODELS} optionTestId={ElementIds.MODEL_OPTION} />
-            </Select.Content>
-          </Select.Root>
-        </form>,
-      ),
-    );
+  it("gives each grouped model a MODEL_OPTION test id carrying its model_id", () => {
+    renderOptions(MULTI_PROVIDER_MODELS, ElementIds.MODEL_OPTION);
 
-    // Every model stays one MODEL_OPTION item — the testid integration tests
-    // read the dropdown options by.
-    expect(screen.getAllByTestId(ElementIds.MODEL_OPTION)).toHaveLength(MULTI_PROVIDER_MODELS.length);
-
-    // Each item's `value` (model_id) survives grouping unchanged.
-    const optionValues = Array.from(container.querySelectorAll("option")).map((option) => option.getAttribute("value"));
-    expect(optionValues).toEqual(expect.arrayContaining(MULTI_PROVIDER_MODELS.map((model) => model.modelId)));
+    // Every model is a single option whose testid encodes its model_id — the hook
+    // integration tests select options by `<MODEL_OPTION>-<model id>`.
+    const options = screen.getAllByTestId(new RegExp(`^${ElementIds.MODEL_OPTION}-`));
+    expect(options).toHaveLength(MULTI_PROVIDER_MODELS.length);
+    for (const model of MULTI_PROVIDER_MODELS) {
+      expect(screen.getByTestId(`${ElementIds.MODEL_OPTION}-${model.modelId}`)).toHaveTextContent(model.displayName);
+    }
   });
 });
 
