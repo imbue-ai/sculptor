@@ -220,6 +220,29 @@ jobs:
           set -euo pipefail
           eval "$(./scripts/export-vault-env shared/aws/AWS_ACCESS_KEY_ID shared/aws/AWS_SECRET_ACCESS_KEY)"
 
+          # Frontend telemetry client keys for the renderer bundle. Without
+          # these the shipped app has an empty Sentry DSN and can't report bugs.
+          # Tag builds use the production Sentry/PostHog projects; other builds
+          # use the dev projects. Both Vault roles can read sculptor-release.
+          if [ -n "${CI_COMMIT_TAG:-}" ]; then
+            export SCULPTOR_BUILD_ENV=production
+            eval "$(./scripts/export-vault-env \
+              sculptor-release/SCULPTOR_PRODUCTION_FRONTEND_SENTRY_DSN \
+              sculptor-release/SCULPTOR_PRODUCTION_FRONTEND_POSTHOG_TOKEN)"
+            # The eval above swallows a missing-key failure and leaves the var
+            # empty; assert so a release never ships an app that can't report bugs.
+            if [ -z "${SCULPTOR_PRODUCTION_FRONTEND_SENTRY_DSN:-}" ] \
+               || [ -z "${SCULPTOR_PRODUCTION_FRONTEND_POSTHOG_TOKEN:-}" ]; then
+              echo "::error::Release build is missing the production frontend Sentry DSN / PostHog token from Vault (sculptor-release)."
+              exit 1
+            fi
+          else
+            export SCULPTOR_BUILD_ENV=dev
+            eval "$(./scripts/export-vault-env \
+              sculptor-release/SCULPTOR_DEV_FRONTEND_SENTRY_DSN \
+              sculptor-release/SCULPTOR_DEV_FRONTEND_POSTHOG_TOKEN)"
+          fi
+
           # A tag build keeps the pyproject version; otherwise stamp a .dev version.
           if [ -z "${CI_COMMIT_TAG:-}" ]; then
             just create-version-file --annotate-dev
