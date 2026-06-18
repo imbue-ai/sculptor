@@ -1,1 +1,2757 @@
-{}
+{
+  "SavedAgentMessage": {
+    "message": {
+      "AgentCrashedRunnerMessage": {
+        "$defs": {
+          "AgentMessageSource": {
+            "description": "Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)",
+            "enum": [
+              "AGENT",
+              "USER",
+              "SCULPTOR_SYSTEM",
+              "RUNNER"
+            ],
+            "title": "AgentMessageSource",
+            "type": "string"
+          },
+          "JsonTypeAlias": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonTypeAlias"
+                },
+                "type": "object"
+              },
+              {
+                "items": {
+                  "$ref": "#/$defs/JsonTypeAlias"
+                },
+                "type": "array"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "SerializedException": {
+            "additionalProperties": true,
+            "description": "A serializable dataclass that represents an exception",
+            "properties": {
+              "args": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/SerializedException"
+                    },
+                    {
+                      "$ref": "#/$defs/JsonTypeAlias"
+                    }
+                  ]
+                },
+                "title": "Args",
+                "type": "array"
+              },
+              "exception": {
+                "title": "Exception",
+                "type": "string"
+              },
+              "tracebackDict": {
+                "$ref": "#/$defs/JsonTypeAlias"
+              },
+              "wasLoggedByLogException": {
+                "default": false,
+                "title": "Wasloggedbylogexception",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "exception",
+              "args",
+              "tracebackDict"
+            ],
+            "title": "SerializedException",
+            "type": "object"
+          }
+        },
+        "additionalProperties": true,
+        "description": "Note that (like EnvironmentCrashedRunnerMessage and UnexpectedErrorRunnerMessage),\nthis can happen before *or after* the agent has finished processing a given message.",
+        "properties": {
+          "approximateCreationTime": {
+            "format": "date-time",
+            "title": "Approximatecreationtime",
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/$defs/SerializedException"
+          },
+          "exitCode": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exitcode"
+          },
+          "messageId": {
+            "title": "Messageid",
+            "type": "string"
+          },
+          "objectType": {
+            "default": "AgentCrashedRunnerMessage",
+            "title": "Objecttype",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/AgentMessageSource",
+            "default": "RUNNER"
+          }
+        },
+        "required": [
+          "exitCode",
+          "error"
+        ],
+        "title": "AgentCrashedRunnerMessage",
+        "type": "object"
+      },
+      "BackgroundTaskNotificationAgentMessage": {
+        "$defs": {
+          "AgentMessageSource": {
+            "description": "Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)",
+            "enum": [
+              "AGENT",
+              "USER",
+              "SCULPTOR_SYSTEM",
+              "RUNNER"
+            ],
+            "title": "AgentMessageSource",
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "description": "Emitted when a background task completes.\n\nThe assistant turn that follows this message is a response to the background task\ncompletion, not a continuation of the previous conversation. message_conversion uses\nthis to separate the background response into its own chat message.\n\nThis is persistent (not ephemeral) because the separation must survive page reloads.\nThe entire background notification cycle (system/task_notification \u2192 system/init \u2192\nassistant streaming \u2192 result/success) happens within a single RequestStarted/\nRequestSuccess pair, so without this persisted marker the background response would\nbe concatenated with the preceding assistant message on replay.",
+        "properties": {
+          "approximateCreationTime": {
+            "format": "date-time",
+            "title": "Approximatecreationtime",
+            "type": "string"
+          },
+          "backgroundTaskId": {
+            "title": "Backgroundtaskid",
+            "type": "string"
+          },
+          "durationSeconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Durationseconds"
+          },
+          "messageId": {
+            "title": "Messageid",
+            "type": "string"
+          },
+          "objectType": {
+            "default": "BackgroundTaskNotificationAgentMessage",
+            "title": "Objecttype",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/AgentMessageSource",
+            "default": "AGENT"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "default": "",
+            "title": "Summary",
+            "type": "string"
+          },
+          "toolUseId": {
+            "title": "Tooluseid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "backgroundTaskId",
+          "toolUseId",
+          "status"
+        ],
+        "title": "BackgroundTaskNotificationAgentMessage",
+        "type": "object"
+      },
+      "ChatInputUserMessage": {
+        "$defs": {
+          "AgentMessageSource": {
+            "description": "Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)",
+            "enum": [
+              "AGENT",
+              "USER",
+              "SCULPTOR_SYSTEM",
+              "RUNNER"
+            ],
+            "title": "AgentMessageSource",
+            "type": "string"
+          },
+          "EffortLevel": {
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "title": "EffortLevel",
+            "type": "string"
+          },
+          "LLMModel": {
+            "enum": [
+              "CLAUDE-4-OPUS",
+              "CLAUDE-4-OPUS-200K",
+              "CLAUDE-4-7-OPUS",
+              "CLAUDE-4-7-OPUS-200K",
+              "CLAUDE-4-6-OPUS",
+              "CLAUDE-4-6-OPUS-200K",
+              "CLAUDE-4-SONNET",
+              "CLAUDE-4-SONNET-200K",
+              "CLAUDE-4-HAIKU",
+              "CLAUDE-FABLE-5",
+              "FAKE_CLAUDE",
+              "FAKE_CLAUDE_2"
+            ],
+            "title": "LLMModel",
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "properties": {
+          "approximateCreationTime": {
+            "description": "Approximate UTC timestamp when user message was created",
+            "format": "date-time",
+            "title": "Approximatecreationtime",
+            "type": "string"
+          },
+          "effort": {
+            "$ref": "#/$defs/EffortLevel",
+            "default": "xhigh",
+            "description": "Thinking effort level"
+          },
+          "enterPlanMode": {
+            "default": false,
+            "description": "Whether the user requested to enter plan mode",
+            "title": "Enterplanmode",
+            "type": "boolean"
+          },
+          "exitPlanMode": {
+            "default": false,
+            "description": "Whether the user requested to exit plan mode",
+            "title": "Exitplanmode",
+            "type": "boolean"
+          },
+          "fastMode": {
+            "default": false,
+            "description": "Whether to enable fast output mode",
+            "title": "Fastmode",
+            "type": "boolean"
+          },
+          "files": {
+            "description": "List of file paths (images, PDFs, etc., stored in Electron app folder) attached to this message",
+            "items": {
+              "type": "string"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "messageId": {
+            "description": "Unique identifier for the user message",
+            "title": "Messageid",
+            "type": "string"
+          },
+          "modelName": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/LLMModel"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Selected LLM model for the chat request"
+          },
+          "objectType": {
+            "default": "ChatInputUserMessage",
+            "title": "Objecttype",
+            "type": "string"
+          },
+          "sentVia": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Interface that sent this message, e.g. 'sculpt'",
+            "title": "Sentvia"
+          },
+          "source": {
+            "$ref": "#/$defs/AgentMessageSource",
+            "default": "USER"
+          },
+          "text": {
+            "description": "User input text content",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "ChatInputUserMessage",
+        "type": "object"
+      },
+      "ClearContextUserMessage": {
+        "$defs": {
+          "AgentMessageSource": {
+            "description": "Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)",
+            "enum": [
+              "AGENT",
+              "USER",
+              "SCULPTOR_SYSTEM",
+              "RUNNER"
+            ],
+            "title": "AgentMessageSource",
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "properties": {
+          "approximateCreationTime": {
+            "description": "Approximate UTC timestamp when user message was created",
+            "format": "date-time",
+            "title": "Approximatecreationtime",
+            "type": "string"
+          },
+          "messageId": {
+            "description": "Unique identifier for the user message",
+            "title": "Messageid",
+            "type": "string"
+          },
+          "objectType": {
+            "default": "ClearContextUserMessage",
+            "title": "Objecttype",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/AgentMessageSource",
+            "default": "USER"
+          }
+        },
+        "title": "ClearContextUserMessage",
+        "type": "object"
+      },
+      "ContextClearedMessage": {
+        "$defs": {
+          "AgentMessageSource": {
+            "description": "Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)",
+            "enum": [
+              "AGENT",
+              "USER",
+              "SCULPTOR_SYSTEM",
+              "RUNNER"
+            ],
+            "title": "AgentMessageSource",
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "properties": {
+          "approximateCreationTime": {
+            "format": "date-time",
+            "title": "Approximatecreationtime",
+            "type": "string"
+          },
+          "messageId": {
+            "title": "Messageid",
+            "type": "string"
+          },
+          "objectType": {
+            "default": "ContextClearedMessage",
+            "title": "Objecttype",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/AgentMessageSource",
+            "default": "AGENT"
+          }
+        },
+        "title": "ContextClearedMessage",
+        "type": "object"
+      },
+      "ContextSummaryMessage": {
+        "$defs": {
+          "AgentMessageSource": {
+            "description": "Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)",
+            "enum": [
+              "AGENT",
+              "USER",
+              "SCULPTOR_SYSTEM",
+              "RUNNER"
+            ],
+            "title": "AgentMessageSource",
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "properties": {
+          "approximateCreationTime": {
+            "format": "date-time",
+            "title": "Approximatecreationtime",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "messageId": {
+            "title": "Messageid",
+            "type": "string"
+          },
+          "objectType": {
+            "default": "ContextSummaryMessage",
+            "title": "Objecttype",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/AgentMessageSource",
+            "default": "AGENT"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "ContextSummaryMessage",
+        "type": "object"
+      },
+      "EnvironmentCrashedRunnerMessage": {
+        "$defs": {
+          "AgentMessageSource": {
+            "description": "Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)",
+            "enum": [
+              "AGENT",
+              "USER",
+              "SCULPTOR_SYSTEM",
+              "RUNNER"
+            ],
+            "title": "AgentMessageSource",
+            "type": "string"
+          },
+          "JsonTypeAlias": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonTypeAlias"
+                },
+                "type": "object"
+              },
+              {
+                "items": {
+                  "$ref": "#/$defs/JsonTypeAlias"
+                },
+                "type": "array"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "SerializedException": {
+            "additionalProperties": true,
+            "description": "A serializable dataclass that represents an exception",
+            "properties": {
+              "args": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/SerializedException"
+                    },
+                    {
+                      "$ref": "#/$defs/JsonTypeAlias"
+                    }
+                  ]
+                },
+                "title": "Args",
+                "type": "array"
+              },
+              "exception": {
+                "title": "Exception",
+                "type": "string"
+              },
+              "tracebackDict": {
+                "$ref": "#/$defs/JsonTypeAlias"
+              },
+              "wasLoggedByLogException": {
+                "default": false,
+                "title": "Wasloggedbylogexception",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "exception",
+              "args",
+              "tracebackDict"
+            ],
+            "title": "SerializedException",
+            "type": "object"
+          }
+        },
+        "additionalProperties": true,
+        "properties": {
+          "approximateCreationTime": {
+            "format": "date-time",
+            "title": "Approximatecreationtime",
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/$defs/SerializedException"
+          },
+          "messageId": {
+            "title": "Messageid",
+            "type": "string"
+          },
+          "objectType": {
+            "default": "EnvironmentCrashedRunnerMessage",
+            "title": "Objecttype",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/AgentMessageSource",
+            "default": "RUNNER"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "EnvironmentCrashedRunnerMessage",
+        "type": "object"
+      },
+      "KilledAgentRunnerMessage": {
+        "$defs": {
+          "AgentMessageSource": {
+            "description": "Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)",
+            "enum": [
+              "AGENT",
+              "USER",
+              "SCULPTOR_SYSTEM",
+              "RUNNER"
+            ],
+            "title": "AgentMessageSource",
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "properties": {
+          "approximateCreationTime": {
+            "format": "date-time",
+            "title": "Approximatecreationtime",
+            "type": "string"
+          },
+          "messageId": {
+            "title": "Messageid",
+            "type": "string"
+          },
+          "objectType": {
+            "default": "KilledAgentRunnerMessage",
+            "title": "Objecttype",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/AgentMessageSource",
+            "default": "RUNNER"
+          }
+        },
+        "title": "KilledAgentRunnerMessage",
+        "type": "object"
+      },
+      "RemoveQueuedMessageAgentMessage": {
+        "$defs": {
+          "AgentMessageSource": {
+            "description": "Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)",
+            "enum": [
+              "AGENT",
+              "USER",
+              "SCULPTOR_SYSTEM",
+              "RUNNER"
+            ],
+            "title": "AgentMessageSource",
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "properties": {
+          "approximateCreationTime": {
+            "format": "date-time",
+            "title": "Approximatecreationtime",
+            "type": "string"
+          },
+          "messageId": {
+            "title": "Messageid",
+            "type": "string"
+          },
+          "objectType": {
+            "default": "RemoveQueuedMessageAgentMessage",
+            "title": "Objecttype",
+            "type": "string"
+          },
+          "removedMessageId": {
+            "title": "Removedmessageid",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/AgentMessageSource",
+            "default": "AGENT"
+          }
+        },
+        "required": [
+          "removedMessageId"
+        ],
+        "title": "RemoveQueuedMessageAgentMessage",
+        "type": "object"
+      },
+      "RequestFailureAgentMessage": {
+        "$defs": {
+          "AgentMessageSource": {
+            "description": "Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)",
+            "enum": [
+              "AGENT",
+              "USER",
+              "SCULPTOR_SYSTEM",
+              "RUNNER"
+            ],
+            "title": "AgentMessageSource",
+            "type": "string"
+          },
+          "JsonTypeAlias": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonTypeAlias"
+                },
+                "type": "object"
+              },
+              {
+                "items": {
+                  "$ref": "#/$defs/JsonTypeAlias"
+                },
+                "type": "array"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "SerializedException": {
+            "additionalProperties": true,
+            "description": "A serializable dataclass that represents an exception",
+            "properties": {
+              "args": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/SerializedException"
+                    },
+                    {
+                      "$ref": "#/$defs/JsonTypeAlias"
+                    }
+                  ]
+                },
+                "title": "Args",
+                "type": "array"
+              },
+              "exception": {
+                "title": "Exception",
+                "type": "string"
+              },
+              "tracebackDict": {
+                "$ref": "#/$defs/JsonTypeAlias"
+              },
+              "wasLoggedByLogException": {
+                "default": false,
+                "title": "Wasloggedbylogexception",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "exception",
+              "args",
+              "tracebackDict"
+            ],
+            "title": "SerializedException",
+            "type": "object"
+          }
+        },
+        "additionalProperties": true,
+        "properties": {
+          "approximateCreationTime": {
+            "format": "date-time",
+            "title": "Approximatecreationtime",
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/$defs/SerializedException"
+          },
+          "messageId": {
+            "title": "Messageid",
+            "type": "string"
+          },
+          "objectType": {
+            "default": "RequestFailureAgentMessage",
+            "title": "Objecttype",
+            "type": "string"
+          },
+          "requestId": {
+            "title": "Requestid",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/AgentMessageSource",
+            "default": "AGENT"
+          }
+        },
+        "required": [
+          "requestId",
+          "error"
+        ],
+        "title": "RequestFailureAgentMessage",
+        "type": "object"
+      },
+      "RequestSkippedAgentMessage": {
+        "$defs": {
+          "AgentMessageSource": {
+            "description": "Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)",
+            "enum": [
+              "AGENT",
+              "USER",
+              "SCULPTOR_SYSTEM",
+              "RUNNER"
+            ],
+            "title": "AgentMessageSource",
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "properties": {
+          "approximateCreationTime": {
+            "format": "date-time",
+            "title": "Approximatecreationtime",
+            "type": "string"
+          },
+          "error": {
+            "default": null,
+            "title": "Error",
+            "type": "null"
+          },
+          "messageId": {
+            "title": "Messageid",
+            "type": "string"
+          },
+          "objectType": {
+            "default": "RequestSkippedAgentMessage",
+            "title": "Objecttype",
+            "type": "string"
+          },
+          "requestId": {
+            "title": "Requestid",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/AgentMessageSource",
+            "default": "AGENT"
+          }
+        },
+        "required": [
+          "requestId"
+        ],
+        "title": "RequestSkippedAgentMessage",
+        "type": "object"
+      },
+      "RequestStartedAgentMessage": {
+        "$defs": {
+          "AgentMessageSource": {
+            "description": "Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)",
+            "enum": [
+              "AGENT",
+              "USER",
+              "SCULPTOR_SYSTEM",
+              "RUNNER"
+            ],
+            "title": "AgentMessageSource",
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "properties": {
+          "approximateCreationTime": {
+            "format": "date-time",
+            "title": "Approximatecreationtime",
+            "type": "string"
+          },
+          "messageId": {
+            "title": "Messageid",
+            "type": "string"
+          },
+          "objectType": {
+            "default": "RequestStartedAgentMessage",
+            "title": "Objecttype",
+            "type": "string"
+          },
+          "requestId": {
+            "title": "Requestid",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/AgentMessageSource",
+            "default": "AGENT"
+          }
+        },
+        "required": [
+          "requestId"
+        ],
+        "title": "RequestStartedAgentMessage",
+        "type": "object"
+      },
+      "RequestStoppedAgentMessage": {
+        "$defs": {
+          "AgentMessageSource": {
+            "description": "Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)",
+            "enum": [
+              "AGENT",
+              "USER",
+              "SCULPTOR_SYSTEM",
+              "RUNNER"
+            ],
+            "title": "AgentMessageSource",
+            "type": "string"
+          },
+          "JsonTypeAlias": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonTypeAlias"
+                },
+                "type": "object"
+              },
+              {
+                "items": {
+                  "$ref": "#/$defs/JsonTypeAlias"
+                },
+                "type": "array"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "SerializedException": {
+            "additionalProperties": true,
+            "description": "A serializable dataclass that represents an exception",
+            "properties": {
+              "args": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/SerializedException"
+                    },
+                    {
+                      "$ref": "#/$defs/JsonTypeAlias"
+                    }
+                  ]
+                },
+                "title": "Args",
+                "type": "array"
+              },
+              "exception": {
+                "title": "Exception",
+                "type": "string"
+              },
+              "tracebackDict": {
+                "$ref": "#/$defs/JsonTypeAlias"
+              },
+              "wasLoggedByLogException": {
+                "default": false,
+                "title": "Wasloggedbylogexception",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "exception",
+              "args",
+              "tracebackDict"
+            ],
+            "title": "SerializedException",
+            "type": "object"
+          }
+        },
+        "additionalProperties": true,
+        "properties": {
+          "approximateCreationTime": {
+            "format": "date-time",
+            "title": "Approximatecreationtime",
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/$defs/SerializedException"
+          },
+          "messageId": {
+            "title": "Messageid",
+            "type": "string"
+          },
+          "objectType": {
+            "default": "RequestStoppedAgentMessage",
+            "title": "Objecttype",
+            "type": "string"
+          },
+          "requestId": {
+            "title": "Requestid",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/AgentMessageSource",
+            "default": "AGENT"
+          }
+        },
+        "required": [
+          "requestId",
+          "error"
+        ],
+        "title": "RequestStoppedAgentMessage",
+        "type": "object"
+      },
+      "RequestSuccessAgentMessage": {
+        "$defs": {
+          "AgentMessageSource": {
+            "description": "Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)",
+            "enum": [
+              "AGENT",
+              "USER",
+              "SCULPTOR_SYSTEM",
+              "RUNNER"
+            ],
+            "title": "AgentMessageSource",
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "properties": {
+          "approximateCreationTime": {
+            "format": "date-time",
+            "title": "Approximatecreationtime",
+            "type": "string"
+          },
+          "error": {
+            "default": null,
+            "title": "Error",
+            "type": "null"
+          },
+          "interrupted": {
+            "default": false,
+            "title": "Interrupted",
+            "type": "boolean"
+          },
+          "messageId": {
+            "title": "Messageid",
+            "type": "string"
+          },
+          "objectType": {
+            "default": "RequestSuccessAgentMessage",
+            "title": "Objecttype",
+            "type": "string"
+          },
+          "requestId": {
+            "title": "Requestid",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/AgentMessageSource",
+            "default": "AGENT"
+          }
+        },
+        "required": [
+          "requestId"
+        ],
+        "title": "RequestSuccessAgentMessage",
+        "type": "object"
+      },
+      "ResponseBlockAgentMessage": {
+        "$defs": {
+          "AgentMessageSource": {
+            "description": "Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)",
+            "enum": [
+              "AGENT",
+              "USER",
+              "SCULPTOR_SYSTEM",
+              "RUNNER"
+            ],
+            "title": "AgentMessageSource",
+            "type": "string"
+          },
+          "ContextClearedBlock": {
+            "additionalProperties": true,
+            "properties": {
+              "objectType": {
+                "default": "ContextClearedBlock",
+                "title": "Objecttype",
+                "type": "string"
+              },
+              "text": {
+                "default": "Cleared successfully",
+                "title": "Text",
+                "type": "string"
+              },
+              "type": {
+                "const": "context_cleared",
+                "default": "context_cleared",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "title": "ContextClearedBlock",
+            "type": "object"
+          },
+          "ContextSummaryBlock": {
+            "additionalProperties": true,
+            "properties": {
+              "objectType": {
+                "default": "ContextSummaryBlock",
+                "title": "Objecttype",
+                "type": "string"
+              },
+              "text": {
+                "title": "Text",
+                "type": "string"
+              },
+              "type": {
+                "const": "context_summary",
+                "default": "context_summary",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "title": "ContextSummaryBlock",
+            "type": "object"
+          },
+          "DiffToolContent": {
+            "additionalProperties": true,
+            "description": "Content for diff-producing tools (Write, Edit, MultiEdit)",
+            "properties": {
+              "contentType": {
+                "const": "diff",
+                "default": "diff",
+                "title": "Contenttype",
+                "type": "string"
+              },
+              "diff": {
+                "description": "The git diff string",
+                "title": "Diff",
+                "type": "string"
+              },
+              "filePath": {
+                "description": "The file that was modified",
+                "title": "Filepath",
+                "type": "string"
+              }
+            },
+            "required": [
+              "diff",
+              "filePath"
+            ],
+            "title": "DiffToolContent",
+            "type": "object"
+          },
+          "ErrorBlock": {
+            "additionalProperties": true,
+            "properties": {
+              "errorType": {
+                "description": "Type of error, i.e. name of the exception that was raised",
+                "title": "Errortype",
+                "type": "string"
+              },
+              "message": {
+                "description": "Error message",
+                "title": "Message",
+                "type": "string"
+              },
+              "objectType": {
+                "default": "ErrorBlock",
+                "title": "Objecttype",
+                "type": "string"
+              },
+              "traceback": {
+                "description": "Error traceback",
+                "title": "Traceback",
+                "type": "string"
+              },
+              "type": {
+                "const": "error",
+                "default": "error",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "message",
+              "traceback",
+              "errorType"
+            ],
+            "title": "ErrorBlock",
+            "type": "object"
+          },
+          "FileBlock": {
+            "additionalProperties": true,
+            "properties": {
+              "objectType": {
+                "default": "FileBlock",
+                "title": "Objecttype",
+                "type": "string"
+              },
+              "source": {
+                "description": "A file path on the users local machine.",
+                "title": "Source",
+                "type": "string"
+              },
+              "type": {
+                "const": "file",
+                "default": "file",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "source"
+            ],
+            "title": "FileBlock",
+            "type": "object"
+          },
+          "GenericToolContent": {
+            "additionalProperties": true,
+            "description": "Generic content for most tools - just a string",
+            "properties": {
+              "contentType": {
+                "const": "generic",
+                "default": "generic",
+                "title": "Contenttype",
+                "type": "string"
+              },
+              "text": {
+                "description": "The tool output as text",
+                "title": "Text",
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "title": "GenericToolContent",
+            "type": "object"
+          },
+          "ResumeResponseBlock": {
+            "additionalProperties": true,
+            "properties": {
+              "objectType": {
+                "default": "ResumeResponseBlock",
+                "title": "Objecttype",
+                "type": "string"
+              },
+              "type": {
+                "const": "resume_response",
+                "default": "resume_response",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "title": "ResumeResponseBlock",
+            "type": "object"
+          },
+          "TextBlock": {
+            "additionalProperties": true,
+            "properties": {
+              "objectType": {
+                "default": "TextBlock",
+                "title": "Objecttype",
+                "type": "string"
+              },
+              "text": {
+                "title": "Text",
+                "type": "string"
+              },
+              "type": {
+                "const": "text",
+                "default": "text",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "title": "TextBlock",
+            "type": "object"
+          },
+          "ToolResultBlock": {
+            "additionalProperties": true,
+            "properties": {
+              "content": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/GenericToolContent"
+                  },
+                  {
+                    "$ref": "#/$defs/DiffToolContent"
+                  }
+                ],
+                "description": "Result content from the tool execution",
+                "title": "Content"
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Human-readable description of what the tool call does",
+                "title": "Description"
+              },
+              "durationSeconds": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Wall-clock duration of the tool execution in seconds",
+                "title": "Durationseconds"
+              },
+              "interactiveRole": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "ask_user_question",
+                      "exit_plan_mode"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Set server-side from the harness when the originating tool is an interactive-backchannel surface; lets the frontend suppress the result (it renders inside the question panel) by role rather than by tool name. None for a regular tool.",
+                "title": "Interactiverole"
+              },
+              "invocationString": {
+                "description": "String representation of how the tool was invoked",
+                "title": "Invocationstring",
+                "type": "string"
+              },
+              "isError": {
+                "default": false,
+                "description": "Whether the tool execution resulted in an error",
+                "title": "Iserror",
+                "type": "boolean"
+              },
+              "objectType": {
+                "default": "ToolResultBlock",
+                "title": "Objecttype",
+                "type": "string"
+              },
+              "toolName": {
+                "description": "Name of the tool that was used",
+                "title": "Toolname",
+                "type": "string"
+              },
+              "toolUseId": {
+                "description": "ID of the corresponding tool use",
+                "title": "Tooluseid",
+                "type": "string"
+              },
+              "type": {
+                "const": "tool_result",
+                "default": "tool_result",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "toolUseId",
+              "toolName",
+              "invocationString",
+              "content"
+            ],
+            "title": "ToolResultBlock",
+            "type": "object"
+          },
+          "ToolUseBlock": {
+            "additionalProperties": true,
+            "properties": {
+              "id": {
+                "description": "Unique identifier for this tool use",
+                "title": "Id",
+                "type": "string"
+              },
+              "input": {
+                "additionalProperties": true,
+                "description": "Input parameters for the tool",
+                "title": "Input",
+                "type": "object"
+              },
+              "interactiveRole": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "ask_user_question",
+                      "exit_plan_mode"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Set server-side from the harness when this tool is an interactive-backchannel surface (ask-user-question / exit-plan-mode); the frontend renders by this role rather than by tool name. None for a regular tool.",
+                "title": "Interactiverole"
+              },
+              "name": {
+                "description": "Name of the tool being used",
+                "title": "Name",
+                "type": "string"
+              },
+              "objectType": {
+                "default": "ToolUseBlock",
+                "title": "Objecttype",
+                "type": "string"
+              },
+              "type": {
+                "const": "tool_use",
+                "default": "tool_use",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ],
+            "title": "ToolUseBlock",
+            "type": "object"
+          },
+          "WarningBlock": {
+            "additionalProperties": true,
+            "properties": {
+              "message": {
+                "description": "Warning message",
+                "title": "Message",
+                "type": "string"
+              },
+              "objectType": {
+                "default": "WarningBlock",
+                "title": "Objecttype",
+                "type": "string"
+              },
+              "traceback": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Warning traceback",
+                "title": "Traceback"
+              },
+              "type": {
+                "const": "warning",
+                "default": "warning",
+                "title": "Type",
+                "type": "string"
+              },
+              "warningType": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Type of warning, i.e. name of the exception that was raised",
+                "title": "Warningtype"
+              }
+            },
+            "required": [
+              "message",
+              "traceback",
+              "warningType"
+            ],
+            "title": "WarningBlock",
+            "type": "object"
+          }
+        },
+        "additionalProperties": true,
+        "properties": {
+          "approximateCreationTime": {
+            "format": "date-time",
+            "title": "Approximatecreationtime",
+            "type": "string"
+          },
+          "assistantMessageId": {
+            "title": "Assistantmessageid",
+            "type": "string"
+          },
+          "content": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/TextBlock"
+                },
+                {
+                  "$ref": "#/$defs/ToolUseBlock"
+                },
+                {
+                  "$ref": "#/$defs/ToolResultBlock"
+                },
+                {
+                  "$ref": "#/$defs/ErrorBlock"
+                },
+                {
+                  "$ref": "#/$defs/WarningBlock"
+                },
+                {
+                  "$ref": "#/$defs/ContextSummaryBlock"
+                },
+                {
+                  "$ref": "#/$defs/ContextClearedBlock"
+                },
+                {
+                  "$ref": "#/$defs/ResumeResponseBlock"
+                },
+                {
+                  "$ref": "#/$defs/FileBlock"
+                }
+              ]
+            },
+            "title": "Content",
+            "type": "array"
+          },
+          "messageId": {
+            "title": "Messageid",
+            "type": "string"
+          },
+          "objectType": {
+            "default": "ResponseBlockAgentMessage",
+            "title": "Objecttype",
+            "type": "string"
+          },
+          "parentToolUseId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Parenttooluseid"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant",
+              "system"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/AgentMessageSource",
+            "default": "AGENT"
+          }
+        },
+        "required": [
+          "role",
+          "assistantMessageId",
+          "content"
+        ],
+        "title": "ResponseBlockAgentMessage",
+        "type": "object"
+      },
+      "ResumeAgentResponseRunnerMessage": {
+        "$defs": {
+          "AgentMessageSource": {
+            "description": "Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)",
+            "enum": [
+              "AGENT",
+              "USER",
+              "SCULPTOR_SYSTEM",
+              "RUNNER"
+            ],
+            "title": "AgentMessageSource",
+            "type": "string"
+          },
+          "EffortLevel": {
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "title": "EffortLevel",
+            "type": "string"
+          },
+          "JsonTypeAlias": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonTypeAlias"
+                },
+                "type": "object"
+              },
+              {
+                "items": {
+                  "$ref": "#/$defs/JsonTypeAlias"
+                },
+                "type": "array"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "LLMModel": {
+            "enum": [
+              "CLAUDE-4-OPUS",
+              "CLAUDE-4-OPUS-200K",
+              "CLAUDE-4-7-OPUS",
+              "CLAUDE-4-7-OPUS-200K",
+              "CLAUDE-4-6-OPUS",
+              "CLAUDE-4-6-OPUS-200K",
+              "CLAUDE-4-SONNET",
+              "CLAUDE-4-SONNET-200K",
+              "CLAUDE-4-HAIKU",
+              "CLAUDE-FABLE-5",
+              "FAKE_CLAUDE",
+              "FAKE_CLAUDE_2"
+            ],
+            "title": "LLMModel",
+            "type": "string"
+          },
+          "SerializedException": {
+            "additionalProperties": true,
+            "description": "A serializable dataclass that represents an exception",
+            "properties": {
+              "args": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/SerializedException"
+                    },
+                    {
+                      "$ref": "#/$defs/JsonTypeAlias"
+                    }
+                  ]
+                },
+                "title": "Args",
+                "type": "array"
+              },
+              "exception": {
+                "title": "Exception",
+                "type": "string"
+              },
+              "tracebackDict": {
+                "$ref": "#/$defs/JsonTypeAlias"
+              },
+              "wasLoggedByLogException": {
+                "default": false,
+                "title": "Wasloggedbylogexception",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "exception",
+              "args",
+              "tracebackDict"
+            ],
+            "title": "SerializedException",
+            "type": "object"
+          }
+        },
+        "additionalProperties": true,
+        "properties": {
+          "approximateCreationTime": {
+            "format": "date-time",
+            "title": "Approximatecreationtime",
+            "type": "string"
+          },
+          "effort": {
+            "$ref": "#/$defs/EffortLevel",
+            "default": "xhigh",
+            "description": "Thinking effort level"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/SerializedException"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "fastMode": {
+            "default": false,
+            "description": "Whether to enable fast output mode",
+            "title": "Fastmode",
+            "type": "boolean"
+          },
+          "forUserMessageId": {
+            "title": "Forusermessageid",
+            "type": "string"
+          },
+          "messageId": {
+            "title": "Messageid",
+            "type": "string"
+          },
+          "modelName": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/LLMModel"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Selected LLM model for the chat request"
+          },
+          "objectType": {
+            "default": "ResumeAgentResponseRunnerMessage",
+            "title": "Objecttype",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/AgentMessageSource",
+            "default": "RUNNER"
+          }
+        },
+        "required": [
+          "forUserMessageId"
+        ],
+        "title": "ResumeAgentResponseRunnerMessage",
+        "type": "object"
+      },
+      "SetModelUserMessage": {
+        "$defs": {
+          "AgentMessageSource": {
+            "description": "Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)",
+            "enum": [
+              "AGENT",
+              "USER",
+              "SCULPTOR_SYSTEM",
+              "RUNNER"
+            ],
+            "title": "AgentMessageSource",
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "description": "Switch the running agent's model out-of-band (the pi `set_model` path).\n\nPersistent like `ClearContextUserMessage` so the harness picks it up through\nthe task runner and runs it between turns. Carries the `(provider, model_id)`\nof the chosen `ModelOption`; the pi adapter issues pi's `set_model` RPC and,\non success, updates the persisted current model. Claude never receives this \u2014\nits model rides each turn as `ChatInputUserMessage.model_name`.",
+        "properties": {
+          "approximateCreationTime": {
+            "description": "Approximate UTC timestamp when user message was created",
+            "format": "date-time",
+            "title": "Approximatecreationtime",
+            "type": "string"
+          },
+          "messageId": {
+            "description": "Unique identifier for the user message",
+            "title": "Messageid",
+            "type": "string"
+          },
+          "modelId": {
+            "description": "The chosen model's id (pi's `modelId`)",
+            "title": "Modelid",
+            "type": "string"
+          },
+          "objectType": {
+            "default": "SetModelUserMessage",
+            "title": "Objecttype",
+            "type": "string"
+          },
+          "provider": {
+            "description": "The chosen model's provider (e.g. 'anthropic')",
+            "title": "Provider",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/AgentMessageSource",
+            "default": "USER"
+          }
+        },
+        "required": [
+          "provider",
+          "modelId"
+        ],
+        "title": "SetModelUserMessage",
+        "type": "object"
+      },
+      "TurnMetricsAgentMessage": {
+        "$defs": {
+          "AgentMessageSource": {
+            "description": "Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)",
+            "enum": [
+              "AGENT",
+              "USER",
+              "SCULPTOR_SYSTEM",
+              "RUNNER"
+            ],
+            "title": "AgentMessageSource",
+            "type": "string"
+          },
+          "TurnMetrics": {
+            "additionalProperties": true,
+            "description": "Per-turn metrics attached to completed assistant messages.",
+            "properties": {
+              "autoCompactThreshold": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Threshold at which auto-compaction fires (denominator for the percent display)",
+                "title": "Autocompactthreshold"
+              },
+              "changedFiles": {
+                "description": "File paths changed during this turn (git-relative, all tools including Bash)",
+                "items": {
+                  "type": "string"
+                },
+                "title": "Changedfiles",
+                "type": "array"
+              },
+              "contextTotalTokens": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Total tokens in the context window at turn end (None if unavailable)",
+                "title": "Contexttotaltokens"
+              },
+              "durationSeconds": {
+                "description": "Wall-clock turn duration in seconds",
+                "title": "Durationseconds",
+                "type": "number"
+              },
+              "inputTokens": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Input tokens for this turn (None when interrupted before completion)",
+                "title": "Inputtokens"
+              },
+              "outputTokens": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Output tokens for this turn (None when interrupted before completion)",
+                "title": "Outputtokens"
+              },
+              "reasoningTokens": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Reasoning/thinking tokens (None if not applicable)",
+                "title": "Reasoningtokens"
+              }
+            },
+            "required": [
+              "durationSeconds"
+            ],
+            "title": "TurnMetrics",
+            "type": "object"
+          }
+        },
+        "additionalProperties": true,
+        "description": "Emitted by the output processor at the end of a turn with per-turn metrics.\n\nAlways arrives on the queue before the corresponding RequestSuccessAgentMessage\nor RequestStoppedAgentMessage, so message_conversion can attach it to the\nin-progress chat message before finalizing the request.\n\nPersistent so that metrics survive server restarts and are available during\nhistorical message replay.",
+        "properties": {
+          "approximateCreationTime": {
+            "format": "date-time",
+            "title": "Approximatecreationtime",
+            "type": "string"
+          },
+          "messageId": {
+            "title": "Messageid",
+            "type": "string"
+          },
+          "objectType": {
+            "default": "TurnMetricsAgentMessage",
+            "title": "Objecttype",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/AgentMessageSource",
+            "default": "AGENT"
+          },
+          "turnMetrics": {
+            "$ref": "#/$defs/TurnMetrics"
+          }
+        },
+        "required": [
+          "turnMetrics"
+        ],
+        "title": "TurnMetricsAgentMessage",
+        "type": "object"
+      },
+      "UnexpectedErrorRunnerMessage": {
+        "$defs": {
+          "AgentMessageSource": {
+            "description": "Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)",
+            "enum": [
+              "AGENT",
+              "USER",
+              "SCULPTOR_SYSTEM",
+              "RUNNER"
+            ],
+            "title": "AgentMessageSource",
+            "type": "string"
+          },
+          "JsonTypeAlias": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonTypeAlias"
+                },
+                "type": "object"
+              },
+              {
+                "items": {
+                  "$ref": "#/$defs/JsonTypeAlias"
+                },
+                "type": "array"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "SerializedException": {
+            "additionalProperties": true,
+            "description": "A serializable dataclass that represents an exception",
+            "properties": {
+              "args": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/SerializedException"
+                    },
+                    {
+                      "$ref": "#/$defs/JsonTypeAlias"
+                    }
+                  ]
+                },
+                "title": "Args",
+                "type": "array"
+              },
+              "exception": {
+                "title": "Exception",
+                "type": "string"
+              },
+              "tracebackDict": {
+                "$ref": "#/$defs/JsonTypeAlias"
+              },
+              "wasLoggedByLogException": {
+                "default": false,
+                "title": "Wasloggedbylogexception",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "exception",
+              "args",
+              "tracebackDict"
+            ],
+            "title": "SerializedException",
+            "type": "object"
+          }
+        },
+        "additionalProperties": true,
+        "properties": {
+          "approximateCreationTime": {
+            "format": "date-time",
+            "title": "Approximatecreationtime",
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/$defs/SerializedException"
+          },
+          "messageId": {
+            "title": "Messageid",
+            "type": "string"
+          },
+          "objectType": {
+            "default": "UnexpectedErrorRunnerMessage",
+            "title": "Objecttype",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/AgentMessageSource",
+            "default": "RUNNER"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "UnexpectedErrorRunnerMessage",
+        "type": "object"
+      },
+      "UserQuestionAnswerMessage": {
+        "$defs": {
+          "AgentMessageSource": {
+            "description": "Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)",
+            "enum": [
+              "AGENT",
+              "USER",
+              "SCULPTOR_SYSTEM",
+              "RUNNER"
+            ],
+            "title": "AgentMessageSource",
+            "type": "string"
+          },
+          "AskUserQuestionData": {
+            "additionalProperties": true,
+            "properties": {
+              "planFilePath": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Absolute path of the plan file the agent wrote in this turn, when the question is the synthesized ExitPlanMode approval. Set by `make_plan_approval_question` and consumed by the frontend ExitPlanMode tool block to render a click-to-reopen link. None for non-plan-approval questions or when the agent didn't write a plan file in the current turn (e.g. re-using a plan from a prior turn).",
+                "title": "Planfilepath"
+              },
+              "questions": {
+                "items": {
+                  "$ref": "#/$defs/UserQuestion"
+                },
+                "title": "Questions",
+                "type": "array"
+              },
+              "toolUseId": {
+                "title": "Tooluseid",
+                "type": "string"
+              }
+            },
+            "required": [
+              "questions",
+              "toolUseId"
+            ],
+            "title": "AskUserQuestionData",
+            "type": "object"
+          },
+          "QuestionOption": {
+            "additionalProperties": true,
+            "properties": {
+              "description": {
+                "title": "Description",
+                "type": "string"
+              },
+              "label": {
+                "title": "Label",
+                "type": "string"
+              }
+            },
+            "required": [
+              "label",
+              "description"
+            ],
+            "title": "QuestionOption",
+            "type": "object"
+          },
+          "UserQuestion": {
+            "additionalProperties": true,
+            "properties": {
+              "header": {
+                "title": "Header",
+                "type": "string"
+              },
+              "multiSelect": {
+                "title": "Multiselect",
+                "type": "boolean"
+              },
+              "options": {
+                "items": {
+                  "$ref": "#/$defs/QuestionOption"
+                },
+                "title": "Options",
+                "type": "array"
+              },
+              "otherLabel": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Otherlabel"
+              },
+              "question": {
+                "title": "Question",
+                "type": "string"
+              }
+            },
+            "required": [
+              "question",
+              "header",
+              "options",
+              "multiSelect"
+            ],
+            "title": "UserQuestion",
+            "type": "object"
+          }
+        },
+        "additionalProperties": true,
+        "properties": {
+          "answers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Map from question text to answer text",
+            "title": "Answers",
+            "type": "object"
+          },
+          "approximateCreationTime": {
+            "description": "Approximate UTC timestamp when user message was created",
+            "format": "date-time",
+            "title": "Approximatecreationtime",
+            "type": "string"
+          },
+          "messageId": {
+            "description": "Unique identifier for the user message",
+            "title": "Messageid",
+            "type": "string"
+          },
+          "notes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Map from question text to the freeform 'Other' text the user typed, when present. Mirrors the native AskUserQuestion tool's per-question `notes` annotation, which the result formatter renders as ` user notes: <text>` after the answer string.",
+            "title": "Notes",
+            "type": "object"
+          },
+          "objectType": {
+            "default": "UserQuestionAnswerMessage",
+            "title": "Objecttype",
+            "type": "string"
+          },
+          "questionData": {
+            "$ref": "#/$defs/AskUserQuestionData",
+            "description": "The original questions for context"
+          },
+          "source": {
+            "$ref": "#/$defs/AgentMessageSource",
+            "default": "USER"
+          },
+          "toolUseId": {
+            "description": "The original ToolUseBlock ID",
+            "title": "Tooluseid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "answers",
+          "questionData",
+          "toolUseId"
+        ],
+        "title": "UserQuestionAnswerMessage",
+        "type": "object"
+      },
+      "WarningAgentMessage": {
+        "$defs": {
+          "AgentMessageSource": {
+            "description": "Messages can come from the AGENT (in-container LLM), USER (chat messages & direct interactions), SCULPTOR_SYSTEM (multifaceted sculptor app and service code) and RUNNER (the process controlling a task on the server.)",
+            "enum": [
+              "AGENT",
+              "USER",
+              "SCULPTOR_SYSTEM",
+              "RUNNER"
+            ],
+            "title": "AgentMessageSource",
+            "type": "string"
+          },
+          "JsonTypeAlias": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonTypeAlias"
+                },
+                "type": "object"
+              },
+              {
+                "items": {
+                  "$ref": "#/$defs/JsonTypeAlias"
+                },
+                "type": "array"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "SerializedException": {
+            "additionalProperties": true,
+            "description": "A serializable dataclass that represents an exception",
+            "properties": {
+              "args": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/SerializedException"
+                    },
+                    {
+                      "$ref": "#/$defs/JsonTypeAlias"
+                    }
+                  ]
+                },
+                "title": "Args",
+                "type": "array"
+              },
+              "exception": {
+                "title": "Exception",
+                "type": "string"
+              },
+              "tracebackDict": {
+                "$ref": "#/$defs/JsonTypeAlias"
+              },
+              "wasLoggedByLogException": {
+                "default": false,
+                "title": "Wasloggedbylogexception",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "exception",
+              "args",
+              "tracebackDict"
+            ],
+            "title": "SerializedException",
+            "type": "object"
+          }
+        },
+        "additionalProperties": true,
+        "properties": {
+          "approximateCreationTime": {
+            "format": "date-time",
+            "title": "Approximatecreationtime",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/SerializedException"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "messageId": {
+            "title": "Messageid",
+            "type": "string"
+          },
+          "objectType": {
+            "default": "WarningAgentMessage",
+            "title": "Objecttype",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/AgentMessageSource",
+            "default": "AGENT"
+          }
+        },
+        "required": [
+          "error",
+          "message"
+        ],
+        "title": "WarningAgentMessage",
+        "type": "object"
+      }
+    }
+  },
+  "Task": {
+    "current_state": {
+      "AgentTaskStateV2": {
+        "$defs": {
+          "ModelOption": {
+            "additionalProperties": true,
+            "description": "One model a harness offers in its switcher.\n\n`provider` and `model_id` identify the model on the harness's own terms\n(pi sends them back as a `set_model` selection; for the Claude harness\n`model_id` is the `LLMModel` value). `display_name` is the selector label.",
+            "properties": {
+              "displayName": {
+                "title": "Displayname",
+                "type": "string"
+              },
+              "modelId": {
+                "title": "Modelid",
+                "type": "string"
+              },
+              "provider": {
+                "title": "Provider",
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "modelId",
+              "displayName"
+            ],
+            "title": "ModelOption",
+            "type": "object"
+          }
+        },
+        "additionalProperties": true,
+        "description": "The state of a run_agent server task.\nThis is used to snapshot the state of the task at various points in time so that the agent can be resumed.",
+        "properties": {
+          "availableModels": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/ModelOption"
+            },
+            "title": "Availablemodels",
+            "type": "array"
+          },
+          "currentModel": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ModelOption"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "lastProcessedMessageId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Lastprocessedmessageid"
+          },
+          "objectType": {
+            "default": "AgentTaskStateV2",
+            "title": "Objecttype",
+            "type": "string"
+          },
+          "terminalSessionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Terminalsessionid"
+          },
+          "terminalShellPid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Terminalshellpid"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Title"
+          },
+          "workspaceId": {
+            "title": "Workspaceid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspaceId"
+        ],
+        "title": "AgentTaskStateV2",
+        "type": "object"
+      },
+      "NoOpTaskStateV1": {
+        "additionalProperties": true,
+        "description": "Test-only task state paired with NoOpTaskInputsV1.",
+        "properties": {
+          "objectType": {
+            "default": "NoOpTaskStateV1",
+            "title": "Objecttype",
+            "type": "string"
+          }
+        },
+        "title": "NoOpTaskStateV1",
+        "type": "object"
+      }
+    },
+    "error": {
+      "SerializedException": {
+        "$defs": {
+          "JsonTypeAlias": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/$defs/JsonTypeAlias"
+                },
+                "type": "object"
+              },
+              {
+                "items": {
+                  "$ref": "#/$defs/JsonTypeAlias"
+                },
+                "type": "array"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "SerializedException": {
+            "additionalProperties": true,
+            "description": "A serializable dataclass that represents an exception",
+            "properties": {
+              "args": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/SerializedException"
+                    },
+                    {
+                      "$ref": "#/$defs/JsonTypeAlias"
+                    }
+                  ]
+                },
+                "title": "Args",
+                "type": "array"
+              },
+              "exception": {
+                "title": "Exception",
+                "type": "string"
+              },
+              "tracebackDict": {
+                "$ref": "#/$defs/JsonTypeAlias"
+              },
+              "wasLoggedByLogException": {
+                "default": false,
+                "title": "Wasloggedbylogexception",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "exception",
+              "args",
+              "tracebackDict"
+            ],
+            "title": "SerializedException",
+            "type": "object"
+          }
+        },
+        "$ref": "#/$defs/SerializedException"
+      }
+    },
+    "input_data": {
+      "AgentTaskInputsV2": {
+        "$defs": {
+          "ClaudeCodeSDKAgentConfig": {
+            "additionalProperties": true,
+            "properties": {
+              "objectType": {
+                "default": "ClaudeCodeSDKAgentConfig",
+                "title": "Objecttype",
+                "type": "string"
+              }
+            },
+            "title": "ClaudeCodeSDKAgentConfig",
+            "type": "object"
+          },
+          "HelloAgentConfig": {
+            "additionalProperties": true,
+            "properties": {
+              "command": {
+                "default": "echo",
+                "title": "Command",
+                "type": "string"
+              },
+              "objectType": {
+                "default": "HelloAgentConfig",
+                "title": "Objecttype",
+                "type": "string"
+              }
+            },
+            "title": "HelloAgentConfig",
+            "type": "object"
+          },
+          "LLMModel": {
+            "enum": [
+              "CLAUDE-4-OPUS",
+              "CLAUDE-4-OPUS-200K",
+              "CLAUDE-4-7-OPUS",
+              "CLAUDE-4-7-OPUS-200K",
+              "CLAUDE-4-6-OPUS",
+              "CLAUDE-4-6-OPUS-200K",
+              "CLAUDE-4-SONNET",
+              "CLAUDE-4-SONNET-200K",
+              "CLAUDE-4-HAIKU",
+              "CLAUDE-FABLE-5",
+              "FAKE_CLAUDE",
+              "FAKE_CLAUDE_2"
+            ],
+            "title": "LLMModel",
+            "type": "string"
+          },
+          "PiAgentConfig": {
+            "additionalProperties": true,
+            "properties": {
+              "objectType": {
+                "default": "PiAgentConfig",
+                "title": "Objecttype",
+                "type": "string"
+              }
+            },
+            "title": "PiAgentConfig",
+            "type": "object"
+          },
+          "RegisteredTerminalAgentConfig": {
+            "additionalProperties": true,
+            "description": "A terminal agent that launches a registered program in its shell.\n\nLaunch parameters are stamped at creation from the registration so the\ntask stays self-describing even if the registration file later changes.",
+            "properties": {
+              "acceptsAutomatedPrompts": {
+                "default": false,
+                "title": "Acceptsautomatedprompts",
+                "type": "boolean"
+              },
+              "displayName": {
+                "title": "Displayname",
+                "type": "string"
+              },
+              "launchCommand": {
+                "title": "Launchcommand",
+                "type": "string"
+              },
+              "objectType": {
+                "default": "RegisteredTerminalAgentConfig",
+                "title": "Objecttype",
+                "type": "string"
+              },
+              "registrationId": {
+                "title": "Registrationid",
+                "type": "string"
+              },
+              "resumeCommandTemplate": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Resumecommandtemplate"
+              }
+            },
+            "required": [
+              "registrationId",
+              "displayName",
+              "launchCommand"
+            ],
+            "title": "RegisteredTerminalAgentConfig",
+            "type": "object"
+          },
+          "TerminalAgentConfig": {
+            "additionalProperties": true,
+            "properties": {
+              "objectType": {
+                "default": "TerminalAgentConfig",
+                "title": "Objecttype",
+                "type": "string"
+              }
+            },
+            "title": "TerminalAgentConfig",
+            "type": "object"
+          }
+        },
+        "additionalProperties": true,
+        "description": "The primary task for running an agent.\n\nContains the necessary information for the task runner.\n\nThe `agent_config` is used to configure the `Agent` itself. It contains the full (versioned) command to be run.\nThe `git_hash` records the starting commit for diff computation.",
+        "properties": {
+          "agentConfig": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/HelloAgentConfig"
+              },
+              {
+                "$ref": "#/$defs/ClaudeCodeSDKAgentConfig"
+              },
+              {
+                "$ref": "#/$defs/PiAgentConfig"
+              },
+              {
+                "$ref": "#/$defs/TerminalAgentConfig"
+              },
+              {
+                "$ref": "#/$defs/RegisteredTerminalAgentConfig"
+              }
+            ],
+            "title": "Agentconfig"
+          },
+          "defaultModel": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/LLMModel"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "gitHash": {
+            "title": "Githash",
+            "type": "string"
+          },
+          "objectType": {
+            "default": "AgentTaskInputsV2",
+            "title": "Objecttype",
+            "type": "string"
+          },
+          "systemPrompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Systemprompt"
+          }
+        },
+        "required": [
+          "agentConfig",
+          "gitHash"
+        ],
+        "title": "AgentTaskInputsV2",
+        "type": "object"
+      },
+      "MustBeShutDownTaskInputsV1": {
+        "additionalProperties": true,
+        "description": "Used in testing to make sure we can shut down tasks that do nothing but wait.",
+        "properties": {
+          "objectType": {
+            "default": "MustBeShutDownTaskInputsV1",
+            "title": "Objecttype",
+            "type": "string"
+          }
+        },
+        "title": "MustBeShutDownTaskInputsV1",
+        "type": "object"
+      },
+      "NoOpTaskInputsV1": {
+        "additionalProperties": true,
+        "description": "Test-only task input that runs a no-op handler and completes immediately.\n\nUsed by the task-service tests to exercise the non-agent task path.",
+        "properties": {
+          "objectType": {
+            "default": "NoOpTaskInputsV1",
+            "title": "Objecttype",
+            "type": "string"
+          }
+        },
+        "title": "NoOpTaskInputsV1",
+        "type": "object"
+      }
+    }
+  }
+}
