@@ -463,6 +463,7 @@ def _create_tool_content(
     tool_input: ToolInput,
     tool_content: Any,
     diff_tracker: DiffTracker | None,
+    is_error: bool = False,
 ) -> GenericToolContent | DiffToolContent:
     """Create appropriate tool content based on tool type."""
     if tool_name in [AgentToolName.WRITE, AgentToolName.EDIT, AgentToolName.MULTI_EDIT]:
@@ -479,15 +480,96 @@ def _create_tool_content(
         if diff:
             return DiffToolContent(diff=diff, file_path=file_path)
 
-        # DiffTracker unavailable or returned None (e.g. file outside workspace).
-        # Create a synthetic diff from the tool input so the UI still shows file contents.
-        if tool_name == AgentToolName.WRITE:
-            content = tool_input.get("content")
-            if isinstance(content, str) and content:
-                diff = _create_synthetic_write_diff(file_path, content)
-                return DiffToolContent(diff=diff, file_path=file_path)
+        # DiffTracker unavailable or returned None (e.g. file outside the
+        # workspace, like the global Claude memory dir). Synthesize a diff from
+        # the tool input so the UI still shows the change. Crucially, this keeps
+        # the result a DiffToolContent so it carries ``file_path`` — without it
+        # the frontend cannot derive a path for the file chip and silently drops
+        # the tool call (see ``chipRowUtils.ts``). This applies to every
+        # file-change tool, not just Write.
+        #
+        # Only do this for a SUCCESSFUL call. On error the file is typically
+        # unchanged and the result carries the error text, which must be
+        # preserved as generic content rather than replaced by a phantom diff
+        # (see test_failed_edit_on_unchanged_file_preserves_error_text).
+        if not is_error:
+            synthetic_diff = _create_synthetic_diff_from_tool_input(tool_name, file_path, tool_input)
+            if synthetic_diff is not None:
+                return DiffToolContent(diff=synthetic_diff, file_path=file_path)
 
     return GenericToolContent(text=str(tool_content))
+
+
+def _create_synthetic_diff_from_tool_input(tool_name: str, file_path: str, tool_input: ToolInput) -> str | None:
+    """Build a best-effort git-format diff from a file-change tool's input.
+
+    Used when the DiffTracker cannot produce a real diff (e.g. the file is
+    outside the workspace). Returns None when the input lacks the fields needed
+    to synthesize a diff, in which case the caller falls back to generic content.
+    """
+    if tool_name == AgentToolName.WRITE:
+        content = tool_input.get("content")
+        if isinstance(content, str) and content:
+            return _create_synthetic_write_diff(file_path, content)
+        return None
+
+    if tool_name in (AgentToolName.EDIT, AgentToolName.MULTI_EDIT):
+        edits = _extract_edits(tool_input)
+        if edits:
+            return _create_synthetic_edit_diff(file_path, edits)
+
+    return None
+
+
+def _extract_edits(tool_input: ToolInput) -> list[tuple[str, str]]:
+    """Extract (old_string, new_string) pairs from an Edit or MultiEdit input.
+
+    MultiEdit carries a list under ``edits``; Edit carries a single
+    ``old_string``/``new_string`` pair at the top level.
+    """
+    edits = tool_input.get("edits")
+    if isinstance(edits, list):
+        pairs: list[tuple[str, str]] = []
+        for edit in edits:
+            if isinstance(edit, dict):
+                old_string = edit.get("old_string")
+                new_string = edit.get("new_string")
+                if isinstance(old_string, str) and isinstance(new_string, str):
+                    pairs.append((old_string, new_string))
+        return pairs
+
+    old_string = tool_input.get("old_string")
+    new_string = tool_input.get("new_string")
+    if isinstance(old_string, str) and isinstance(new_string, str):
+        return [(old_string, new_string)]
+
+    return []
+
+
+def _create_synthetic_edit_diff(file_path: str, edits: list[tuple[str, str]]) -> str:
+    """Create a synthetic git-format diff for Edit/MultiEdit when DiffTracker is unavailable.
+
+    We don't know the file's real line numbers without its contents, so each
+    edit becomes a hunk showing the replaced text as removals and the new text
+    as additions. The frontend's ``getLineCounts`` skips the 5-line header and
+    counts ``+``/``-`` lines, so the chip's stats stay accurate even though the
+    hunk offsets are placeholders. This same string is also rendered in the chip
+    diff popover, so the user sees the change anchored at line 1 (the placeholder
+    offset) — matching the existing ``_create_synthetic_write_diff`` behavior.
+    """
+    lines: list[str] = [
+        f"diff --git a/{file_path} b/{file_path}",
+        "index 0000000..0000000 100644",
+        f"--- a/{file_path}",
+        f"+++ b/{file_path}",
+    ]
+    for old_string, new_string in edits:
+        old_lines = old_string.split("\n")
+        new_lines = new_string.split("\n")
+        lines.append(f"@@ -1,{len(old_lines)} +1,{len(new_lines)} @@")
+        lines.extend("-" + line for line in old_lines)
+        lines.extend("+" + line for line in new_lines)
+    return "\n".join(lines) + "\n"
 
 
 def _create_synthetic_write_diff(file_path: str, content: str) -> str:
@@ -523,7 +605,11 @@ def _load_content_for_tool_result_message_no_error_checking(
 
     assert isinstance(simple_block.content, SimpleToolContent)
     tool_content = _create_tool_content(
-        simple_block.tool_name, simple_block.content.tool_input, simple_block.content.tool_content, diff_tracker
+        simple_block.tool_name,
+        simple_block.content.tool_input,
+        simple_block.content.tool_content,
+        diff_tracker,
+        is_error=simple_block.is_error,
     )
 
     return ParsedToolResultResponse(

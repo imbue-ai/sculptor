@@ -4,13 +4,19 @@ import type { ToolResultBlock, ToolUseBlock } from "~/api";
 
 import { segmentToolBlocks } from "../chipRowUtils.ts";
 
+const DIFF_TOOL_NAMES = new Set(["Edit", "Write", "MultiEdit"]);
+
 let idCounter = 0;
+// Diff-tool fixtures carry a derivable file path (input.file_path for a
+// tool_use, diff content with filePath for a tool_result) because real
+// file-change tools always do. segmentToolBlocks only routes a diff tool to a
+// chip when a path is derivable; path-less cases are covered explicitly below.
 const makeToolUse = (name: string, id = `tu-${name}-${idCounter++}`): ToolUseBlock => ({
   type: "tool_use",
   objectType: "ToolUseBlock",
   id,
   name,
-  input: {},
+  input: DIFF_TOOL_NAMES.has(name) ? { file_path: `/repo/${name}.ts` } : {},
   invocationString: "",
 });
 
@@ -20,7 +26,35 @@ const makeToolResult = (toolName: string, toolUseId = `tu-${toolName}`): ToolRes
   toolUseId,
   toolName,
   invocationString: "",
-  content: { contentType: "generic", text: "ok" } as ToolResultBlock["content"],
+  content: DIFF_TOOL_NAMES.has(toolName)
+    ? ({
+        contentType: "diff",
+        diff: "diff --git a/x b/x\n",
+        filePath: `/repo/${toolName}.ts`,
+      } as ToolResultBlock["content"])
+    : ({ contentType: "generic", text: "ok" } as ToolResultBlock["content"]),
+  isError: false,
+});
+
+// A diff-tool block with no derivable file path: a tool_use whose file_path
+// hasn't streamed in yet, or a completed tool_result that fell back to generic
+// content (e.g. a failed edit, or an edit to a file outside the workspace).
+const makePathlessDiffToolUse = (name: string, id = `tu-${name}-${idCounter++}`): ToolUseBlock => ({
+  type: "tool_use",
+  objectType: "ToolUseBlock",
+  id,
+  name,
+  input: {},
+  invocationString: "",
+});
+
+const makeGenericDiffToolResult = (toolName: string, toolUseId = `tu-${toolName}`): ToolResultBlock => ({
+  type: "tool_result",
+  objectType: "ToolResultBlock",
+  toolUseId,
+  toolName,
+  invocationString: "",
+  content: { contentType: "generic", text: "File edited successfully." } as ToolResultBlock["content"],
   isError: false,
 });
 
@@ -183,6 +217,34 @@ describe("segmentToolBlocks", () => {
       expect(segments).toHaveLength(1);
       expect(segments[0].kind).toBe("tools");
       expect(segments[0].blocks).toHaveLength(2);
+    });
+  });
+
+  describe("path-less diff tools fall back to tool pills", () => {
+    // A chip requires a derivable file path; without one buildChipData would
+    // silently drop the block, making the tool call vanish. These blocks must
+    // fall back to a tool pill instead.
+    it("routes a diff tool_result with generic content into a tools segment", () => {
+      const segments = segmentToolBlocks([makeGenericDiffToolResult("Edit", "tu-1")]);
+
+      expect(segments).toHaveLength(1);
+      expect(segments[0].kind).toBe("tools");
+      expect(segments[0].blocks).toHaveLength(1);
+    });
+
+    it("routes a diff tool_use without a file_path into a tools segment", () => {
+      const segments = segmentToolBlocks([makePathlessDiffToolUse("Edit", "tu-1")]);
+
+      expect(segments).toHaveLength(1);
+      expect(segments[0].kind).toBe("tools");
+      expect(segments[0].blocks).toHaveLength(1);
+    });
+
+    it("still routes a diff tool with a derivable path into a chip segment", () => {
+      const segments = segmentToolBlocks([makeToolResult("Edit", "tu-1")]);
+
+      expect(segments).toHaveLength(1);
+      expect(segments[0].kind).toBe("chip");
     });
   });
 });
