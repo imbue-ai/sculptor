@@ -157,6 +157,12 @@ export const submitReportAtom: WritableAtom<null, [], Promise<void>> = atom(null
 
   set(updateReportProblemAtom, { submitState: { type: "reporting" } });
   try {
+    // With no Sentry DSN there's no client, so captureFeedback no-ops yet still
+    // returns an id — making the report look sent. Fail honestly instead.
+    if (Sentry.getClient() === undefined) {
+      throw new Error("Error reporting isn't configured in this build, so the report couldn't be sent.");
+    }
+
     const { screenshotData } = get(reportProblemAtom);
     const healthCheckData = get(healthCheckDataAtom);
     const attachments: Array<{ filename: string; data: Uint8Array; contentType: string }> = [];
