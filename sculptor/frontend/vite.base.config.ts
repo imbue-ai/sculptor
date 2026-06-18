@@ -1,13 +1,15 @@
-// Shared Vite configuration for both frontend builds, so each bundles the app
-// through the same plugin pipeline. Only the genuinely
-// target-specific knobs are left to each entry config:
+// Shared Vite configuration for both frontend builds. `defineFrontendConfig`
+// (at the bottom) builds the entire config — the dev/prod branch, the proxy,
+// env loading, and the plugin pipeline — so each entry config only declares the
+// handful of knobs that genuinely differ:
 //
-//   - vite.web.config.ts      (web / OpenHost):  base "/",  outDir dist,
-//                                                 API_URL_BASE "" (same-origin)
-//   - vite.renderer.config.ts (Electron renderer): base "/", outDir
-//                                                 .vite/build/renderer,
-//                                                 API_URL_BASE undefined
-//                                                 (preload injects the port)
+//   - vite.web.config.ts      (web / OpenHost):  API_URL_BASE "" (same-origin),
+//                                                 sentry release from the git sha,
+//                                                 a type-generation plugin
+//   - vite.renderer.config.ts (Electron renderer): API_URL_BASE undefined
+//                                                 (preload injects the port),
+//                                                 outDir .vite/build/renderer,
+//                                                 HMR gated under pytest
 //
 // Each entry config passes its own `root` (the frontend dir) so path resolution
 // here never depends on how Vite bundles this module.
@@ -15,7 +17,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import react from "@vitejs/plugin-react-swc";
-import type { Plugin } from "vite";
+import { defineConfig, loadEnv, type Plugin, type UserConfig, type UserConfigExport } from "vite";
 
 import { pluginRuntimeStubs } from "./vite-plugins/plugin-runtime-stubs.ts";
 
@@ -141,3 +143,100 @@ export const sharedDefine = (
   FRONTEND_POSTHOG_HOST: JSON.stringify(env.SCULPTOR_FRONTEND_POSTHOG_HOST || "https://us.i.posthog.com"),
   API_URL_BASE: opts.apiUrlBaseExpr,
 });
+
+/**
+ * Target-specific knobs for {@link defineFrontendConfig}. Everything else — the
+ * dev/prod branch, the proxy, env loading, and the shared
+ * plugins/resolve/css/define — is identical across builds and lives in the
+ * factory, so each entry config only declares what actually differs.
+ */
+export interface FrontendConfigOptions {
+  /** Frontend dir; drives `root`, the `~` alias, SCSS load paths, and plugin file copies. */
+  root: string;
+  /** Dev-server port used when SCULPTOR_FRONTEND_PORT is unset (5174 web, 5173 renderer). */
+  defaultFrontendPort: number;
+  /** Raw `API_URL_BASE` define expression, derived from the loaded env. */
+  apiUrlBase: (env: Record<string, string>) => string;
+  /** Sentry release id (with its per-target fallback), derived from the loaded env. */
+  sentryRelease: (env: Record<string, string>) => string;
+  /**
+   * Asset base. Defaults to "/" (absolute): both builds are served from an
+   * origin root — the backend for web, the `sculptor://app` scheme (and the
+   * Vite dev server in development) for the packaged renderer — never `file://`,
+   * so assets resolve against the origin regardless of the document's path.
+   */
+  base?: string;
+  /** Extra `build` options merged over the shared `{ sourcemap: true }`. */
+  build?: import("vite").BuildOptions;
+  /** Plugins appended after the shared pipeline (e.g. web's type generation). */
+  extraPlugins?: Array<Plugin>;
+  /** Disable HMR under pytest so integration tests don't hit reload races. */
+  gateHmrUnderPytest?: boolean;
+}
+
+/** Dev-only proxy server forwarding `/api` and `/ws` to the backend. */
+function devServer(env: Record<string, string>, defaultFrontendPort: number): import("vite").ServerOptions {
+  const apiPort = Number(env.SCULPTOR_API_PORT || 5050);
+  const fePort = Number(env.SCULPTOR_FRONTEND_PORT || defaultFrontendPort);
+  const apiTarget = env.SCULPTOR_CUSTOM_BACKEND_URL || `http://127.0.0.1:${apiPort}`;
+
+  console.log(`Proxying frontend: target=${apiTarget} SCULPTOR_FRONTEND_PORT=${fePort}`);
+
+  return {
+    port: fePort,
+    strictPort: true,
+    host: "127.0.0.1",
+    proxy: {
+      "/api": {
+        target: apiTarget,
+        changeOrigin: true,
+        ws: true,
+      },
+      "/ws": {
+        target: apiTarget,
+        ws: true,
+        rewriteWsOrigin: true,
+      },
+    },
+  };
+}
+
+/**
+ * Build the full Vite config for a frontend target from its {@link
+ * FrontendConfigOptions}. Owns the dev/prod branch and the proxy so the entry
+ * configs only declare what genuinely differs between web and the renderer.
+ */
+export function defineFrontendConfig(opts: FrontendConfigOptions): UserConfigExport {
+  return defineConfig(({ command, mode }): UserConfig => {
+    const env = loadEnv(mode, process.cwd(), "");
+
+    console.log(`Started vite with command: "${command}" and mode: "${mode}"`);
+
+    const config: UserConfig = {
+      root: opts.root,
+      base: opts.base ?? "/",
+      optimizeDeps: sharedOptimizeDeps,
+      define: sharedDefine(env, {
+        apiUrlBaseExpr: opts.apiUrlBase(env),
+        sentryRelease: opts.sentryRelease(env),
+      }),
+      build: { sourcemap: true, ...opts.build },
+      clearScreen: false,
+      envPrefix: "SCULPTOR_",
+      resolve: sharedResolve(opts.root),
+      css: sharedCss(opts.root),
+      plugins: [...sharedPlugins(opts.root), ...(opts.extraPlugins ?? [])],
+    };
+
+    if (command === "serve" || mode === "development") {
+      const server = devServer(env, opts.defaultFrontendPort);
+      // HMR can cause race conditions in integration tests, so disable it there.
+      if (opts.gateHmrUnderPytest) {
+        server.hmr = !env.PYTEST_CURRENT_TEST;
+      }
+      config.server = server;
+    }
+
+    return config;
+  });
+}
