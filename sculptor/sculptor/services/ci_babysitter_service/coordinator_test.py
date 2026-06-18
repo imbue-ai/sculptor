@@ -658,6 +658,34 @@ def test_scenario_5_mid_turn_queueing_reuses_task(
     assert task_service.delete_task_calls == []
 
 
+def test_restart_reuses_persisted_babysitter_task(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    """After a restart (fresh in-memory state) a CI failure re-adopts the
+    workspace's persisted babysitter task instead of creating a duplicate.
+
+    Regression for SCU-1530: the babysitter task id lived only in the
+    coordinator's in-memory state, so a restart forgot it and spawned a second
+    "CI Babysitter" task. Here the task already exists in the database but the
+    coordinator's _state is empty, exactly as it is right after a restart.
+    """
+    existing_babysitter = _make_agent_task(
+        env, ClaudeCodeSDKAgentConfig(), "2026-01-01T00:00:00", title="CI Babysitter"
+    )
+    env.tasks.append(existing_babysitter)
+    env.tasks_by_id[existing_babysitter.object_id] = existing_babysitter
+
+    coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
+    _seed_baseline(coordinator, env.workspace_id)
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+
+    # No new task is created; the prompt is delivered to the persisted babysitter.
+    assert task_service.create_task_calls == []
+    assert len(task_service.create_message_calls) == 1
+    assert task_service.create_message_calls[0][1] == existing_babysitter.object_id
+
+
 def test_scenario_6_human_push_non_interference(
     env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
 ) -> None:
