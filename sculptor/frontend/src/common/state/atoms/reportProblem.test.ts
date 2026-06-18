@@ -31,7 +31,12 @@ describe("submitReportAtom", () => {
 
     await store.set(submitReportAtom);
 
-    expect(store.get(reportProblemAtom).submitState.type).toBe("error");
+    const submitState = store.get(reportProblemAtom).submitState;
+    expect(submitState.type).toBe("error");
+    // The message is shown verbatim, so it must not carry a stray "Error:" prefix.
+    if (submitState.type === "error") {
+      expect(submitState.message).not.toMatch(/^Error:/);
+    }
     expect(Sentry.captureFeedback).not.toHaveBeenCalled();
   });
 
