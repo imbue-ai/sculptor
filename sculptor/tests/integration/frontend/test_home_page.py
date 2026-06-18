@@ -2,7 +2,7 @@
 
 Tests verify:
 - Recent workspaces are shown on the home page
-- Empty state when no workspaces exist
+- The inline new-workspace form is shown (and can create) when no workspaces exist
 - Search filters the workspace list
 - Clicking a workspace row navigates to that workspace
 - Workspace row branch display shows current branch (not source branch)
@@ -11,6 +11,7 @@ Tests verify:
 from playwright.sync_api import expect
 
 from sculptor.testing.pages.home_page import PlaywrightHomePage
+from sculptor.testing.pages.new_workspace_modal_page import PlaywrightNewWorkspaceModalPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import navigate_to_home_page
 from sculptor.testing.playwright_utils import soft_reload_page
@@ -42,22 +43,34 @@ def test_recent_workspaces_shown_on_home_page(
     expect(workspace_row).to_be_visible()
 
 
-@user_story("to see helpful guidance when I have no workspaces")
-def test_empty_state_shown_for_new_user(
+@user_story("to create my first workspace immediately when I have none")
+def test_inline_new_workspace_form_shown_and_creates_for_new_user(
     sculptor_instance_: SculptorInstance,
 ) -> None:
-    """When a user has zero workspaces, the empty state should be shown on the home page."""
+    """When a user has zero workspaces, the new-workspace form is rendered
+    inline on the home page (in place of the old empty-state placeholder),
+    the search bar is hidden, and the form can create a workspace directly."""
     page = sculptor_instance_.page
 
     # Navigate to the home page
     navigate_to_home_page(page)
 
-    # The empty state heading should be visible
+    # The inline new-workspace form should be visible, and the search bar hidden.
     home_page = PlaywrightHomePage(page)
-    expect(home_page.get_empty_state()).to_be_visible()
-
-    # The search bar should NOT be visible
+    expect(home_page.get_inline_new_workspace_form()).to_be_visible()
     expect(home_page.get_search_input()).not_to_be_visible()
+
+    # Create a workspace directly from the inline form. Wait for the submit
+    # button to enable (repo info + worktree branch-name preview settled).
+    add_workspace = PlaywrightNewWorkspaceModalPage(page=page)
+    add_workspace.get_workspace_name_input().fill("My First Workspace")
+    submit_button = add_workspace.get_submit_button()
+    expect(submit_button).to_be_enabled()
+    submit_button.click()
+
+    # Creating navigates to the new agent — the chat panel appears.
+    task_page = PlaywrightTaskPage(page)
+    expect(task_page.get_chat_panel()).to_be_visible(timeout=60_000)
 
 
 @user_story("to find a workspace quickly by searching")
@@ -157,7 +170,8 @@ def test_clicking_recent_workspace_after_reload_navigates_without_spinner(
         workspace_name="Workspace Beta",
     )
 
-    # Step 3: Fresh-navigate to clear the in-memory mruAgentByWorkspaceAtom.
+    # Step 3: Fresh-navigate to clear in-memory tab state, forcing the
+    # rootLoader to rehydrate from persisted storage instead of memory.
     soft_reload_page(page)
 
     # Step 4: Wait for the app to finish loading after reload.

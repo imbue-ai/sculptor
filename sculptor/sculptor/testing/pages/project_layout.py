@@ -19,14 +19,6 @@ from sculptor.testing.utils import get_playwright_modifier_key
 class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
     """Page object for the PageLayout that contains the top bar and main content."""
 
-    def get_home_tab(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.HOME_TAB)
-
-    def close_home_tab(self) -> None:
-        home_tab = self.get_home_tab()
-        close_button = home_tab.get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON)
-        close_button.click()
-
     def get_settings_button(self) -> Locator:
         return self.get_by_test_id(ElementIDs.SETTINGS_BUTTON)
 
@@ -62,11 +54,12 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
     def get_add_workspace_button(self) -> Locator:
         return self.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
 
+    def get_home_button(self) -> Locator:
+        """The topbar Home button that toggles between /home and the last workspace."""
+        return self.get_by_test_id(ElementIDs.HOME_BUTTON)
+
     def get_workspace_tabs(self) -> Locator:
         return self.get_by_test_id(ElementIDs.WORKSPACE_TAB)
-
-    def get_add_workspace_tabs(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.ADD_WORKSPACE_TAB)
 
     def close_workspace_tab(self, workspace_tab_index: int = 0) -> None:
         tab = self.get_workspace_tabs().nth(workspace_tab_index)

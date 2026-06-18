@@ -3,12 +3,13 @@ import { useAtomValue } from "jotai";
 import type { ReactElement, RefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { RecentWorkspaceResponse } from "../../../api";
-import { listRecentWorkspaces } from "../../../api";
-import { deletedWorkspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
-import { useOptimisticWorkspaceDelete } from "../../../common/state/hooks/useOptimisticWorkspaceDelete.ts";
-import { DeleteConfirmationDialog } from "../../../components/DeleteConfirmationDialog.tsx";
-import { EmptyState } from "./EmptyState.tsx";
+import type { RecentWorkspaceResponse } from "~/api";
+import { ElementIds, listRecentWorkspaces } from "~/api";
+import { deletedWorkspaceIdsAtom } from "~/common/state/atoms/workspaces.ts";
+import { useOptimisticWorkspaceDelete } from "~/common/state/hooks/useOptimisticWorkspaceDelete.ts";
+import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
+import { NewWorkspaceForm } from "~/components/NewWorkspaceModal/NewWorkspaceForm.tsx";
+
 import styles from "./RecentWorkspaces.module.scss";
 import { WorkspaceRow } from "./WorkspaceRow.tsx";
 import { WorkspaceSearchBar } from "./WorkspaceSearchBar.tsx";
@@ -171,10 +172,15 @@ export const RecentWorkspaces = ({
     );
   }
 
+  // Zero workspaces: render the new-workspace form inline (centered, no search
+  // bar) so a first-time user can create one immediately — no auto-opened
+  // modal, no separate empty-state placeholder.
   if (enrichedWorkspaces.length === 0) {
     return (
-      <div className={styles.recentArea}>
-        <EmptyState />
+      <div className={styles.emptyState}>
+        <div className={styles.inlineForm} data-testid={ElementIds.HOME_NEW_WORKSPACE_FORM}>
+          <NewWorkspaceForm entrySource="home" />
+        </div>
       </div>
     );
   }

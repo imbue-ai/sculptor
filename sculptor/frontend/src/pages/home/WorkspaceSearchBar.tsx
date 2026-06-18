@@ -1,7 +1,8 @@
 import { SearchIcon } from "lucide-react";
 import type { ReactElement, RefObject } from "react";
 
-import { ElementIds } from "../../../api";
+import { ElementIds } from "~/api";
+
 import styles from "./WorkspaceSearchBar.module.scss";
 
 type WorkspaceSearchBarProps = {

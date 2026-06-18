@@ -26,9 +26,17 @@ export type CommandRuntime = {
   navigate: {
     toHome: () => void;
     toSettings: (section?: string) => void;
-    toAddWorkspace: () => void;
     toWorkspace: (workspaceId: string) => void;
     toAgent: (workspaceId: string, agentId: string) => void;
+  };
+  modal: {
+    /**
+     * Open the new-workspace modal. The "swap in place" feel for the
+     * Cmd+K → "New workspace" command is preserved by passing source =
+     * "palette" — the modal renders a back-arrow breadcrumb and Esc
+     * once returns to the palette command list.
+     */
+    openNewWorkspaceFromPalette: () => void;
   };
   ui: {
     toggleHelpDialog: () => void;

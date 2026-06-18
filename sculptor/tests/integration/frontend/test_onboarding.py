@@ -11,8 +11,9 @@ from sculptor.config.user_config import UserConfig
 from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.dependency_stubs import DependencyState
 from sculptor.testing.dependency_stubs import stub_dependency
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
+from sculptor.testing.pages.new_workspace_modal_page import PlaywrightNewWorkspaceModalPage
 from sculptor.testing.pages.onboarding_page import PlaywrightOnboardingPage
+from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import soft_reload_page
 from sculptor.testing.resources import custom_sculptor_folder_populator
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
@@ -70,50 +71,12 @@ def test_full_onboarding_flow(sculptor_instance_factory_: SculptorInstanceFactor
         expect(add_repo_step).to_be_visible()
         add_repo_step.complete_step(str(sculptor_instance_factory_.base_repo.base_path))
 
-        # After onboarding, the Add Workspace page should load
-        add_workspace_page = PlaywrightAddWorkspacePage(page)
-        expect(add_workspace_page.get_submit_button()).to_be_visible()
-
-
-@user_story("to see a descriptive validation error when my email is rejected during onboarding")
-@custom_sculptor_folder_populator.with_args(_dont_populate_sculptor_folder)
-def test_invalid_email_surfaces_validation_error(sculptor_instance_factory_: SculptorInstanceFactory) -> None:
-    """A backend 422 during the email step must surface the field validation message.
-
-    Regression test for SCU-1365. ``makeAPIRequest``
-    (``sculptor/frontend/src/apiClient.ts``) only threw ``ValidationError`` when
-    ``errorData.status === 422``, but a FastAPI 422 body is ``{"detail": [...]}``
-    with no top-level ``status`` field — so that branch was unreachable (and it
-    threw from inside a ``try``/``catch`` that swallowed the error anyway). As a
-    result, onboarding email-validation failures were replaced by an opaque
-    ``HTTP 422`` message with no field-level detail.
-
-    ``foo@bar`` clears the client-side ``email.includes("@")`` gate but fails the
-    backend's ``EmailStr`` validation, producing a real 422 with a ``detail`` array.
-
-    Verifies:
-    1. The welcome step accepts and submits the invalid email
-    2. The descriptive field-validation message is shown (correct behavior)
-    3. The opaque ``HTTP 422`` fallback is NOT shown (the bug)
-    """
-    invalid_email = "foo@bar"
-    with sculptor_instance_factory_.spawn_instance() as sculptor_instance:
-        page = sculptor_instance.page
-        onboarding_page = PlaywrightOnboardingPage(page)
-
-        welcome_step = onboarding_page.get_welcome_step()
-        expect(welcome_step).to_be_visible()
-
-        # An email that passes the client-side gate but fails backend validation.
-        welcome_step.enter_email(invalid_email)
-        welcome_step.submit()
-
-        # The inline error must show the validation message from the 422 ``detail``
-        # array — not the opaque "HTTP 422" fallback. (Default 30s timeout: this
-        # waits on a backend round-trip.)
-        error_message = welcome_step.get_error_message()
-        expect(error_message).to_contain_text("is not a valid email address")
-        expect(error_message).not_to_contain_text("HTTP 422")
+        # After onboarding the user lands on an empty Home, which renders the
+        # new-workspace form inline — its submit button should be visible
+        # without any extra navigation (the topbar "+" is hidden there).
+        modal = PlaywrightNewWorkspaceModalPage(page=page)
+        submit_button = modal.get_submit_button()
+        expect(submit_button).to_be_visible(timeout=30000)
 
 
 @user_story("to sign up for Sculptor even when Git is not installed")
@@ -176,8 +139,10 @@ def test_dependency_path_and_version_display(sculptor_instance_factory_: Sculpto
         # Expand the Git card to see path/version details
         git_card = installation_step.get_git_card()
         expect(git_card.locator).to_be_visible()
-        # The card mirrors its `canExpand` gate via `aria-disabled`, so this click
-        # auto-waits for the dependency probe to settle (SCU-1215) — no precondition needed.
+        # DependencyCard swallows clicks while status.state is loading/installing/authenticating
+        # (see canExpand gate). On slower runners the probe is still in "checking" when the
+        # card becomes visible, so clicking immediately is a no-op and the card never expands.
+        expect(git_card.get_status()).not_to_contain_text("checking")
         git_card.locator.click()
 
         # Git should show path and version (Git is installed in test environments)
@@ -437,9 +402,62 @@ def test_installation_step_skips_add_repo_when_project_exists(
         # Complete the installation step
         installation_step.complete_step()
 
-        # The main app should appear — not the add-repo step
-        add_workspace_page = PlaywrightAddWorkspacePage(page)
-        expect(add_workspace_page.get_submit_button()).to_be_visible()
+        # The main app should appear — not the add-repo step. The "main app
+        # rendered" beacon is the topbar "+" OR the inline new-workspace form's
+        # submit button (on an empty Home the "+" is hidden and the inline form
+        # is shown instead).
+        layout = PlaywrightProjectLayoutPage(page=page)
+        modal = PlaywrightNewWorkspaceModalPage(page=page)
+        app_ready = layout.get_add_workspace_button().or_(modal.get_submit_button())
+        expect(app_ready).to_be_visible(timeout=30000)
 
         # The add-repo step should not have appeared
-        expect(onboarding_page.get_add_repo_step()).not_to_be_visible()
+        add_repo_step = onboarding_page.get_add_repo_step()
+        expect(add_repo_step).not_to_be_visible()
+
+        # And the new-workspace form should be usable: on the empty Home it
+        # renders inline, so its submit button is directly reachable without a
+        # "+" click (the "+" is hidden in that initial state).
+        start_task_button = modal.get_submit_button()
+        expect(start_task_button).to_be_visible()
+
+
+@user_story("to see a descriptive validation error when my email is rejected during onboarding")
+@custom_sculptor_folder_populator.with_args(_dont_populate_sculptor_folder)
+def test_invalid_email_surfaces_validation_error(sculptor_instance_factory_: SculptorInstanceFactory) -> None:
+    """A backend 422 during the email step must surface the field validation message.
+
+    Regression test for SCU-1365. ``makeAPIRequest``
+    (``sculptor/frontend/src/apiClient.ts``) only threw ``ValidationError`` when
+    ``errorData.status === 422``, but a FastAPI 422 body is ``{"detail": [...]}``
+    with no top-level ``status`` field — so that branch was unreachable (and it
+    threw from inside a ``try``/``catch`` that swallowed the error anyway). As a
+    result, onboarding email-validation failures were replaced by an opaque
+    ``HTTP 422`` message with no field-level detail.
+
+    ``foo@bar`` clears the client-side ``email.includes("@")`` gate but fails the
+    backend's ``EmailStr`` validation, producing a real 422 with a ``detail`` array.
+
+    Verifies:
+    1. The welcome step accepts and submits the invalid email
+    2. The descriptive field-validation message is shown (correct behavior)
+    3. The opaque ``HTTP 422`` fallback is NOT shown (the bug)
+    """
+    invalid_email = "foo@bar"
+    with sculptor_instance_factory_.spawn_instance() as sculptor_instance:
+        page = sculptor_instance.page
+        onboarding_page = PlaywrightOnboardingPage(page)
+
+        welcome_step = onboarding_page.get_welcome_step()
+        expect(welcome_step).to_be_visible()
+
+        # An email that passes the client-side gate but fails backend validation.
+        welcome_step.enter_email(invalid_email)
+        welcome_step.submit()
+
+        # The inline error must show the validation message from the 422 ``detail``
+        # array — not the opaque "HTTP 422" fallback. (Default 30s timeout: this
+        # waits on a backend round-trip.)
+        error_message = welcome_step.get_error_message()
+        expect(error_message).to_contain_text("is not a valid email address")
+        expect(error_message).not_to_contain_text("HTTP 422")

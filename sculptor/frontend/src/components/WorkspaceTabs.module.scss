@@ -11,3 +11,10 @@
   app-region: no-drag;
   flex-shrink: 0;
 }
+
+// Mirrors `.tooltipKbd` in TopBar — renders the keybinding glyph in
+// the new-workspace tooltip in the platform's mono font so the Mac
+// modifier symbols (⌘ ⇧) lay out cleanly.
+.tooltipKbd {
+  font-family: var(--mono-font-family);
+}

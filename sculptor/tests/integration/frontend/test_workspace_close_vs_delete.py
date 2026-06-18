@@ -9,10 +9,10 @@ Tests verify:
 """
 
 import json
+import re
 
 from playwright.sync_api import expect
 
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.pages.home_page import PlaywrightHomePage
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import get_local_storage_item
@@ -223,14 +223,14 @@ def test_close_all_workspace_tabs_via_context_menu(
     # Step 5: Verify all workspace tabs are gone.
     expect(workspace_tabs).to_have_count(0)
 
-    # Step 6: Verify the Add Workspace page is shown.
-    add_ws_page = PlaywrightAddWorkspacePage(page=page)
-    expect(add_ws_page.get_workspace_name_input()).to_be_visible()
-
-    # Step 7: Navigate to the Home page and verify both workspaces still exist.
-    navigate_to_home_page(page)
+    # Step 6: Close-all in the modal flow lands the user on /home (the
+    # old flow rendered the new-workspace form inline; the new flow
+    # leaves the user on /home with the topbar + ready). Verify the
+    # workspaces still exist by checking the home-page rows.
+    expect(page).to_have_url(re.compile(r".*#/home$"))
     home_page = PlaywrightHomePage(page)
-    expect(home_page.get_workspace_rows()).to_have_count(2)
+    workspace_rows = home_page.get_workspace_rows()
+    expect(workspace_rows).to_have_count(2)
 
 
 @user_story("to close all other workspace tabs except the selected one")
@@ -340,8 +340,7 @@ def test_closed_workspace_stays_closed(
     pill = layout.get_closed_workspaces_pill()
     expect(pill).to_be_visible()
     pill.click()
-    dropdown = layout.get_closed_workspaces_dropdown()
-    row = dropdown.get_rows()
+    row = layout.get_closed_workspaces_dropdown().get_rows()
     expect(row).to_be_visible()
     row.click()
     expect(workspace_tabs).to_have_count(2)
@@ -350,10 +349,11 @@ def test_closed_workspace_stays_closed(
     layout.close_workspace_tab(0)
     expect(workspace_tabs).to_have_count(1)
 
-    # Wait a moment for any WebSocket updates to arrive
-    page.wait_for_timeout(2000)
-
-    # Verify the workspace stays closed — tab count should still be 1
+    # The close has fully round-tripped once the closed-workspaces pill
+    # reflects it — wait on that settle signal instead of a fixed sleep, then
+    # confirm a stale, out-of-order open PATCH response didn't reopen the tab.
+    closed_pill = layout.get_closed_workspaces_pill()
+    expect(closed_pill).to_be_visible()
     expect(workspace_tabs).to_have_count(1)
 
 
@@ -391,27 +391,19 @@ def test_close_after_reopen_from_home_page(
     close_all_item.click()
     expect(workspace_tabs).to_have_count(0)
 
-    # Wait for the Add Workspace page to finish rendering after close-all
-    # navigates to it. Its autoFocused workspace name input would otherwise
-    # steal focus from the closed-workspaces popover the moment it opens,
-    # causing Radix to dismiss the popover mid-click.
-    add_ws_page = PlaywrightAddWorkspacePage(page=page)
-    expect(add_ws_page.get_workspace_name_input()).to_be_visible()
-
     # Reopen both from the closed workspaces dropdown
     pill = layout.get_closed_workspaces_pill()
     expect(pill).to_be_visible()
     expect(pill).to_contain_text("2")
     pill.click()
 
-    dropdown = layout.get_closed_workspaces_dropdown()
-    rows = dropdown.get_rows()
+    rows = layout.get_closed_workspaces_dropdown().get_rows()
     expect(rows).to_have_count(2)
     rows.nth(0).click()
     expect(workspace_tabs).to_have_count(1)
 
     pill.click()
-    rows = dropdown.get_rows()
+    rows = layout.get_closed_workspaces_dropdown().get_rows()
     expect(rows).to_have_count(1)
     rows.nth(0).click()
     expect(workspace_tabs).to_have_count(2)
@@ -421,10 +413,11 @@ def test_close_after_reopen_from_home_page(
     layout.close_workspace_tab(0)
     expect(workspace_tabs).to_have_count(1)
 
-    # Wait for any out-of-order WebSocket updates to arrive
-    page.wait_for_timeout(3000)
-
-    # Verify the workspace stays closed — dropdown path
+    # Wait for the close to round-trip (the pill reflects the now-closed
+    # workspace) rather than sleeping a fixed window, then confirm an
+    # out-of-order open PATCH response didn't reopen it.
+    closed_pill = layout.get_closed_workspaces_pill()
+    expect(closed_pill).to_be_visible()
     expect(workspace_tabs).to_have_count(1)
 
 
@@ -448,6 +441,7 @@ def test_close_after_reopen_from_home(
     """
     page = sculptor_instance_.page
     layout = PlaywrightProjectLayoutPage(page=page)
+    home_page = PlaywrightHomePage(page)
 
     start_task_and_wait_for_ready(page, prompt="Task A", workspace_name="Home Close A")
     start_task_and_wait_for_ready(page, prompt="Task B", workspace_name="Home Close B")
@@ -464,7 +458,6 @@ def test_close_after_reopen_from_home(
 
     # Reopen the first workspace from the Home page
     navigate_to_home_page(page)
-    home_page = PlaywrightHomePage(page)
     first_row = home_page.get_workspace_rows().filter(has_text="Home Close A")
     expect(first_row).to_be_visible()
     first_row.click()
@@ -481,10 +474,11 @@ def test_close_after_reopen_from_home(
     layout.close_workspace_tab(0)
     expect(workspace_tabs).to_have_count(1)
 
-    # Wait for any out-of-order WebSocket updates to arrive
-    page.wait_for_timeout(3000)
-
-    # Verify the workspace stays closed — Home page path
+    # Wait for the close to round-trip (the pill reflects the now-closed
+    # workspace) rather than sleeping, then confirm an out-of-order open PATCH
+    # response didn't reopen it.
+    closed_pill = layout.get_closed_workspaces_pill()
+    expect(closed_pill).to_be_visible()
     expect(workspace_tabs).to_have_count(1)
 
 
@@ -539,7 +533,9 @@ def test_localstorage_migration_preserves_closed_state(
     # start as false).
     page.reload()
 
-    # The open workspace should have a tab; the closed one should not
+    # The open workspace should have a tab; the closed one should not. The
+    # migration's batch PATCH runs during hydration — the auto-retrying count
+    # assertion waits it out, so no fixed sleep is needed.
     expect(workspace_tabs).to_have_count(1)
 
     # The closed workspace should appear in the closed workspaces dropdown

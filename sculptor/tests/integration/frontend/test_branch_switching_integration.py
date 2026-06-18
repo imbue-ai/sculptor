@@ -2,23 +2,24 @@
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.chat_panel import select_model_by_name
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
+from sculptor.testing.elements.user_config import enable_clone_workspaces
 from sculptor.testing.elements.user_config import enable_in_place_workspaces
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
+from sculptor.testing.pages.new_workspace_modal_page import PlaywrightNewWorkspaceModalPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
+from sculptor.testing.playwright_utils import open_new_workspace_modal
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
 
-@user_story("to create workspaces from different branches using the branch selector")
+@user_story("to create a clone workspace from a different branch using the branch selector")
 def test_branch_switching_with_untracked_file(sculptor_instance_: SculptorInstance) -> None:
-    """Test that sets up a test repo with two branches A and B as well as a single untracked file,
-    checks out branch A, starts sculptor, and uses the branch selector on the New Workspace page
-    to create a workspace cloned from branch B.
+    """Set up a test repo with branches A and B plus an untracked file, check out
+    branch A, start Sculptor, and use the branch selector in the New Workspace
+    modal to create a CLONE workspace from branch B.
     """
     page = sculptor_instance_.page
 
@@ -53,35 +54,30 @@ def test_branch_switching_with_untracked_file(sculptor_instance_: SculptorInstan
     assert branch_a in all_branches, f"Branch {branch_a} not found in repo. Available branches: {all_branches}"
     assert branch_b in all_branches, f"Branch {branch_b} not found in repo. Available branches: {all_branches}"
 
-    # We should already be on the Add Workspace page (cleanup deletes all workspaces).
-    # The default mode is Clone, so the branch selector should be editable.
-    add_workspace_page = PlaywrightAddWorkspacePage(page=page)
-    submit_button = add_workspace_page.get_submit_button()
-    expect(submit_button).to_be_visible()
+    # Clone mode is opt-in — enable it before opening the modal.
+    enable_clone_workspaces(page)
 
-    # Fill in the workspace name (required field)
-    add_workspace_page.get_workspace_name_input().fill("Branch B workspace")
+    open_new_workspace_modal(page)
+    add_workspace = PlaywrightNewWorkspaceModalPage(page=page)
+    add_workspace.get_workspace_name_input().fill("Branch B workspace")
+    add_workspace.select_clone_mode()
 
-    # Select branch B via the branch selector on the New Workspace page
-    add_workspace_page.select_branch(branch_b)
+    # Select branch B as the clone source via the branch selector.
+    add_workspace.select_branch(branch_b)
 
-    # Submit to create the workspace (no prompt on the Add Workspace page)
-    expect(submit_button).to_be_enabled()
-    submit_button.click()
+    add_workspace.submit_and_wait_for_chat_panel()
 
-    # Wait for the chat panel to appear (we navigated to the workspace/agent page)
+    # Switch to the Fake Claude model on the chat panel, then send a prompt.
     task_page = PlaywrightTaskPage(page=page)
     chat_panel = task_page.get_chat_panel()
-    expect(chat_panel).to_be_visible()
-
-    # Switch to the Fake Claude model on the chat panel, then send the prompt.
     select_model_by_name(chat_panel=chat_panel, model_name=FAKE_CLAUDE_MODEL_NAME)
     send_chat_message(chat_panel=chat_panel, message="Hello!")
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    # Clone mode should not show a mode badge
+    # Clone mode shows a "clone" badge on the workspace page.
     mode_badge = task_page.get_mode_badge()
-    expect(mode_badge).not_to_be_visible()
+    expect(mode_badge).to_be_visible()
+    expect(mode_badge).to_have_text("clone")
 
 
 @user_story("to see task mode displayed correctly on the workspace page")
@@ -92,27 +88,16 @@ def test_in_place_mode_displayed_correctly(sculptor_instance_: SculptorInstance)
     # Enable the experimental in-place workspaces flag so the mode selector is visible.
     enable_in_place_workspaces(page)
 
-    # We should already be on the Add Workspace page (cleanup deletes all workspaces).
-    add_workspace_page = PlaywrightAddWorkspacePage(page=page)
-    submit_button = add_workspace_page.get_submit_button()
-    expect(submit_button).to_be_visible()
+    open_new_workspace_modal(page)
+    add_workspace = PlaywrightNewWorkspaceModalPage(page=page)
+    add_workspace.get_workspace_name_input().fill("In-place workspace")
+    add_workspace.select_in_place_mode()
 
-    # Fill in the workspace name (required field)
-    add_workspace_page.get_workspace_name_input().fill("In-place workspace")
+    add_workspace.submit_and_wait_for_chat_panel()
 
-    # Switch to in-place mode via the mode selector dropdown.
-    add_workspace_page.select_mode(ElementIDs.MODE_OPTION_IN_PLACE)
-
-    # Submit to create the workspace (no prompt on the Add Workspace page)
-    expect(submit_button).to_be_enabled()
-    submit_button.click()
-
-    # Wait for the chat panel to appear (we navigated to the workspace/agent page)
+    # Switch to the Fake Claude model on the chat panel, then send a prompt.
     task_page = PlaywrightTaskPage(page=page)
     chat_panel = task_page.get_chat_panel()
-    expect(chat_panel).to_be_visible()
-
-    # Switch to the Fake Claude model on the chat panel, then send the prompt.
     select_model_by_name(chat_panel=chat_panel, model_name=FAKE_CLAUDE_MODEL_NAME)
     send_chat_message(chat_panel=chat_panel, message="Hello in-place!")
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)

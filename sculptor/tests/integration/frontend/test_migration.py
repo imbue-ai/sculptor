@@ -18,7 +18,8 @@ from sculptor.config.user_config import UserConfig
 from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.dependency_stubs import DependencyState
 from sculptor.testing.dependency_stubs import stub_dependency
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
+from sculptor.testing.pages.new_workspace_modal_page import PlaywrightNewWorkspaceModalPage
+from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.resources import custom_sculptor_folder_populator
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
@@ -35,6 +36,7 @@ def _make_test_config() -> UserConfig:
         instance_id=hashlib.md5(os.urandom(64)).hexdigest(),
         is_error_reporting_enabled=True,
         is_product_analytics_enabled=True,
+        is_llm_logs_enabled=True,
         is_session_recording_enabled=True,
         is_privacy_policy_consented=True,
         is_telemetry_level_set=True,
@@ -88,11 +90,14 @@ def test_inplace_bootstrap_and_workspace_operations(
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
 
-        add_workspace_page = PlaywrightAddWorkspacePage(page)
-
-        # Verify the Add Workspace page loaded — bootstrap succeeded
+        # Verify the create surface is reachable, confirming bootstrap
+        # succeeded: the topbar "+" (when workspaces exist) or the inline
+        # new-workspace form's submit button (on an empty Home, where the "+"
+        # is hidden).
+        layout = PlaywrightProjectLayoutPage(page=page)
+        modal = PlaywrightNewWorkspaceModalPage(page=page)
         try:
-            expect(add_workspace_page.get_submit_button()).to_be_visible(timeout=45_000)
+            expect(layout.get_add_workspace_button().or_(modal.get_submit_button())).to_be_visible(timeout=45_000)
         except AssertionError:
             _dump_diagnostics(page, instance.sculptor_folder, "bootstrap")
             raise

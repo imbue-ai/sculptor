@@ -7,7 +7,6 @@ import { setActiveTabByIdAtom, setAgentForWorkspaceAtom, workspaceAtomFamily } f
 type ImbueNavigationFunctions = {
   navigateToWorkspace: (workspaceID: string) => void;
   navigateToAgent: (workspaceID: string, agentID: string) => void;
-  navigateToAddWorkspace: (draftId?: string) => void;
   navigateToHome: () => void;
   navigateToGlobalSettings: (section?: string) => void;
   navigateToRepoSetupCommand: (projectId: string) => void;
@@ -49,12 +48,6 @@ export const useImbueNavigate = (): ImbueNavigationFunctions => {
       },
       [navigate, setActiveTabById, setAgentForWorkspace],
     ),
-    navigateToAddWorkspace: useCallback(
-      (draftId?: string): void => {
-        navigate(`/ws/new/${draftId ?? crypto.randomUUID()}`);
-      },
-      [navigate],
-    ),
     navigateToHome: useCallback((): void => {
       navigate(`/home`);
     }, [navigate]),
@@ -82,8 +75,6 @@ export const useImbueNavigate = (): ImbueNavigationFunctions => {
 type ImbueLocationType = {
   isAgentRoute: boolean;
   isWorkspaceRoute: boolean;
-  isAddWorkspaceRoute: boolean;
-  addWorkspaceDraftId: string | null;
   isHomeRoute: boolean;
   isSettingsRoute: boolean;
   isComponentGalleryRoute: boolean;
@@ -98,28 +89,21 @@ export const useImbueLocation = (): ImbueLocationType => {
   const pathname = location.pathname;
 
   const isAgentRoute = /^\/ws\/[^/]+\/agent\/[^/]+$/.test(pathname);
-  const addWorkspaceMatch = pathname.match(/^\/ws\/new\/([^/]+)$/);
-  const isAddWorkspaceRoute = /^\/ws\/new(\/[^/]+)?$/.test(pathname);
-  const addWorkspaceDraftId = addWorkspaceMatch ? addWorkspaceMatch[1] : null;
   const isHomeRoute = /^\/home$/.test(pathname);
   const isSettingsRoute = /^\/settings$/.test(pathname);
   const isComponentGalleryRoute = /^\/component-gallery$/.test(pathname);
-  // A "workspace route" means we're viewing a specific workspace (or one of
-  // its agents). Excludes the new-workspace draft page (/ws/new/...).
-  const isWorkspaceRoute = /^\/ws\/(?!new\b)[^/]+/.test(pathname);
+  const isWorkspaceRoute = /^\/ws\/[^/]+/.test(pathname);
 
   // Parse the workspace + agent ids from the path. We can't use `useParams`
   // here because `useImbueLocation` is called outside the matched <Route>
   // tree (e.g. from the global CommandPalette), so it has no params context.
-  const workspaceMatch = pathname.match(/^\/ws\/(?!new\b)([^/?]+)(?:\/agent\/([^/?]+))?/);
+  const workspaceMatch = pathname.match(/^\/ws\/([^/?]+)(?:\/agent\/([^/?]+))?/);
   const workspaceId = workspaceMatch ? (workspaceMatch[1] ?? null) : null;
   const agentId = workspaceMatch ? (workspaceMatch[2] ?? null) : null;
 
   return {
     isAgentRoute,
     isWorkspaceRoute,
-    isAddWorkspaceRoute,
-    addWorkspaceDraftId,
     isHomeRoute,
     isSettingsRoute,
     isComponentGalleryRoute,

@@ -31,7 +31,7 @@ from playwright.sync_api import expect
 from sculptor.config.user_config import DependencyPaths
 from sculptor.config.user_config import UserConfig
 from sculptor.services.user_config.user_config import save_config
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
+from sculptor.testing.pages.new_workspace_modal_page import PlaywrightNewWorkspaceModalPage
 from sculptor.testing.pages.onboarding_page import PlaywrightOnboardingPage
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import soft_reload_page
@@ -203,7 +203,7 @@ def test_onboarding_skip_account_setup(sculptor_instance_factory_: SculptorInsta
         expect(add_repo_step).to_be_visible()
         add_repo_step.complete_step(str(sculptor_instance_factory_.base_repo.base_path))
 
-        add_workspace_page = PlaywrightAddWorkspacePage(page)
+        add_workspace_page = PlaywrightNewWorkspaceModalPage(page=page)
         expect(add_workspace_page.get_submit_button()).to_be_visible()
 
         # Settings → Privacy shows the unset email and the enabled switch.

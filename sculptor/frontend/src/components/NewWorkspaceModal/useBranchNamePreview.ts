@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { WorkspaceInitializationStrategy } from "~/api";
 import { branchExists, previewBranchName, WorkspaceInitializationStrategy as Strategy } from "~/api";
@@ -14,6 +14,12 @@ type BranchNamePreviewState = {
   isLoading: boolean;
   /** Result of the debounced `branch-exists` check on `displayedValue`. */
   collision: BranchNameCollisionState;
+  /**
+   * Re-fetch a fresh auto-filled name. Useful as a "shuffle" affordance —
+   * if the user is already in auto mode, the preview effect's normal
+   * deps don't change, so this nonce-bump is what forces a new fetch.
+   */
+  shuffle: () => void;
 };
 
 type UseBranchNamePreviewArgs = {
@@ -36,12 +42,20 @@ export function useBranchNamePreview({
   const [preview, setPreview] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [collision, setCollision] = useState<BranchNameCollisionState>("unknown");
+  // Bumped by `shuffle()` to force the auto-fill effect to re-run
+  // even when no other dep changed (e.g. user clicks shuffle while
+  // already in auto mode with the same workspace name).
+  const [shuffleNonce, setShuffleNonce] = useState<number>(0);
 
   const previewRequestId = useRef<number>(0);
   const collisionRequestId = useRef<number>(0);
 
   const isManuallyEdited = override !== null;
   const displayedValue = override ?? preview;
+
+  const shuffle = useCallback((): void => {
+    setShuffleNonce((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     if (mode === Strategy.IN_PLACE || !projectId || isManuallyEdited) {
@@ -71,7 +85,7 @@ export function useBranchNamePreview({
     return (): void => {
       window.clearTimeout(timer);
     };
-  }, [projectId, workspaceName, mode, isManuallyEdited]);
+  }, [projectId, workspaceName, mode, isManuallyEdited, shuffleNonce]);
 
   useEffect(() => {
     if (mode === Strategy.IN_PLACE || !projectId) {
@@ -106,5 +120,5 @@ export function useBranchNamePreview({
     };
   }, [projectId, displayedValue, mode]);
 
-  return { preview, displayedValue, isLoading, collision };
+  return { preview, displayedValue, isLoading, collision, shuffle };
 }

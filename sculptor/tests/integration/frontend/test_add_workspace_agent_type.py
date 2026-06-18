@@ -14,7 +14,7 @@ from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
 from sculptor.testing.elements.terminal import expect_terminal_panel_replaces_chat
 from sculptor.testing.elements.user_config import disable_pi_agent
 from sculptor.testing.elements.user_config import enable_pi_agent
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.playwright_utils import open_new_workspace_modal
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -28,7 +28,7 @@ def test_agent_type_select_visible_with_claude_default(
 
     # The picker is no longer flag-gated — visible for everyone.
     disable_pi_agent(page)
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_modal(page)
     picker = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_AGENT_TYPE_SELECT)
     expect(picker).to_be_visible()
     expect(picker).to_contain_text("Claude")
@@ -42,7 +42,7 @@ def test_pi_option_gated_behind_pi_agent_flag(
 
     # The flag is sticky on the shared instance — reset it defensively.
     disable_pi_agent(page)
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_modal(page)
     picker = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_AGENT_TYPE_SELECT)
     picker.click()
     expect(page.get_by_test_id(ElementIDs.AGENT_TYPE_OPTION_CLAUDE)).to_be_visible()
@@ -52,7 +52,7 @@ def test_pi_option_gated_behind_pi_agent_flag(
 
     try:
         enable_pi_agent(page)
-        navigate_to_add_workspace_page(page)
+        open_new_workspace_modal(page)
         picker.click()
         expect(page.get_by_test_id(ElementIDs.AGENT_TYPE_OPTION_PI)).to_be_visible()
         page.keyboard.press("Escape")
@@ -103,6 +103,6 @@ def test_first_agent_type_defaults_to_shared_last_used(
     # And the next new-workspace form opens preset to Terminal. (No cleanup
     # needed: the per-test browser reset clears localStorage, so the MRU
     # cannot leak into other tests.)
-    navigate_to_add_workspace_page(page)
+    open_new_workspace_modal(page)
     picker = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_AGENT_TYPE_SELECT)
     expect(picker).to_contain_text("Terminal")

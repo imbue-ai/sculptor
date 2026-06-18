@@ -29,7 +29,7 @@ vi.mock("../../../common/openInApp/items.tsx", () => {
 import { buildWorkspaceActionsProvider } from "../dynamic/workspaceActions.ts";
 
 const ROOT_CTX: PaletteContext = {
-  route: { isHome: true, isWorkspace: false, isSettings: false, isAddWorkspace: false, isAgent: false },
+  route: { isHome: true, isWorkspace: false, isSettings: false, isAgent: false },
   activeWorkspaceId: null,
   activeAgentId: null,
   hasChatPanel: false,
@@ -58,7 +58,8 @@ const makeCommandRuntime = (): CommandRuntime => {
   const noop = (): void => {};
   return {
     store: getDefaultStore(),
-    navigate: { toHome: noop, toSettings: noop, toAddWorkspace: noop, toWorkspace: vi.fn(), toAgent: vi.fn() },
+    navigate: { toHome: noop, toSettings: noop, toWorkspace: vi.fn(), toAgent: vi.fn() },
+    modal: { openNewWorkspaceFromPalette: noop },
     ui: {
       toggleHelpDialog: noop,
       toggleDevPanel: noop,

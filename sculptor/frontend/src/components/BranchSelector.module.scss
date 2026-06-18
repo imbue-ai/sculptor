@@ -1,13 +1,24 @@
 .dropdownButton {
-  color: var(--accent-11);
+  color: var(--gray-12);
   font-size: var(--font-size-1);
   font-weight: var(--font-weight-medium);
   max-width: 200px;
   overflow: hidden;
+
+  // The trigger is a flex row of `<icon> source <branch-name>`; the
+  // branch name truncates via `<Text truncate>`, but without an
+  // explicit `flex-shrink: 0` on the icon, flexbox happily shrinks
+  // the SVG too once the text overflows — leaving a 12px lucide
+  // icon collapsed to ~9px next to a long branch name. Anchor it
+  // here so the icon stays at its declared size regardless of the
+  // selected branch's length.
+  svg {
+    flex-shrink: 0;
+  }
 }
 
 .infoIcon {
-  color: var(--accent-11);
+  color: var(--gray-10);
 }
 
 .branchName {
@@ -15,7 +26,7 @@
 }
 
 .selectorLabel {
-  color: var(--accent-9);
+  color: var(--gray-10);
   font-size: var(--font-size-1);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-regular);
 }

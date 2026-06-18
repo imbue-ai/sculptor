@@ -11,17 +11,12 @@ import re
 import subprocess
 from pathlib import Path
 
-import playwright.sync_api
 from playwright.sync_api import Page
 from playwright.sync_api import expect
-from tenacity import retry
-from tenacity import retry_if_exception_type
-from tenacity import stop_after_attempt
-from tenacity import wait_fixed
 
 from sculptor.testing.elements.user_config import _set_user_config_flag
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.pages.new_workspace_modal_page import PlaywrightNewWorkspaceModalPage
+from sculptor.testing.playwright_utils import open_new_workspace_modal
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
@@ -29,22 +24,13 @@ from sculptor.testing.user_stories import user_story
 def _create_worktree_workspace(page: Page, workspace_name: str) -> tuple[str, str]:
     """Create a worktree workspace and return `(branch_name, workspace_id)`.
 
-    Worktree mode is the default, so no mode-selector interaction is needed.
-    Waits for the branch-name preview to settle to the slug derived from
-    ``workspace_name`` — otherwise the test can race with the initial
-    empty-workspace-name preview (which returns a random ``<adj>-<noun>``
-    slug) and pick that up instead.
+    Worktree is the default mode, so there's no mode selection to make.
     """
-    navigate_to_add_workspace_page(page)
-    add_ws_page = PlaywrightAddWorkspacePage(page=page)
-    add_ws_page.get_workspace_name_input().fill(workspace_name)
-
-    branch_input = add_ws_page.get_branch_name_input()
-    slug_pattern = re.sub(r"[^a-z0-9]+", "-", workspace_name.lower()).strip("-")
-    expect(branch_input).to_have_value(re.compile(rf".*{re.escape(slug_pattern)}.*"))
-    branch_name = branch_input.input_value()
-
-    add_ws_page.submit_and_wait_for_chat_panel()
+    open_new_workspace_modal(page)
+    add_workspace = PlaywrightNewWorkspaceModalPage(page=page)
+    add_workspace.get_workspace_name_input().fill(workspace_name)
+    branch_name = add_workspace.wait_for_branch_preview()
+    add_workspace.submit_and_wait_for_chat_panel()
 
     expect(page).to_have_url(re.compile(r".*/ws/(ws_[a-z0-9]+)/"))
     match = re.search(r"/ws/(ws_[a-z0-9]+)/", page.url)
@@ -101,21 +87,14 @@ def _commit_on_worktree(worktree_path: Path, message: str) -> None:
     )
 
 
-@retry(
-    retry=retry_if_exception_type(playwright.sync_api.Error),
-    stop=stop_after_attempt(3),
-    wait=wait_fixed(1),
-    reraise=True,
-)
 def _delete_workspace_via_api(page: Page, workspace_id: str) -> None:
-    # Retry on transient ECONNRESET under heavy offload-sandbox load (SCU-773).
     base_url = page.url.split("#")[0].rstrip("/")
     response = page.request.delete(f"{base_url}/api/v1/workspaces/{workspace_id}")
     assert response.ok, f"DELETE workspace failed: {response.status} {response.text()}"
 
 
 def _wait_for_worktree_removed(
-    page: Page, user_repo_path: Path, worktree_path: Path, timeout_ms: int = 30_000
+    page: Page, user_repo_path: Path, worktree_path: Path, timeout_ms: int = 10_000
 ) -> None:
     deadline_steps = timeout_ms // 100
     for _ in range(deadline_steps):

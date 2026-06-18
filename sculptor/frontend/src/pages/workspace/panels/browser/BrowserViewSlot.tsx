@@ -18,7 +18,7 @@ import { useBrowserWebview } from "./useBrowserWebview";
 // at the root of the React tree. Lifetime is tied to the registry, not
 // to whichever route is currently rendered, so the webContents (and
 // in-page state) survives panel-tab switches, zone visibility flips, and
-// route detours through /settings or /ws/new.
+// route detours through /settings or the home page.
 export const BrowserViewSlot = ({ workspaceId }: { workspaceId: string }): ReactElement => {
   const setPanelState = useSetAtom(browserPanelStateAtomFamily(workspaceId));
   const setStatus = useSetAtom(browserViewStatusAtomFamily(workspaceId));

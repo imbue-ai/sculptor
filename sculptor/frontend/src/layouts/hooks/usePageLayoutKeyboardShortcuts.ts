@@ -5,16 +5,17 @@ import { ElementIds } from "../../api";
 import { CHAT_INPUT_ELEMENT_ID } from "../../common/Constants.ts";
 import { keybindingsMapAtom } from "../../common/keybindings/atoms.ts";
 import type { KeybindingId } from "../../common/keybindings/types.ts";
-import { useImbueNavigate } from "../../common/NavigateUtils.ts";
 import { isDismissibleOverlayOpen } from "../../common/overlayUtils.ts";
 import { shouldHandleKeybinding } from "../../common/ShortcutUtils.ts";
 import { chatSearchFocusRequestAtom, chatSearchVisibleAtom } from "../../common/state/atoms/chatSearch.ts";
 import { themeBuilderSettingsAtom } from "../../common/state/atoms/themeBuilder.ts";
 import { useDevPanel } from "../../common/state/hooks/useDevPanel.ts";
 import { useHelpDialog } from "../../common/state/hooks/useHelpDialog.ts";
+import { useHomeToggle } from "../../common/state/hooks/useHomeToggle.ts";
 import { useOpenSettings } from "../../common/state/hooks/useOpenSettings.ts";
 import { useResolvedTheme } from "../../common/Utils.ts";
 import { useCommandPalette } from "../../components/CommandPalette";
+import { useNewWorkspaceModal } from "../../components/NewWorkspaceModal/hooks.ts";
 import { useFocusMode, useSideToggle, useZenMode } from "../../components/panels/hooks.ts";
 import { chatToolDensityAtom } from "../../pages/workspace/components/chat-alpha/atoms.ts";
 
@@ -27,7 +28,8 @@ export const usePageLayoutKeyboardShortcuts = (): void => {
     openTo: openCommandPaletteTo,
   } = useCommandPalette();
   const { toggleHelpDialog } = useHelpDialog();
-  const { navigateToAddWorkspace, navigateToHome } = useImbueNavigate();
+  const { open: openNewWorkspaceModal } = useNewWorkspaceModal();
+  const { toggleHome } = useHomeToggle();
   const setChatSearchVisible = useSetAtom(chatSearchVisibleAtom);
   const setFocusRequest = useSetAtom(chatSearchFocusRequestAtom);
   const openSettings = useOpenSettings();
@@ -149,10 +151,9 @@ export const usePageLayoutKeyboardShortcuts = (): void => {
         [
           "new_workspace",
           (): void => {
-            if (isCommandPaletteOpen) {
-              closeCommandPalette();
-            }
-            navigateToAddWorkspace();
+            // The hook closes the palette internally when the modal
+            // opens (mutual exclusion), so we don't need to do it here.
+            openNewWorkspaceModal("keybinding");
           },
         ],
         [
@@ -166,7 +167,10 @@ export const usePageLayoutKeyboardShortcuts = (): void => {
           "open_workspace",
           (): void => openCommandPaletteTo("workspaces.switch"),
         ],
-        ["home", (): void => navigateToHome()],
+        // Home keybinding mirrors the topbar Home button: toggle between
+        // /home and the last non-home pathname. Pressing the shortcut
+        // while already on /home pops back to wherever the user was.
+        ["home", (): void => toggleHome()],
         ["settings", (): void => openSettings()],
         [
           "toggle_theme",
@@ -217,8 +221,8 @@ export const usePageLayoutKeyboardShortcuts = (): void => {
     toggleDevPanel,
     toggleCommandPalette,
     openCommandPaletteTo,
-    navigateToAddWorkspace,
-    navigateToHome,
+    openNewWorkspaceModal,
+    toggleHome,
     openSettings,
     toggleHelpDialog,
     keybindingsMap,

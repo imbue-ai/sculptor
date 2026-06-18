@@ -12,7 +12,7 @@ import type { CommandRuntime } from "../runtime.ts";
 import type { PaletteContext } from "../types.ts";
 
 const ROOT_CTX: PaletteContext = {
-  route: { isHome: true, isWorkspace: false, isSettings: false, isAddWorkspace: false, isAgent: false },
+  route: { isHome: true, isWorkspace: false, isSettings: false, isAgent: false },
   activeWorkspaceId: null,
   activeAgentId: null,
   hasChatPanel: false,
@@ -30,9 +30,11 @@ const makeRuntime = (): CommandRuntime => {
     navigate: {
       toHome: noop,
       toSettings: noop,
-      toAddWorkspace: noop,
       toWorkspace: vi.fn(),
       toAgent: vi.fn(),
+    },
+    modal: {
+      openNewWorkspaceFromPalette: noop,
     },
     ui: {
       toggleHelpDialog: noop,

@@ -28,7 +28,6 @@ vi.mock("~/common/NavigateUtils.ts", () => ({
   useImbueNavigate: (): Record<string, ReturnType<typeof vi.fn>> => ({
     navigateToWorkspace: vi.fn(),
     navigateToAgent: vi.fn(),
-    navigateToAddWorkspace: vi.fn(),
     navigateToHome: vi.fn(),
     navigateToGlobalSettings: vi.fn(),
     navigateToComponentGallery: vi.fn(),

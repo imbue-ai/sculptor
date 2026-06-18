@@ -10,8 +10,8 @@ class PlaywrightHomePage(PlaywrightIntegrationTestPage):
     def get_workspace_rows(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
 
-    def get_empty_state(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.ADD_WORKSPACE_EMPTY_STATE)
+    def get_inline_new_workspace_form(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.HOME_NEW_WORKSPACE_FORM)
 
     def get_search_input(self) -> Locator:
         return self._page.get_by_placeholder("Search workspaces...")

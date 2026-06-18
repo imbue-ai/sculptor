@@ -62,71 +62,80 @@ def expect_app_not_onboarding(page: Page, app_element: Locator, *, timeout: int 
         )
 
 
+def get_app_ready_beacon(page: Page) -> Locator:
+    """Locator that resolves once the SPA shell has finished its initial render.
+
+    The beacon is the topbar "+" (``ADD_WORKSPACE_BUTTON``) OR the inline
+    new-workspace form's submit button (``START_TASK_BUTTON``): the "+" is
+    hidden on an empty Home, where the inline form is the create surface, so
+    either one means the app rendered. The two are mutually exclusive on
+    /home, so the union never matches two elements — do NOT append ``.first``
+    when handing this to ``expect_app_not_onboarding``, which composes its own
+    ``.or_(onboarding)`` that a trailing ``.first`` would break.
+    """
+    return page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).or_(page.get_by_test_id(ElementIDs.START_TASK_BUTTON))
+
+
 def navigate_to_home_page(page: Page) -> None:
     """Navigate to the Home page (/home).
 
-    Clicks the Home button in the top bar, or falls back to direct URL
-    navigation when the button is not visible (e.g. on settings page).
+    Clicks the Home button when on a non-home route, or reloads when
+    already on /home so the workspace list refetches. ``RecentWorkspaces``
+    only fetches once on mount, so a no-op home click after CLI/external
+    workspace changes would leave the list stale.
     """
     home_button = page.get_by_test_id(ElementIDs.HOME_BUTTON)
-    if home_button.is_visible():
+    is_on_home = "#/home" in page.url
+
+    if is_on_home:
+        # Force HomePage / RecentWorkspaces to remount and refetch via a
+        # full SPA reload — useHomeToggle treats Home button on /home as a
+        # no-op when there are no visible tabs to bounce to, and a soft
+        # ``page.goto(page.url)`` to a hash-only URL doesn't tear down the
+        # SPA, so RecentWorkspaces wouldn't pick up CLI-created workspaces.
+        # ``page.reload()`` is avoided because it triggers
+        # ERR_INSUFFICIENT_RESOURCES on CI runners.
+        full_spa_reload(page, target_hash="#/home")
+    elif home_button.is_visible():
         home_button.click()
-        # Wait for the workspace list or empty state to appear
-        workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
-        empty_state = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_EMPTY_STATE)
-        expect(workspace_rows.first.or_(empty_state)).to_be_visible(timeout=10000)
-        return
+    else:
+        # Home button not visible — navigate via URL. Append the hash directly
+        # to the base (no extra "/"): an injected slash would turn a document
+        # path like ".../index.html" into ".../index.html/", breaking
+        # relative-to-document asset resolution under the sculptor://app origin.
+        base_url = page.url.split("#")[0].rstrip("/")
+        page.goto(f"{base_url}#/home")
 
-    # Home button not visible — navigate via URL. Append the hash directly to
-    # the base (no extra "/"): an injected slash would turn a document path
-    # like ".../index.html" into ".../index.html/", breaking relative-to-
-    # document asset resolution under the sculptor://app origin.
-    base_url = page.url.split("#")[0].rstrip("/")
-    page.goto(f"{base_url}#/home")
     workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
-    empty_state = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_EMPTY_STATE)
-    expect(workspace_rows.first.or_(empty_state)).to_be_visible(timeout=10000)
+    inline_new_workspace_form = page.get_by_test_id(ElementIDs.HOME_NEW_WORKSPACE_FORM)
+    expect(workspace_rows.first.or_(inline_new_workspace_form)).to_be_visible(timeout=10000)
 
 
-def navigate_to_add_workspace_page(page: Page) -> None:
-    """Navigate to the Add Workspace page (/ws/new).
+def open_new_workspace_modal(page: Page) -> None:
+    """Ensure the new-workspace form is visible with its inputs ready.
 
-    Clicks the "+" button in the workspace tabs bar, or is a no-op if the
-    submit button is already visible (i.e. we're already on the page).
-    Falls back to direct URL navigation when on a page that doesn't show
-    workspace controls (e.g. settings).
+    No-op when the submit button is already visible — either the modal is
+    open, or (on an empty Home) the inline form is already rendered.
+    Otherwise clicks the topbar "+" to open the modal.
 
-    If an "Open Workspace" tab already exists in the tab bar, clicks it
-    instead of creating a new one via "+".  This avoids creating duplicate
-    tabs when the add-workspace page is still loading (e.g. fetching projects).
+    The "+" is intentionally hidden on an empty Home (the inline form is the
+    create surface there), so we wait for *either* the create form or the
+    "+" and only click the "+" when the form isn't already showing.
     """
     submit_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
+    add_workspace_button = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
+
+    # Wait for either the create form (inline on an empty Home, or an
+    # already-open modal) or the topbar "+".  The early ``is_visible()`` check
+    # below doesn't wait, so on a freshly-spawned instance the SPA may still be
+    # on the loading spinner — polling on the union avoids racing the mount.
+    # ``.first`` keeps the assertion single-element (Playwright strict mode) for
+    # the brief windows where both a topbar "+" and a form submit button can be
+    # in the DOM at once (e.g. the "+" plus an open modal).
+    expect(submit_button.or_(add_workspace_button).first).to_be_visible(timeout=45_000)
     if submit_button.is_visible():
         return
-
-    # If an add-workspace tab already exists (e.g. from an earlier redirect or
-    # navigation), click it instead of creating a new one.  This handles the
-    # case where we're already on /ws/new/<draftId> but the form is still
-    # loading (showing a spinner while projects load).
-    add_workspace_tab = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_TAB)
-    if add_workspace_tab.count() > 0:
-        add_workspace_tab.first.click()
-        expect(submit_button).to_be_visible(timeout=45_000)
-        return
-
-    add_workspace_button = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
-    if add_workspace_button.is_visible():
-        add_workspace_button.click()
-        expect(submit_button).to_be_visible(timeout=45_000)
-        return
-
-    # Neither button visible (e.g. on settings page) — navigate via URL.
-    # Use the base URL without a hash to force the SPA to reinitialize from
-    # the root loader, which redirects to /ws/new.  A hash-only goto can be
-    # a no-op if the router thinks we're already on a /ws/new path.
-    base_url = page.url.split("#")[0].rstrip("/")
-    page.goto(base_url)
-    page.wait_for_load_state("domcontentloaded")
+    add_workspace_button.click()
     expect(submit_button).to_be_visible(timeout=45_000)
 
 
@@ -137,7 +146,8 @@ def reset_active_panel_to_files(page: Page) -> None:
     ``activePanelPerZone`` atom.  Calling this resets it through normal
     UI interaction so subsequent tests start with the default panel visible.
 
-    No-op if the sidebar icons aren't visible (e.g. on the Add Workspace page).
+    No-op if the sidebar icons aren't visible (e.g. when the new-workspace
+    modal is open or we're on the Home page).
     """
     files_icon = page.get_by_test_id(ElementIDs.PANEL_ICON_FILES)
     if files_icon.is_visible():
@@ -152,12 +162,11 @@ _MAX_WORKSPACE_DELETE_ITERATIONS = 50
 
 
 def delete_all_workspaces_via_ui(page: Page) -> None:
-    """Delete every workspace through the UI and land on the Add Workspace page.
+    """Delete every workspace through the UI and land on the Home page.
 
     Phase 1: For each open workspace tab, right-click → Delete → Confirm.
-    Phase 2: Navigate to the Add Workspace page, then delete any remaining
-    workspace rows (closed-but-not-deleted workspaces) via their inline
-    delete buttons.
+    Phase 2: Navigate to the Home page, then delete any remaining workspace
+    rows (closed-but-not-deleted workspaces) via their inline delete buttons.
     """
     # Dismiss any open popover/context menu that might intercept clicks.
     page.keyboard.press("Escape")
@@ -200,16 +209,6 @@ def delete_all_workspaces_via_ui(page: Page) -> None:
             close_btn.click()
             expect(tab).not_to_be_visible()
 
-    # Close extra "Open Workspace" tabs (multiple can exist now).
-    # Leave at most one — it won't have a close button when it's the sole tab.
-    add_workspace_tabs = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_TAB)
-    while add_workspace_tabs.count() > 1:
-        tab = add_workspace_tabs.first
-        tab.hover()
-        close_btn = tab.get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON)
-        expect(close_btn).to_be_visible()
-        close_btn.click()
-
     navigate_to_home_page(page)
 
     # Phase 2: Delete any remaining workspaces from the workspace list
@@ -250,18 +249,20 @@ def start_task_and_wait_for_ready(
     mode: str | None = None,
     agent_type: str | None = None,
 ) -> PlaywrightTaskPage:
-    """Create a workspace and agent through the Add Workspace UI.
+    """Create a workspace and agent through the new-workspace modal.
 
-    Navigates to the Add Workspace form by clicking the "+" button in the
-    workspace tabs bar, fills in the workspace name, clicks submit,
-    then waits for the agent chat page to appear.  If the Add Workspace form
-    is already showing (e.g. no workspaces exist yet), skips the "+" click.
+    Opens the new-workspace form — the topbar "+" modal, or the inline form
+    shown on an empty Home when no workspaces exist yet — fills in the
+    workspace name, clicks submit, then waits for the agent chat page to
+    appear.
 
-    The Add Workspace page no longer has a model selector, so the model
-    is switched on the chat panel once the workspace is ready.
+    The modal does not expose a model selector, so the model is switched
+    on the chat panel once the workspace is ready.
 
-    When *prompt* is provided, it is sent as the first chat message after the
-    workspace is created (the Add Workspace page has no prompt input).
+    When *prompt* is provided, it is sent as the first chat message after
+    creation. We deliberately don't use the modal's prompt textarea here:
+    callers expect ``select_model_by_name`` to apply, and chat-panel
+    sending is the only path that runs through the model-switch helper.
 
     When *prompt* is empty the agent is created in a waiting state and
     ``wait_for_agent_to_finish`` is ignored.
@@ -291,7 +292,7 @@ def start_task_and_wait_for_ready(
     if agent_type == "pi":
         enable_pi_agent(sculptor_page)
 
-    navigate_to_add_workspace_page(sculptor_page)
+    open_new_workspace_modal(sculptor_page)
 
     # Fill in the workspace name. Each call gets a unique name by default so
     # the auto-generated worktree branch (`<user>/<slug>`) doesn't collide
@@ -342,9 +343,9 @@ def start_task_and_wait_for_ready(
     chat_panel = task_page.get_chat_panel()
 
     # Switch the agent to the requested model on the chat panel, since the
-    # Add Workspace form no longer offers a model selector.  The model-selector
-    # click steals focus from the chat input, so restore it afterwards — tests
-    # that assert post-creation focus rely on this.
+    # new-workspace modal does not offer a model selector. The model-selector
+    # click steals focus from the chat input, so restore it afterwards —
+    # tests that assert post-creation focus rely on this.
     if model_name is not None:
         select_model_by_name(chat_panel=chat_panel, model_name=model_name)
     chat_input = chat_panel.get_chat_input()
@@ -493,8 +494,9 @@ def delete_project_via_settings(
     repos_section = settings_page.click_on_repositories()
     repos_section.remove_repo(project_name, path_contains=path_contains)
 
-    # Navigate back to the Add Workspace page after deletion
-    navigate_to_add_workspace_page(page)
+    # Re-open the new-workspace modal so callers see the same post-deletion
+    # state they got before the modal migration.
+    open_new_workspace_modal(page)
 
 
 def upload_file_via_api(page: Page, *, name: str, mime_type: str, content: bytes) -> str:
@@ -556,19 +558,39 @@ def soft_reload_page(page: Page, wait_until: str | None = None) -> None:
         page.goto(page.url)
 
 
-def navigate_away_and_back(page: Page) -> None:
-    """Navigate to the Add Workspace page and back to force Jotai store reinitialization.
+def trigger_root_loader(page: Page) -> None:
+    """Navigate to the bare URL so the SPA's rootLoader fires.
 
-    The Sculptor frontend caches state in Jotai atoms that are initialized from
-    localStorage on first load.  A hash-only navigation within the SPA does not
-    unload/reload atoms.  By navigating to a different route (``#/ws/new``) and
-    then back, we force the atoms to reinitialize from whatever values are
-    currently in localStorage.
+    ``spawn_instance`` lands directly on ``/#/home`` to skip the rootLoader.
+    Restart-style tests that want to exercise the loader's MRU / no-MRU
+    routing logic (the actual subject under test) can call this helper to
+    navigate through ``/`` and let the loader take them where it would.
+    """
+    base_url = page.url.split("#")[0].rstrip("/")
+    page.goto(base_url)
+
+
+def navigate_away_and_back(page: Page) -> None:
+    """Hash-navigate to /home and back to force component remount.
+
+    The state-restoration tests that use this helper (pending Q&A panels,
+    plan-mode revisions, etc.) want to verify that the workspace page
+    rebuilds the in-progress UI from atoms when the user clicks away and
+    comes back. They rely on Jotai's *in-memory* atom values — about:blank
+    or a real reload would wipe them and the test would assert against an
+    empty page instead. Hash-only navigation re-mounts the route's
+    component tree without unloading the SPA, which is the right grain:
+    components remount, atoms persist.
+
+    The pre-modal helper went to ``#/ws/new``; that route is gone, so
+    ``#/home`` is the modal-flow equivalent — it triggers a full
+    workspace-page unmount without reloading atoms.
     """
     current_url = page.url
     base_url = current_url.split("#")[0].rstrip("/")
-    page.goto(f"{base_url}#/ws/new")
-    expect(page.get_by_test_id(ElementIDs.START_TASK_BUTTON)).to_be_visible()
+    page.goto(f"{base_url}#/home")
+    # Confirm Home rendered before going back.
+    expect(get_app_ready_beacon(page)).to_be_visible()
     page.goto(current_url)
 
 

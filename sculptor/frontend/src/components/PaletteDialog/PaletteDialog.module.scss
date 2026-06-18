@@ -1,0 +1,45 @@
+.overlay {
+  background-color: rgba(0, 0, 0, 40%);
+  inset: 0;
+  position: fixed;
+  z-index: var(--z-modal);
+}
+
+// Raycast's panel is opaque, not translucent — the canonical
+// pacocoursey/cmdk Raycast demo uses a flat dark fill plus a single
+// hairline border and a soft shadow. Adding backdrop-filter would push
+// the look toward macOS Spotlight, which we explicitly do not want.
+//
+// Rendered inline (no Dialog.Portal) so it inherits the Radix
+// `.radix-themes` token scope, which is where `.dark` / `.light` CSS
+// variable overrides live.
+.content {
+  background: var(--color-panel-solid);
+  border: 1px solid var(--gray-a5);
+  border-radius: var(--radius-4);
+  box-shadow:
+    0 16px 70px rgba(0, 0, 0, 22%),
+    0 4px 16px rgba(0, 0, 0, 12%);
+  display: flex;
+  flex-direction: column;
+  left: 50%;
+  max-height: min(72vh, 560px);
+
+  // Radix Dialog.Content focuses itself on mount and the browser paints a
+  // default focus ring (blue in WebKit) AROUND the entire panel. The
+  // panel is already obviously focused — its own border + the dimmed
+  // overlay carry that signal — so we suppress both the default outline
+  // and the focus-visible variant.
+  outline: none;
+  overflow: hidden;
+  position: fixed;
+  top: 14%;
+  transform: translateX(-50%);
+  width: min(720px, 92vw);
+  z-index: calc(var(--z-modal) + 1);
+
+  &:focus,
+  &:focus-visible {
+    outline: none;
+  }
+}

@@ -7,19 +7,20 @@ to copy it copies the project-level repo branch instead.
 Root cause: The copy mechanism uses the project repo branch instead of the workspace's
 working directory branch (useWorkspaceBranch) to determine the branch name.
 
-Note: CLONE workspaces now always create their own branch (the requestedBranchName
-auto-fill from the New Workspace form), so the workspace's branch differs from the
-selected source branch. The test sets an explicit branch name so the expected value
-is deterministic.
+Note: CLONE workspaces always create their own branch (the requestedBranchName
+from the New Workspace form), so the workspace's branch differs from the selected
+source branch. The test sets an explicit branch name so the expected value is
+deterministic.
 """
 
 from playwright.sync_api import expect
 
+from sculptor.constants import ElementIDs
 from sculptor.testing.elements.clipboard import install_clipboard_interceptor
 from sculptor.testing.elements.clipboard import read_intercepted_clipboard
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
-from sculptor.testing.pages.task_page import PlaywrightTaskPage
-from sculptor.testing.playwright_utils import soft_reload_page
+from sculptor.testing.elements.user_config import enable_clone_workspaces
+from sculptor.testing.pages.new_workspace_modal_page import PlaywrightNewWorkspaceModalPage
+from sculptor.testing.playwright_utils import open_new_workspace_modal
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
@@ -51,42 +52,45 @@ def test_copy_branch_name_copies_workspace_branch(sculptor_instance_: SculptorIn
     # Switch back to the default branch so the project repo is on a different branch
     sculptor_instance_.repo.checkout_branch("testing")
 
-    # Soft-reload so the branch selector picks up the newly created branch
-    # (direct page reload causes ERR_INSUFFICIENT_RESOURCES on CI)
-    soft_reload_page(page)
-    add_ws_page = PlaywrightAddWorkspacePage(page=page)
-    expect(add_ws_page.get_submit_button()).to_be_visible()
+    # Enable clone mode. This reloads the page, which also makes the branch
+    # selector pick up the newly created feature_branch. After the reload we
+    # land on /home with the modal closed, so open it explicitly.
+    enable_clone_workspaces(page)
+    open_new_workspace_modal(page)
+    add_workspace = PlaywrightNewWorkspaceModalPage(page=page)
 
-    # Fill in the workspace name (required field)
-    add_ws_page.get_workspace_name_input().fill("Feature branch workspace")
+    add_workspace.get_workspace_name_input().fill("Feature branch workspace")
+    add_workspace.select_clone_mode()
 
     # Override the auto-filled branch name so we know exactly what the
-    # workspace's branch will be (the form default is `<user>/<slug>`).
-    branch_input = add_ws_page.get_branch_name_input()
+    # workspace's branch will be.
+    branch_input = add_workspace.get_branch_name_input()
     branch_input.fill(workspace_branch)
+    expect(branch_input).to_have_value(workspace_branch)
 
-    # Select feature_branch via the branch selector (the source to clone from)
-    add_ws_page.select_branch(feature_branch)
+    # Select feature_branch via the branch selector (the source to clone from).
+    add_workspace.select_branch(feature_branch)
 
     # Wait for the selector's displayed value to reflect the click before
     # submitting — without this, submit can fire before React commits the
     # `userSelectedBranch` state update and the request goes out with the
     # project's current branch instead of `feature_branch`.
-    expect(add_ws_page.get_branch_selector()).to_contain_text(feature_branch)
+    expect(add_workspace.get_branch_selector()).to_contain_text(feature_branch)
 
-    # Submit to create the workspace (no prompt on the Add Workspace page)
-    add_ws_page.submit_and_wait_for_chat_panel()
+    add_workspace.submit_and_wait_for_chat_panel()
 
-    # Clone mode should not show a mode badge (no experimental flags enabled)
-    task_page = PlaywrightTaskPage(page=page)
-    expect(task_page.get_mode_badge()).not_to_be_visible()
+    # Clone mode shows a "clone" badge on the workspace page.
+    mode_badge = page.get_by_test_id(ElementIDs.TASK_MODE_BADGE)
+    expect(mode_badge).to_be_visible()
+    expect(mode_badge).to_have_text("clone")
 
     # Install a clipboard interceptor so we can read what was written
     install_clipboard_interceptor(page)
 
-    # Wait for the branch name to load in the workspace banner (async, can take 1-2s)
-    # and click it to copy the value to the clipboard.
-    branch_element = task_page.get_branch_name_element()
+    # Wait for the branch name to load in the workspace banner and click it to
+    # copy the value to the clipboard.
+    branch_element = page.get_by_test_id(ElementIDs.BRANCH_NAME)
+    expect(branch_element).to_be_visible()
     expect(branch_element).to_have_text(workspace_branch)
     branch_element.click()
 

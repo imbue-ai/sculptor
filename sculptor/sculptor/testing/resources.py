@@ -20,7 +20,6 @@ from pytest_playwright.pytest_playwright import ArtifactsRecorder
 
 from sculptor.config.user_config import DependencyPaths
 from sculptor.config.user_config import UserConfig
-from sculptor.constants import ElementIDs
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.concurrency_group import ConcurrencyGroupState
 from sculptor.primitives.ids import create_organization_id
@@ -40,6 +39,7 @@ from sculptor.testing.mock_repo import MockRepoState
 from sculptor.testing.packaged_backend_frontend import PackagedBackendFrontend
 from sculptor.testing.packaged_electron_frontend import PackagedElectronFrontend
 from sculptor.testing.playwright_utils import expect_app_not_onboarding
+from sculptor.testing.playwright_utils import get_app_ready_beacon
 from sculptor.testing.playwright_utils import navigate_to_frontend
 from sculptor.testing.port_manager import PortManager
 from sculptor.testing.repo_resources import get_test_project_state
@@ -283,9 +283,9 @@ def _get_or_create_shared_instance(
     # Use a longer timeout than the default 30s for this initial check to
     # allow headroom for cold Electron starts on CI.
     t2 = time.monotonic()
-    add_ws_button = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
+    app_ready = get_app_ready_beacon(page)
     try:
-        expect_app_not_onboarding(page, add_ws_button, timeout=_INITIAL_RENDER_TIMEOUT_MS)
+        expect_app_not_onboarding(page, app_ready, timeout=_INITIAL_RENDER_TIMEOUT_MS)
     except Exception:
         logger.warning("[timing] SPA render failed after {:.2f}s", time.monotonic() - t2)
         if electron_frontend is not None:
@@ -424,21 +424,20 @@ def _create_packaged_instance(
     # Register the test project. Without this the app lands on /setup (no projects).
     packaged_frontend.register_project(repo_path)
 
-    # Full-reload to the root URL so the SPA rootLoader re-evaluates routing.
-    # It will call getActiveProjects(), find the newly registered project,
-    # and redirect to /ws/new.  We navigate to the bare URL (no hash) so
-    # the hash router starts at "/" and the rootLoader fires.  The previous
-    # approach of page.goto("#/ws/new") + page.reload() was unreliable in
-    # CDP mode: the hash-only goto could race with reload, leaving the page
-    # stuck on #/setup.
+    # Full-reload directly to /home so the SPA mounts on a known route
+    # without going through the rootLoader at "/". On an empty Home the
+    # inline new-workspace form renders (no overlay); tests that need the
+    # project-picker flow can navigate explicitly afterwards.
     base_url = page.url.split("#")[0].rstrip("/")
-    page.goto(base_url, wait_until="networkidle")
+    page.goto(f"{base_url}#/home", wait_until="networkidle")
 
     # Wait for the SPA to render — raise if onboarding shows instead of the main app.
-    logger.info("Waiting for SPA to render (checking for ADD_WORKSPACE_BUTTON or onboarding)")
-    add_ws_button = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
+    # Beacon is the topbar "+" OR the inline form's submit button (the "+" is
+    # hidden on an empty Home, where the inline form is the create surface).
+    logger.info("Waiting for SPA to render (checking for create surface or onboarding)")
+    app_ready = get_app_ready_beacon(page)
     try:
-        expect_app_not_onboarding(page, add_ws_button, timeout=_INITIAL_RENDER_TIMEOUT_MS)
+        expect_app_not_onboarding(page, app_ready, timeout=_INITIAL_RENDER_TIMEOUT_MS)
     except Exception:
         logger.error("SPA render failed. Page URL: {}", page.url)
         logger.error("Page content preview: {}", page.content()[:2000])
@@ -549,9 +548,7 @@ def _create_custom_command_instance(
 
     # Wait for the React SPA to render.
     try:
-        expect(
-            page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).or_(page.get_by_test_id(ElementIDs.START_TASK_BUTTON))
-        ).to_be_visible()
+        expect(get_app_ready_beacon(page)).to_be_visible()
     except Exception:
         electron_frontend.__exit__(None, None, None)
         raise

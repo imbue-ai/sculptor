@@ -23,32 +23,34 @@ import type { CommandRuntime } from "../runtime.ts";
 
 const noop = (): void => {};
 
-const makeRuntime = (): CommandRuntime =>
-  ({
-    store: getDefaultStore(),
-    navigate: { toHome: noop, toSettings: vi.fn(), toAddWorkspace: noop, toWorkspace: vi.fn(), toAgent: vi.fn() },
-    ui: {
-      toggleHelpDialog: noop,
-      toggleDevPanel: noop,
-      toggleZenMode: noop,
-      toggleFocusMode: noop,
-      toggleLeftPanel: noop,
-      toggleBottomPanel: noop,
-      toggleRightPanel: noop,
-      togglePanel: noop,
-      setTheme: vi.fn(),
-      focusChatInput: noop,
-      showChatSearch: noop,
-      jumpChatToBottom: noop,
-      nextWorkspaceTab: noop,
-      previousWorkspaceTab: noop,
-      nextAgent: noop,
-      previousAgent: noop,
-      openReportProblem: noop,
-    },
-    config: { updateField: vi.fn().mockResolvedValue(undefined) },
-    electron: { isAvailable: false, reloadWindow: noop },
-  }) as unknown as CommandRuntime;
+const makeRuntime = (): CommandRuntime => ({
+  store: getDefaultStore(),
+  navigate: { toHome: noop, toSettings: vi.fn(), toWorkspace: vi.fn(), toAgent: vi.fn() },
+  modal: { openNewWorkspaceFromPalette: noop },
+  ui: {
+    toggleHelpDialog: noop,
+    toggleDevPanel: noop,
+    toggleZenMode: noop,
+    toggleFocusMode: noop,
+    toggleLeftPanel: noop,
+    toggleBottomPanel: noop,
+    toggleRightPanel: noop,
+    togglePanel: noop,
+    setTheme: vi.fn(),
+    focusChatInput: noop,
+    showChatSearch: noop,
+    jumpChatToBottom: noop,
+    nextWorkspaceTab: noop,
+    previousWorkspaceTab: noop,
+    nextAgent: noop,
+    previousAgent: noop,
+    createAgent: noop,
+    openReportProblem: noop,
+    clearActiveTerminal: noop,
+  },
+  config: { updateField: vi.fn().mockResolvedValue(undefined) },
+  electron: { isAvailable: false, reloadWindow: noop },
+});
 
 describe("Appearance modes drift", () => {
   it("every mode in APPEARANCE_MODES has a corresponding palette command", () => {
@@ -82,7 +84,7 @@ describe("Appearance modes drift", () => {
       expect(cmd).toBeDefined();
       cmd!.perform({
         ctx: {
-          route: { isHome: true, isWorkspace: false, isSettings: false, isAddWorkspace: false, isAgent: false },
+          route: { isHome: true, isWorkspace: false, isSettings: false, isAgent: false },
           activeWorkspaceId: null,
           activeAgentId: null,
           hasChatPanel: false,

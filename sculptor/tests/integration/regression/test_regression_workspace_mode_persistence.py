@@ -23,13 +23,15 @@ from playwright.sync_api import expect
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.task_starter import select_home_page_model
 from sculptor.testing.elements.user_config import enable_in_place_workspaces
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
+from sculptor.testing.pages.new_workspace_modal_page import PlaywrightNewWorkspaceModalPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
 
-@pytest.mark.xfail(reason="Mode persistence not yet implemented in AddWorkspacePage (uses local useState)")
+@pytest.mark.xfail(
+    reason="Mode persistence not yet implemented in NewWorkspaceModal (lives in atoms but is not seeded from a per-workspace MRU)"
+)
 @user_story("to have my workspace selection mode persist when creating multiple workspaces")
 def test_workspace_selection_mode_persists_after_workspace_creation(sculptor_instance_: SculptorInstance) -> None:
     """Workspace selection mode should persist after creating a workspace.
@@ -42,7 +44,7 @@ def test_workspace_selection_mode_persists_after_workspace_creation(sculptor_ins
     5. Verify the mode selector still shows In-place (not Worktree)
     """
     page = sculptor_instance_.page
-    add_ws_page = PlaywrightAddWorkspacePage(page=page)
+    add_ws_page = PlaywrightNewWorkspaceModalPage(page=page)
 
     # Enable the experimental in-place workspaces flag so the mode selector is visible.
     enable_in_place_workspaces(page)

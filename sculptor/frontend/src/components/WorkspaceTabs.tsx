@@ -1,12 +1,13 @@
-import { ContextMenu, IconButton } from "@radix-ui/themes";
+import { ContextMenu, IconButton, Tooltip } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { HomeIcon, LayoutGrid, Minus, PlusIcon, Settings as SettingsGearIcon, X, XCircle } from "lucide-react";
+import { LayoutGrid, Minus, PlusIcon, Settings as SettingsGearIcon, X, XCircle } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { useCallback, useEffect, useMemo } from "react";
 import { useParams } from "react-router-dom";
 
 import { ElementIds, updateWorkspace } from "~/api";
 import { keybindingsMapAtom } from "~/common/keybindings/atoms.ts";
+import { useKeybindingDisplayText } from "~/common/keybindings/hooks.ts";
 import { useImbueLocation, useImbueNavigate } from "~/common/NavigateUtils.ts";
 import { isDismissibleOverlayOpen, shouldHandleKeybinding } from "~/common/ShortcutUtils.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
@@ -14,11 +15,6 @@ import { fileBrowserTabCloseBehaviorAtom } from "~/common/state/atoms/userConfig
 import {
   agentIdsByWorkspaceAtom,
   effectiveOpenTabIdsAtom,
-  ensurePseudoTabAtom,
-  newWorkspaceTabId,
-  openNewWorkspaceTabAtom,
-  openNewWorkspaceTabIdsAtom,
-  parseDraftIdFromTabId,
   reorderTabsAtom,
   workspacesArrayAtom,
 } from "~/common/state/atoms/workspaces.ts";
@@ -35,6 +31,7 @@ import { useGitAndOpenInRuntime } from "~/components/CommandPalette/contextActio
 import { buildWorkspaceActions } from "~/components/CommandPalette/contextActions/workspaceActions.ts";
 import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
+import { useNewWorkspaceModal } from "~/components/NewWorkspaceModal";
 import { computeWorkspaceDotStatus, EMPTY_WORKSPACE_DOT_STATUS, WorkspaceStatusDots } from "~/components/statusDot";
 import { TabBar } from "~/components/tabs/TabBar";
 import type { TabDefinition } from "~/components/tabs/types";
@@ -54,22 +51,23 @@ export const WorkspaceTabs = (): ReactElement => {
   const workspaces = useAtomValue(workspacesArrayAtom);
   const tasks = useAtomValue(tasksArrayAtom);
   const effectiveOpenTabIds = useAtomValue(effectiveOpenTabIdsAtom);
-  const ensurePseudoTab = useSetAtom(ensurePseudoTabAtom);
   const reorderTabs = useSetAtom(reorderTabsAtom);
-  const {
-    navigateToWorkspace,
-    navigateToAddWorkspace,
-    navigateToAgent,
-    navigateToHome,
-    navigateToGlobalSettings,
-    navigateToComponentGallery,
-  } = useImbueNavigate();
+  const { navigateToWorkspace, navigateToAgent, navigateToHome, navigateToGlobalSettings, navigateToComponentGallery } =
+    useImbueNavigate();
+  const { open: openNewWorkspaceModal } = useNewWorkspaceModal();
+  const newWorkspaceShortcut = useKeybindingDisplayText("new_workspace");
   const agentIdsByWorkspace = useAtomValue(agentIdsByWorkspaceAtom);
   const keybindingsMap = useAtomValue(keybindingsMapAtom);
-  const openNewWorkspaceTabIds = useAtomValue(openNewWorkspaceTabIdsAtom);
-  const openNewWorkspaceTab = useSetAtom(openNewWorkspaceTabAtom);
-  const { isAddWorkspaceRoute, addWorkspaceDraftId, isHomeRoute, isSettingsRoute, isComponentGalleryRoute } =
-    useImbueLocation();
+  const { isHomeRoute, isSettingsRoute, isComponentGalleryRoute } = useImbueLocation();
+
+  // The empty Home renders the new-workspace form inline, so the topbar "+"
+  // would be a redundant second entry point — hide it in that initial state
+  // only. Once workspaces exist (or anywhere off Home) the "+" is the way in.
+  // `?? 0` treats the not-yet-loaded atom as empty: the recent-workspaces list
+  // is fetched separately (HTTP) and often resolves to "empty → inline form"
+  // before the workspace stream populates the atom, so keying the "+" off a
+  // bare `=== 0` would briefly show it *alongside* the inline form.
+  const isHomeEmptyState = isHomeRoute && (workspaces?.length ?? 0) === 0;
 
   const { handleClose, handleCloseOthers, handleCloseAll, navigateToNextTab } = useWorkspaceTabActions();
 
@@ -81,20 +79,6 @@ export const WorkspaceTabs = (): ReactElement => {
 
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useAtom(renamingWorkspaceIdAtom);
   const [deleteTarget, setDeleteTarget] = useAtom(workspaceDeleteTargetAtom);
-
-  // When navigating to the home route, ensure the home tab is tracked.
-  useEffect(() => {
-    if (isHomeRoute) {
-      ensurePseudoTab(HOME_TAB_ID);
-    }
-  }, [isHomeRoute, ensurePseudoTab]);
-
-  // When navigating to an add-workspace route, ensure the tab is tracked.
-  useEffect(() => {
-    if (addWorkspaceDraftId) {
-      openNewWorkspaceTab(addWorkspaceDraftId);
-    }
-  }, [addWorkspaceDraftId, openNewWorkspaceTab]);
 
   const workspaceStatuses = useMemo(() => {
     const statusMap = new Map<string, ReturnType<typeof computeWorkspaceDotStatus>>();
@@ -175,19 +159,23 @@ export const WorkspaceTabs = (): ReactElement => {
     (direction: 1 | -1): void => {
       if (effectiveOpenTabIds.length === 0) return;
 
+      // /home isn't a tab anymore, so when the user is on /home the
+      // cycle has no current index — fall through to a simple
+      // "first / last tab" jump for forward / backward.
       const currentIndex = activeWorkspaceID
         ? effectiveOpenTabIds.indexOf(activeWorkspaceID)
-        : isHomeRoute
-          ? effectiveOpenTabIds.indexOf(HOME_TAB_ID)
-          : isSettingsRoute
-            ? effectiveOpenTabIds.indexOf(SETTINGS_TAB_ID)
-            : isComponentGalleryRoute
-              ? effectiveOpenTabIds.indexOf(COMPONENT_GALLERY_TAB_ID)
-              : addWorkspaceDraftId
-                ? effectiveOpenTabIds.indexOf(newWorkspaceTabId(addWorkspaceDraftId))
-                : -1;
+        : isSettingsRoute
+          ? effectiveOpenTabIds.indexOf(SETTINGS_TAB_ID)
+          : isComponentGalleryRoute
+            ? effectiveOpenTabIds.indexOf(COMPONENT_GALLERY_TAB_ID)
+            : -1;
 
-      const nextIndex = (currentIndex + direction + effectiveOpenTabIds.length) % effectiveOpenTabIds.length;
+      const nextIndex =
+        currentIndex < 0
+          ? direction > 0
+            ? 0
+            : effectiveOpenTabIds.length - 1
+          : (currentIndex + direction + effectiveOpenTabIds.length) % effectiveOpenTabIds.length;
       const nextTabId = effectiveOpenTabIds[nextIndex];
 
       if (nextTabId === HOME_TAB_ID) {
@@ -197,23 +185,15 @@ export const WorkspaceTabs = (): ReactElement => {
       } else if (nextTabId === COMPONENT_GALLERY_TAB_ID) {
         navigateToComponentGallery();
       } else {
-        const draftId = parseDraftIdFromTabId(nextTabId);
-        if (draftId !== null) {
-          navigateToAddWorkspace(draftId);
-        } else {
-          handleWorkspaceClick(nextTabId);
-        }
+        handleWorkspaceClick(nextTabId);
       }
     },
     [
       activeWorkspaceID,
-      addWorkspaceDraftId,
       effectiveOpenTabIds,
-      isHomeRoute,
       isSettingsRoute,
       isComponentGalleryRoute,
       handleWorkspaceClick,
-      navigateToAddWorkspace,
       navigateToHome,
       navigateToGlobalSettings,
       navigateToComponentGallery,
@@ -240,12 +220,10 @@ export const WorkspaceTabs = (): ReactElement => {
       return;
     }
 
+    // /home isn't a tab anymore — pressing the close-tab keybinding
+    // there is a no-op. The other system surfaces still close.
     let currentTabId: string | null = null;
-    if (isAddWorkspaceRoute && addWorkspaceDraftId) {
-      currentTabId = newWorkspaceTabId(addWorkspaceDraftId);
-    } else if (isHomeRoute) {
-      currentTabId = HOME_TAB_ID;
-    } else if (isSettingsRoute) {
+    if (isSettingsRoute) {
       currentTabId = SETTINGS_TAB_ID;
     } else if (isComponentGalleryRoute) {
       currentTabId = COMPONENT_GALLERY_TAB_ID;
@@ -258,9 +236,6 @@ export const WorkspaceTabs = (): ReactElement => {
     }
   }, [
     activeWorkspaceID,
-    isAddWorkspaceRoute,
-    addWorkspaceDraftId,
-    isHomeRoute,
     isSettingsRoute,
     isComponentGalleryRoute,
     handleClose,
@@ -364,15 +339,6 @@ export const WorkspaceTabs = (): ReactElement => {
       };
     });
 
-    if (effectiveOpenTabIds.includes(HOME_TAB_ID) || isHomeRoute) {
-      workspaceTabs.push({
-        id: HOME_TAB_ID,
-        label: "Home",
-        icon: <HomeIcon size={14} />,
-        dataTestId: ElementIds.HOME_TAB,
-      });
-    }
-
     if (effectiveOpenTabIds.includes(SETTINGS_TAB_ID) || isSettingsRoute) {
       workspaceTabs.push({
         id: SETTINGS_TAB_ID,
@@ -391,15 +357,6 @@ export const WorkspaceTabs = (): ReactElement => {
       });
     }
 
-    for (const draftId of openNewWorkspaceTabIds) {
-      workspaceTabs.push({
-        id: newWorkspaceTabId(draftId),
-        label: "New Workspace",
-        icon: <PlusIcon size={14} />,
-        dataTestId: ElementIds.ADD_WORKSPACE_TAB,
-      });
-    }
-
     return workspaceTabs;
   }, [
     workspaces,
@@ -407,35 +364,25 @@ export const WorkspaceTabs = (): ReactElement => {
     renamingWorkspaceId,
     setRenamingWorkspaceId,
     effectiveOpenTabIds,
-    isHomeRoute,
     isSettingsRoute,
     isComponentGalleryRoute,
-    openNewWorkspaceTabIds,
     handleRenameCommit,
   ]);
 
-  // effectiveOpenTabIds is the single source of truth for tab order — it
-  // already contains new-workspace pseudo-tab IDs in their correct position.
+  // effectiveOpenTabIds is the single source of truth for tab order.
   const openTabIds = effectiveOpenTabIds;
 
-  const activeTabId = isHomeRoute
-    ? HOME_TAB_ID
-    : isSettingsRoute
-      ? SETTINGS_TAB_ID
-      : isComponentGalleryRoute
-        ? COMPONENT_GALLERY_TAB_ID
-        : addWorkspaceDraftId
-          ? newWorkspaceTabId(addWorkspaceDraftId)
-          : (activeWorkspaceID ?? "");
+  // /home doesn't render a tab — when the user is on /home, no tab in
+  // the row is highlighted (activeTabId stays empty so TabBar matches
+  // nothing).
+  const activeTabId = isSettingsRoute
+    ? SETTINGS_TAB_ID
+    : isComponentGalleryRoute
+      ? COMPONENT_GALLERY_TAB_ID
+      : (activeWorkspaceID ?? "");
 
   const handleActivate = useCallback(
     (tabId: string): void => {
-      const draftId = parseDraftIdFromTabId(tabId);
-      if (draftId !== null) {
-        navigateToAddWorkspace(draftId);
-        return;
-      }
-
       if (tabId === HOME_TAB_ID) {
         navigateToHome();
         return;
@@ -452,24 +399,12 @@ export const WorkspaceTabs = (): ReactElement => {
       }
       handleWorkspaceClick(tabId);
     },
-    [
-      handleWorkspaceClick,
-      navigateToAddWorkspace,
-      navigateToHome,
-      navigateToGlobalSettings,
-      navigateToComponentGallery,
-    ],
+    [handleWorkspaceClick, navigateToHome, navigateToGlobalSettings, navigateToComponentGallery],
   );
 
   const handleDoubleClick = useCallback(
     (tabId: string): void => {
-      if (
-        parseDraftIdFromTabId(tabId) !== null ||
-        tabId === HOME_TAB_ID ||
-        tabId === SETTINGS_TAB_ID ||
-        tabId === COMPONENT_GALLERY_TAB_ID
-      )
-        return;
+      if (tabId === HOME_TAB_ID || tabId === SETTINGS_TAB_ID || tabId === COMPONENT_GALLERY_TAB_ID) return;
       setRenamingWorkspaceId(tabId);
     },
     [setRenamingWorkspaceId],
@@ -518,8 +453,6 @@ export const WorkspaceTabs = (): ReactElement => {
 
   const contextMenuContent = useCallback(
     (tabId: string): ReactNode => {
-      if (parseDraftIdFromTabId(tabId) !== null) return undefined;
-
       // System tabs (Home / Settings / Component Gallery) only support
       // close operations, never rename or delete. We hand-render this
       // small variant rather than wiring three separate registries.
@@ -578,21 +511,31 @@ export const WorkspaceTabs = (): ReactElement => {
         onDoubleClick={handleDoubleClick}
         tabBarClassName={styles.tabBar}
         // Always render the X — closing the last tab navigates the user
-        // to the AddWorkspace page (handled in useWorkspaceTabActions).
+        // to /home (handled in useWorkspaceTabActions).
         alwaysCloseable={true}
         contextMenuContent={contextMenuContent}
       >
-        <IconButton
-          variant="ghost"
-          size="1"
-          color="gray"
-          className={styles.addButton}
-          onClick={() => navigateToAddWorkspace()}
-          aria-label="Add workspace"
-          data-testid={ElementIds.ADD_WORKSPACE_BUTTON}
-        >
-          <PlusIcon size={14} />
-        </IconButton>
+        {!isHomeEmptyState && (
+          <Tooltip
+            content={
+              <>
+                New workspace {newWorkspaceShortcut && <kbd className={styles.tooltipKbd}>{newWorkspaceShortcut}</kbd>}
+              </>
+            }
+          >
+            <IconButton
+              variant="ghost"
+              size="1"
+              color="gray"
+              className={styles.addButton}
+              onClick={() => openNewWorkspaceModal("topbar")}
+              aria-label="New workspace"
+              data-testid={ElementIds.ADD_WORKSPACE_BUTTON}
+            >
+              <PlusIcon size={14} />
+            </IconButton>
+          </Tooltip>
+        )}
       </TabBar>
       <WorkspacePeekOverlay onNavigate={handleWorkspacePeekNavigate} />
       <DeleteConfirmationDialog

@@ -4,9 +4,8 @@ Verifies the parallel branch-experience for CLONE mode (the field is
 optional): clearing it checks out the base branch directly, keeping
 the auto-filled value creates a new branch inside the clone.
 
-Clone mode is now opt-in (worktree is the default), so each test enables
-the clone flag and selects clone in the mode picker before exercising the
-branch-name field.
+Clone mode is opt-in, so each test enables the flag and selects CLONE in
+the mode selector before driving the branch field.
 """
 
 import re
@@ -16,10 +15,9 @@ from pathlib import Path
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.user_config import enable_clone_workspaces
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.pages.new_workspace_modal_page import PlaywrightNewWorkspaceModalPage
+from sculptor.testing.playwright_utils import open_new_workspace_modal
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
@@ -66,18 +64,19 @@ def test_clone_mode_cleared_branch_checks_out_base(sculptor_instance_: SculptorI
     page = sculptor_instance_.page
     enable_clone_workspaces(page)
 
-    navigate_to_add_workspace_page(page)
-    add_ws_page = PlaywrightAddWorkspacePage(page)
-    add_ws_page.get_workspace_name_input().fill("Some work")
-    add_ws_page.select_mode(ElementIDs.MODE_OPTION_CLONE)
+    open_new_workspace_modal(page)
+    add_workspace = PlaywrightNewWorkspaceModalPage(page=page)
+    add_workspace.get_workspace_name_input().fill("Some work")
+    add_workspace.select_clone_mode()
 
-    branch_input = add_ws_page.get_branch_name_input()
-    expect(branch_input).to_be_visible()
-    expect(branch_input).to_have_value(re.compile(r".*some-work.*"))
+    branch_input = add_workspace.get_branch_name_input()
+    add_workspace.wait_for_branch_preview()
+    # Clone mode makes the branch optional — clearing it checks out the base
+    # branch directly (worktree mode would gate submit on a non-empty name).
     branch_input.fill("")
     expect(branch_input).to_have_value("")
 
-    add_ws_page.submit_and_wait_for_chat_panel()
+    add_workspace.submit_and_wait_for_chat_panel()
 
     workspace_id = _workspace_id_from_url(page)
     clone_path = _clone_code_dir_for_workspace(page, sculptor_instance_.backend_api_url, workspace_id)
@@ -91,17 +90,14 @@ def test_clone_mode_kept_branch_name_creates_new_branch(sculptor_instance_: Scul
     page = sculptor_instance_.page
     enable_clone_workspaces(page)
 
-    navigate_to_add_workspace_page(page)
-    add_ws_page = PlaywrightAddWorkspacePage(page)
-    add_ws_page.get_workspace_name_input().fill("Fix login bug")
-    add_ws_page.select_mode(ElementIDs.MODE_OPTION_CLONE)
+    open_new_workspace_modal(page)
+    add_workspace = PlaywrightNewWorkspaceModalPage(page=page)
+    add_workspace.get_workspace_name_input().fill("Fix login bug")
+    add_workspace.select_clone_mode()
 
-    branch_input = add_ws_page.get_branch_name_input()
-    expect(branch_input).to_be_visible()
-    expect(branch_input).to_have_value(re.compile(r".*fix-login-bug.*"))
-    expected_branch = branch_input.input_value()
+    expected_branch = add_workspace.wait_for_branch_preview(re.compile(r".*fix-login-bug.*"))
 
-    add_ws_page.submit_and_wait_for_chat_panel()
+    add_workspace.submit_and_wait_for_chat_panel()
 
     workspace_id = _workspace_id_from_url(page)
     clone_path = _clone_code_dir_for_workspace(page, sculptor_instance_.backend_api_url, workspace_id)

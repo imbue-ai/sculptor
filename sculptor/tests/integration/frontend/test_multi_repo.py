@@ -1,7 +1,7 @@
 """Integration tests for multi-repo functionality.
 
 These tests verify that Sculptor correctly handles:
-- Creating new repos through the AddWorkspacePage RepoSelector
+- Creating new repos through the new-workspace modal RepoSelector
 - Selecting different repos when creating workspaces
 - Running workspaces in different repos and switching between them
 - Message isolation across workspaces in different repos
@@ -17,10 +17,10 @@ from playwright.sync_api import expect
 
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
-from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
+from sculptor.testing.pages.new_workspace_modal_page import PlaywrightNewWorkspaceModalPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
 from sculptor.testing.playwright_utils import navigate_to_settings_page
+from sculptor.testing.playwright_utils import open_new_workspace_modal
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.test_repo_factory import TestRepoFactory
@@ -40,7 +40,7 @@ def _add_repo_via_settings(page: Page, repo_path: Path) -> None:
 
 
 @user_story("to create new projects and use them in workspaces")
-def test_create_new_project_from_add_workspace_page(
+def test_create_new_project_from_new_workspace_modal(
     sculptor_instance_: SculptorInstance, test_repo_factory_: TestRepoFactory
 ) -> None:
     """Test creating a new project via API and using it when creating a workspace.
@@ -59,9 +59,9 @@ def test_create_new_project_from_add_workspace_page(
     # Add the repo via the Settings UI
     _add_repo_via_settings(page, repo.base_path)
 
-    # Navigate to the AddWorkspacePage so the UI picks up the new project
-    navigate_to_add_workspace_page(page)
-    add_ws_page = PlaywrightAddWorkspacePage(page=page)
+    # Navigate to the new-workspace modal so the UI picks up the new project
+    open_new_workspace_modal(page)
+    add_ws_page = PlaywrightNewWorkspaceModalPage(page=page)
     expect(add_ws_page.get_submit_button()).to_be_visible()
 
     # Verify the new project is selectable in the project selector dropdown
@@ -91,9 +91,9 @@ def test_git_init_dialog_for_non_git_directories(sculptor_instance_: SculptorIns
 
     page = sculptor_instance_.page
 
-    # Navigate to the AddWorkspacePage
-    navigate_to_add_workspace_page(page)
-    add_ws_page = PlaywrightAddWorkspacePage(page=page)
+    # Navigate to the new-workspace modal
+    open_new_workspace_modal(page)
+    add_ws_page = PlaywrightNewWorkspaceModalPage(page=page)
 
     # Open the project selector and click "Open New Repo"
     add_ws_page.get_project_selector().click()
@@ -116,7 +116,7 @@ def test_git_init_dialog_for_non_git_directories(sculptor_instance_: SculptorIns
     # Confirm git init
     git_init_dialog.get_confirm_button().click()
 
-    # Wait for the git init dialog to close and the AddWorkspacePage to be ready
+    # Wait for the git init dialog to close and the new-workspace modal to be ready
     expect(git_init_dialog).to_be_hidden()
     expect(add_ws_page.get_submit_button()).to_be_visible()
 
@@ -159,15 +159,15 @@ def test_create_workspaces_in_multiple_projects_and_switch(
     _add_repo_via_settings(page, repo_b.base_path)
 
     # Create a workspace in project A
-    navigate_to_add_workspace_page(page)
-    PlaywrightAddWorkspacePage(page=page).select_project_by_name(project_a)
+    open_new_workspace_modal(page)
+    PlaywrightNewWorkspaceModalPage(page=page).select_project_by_name(project_a)
     task_page_a = start_task_and_wait_for_ready(page, prompt="Alpha task 1", workspace_name="Alpha Workspace")
     chat_panel_a = task_page_a.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel_a, expected_message_count=2)
 
     # Create a workspace in project B
-    navigate_to_add_workspace_page(page)
-    PlaywrightAddWorkspacePage(page=page).select_project_by_name(project_b)
+    open_new_workspace_modal(page)
+    PlaywrightNewWorkspaceModalPage(page=page).select_project_by_name(project_b)
     task_page_b = start_task_and_wait_for_ready(page, prompt="Beta task 1", workspace_name="Beta Workspace")
     chat_panel_b = task_page_b.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel_b, expected_message_count=2)
@@ -218,8 +218,8 @@ def test_send_messages_across_multiple_project_workspaces(
     _add_repo_via_settings(page, repo_b.base_path)
 
     # Create workspace in project A
-    navigate_to_add_workspace_page(page)
-    PlaywrightAddWorkspacePage(page=page).select_project_by_name(project_a)
+    open_new_workspace_modal(page)
+    PlaywrightNewWorkspaceModalPage(page=page).select_project_by_name(project_a)
     task_page_a = start_task_and_wait_for_ready(page, prompt=initial_prompt_a, workspace_name="Alpha Workspace")
     chat_panel_a = task_page_a.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel_a, expected_message_count=2)
@@ -229,8 +229,8 @@ def test_send_messages_across_multiple_project_workspaces(
     wait_for_completed_message_count(chat_panel=chat_panel_a, expected_message_count=4)
 
     # Create workspace in project B
-    navigate_to_add_workspace_page(page)
-    PlaywrightAddWorkspacePage(page=page).select_project_by_name(project_b)
+    open_new_workspace_modal(page)
+    PlaywrightNewWorkspaceModalPage(page=page).select_project_by_name(project_b)
     task_page_b = start_task_and_wait_for_ready(page, prompt=initial_prompt_b, workspace_name="Beta Workspace")
     chat_panel_b = task_page_b.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel_b, expected_message_count=2)
@@ -268,17 +268,17 @@ def test_send_messages_across_multiple_project_workspaces(
 def test_mru_project_updates_after_creating_workspace(
     sculptor_instance_: SculptorInstance, test_repo_factory_: TestRepoFactory
 ) -> None:
-    """Creating a workspace should update the MRU project so the Add Workspace page defaults to it.
+    """Creating a workspace should update the MRU project so the new-workspace modal defaults to it.
 
     The initial project (project A) is set up by the test fixture. We add a second
     project (project B) — which sets B as MRU via activate_project — then create a
-    workspace in project A. After navigating to the Add Workspace page, project A
+    workspace in project A. After navigating to the new-workspace modal, project A
     should be pre-selected because it was most recently *used*, not project B.
 
     Steps:
     1. Add a second project (project B) — this sets MRU to B via activate_project
     2. Create a workspace in the original project (project A)
-    3. Navigate to the Add Workspace page
+    3. Navigate to the new-workspace modal
     4. Verify that the project selector shows project A (the most recently used project)
     """
     project_b_name = "project_bravo"
@@ -292,16 +292,16 @@ def test_mru_project_updates_after_creating_workspace(
 
     # Step 2: Create a workspace in the original project A (not B).
     # The project selector should still show A since it's the first project.
-    navigate_to_add_workspace_page(page)
-    PlaywrightAddWorkspacePage(page=page).select_project_by_name(project_a_name)
+    open_new_workspace_modal(page)
+    PlaywrightNewWorkspaceModalPage(page=page).select_project_by_name(project_a_name)
     start_task_and_wait_for_ready(page, prompt="Alpha task", workspace_name="Alpha Workspace")
 
-    # Step 3: Navigate back to the Add Workspace page.
-    navigate_to_add_workspace_page(page)
+    # Step 3: Navigate back to the new-workspace modal.
+    open_new_workspace_modal(page)
 
     # Step 4: Verify the project selector shows project A (not B) as the default,
     # because we most recently created a workspace in project A.
-    add_ws_page = PlaywrightAddWorkspacePage(page=page)
+    add_ws_page = PlaywrightNewWorkspaceModalPage(page=page)
     expect(add_ws_page.get_project_selector()).to_contain_text(project_a_name)
 
 

@@ -68,11 +68,14 @@ export const useRepoInfo = (projectId: ProjectID): RepoInfoHookReturn => {
         return;
       }
 
+      // Spread the existing RepoInfo and override only currentBranch so the
+      // origin flags (isGitlabOrigin / isGithubOrigin) and remoteBranches
+      // survive this partial refresh. Enumerating fields by hand silently
+      // dropped them, which flickered the WorkspaceBanner's target branch as
+      // this write landed ahead of the next full fetchRepoInfo.
       const newRepoInfo: RepoInfo = {
+        ...existingRepoInfo,
         currentBranch: currentBranchInfo.currentBranch,
-        projectId: projectId,
-        recentBranches: existingRepoInfo.recentBranches,
-        repoPath: existingRepoInfo.repoPath,
       };
 
       store.set(repoInfoAtom, newRepoInfo);

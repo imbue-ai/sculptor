@@ -63,7 +63,7 @@
 "." = 1
 
 [no-logger-warning]
-"." = 57
+"." = 58
 
 [no-make-composite-seed]
 "." = 0
