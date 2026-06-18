@@ -50,7 +50,7 @@ const makeProps = (items: Array<TestItem>): { props: SuggestionProps; command: R
   return { props, command };
 };
 
-const pressKey = (ref: React.RefObject<SuggestionListRef>, key: string, shiftKey = false): boolean => {
+const pressKey = (ref: React.RefObject<SuggestionListRef | null>, key: string, shiftKey = false): boolean => {
   // Wrap in act() so the setState triggered inside onKeyDown flushes before
   // the next assertion — otherwise sideContent/selectedIndex updates lag.
   let didHandle = false;

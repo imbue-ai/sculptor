@@ -73,18 +73,7 @@ function externalizeXterm(): import("vite").Plugin {
 const ENABLED_PLUGINS = [
   externalizeXterm(),
   pluginRuntimeStubs(),
-  react({
-    plugins: [
-      [
-        "@swc/plugin-styled-components",
-        {
-          displayName: true,
-          fileName: true,
-          ssr: false,
-        },
-      ],
-    ],
-  }),
+  react(),
   {
     name: "generate-types",
     buildStart(): void {
@@ -144,9 +133,7 @@ export default defineConfig(({ command, mode }): UserConfig => {
       preprocessorOptions: {
         scss: {
           // Lets SCSS modules `@use "scrollbar" as *;` without relative paths.
-          // Vite 5 defaults to the legacy Sass API, which expects
-          // `includePaths` (the modern API's equivalent is `loadPaths`).
-          includePaths: [path.resolve(__dirname, "src/styles")],
+          loadPaths: [path.resolve(__dirname, "src/styles")],
         },
       },
     },

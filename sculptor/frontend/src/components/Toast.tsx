@@ -9,6 +9,7 @@ import { ElementIds } from "../api";
 import { mergeClasses } from "../common/Utils.ts";
 import styles from "./Toast.module.scss";
 
+// eslint-disable-next-line react-refresh/only-export-components -- enum-style const shared with non-component code
 export const ToastType = {
   DEFAULT: "DEFAULT",
   SUCCESS: "SUCCESS",

@@ -42,7 +42,7 @@ const makeProps = (items: Array<TestItem>): { props: SuggestionProps; command: R
   return { props, command };
 };
 
-const pressKey = (ref: React.RefObject<SuggestionListRef>, key: string): boolean => {
+const pressKey = (ref: React.RefObject<SuggestionListRef | null>, key: string): boolean => {
   let didHandle = false;
   act(() => {
     const event = { key, shiftKey: false } as unknown as KeyboardEvent;

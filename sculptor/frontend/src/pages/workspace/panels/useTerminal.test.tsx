@@ -295,12 +295,14 @@ describe("useTerminal — clear-terminal keydown listener lifecycle", () => {
   });
 
   const keydownAddCalls = (): Array<Parameters<typeof window.addEventListener>> =>
-    addSpy.mock.calls.filter((call) => call[0] === "keydown") as Array<Parameters<typeof window.addEventListener>>;
+    addSpy.mock.calls.filter((call: Parameters<typeof window.addEventListener>) => call[0] === "keydown") as Array<
+      Parameters<typeof window.addEventListener>
+    >;
 
   const keydownRemoveCalls = (): Array<Parameters<typeof window.removeEventListener>> =>
-    removeSpy.mock.calls.filter((call) => call[0] === "keydown") as Array<
-      Parameters<typeof window.removeEventListener>
-    >;
+    removeSpy.mock.calls.filter(
+      (call: Parameters<typeof window.removeEventListener>) => call[0] === "keydown",
+    ) as Array<Parameters<typeof window.removeEventListener>>;
 
   it("attaches a capture-phase keydown listener when isVisible=true", () => {
     renderHook(() => useTerminal({ terminalPath: "/api/v1/workspaces/ws_test/terminal/0/ws", isVisible: true }));

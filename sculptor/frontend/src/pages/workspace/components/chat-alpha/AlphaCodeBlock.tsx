@@ -33,7 +33,7 @@ export const AlphaCodeBlock = memo(
   ({ content, language, searchQuery, activeOccurrenceIndex = -1 }: AlphaCodeBlockProps): ReactElement => {
     const [tokens, setTokens] = useState<ReadonlyArray<ReadonlyArray<DualThemedToken>> | null>(null);
     const [isCopied, setIsCopied] = useState(false);
-    const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
+    const copyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
     const codeTheme = useAtomValue(themeCodeThemeAtom);
     const themes = getShikiThemes(codeTheme);
 

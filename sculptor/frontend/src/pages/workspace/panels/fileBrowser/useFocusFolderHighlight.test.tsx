@@ -34,7 +34,7 @@ const renderFocusFolderHook = ({
   store: TestStore;
   flatRows: Array<FlatRowEntry>;
   virtualizer: ReturnType<typeof makeVirtualizer>;
-  scrollContainerRef: RefObject<HTMLDivElement>;
+  scrollContainerRef: RefObject<HTMLDivElement | null>;
 }): void => {
   const wrapper = ({ children }: { children: ReactNode }): ReactElement => (
     <Provider store={store}>{children}</Provider>

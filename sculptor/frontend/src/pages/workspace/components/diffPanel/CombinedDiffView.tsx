@@ -187,7 +187,7 @@ type CombinedDiffViewProps = {
   /** When false the component stays mounted but hidden via CSS, keeping the toolbar DOM ready. */
   isActive: boolean;
   /** Optional ref exposed to the parent for features like in-file search. */
-  contentRef?: RefObject<HTMLDivElement>;
+  contentRef?: RefObject<HTMLDivElement | null>;
   /** Active search query — collapsed files matching this query are auto-expanded. */
   searchQuery?: string;
   /** Called after the commit button sends its message. */

@@ -75,7 +75,7 @@ const ReadEntry = ({
   const { workspaceID } = useWorkspacePageParams();
   const openFileViewTab = useSetAtom(openFileViewTabAtom);
   const [isCopied, setIsCopied] = useState(false);
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => (): void => clearTimeout(copyTimerRef.current), []);
 
   const handleCopyPath = useCallback(

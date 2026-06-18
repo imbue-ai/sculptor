@@ -2,6 +2,7 @@ import { Theme } from "@radix-ui/themes";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import type { ReactElement, ReactNode } from "react";
+import type { Mock } from "vitest";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UserConfig } from "~/api";
@@ -78,6 +79,11 @@ const renderTelemetryRow = (
   render(<TelemetryRow setToast={setToast} />, { wrapper: Wrapper });
 };
 
+// vitest 4's bare vi.fn() is typed too loosely (Mock<Procedure>) to pass where
+// a specific callback is expected, so pin the mock to renderTelemetryRow's
+// setToast parameter type.
+type SetToastFn = Parameters<typeof renderTelemetryRow>[1];
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -86,10 +92,10 @@ afterEach(() => {
 });
 
 describe("TelemetryRow opt-out", () => {
-  let setToast: ReturnType<typeof vi.fn>;
+  let setToast: Mock<SetToastFn>;
 
   beforeEach(() => {
-    setToast = vi.fn();
+    setToast = vi.fn<SetToastFn>();
   });
 
   it("fires the meta event, flips the SDKs, and persists via POST", async () => {
@@ -150,10 +156,10 @@ describe("TelemetryRow opt-out", () => {
 });
 
 describe("TelemetryRow opt-in", () => {
-  let setToast: ReturnType<typeof vi.fn>;
+  let setToast: Mock<SetToastFn>;
 
   beforeEach(() => {
-    setToast = vi.fn();
+    setToast = vi.fn<SetToastFn>();
   });
 
   it("flips the SDKs without a confirmation dialog and fires the meta event after the POST", async () => {

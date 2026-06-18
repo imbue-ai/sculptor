@@ -155,7 +155,7 @@ export const AlphaChipDiffPopover = ({
   // Only one of the path/error buttons is visible at a time, so a single
   // discriminator captures which (if any) is in its post-copy "Check" state.
   const [copiedKey, setCopiedKey] = useState<"path" | "error" | null>(null);
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => (): void => clearTimeout(copyTimerRef.current), []);
 
   const flashCopied = useCallback((key: "path" | "error"): void => {

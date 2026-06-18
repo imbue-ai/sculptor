@@ -314,7 +314,7 @@ type UseTerminalArgs = {
 };
 
 type UseTerminalResult = {
-  terminalContainerRef: React.RefObject<HTMLDivElement>;
+  terminalContainerRef: React.RefObject<HTMLDivElement | null>;
 };
 
 export const useTerminal = ({

@@ -1,5 +1,6 @@
 import type { Virtualizer } from "@tanstack/react-virtual";
 import { act, cleanup, renderHook } from "@testing-library/react";
+import type { Mock } from "vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { type ChatMessage, ChatMessageRole, ElementIds } from "~/api";
@@ -103,8 +104,8 @@ const flushRaf = async (): Promise<void> => {
 // ---------------------------------------------------------------------------
 
 describe("useAlphaPromptNav", () => {
-  let mockScrollToBottom: ReturnType<typeof vi.fn>;
-  let mockSetIsSuppressed: ReturnType<typeof vi.fn>;
+  let mockScrollToBottom: Mock<() => void>;
+  let mockSetIsSuppressed: Mock<(val: boolean) => void>;
   let chatInputContainer: HTMLDivElement;
   let editableEl: HTMLDivElement;
   let unmountHandles: Array<() => void>;

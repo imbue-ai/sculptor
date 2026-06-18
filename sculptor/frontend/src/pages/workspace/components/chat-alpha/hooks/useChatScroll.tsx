@@ -15,7 +15,7 @@ type ChatScrollContextValue = {
 const ChatScrollContext = createContext<ChatScrollContextValue | null>(null);
 
 type ChatScrollProviderProps = {
-  scrollContainerRef: RefObject<HTMLElement>;
+  scrollContainerRef: RefObject<HTMLElement | null>;
   // Owned by `useAlphaAutoScroll`. True for ~150ms after a wheel / touch /
   // keydown on the scroll container. The provider treats only user-initiated
   // scrolls as dismissal signals: if the user hasn't touched the surface

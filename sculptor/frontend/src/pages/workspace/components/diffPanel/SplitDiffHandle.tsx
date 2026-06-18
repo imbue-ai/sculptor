@@ -18,7 +18,7 @@ type SplitDiffHandleProps = {
    * `diffs-container` shadow DOM so the handle can read actual grid column
    * widths for pixel-accurate positioning.
    */
-  containerRef: RefObject<HTMLElement>;
+  containerRef: RefObject<HTMLElement | null>;
 };
 
 /**

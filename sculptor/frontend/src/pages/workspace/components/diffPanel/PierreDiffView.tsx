@@ -264,7 +264,7 @@ export const PierreDiffView = ({
         </div>
         {hasScrollbar && <StickyHorizontalScrollbar containerRef={pierreRef} />}
       </div>
-      {isSplit && !hideHandle && <SplitDiffHandle containerRef={wrapperRef as RefObject<HTMLElement>} />}
+      {isSplit && !hideHandle && <SplitDiffHandle containerRef={wrapperRef as RefObject<HTMLElement | null>} />}
     </div>
   );
 };

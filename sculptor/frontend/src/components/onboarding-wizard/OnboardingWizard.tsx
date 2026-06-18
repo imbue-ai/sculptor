@@ -15,6 +15,7 @@ import styles from "./OnboardingWizard.module.scss";
 import { StepIndicator } from "./StepIndicator.tsx";
 import { WelcomeStep } from "./WelcomeStep.tsx";
 
+// eslint-disable-next-line react-refresh/only-export-components -- enum-style const shared with non-component code
 export const OnboardingStep = {
   EMAIL: "EMAIL",
   INSTALLATION: "INSTALLATION",

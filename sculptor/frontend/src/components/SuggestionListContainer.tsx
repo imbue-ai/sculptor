@@ -240,7 +240,11 @@ export const SuggestionListContainer = forwardRef<SuggestionListRef, SuggestionL
     }));
 
     const sideContentNode = sideContent?.(items[selectedIndex]);
-    const containerClass = classnames(styles.suggestionList, sideContentNode && styles.suggestionListSplit, className);
+    const containerClass = classnames(
+      styles.suggestionList,
+      !!sideContentNode && styles.suggestionListSplit,
+      className,
+    );
     const virtualItems = virtualizer.getVirtualItems();
     const totalSize = virtualizer.getTotalSize();
 

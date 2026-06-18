@@ -150,7 +150,7 @@ describe("MentionPickerList — selection resets when the filtered items change"
 
   const subConfigs: MentionPickerSubConfigs = {};
 
-  const pressKey = (ref: React.RefObject<SuggestionListRef>, key: string): void => {
+  const pressKey = (ref: React.RefObject<SuggestionListRef | null>, key: string): void => {
     act(() => {
       ref.current!.onKeyDown({ event: { key, shiftKey: false } as unknown as KeyboardEvent });
     });

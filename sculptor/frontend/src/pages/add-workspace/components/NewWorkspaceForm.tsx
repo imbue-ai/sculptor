@@ -15,7 +15,7 @@ import styles from "./NewWorkspaceForm.module.scss";
 type NewWorkspaceFormProps = {
   workspaceName: string;
   onWorkspaceNameChange: (value: string) => void;
-  nameInputRef: RefObject<HTMLInputElement>;
+  nameInputRef: RefObject<HTMLInputElement | null>;
   repoInfo: RepoInfo | null;
   isPending: boolean;
   // Extra gating from the parent (e.g. worktree mode requires a non-empty

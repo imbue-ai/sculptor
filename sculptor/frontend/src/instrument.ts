@@ -35,6 +35,10 @@ export const initializeSentry = (): void => {
     integrations: [
       Sentry.captureConsoleIntegration({
         levels: ["error", "warn"],
+        // Sentry 9+ marks console-captured events as handled by default,
+        // which would re-group existing issues; keep the pre-upgrade
+        // unhandled classification.
+        handled: false,
       }),
       Sentry.contextLinesIntegration(),
       Sentry.extraErrorDataIntegration(),

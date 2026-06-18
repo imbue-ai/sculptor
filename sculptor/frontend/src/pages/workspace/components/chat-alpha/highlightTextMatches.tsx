@@ -39,7 +39,9 @@ const walkNode = (node: ReactNode, lowerQuery: string, activeOccurrence: number,
   }
 
   if (isValidElement(node)) {
-    const element = node as ReactElement;
+    // React 19's ReactElement defaults its props to unknown; we only walk
+    // intrinsic elements, whose children prop is a plain ReactNode.
+    const element = node as ReactElement<{ children?: ReactNode }>;
 
     // Skip component elements — only walk into intrinsic HTML elements.
     // Component elements (functions/classes) may have type constraints on

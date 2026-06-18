@@ -61,7 +61,7 @@ export default tseslint.config(
 
   reactPlugin.configs.flat.recommended,
   reactPlugin.configs.flat["jsx-runtime"],
-  reactHooksPlugin.configs["recommended-latest"],
+  reactHooksPlugin.configs.flat["recommended-latest"],
   reactRefreshPlugin.configs.vite,
   importPlugin.configs.typescript,
   cssPlugin.configs["flat/recommended"],
@@ -100,6 +100,21 @@ export default tseslint.config(
       "simple-import-sort": simpleImportSortPlugin,
     },
     rules: {
+      // eslint-plugin-react-hooks 7 enables the React Compiler diagnostic
+      // rules by default. They flag ~160 pre-existing patterns (refs read
+      // during render, setState in effects, manual-memoization drift) that
+      // need per-site behavioral rework, so they are disabled until that
+      // cleanup happens. rules-of-hooks and exhaustive-deps stay active.
+      "react-hooks/refs": "off",
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/immutability": "off",
+      "react-hooks/preserve-manual-memoization": "off",
+      "react-hooks/static-components": "off",
+      "react-hooks/incompatible-library": "off",
+      "react-hooks/use-memo": "off",
+      "react-hooks/purity": "off",
+      "react-hooks/globals": "off",
+
       /*
         Rules copied from https://mkosir.github.io/typescript-style-guide/ on 2025-06-04,
         with adaptions noted.

@@ -7,7 +7,7 @@ import styles from "./WorkspaceSearchBar.module.scss";
 type WorkspaceSearchBarProps = {
   searchQuery: string;
   onSearchChange: (value: string) => void;
-  inputRef: RefObject<HTMLInputElement>;
+  inputRef: RefObject<HTMLInputElement | null>;
   autoFocus?: boolean;
   onEscape: () => void;
 };

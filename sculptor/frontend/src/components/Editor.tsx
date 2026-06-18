@@ -1,8 +1,8 @@
 import type { Editor as TipTapEditor } from "@tiptap/react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { useAtomValue } from "jotai";
-import type { ReactElement } from "react";
 import type React from "react";
+import type { ReactElement } from "react";
 import { useEffect, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
 
