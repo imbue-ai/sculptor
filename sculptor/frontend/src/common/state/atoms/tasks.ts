@@ -100,12 +100,17 @@ export const taskModelAtomFamily = atomFamily<string, Atom<string | undefined>>(
   atom((get) => get(taskAtomFamily(taskId))?.model),
 );
 
+// A stable reference for the "no backend list" case so the derived atom below
+// keeps the same identity across unrelated task updates (a fresh `[]` would fail
+// Jotai's Object.is check and re-render every subscriber).
+const EMPTY_MODEL_OPTIONS: ReadonlyArray<ModelOption> = [];
+
 // The harness's backend-sourced model catalog (pi). A non-capability view field,
 // so the no-direct-harness-capability-read ratchet does not apply. Empty for
 // harnesses that source no list (Claude) — the switcher then falls back to its
 // built-in PRODUCTION_MODELS.
 export const taskAvailableModelsAtomFamily = atomFamily<string, Atom<ReadonlyArray<ModelOption>>>((taskId) =>
-  atom((get) => get(taskAtomFamily(taskId))?.availableModels ?? []),
+  atom((get) => get(taskAtomFamily(taskId))?.availableModels ?? EMPTY_MODEL_OPTIONS),
 );
 
 // The model_id the switcher should show as selected for a backend-sourced list

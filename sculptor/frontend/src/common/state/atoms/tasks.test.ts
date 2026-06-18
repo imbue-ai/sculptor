@@ -6,6 +6,7 @@ import {
   optimisticDeleteTaskAtom,
   rollbackDeleteTaskAtom,
   taskAtomFamily,
+  taskAvailableModelsAtomFamily,
   taskIdsAtom,
   tasksArrayAtom,
   taskSupportsBackgroundTasksAtomFamily,
@@ -211,6 +212,24 @@ describe("taskSupportsInteractiveBackchannelAtomFamily", () => {
 
     let notificationCount = 0;
     const unsubscribe = store.sub(taskSupportsInteractiveBackchannelAtomFamily("task-1"), () => {
+      notificationCount += 1;
+    });
+
+    store.set(taskAtomFamily("task-1"), { ...task, status: "WAITING" } as CodingAgentTaskView);
+    expect(notificationCount).toBe(0);
+
+    unsubscribe();
+  });
+
+  it("does not notify availableModels subscribers on unrelated task updates (stable empty list)", () => {
+    const store = createStore();
+    // No backend catalog (Claude): availableModels is undefined, so the derived
+    // atom must yield a stable empty array rather than a fresh one each recompute.
+    const task = createMockTask({ id: "task-1" });
+    store.set(taskAtomFamily("task-1"), task);
+
+    let notificationCount = 0;
+    const unsubscribe = store.sub(taskAvailableModelsAtomFamily("task-1"), () => {
       notificationCount += 1;
     });
 
