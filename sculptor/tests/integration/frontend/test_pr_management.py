@@ -27,14 +27,18 @@ def _set_remote(instance: SculptorInstance, url: str) -> None:
 
 @user_story("to not see PR management UI on a non-GitLab workspace")
 def test_banner_hides_pr_ui_for_non_gitlab_origin(sculptor_instance_: SculptorInstance) -> None:
-    """Verify the banner does NOT show PR elements for non-GitLab origins."""
+    """Verify the banner does NOT show the PR button for non-GitHub/GitLab origins.
+
+    PR/MR creation requires a GitHub or GitLab provider, so the PR button stays
+    hidden. The target-branch selector is host-agnostic and remains visible — it
+    is covered by ``test_banner_shows_target_branch_selector_for_non_github_gitlab_origin``.
+    """
     page = sculptor_instance_.page
 
     task_page = start_task_and_wait_for_ready(page, "say hello")
 
-    # Non-GitLab workspace should not show PR button or target branch selector
+    # Non-GitHub/GitLab workspace should not show the PR button.
     expect(task_page.get_pr_button_create()).not_to_be_visible()
-    expect(task_page.get_target_branch_selector()).not_to_be_visible()
 
 
 @user_story("to choose a target branch on a repo whose origin is not GitHub or GitLab")

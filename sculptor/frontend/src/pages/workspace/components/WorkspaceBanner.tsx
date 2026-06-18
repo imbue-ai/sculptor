@@ -1,4 +1,4 @@
-import { Skeleton, Text, Tooltip } from "@radix-ui/themes";
+import { Skeleton, Tooltip } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import { GitBranchIcon } from "lucide-react";
 import type { ReactElement } from "react";
@@ -139,7 +139,11 @@ export const WorkspaceBanner = (): ReactElement | null => {
   // in-place workspaces are visually marked so users can spot the non-default
   // ones in a mixed list.
   const shouldShowModeBadge = strategy !== WorkspaceInitializationStrategy.WORKTREE;
-  const shouldShowTargetBranch = repoInfo?.isGitlabOrigin || repoInfo?.isGithubOrigin;
+  // The target-branch selector is host-agnostic — it just edits the
+  // workspace's merge target — so it is shown for every repo regardless of
+  // remote host (SCU-1526). PR/MR creation, on the other hand, requires the
+  // GitHub or GitLab CLI, so the PR button stays gated on the git provider.
+  const canCreatePr = gitProvider !== null;
 
   // Resolve the full remote branch name for the mismatch target (e.g. "upstream/main")
   const mismatchedFullBranch = hasMismatch
@@ -189,42 +193,28 @@ export const WorkspaceBanner = (): ReactElement | null => {
         <Skeleton width="160px" height="16px" />
       )}
 
-      {shouldShowTargetBranch && (
-        <>
-          <span className={styles.arrowSeparator}>&rarr;</span>
-          <Tooltip
-            content={
-              isMismatched
-                ? `${isGitLab ? "MR" : "PR"} ${isGitLab ? "!" : "#"}${mismatchInfo.mismatchedPrIid} targets ${mismatchInfo.fullBranch} — retarget?`
-                : "Target branch"
-            }
-            side="bottom"
-            open={isTargetBranchOpen ? false : undefined}
-          >
-            <span>
-              <TargetBranchSelector
-                currentTargetBranch={currentTargetBranch}
-                remoteBranches={remoteBranches}
-                onBranchChange={handleTargetBranchChange}
-                onOpenChange={setIsTargetBranchOpen}
-                variant={isMismatched ? "amber" : "default"}
-                mismatch={mismatchForSelector}
-              />
-            </span>
-          </Tooltip>
-        </>
-      )}
-
-      {!shouldShowTargetBranch && workspace.sourceBranch && (
-        <>
-          <Text size="1" className={styles.fromLabel}>
-            from
-          </Text>
-          <Text size="1" className={styles.sourceBranch}>
-            {workspace.sourceBranch}
-          </Text>
-        </>
-      )}
+      {/* Arrow + target branch */}
+      <span className={styles.arrowSeparator}>&rarr;</span>
+      <Tooltip
+        content={
+          isMismatched
+            ? `${isGitLab ? "MR" : "PR"} ${isGitLab ? "!" : "#"}${mismatchInfo.mismatchedPrIid} targets ${mismatchInfo.fullBranch} — retarget?`
+            : "Target branch"
+        }
+        side="bottom"
+        open={isTargetBranchOpen ? false : undefined}
+      >
+        <span>
+          <TargetBranchSelector
+            currentTargetBranch={currentTargetBranch}
+            remoteBranches={remoteBranches}
+            onBranchChange={handleTargetBranchChange}
+            onOpenChange={setIsTargetBranchOpen}
+            variant={isMismatched ? "amber" : "default"}
+            mismatch={mismatchForSelector}
+          />
+        </span>
+      </Tooltip>
 
       <div className={styles.spacer} data-spacer />
 
@@ -234,7 +224,8 @@ export const WorkspaceBanner = (): ReactElement | null => {
         </div>
       )}
 
-      {!hiddenPriorities.has(4) && shouldShowTargetBranch && (
+      {/* PR button */}
+      {!hiddenPriorities.has(4) && canCreatePr && (
         <div data-collapse-priority="4">
           <PrButton
             workspaceId={workspaceID}
