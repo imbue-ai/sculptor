@@ -297,6 +297,18 @@ class TestAgentCreateHarness:
         assert "Claude" in result.stderr
         assert "Terminal" in result.stderr
 
+    @respx.mock
+    def test_create_terminal_harness_with_prompt_is_rejected(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_workspaces("ws_test123")
+
+        result = runner.invoke(
+            app, ["agent", "create", "-w", "ws_test123", "--harness", "Terminal", "-p", "Do something"]
+        )
+
+        assert result.exit_code == 1
+        assert "prompt" in result.stderr
+
 
 class TestAgentList:
     @patch("sculpt.commands.agent.fetch_all_agents")
