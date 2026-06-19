@@ -1498,26 +1498,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pydevd"
-version = "3.5.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/6f/ae/d8020162aed46bef5394ce6a4cb5afaa4c3307371ff70339e3e61dd9b109/pydevd-3.5.0.tar.gz", hash = "sha256:2f0ef00281d6082a501cc3591fbb2e3ad32939007ebbe978f7c0cbfd95b71399", size = 1370699, upload-time = "2026-04-02T10:24:12.995Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/6d/71/bababdeb9fdcfe14169741bfc4b55c20ff9c86fd84cca9b1591bf59ebe10/pydevd-3.5.0-cp313-cp313-macosx_14_0_universal2.whl", hash = "sha256:cbb130f3ee344a1ac6a7517edaf2cfa0b7de27809d3e88a652ba491153f64aea", size = 2651103, upload-time = "2026-04-02T10:22:33.323Z" },
-    { url = "https://files.pythonhosted.org/packages/d1/42/7d6db3357a69392b8a9a0e844459c48efa1c151d686f4dc8aa9fcfcd3714/pydevd-3.5.0-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e973c3f263401fdbbbb21acb2c2238d65bb8294aed924e222bbd1eaa561acba1", size = 4176883, upload-time = "2026-04-02T10:23:15.004Z" },
-    { url = "https://files.pythonhosted.org/packages/cd/5a/ae8b5e9d5c972972f9db3326b6ff067b63ec08f030bf003186bcdf2ba9f4/pydevd-3.5.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e52b9ea99e2841f34120a6a42977072d904829cacf2b77ff0e4d076dcbc32568", size = 4250214, upload-time = "2026-04-02T10:31:10.192Z" },
-    { url = "https://files.pythonhosted.org/packages/3c/af/9b0cec9c4ec69e171caac91b9ff2fe9fafdf55a039d0ed8b5232f06cf489/pydevd-3.5.0-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:d28b93e1837f5e2f3409bf9907c8a2fa1340cdde9e2f07dadc48dba0fd2db7e0", size = 5073422, upload-time = "2026-04-02T10:23:16.857Z" },
-    { url = "https://files.pythonhosted.org/packages/64/2a/a797224291f494fd6d7b0e061aa1d0ceeb71c9544fd3dcbd54581600ebe3/pydevd-3.5.0-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:0729925ac1cebf5de00bdebfdb21e9b433734b0f6f3f0f4ba69a1abe250578dc", size = 5215172, upload-time = "2026-04-02T10:31:11.475Z" },
-    { url = "https://files.pythonhosted.org/packages/eb/44/a00295055127b7b8a597318409a51e3db6dac48fbd26160589d2739ebe3e/pydevd-3.5.0-cp313-cp313-win_amd64.whl", hash = "sha256:bb5c289254fd5abf87c30da57ce275655e251fef68a99aec6579c360b1407dc9", size = 2298263, upload-time = "2026-04-02T10:22:35.107Z" },
-]
-
-[[package]]
-name = "pydevd-pycharm"
-version = "262.7581.27"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/d2/c9/8b796004652f5be91520ef4b56524af6ca8f9e6ba97cf1ba990292e10acf/pydevd_pycharm-262.7581.27.tar.gz", hash = "sha256:dda7ce2ab21e2da19a04d6738169a9cf249a172b5a3492d784ca5fccf7ddc83d", size = 7635909, upload-time = "2026-06-15T13:26:06.926Z" }
-
-[[package]]
 name = "pyee"
 version = "13.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2292,15 +2272,12 @@ dependencies = [
     { name = "fastmcp" },
     { name = "junit2html" },
     { name = "mcp" },
-    { name = "pydevd-pycharm" },
 ]
 
 [package.dev-dependencies]
 dev = [
     { name = "ipdb" },
     { name = "ipython" },
-    { name = "pydevd" },
-    { name = "pydevd-pycharm" },
     { name = "pyrefly" },
     { name = "pytest-watcher" },
     { name = "pytest-xdist" },
@@ -2312,15 +2289,12 @@ requires-dist = [
     { name = "fastmcp", specifier = ">=2.1.2" },
     { name = "junit2html", specifier = ">=31.0.2" },
     { name = "mcp", specifier = ">=1.23.0,<2" },
-    { name = "pydevd-pycharm", specifier = ">=251.23774.123" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "ipdb", specifier = ">=0.13.13" },
     { name = "ipython", specifier = ">=8.12.0" },
-    { name = "pydevd", specifier = ">=3.3.0" },
-    { name = "pydevd-pycharm", specifier = ">=251.23774.123" },
     { name = "pyrefly", specifier = ">=1.0.0" },
     { name = "pytest-watcher", specifier = ">=0.4.3" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
