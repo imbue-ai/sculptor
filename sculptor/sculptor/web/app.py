@@ -395,12 +395,8 @@ WORKER_THREAD_COUNT = 40
 
 def on_startup():
     # Based on https://github.com/Kludex/starlette/issues/1724#issuecomment-1717476987
-    # Which I found from https://github.com/fastapi/fastapi/discussions/4593
-    # Also looked at https://github.com/fastapi/fastapi/issues/4221 but that appears to be out of date; Does not work.
-
-    # This is where+how we can set the number of worker threads in the app's underlying pool.
-    # I found this to verify the number of workers we actually have (defaults to 40)
-    # and ensure that we're not going to run out under load from long-running requests.
+    # Sets the number of worker threads in the app's underlying pool so we don't
+    # run out under load from long-running requests.
     limiter = anyio.to_thread.current_default_thread_limiter()
     limiter.total_tokens = WORKER_THREAD_COUNT
 
@@ -658,11 +654,6 @@ def _cleanup_task_file_attachments(
         except Exception as e:
             log_exception(e, "Failed to delete {file_path}", file_path=file_path)
     logger.info("Cleaned up {} file(s) for task {}", len(file_paths), task_id)
-
-
-# =====================
-# Workspace Endpoints
-# =====================
 
 
 @router.post("/api/v1/workspaces")
@@ -1583,11 +1574,6 @@ def get_skills(
             except Exception as e:
                 log_exception(e, "Failed to get skills")
                 raise HTTPException(status_code=500, detail="Failed to get skills") from e
-
-
-# =====================
-# Workspace-Scoped Agent Endpoints
-# =====================
 
 
 def _get_workspace_or_404(
@@ -2545,11 +2531,6 @@ def get_logged_in_or_anonymous_telemetry_info() -> telemetry.TelemetryInfo:
     if not logged_in_info:
         return get_onboarding_telemetry_info()
     return logged_in_info
-
-
-# ====================
-# Onboarding routes and Helpers
-# ====================
 
 
 @router.get("/api/v1/config/status")

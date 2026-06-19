@@ -27,8 +27,6 @@ import urllib.request
 from collections import defaultdict
 from pathlib import Path
 
-# websocket-client is used for direct WS capture (see analyze_ws_traffic)
-
 
 def free_port():
     with socket.socket() as s:

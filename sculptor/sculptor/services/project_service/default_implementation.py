@@ -137,13 +137,13 @@ class DefaultProjectService(ProjectService):
                 # Wait for the monitoring interval or until stop event is set
                 # wait() returns True if the event is set, False if timeout occurred
                 if stop_event.wait(timeout=interval_in_seconds):
-                    break  # Stop event was set, exit the loop
+                    break
 
             except Exception as e:
                 log_exception(e, "Error in project path monitoring")
                 # Continue monitoring even if there's an error, but check for stop event
                 if stop_event.wait(timeout=interval_in_seconds):
-                    break  # Stop event was set, exit the loop
+                    break
 
         logger.info("Project path monitoring thread stopped")
 

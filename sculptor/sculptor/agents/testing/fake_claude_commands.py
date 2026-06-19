@@ -856,9 +856,8 @@ def handle_enter_plan_mode_and_ask(args: dict, emit_streaming: bool) -> list[dic
     """Enter plan mode and immediately ask a question — in a single CLI turn.
 
     Under the SDK MCP path the AUQ resolves via ``mcp__sculptor__ask_user_question``
-    rather than the killed-and-resumed built-in. The original "ParsedAssistantResponse
-    before content_block_stop" reproduction is no longer relevant: the MCP flow
-    never blocks the CLI mid-stream.
+    rather than the killed-and-resumed built-in, and the MCP flow never blocks the
+    CLI mid-stream.
     """
     questions = args["questions"]
 

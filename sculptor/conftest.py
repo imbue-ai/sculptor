@@ -27,13 +27,11 @@ from sculptor.web.middleware import shutdown_event
 EXPLICITLY_IMPORTED_FIXTURES = (empty_temp_git_repo, initial_commit_repo, browser_panel_fixture_server_)
 
 
-# ---------------------------------------------------------------------------
 # Session budget: fail remaining tests when time runs out so pytest exits
 # cleanly and writes JUnit XML. Controlled by SESSION_TIMEOUT_SECONDS env var.
 #
 # Must be in the root conftest (not a subdirectory conftest imported via
 # `import *`) so hooks are registered before pytest_sessionstart fires.
-# ---------------------------------------------------------------------------
 _SESSION_START_ENV_KEY = "_PYTEST_SESSION_START_TIME"
 
 

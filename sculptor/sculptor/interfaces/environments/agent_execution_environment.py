@@ -61,8 +61,6 @@ class AgentExecutionEnvironment(Protocol):
     - get_artifacts_path(): Per-task artifacts directory: {root}/artifacts/tasks/{task_id}/
     """
 
-    # ===== Properties =====
-
     @property
     def supports_terminal(self) -> bool:
         """Whether the environment supports a terminal/TTY."""
@@ -72,8 +70,6 @@ class AgentExecutionEnvironment(Protocol):
     def concurrency_group(self) -> ConcurrencyGroup:
         """The concurrency group for process and thread management."""
         ...
-
-    # ===== Path Management =====
 
     def get_state_path(self) -> Path:
         """Get the per-task state directory path.
@@ -122,8 +118,6 @@ class AgentExecutionEnvironment(Protocol):
         """Convert a host filesystem path to an environment path."""
         ...
 
-    # ===== File Operations =====
-
     def exists(self, path: str) -> bool:
         """Check if a path exists in the environment."""
         ...
@@ -156,8 +150,6 @@ class AgentExecutionEnvironment(Protocol):
             EnvironmentFailure: if the file cannot be deleted.
         """
         ...
-
-    # ===== Process Management =====
 
     def run_process_in_background(
         self,
@@ -226,8 +218,6 @@ class AgentExecutionEnvironment(Protocol):
         """
         ...
 
-    # ===== Tool Binary Resolution =====
-
     def get_tool_binary_path(self, tool: Dependency) -> str | None:
         """Resolve the path to a tool binary.
 
@@ -238,8 +228,6 @@ class AgentExecutionEnvironment(Protocol):
             The resolved path to the binary, or None if not found.
         """
         ...
-
-    # ===== System Configuration =====
 
     def get_system_prompt(self) -> str | None:
         """Get the environment-specific system prompt content.
@@ -257,8 +245,6 @@ class AgentExecutionEnvironment(Protocol):
         agent. Values are intentionally not exposed.
         """
         ...
-
-    # ===== Terminal Management =====
 
     def start_terminal_manager(
         self,

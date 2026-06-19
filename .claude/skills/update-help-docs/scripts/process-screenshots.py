@@ -13,10 +13,6 @@ TARGET_WIDTH = 1200  # Standard width for documentation
 TARGET_HEIGHT = 800  # Standard height for documentation
 BACKGROUND_COLOR = (166, 170, 145)  # Sage green background (#A6AA91)
 MIN_BORDER_WIDTH = 40  # Minimum border thickness (pixels) on all sides
-# Alternative colors:
-# (255, 255, 255) - White
-# (243, 244, 246) - Tailwind gray-100
-# (17, 24, 39) - Dark mode background
 
 def remove_border(img, border_color, tolerance=10):
     """

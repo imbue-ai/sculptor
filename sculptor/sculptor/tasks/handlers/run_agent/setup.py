@@ -88,7 +88,6 @@ def wait_for_initial_message_and_process_queue(
     leaf_persistent_user_message_types = extract_leaf_types(PersistentUserMessageUnion)
     assert all(isinstance(message, leaf_persistent_user_message_types) for message in re_queued_messages)
     assert isinstance(re_queued_messages, tuple)
-    # after the above checks, this cast is now safe
     re_queued_messages = cast(tuple[PersistentUserMessageUnion, ...], re_queued_messages)
 
     return re_queued_messages, initial_message
@@ -235,7 +234,6 @@ def load_initial_task_state(services: ServiceCollectionForTask, task: Task) -> t
         task_row = transaction.get_task(task.object_id)
         assert task_row is not None, "Task must exist in the database"
         if task_row.current_state is None:
-            # After Phase 1 workspace integration, all tasks must have current_state with workspace_id.
             # Tasks are created with current_state in start_task(), so this should never happen.
             raise RuntimeError(f"Task {task.object_id} has no current_state. All tasks must have initial state.")
         logger.debug("loading existing task state...")

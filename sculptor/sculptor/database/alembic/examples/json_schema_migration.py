@@ -26,10 +26,7 @@ def downgrade() -> None:
 
 
 OBJECT_TYPE = "UpdateGoalAgentMessage"
-TABLES_AND_PRIMARY_KEYS = (
-    ("saved_agent_message", "snapshot_id"),
-    # ("saved_agent_message_latest", "object_id"),
-)
+TABLES_AND_PRIMARY_KEYS = (("saved_agent_message", "snapshot_id"),)
 
 
 def _select_rows(table_name: str, primary_key: str) -> sa.TextClause:

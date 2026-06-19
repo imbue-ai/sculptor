@@ -126,7 +126,7 @@ class StartTaskRequest(RequestModel):
     initialization_strategy: WorkspaceInitializationStrategy = WorkspaceInitializationStrategy.IN_PLACE
     name: str | None = None
     source_branch: str | None = None
-    # New field for workspace selection - mutually exclusive with initialization_strategy
+    # Mutually exclusive with initialization_strategy.
     # When provided, the task will be created in an existing workspace
     workspace_id: WorkspaceID | None = None
     enter_plan_mode: bool = False
