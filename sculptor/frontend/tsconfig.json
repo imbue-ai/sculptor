@@ -5,7 +5,13 @@
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "skipLibCheck": true,
-    "paths": { "~/*": ["./src/*"] },
+    "paths": {
+      "~/*": ["./src/*"],
+      // Bundled plugins import the SDK by its bare specifier; resolve it to host
+      // source so `tsc` type-checks them (they're included below). Mirrors each
+      // plugin's own tsconfig path and the vite/import-map resolution.
+      "@sculptor/plugin-sdk": ["./src/plugins/sdk/index.ts"]
+    },
     /* Bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
@@ -27,6 +33,7 @@
   },
   "include": [
     "src",
+    "plugins",
     "src/globals.d.ts",
     "src/generated-types.d.ts",
     "eslint.config.ts",

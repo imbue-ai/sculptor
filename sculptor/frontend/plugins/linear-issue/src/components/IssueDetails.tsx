@@ -3,14 +3,7 @@ import { Markdown, openExternal } from "@sculptor/plugin-sdk";
 import { ExternalLink, GitPullRequest } from "lucide-react";
 import type { ReactElement } from "react";
 
-import { isPullRequestAttachment, type LinearIssue } from "../linear/client.ts";
-
-// "https://github.com/owner/repo/pull/74" -> "#74"; GitLab merge requests -> "!74".
-const prLabel = (url: string): string => {
-  const match = url.match(/\/(?:pull|merge_requests)\/(\d+)/);
-  if (!match) return "PR";
-  return `${url.includes("/merge_requests/") ? "!" : "#"}${match[1]}`;
-};
+import { isPullRequestAttachment, type LinearIssue, prLabel } from "../linear/client.ts";
 
 /** The expanded body of a ticket: metadata, markdown description, and links out. */
 export const IssueDetails = ({ issue }: { issue: LinearIssue }): ReactElement => {
