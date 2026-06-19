@@ -1,12 +1,10 @@
 from collections.abc import Mapping
-from concurrent.futures import as_completed
 from pathlib import Path
 
 import attr
 
 from sculptor.foundation.concurrency_group import ConcurrencyGroup
 from sculptor.foundation.frozen_utils import empty_mapping
-from sculptor.primitives.executor import ObservableThreadPoolExecutor
 from sculptor.testing.computing_environment import apply_patch_via_git
 from sculptor.testing.computing_environment import make_commit
 from sculptor.testing.local_git_repo import LocalGitRepo
@@ -81,9 +79,14 @@ def create_repo_from_snapshot(
 def _write_files_in_parallel(
     repo: LocalGitRepo, content: Mapping[str, str], concurrency_group: ConcurrencyGroup
 ) -> None:
-    with ObservableThreadPoolExecutor(concurrency_group) as executor:
-        futures = [
-            executor.submit(repo.write_file, file_path, file_content) for file_path, file_content in content.items()
-        ]
-        for future in as_completed(futures):
-            future.result()  # This will raise any exceptions that occurred
+    # Write each file on its own ConcurrencyGroup-tracked ObservableThread, then join them:
+    # join() re-raises any exception the worker captured. File counts here are small
+    # test-fixture sizes, so one thread per file is fine.
+    threads = [
+        concurrency_group.start_new_thread(
+            target=repo.write_file, args=(file_path, file_content), name=f"write_file_{index}"
+        )
+        for index, (file_path, file_content) in enumerate(content.items())
+    ]
+    for thread in threads:
+        thread.join()
