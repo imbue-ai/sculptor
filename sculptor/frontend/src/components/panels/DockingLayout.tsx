@@ -30,7 +30,6 @@ import {
   usePanelsByZone,
 } from "~/components/panels/hooks.ts";
 import { LeftSidebar } from "~/components/panels/LeftSidebar";
-import { PanelModal } from "~/components/panels/PanelModal";
 import { ResizeHandle } from "~/components/panels/ResizeHandle";
 import { RightSidebar } from "~/components/panels/RightSidebar";
 import type { DropTarget } from "~/components/panels/SidebarDropZone";
@@ -393,8 +392,6 @@ export const DockingLayout = ({ centerContent }: DockingLayoutProps): ReactEleme
           </div>
         )}
       </DragOverlay>
-
-      <PanelModal />
     </DndContext>
   );
 };

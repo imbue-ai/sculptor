@@ -1,5 +1,5 @@
 import { DndContext } from "@dnd-kit/core";
-import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { createStore } from "jotai";
 import { Circle } from "lucide-react";
 import type { ReactNode } from "react";
@@ -10,7 +10,6 @@ import { parseShortcut } from "~/common/ShortcutUtils";
 import {
   activePanelPerZoneAtom,
   createPanelStore,
-  modalPanelIdAtom,
   panelsInZoneAtom,
   zoneAssignmentsAtom,
   zoneOrderAtom,
@@ -635,17 +634,6 @@ describe("DockingLayout", () => {
       // context menu) is present as a proxy for the menu opening.
       expect(screen.getByText("Move to")).toBeInTheDocument();
     });
-
-    it("context menu contains 'Move to' and 'Open in Modal' options", () => {
-      const store = createDefaultTestStore();
-      const { container } = renderTest(<DockingLayout />, store);
-
-      const infoIcon = getClickableIcon(container, "info");
-      fireEvent.contextMenu(infoIcon!);
-
-      expect(screen.getByText("Move to")).toBeInTheDocument();
-      expect(screen.getByText("Open in Modal")).toBeInTheDocument();
-    });
   });
 
   describe("keyboard shortcuts", () => {
@@ -710,76 +698,6 @@ describe("DockingLayout", () => {
       fireShortcut("cost");
       expect(screen.getByText(TEST_PANEL_CONTENT.cost)).toBeInTheDocument();
       expect(screen.queryByText(TEST_PANEL_CONTENT.info)).not.toBeInTheDocument();
-    });
-  });
-
-  describe("context menu actions", () => {
-    it("context menu 'Open in Modal' option is rendered for each panel", () => {
-      const store = createDefaultTestStore();
-      const { container } = renderTest(<DockingLayout />, store);
-
-      // Verify the option appears for a left-sidebar panel
-      const infoIcon = getClickableIcon(container, "info");
-      fireEvent.contextMenu(infoIcon!);
-      expect(screen.getByText("Open in Modal")).toBeInTheDocument();
-
-      // Close the menu by clicking elsewhere, then verify for a different zone
-      cleanup();
-      const store2 = createDefaultTestStore();
-      const { container: container2 } = renderTest(<DockingLayout />, store2);
-      const terminalIcon = getClickableIcon(container2, "terminal");
-      fireEvent.contextMenu(terminalIcon!);
-      expect(screen.getByText("Open in Modal")).toBeInTheDocument();
-    });
-  });
-
-  describe("modal", () => {
-    it("opens when modalPanelIdAtom is set", () => {
-      const store = createDefaultTestStore();
-      renderTest(<DockingLayout />, store);
-
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-
-      act(() => {
-        store.set(modalPanelIdAtom, "terminal");
-      });
-
-      const dialog = screen.getByRole("dialog");
-      expect(dialog).toBeInTheDocument();
-      expect(dialog).toHaveTextContent("Terminal");
-      expect(dialog).toHaveTextContent(TEST_PANEL_CONTENT.terminal);
-    });
-
-    it("closes when modalPanelIdAtom is cleared", () => {
-      const store = createDefaultTestStore();
-      renderTest(<DockingLayout />, store);
-
-      act(() => {
-        store.set(modalPanelIdAtom, "info");
-      });
-      expect(screen.getByRole("dialog")).toBeInTheDocument();
-
-      act(() => {
-        store.set(modalPanelIdAtom, null);
-      });
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    });
-
-    it("can open modal for any registered panel", () => {
-      const store = createDefaultTestStore();
-      renderTest(<DockingLayout />, store);
-
-      for (const { id, displayName } of TEST_PANELS) {
-        act(() => {
-          store.set(modalPanelIdAtom, id);
-        });
-        const dialog = screen.getByRole("dialog");
-        expect(dialog).toHaveTextContent(displayName);
-
-        act(() => {
-          store.set(modalPanelIdAtom, null);
-        });
-      }
     });
   });
 

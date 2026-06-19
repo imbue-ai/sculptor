@@ -1,15 +1,10 @@
 import { useDraggable } from "@dnd-kit/core";
 import { Tooltip } from "@radix-ui/themes";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue } from "jotai";
 import { type ReactElement, useState } from "react";
 
 import { ElementIds } from "~/api";
-import {
-  activePanelPerZoneAtom,
-  modalPanelIdAtom,
-  zoneAssignmentsAtom,
-  zoneVisibilityAtom,
-} from "~/components/panels/atoms.ts";
+import { activePanelPerZoneAtom, zoneAssignmentsAtom, zoneVisibilityAtom } from "~/components/panels/atoms.ts";
 import { usePanelActions, usePanelById } from "~/components/panels/hooks.ts";
 import { PanelContextMenu } from "~/components/panels/PanelContextMenu";
 import type { PanelId, ZoneId } from "~/components/panels/types.ts";
@@ -35,7 +30,6 @@ export const SidebarIcon = ({ panelId, zoneId }: SidebarIconProps): ReactElement
   const zoneAssignments = useAtomValue(zoneAssignmentsAtom);
   const activePanelPerZone = useAtomValue(activePanelPerZoneAtom);
   const zoneVisibility = useAtomValue(zoneVisibilityAtom);
-  const setModalPanelId = useSetAtom(modalPanelIdAtom);
   const { togglePanel } = usePanelActions();
 
   const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
@@ -51,22 +45,13 @@ export const SidebarIcon = ({ panelId, zoneId }: SidebarIconProps): ReactElement
     togglePanel(panelId);
   };
 
-  const handleOpenInModal = (): void => {
-    setModalPanelId(panelId);
-  };
-
   const iconClassName = [styles.icon, isActive ? styles.active : ""].filter(Boolean).join(" ");
 
   return (
     <div data-panel-icon={panelId} data-testid={PANEL_ICON_TEST_IDS[panelId]}>
       <Tooltip content={panelDef.displayName} side="right" open={isContextMenuOpen ? false : undefined}>
         <div>
-          <PanelContextMenu
-            panelId={panelId}
-            zoneId={zoneId}
-            onOpenInModal={handleOpenInModal}
-            onOpenChange={setIsContextMenuOpen}
-          >
+          <PanelContextMenu panelId={panelId} zoneId={zoneId} onOpenChange={setIsContextMenuOpen}>
             <div ref={setNodeRef} className={iconClassName} onClick={handleClick} {...listeners} {...attributes}>
               <Icon size={18} />
             </div>

@@ -73,9 +73,6 @@ export const didZenImplyFocusModeAtom = atomWithStorage<boolean>("sculptor-zen-m
 // Set by WorkspacePageContent on mount/navigation; null when not viewing a workspace.
 export const activeWorkspaceIdAtom = atom<string | null>(null);
 
-// Modal state atom — NOT persisted (resets on reload)
-export const modalPanelIdAtom = atom<PanelId | null>(null);
-
 // Tracks whether a chat panel (real or skeleton) is currently mounted.
 // Chat-panel components flip this to `true` on mount and `false` on unmount,
 // giving the rest of the app a reactive, DOM-free signal that can be read
