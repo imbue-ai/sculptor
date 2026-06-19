@@ -21,7 +21,6 @@ class TestConvertArchivedOutcomeToDeleted(MigrationTestFixture):
         return "0fb6dc48c8ef"
 
     def seed(self, connection: sa.engine.Connection) -> None:
-        # Insert a project
         connection.execute(
             sa.text("""
                 INSERT INTO project_latest (

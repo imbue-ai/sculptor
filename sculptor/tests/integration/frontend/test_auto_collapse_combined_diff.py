@@ -115,7 +115,6 @@ def test_many_files_start_collapsed_in_review_all(sculptor_instance_: SculptorIn
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    # Open the Changes panel and click Review All
     task_page.activate_changes_panel()
     task_page.click_review_all()
 
@@ -138,14 +137,12 @@ def test_few_files_start_expanded_in_review_all(sculptor_instance_: SculptorInst
     start expanded (not collapsed)."""
     page = sculptor_instance_.page
 
-    # Enable Review All via Settings UI
     _enable_review_all_via_settings(page)
 
     task_page = start_task_and_wait_for_ready(page, prompt=_THREE_FILES_PROMPT, wait_for_agent_to_finish=False)
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    # Open the Changes panel and click Review All
     task_page.activate_changes_panel()
     task_page.click_review_all()
 

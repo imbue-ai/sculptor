@@ -23,10 +23,6 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 
 def _stop_agent(chat_panel: PlaywrightChatPanelElement) -> None:
     """Click the stop button and wait for the agent to stop."""
@@ -34,11 +30,6 @@ def _stop_agent(chat_panel: PlaywrightChatPanelElement) -> None:
     expect(stop_button).to_be_visible()
     stop_button.click()
     expect(chat_panel.get_thinking_indicator()).not_to_be_visible()
-
-
-# ---------------------------------------------------------------------------
-# 1. Non-JSON output
-# ---------------------------------------------------------------------------
 
 
 @user_story("to see the agent recover gracefully when the Anthropic API returns garbage")
@@ -65,11 +56,6 @@ def test_garbage_output_does_not_crash_ui(sculptor_instance_: SculptorInstance) 
     send_chat_message(chat_panel, 'fake_claude:text `{"text": "Recovery after garbage"}`')
     expect(chat_panel.get_thinking_indicator()).not_to_be_visible()
     expect(chat_panel.get_messages().last).to_contain_text("Recovery after garbage")
-
-
-# ---------------------------------------------------------------------------
-# 2. Hung / non-responsive process
-# ---------------------------------------------------------------------------
 
 
 @user_story("to stop a non-responsive agent via the Stop button")
@@ -101,11 +87,6 @@ def test_stop_kills_hung_process(sculptor_instance_: SculptorInstance) -> None:
     expect(messages.last).to_contain_text("Recovery after hang")
 
 
-# ---------------------------------------------------------------------------
-# 3. Stdin backpressure
-# ---------------------------------------------------------------------------
-
-
 @user_story("to stop an agent that ignores stdin without the UI freezing")
 def test_stdin_backpressure_does_not_block_stop(sculptor_instance_: SculptorInstance) -> None:
     """When the CLI never reads stdin, writing a follow-up message or interrupt
@@ -135,11 +116,6 @@ def test_stdin_backpressure_does_not_block_stop(sculptor_instance_: SculptorInst
     send_chat_message(chat_panel, 'fake_claude:text `{"text": "Recovery after backpressure"}`')
     expect(chat_panel.get_thinking_indicator()).not_to_be_visible()
     expect(chat_panel.get_messages().last).to_contain_text("Recovery after backpressure")
-
-
-# ---------------------------------------------------------------------------
-# 4. Process leak after error response
-# ---------------------------------------------------------------------------
 
 
 def _read_pid_file(pid_path: Path, page: Page, timeout: float = 10.0) -> int:
@@ -217,11 +193,6 @@ def test_error_response_terminates_process(sculptor_instance_: SculptorInstance)
         if leaked_pid is not None:
             _kill_process(leaked_pid)
         pid_path.unlink(missing_ok=True)
-
-
-# ---------------------------------------------------------------------------
-# 5. Successful response + slow-to-exit process
-# ---------------------------------------------------------------------------
 
 
 @user_story("to see a successful response even when the CLI process is slow to exit")

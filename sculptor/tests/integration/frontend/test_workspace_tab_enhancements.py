@@ -1,11 +1,4 @@
-"""Integration tests for workspace tab enhancements.
-
-Tests cover:
-- Cmd+T keyboard shortcut opens the Add Workspace page
-- Cmd+W keyboard shortcut closes the current workspace tab (removes tab, no deletion)
-- X button on the Open Workspace tab navigates to the MRU workspace
-- Context menu Delete action triggers deletion with confirmation
-"""
+"""Integration tests for workspace tab enhancements."""
 
 from playwright.sync_api import expect
 

@@ -44,8 +44,8 @@ fake_claude:multi_step `{
     expect(pills).to_have_count(2)
 
     # Click the first pill (Read) — its popover should show the file path.
-    # (The popover no longer prints the tool name as a header for single-entry
-    # pills; it shows the per-tool details directly.)
+    # (For single-entry pills the popover shows the per-tool details directly,
+    # with no tool-name header.)
     pills.nth(0).click()
     popover = chat_panel.get_tool_pill_popover()
     expect(popover).to_be_visible()

@@ -1,10 +1,4 @@
-"""Integration tests for workspace tab context menu rename functionality.
-
-Tests cover:
-- Workspace context menu has a Rename item
-- Inline rename input appears and works on commit (Enter)
-- Inline rename input cancels on Escape
-"""
+"""Integration tests for workspace tab context menu rename functionality."""
 
 from playwright.sync_api import expect
 

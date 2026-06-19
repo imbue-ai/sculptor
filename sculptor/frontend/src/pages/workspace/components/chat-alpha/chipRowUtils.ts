@@ -280,19 +280,36 @@ export const segmentToolBlocks = (blocks: ReadonlyArray<ToolUseBlock | ToolResul
   for (const block of blocks) {
     const name = getToolName(block);
 
-    if (block.type === "tool_use" && isDiffTool(name)) {
-      flushTools();
-      currentChipBlocks.push(block);
-    } else if (block.type === "tool_result" && isDiffTool(name)) {
-      // The backend replaces tool_use with tool_result in completed messages.
-      // Convert back to a ToolUseBlock shim so the chip row can render it.
-      flushTools();
-      currentChipBlocks.push(resultToToolUseShim(block as ToolResultBlock));
-    } else {
-      // Everything else (including Bash) goes into a tool pill segment.
-      flushChip();
-      currentToolBlocks.push(block);
+    if (isDiffTool(name)) {
+      // Diff tools normally render as file chips, but a chip requires a
+      // derivable file path — without one buildChipData would silently drop the
+      // block, making the tool call vanish. Fall back to a tool pill so the
+      // call still appears (e.g. an Edit to a file outside the workspace whose
+      // result carries no path).
+      if (block.type === "tool_use" && getFilePathFromToolBlock(block) !== null) {
+        flushTools();
+        currentChipBlocks.push(block);
+        continue;
+      }
+
+      if (block.type === "tool_result") {
+        // The backend replaces tool_use with tool_result in completed messages.
+        // Convert back to a ToolUseBlock shim so the chip row can render it.
+        const result = block as ToolResultBlock;
+        const shim = resultToToolUseShim(result);
+        if (getFilePathFromToolBlock(shim, result) !== null) {
+          flushTools();
+          currentChipBlocks.push(shim);
+          continue;
+        }
+      }
+      // No derivable file path — fall through to the tool pill segment below.
     }
+
+    // Everything else (including Bash and path-less diff tools) goes into a
+    // tool pill segment.
+    flushChip();
+    currentToolBlocks.push(block);
   }
 
   flushChip();

@@ -6,6 +6,7 @@ import react from "@vitejs/plugin-react-swc";
 import type { BuildOptions, Plugin } from "vite";
 import { defineConfig, loadEnv, type UserConfig } from "vite";
 
+import { bundledPlugins } from "./vite-plugins/bundled-plugins.ts";
 import { pluginRuntimeStubs } from "./vite-plugins/plugin-runtime-stubs.ts";
 
 /**
@@ -63,7 +64,7 @@ export default defineConfig(({ command, mode }): UserConfig => {
   console.log(`PostHog token: ${posthogToken ? "set" : "(empty — telemetry disabled)"}`);
   console.log(`PostHog host: ${posthogHost}`);
 
-  const ENABLED_PLUGINS = [externalizeXterm(), pluginRuntimeStubs(), react()];
+  const ENABLED_PLUGINS = [externalizeXterm(), pluginRuntimeStubs(), bundledPlugins(), react()];
 
   const baseConfig: UserConfig = {
     root,

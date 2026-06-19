@@ -44,18 +44,14 @@ def test_component_gallery_opens_as_tab(
     """
     page = sculptor_instance_.page
 
-    # Step 1: Create a workspace.
     start_task_and_wait_for_ready(page, prompt="Gallery test", workspace_name="Gallery WS")
 
-    # Step 2: Open Component Gallery via Theme Builder.
     _open_component_gallery_tab(sculptor_instance_)
 
-    # Step 3: Verify a Component Gallery tab appears.
     layout = PlaywrightProjectLayoutPage(page=page)
     gallery_tab = layout.get_component_gallery_tab()
     expect(gallery_tab).to_be_visible()
 
-    # Step 4: Verify the Component Gallery tab is active.
     expect(gallery_tab).to_have_attribute("aria-selected", "true")
 
 
@@ -74,24 +70,19 @@ def test_component_gallery_tab_is_closeable(
     """
     page = sculptor_instance_.page
 
-    # Step 1: Create a workspace.
     start_task_and_wait_for_ready(page, prompt="Close gallery test", workspace_name="Close Gallery WS")
 
-    # Step 2: Open Component Gallery tab.
     _open_component_gallery_tab(sculptor_instance_)
 
     layout = PlaywrightProjectLayoutPage(page=page)
     gallery_tab = layout.get_component_gallery_tab()
     expect(gallery_tab).to_be_visible()
 
-    # Step 3: Click the close button on the Component Gallery tab.
     close_button = gallery_tab.get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON)
     close_button.click()
 
-    # Step 4: Verify the Component Gallery tab disappears.
     expect(gallery_tab).to_have_count(0)
 
-    # Step 5: Verify a workspace tab is active.
     workspace_tabs = layout.get_workspace_tabs()
     expect(workspace_tabs).to_have_count(1)
 
@@ -111,25 +102,20 @@ def test_component_gallery_tab_context_menu_no_rename_or_delete(
     """
     page = sculptor_instance_.page
 
-    # Step 1: Create a workspace and open Component Gallery.
     start_task_and_wait_for_ready(page, prompt="Menu test", workspace_name="Menu Gallery WS")
     _open_component_gallery_tab(sculptor_instance_)
 
-    # Step 2: Right-click the Component Gallery tab.
     layout = PlaywrightProjectLayoutPage(page=page)
     tab_bar = PlaywrightAgentTabBarElement(page)
     gallery_tab = layout.get_component_gallery_tab()
     expect(gallery_tab).to_be_visible()
     tab_bar.open_context_menu(gallery_tab)
 
-    # Step 3: Verify Close is visible.
     close_item = tab_bar.get_context_menu_close_item()
     expect(close_item).to_be_visible()
 
-    # Step 4: Verify Rename is not present.
     rename_item = tab_bar.get_context_menu_rename_item()
     expect(rename_item).to_have_count(0)
 
-    # Step 5: Verify Delete is not present.
     delete_item = tab_bar.get_context_menu_delete_item()
     expect(delete_item).to_have_count(0)

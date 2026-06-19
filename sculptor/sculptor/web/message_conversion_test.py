@@ -507,7 +507,6 @@ def test_convert_agent_messages_to_task_update_processes_tool_results_during_str
     assert isinstance(tool_content, GenericToolContent)
     assert tool_content.text == "file contents here"
 
-    # Now streaming completes
     streaming_complete = StreamingMessageCompleteAgentMessage(message_id=AgentMessageID())
 
     state = convert_agent_messages_to_task_update(
@@ -519,7 +518,6 @@ def test_convert_agent_messages_to_task_update_processes_tool_results_during_str
     )
 
     assert state.is_streaming_active is False
-    # Tool result should still be there
     in_progress_msg = state.in_progress_chat_message
     assert in_progress_msg is not None
     assert isinstance(in_progress_msg.content[1], ToolResultBlock)

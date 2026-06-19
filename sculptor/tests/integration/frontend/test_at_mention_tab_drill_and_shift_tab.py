@@ -1,7 +1,6 @@
 """Integration tests for Tab-drill (into a folder) and Shift+Tab (up a folder).
 
-Recent changes introduced a distinction between Enter and Tab in the @-mention
-picker:
+Enter and Tab have distinct behaviors in the @-mention picker:
 - Enter on a folder commits it as a mention chip (for folder reveal).
 - Tab on a folder drills *into* it, switching the picker to path-mode on the
   selected directory — including gitignored entries that fuzzy search hides.

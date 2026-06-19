@@ -1,10 +1,4 @@
-"""Tests for LocalAgentExecutionEnvironment wrapper.
-
-Tests verify:
-1. Per-task namespaced state and artifacts paths
-2. Delegation to underlying Environment for other operations
-3. Directory creation on initialization
-"""
+"""Tests for LocalAgentExecutionEnvironment wrapper."""
 
 from pathlib import Path
 from unittest.mock import MagicMock

@@ -124,11 +124,6 @@ def _assert_error_button_with_popover(
     _expand_details_and_verify(task_page, details_text)
 
 
-# ---------------------------------------------------------------------------
-# Group 1: CLI missing (no gh/glab on PATH) — one spawn, two scenarios
-# ---------------------------------------------------------------------------
-
-
 @user_story("to see an error when gh/glab CLI is not installed")
 def test_cli_missing_shows_error_for_github_and_gitlab(
     sculptor_instance_factory_: SculptorInstanceFactory, tmp_path: Path
@@ -168,10 +163,6 @@ def test_cli_missing_shows_error_for_github_and_gitlab(
         popover = task_page.get_pr_button_error_popover()
         expect(popover).to_contain_text("brew install glab")
 
-
-# ---------------------------------------------------------------------------
-# Group 2: GitHub error variants — one spawn, mode-switching fake gh
-# ---------------------------------------------------------------------------
 
 _FAKE_GH_SCRIPT = """\
 #!/bin/bash
@@ -246,10 +237,6 @@ def test_github_cli_error_variants(sculptor_instance_: SculptorInstance, tmp_pat
     )
 
 
-# ---------------------------------------------------------------------------
-# Group 3: GitHub happy paths — one spawn, mode-switching fake gh
-# ---------------------------------------------------------------------------
-
 # The backend issues a single `gh api graphql` query for PR status, so each
 # mode emits the GraphQL response envelope: no_pr returns an empty node list,
 # open_pr returns one node tagged "state": "OPEN". The mode-file path is
@@ -300,10 +287,6 @@ def test_github_happy_paths(sculptor_instance_: SculptorInstance, tmp_path: Path
     expect(open_button).to_be_visible()
     expect(open_button).to_contain_text("PR #42")
 
-
-# ---------------------------------------------------------------------------
-# Group 4: GitLab error variants — one spawn, mode-switching fake glab
-# ---------------------------------------------------------------------------
 
 _FAKE_GLAB_SCRIPT = """\
 #!/bin/bash

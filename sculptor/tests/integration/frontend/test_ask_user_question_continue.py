@@ -84,7 +84,6 @@ fake_claude:ask_user_question_and_continue `{
     # Now answer the question — this triggers a follow-up invocation
     auq_panel.select_first_option_and_submit()
 
-    # Q&A panel should disappear after submission
     expect(auq_panel).not_to_be_visible()
 
     # Wait for the follow-up invocation to finish

@@ -58,7 +58,6 @@ def test_write_to_claude_skill_file(sculptor_instance_: SculptorInstance) -> Non
     --dangerously-skip-permissions is set. Without --permission-prompt-tool stdio
     and auto-approval of can_use_tool control requests, this write fails silently.
     """
-    # Step 1: Ask the agent to write to a .claude/ skill file using the Write tool.
     # We use a unique sentinel so we can verify the exact content was written.
     task_page = create_workspace_and_send(sculptor_instance_, _WRITE_PROMPT)
     chat_panel = task_page.get_chat_panel()

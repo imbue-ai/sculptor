@@ -27,7 +27,6 @@ def test_terminal_tab_context_menu_close_others(
     """
     page = sculptor_instance_.page
 
-    # Create a workspace
     start_task_and_wait_for_ready(page, prompt="Terminal test", workspace_name="Terminal WS")
 
     # Open the terminal panel (it is not visible by default)
@@ -38,7 +37,6 @@ def test_terminal_tab_context_menu_close_others(
     add_terminal_button.click()
     add_terminal_button.click()
 
-    # Verify 3 terminal tabs exist
     terminal_tabs = get_terminal_tabs(page)
     expect(terminal_tabs).to_have_count(3)
 
@@ -50,5 +48,4 @@ def test_terminal_tab_context_menu_close_others(
     expect(close_others_item).to_be_visible()
     close_others_item.click()
 
-    # Verify only 1 terminal tab remains
     expect(terminal_tabs).to_have_count(1)

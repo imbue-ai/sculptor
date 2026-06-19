@@ -14,7 +14,6 @@ def test_log_rotation(tmp_path: Path):
         setup_loggers(log_file, level="TRACE", rotation="1 KB", retention=2)
         # write a small line
         logger.info("hello")
-        # check that the log file exists
         time.sleep(1.0)
         assert log_file.exists(), "log file should exist"
         # write a big line

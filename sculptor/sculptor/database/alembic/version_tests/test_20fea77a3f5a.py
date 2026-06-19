@@ -62,12 +62,10 @@ class TestAddDiffStatusAndDiffUpdatedAt(MigrationTestFixture):
         )
 
     def verify(self, connection: sa.engine.Connection) -> None:
-        # Check diff_status and diff_updated_at columns exist on workspace
         workspace_columns = {row[1] for row in connection.execute(sa.text("PRAGMA table_info(workspace)"))}
         assert "diff_status" in workspace_columns, "diff_status column not found in workspace"
         assert "diff_updated_at" in workspace_columns, "diff_updated_at column not found in workspace"
 
-        # Check diff_status and diff_updated_at columns exist on workspace_latest
         workspace_latest_columns = {
             row[1] for row in connection.execute(sa.text("PRAGMA table_info(workspace_latest)"))
         }

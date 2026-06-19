@@ -305,13 +305,6 @@ def test_frozen_json_schema_baseline_covers_every_persisted_model() -> None:
     assert set(frozen_schemas.keys()) == set(latest_schemas.keys()), missing_models_message
 
 
-# ============================================================================
-# MIGRATION CORRECTNESS TESTS
-# These tests verify that the Alembic migration chain produces a correct
-# schema and that triggers work properly after migration.
-# ============================================================================
-
-
 def _get_schema_info(engine) -> dict[str, Any]:  # noqa: ANN001
     """Extract a normalized schema description from a database engine for comparison."""
     inspector = inspect(engine)
@@ -619,13 +612,6 @@ def _get_migration_fixtures() -> list[MigrationTestFixture]:
     return discover_test_fixtures()
 
 
-# ============================================================================
-# MIGRATION FIXTURE TESTS
-# These tests ensure every migration has a test fixture and that
-# each fixture's seed/verify logic runs successfully.
-# ============================================================================
-
-
 def test_every_migration_has_a_test_fixture() -> None:
     """Enforce that every migration file has a companion test fixture file."""
     from sculptor.database.alembic.migration_test_utils import get_all_migration_revision_ids
@@ -652,14 +638,6 @@ def test_migration_fixture(fixture: MigrationTestFixture) -> None:
     from sculptor.database.alembic.migration_test_utils import run_migration_fixture_test
 
     run_migration_fixture_test(fixture)
-
-
-# ============================================================================
-# OBSERVER BEHAVIOR TESTS
-# These tests verify the current behavior by mocking observer notifications
-# via queue.put() calls. This ensures refactoring doesn't break existing
-# functionality.
-# ============================================================================
 
 
 def test_observer_notification_project_upsert(test_db_service: SQLDataModelService) -> None:
@@ -966,12 +944,6 @@ def test_lock_debug_logging_on_begin_immediate_failure(
                     pass
         except OperationalError:
             pass
-
-
-# ============================================================================
-# WORKSPACE STREAMING TESTS
-# These tests verify workspace changes are tracked and streamed correctly.
-# ============================================================================
 
 
 def test_observer_notification_workspace_upsert(

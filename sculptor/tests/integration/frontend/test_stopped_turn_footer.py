@@ -72,11 +72,9 @@ def test_stopped_turn_footer_shows_duration_after_content_streamed(
 
     _stop_agent_via_status_pill(chat_panel)
 
-    # The turn footer should be visible
     turn_footer = alpha_view.get_turn_footers()
     expect(turn_footer).to_be_visible()
 
-    # It must say "Stopped"
     expect(turn_footer).to_contain_text("Stopped")
 
     # It must also include duration info (contains "s" for seconds, e.g. "3.2s")
@@ -138,7 +136,6 @@ def test_turn_footer_shows_metrics_after_completed_turn(
     turn_footer = alpha_view.get_turn_footers()
     expect(turn_footer).to_be_visible()
     expect(turn_footer).to_contain_text("s")
-    # Token count should also be present
     expect(turn_footer).to_contain_text("tokens")
 
 

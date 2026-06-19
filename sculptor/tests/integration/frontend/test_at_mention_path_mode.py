@@ -43,7 +43,6 @@ def test_path_mode_workspace_root_lists_tracked_files(sculptor_instance_: Sculpt
     expect(mention_list).to_be_visible()
     expect(chat_panel.get_mention_items().first).to_be_visible()
 
-    # Every known root-level fixture entry is present.
     expect(mention_list).to_contain_text("README")
     expect(mention_list).to_contain_text("stuff")
     # The src/ folder lists under a row with text "src". There may be other
@@ -59,10 +58,8 @@ def test_path_mode_surfaces_dotgit_folder(sculptor_instance_: SculptorInstance) 
 
     The fuzzy file cache is backed by ``git ls-files``, which never lists
     ``.git/`` itself.  Path mode hits ``getFilesAndFolders`` which reads the
-    disk directly.  This is the regression protection for commit
-    ``78956b055de`` (surface entries the fuzzy corpus excludes) — we use
-    ``.git/`` as the canary instead of a custom gitignored file because it
-    reliably exists in any workspace clone.
+    disk directly.  We use ``.git/`` as the canary instead of a custom
+    gitignored file because it reliably exists in any workspace clone.
     """
     task_page = _navigate_to_task_chat(sculptor_instance_)
     chat_panel = task_page.get_chat_panel()

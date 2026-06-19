@@ -1,17 +1,4 @@
-"""Regression tests for CodingAgentTaskView.status after restart mid-agent-turn.
-
-Historical context: this file originally enforced "status RUNNING after restart
-when the only completion is a RequestStopped, because the agent is re-processing."
-That behavior was a workaround for a prompt-replay bug: when Sculptor was SIGTERM'd
-mid-turn the runner used to silently re-deliver the prompt to Claude on the next
-agent run, so RequestStopped really did precede a re-processing window.
-
-With those bugs fixed at the runner layer, the re-processing no longer happens.
-RequestStopped now genuinely means "this chat is settled; the user can send a new
-message." Status should be READY, not RUNNING. The exclusion of RequestStopped
-from ``request_finished_messages`` in ``derived.py`` has been removed accordingly,
-and the test below has been updated to assert the new behavior.
-"""
+"""Regression tests for CodingAgentTaskView.status after restart mid-agent-turn."""
 
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.models import AgentTaskInputsV2
@@ -94,11 +81,6 @@ def test_status_is_ready_after_request_stopped_and_environment_reacquired() -> N
     prompt is recorded as processed and NOT re-delivered to Claude on the next
     agent run. The post-restart agent is therefore idle — the user can send a
     new message — so status should be READY.
-
-    This test previously asserted RUNNING as a workaround for the replay bug
-    (RequestStopped was excluded from "finished" so status stayed RUNNING during
-    the unwanted re-processing). That exclusion is gone now that the runner
-    doesn't re-process.
     """
     task = _make_task()
     view = _make_task_view(task)

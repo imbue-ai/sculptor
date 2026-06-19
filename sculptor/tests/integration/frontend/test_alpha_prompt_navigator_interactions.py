@@ -2,9 +2,7 @@
 
 Focuses on interactions with ``AlphaPromptNavigator``: dot clicks, active
 highlight tracking the scroll position, keyboard nav continuing from a
-clicked dot, and popover tooltip on hover.  The non-alpha dot rail
-(``PromptNavigator.tsx``) is covered separately by
-``test_prompt_navigator.py``.
+clicked dot, and popover tooltip on hover.
 """
 
 import json
@@ -151,7 +149,6 @@ def test_hovering_dot_shows_popover(sculptor_instance_: SculptorInstance) -> Non
 
     tooltip = navigator.get_tooltip()
     expect(tooltip).to_be_visible()
-    # Should include the prompt label text.
     expect(tooltip).to_contain_text("First prompt")
 
 
@@ -171,7 +168,6 @@ def test_popover_swaps_content_between_dots(sculptor_instance_: SculptorInstance
     # content swaps instantly (no additional open delay).
     navigator.get_dot(2).hover()
     expect(tooltip).to_contain_text("Prompt 3")
-    # And the old prompt's label is gone.
     expect(tooltip).not_to_contain_text("First prompt")
 
 

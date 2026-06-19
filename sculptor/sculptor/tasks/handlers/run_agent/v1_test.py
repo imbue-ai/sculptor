@@ -62,7 +62,6 @@ def test_drop_already_processed_messages_with_processed_id() -> None:
     """Test dropping messages up to last_processed_input_message_id."""
     user_queue: Queue[Message] = Queue()
 
-    # Create test messages
     msg1 = ChatInputUserMessage(
         message_id=AgentMessageID(),
         text="First message",
@@ -84,19 +83,16 @@ def test_drop_already_processed_messages_with_processed_id() -> None:
         model_name=LLMModel.CLAUDE_4_SONNET,
     )
 
-    # Add messages to queue
     user_queue.put(msg1)
     user_queue.put(msg2)
     user_queue.put(target_msg)
     user_queue.put(msg3)
 
-    # Drop messages up to target
     dropped, _ = _drop_already_processed_messages(
         last_processed_input_message_id=target_msg.message_id,
         user_message_queue=user_queue,
     )
 
-    # Verify results
     assert len(dropped) == 3
     assert dropped == (msg1, msg2, target_msg)
     assert user_queue.qsize() == 1
@@ -107,7 +103,6 @@ def test_drop_already_processed_messages_none_values() -> None:
     """Test edge case with None value for last_processed_input_message_id."""
     user_queue: Queue[Message] = Queue()
 
-    # Create test messages
     msg1 = ChatInputUserMessage(
         message_id=AgentMessageID(),
         text="First message",
@@ -122,7 +117,6 @@ def test_drop_already_processed_messages_none_values() -> None:
     user_queue.put(msg1)
     user_queue.put(msg2)
 
-    # Test with None - should not drop anything
     dropped, _ = _drop_already_processed_messages(
         last_processed_input_message_id=None,
         user_message_queue=user_queue,

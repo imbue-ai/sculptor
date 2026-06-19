@@ -61,8 +61,10 @@ jobs:
 
       - name: Install system packages
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends rsync jq unzip ca-certificates
+          # Retry/timeout-harden apt against transient mirror stalls (SCU-1545).
+          APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y --no-install-recommends rsync jq unzip ca-certificates
 
       - name: Install Vault CLI
         # Matches the GitLab pipeline's pinned version + sha. Installing
@@ -208,8 +210,10 @@ jobs:
 
       - name: Install system packages
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends rsync jq unzip ca-certificates
+          # Retry/timeout-harden apt against transient mirror stalls (SCU-1545).
+          APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y --no-install-recommends rsync jq unzip ca-certificates
 
       - name: Install Vault CLI
         run: |

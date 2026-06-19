@@ -61,7 +61,6 @@ def test_tab_switching_shows_correct_content(sculptor_instance_: SculptorInstanc
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    # Ensure the File Browser panel is visible
     task_page.activate_file_browser()
     file_browser = task_page.get_file_browser()
 

@@ -17,10 +17,6 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 
 def _create_task_and_navigate(sculptor_instance: SculptorInstance):
     """Create a TestingAgent task via API and navigate to its workspace page.
@@ -32,11 +28,6 @@ def _create_task_and_navigate(sculptor_instance: SculptorInstance):
         prompt="Test task for custom actions",
     )
     return task_page
-
-
-# ---------------------------------------------------------------------------
-# Tests: Actions Panel (workspace)
-# ---------------------------------------------------------------------------
 
 
 @user_story("to create a custom action from the actions panel and see it appear as a chip")
@@ -55,7 +46,6 @@ def test_create_action_from_panel(sculptor_instance_: SculptorInstance) -> None:
 
     expect(dialog).not_to_be_visible()
 
-    # Verify the chip appears in the panel
     chip = actions_panel.get_action_chip_by_name("Run Tests")
     expect(chip).to_be_visible()
 
@@ -80,31 +70,21 @@ def test_edit_action_from_settings(sculptor_instance_: SculptorInstance) -> None
     # stable" failures under parallel execution).
     settings_page.dismiss_toast()
 
-    # Find the action row and click the edit icon
     edit_button = actions_section.get_action_edit_button("Old Name")
     edit_button.click()
 
-    # Edit the action name
     edit_dialog = get_action_dialog(sculptor_instance_.page)
     expect(edit_dialog).to_be_visible()
     edit_dialog.fill_name("New Name")
     edit_dialog.click_save()
     expect(edit_dialog).not_to_be_visible()
 
-    # Wait for success toast
     expect(settings_page.get_toast()).to_be_visible()
 
-    # Verify the updated name appears in settings
     updated_row = actions_section.get_action_row_by_name("New Name")
     expect(updated_row).to_be_visible()
 
-    # Old name should be gone
     expect(actions_section.get_action_row_by_name("Old Name")).to_have_count(0)
-
-
-# ---------------------------------------------------------------------------
-# Tests: Settings page
-# ---------------------------------------------------------------------------
 
 
 @user_story("to create a custom action from the settings page")
@@ -113,7 +93,6 @@ def test_create_action_from_settings(sculptor_instance_: SculptorInstance) -> No
     settings_page = navigate_to_settings_page(page=sculptor_instance_.page)
     actions_section = settings_page.click_on_actions()
 
-    # Click "Add Action"
     actions_section.get_add_action_button().click()
 
     dialog = get_action_dialog(sculptor_instance_.page)
@@ -124,10 +103,8 @@ def test_create_action_from_settings(sculptor_instance_: SculptorInstance) -> No
 
     expect(dialog).not_to_be_visible()
 
-    # Wait for success toast
     expect(settings_page.get_toast()).to_be_visible()
 
-    # Verify the action row appears
     action_row = actions_section.get_action_row_by_name("Lint Code")
     expect(action_row).to_be_visible()
 
@@ -147,19 +124,14 @@ def test_delete_action_from_settings(sculptor_instance_: SculptorInstance) -> No
     dialog.click_save()
     expect(dialog).not_to_be_visible()
 
-    # Wait for success toast
     expect(settings_page.get_toast()).to_be_visible()
 
-    # Find the action row and click the delete icon
     actions_section.get_action_delete_button("To Remove").click()
 
-    # Confirm deletion
     actions_section.confirm_delete_action()
 
-    # Wait for success toast
     expect(settings_page.get_toast()).to_be_visible()
 
-    # Verify the action row is gone
     expect(actions_section.get_action_row_by_name("To Remove")).to_have_count(0)
 
 
@@ -169,21 +141,16 @@ def test_create_group_from_settings(sculptor_instance_: SculptorInstance) -> Non
     settings_page = navigate_to_settings_page(page=sculptor_instance_.page)
     actions_section = settings_page.click_on_actions()
 
-    # Click "Add Group"
     actions_section.get_add_group_button().click()
 
-    # Fill in the group name in the dialog that appears
     group_name_input = actions_section.get_group_name_input()
     expect(group_name_input).to_be_visible()
     group_name_input.fill("My Group")
 
-    # Click "Create Group"
     actions_section.get_create_group_button().click()
 
-    # Wait for success toast
     expect(settings_page.get_toast()).to_be_visible()
 
-    # Verify the group appears in the settings section
     group_heading = actions_section.get_group_headings().filter(has_text="My Group")
     expect(group_heading).to_be_visible()
 
@@ -203,7 +170,6 @@ def test_action_persists_across_page_reload(sculptor_instance_: SculptorInstance
     dialog.click_save()
     expect(dialog).not_to_be_visible()
 
-    # Wait for success toast
     expect(settings_page.get_toast()).to_be_visible()
 
     # Soft-reload to verify persistence (direct reload causes ERR_INSUFFICIENT_RESOURCES on CI)
@@ -214,14 +180,8 @@ def test_action_persists_across_page_reload(sculptor_instance_: SculptorInstance
     reloaded_settings = PlaywrightSettingsPage(page=sculptor_instance_.page)
     actions_section = reloaded_settings.click_on_actions()
 
-    # Verify the action still exists
     action_row = actions_section.get_action_row_by_name("Persistent Action")
     expect(action_row).to_be_visible()
-
-
-# ---------------------------------------------------------------------------
-# Tests: Skill mentions in action prompts
-# ---------------------------------------------------------------------------
 
 
 @user_story("to see clean prompt text in settings when an action contains a skill mention")
@@ -235,7 +195,6 @@ def test_action_with_skill_mention_displays_cleanly_in_settings(sculptor_instanc
     """
     page = sculptor_instance_.page
 
-    # Open the action dialog from the settings page
     settings_page = navigate_to_settings_page(page=page)
     actions_section = settings_page.click_on_actions()
     actions_section.get_add_action_button().click()
@@ -250,17 +209,13 @@ def test_action_with_skill_mention_displays_cleanly_in_settings(sculptor_instanc
     expect(prompt_input).to_be_visible()
     insert_mention_into_tiptap(prompt_input, "/fix-bug", "/")
 
-    # Verify the mention span was inserted into the editor
     expect(dialog.get_mention_span()).to_be_visible()
 
-    # Save the action
     dialog.click_save()
     expect(dialog).not_to_be_visible()
 
-    # Wait for success toast
     expect(settings_page.get_toast()).to_be_visible()
 
-    # Find the action row in settings and verify the prompt preview is clean text.
     # The prompt preview must NOT contain raw HTML attributes — if it does,
     # the tiptap-markdown serializer is leaking HTML into the stored prompt.
     action_row = actions_section.get_action_row_by_name("Skill Action")
@@ -269,11 +224,7 @@ def test_action_with_skill_mention_displays_cleanly_in_settings(sculptor_instanc
     expect(action_row).not_to_contain_text("data-label")
 
 
-# ---------------------------------------------------------------------------
 # Tests: Delete group also deletes actions (SCU-308)
-# ---------------------------------------------------------------------------
-
-
 @user_story("to delete a group from settings and have its actions deleted too")
 def test_delete_group_deletes_actions_from_settings(sculptor_instance_: SculptorInstance) -> None:
     """Delete a group from the settings page and verify its actions are also removed."""
@@ -281,7 +232,6 @@ def test_delete_group_deletes_actions_from_settings(sculptor_instance_: Sculptor
     settings_page = navigate_to_settings_page(page=page)
     actions_section = settings_page.click_on_actions()
 
-    # 1. Create a group
     actions_section.get_add_group_button().click()
     group_name_input = actions_section.get_group_name_input()
     expect(group_name_input).to_be_visible()
@@ -290,7 +240,6 @@ def test_delete_group_deletes_actions_from_settings(sculptor_instance_: Sculptor
 
     settings_page.dismiss_toast()
 
-    # 2. Create an action in that group
     actions_section.get_add_action_button().click()
     dialog = get_action_dialog(page)
     expect(dialog).to_be_visible()
@@ -303,27 +252,17 @@ def test_delete_group_deletes_actions_from_settings(sculptor_instance_: Sculptor
 
     settings_page.dismiss_toast()
 
-    # Verify action appears under the group
     action_row = actions_section.get_action_row_by_name("Doomed Action")
     expect(action_row).to_be_visible()
 
-    # 3. Delete the group via the trash icon on the group header
     actions_section.click_delete_group("Doomed Group")
 
-    # 4. Confirm in the delete group dialog
     actions_section.confirm_delete_group()
 
-    # Wait for success toast
     expect(settings_page.get_toast()).to_be_visible()
 
-    # 5. Verify both group and action are gone
     expect(actions_section.get_group_headings().filter(has_text="Doomed Group")).to_have_count(0)
     expect(actions_section.get_action_row_by_name("Doomed Action")).to_have_count(0)
-
-
-# ---------------------------------------------------------------------------
-# Tests: Built-in Sculptor group
-# ---------------------------------------------------------------------------
 
 
 @user_story("to see the built-in Sculptor group with its un-deletable skill chips")
@@ -339,7 +278,6 @@ def test_builtin_chips(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
     actions_panel = task_page.get_actions_panel()
 
-    # Sculptor header + both built-in chips are visible.
     sculptor_header = actions_panel.get_group_header_by_name("Sculptor")
     expect(sculptor_header).to_be_visible()
     expect(actions_panel.get_action_chip_by_name("/help")).to_be_visible()
@@ -406,7 +344,6 @@ def test_draft_action_populates_and_focuses_chat_input(sculptor_instance_: Sculp
     dialog.click_save()
     expect(dialog).not_to_be_visible()
 
-    # Click the chip.
     actions_panel.get_action_chip_by_name("My Draft Action").click()
 
     chat_input = task_page.get_chat_panel().get_chat_input()
@@ -420,7 +357,6 @@ def test_delete_group_deletes_actions_from_panel(sculptor_instance_: SculptorIns
     and verify its actions are also removed."""
     page = sculptor_instance_.page
 
-    # 1. Create an action with a new group from the workspace panel
     task_page = _create_task_and_navigate(sculptor_instance_)
     actions_panel = task_page.get_actions_panel()
 
@@ -434,15 +370,11 @@ def test_delete_group_deletes_actions_from_panel(sculptor_instance_: SculptorIns
     dialog.click_save()
     expect(dialog).not_to_be_visible()
 
-    # Verify the action chip appears in the panel
     chip = actions_panel.get_action_chip_by_name("Panel Action")
     expect(chip).to_be_visible()
 
-    # 2. Right-click the group header to open context menu, then click "Delete group"
     actions_panel.delete_group_via_context_menu("Panel Group")
 
-    # 3. Confirm in the delete group dialog
     actions_panel.confirm_delete_group()
 
-    # 4. Verify the action chip is gone
     expect(actions_panel.get_action_chip_by_name("Panel Action")).to_have_count(0)

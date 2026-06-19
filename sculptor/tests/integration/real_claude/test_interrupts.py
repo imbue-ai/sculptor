@@ -31,10 +31,6 @@ from tests.integration.real_claude.helpers import send_no_wait
 from tests.integration.real_claude.helpers import wait_for_any_assistant_text
 from tests.integration.real_claude.helpers import wait_for_streaming_text
 
-# ---------------------------------------------------------------------------
-# THE MOST IMPORTANT TEST: Interrupt during streaming, no amnesia
-# ---------------------------------------------------------------------------
-
 
 @real_claude
 @pytest.mark.timeout(300)
@@ -59,12 +55,10 @@ def test_interrupt_during_streaming_no_amnesia(sculptor_instance_: SculptorInsta
         ),
     )
 
-    # Wait for streaming to begin, then interrupt
     wait_for_streaming_text(chat_panel, "ESSAY-BEGINS-HERE")
     interrupt_agent(chat_panel)
     assert_interrupted(chat_panel)
 
-    # THE CRITICAL CHECK: Does the agent remember the anchor code?
     send_and_wait(
         chat_panel,
         "What is the code I asked you to remember at the start of our conversation? Reply in the format: RECALLED-CODE: <code>",
@@ -84,11 +78,6 @@ def test_interrupt_during_streaming_no_amnesia(sculptor_instance_: SculptorInsta
     # The critical check is that the pre-interrupt context (anchor) is preserved.
     # At least 3 user turns: anchor, essay request, recall question
     assert_transcript_turn_count(transcript, "user", min_count=3)
-
-
-# ---------------------------------------------------------------------------
-# Interrupt during tool execution, no amnesia
-# ---------------------------------------------------------------------------
 
 
 @real_claude
@@ -116,18 +105,12 @@ def test_interrupt_during_tool_execution_no_amnesia(sculptor_instance_: Sculptor
     interrupt_agent(chat_panel)
     assert_interrupted(chat_panel)
 
-    # Verify memory
     send_and_wait(
         chat_panel,
         "What file did you create earlier and what was its content? Reply starting with: TOOL-RECALL:",
     )
     assert_last_message_contains(chat_panel, "anchor-tool.txt")
     assert_last_message_contains(chat_panel, "TOOL-ANCHOR-88312")
-
-
-# ---------------------------------------------------------------------------
-# Multiple interrupts, no amnesia
-# ---------------------------------------------------------------------------
 
 
 @real_claude
@@ -147,7 +130,6 @@ def test_multiple_interrupts_no_amnesia(sculptor_instance_: SculptorInstance) ->
     chat_panel = task_page.get_chat_panel()
     assert_last_message_contains(chat_panel, "MSG-1-ACK")
 
-    # First interrupt (message 2)
     send_no_wait(
         chat_panel,
         "This is message 2. Write a 2000-word essay about dogs. Start with: DOG-ESSAY-START:",
@@ -156,7 +138,6 @@ def test_multiple_interrupts_no_amnesia(sculptor_instance_: SculptorInstance) ->
     interrupt_agent(chat_panel)
     assert_interrupted(chat_panel)
 
-    # Second interrupt (message 3)
     send_no_wait(
         chat_panel,
         "This is message 3. Write a 2000-word essay about cats. Start with: CAT-ESSAY-START:",
@@ -165,7 +146,6 @@ def test_multiple_interrupts_no_amnesia(sculptor_instance_: SculptorInstance) ->
     interrupt_agent(chat_panel)
     assert_interrupted(chat_panel)
 
-    # Message 4: ask Claude to count messages
     send_and_wait(
         chat_panel,
         (
@@ -202,11 +182,6 @@ def test_multiple_interrupts_no_amnesia(sculptor_instance_: SculptorInstance) ->
     assert_transcript_turn_count(transcript, "user", min_count=4)
 
 
-# ---------------------------------------------------------------------------
-# Rapid stop (interrupt very early in streaming)
-# ---------------------------------------------------------------------------
-
-
 @real_claude
 @pytest.mark.timeout(300)
 def test_interrupt_early_streaming(sculptor_instance_: SculptorInstance) -> None:
@@ -218,20 +193,13 @@ def test_interrupt_early_streaming(sculptor_instance_: SculptorInstance) -> None
     )
     chat_panel = task_page.get_chat_panel()
 
-    # Interrupt as soon as any text appears
     wait_for_any_assistant_text(chat_panel)
     interrupt_agent(chat_panel)
     assert_interrupted(chat_panel)
     assert_no_errors(chat_panel)
 
-    # Verify recovery
     send_and_wait(chat_panel, "Reply with exactly: RAPID-STOP-RECOVERED-OK")
     assert_last_message_contains(chat_panel, "RAPID-STOP-RECOVERED-OK")
-
-
-# ---------------------------------------------------------------------------
-# Immediate stop before any output
-# ---------------------------------------------------------------------------
 
 
 @real_claude
@@ -245,24 +213,16 @@ def test_interrupt_before_any_output(sculptor_instance_: SculptorInstance) -> No
     )
     chat_panel = task_page.get_chat_panel()
 
-    # Wait just for the thinking indicator, then immediately stop
     expect(chat_panel.get_thinking_indicator()).to_be_visible(timeout=30_000)
     interrupt_agent(chat_panel)
 
-    # No crash, no InterruptFailure
     messages = chat_panel.get_messages()
     expect(messages.filter(has_text="InterruptFailure")).to_have_count(0)
 
     assert_no_errors(chat_panel)
 
-    # Verify recovery
     send_and_wait(chat_panel, "Reply with exactly: IMMEDIATE-STOP-OK-55023")
     assert_last_message_contains(chat_panel, "IMMEDIATE-STOP-OK-55023")
-
-
-# ---------------------------------------------------------------------------
-# Interrupt and continue with complex multi-step work
-# ---------------------------------------------------------------------------
 
 
 @real_claude
@@ -279,7 +239,6 @@ def test_interrupt_and_continue_with_tools(sculptor_instance_: SculptorInstance)
     wait_for_streaming_text(chat_panel, "VOLCANO-START")
     interrupt_agent(chat_panel)
 
-    # Now do real multi-step work
     send_and_wait(
         chat_panel,
         (
@@ -288,11 +247,6 @@ def test_interrupt_and_continue_with_tools(sculptor_instance_: SculptorInstance)
     )
     assert_last_message_contains(chat_panel, "ALL-POST-INTERRUPT-STEPS-DONE")
     assert_no_errors(chat_panel)
-
-
-# ---------------------------------------------------------------------------
-# Queue message + "Interrupt and send"
-# ---------------------------------------------------------------------------
 
 
 @real_claude
@@ -306,24 +260,16 @@ def test_queue_and_interrupt_and_send(sculptor_instance_: SculptorInstance) -> N
     )
     chat_panel = task_page.get_chat_panel()
 
-    # Wait for streaming to begin
     wait_for_streaming_text(chat_panel, "OCEAN-ESSAY-START")
 
-    # Type a new message and click send (which acts as "interrupt and send")
     interrupt_and_send(
         chat_panel,
         task_page._page,
         "Stop writing. Reply with exactly: INTERRUPT-SEND-SENTINEL-40182",
     )
 
-    # Wait for the new response
     expect(chat_panel.get_thinking_indicator()).not_to_be_visible(timeout=RESPONSE_TIMEOUT_MS)
     assert_any_message_contains(chat_panel, "INTERRUPT-SEND-SENTINEL-40182")
-
-
-# ---------------------------------------------------------------------------
-# Queue + interrupt and send, memory preserved
-# ---------------------------------------------------------------------------
 
 
 @real_claude
@@ -337,14 +283,12 @@ def test_interrupt_and_send_memory_preserved(sculptor_instance_: SculptorInstanc
     chat_panel = task_page.get_chat_panel()
     assert_last_message_contains(chat_panel, "FOXTROT-STORED")
 
-    # Start a long essay
     send_no_wait(
         chat_panel,
         "Write a 3000-word essay about space travel. Start with SPACE-ESSAY:",
     )
     wait_for_streaming_text(chat_panel, "SPACE-ESSAY")
 
-    # Interrupt and send a recall question
     interrupt_and_send(
         chat_panel,
         task_page._page,
@@ -353,11 +297,6 @@ def test_interrupt_and_send_memory_preserved(sculptor_instance_: SculptorInstanc
 
     expect(chat_panel.get_thinking_indicator()).not_to_be_visible(timeout=RESPONSE_TIMEOUT_MS)
     assert_any_message_contains(chat_panel, "ANCHOR-FOXTROT-62018")
-
-
-# ---------------------------------------------------------------------------
-# Interrupt during background process
-# ---------------------------------------------------------------------------
 
 
 @real_claude
@@ -381,17 +320,11 @@ def test_interrupt_during_background_process(sculptor_instance_: SculptorInstanc
     interrupt_agent(chat_panel)
     assert_interrupted(chat_panel)
 
-    # Verify recovery
     send_and_wait(
         chat_panel,
         "Good, the interrupt worked. Please confirm by saying the phrase BG-INTERRUPT-RECOVERED-61037 so I know you're back.",
     )
     assert_last_message_contains(chat_panel, "BG-INTERRUPT-RECOVERED-61037")
-
-
-# ---------------------------------------------------------------------------
-# Multiple rapid interrupts in sequence
-# ---------------------------------------------------------------------------
 
 
 @real_claude
@@ -415,14 +348,8 @@ def test_multiple_rapid_interrupts(sculptor_instance_: SculptorInstance) -> None
     wait_for_any_assistant_text(chat_panel)
     interrupt_agent(chat_panel)
 
-    # After three rapid interrupts, the agent should still be functional
     send_and_wait(chat_panel, "Reply with exactly: TRIPLE-INTERRUPT-SURVIVED-88341")
     assert_last_message_contains(chat_panel, "TRIPLE-INTERRUPT-SURVIVED-88341")
-
-
-# ---------------------------------------------------------------------------
-# Interrupt during AskUserQuestion
-# ---------------------------------------------------------------------------
 
 
 @real_claude
@@ -443,6 +370,5 @@ def test_stop_button_hidden_during_ask_user_question(sculptor_instance_: Sculpto
     ask_panel = get_ask_user_question_panel(chat_panel._page)
     expect(ask_panel).to_be_visible(timeout=RESPONSE_TIMEOUT_MS)
 
-    # The stop button should NOT be visible when AUQ is showing
     stop_button = chat_panel.get_stop_button()
     expect(stop_button).not_to_be_visible()

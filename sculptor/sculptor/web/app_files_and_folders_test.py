@@ -57,7 +57,6 @@ def _populate_repo(repo_path: Path) -> None:
             ext = extensions[f % len(extensions)]
             (dir_path / f"file_{f:02d}{ext}").write_text(f"// file {d}-{f}\n")
 
-    # Also create a top-level file
     (repo_path / "README.md").write_text("# Test repo\n")
 
 

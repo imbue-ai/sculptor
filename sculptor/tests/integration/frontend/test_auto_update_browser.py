@@ -23,10 +23,6 @@ from sculptor.testing.sculptor_instance import SculptorInstance
 
 pytestmark = pytest.mark.release
 
-# ---------------------------------------------------------------------------
-# B1: Null initial state — no flicker
-# ---------------------------------------------------------------------------
-
 
 def test_null_initial_state_version_popover(
     sculptor_instance_: SculptorInstance,
@@ -54,11 +50,6 @@ def test_null_initial_state_settings_page(
 
     update_controls = PlaywrightSettingsUpdateElement(page=page)
     expect(update_controls.get_channel_select()).to_be_disabled()
-
-
-# ---------------------------------------------------------------------------
-# B2: Each status variant renders correctly
-# ---------------------------------------------------------------------------
 
 
 def test_idle_status_shows_up_to_date(
@@ -195,11 +186,6 @@ def test_update_dot_appears_when_downloading(
     expect(version_popover.get_update_dot()).to_be_visible()
 
 
-# ---------------------------------------------------------------------------
-# B3: Toast dismiss + re-show logic
-# ---------------------------------------------------------------------------
-
-
 def test_dismissed_download_toast_stays_dismissed(
     sculptor_instance_: SculptorInstance,
     mock_electron_api: MockSculptorElectronAPI,
@@ -223,11 +209,6 @@ def test_dismissed_download_toast_stays_dismissed(
     mock_electron_api.push_status({"type": "ready", "channel": "STABLE", "version": "2.0.0"})
     ready_toast = toast.filter_by_text("Update ready (v2.0.0)")
     expect(ready_toast).to_be_visible()
-
-
-# ---------------------------------------------------------------------------
-# B4: Channel switch flow via Settings
-# ---------------------------------------------------------------------------
 
 
 def test_channel_switch_calls_ipc_and_shows_pending(
@@ -318,11 +299,6 @@ def test_check_for_updates_button(
 
     calls = mock_electron_api.get_ipc_calls(method="checkForUpdate")
     assert len(calls) == 1
-
-
-# ---------------------------------------------------------------------------
-# B5: Disabled state — auto-update feature gate is off
-# ---------------------------------------------------------------------------
 
 
 def test_disabled_status_grays_out_settings_controls(

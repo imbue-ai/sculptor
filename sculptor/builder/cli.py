@@ -144,6 +144,16 @@ def setup_build_vars(environment: str) -> None:
         case _ as never:
             assert_never(never)
 
+    # A production build with an empty DSN ships an app that can't report bugs.
+    # Warn on stderr (stdout is eval'd by the caller); CI escalates this to a
+    # hard failure.
+    if environment == "production" and not frontend_dsn:
+        warning = (
+            "warning: SCULPTOR_PRODUCTION_FRONTEND_SENTRY_DSN is empty; "
+            + "this build will have frontend error reporting and Report-a-Problem disabled."
+        )
+        typer.secho(warning, fg=typer.colors.YELLOW, err=True)
+
     typer.echo(f"export SCULPTOR_SENTRY_RELEASE_ID='{release_id}'")
     typer.echo(f"export SCULPTOR_FRONTEND_SENTRY_DSN='{frontend_dsn}'")
     typer.echo(f"export SCULPTOR_FRONTEND_POSTHOG_TOKEN='{frontend_posthog_token}'")

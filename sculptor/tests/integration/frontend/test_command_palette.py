@@ -80,9 +80,7 @@ def test_command_palette_navigates_to_settings(sculptor_instance_: SculptorInsta
     palette.type_query("Open Settings")
     palette.select_by_command_id("nav.settings")
 
-    # The palette should auto-close after the navigation.
     expect(palette).not_to_be_visible()
-    # And the Settings page should be visible.
     expect(layout.get_settings_page_locator()).to_be_visible()
 
 
@@ -123,7 +121,6 @@ def test_command_palette_keep_open_command(sculptor_instance_: SculptorInstance)
     palette.type_query("Toggle Theme")
     palette.select_by_command_id("theme.toggle")
 
-    # Palette is still visible.
     expect(palette).to_be_visible()
 
     # Flip the theme back so the test doesn't leave a lasting side effect
