@@ -72,19 +72,15 @@ def server_app(
 
 @pytest.fixture
 def server_url(server_app: FastAPI) -> Generator[str, None, None]:
-    # Start server in a separate thread
     config = uvicorn.Config(app=server_app, host="127.0.0.1", port=0, log_level="debug")
     server = ServerWithReadyFlag(config)
     server_thread = ObservableThread(target=server.run)
     server_thread.start()
 
-    # Wait for server to be actually ready
     server._ready_event.wait()
 
-    # figure out what port was bound
     server_port = only(only(server.servers).sockets).getsockname()[-1]
 
-    # Now make requests using the actual port
     yield f"http://127.0.0.1:{server_port}"
 
     # pyrefly: ignore [missing-attribute]
@@ -121,7 +117,6 @@ def stream_response(url: str) -> Generator[Queue[str], None, None]:
 
 def _stream_lines_into_queue_from_websocket(ws: Connection, is_done: threading.Event, queue: Queue[str]) -> None:
     try:
-        # Iterate over the response line by line
         while True:
             if is_done.is_set():
                 break
@@ -205,7 +200,6 @@ def test_unified_stream_emits_task_updates(
         assert task_update is not None, "Did not receive task update after creating message"
         in_progress = task_update.get("inProgressChatMessage")
         assert in_progress is not None
-        # Check that the message text is in the content blocks
         content_blocks = in_progress.get("content", [])
         assert any(
             block.get("text") == "streaming smoke test message"
@@ -244,5 +238,4 @@ def test_unified_stream_emits_notifications_and_finished_requests(
 
         assert any(entry.get("message") == notification.message for entry in notifications)
 
-        # Just verify that we got some finished request IDs in the stream
         assert len(finished_request_ids) > 0, "Should receive finished request IDs in the stream"

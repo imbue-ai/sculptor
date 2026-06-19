@@ -10,7 +10,7 @@ LocalTerminalManager managing a real pty + shell. Asserts:
 The shell-pid capture is intentionally agnostic about the underlying
 pty implementation -- it reads ``_helper.shell_pid``
 (posix_spawn-backed SpawnedPtyProcess) or ``_handle.shell_pid``
-(forkserver-backed SpawnedPtyProcess from !1138), whichever exists --
+(forkserver-backed SpawnedPtyProcess), whichever exists --
 so this test survives the pty implementation swap regardless of which
 approach lands.
 """
@@ -51,7 +51,7 @@ pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX-only")
 def _shell_pid(manager: LocalTerminalManager) -> int:
     """Read the shell pid in a way that works across all current pty backends:
     ``_helper.shell_pid`` (posix_spawn helper), ``_handle.shell_pid``
-    (forkserver helper from !1138), or ``_pid`` (legacy direct fork)."""
+    (forkserver helper), or ``_pid`` (legacy direct fork)."""
     pty_process = manager._pty_process
     assert pty_process is not None
     for attr in ("_helper", "_handle"):

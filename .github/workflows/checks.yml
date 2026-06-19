@@ -58,8 +58,10 @@ jobs:
 
       - name: Install system packages
         run: |
-          sudo apt-get update
-          sudo apt-get install -y tmux
+          # Retry/timeout-harden apt against transient mirror stalls (SCU-1545).
+          APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y tmux
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v4

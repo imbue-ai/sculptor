@@ -20,7 +20,6 @@ class TestDropArchiveColumnsFromTask(MigrationTestFixture):
         return "2755d9e9f872"
 
     def seed(self, connection: sa.engine.Connection) -> None:
-        # Insert a project
         connection.execute(
             sa.text("""
                 INSERT INTO project_latest (
@@ -90,17 +89,14 @@ class TestDropArchiveColumnsFromTask(MigrationTestFixture):
         )
 
     def verify(self, connection: sa.engine.Connection) -> None:
-        # Check is_archived and is_archiving columns are removed from task
         task_columns = {row[1] for row in connection.execute(sa.text("PRAGMA table_info(task)"))}
         assert "is_archived" not in task_columns, "is_archived column still exists in task"
         assert "is_archiving" not in task_columns, "is_archiving column still exists in task"
 
-        # Check is_archived and is_archiving columns are removed from task_latest
         task_latest_columns = {row[1] for row in connection.execute(sa.text("PRAGMA table_info(task_latest)"))}
         assert "is_archived" not in task_latest_columns, "is_archived column still exists in task_latest"
         assert "is_archiving" not in task_latest_columns, "is_archiving column still exists in task_latest"
 
-        # Check the existing task's other data is preserved
         result = connection.execute(
             sa.text("SELECT object_id, outcome FROM task WHERE object_id = :task_id"),
             {"task_id": TASK_ID},

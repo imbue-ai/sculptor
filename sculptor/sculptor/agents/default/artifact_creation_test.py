@@ -1,4 +1,4 @@
-"""Unit tests for artifact_creation helpers (Phase 3 task list reader)."""
+"""Unit tests for artifact_creation helpers."""
 
 import json
 from pathlib import Path

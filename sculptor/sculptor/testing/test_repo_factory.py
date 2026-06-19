@@ -45,10 +45,8 @@ class TestRepoFactory:
         """
         repo_dir = self.base_path / name
 
-        # Get the standard test project state
         initial_state = get_test_project_state()
 
-        # Build the repository
         repo = MockRepoState.build_locally(
             state=initial_state, local_dir=repo_dir, concurrency_group=self.concurrency_group
         )

@@ -19,6 +19,7 @@ import path from "node:path";
 import react from "@vitejs/plugin-react-swc";
 import { defineConfig, loadEnv, type Plugin, type UserConfig, type UserConfigExport } from "vite";
 
+import { bundledPlugins } from "./vite-plugins/bundled-plugins.ts";
 import { pluginRuntimeStubs } from "./vite-plugins/plugin-runtime-stubs.ts";
 
 /**
@@ -79,6 +80,7 @@ export function externalizeXterm(root: string): Plugin {
 export const sharedPlugins = (root: string): Array<Plugin> => [
   externalizeXterm(root),
   pluginRuntimeStubs(),
+  bundledPlugins(),
   react({
     plugins: [
       [
