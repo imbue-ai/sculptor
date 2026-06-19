@@ -125,6 +125,26 @@ def _wait_for_worktree_removed(
     raise AssertionError(f"worktree {worktree_path} was not removed within {timeout_ms}ms")
 
 
+def _wait_for_branch_deleted(
+    page: Page, repo_path: Path, branch: str, failure_message: str, timeout_ms: int = 30_000
+) -> None:
+    """Poll until `branch` is gone, raising `failure_message` on timeout.
+
+    Branch deletion runs as a separate `git branch -d`/`-D` subprocess *after*
+    `git worktree remove` completes, so the branch can still exist for a moment
+    after the worktree disappears. `_wait_for_worktree_removed` returns as soon
+    as the worktree is gone, which under load can be before branch deletion has
+    run — asserting branch absence right then races. Polling here gives the
+    deletion subprocess a deadline to finish before we conclude it failed.
+    """
+    deadline_steps = timeout_ms // 100
+    for _ in range(deadline_steps):
+        if not _branch_exists(repo_path, branch):
+            return
+        page.wait_for_timeout(100)
+    raise AssertionError(failure_message)
+
+
 @user_story("to preserve my worktree branch after deleting the workspace when policy is 'never'")
 def test_never_policy_preserves_branch(sculptor_instance_: SculptorInstance) -> None:
     page = sculptor_instance_.page
@@ -157,8 +177,11 @@ def test_delete_if_safe_with_merged_branch(sculptor_instance_: SculptorInstance)
     _delete_workspace_via_api(page, workspace_id)
 
     _wait_for_worktree_removed(page, sculptor_instance_.project_path, worktree_path)
-    assert not _branch_exists(sculptor_instance_.project_path, branch_name), (
-        f"branch {branch_name} should be deleted under 'delete_if_safe' when merged"
+    _wait_for_branch_deleted(
+        page,
+        sculptor_instance_.project_path,
+        branch_name,
+        f"branch {branch_name} should be deleted under 'delete_if_safe' when merged",
     )
 
 
@@ -195,6 +218,9 @@ def test_always_policy_force_deletes_branch(sculptor_instance_: SculptorInstance
     _delete_workspace_via_api(page, workspace_id)
 
     _wait_for_worktree_removed(page, sculptor_instance_.project_path, worktree_path)
-    assert not _branch_exists(sculptor_instance_.project_path, branch_name), (
-        f"branch {branch_name} should be force-deleted under 'always'"
+    _wait_for_branch_deleted(
+        page,
+        sculptor_instance_.project_path,
+        branch_name,
+        f"branch {branch_name} should be force-deleted under 'always'",
     )
