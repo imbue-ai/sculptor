@@ -31,7 +31,7 @@ def run_cmd(
         ),
     ),
     model: str = typer.Option(
-        "opus", "--model", "-m", help="The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m])"
+        "opus", "--model", "-m", help="The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m], fable)"
     ),
     strategy: str = typer.Option(
         "worktree",

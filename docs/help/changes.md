@@ -30,7 +30,7 @@ If something looks wrong, send a follow-up message in the chat panel to ask the 
 
 ## Committing changes
 
-When you're satisfied with the changes, click the **Commit** button at the bottom of the Changes tab. The button label reflects the change count — for example, **Commit 2 changes**.
+When you're satisfied with the changes, click the **Commit** button in the header of the Changes tab. The button label reflects the change count — for example, **Commit 2 changes**.
 
 ![Commit button in the Changes tab showing the pending change count](images/commit_button.png)
 
