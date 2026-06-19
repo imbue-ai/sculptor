@@ -61,6 +61,19 @@ class PlaywrightPluginsSettingsElement(PlaywrightIntegrationTestElement):
         """
         self.get_source_row(source).get_by_test_id(ElementIDs.SETTINGS_PLUGINS_SOURCE_SETTINGS).click()
 
+    def set_source_text_setting(self, source: str, value: str) -> None:
+        """Open a source's plugin-rendered settings and fill its text input.
+
+        The settings component is plugin-authored, so its field carries no host
+        testid; scope to the (single) ``<input>`` inside the source's row. Used
+        e.g. to enter the Linear plugin's API key, which the plugin persists via
+        the settings SDK and applies reactively (no reload needed).
+        """
+        self.open_source_settings(source)
+        field = self.get_source_row(source).locator("input")
+        expect(field).to_be_visible()
+        field.fill(value)
+
     def get_toggle(self, source: str) -> Locator:
         """Locate the enable/disable switch on a source's row."""
         return self.get_source_row(source).get_by_test_id(ElementIDs.SETTINGS_PLUGINS_SOURCE_TOGGLE)
