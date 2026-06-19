@@ -345,7 +345,10 @@ class TestWorkspaceList:
         result = runner.invoke(app, ["workspace", "list", "--repo", "/tmp/test", "--json"])
 
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        # Parse stdout (not result.output): the --repo flow writes "Initialized
+        # repo ..." to stderr, which the bumped typer/click CliRunner folds into
+        # result.output. Matches the other --json assertions in this file.
+        data = json.loads(result.stdout)
         assert len(data) == 1
         assert data[0]["target_branch"] == "parent-branch"
         assert data[0]["requested_branch_name"] == "child-branch"
