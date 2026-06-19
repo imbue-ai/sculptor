@@ -33,31 +33,28 @@ rename command if you don't already know it.
 
 Several steps below involve multi-turn conversation with the user —
 most obviously **Step 4** (goals) and **Step 7** (fill the spec), but
-also any step that asks the user a question via
-`mcp__sculptor__ask_user_question`. The rules in this section apply
+also any step that asks the user a question. The rules in this section apply
 whenever you're in a Q&A loop. Later steps add step-specific content
 (what to ask, how to update the file) on top of these.
 
-### Every turn ends with mcp__sculptor__ask_user_question
+### Every turn ends by asking the user a question with your question tool
 
-**Every turn in a Q&A loop MUST end with an
-`mcp__sculptor__ask_user_question` tool call.** This is the single
+**Every turn in a Q&A loop MUST end by asking the user a question with your question tool.** This is the single
 rule that determines whether the turn succeeded. If you end a turn
 without it, you have stopped silently — the user has nothing to
 respond to and the skill is stuck.
 
-Before ending any turn, verify: *did this turn emit an
-`mcp__sculptor__ask_user_question` call?* If not, emit one now.
+Before ending any turn, verify: *did this turn end by asking the user
+a question with your question tool?* If not, do so now.
 
 The ritual holds regardless of what happened earlier in the turn —
 research, answering the user's question, long discussion, a
-back-and-forth. Every one of those ends with
-`mcp__sculptor__ask_user_question`.
+back-and-forth. Every one of those ends by asking the user a question with your question tool.
 
 **One narrow exception: spawning a Mock agent.** When you spawn a
 mock-creator agent in Step 6, Step 7's escape hatch, or Step 9, the
 spawning turn ends with **text instructions** rather than
-`mcp__sculptor__ask_user_question`. This is deliberate: the
+asking the user a question. This is deliberate: the
 workspace's "waiting for input" state must belong to the Mock agent
 while the user is iterating on mocks, not to the Spec agent —
 otherwise the Mock agent's attention signals are masked. The
@@ -75,8 +72,8 @@ The user will often:
 This is a feature, not a problem. When it happens, the conversational
 frame shifts: you owe the user a response before asking anything new.
 **This is the moment the skill fails most often** — the agent goes
-into "answer the user" mode and forgets to close the turn with
-`mcp__sculptor__ask_user_question`.
+into "answer the user" mode and forgets to close the turn by asking
+the user a question with your question tool.
 
 Handle it like this:
 
@@ -85,8 +82,8 @@ Handle it like this:
    answer concretely.
 2. **Update the spec file** to reflect anything new the conversation
    surfaced.
-3. **End the turn with `mcp__sculptor__ask_user_question`.** Usually
-   this is a follow-up that builds on what you just discussed
+3. **End the turn by asking the user a question with your question tool.**
+   Usually this is a follow-up that builds on what you just discussed
    ("Given what I found in `foo.py`, which of these do you prefer?"),
    but it can also be "do you want to keep drilling into this, or
    move on?" — so the user stays in control of the pace.
@@ -99,16 +96,16 @@ you drive the spec forward.
 The silent-stop failure is especially likely when a user's answer
 prompts more exploration (Grep, Read, or another round of codebase
 digging) before the next question. Research output eats your output
-budget, and the final synthesis step — including the
-`mcp__sculptor__ask_user_question` call — gets skipped.
+budget, and the final synthesis step — including asking the user a
+question — gets skipped.
 
-Do the research. Then still update the spec file and still emit
-`mcp__sculptor__ask_user_question` in the same turn. Research does
+Do the research. Then still update the spec file and still ask the
+user a question with your question tool in the same turn. Research does
 not excuse skipping the ritual.
 
 ### Do not announce upcoming tool calls in text
 
-When you're about to call `mcp__sculptor__ask_user_question`, do
+When you're about to ask the user a question, do
 **not** announce the call in text first. Just make the call.
 
 Any sentence that announces an upcoming tool call — whether it ends
@@ -125,10 +122,9 @@ call. Examples of announcement preambles that trigger this:
 - "A few more questions."
 - "Next I'll ask about X."
 
-Delete any such sentence and emit the tool call directly. Options,
-questions, and choices go INSIDE the
-`mcp__sculptor__ask_user_question` call, not as preamble describing
-what you're about to do.
+Delete any such sentence and ask the user directly. Options,
+questions, and choices go INSIDE the question you ask, not as
+preamble describing what you're about to do.
 
 **Context about the prior state is fine** (e.g. "I updated the User
 Scenarios section with that flow.", "Grepping turned up one related
@@ -138,7 +134,7 @@ do it.
 
 ### How to ask
 
-Use the `mcp__sculptor__ask_user_question` tool for every question.
+For every question, ask with your question tool — `mcp__sculptor__ask_user_question` if it's available, otherwise the built-in `AskUserQuestion`. Never ask in plain text: only the tool call puts the workspace into the "waiting for input" state that alerts the user.
 Provide concrete, distinct options grounded in what you found in the
 codebase. Sculptor's UI always shows a free-text field alongside the
 options, so you do not need to include an explicit "Other" option.
@@ -170,8 +166,7 @@ for the writing guidance. Don't look for those in `.sculptor/docs.md`.
 ## Step 2: Parse the input
 
 `$ARGUMENTS` is the feature description. If it's empty or too vague
-(1-3 words like "add caching"), use `mcp__sculptor__ask_user_question`
-to ask the user to describe the feature in one or two sentences before
+(1-3 words like "add caching"), use your question tool to ask the user to describe the feature in one or two sentences before
 continuing. Follow the Q&A ritual above.
 
 ## Step 3: Scaffold the spec
@@ -247,8 +242,7 @@ Focus on:
 - **Audience** — whose experience changes, and how?
 - **Non-goals** — what are they explicitly NOT trying to do?
 
-Pick 1 to 3 that are genuinely missing from `$ARGUMENTS` and ask via
-`mcp__sculptor__ask_user_question`. Skip anything the input already
+Pick 1 to 3 that are genuinely missing from `$ARGUMENTS` and ask with your question tool. Skip anything the input already
 covers.
 
 **Skip this step entirely if `$ARGUMENTS` already covers problem,
@@ -313,7 +307,7 @@ mocks come first.
 
 ### The three options
 
-Use `mcp__sculptor__ask_user_question` with:
+Ask with your question tool, with:
 
 1. **Mock first (exploration)** — "I'll spawn a mock-creator agent to
    build 3+ HTML variants so you can see options before we fill out
@@ -337,8 +331,8 @@ Use `mcp__sculptor__ask_user_question` with:
    Do NOT pass `Associated spec:` — the spec only has Overview at
    this point. The mock agent's handoff artifact `mocks.context.md`
    feeds the rest of the spec, not the other way around.
-2. End this turn with **text instructions** — do NOT call
-   `mcp__sculptor__ask_user_question`. Briefly tell the user what
+2. End this turn with **text instructions** — do NOT ask the user
+   a question. Briefly tell the user what
    you spawned, point them at the new "Mock" tab, and let them
    know they can come back to this tab whenever they're ready,
    whether that's because mocking is done, they have questions
@@ -347,9 +341,9 @@ Use `mcp__sculptor__ask_user_question` with:
    prescribe specific reply phrases. Then end the turn with no
    tool call.
 
-   Why no `ask_user_question` here: that tool puts the workspace
-   into "waiting for input" state, which would mask the Mock
-   agent's own attention signals. The Spec agent should be quiet
+   Why no question here: asking the user a question puts the
+   workspace into "waiting for input" state, which would mask the
+   Mock agent's own attention signals. The Spec agent should be quiet
    until the user returns.
 
 3. When the user comes back, infer from their message which path
@@ -375,8 +369,7 @@ Use `mcp__sculptor__ask_user_question` with:
        mock files — leave them as-is.
 
    If their message is genuinely ambiguous between these paths, ask
-   a clarifying question — this is a normal Q&A turn now, so use
-   `mcp__sculptor__ask_user_question`.
+   a clarifying question with your question tool — this is a normal Q&A turn now.
 
 ### If the user picks "Spec first, mock at the end"
 
@@ -495,12 +488,12 @@ session is already in progress or has produced mocks, don't re-offer.
 Also do not offer if the user previously selected "stop offering"
 (see below).
 
-Use `mcp__sculptor__ask_user_question`:
+Ask with your question tool:
 
 - **Yes, spawn a mock agent now** — treat this as if the user picked
   "Mock first" in Step 6. Spawn the agent (see Step 6 for the
   invocation), end this turn with text instructions per Step 6 (no
-  `ask_user_question` — see the exception in the Q&A ritual), and
+  question — see the exception in the Q&A ritual), and
   when the user returns integrate the mocks into the spec and resume
   Q&A.
 - **No, keep going in Q&A** — continue with your next substantive
@@ -524,7 +517,7 @@ the spec?
   final call.
 
 **The finalize question must always be its own
-`mcp__sculptor__ask_user_question` call, on a turn of its own.**
+question, on a turn of its own.**
 Never bundle it with substantive questions in the same call. The user
 cannot decide whether to finalize until they have seen every
 preceding answer reflected in the spec file.
@@ -533,12 +526,11 @@ The correct sequence is:
 
 1. User answers the previous round of substantive questions.
 2. You update the spec file to integrate every one of those answers.
-3. Only then, on a new turn, emit a standalone
-   `mcp__sculptor__ask_user_question` with the single finalize
-   question — no other questions attached.
+3. Only then, on a new turn, ask the user the single
+   finalize question on its own — no other questions attached.
 
 If you still have substantive questions you want to ask, ask those
-instead (in their own `mcp__sculptor__ask_user_question` call) — the
+instead (as a separate question) — the
 finalize offer can wait for the next round.
 
 ## Step 8: Finalize
@@ -578,8 +570,7 @@ Stay in conversation to refine the spec:
   list.
 
 **Do NOT begin implementation** until the user explicitly says so.
-When they signal they're done refining, use
-`mcp__sculptor__ask_user_question` to offer:
+When they signal they're done refining, ask with your question tool, offering:
 
 - **Create / revise HTML mocks** — spawn a mock-creator agent via
   `/sculptor:sculpt-cli`, invoking `/sculptor-workflow:mock` in `Mode: confirmation`.
@@ -594,7 +585,7 @@ When they signal they're done refining, use
   If mocks already exist at the target path, note that in the
   invocation so the agent revises rather than overwrites. End this
   turn with the same text instructions as Step 6 — no
-  `mcp__sculptor__ask_user_question` (see the exception in the Q&A
+  question (see the exception in the Q&A
   ritual). The Mock agent self-renames on entry, so you don't need
   to rename it here. Let the user know they can come back when
   mocking is done, when they have questions, or if they want to
@@ -618,7 +609,7 @@ When they signal they're done refining, use
 
   Rename the new agent to `Architect` via `/sculptor:sculpt-cli`,
   then end this turn with text instructions pointing the user to
-  the new tab — no `mcp__sculptor__ask_user_question` (same
+  the new tab — no question (same
   spawn-turn exception as Mocks). The Architect will take it from
   there.
 - **Leave as a spec** — stop here
@@ -666,14 +657,12 @@ Act on the user's choice.
   a separately-spawned mock-creator agent, not by you.
 - Do NOT skip the docs config. If `.sculptor/docs.md` is missing,
   invoke `/sculptor-workflow:setup-repo` first.
-- **Use `mcp__sculptor__ask_user_question` for every question.** The
-  built-in `AskUserQuestion` tool is blocked in Sculptor.
+- **Ask every question with your question tool** (see *How to ask*) — never a plain-text question.
 - **Follow the Q&A ritual (see above) in every step that asks the
   user a question** — Step 2 (if `$ARGUMENTS` is vague), Step 4
   (goals), Step 6 (mock choice), Step 7 (spec Q&A), Step 9
-  (refine). Ending a Q&A turn without
-  `mcp__sculptor__ask_user_question` is the primary failure mode of
-  this skill.
+  (refine). Ending a Q&A turn without asking the user a question is
+  the primary failure mode of this skill.
 - **Every question in Step 4 must be about goals, outcomes,
   audience, or scope — never implementation.** If you're about to
   ask an implementation question, stop and move on to Step 5
@@ -681,7 +670,7 @@ Act on the user's choice.
 - After every user answer, update the spec file before asking the
   next question.
 - The finalize question (Step 7) is always its own
-  `mcp__sculptor__ask_user_question` call on its own turn, after the
+  question on its own turn, after the
   spec has been updated with all prior answers. Never bundle it with
   substantive questions.
 - When mocks exist next to the spec at Step 8, auto-add the Mocks
@@ -689,7 +678,7 @@ Act on the user's choice.
 - When spawning another agent (a Mock agent in Step 6 / Step 7
   escape hatch / Step 9, or an Architect agent in Step 9), end the
   spawning turn with **text instructions** rather than
-  `mcp__sculptor__ask_user_question`. This is the one deliberate
+  asking the user a question. This is the one deliberate
   exception to the Q&A ritual: the workspace's "waiting for input"
   state must belong to the spawned agent until the user returns, so
   the Spec agent stays quiet. When the user replies, infer their

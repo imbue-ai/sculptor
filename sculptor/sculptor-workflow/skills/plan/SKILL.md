@@ -29,22 +29,20 @@ Before doing anything else, rename this agent to "Plan" via the
 The plan agent runs a multi-turn Q&A loop with the user. The rules
 below apply to every Q&A turn.
 
-### Every turn ends with mcp__sculptor__ask_user_question
+### Every turn ends by asking the user a question
 
-**Every turn in a Q&A loop MUST end with an
-`mcp__sculptor__ask_user_question` tool call.** This is the single
+**Every turn in a Q&A loop MUST end with a question to the user via your question tool.** This is the single
 rule that determines whether the turn succeeded. If you end a turn
 without it, you have stopped silently and the user has nothing to
 respond to.
 
 The ritual holds regardless of what happened earlier in the turn —
 research, answering the user's question, long discussion, a
-back-and-forth. Every one of those ends with
-`mcp__sculptor__ask_user_question`.
+back-and-forth. Every one of those ends by asking the user a question with your question tool.
 
 **One narrow exception: spawning the Build agent.** When you spawn
 `/sculptor-workflow:build` at finalize, the spawning turn ends with
-**text instructions** rather than `mcp__sculptor__ask_user_question`.
+**text instructions** rather than a question.
 The workspace's "waiting for input" state must belong to the Build
 agent, not to this one. The exception applies only to the spawn turn.
 
@@ -53,8 +51,8 @@ agent, not to this one. The exception applies only to the spawn turn.
 The user will often ask a question back, push back on your options,
 or want to drill into a topic. This is a feature, not a problem — but
 it's the moment the skill fails most often: the agent goes into
-"answer the user" mode and forgets to close with
-`mcp__sculptor__ask_user_question`.
+"answer the user" mode and forgets to close by asking the user a
+question with your question tool.
 
 Handle it like this:
 
@@ -62,15 +60,15 @@ Handle it like this:
    (Grep, Read) if needed.
 2. Update the relevant task file (or `00_overview.md`) to reflect
    anything new the conversation surfaced.
-3. End the turn with `mcp__sculptor__ask_user_question` — usually a
-   follow-up that builds on the discussion, or a "keep drilling or
-   move on?" pacing question.
+3. End the turn by asking the user a question with your question tool —
+   usually a follow-up that builds on the discussion, or a "keep
+   drilling or move on?" pacing question.
 
 Research does not excuse skipping the ritual.
 
 ### Do not announce upcoming tool calls
 
-When you're about to call `mcp__sculptor__ask_user_question`, do
+When you're about to ask the user a question, do
 **not** announce it in text first. Just make the call.
 
 Any sentence that announces an upcoming tool call ("Here are the
@@ -119,8 +117,8 @@ The plan folder path:
 - **Directory-per-spec:** `<spec-dir>/plan/`
 - **Flat:** `<spec-dir>/<slug>.plan/`
 
-If the plan folder already exists, ask the user via
-`mcp__sculptor__ask_user_question` whether to extend it, replace it,
+If the plan folder already exists, use your question tool to ask
+whether to extend it, replace it,
 or pick a new slug.
 
 ## Step 3: Read upstream artifacts
@@ -336,8 +334,7 @@ do. Include:>
   section).
 - **Confirm end-to-end tests with the user.** After writing the plan,
   present the user with a summary of which end-to-end tests you've
-  identified for each task. Use `mcp__sculptor__ask_user_question` to
-  ask the user to confirm these are the right tests, or suggest
+  identified for each task. Use your question tool to ask the user to confirm these are the right tests, or suggest
   additional ones.
 
 ### Mandatory final tasks (every plan)
@@ -444,8 +441,8 @@ None. This task spawns an agent; it does not edit code.
 3. The Review agent self-renames on entry; you do not need to
    rename it.
 4. End this turn with **text instructions** pointing the user to
-   the new Review tab. Do NOT call
-   `mcp__sculptor__ask_user_question` (the workspace's "waiting for
+   the new Review tab. Do NOT ask the user a question (the
+   workspace's "waiting for
    input" state must belong to the Review agent now).
 
 ## Verification checklist
@@ -473,7 +470,7 @@ After writing all task files:
    verify-all-tests and launch-review tasks at the end of the Task
    Index). If they're missing, write them now.
 3. Show the plan folder path in a code block.
-4. Emit the finalize `mcp__sculptor__ask_user_question` on its own
+4. Emit the finalizing question on its own
    turn:
    - **Proceed to Build** — spawn the Build agent, hand off
    - **Revise** — keep iterating on the plan
@@ -515,11 +512,11 @@ yet final.
      folder
 2. Rename the new agent to `Build` via `/sculptor:sculpt-cli`.
 3. End this turn with **text instructions** pointing the user to the
-   new tab — no `mcp__sculptor__ask_user_question`.
+   new tab — without asking the user a question.
 
 ### If the user picks "Revise" or "Stop"
 
-Revise: ask via `mcp__sculptor__ask_user_question` what to change,
+Revise: use your question tool to ask what to change,
 then edit task files in place. Stop: end cleanly with a short text
 note pointing at the plan folder.
 
@@ -578,7 +575,7 @@ verified them in the codebase.
 - Do NOT reference other task files for context — repeat the context
   instead.
 - Do NOT omit end-to-end tests for user-facing features.
-- **Use `mcp__sculptor__ask_user_question` for every question.**
+- **Ask every question with your question tool** — `mcp__sculptor__ask_user_question` if it's available, otherwise the built-in `AskUserQuestion`. Never ask in plain text: only the tool call puts the workspace into the "waiting for input" state that alerts the user.
 - The finalize question is its own turn.
 - When spawning the Build agent, end the spawning turn with **text
-  instructions** rather than `mcp__sculptor__ask_user_question`.
+  instructions** rather than a question.

@@ -69,7 +69,7 @@ Check the current branch with `git branch --show-current`.
 - If the current branch **is** the default branch, create a new branch using
   the code config's **Branch Naming** convention. If the config has no
   branch naming section:
-  - **Interactive mode:** use `mcp__sculptor__ask_user_question` to ask the user.
+  - **Interactive mode:** ask with your question tool.
   - **Autonomous mode:** generate a reasonable slug from the bug description
     (lowercased, kebab-case, ticket ID prefix if present), e.g.
     `auto/bugs/SCU-123-login-crash` or `auto/bugs/login-crash`.
@@ -93,8 +93,7 @@ description, and comments, and use that context as the bug description for the
 rest of the workflow.
 
 If the config says a ticket is always required but no ticket ID was provided:
-- **Interactive mode:** use `mcp__sculptor__ask_user_question` to ask for the
-  ticket ID or whether they want to proceed without one.
+- **Interactive mode:** use your question tool to ask for the ticket ID or whether they want to proceed without one.
 - **Autonomous mode:** proceed without a ticket. Note in the final MR/PR body
   that no ticket was provided.
 
@@ -109,7 +108,7 @@ Before writing any code, get full clarity on what is broken.
 
 ### Gather information
 
-1. **Ask the user questions** using `mcp__sculptor__ask_user_question` if the description is
+1. **Ask the user questions with your question tool** if the description is
    vague or incomplete. Don't guess — ask about:
    - Exact steps to reproduce
    - What the user expected to happen
@@ -151,14 +150,14 @@ Write out your understanding as a summary:
 `<img>` tags. Walk the user through each screenshot, explaining what you did
 and what you observed.
 
-**You MUST use the `mcp__sculptor__ask_user_question` tool here** — do NOT use a plain text
+**You MUST ask with your question tool here** — `mcp__sculptor__ask_user_question` if it's available, otherwise the built-in `AskUserQuestion` — do NOT use a plain text
 message. The tool triggers a UI notification that grabs the user's attention.
 Ask:
 > "Does this match your understanding? Is the test location correct? Please
 > confirm so I can proceed."
 
 Then **STOP. Do not proceed to Phase 2. Do not write any code.** Wait for the
-user's explicit response via the `mcp__sculptor__ask_user_question` tool result.
+user's explicit response.
 
 ## Phase 2: Write a Failing Test
 
@@ -180,8 +179,7 @@ this skill — do not do it.
 ### If you hit an obstacle that seems to require deviating
 
 If, while writing the test, you believe you need to change the test kind (e.g.
-fall back from an end-to-end test to a unit test), you MUST stop and use
-`mcp__sculptor__ask_user_question` before writing anything different. In the question:
+fall back from an end-to-end test to a unit test), you MUST stop and ask with your question tool before writing anything different. In the question:
 
 - Name the **specific obstacle** you hit (e.g. "the bug only reproduces when
   \<X\>, and the end-to-end test framework cannot do \<Y\>"). "Difficult,"
@@ -332,7 +330,7 @@ Enter this workflow only when the input began with `--autonomous` (or
 
 ### Forbidden in autonomous mode
 
-- **No `mcp__sculptor__ask_user_question` calls.** Not for clarification, not
+- **No asking the user.** Not for clarification, not
   for confirmation, not for fallback approval, not ever.
 - **No waiting on the user.** Don't ask "should I proceed?" — proceed.
 - **No fabricated bugs.** If you cannot reproduce any plausible interpretation

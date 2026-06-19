@@ -32,22 +32,21 @@ rename command.
 The architect runs a multi-turn Q&A loop with the user. The rules
 below apply to every Q&A turn.
 
-### Every turn ends with mcp__sculptor__ask_user_question
+### Every turn ends by asking the user a question with your question tool
 
-**Every turn in a Q&A loop MUST end with an
-`mcp__sculptor__ask_user_question` tool call.** This is the single
+**Every turn in a Q&A loop MUST end by asking the user a question with your question tool.**
+This is the single
 rule that determines whether the turn succeeded. If you end a turn
 without it, you have stopped silently and the user has nothing to
 respond to.
 
 The ritual holds regardless of what happened earlier in the turn —
 research, answering the user's question, long discussion, a
-back-and-forth. Every one of those ends with
-`mcp__sculptor__ask_user_question`.
+back-and-forth. Every one of those ends by asking the user a question with your question tool.
 
 **One narrow exception: spawning the Plan agent.** When you spawn
 `/sculptor-workflow:plan` at finalize, the spawning turn ends with
-**text instructions** rather than `mcp__sculptor__ask_user_question`.
+**text instructions** rather than a question.
 The workspace's "waiting for input" state must belong to the Plan
 agent, not to this one. The exception applies only to the spawn turn.
 
@@ -56,8 +55,8 @@ agent, not to this one. The exception applies only to the spawn turn.
 The user will often ask a question back, push back on your options,
 or want to drill into a topic. This is a feature, not a problem — but
 it's the moment the skill fails most often: the agent goes into
-"answer the user" mode and forgets to close with
-`mcp__sculptor__ask_user_question`.
+"answer the user" mode and forgets to close by asking the user a
+question with your question tool.
 
 Handle it like this:
 
@@ -65,7 +64,7 @@ Handle it like this:
    (Grep, Read) if needed.
 2. Update `architecture.md` to reflect anything new the conversation
    surfaced.
-3. End the turn with `mcp__sculptor__ask_user_question` — usually a
+3. End the turn by asking the user a question with your question tool — usually a
    follow-up that builds on the discussion, or a "keep drilling or
    move on?" pacing question.
 
@@ -73,7 +72,7 @@ Research does not excuse skipping the ritual.
 
 ### Do not announce upcoming tool calls
 
-When you're about to call `mcp__sculptor__ask_user_question`, do
+When you're about to ask the user a question, do
 **not** announce it in text first. Just make the call.
 
 Any sentence that announces an upcoming tool call ("Here are the
@@ -120,8 +119,8 @@ structure* section below. Don't look for it in `.sculptor/docs.md`.
 
 Resolve:
 
-- **Slug** — from the input, or ask via
-  `mcp__sculptor__ask_user_question` if the input is empty. When you
+- **Slug** — from the input, or use your question tool to ask the user if the input is empty.
+  When you
   ask, glob the configured spec location for existing slugs and offer
   them as options.
 - **Spec path** — from the seed if provided, otherwise derive from
@@ -132,8 +131,8 @@ Resolve:
 - **Mocks path** — from seed, or `<spec-dir>/mocks.html` (or
   `<slug>.mocks.html` in flat mode) if it exists, else none.
 
-If the spec doesn't exist at the resolved path, stop and ask the user
-via `mcp__sculptor__ask_user_question` what to do — write the spec
+If the spec doesn't exist at the resolved path, stop and ask with your question tool
+what to do — write the spec
 first (invoke `/sculptor-workflow:spec`), or use a different slug.
 
 ## Step 3: Read upstream artifacts
@@ -328,7 +327,7 @@ When the design is clear enough:
    in the *Alternatives considered* section with the trade-offs you
    evaluated, add a *Risks and mitigations* section.
 2. Show the path in a code block.
-3. Emit the finalize `mcp__sculptor__ask_user_question` on its own
+3. Emit the finalizing question on its own
    turn (never bundled with substantive questions) with these
    options:
    - **Proceed to Plan** — spawn the Plan agent, hand off
@@ -370,12 +369,12 @@ is not yet final.
    - `Mocks path:` (only if mocks exist)
 2. Rename the new agent to `Plan` via `/sculptor:sculpt-cli`.
 3. End this turn with **text instructions** pointing the user to the
-   new tab — do NOT call `mcp__sculptor__ask_user_question`. See the
+   new tab — do not ask the user. See the
    spawn-turn exception in the Q&A ritual at the top of this skill.
 
 ### If the user picks "Revise"
 
-Use `mcp__sculptor__ask_user_question` to ask what to change, then
+Use your question tool to ask what to change, then
 iterate on `architecture.md`.
 
 ### If the user picks "Stop"
@@ -394,18 +393,18 @@ path. The user can resume the pipeline later by invoking
   spec issue, capture it in `architecture.md`'s *Open Questions*
   section and flag it to the user — they can return to the Spec tab
   to resolve it.
-- **Use `mcp__sculptor__ask_user_question` for every question.** The
-  built-in `AskUserQuestion` tool is blocked in Sculptor.
+- **Ask every question with your question tool** — `mcp__sculptor__ask_user_question` if it's available, otherwise the built-in `AskUserQuestion`. Never ask in plain text: only the tool call puts the
+  workspace into the "waiting for input" state that alerts the user.
 - **Follow the Q&A ritual in every step that asks the user a
-  question.** Ending a Q&A turn without
-  `mcp__sculptor__ask_user_question` is the primary failure mode of
+  question.** Ending a Q&A turn without asking the user a question is
+  the primary failure mode of
   this skill.
 - After every user answer, update `architecture.md` before asking the
   next question.
-- The finalize question is always its own
-  `mcp__sculptor__ask_user_question` call on its own turn.
+- The finalizing question is always its own
+  question on its own turn.
 - When spawning the Plan agent, end the spawning turn with **text
-  instructions** rather than `mcp__sculptor__ask_user_question`. The
+  instructions** rather than a question. The
   workspace's "waiting for input" state must belong to the Plan
   agent.
 - Reference `REQ-*` IDs from the spec wherever possible so traceability
