@@ -5,8 +5,6 @@ import sys
 import uuid
 from pathlib import Path
 
-import pathspec
-
 
 def is_on_osx() -> bool:
     return platform.system().lower() == "darwin"
@@ -50,32 +48,6 @@ def get_temp_dir() -> Path:
     temp_dir = get_filesystem_root() / "tmp"
     temp_dir.mkdir(parents=True, exist_ok=True)
     return temp_dir
-
-
-def filter_excluded_files(files: list[Path], directory: Path, exclude_file_name: str = ".gitignore") -> list[Path]:
-    """Remove files from the list that are matched by a .gitignore or similarly-specified exclude file such as
-    .gitignore or .ratchetignore.
-    """
-
-    # Underneath the root directory, find all the excluders.
-    # They can occur in subfolders and if they do they apply only to that subfolder.
-    excluders = {path for path in directory.rglob(exclude_file_name) if not path.is_symlink()}
-
-    # Per excluder, make a pathspec.
-    for excluder in excluders:
-        with excluder.open("r") as exclude_file:
-            exclude_spec = pathspec.GitIgnoreSpec.from_lines(exclude_file)
-
-            # Now we have two cases - We keep the file if the excluder doesn't apply because it's in a different
-            # folder, or if it applies but doesn't match
-            prefix = excluder.parent
-            files = [
-                file
-                for file in files
-                if not (file.is_relative_to(prefix) and exclude_spec.match_file(file.relative_to(prefix)))
-            ]
-
-    return files
 
 
 def generate_id() -> str:

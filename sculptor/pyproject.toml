@@ -15,46 +15,37 @@ dependencies = [
     # Please add dev dependencies to dependency-groups.dev, not here.
     # Please keep these sorted alphabetically.
     "alembic>=1.16.1",
-    "anthropic>=0.38.0",
-    # The block from anyio through traceback-with-variables was absorbed from the former
-    # imbue_core library when it was folded into sculptor.foundation; keep it sorted in.
+    # Several deps below were absorbed from the former imbue_core library when it was
+    # folded into sculptor.foundation; keep them sorted in.
     "anyio",
     # Pyrefly understands @attr.s classes only with the PEP 681 dataclass_transform
     # stubs introduced in attrs 26; older stubs leave it unable to see generated __init__s.
     "attrs>=26.1.0",
-    "beautifulsoup4>=4.12.2",
     "boto3>=1.35.0",
     "cachetools",
     "coolname>=2.2.0",
-    "dockerfile-parse>=2.0.1",
     "email-validator",
     "fastapi",
     "filelock>=3.8.0",
-    "humanfriendly>=10.0",
     "httpx",
     "loguru",
-    "pathspec",
     "psutil>=5.9.0",
     "pydantic>=2.11.4",
     "pydantic-settings",
     "pygit2>=1.18.0",
-    "pygments>=2.0.0",
     "pyjwt[crypto]",
     "python-multipart",
     "python-slugify>=8.0.0",
     "pyyaml>=6.0",
     "requests>=2.28.0",
-    "splinter>=0.19.0",
     "sqlalchemy",
     "tblib>=3.1",
     "tenacity>=8.2.2",
     "tomlkit>=0.13.0",
-    "traceback-with-variables>=2.2.0",
     "typeid-python",
     "typer",
     "uvicorn>=0.34.3",
     "viztracer>=1.0.0",
-    "watchdog>=6.0.0",
     "websockets>=15.0.1",
 ]
 requires-python = ">=3.14"
@@ -107,29 +98,22 @@ dev = [
     "sculpt",
     "boto3-stubs>=1.40.49",
     "filelock>=3.18.0",
-    # inline-snapshot, pylint, pytest-asyncio and pytest-mock were absorbed from the former
-    # imbue_core library (now sculptor.foundation) — its tests and ratchets need them.
+    # inline-snapshot, pytest-asyncio and pytest-mock were absorbed from the former
+    # imbue_core library (now sculptor.foundation) — its tests need them.
     "inline-snapshot",
-    "moto[s3]",
     "pillow>=11.0.0",
     # playwright's bundled Chromium must match Electron's (1.53 <-> Electron 37,
     # 1.60 <-> Electron 42) for connect_over_cdp; bump together with Electron.
     # Keep the frontend package.json "playwright" devDependency on the same pin.
     "playwright==1.60.0",
-    "pylint==3.2.6",
     "pyrefly>=1.0.0",
     "pytest-asyncio",
-    "pytest-cov>=6.2.1",
-    "pytest-metadata==3.1.1",
     "pytest-mock",
     "pytest-performancetotal==1.0.0",
     "pytest-playwright==0.8.0",
-    "pytest-repeat>=0.9.3",
-    "pytest-split>=0.9.0",
     "pytest-timeout",
     "pytest-xdist>=3.8.0",
     "pytest>=9",
-    "selenium>=4.0.0",
     "syrupy",
     "tabulate>=0.9.0",
     "ty>=0.0.4",
