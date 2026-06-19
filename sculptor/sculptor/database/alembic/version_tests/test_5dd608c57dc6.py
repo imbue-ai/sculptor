@@ -20,7 +20,6 @@ class TestRemoveCommandInputUserMessage(MigrationTestFixture):
         return "811610e55bae"
 
     def seed(self, connection: sa.engine.Connection) -> None:
-        # Insert a project
         connection.execute(
             sa.text("""
                 INSERT INTO project_latest (
@@ -35,7 +34,6 @@ class TestRemoveCommandInputUserMessage(MigrationTestFixture):
             {"project_id": PROJECT_ID},
         )
 
-        # Insert a task
         input_data = json.dumps(
             {
                 "object_type": "AgentTaskInputsV2",
@@ -97,7 +95,6 @@ class TestRemoveCommandInputUserMessage(MigrationTestFixture):
             )
 
     def verify(self, connection: sa.engine.Connection) -> None:
-        # Check only the ChatInputUserMessage row remains
         result = connection.execute(sa.text("SELECT json_extract(message, '$.object_type') FROM saved_agent_message"))
         remaining_types = [row[0] for row in result]
         assert remaining_types == ["ChatInputUserMessage"], (

@@ -20,7 +20,6 @@ class TestTasksRequireWorkspace(MigrationTestFixture):
         return "9bb41574855c"
 
     def seed(self, connection: sa.engine.Connection) -> None:
-        # Insert a project
         connection.execute(
             sa.text("""
                 INSERT INTO project (
@@ -111,17 +110,14 @@ class TestTasksRequireWorkspace(MigrationTestFixture):
         )
 
     def verify(self, connection: sa.engine.Connection) -> None:
-        # Check workspace tables exist
         tables = {row[0] for row in connection.execute(sa.text("SELECT name FROM sqlite_master WHERE type='table'"))}
         assert "workspace" in tables, "workspace table not found"
         assert "workspace_latest" in tables, "workspace_latest table not found"
 
-        # Check a workspace was created
         workspace_rows = connection.execute(sa.text("SELECT COUNT(*) FROM workspace")).fetchone()
         assert workspace_rows is not None
         assert workspace_rows[0] >= 1, "No workspace rows were created"
 
-        # Check task_latest current_state now contains workspace_id
         result = connection.execute(
             sa.text("""
                 SELECT json_extract(current_state, '$.workspace_id')

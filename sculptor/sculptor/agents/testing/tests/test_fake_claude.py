@@ -44,8 +44,6 @@ from sculptor.state.claude_state import ParsedTaskStartedResponse
 from sculptor.state.claude_state import ParsedToolResultResponseSimple
 from sculptor.state.claude_state import parse_claude_code_json_lines_simple
 
-# ========== JSONL Round-Trip Tests ==========
-
 
 def test_init_message_roundtrip() -> None:
     session_id = f"test-{uuid4().hex}"
@@ -166,9 +164,6 @@ def test_end_message_roundtrip() -> None:
     assert parsed.is_error is False
 
 
-# ========== Command Parsing Tests ==========
-
-
 def test_parse_default_command() -> None:
     command, args = _parse_prompt("Hello, help me with code")
     assert command is None
@@ -191,9 +186,6 @@ def test_parse_unknown_command() -> None:
     command, args = _parse_prompt("fake_claude:nonexistent")
     assert command == "nonexistent"
     assert args == {}
-
-
-# ========== Command Handler Tests ==========
 
 
 def test_handle_default() -> None:
@@ -632,9 +624,6 @@ def test_handle_parallel_tools(tmp_path: Path) -> None:
     assert "second" in messages[2]["message"]["content"][0]["content"]
 
 
-# ========== Generate ID Tests ==========
-
-
 def test_generate_id_uniqueness() -> None:
     ids = {generate_id("msg") for _ in range(100)}
     assert len(ids) == 100
@@ -646,9 +635,6 @@ def test_generate_id_prefix() -> None:
 
     tool_id = generate_id("toolu")
     assert tool_id.startswith("toolu_fakeclaude_")
-
-
-# ========== End-to-End Subprocess Test ==========
 
 
 def test_end_to_end_subprocess() -> None:
@@ -692,9 +678,6 @@ def test_end_to_end_unknown_command_exits_with_error() -> None:
     assert result.returncode == 1
 
 
-# ========== Determinism Test ==========
-
-
 def test_determinism_same_output_for_same_input() -> None:
     """Same command + args should produce structurally identical output (modulo IDs)."""
     args = {"text": "deterministic test"}
@@ -706,9 +689,6 @@ def test_determinism_same_output_for_same_input() -> None:
     assert len(messages_1) == len(messages_2)
     assert messages_1[0]["type"] == messages_2[0]["type"]
     assert messages_1[0]["message"]["content"][0]["text"] == messages_2[0]["message"]["content"][0]["text"]
-
-
-# ========== Streaming Tests ==========
 
 
 def test_handle_text_with_streaming() -> None:
@@ -733,9 +713,6 @@ def test_handle_write_file_with_streaming(tmp_path: Path) -> None:
     )
     stream_events = [m for m in messages if m.get("type") == "stream_event"]
     assert len(stream_events) > 0
-
-
-# ========== Handler Roundtrip Tests ==========
 
 
 @pytest.mark.parametrize("emit_streaming", [True, False])

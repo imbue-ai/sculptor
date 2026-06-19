@@ -20,7 +20,6 @@ class TestDropParentTaskId(MigrationTestFixture):
         return "5dd608c57dc6"
 
     def seed(self, connection: sa.engine.Connection) -> None:
-        # Insert a project
         connection.execute(
             sa.text("""
                 INSERT INTO project_latest (
@@ -99,15 +98,12 @@ class TestDropParentTaskId(MigrationTestFixture):
         )
 
     def verify(self, connection: sa.engine.Connection) -> None:
-        # Check parent_task_id column no longer exists in task
         task_columns = {row[1] for row in connection.execute(sa.text("PRAGMA table_info(task)"))}
         assert "parent_task_id" not in task_columns, "parent_task_id still in task table"
 
-        # Check parent_task_id column no longer exists in task_latest
         task_latest_columns = {row[1] for row in connection.execute(sa.text("PRAGMA table_info(task_latest)"))}
         assert "parent_task_id" not in task_latest_columns, "parent_task_id still in task_latest table"
 
-        # Check task data is preserved
         result = connection.execute(
             sa.text("SELECT object_id, outcome FROM task_latest WHERE object_id = :task_id"),
             {"task_id": TASK_ID},

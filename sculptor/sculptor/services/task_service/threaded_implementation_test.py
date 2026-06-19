@@ -134,16 +134,12 @@ def test_subscribe_to_user_messages(
 ) -> None:
     user_session = authenticate_anonymous(test_service_collection, RequestID())
     service = test_service_collection.task_service
-    # add the task
     task = get_simple_task(user_session, specimen_project)
     with user_session.open_transaction(test_service_collection) as transaction:
         service.create_task(task, transaction)
-    # add the first message
     first_user_message = get_user_input_message(task.object_id, "Hello, world!")
     with user_session.open_transaction(test_service_collection) as transaction:
-        # cast is safe because every instantiated Message is in MessageTypes
         service.create_message(cast(MessageTypes, first_user_message), task.object_id, transaction)
-    # subscribe to the messages
     with service.subscribe_to_user_and_sculptor_system_messages(task_id=task.object_id) as message_queue:
         # Ignore any sculptor system messages and wait for the first user message.
         for _ in range(99):
@@ -152,10 +148,8 @@ def test_subscribe_to_user_messages(
                 break
         else:
             assert False, "Did not receive the first user message."
-        # add a second message
         second_user_message = get_user_input_message(task.object_id, "Goodbye, world!")
         with user_session.open_transaction(test_service_collection) as transaction:
-            # cast is safe because every instantiated Message is in MessageTypes
             service.create_message(cast(MessageTypes, second_user_message), task.object_id, transaction)
         for _ in range(99):
             message = message_queue.get(timeout=1)
@@ -171,25 +165,17 @@ def test_subscribe_to_complete_tasks_for_user(
 ) -> None:
     user_session = authenticate_anonymous(test_service_collection, RequestID())
     service = test_service_collection.task_service
-    # add the task
     task = get_simple_task(user_session, specimen_project)
     with user_session.open_transaction(test_service_collection) as transaction:
         service.create_task(task, transaction)
-    # add the first message
     first_user_message = get_user_input_message(task.object_id, "Hello, world!")
     with user_session.open_transaction(test_service_collection) as transaction:
-        # cast is safe because every instantiated Message is in MessageTypes
         service.create_message(cast(MessageTypes, first_user_message), task.object_id, transaction)
-    # subscribe to the messages
     with service.subscribe_to_all_tasks_for_user(user_reference=task.user_reference) as message_queue:
-        # make sure that the queue already has the first message
         assert_message_is_in_update(message_queue, first_user_message, task.object_id)
-        # add a second message
         second_user_message = get_user_input_message(task.object_id, "Goodbye, world!")
         with user_session.open_transaction(test_service_collection) as transaction:
-            # cast is safe because every instantiated Message is in MessageTypes
             service.create_message(cast(MessageTypes, second_user_message), task.object_id, transaction)
-        # check that the queue receives the second message
         assert_message_is_in_update(message_queue, second_user_message, task.object_id)
 
 

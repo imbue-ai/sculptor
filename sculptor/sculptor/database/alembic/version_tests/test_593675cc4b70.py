@@ -26,7 +26,6 @@ class TestAddPlanModeFieldsToChatInputUserMessage(MigrationTestFixture):
         return "b1a2c3d4e5f6"
 
     def seed(self, connection: sa.engine.Connection) -> None:
-        # Insert a project
         connection.execute(
             sa.text("""
                 INSERT INTO project_latest (
@@ -41,7 +40,6 @@ class TestAddPlanModeFieldsToChatInputUserMessage(MigrationTestFixture):
             {"project_id": PROJECT_ID},
         )
 
-        # Insert a task
         input_data = json.dumps(
             {
                 "object_type": "AgentTaskInputsV2",
@@ -96,7 +94,6 @@ class TestAddPlanModeFieldsToChatInputUserMessage(MigrationTestFixture):
         )
 
     def verify(self, connection: sa.engine.Connection) -> None:
-        # Verify the ChatInputUserMessage is preserved
         result = connection.execute(
             sa.text("SELECT message FROM saved_agent_message WHERE object_id = :object_id"),
             {"object_id": MESSAGE_ID},

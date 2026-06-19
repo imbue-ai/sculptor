@@ -20,7 +20,6 @@ class TestRemoveMessageFeedbackUserMessage(MigrationTestFixture):
         return "a53ed60690f5"
 
     def seed(self, connection: sa.engine.Connection) -> None:
-        # Insert a project
         connection.execute(
             sa.text("""
                 INSERT INTO project_latest (
@@ -65,7 +64,6 @@ class TestRemoveMessageFeedbackUserMessage(MigrationTestFixture):
             },
         )
 
-        # Insert saved_agent_messages
         messages = [
             ("snap-msg-1", "msg-1", "MessageFeedbackUserMessage"),
             ("snap-msg-2", "msg-2", "ChatInputUserMessage"),

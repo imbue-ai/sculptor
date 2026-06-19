@@ -180,8 +180,7 @@ def test_combined_output_is_valid_chrome_json(tmp_path: Path) -> None:
 
 def test_atomic_write_preserves_prior_file_on_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A mid-write serialization failure must not clobber a pre-existing file
-    at ``trace_to_path``, and must not leak a ``.tmp`` sibling. Pins the
-    atomic-write contract in the plan's "Atomic write" sub-bullet."""
+    at ``trace_to_path``, and must not leak a ``.tmp`` sibling."""
     out = tmp_path / "trace.json"
     prior_content = b"PRIOR_CONTENT"
     out.write_bytes(prior_content)

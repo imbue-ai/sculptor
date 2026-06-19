@@ -277,12 +277,10 @@ def test_discover_skills_combines_skills_and_commands(tmp_path: Path, monkeypatc
     fake_home.mkdir()
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
 
-    # Create a skill
     skill_dir = tmp_path / ".claude" / "skills" / "alpha"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text("---\nname: alpha\ndescription: A skill\n---\n")
 
-    # Create a command
     commands_dir = tmp_path / ".claude" / "commands"
     commands_dir.mkdir(parents=True)
     (commands_dir / "beta.md").write_text("---\ndescription: A command\n---\n")
@@ -300,12 +298,10 @@ def test_discover_skills_deduplicates_by_name(tmp_path: Path, monkeypatch: pytes
     fake_home.mkdir()
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
 
-    # Create a skill named "deploy"
     skill_dir = tmp_path / ".claude" / "skills" / "deploy"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text("---\nname: deploy\ndescription: Skill version\n---\n")
 
-    # Create a command also named "deploy"
     commands_dir = tmp_path / ".claude" / "commands"
     commands_dir.mkdir(parents=True)
     (commands_dir / "deploy.md").write_text("---\ndescription: Command version\n---\n")
@@ -349,18 +345,15 @@ def test_discover_skills_includes_home_directory_skills(tmp_path: Path, monkeypa
     fake_home = tmp_path / "home"
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
 
-    # Repo skill
     repo_dir = tmp_path / "repo"
     skill_dir = repo_dir / ".claude" / "skills" / "repo-skill"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text("---\nname: repo-skill\ndescription: From repo\n---\n")
 
-    # Home skill
     home_skill_dir = fake_home / ".claude" / "skills" / "home-skill"
     home_skill_dir.mkdir(parents=True)
     (home_skill_dir / "SKILL.md").write_text("---\nname: home-skill\ndescription: From home\n---\n")
 
-    # Home command
     home_commands_dir = fake_home / ".claude" / "commands"
     home_commands_dir.mkdir(parents=True)
     (home_commands_dir / "home-command.md").write_text("---\ndescription: Home command\n---\n")
@@ -381,12 +374,10 @@ def test_discover_skills_repo_skills_take_precedence_over_home(
 
     repo_dir = tmp_path / "repo"
 
-    # Repo skill named "shared"
     skill_dir = repo_dir / ".claude" / "skills" / "shared"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text("---\nname: shared\ndescription: Repo version\n---\n")
 
-    # Home skill also named "shared"
     home_skill_dir = fake_home / ".claude" / "skills" / "shared"
     home_skill_dir.mkdir(parents=True)
     (home_skill_dir / "SKILL.md").write_text("---\nname: shared\ndescription: Home version\n---\n")
@@ -405,12 +396,10 @@ def test_discover_skills_repo_command_takes_precedence_over_home_skill(
 
     repo_dir = tmp_path / "repo"
 
-    # Repo *command* named "shared"
     repo_commands = repo_dir / ".claude" / "commands"
     repo_commands.mkdir(parents=True)
     (repo_commands / "shared.md").write_text("---\ndescription: Repo command\n---\n")
 
-    # Home *skill* also named "shared"
     home_skill_dir = fake_home / ".claude" / "skills" / "shared"
     home_skill_dir.mkdir(parents=True)
     (home_skill_dir / "SKILL.md").write_text("---\nname: shared\ndescription: Home skill\n---\n")

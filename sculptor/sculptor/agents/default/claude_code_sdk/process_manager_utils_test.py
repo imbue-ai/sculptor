@@ -386,9 +386,6 @@ def test_get_user_instructions_plan_revision_no_reenter_when_not_in_plan_mode() 
     assert "requested revisions" in result
 
 
-# ---- get_claude_command tests ----
-
-
 def _get_command_string(
     system_prompt: str = "",
     session_id: str | None = None,
@@ -449,9 +446,6 @@ def test_get_claude_command_fast_mode_and_effort_combined() -> None:
     assert "--effort high" in cmd
 
 
-# --- Tests for get_claude_command resolve_binary_path ---
-
-
 def test_get_claude_command_with_binary_path() -> None:
     cmd = get_claude_command(
         system_prompt="test",
@@ -510,18 +504,6 @@ def test_get_claude_command_disables_builtin_auq_and_exit_plan_mode() -> None:
     bash_cmd = _get_command_string()
     assert "--disallowed-tools" in bash_cmd
     assert "AskUserQuestion,ExitPlanMode" in bash_cmd
-
-
-# ---------------------------------------------------------------------------
-# Prototype: deterministically emulate Claude stdout for a failed Edit.
-#
-# Models the pattern surfaced in session d4fffd07-0662-4b40-8f73-5d8ed2c32e9e
-# where Claude emitted an Edit tool_use without first Reading the file and got
-# back `is_error=True` with "File has not been read yet." The file on disk is
-# unchanged by the failed Edit, so DiffTracker must produce no diff, and
-# `_create_tool_content` must fall through to GenericToolContent so the real
-# error text reaches the chip popover instead of a bogus diff body.
-# ---------------------------------------------------------------------------
 
 
 def _make_repo_with_file_ending_in_newline(

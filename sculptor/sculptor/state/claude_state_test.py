@@ -8,10 +8,6 @@ from sculptor.state.claude_state import get_tool_invocation_string
 from sculptor.state.claude_state import parse_claude_code_json_lines_simple
 from sculptor.state.claude_state import split_text_and_media
 
-# =============================================
-# Tests for extract_media_tags_from_text
-# =============================================
-
 
 def test_extract_img_tags_no_img_tags_returns_text_unchanged() -> None:
     text = "Hello, this is plain text with no images."
@@ -83,11 +79,6 @@ def test_extract_img_tags_single_quotes() -> None:
     assert paths == ["/path/to/image.png"]
 
 
-# =============================================
-# Tests for video tag extraction
-# =============================================
-
-
 def test_extract_video_tag_single_local_path() -> None:
     text = '<video src="/workspace/attachments/screenshots/recording.webm" controls></video>'
     cleaned, paths = extract_media_tags_from_text(text)
@@ -135,11 +126,6 @@ def test_extract_img_tag_multiline_closing_tag() -> None:
     cleaned, paths = extract_media_tags_from_text(text)
     assert cleaned == ""
     assert paths == ["/path/image.png"]
-
-
-# =============================================
-# Tests for non-media file extension filtering
-# =============================================
 
 
 def test_extract_img_tag_html_file_left_untouched() -> None:
@@ -201,11 +187,6 @@ def test_extract_img_tag_case_insensitive_extension() -> None:
     cleaned, paths = extract_media_tags_from_text(text)
     assert cleaned == ""
     assert paths == ["/path/to/image.PNG"]
-
-
-# =============================================
-# Tests for split_text_and_media
-# =============================================
 
 
 def test_split_text_and_media_no_media() -> None:
@@ -275,11 +256,6 @@ def test_split_text_and_media_mixed_img_and_video() -> None:
         TextBlock(text="Recording:"),
         FileBlock(source="/tmp/rec.webm"),
     ]
-
-
-# =============================================
-# Integration test: parse_claude_code_json_lines_simple with media tags
-# =============================================
 
 
 def test_parse_assistant_message_extracts_img_tags_into_file_blocks() -> None:
@@ -398,11 +374,6 @@ def test_parse_assistant_message_extracts_video_tag_into_file_block() -> None:
     file_block = blocks[1]
     assert isinstance(file_block, FileBlock)
     assert file_block.source == "/workspace/attachments/screenshots/recording.webm"
-
-
-# =============================================
-# Tests for get_tool_invocation_string
-# =============================================
 
 
 def test_get_tool_invocation_string_skill_returns_skill_name() -> None:
