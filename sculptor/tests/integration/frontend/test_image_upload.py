@@ -54,10 +54,25 @@ def _attach_image_and_verify_preview(
     images: str | Sequence[str],
     expected_count: int = 1,
 ) -> Locator:
-    element.attach_files(images)
+    # Setting files on the hidden upload input can race with a chat-panel
+    # remount — e.g. right after switching to a freshly-added agent, whose
+    # ChatInput is keyed by task id. A selection applied mid-remount is silently
+    # dropped (no change event fires, so no upload happens and no preview
+    # renders). The drop is all-or-nothing, so when nothing has rendered yet we
+    # re-apply the selection once the panel has settled; guarding on a zero
+    # count means a selection that did take is never re-applied (no double-count).
     image_previews = element.get_file_previews()
-    expect(image_previews).to_have_count(expected_count)
-    return image_previews
+    last_error: AssertionError | None = None
+    for _attempt in range(3):
+        if image_previews.count() == 0:
+            element.attach_files(images)
+        try:
+            expect(image_previews).to_have_count(expected_count, timeout=10_000)
+            return image_previews
+        except AssertionError as error:
+            last_error = error
+    assert last_error is not None
+    raise last_error
 
 
 def _verify_image_in_message(
