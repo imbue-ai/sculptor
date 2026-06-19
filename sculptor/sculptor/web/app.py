@@ -44,6 +44,7 @@ from pydantic import ValidationError
 from pydantic.alias_generators import to_camel
 
 from sculptor import version
+from sculptor.agents.attachments import resolve_attachment_source
 from sculptor.agents.default.claude_code_sdk.btw_process_manager import NoBtwSessionAvailable
 from sculptor.agents.harness_registry import get_harness_for_config
 from sculptor.common.plugin import get_plugin_dirs
@@ -653,10 +654,14 @@ def _cleanup_task_file_attachments(
 
     for file_path in file_paths:
         try:
-            file_file = Path(file_path)
-            if file_file.exists():
-                file_file.unlink()
-                logger.debug("Deleted file: {}", file_path)
+            # Resolve the stored reference to its real source: an absolute path
+            # (Electron) is used as-is; a bare upload id (web/HTTP) lives under
+            # <internal>/uploads/. Without this, http-uploaded files would never
+            # be deleted (Path("<id>").unlink() looks in the cwd, not uploads/).
+            source = resolve_attachment_source(file_path)
+            if source.exists():
+                source.unlink()
+                logger.debug("Deleted file: {}", source)
         except Exception as e:
             log_exception(e, "Failed to delete {file_path}", file_path=file_path)
     logger.info("Cleaned up {} file(s) for task {}", len(file_paths), task_id)

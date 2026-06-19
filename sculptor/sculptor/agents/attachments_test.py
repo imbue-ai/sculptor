@@ -8,8 +8,22 @@ from unittest.mock import MagicMock
 import pytest
 
 from sculptor.agents import attachments
+from sculptor.agents.attachments import resolve_attachment_source
 from sculptor.agents.attachments import save_attachments_to_environment
 from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
+
+
+def test_resolve_attachment_source_returns_absolute_path_as_is(tmp_path: Path) -> None:
+    absolute = tmp_path / "picture.png"
+    assert resolve_attachment_source(str(absolute)) == absolute
+
+
+def test_resolve_attachment_source_maps_upload_id_under_internal_uploads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    internal = tmp_path / "internal"
+    monkeypatch.setattr(attachments, "get_internal_folder", lambda: internal)
+    assert resolve_attachment_source("uuid-123.png") == internal / "uploads" / "uuid-123.png"
 
 
 def _mock_environment(attachments_dir: Path) -> AgentExecutionEnvironment:
