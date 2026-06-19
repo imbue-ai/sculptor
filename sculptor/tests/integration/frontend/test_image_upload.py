@@ -153,13 +153,11 @@ def test_image_upload_from_second_agent(sculptor_instance_: SculptorInstance, te
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    # Add a second agent to the workspace
     agent_tab_bar = task_page.get_agent_tab_bar()
     agent_tab_bar.get_add_agent_button().click()
 
     expect(agent_tab_bar.get_agent_tabs()).to_have_count(2)
 
-    # The new agent's chat panel should be visible
     new_task_page = PlaywrightTaskPage(page=page)
     new_chat_panel = new_task_page.get_chat_panel()
 
@@ -209,13 +207,11 @@ def test_images_deleted_when_task_deleted(
 
     images = _verify_image_in_message(chat_panel, message_index=0, expected_image_count=2)
 
-    # Extract image paths from data-path attributes
     image_paths = []
     for i in range(2):
         image_path = images.nth(i).get_attribute("data-path")
         image_paths.append(Path(image_path))
 
-    # Verify images exist on disk before deletion
     assert len(image_paths) == 2, "Should have extracted 2 image paths"
     for image_path in image_paths:
         assert image_path.exists(), f"Image should exist at {image_path}"
@@ -233,6 +229,5 @@ def test_images_deleted_when_task_deleted(
     delete_resp = page.request.delete(f"{base_url}/api/v1/workspaces/{ws_id}")
     assert delete_resp.ok, f"Failed to delete workspace: {delete_resp.status}"
 
-    # Verify images no longer exist on disk
     for image_path in image_paths:
         assert not image_path.exists(), f"Image should be deleted at {image_path}"

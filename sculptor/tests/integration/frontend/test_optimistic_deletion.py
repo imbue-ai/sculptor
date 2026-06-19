@@ -21,8 +21,6 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
-# --- Happy-path: agent deletion ---
-
 
 @user_story("to have agent tabs disappear instantly when deleted")
 def test_optimistic_agent_deletion_removes_tab_immediately(
@@ -79,9 +77,6 @@ def test_optimistic_agent_deletion_last_agent_creates_new_one(
     expect(layout.get_workspace_tabs()).to_have_count(1)
 
 
-# --- Happy-path: workspace deletion ---
-
-
 @user_story("to have workspace tabs disappear instantly when deleted")
 def test_optimistic_workspace_deletion_removes_tab_immediately(
     sculptor_instance_: SculptorInstance,
@@ -106,9 +101,6 @@ def test_optimistic_workspace_deletion_removes_tab_immediately(
     # Optimistic delete removes the tab immediately, but on slower runners
     # the DOM update may lag behind the dialog dismissal.
     expect(workspace_tabs).to_have_count(1)
-
-
-# --- Failure / rollback: agent deletion ---
 
 
 @user_story("to see an agent restored when deletion fails")
@@ -209,9 +201,6 @@ def test_agent_deletion_failure_retry_succeeds(
     expect(agent_tabs).to_have_count(1)
 
 
-# --- Failure / rollback: workspace deletion ---
-
-
 @user_story("to see a workspace restored when deletion fails")
 def test_workspace_deletion_failure_rolls_back_and_shows_error_toast(
     sculptor_instance_: SculptorInstance,
@@ -256,9 +245,6 @@ def test_workspace_deletion_failure_rolls_back_and_shows_error_toast(
         expect(toast).to_contain_text("Retry")
     finally:
         page.unroute(workspace_delete_pattern, fail_workspace_delete)
-
-
-# --- activeIndex clamping on workspace deletion ---
 
 
 def _read_tabs_state(page: Page) -> dict:

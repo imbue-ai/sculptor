@@ -73,11 +73,9 @@ fake_claude:ask_user_question `{
     ask_tool_blocks = get_ask_user_question_tool_blocks(page)
     expect(ask_tool_blocks).to_have_count(1)
 
-    # Verify the question is displayed in the panel
     question_text = ask_panel.get_question_text()
     expect(question_text).to_contain_text("programming language")
 
-    # Verify at least one option is rendered
     options = ask_panel.get_options()
     expect(options.first).to_be_visible()
 
@@ -85,24 +83,17 @@ fake_claude:ask_user_question `{
     submit_button = ask_panel.get_submit_button()
     expect(submit_button).to_be_disabled()
 
-    # Select the first option (likely Python)
     options.first.click()
 
-    # The submit button should now be enabled
     expect(submit_button).to_be_enabled()
 
-    # Submit the answer
     submit_button.click()
 
-    # After submission, the Q&A panel should disappear
     expect(ask_panel).not_to_be_visible(timeout=30_000)
 
-    # The chat input should reappear (back to normal mode)
     chat_input = chat_panel.get_chat_input()
     expect(chat_input).to_be_visible()
 
-    # The agent should continue processing after receiving the answer.
-    # Wait for the agent to finish streaming.
     expect(chat_panel.get_thinking_indicator(), "agent to finish").not_to_be_visible()
 
     # After the agent finishes, we should have completed messages:
@@ -116,12 +107,10 @@ fake_claude:ask_user_question `{
     # tool block — no duplicates should appear from persistence or page state.
     expect(ask_tool_blocks).to_have_count(1)
 
-    # Verify the tool block shows the submitted state with the question and answer
     tool_block = get_first_ask_user_question_tool_block(page)
     tool_block.expect_submitted_state()
     tool_block.expect_question_visible("programming language")
-    # The answer should be one of the options (Python, JavaScript, or Rust)
-    # We know the first option was selected, which is likely Python
+    # The first option was selected, which is likely Python.
     tool_block.expect_answer_visible("Python")
 
 
@@ -180,38 +169,30 @@ fake_claude:ask_user_question `{
     ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
-    # Verify we're on question 1
     question_text = ask_panel.get_question_text()
     expect(question_text).to_contain_text("programming language")
 
-    # Button should say "Next" (haven't answered all questions yet)
+    # Button says "Next" because not all questions are answered yet.
     submit_button = ask_panel.get_submit_button()
     expect(submit_button).to_have_text("Next")
 
-    # Select an answer for question 1
     options = ask_panel.get_options()
     options.first.click()
 
-    # Navigate to question 2
     ask_panel.navigate_next()
 
-    # Verify we're on question 2
     expect(question_text).to_contain_text("experience level")
 
-    # Button should still say "Next"
     expect(submit_button).to_have_text("Next")
 
-    # Select an answer for question 2
     options = ask_panel.get_options()
     options.first.click()
 
-    # Navigate to question 3
     ask_panel.navigate_next()
 
-    # Verify we're on question 3
     expect(question_text).to_contain_text("type of project")
 
-    # Q3 is the only unanswered question, so button says "Submit" (disabled)
+    # Q3 is the only unanswered question, so button says "Submit" (disabled).
     expect(submit_button).to_have_text("Submit")
     expect(submit_button).to_be_disabled()
 
@@ -223,22 +204,18 @@ fake_claude:ask_user_question `{
     ask_panel.navigate_next()
     expect(question_text).to_contain_text("type of project")
 
-    # Select an answer for question 3
     options = ask_panel.get_options()
     options.first.click()
 
-    # Now all questions are answered, button should say "Submit"
+    # Now all questions are answered, button should say "Submit".
     expect(submit_button).to_have_text("Submit")
 
-    # Submit the answers
     submit_button.click()
 
-    # Wait for the agent to finish
     expect(ask_panel).not_to_be_visible(timeout=30_000)
     expect(chat_panel.get_thinking_indicator(), "agent to finish").not_to_be_visible()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
 
-    # Verify the tool block shows all three questions and answers
     tool_block = get_first_ask_user_question_tool_block(page)
     tool_block.expect_submitted_state()
     tool_block.expect_question_visible("programming language")
@@ -282,20 +259,16 @@ fake_claude:ask_user_question `{
     ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
-    # Select multiple options
     ask_panel.select_option("Python")
     ask_panel.select_option("JavaScript")
     ask_panel.select_option("Rust")
 
-    # Submit
     ask_panel.submit()
 
-    # Wait for completion
     expect(ask_panel).not_to_be_visible(timeout=30_000)
     expect(chat_panel.get_thinking_indicator(), "agent to finish").not_to_be_visible()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
 
-    # Verify the tool block shows all selected answers
     tool_block = get_first_ask_user_question_tool_block(page)
     tool_block.expect_submitted_state()
     tool_block.expect_answers_visible(["Python", "JavaScript", "Rust"])
@@ -337,10 +310,8 @@ fake_claude:ask_user_question `{
     ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
-    # Select 'Other' option
     ask_panel.select_option("Other")
 
-    # Verify text input appears and is focused
     other_input = ask_panel.get_other_input()
     expect(other_input).to_be_visible()
     expect(other_input).to_be_focused()
@@ -349,21 +320,16 @@ fake_claude:ask_user_question `{
     submit_button = ask_panel.get_submit_button()
     expect(submit_button).to_be_disabled()
 
-    # Type custom text
     ask_panel.type_other_text("Haskell")
 
-    # Now submit should be enabled
     expect(submit_button).to_be_enabled()
 
-    # Submit
     submit_button.click()
 
-    # Wait for completion
     expect(ask_panel).not_to_be_visible(timeout=30_000)
     expect(chat_panel.get_thinking_indicator(), "agent to finish").not_to_be_visible()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
 
-    # Verify the tool block shows the custom answer
     tool_block = get_first_ask_user_question_tool_block(page)
     tool_block.expect_submitted_state()
     tool_block.expect_answer_visible("Haskell")
@@ -404,23 +370,18 @@ fake_claude:ask_user_question `{
     ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
-    # Select some predefined options
     ask_panel.select_option("Python")
     ask_panel.select_option("JavaScript")
 
-    # Select Other and type custom text
     ask_panel.select_option("Other")
     ask_panel.type_other_text("Elixir")
 
-    # Submit
     ask_panel.submit()
 
-    # Wait for completion
     expect(ask_panel).not_to_be_visible(timeout=30_000)
     expect(chat_panel.get_thinking_indicator(), "agent to finish").not_to_be_visible()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
 
-    # Verify the tool block shows all answers including custom text
     tool_block = get_first_ask_user_question_tool_block(page)
     tool_block.expect_submitted_state()
     tool_block.expect_answers_visible(["Python", "JavaScript", "Elixir"])
@@ -462,21 +423,17 @@ fake_claude:ask_user_question `{
     ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
-    # Click Dismiss instead of answering
     ask_panel.dismiss()
 
-    # Q&A panel should disappear
     expect(ask_panel).not_to_be_visible(timeout=30_000)
 
-    # Wait for agent to finish (agent should continue despite dismissal)
+    # The agent should continue despite the dismissal.
     expect(chat_panel.get_thinking_indicator(), "agent to finish").not_to_be_visible()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
 
-    # Verify the tool block shows dismissed state
     tool_block = get_first_ask_user_question_tool_block(page)
     tool_block.expect_dismissed_state()
 
-    # Verify the question text is still visible when expanded
     tool_block.expect_question_visible("programming language")
 
 
@@ -548,7 +505,6 @@ fake_claude:ask_user_question `{
 }`""",
     )
 
-    # Second question should appear
     expect(ask_panel).to_be_visible(timeout=30_000)
     expect(ask_panel.get_question_text()).to_contain_text("framework")
 
@@ -559,17 +515,14 @@ fake_claude:ask_user_question `{
 
     expect(ask_panel).not_to_be_visible(timeout=30_000)
 
-    # Wait for agent to finish
     expect(chat_panel.get_thinking_indicator(), "agent to finish after Q2").not_to_be_visible()
 
     # Messages: user Q1, assistant Q1, assistant default, user Q2, assistant Q2, assistant default
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=6)
 
-    # Verify two separate tool blocks exist
     ask_tool_blocks = get_ask_user_question_tool_blocks(page)
     expect(ask_tool_blocks).to_have_count(2)
 
-    # Verify each tool block shows its respective question
     first_block = PlaywrightAskUserQuestionBlockElement(locator=ask_tool_blocks.nth(0), page=page)
     first_block.expect_submitted_state()
     first_block.expect_question_visible("programming language")
@@ -610,7 +563,6 @@ fake_claude:ask_user_question `{
         wait_for_agent_to_finish=False,
     )
 
-    # Wait for Q&A panel to appear
     ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
     expect(ask_panel.get_question_text()).to_contain_text("programming language")
@@ -618,12 +570,10 @@ fake_claude:ask_user_question `{
     # Navigate away from the workspace and back to force Jotai store reinitialization.
     navigate_away_and_back(page)
 
-    # Question should still be pending and visible
     ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible()
     expect(ask_panel.get_question_text()).to_contain_text("programming language")
 
-    # Should be able to answer normally
     options = ask_panel.get_options()
     options.first.click()
     ask_panel.submit()
@@ -685,7 +635,6 @@ fake_claude:ask_user_question `{
     ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).not_to_be_visible()
 
-    # Tool block should show submitted state with answers
     tool_block = get_first_ask_user_question_tool_block(page)
     tool_block.expect_submitted_state()
     tool_block.expect_question_visible("programming language")
@@ -888,15 +837,12 @@ fake_claude:ask_user_question `{
     expect(submit_button).to_have_text("Submit")
     expect(submit_button).to_be_enabled()
 
-    # Submit
     submit_button.click()
 
-    # Wait for completion
     expect(ask_panel).not_to_be_visible(timeout=30_000)
     expect(chat_panel.get_thinking_indicator(), "agent to finish").not_to_be_visible()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
 
-    # Verify tool block
     tool_block = get_first_ask_user_question_tool_block(page)
     tool_block.expect_submitted_state()
     tool_block.expect_answer_visible("Red")
@@ -941,17 +887,14 @@ fake_claude:ask_user_question `{
     ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
-    # Verify the long question text is visible (at least part of it)
     expect(ask_panel.get_question_text()).to_contain_text("preferred programming language")
 
-    # Should be able to interact normally
     options = ask_panel.get_options()
     expect(options.first).to_be_visible()
     options.first.click()
 
     ask_panel.submit()
 
-    # Wait for completion
     expect(ask_panel).not_to_be_visible(timeout=30_000)
     expect(chat_panel.get_thinking_indicator(), "agent to finish").not_to_be_visible()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
@@ -998,21 +941,17 @@ fake_claude:ask_user_question `{
     ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
-    # Verify special characters appear correctly
     expect(ask_panel.get_question_text()).to_contain_text("favorite programming language")
 
-    # Select an option with special characters (e.g., C++)
     options = ask_panel.get_options()
     options.first.click()
 
     ask_panel.submit()
 
-    # Wait for completion
     expect(ask_panel).not_to_be_visible(timeout=30_000)
     expect(chat_panel.get_thinking_indicator(), "agent to finish").not_to_be_visible()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
 
-    # Verify tool block shows the question and answer with special characters
     tool_block = get_first_ask_user_question_tool_block(page)
     tool_block.expect_submitted_state()
     tool_block.expect_question_visible("favorite programming language")
@@ -1079,20 +1018,17 @@ fake_claude:ask_user_question `{
         page = instance.page
 
         # The workspace still exists after restart.
-        # Wait for the workspace tab to be visible, then click it.
         workspace_tab = page.get_by_test_id(ElementIDs.WORKSPACE_TAB).first
         expect(workspace_tab).to_be_visible()
         workspace_tab.click()
 
-        # Wait for messages to fully load from persistence before checking tool blocks.
-        # Previously we only waited for the chat panel to be visible, which doesn't
-        # guarantee messages have finished loading from the backend.  Waiting for the
-        # expected message count (3 from Phase 1) ensures the chat is fully populated.
+        # Wait for messages to fully load from persistence before checking tool blocks:
+        # a visible chat panel does not guarantee messages have finished loading from the
+        # backend, so wait for the expected count to ensure the chat is fully populated.
         task_page_after = PlaywrightTaskPage(page=page)
         chat_panel_after = task_page_after.get_chat_panel()
         wait_for_completed_message_count(chat_panel=chat_panel_after, expected_message_count=3)
 
-        # After messages are loaded, verify only one tool block exists
         ask_tool_blocks_after_restart = get_ask_user_question_tool_blocks(page)
         expect(ask_tool_blocks_after_restart).to_have_count(1)
 
@@ -1140,16 +1076,13 @@ fake_claude:ask_user_question `{
     )
     chat_panel = task_page.get_chat_panel()
 
-    # Wait for the Q&A panel to appear
     ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
-    # Select an answer and submit
     options = ask_panel.get_options()
     options.first.click()
     ask_panel.submit()
 
-    # After submission, the Q&A panel should disappear
     expect(ask_panel).not_to_be_visible(timeout=30_000)
 
     # REGRESSION: After answering, the task status must transition to RUNNING while
@@ -1157,7 +1090,6 @@ fake_claude:ask_user_question `{
     # should be visible while the agent processes the answer.
     expect(chat_panel.get_thinking_indicator(), "task should be RUNNING while processing answer").to_be_visible()
 
-    # Wait for the agent to finish processing the answer
     expect(chat_panel.get_thinking_indicator(), "agent to finish").not_to_be_visible()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
 
@@ -1192,7 +1124,6 @@ fake_claude:ask_user_question `{
     )
     chat_panel = task_page.get_chat_panel()
 
-    # Wait for the Q&A panel to appear
     ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
@@ -1201,7 +1132,6 @@ fake_claude:ask_user_question `{
     options.first.click()
     ask_panel.submit()
 
-    # Wait for completion
     expect(ask_panel).not_to_be_visible(timeout=30_000)
     expect(chat_panel.get_thinking_indicator(), "agent to finish").not_to_be_visible()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
@@ -1241,7 +1171,6 @@ fake_claude:ask_user_question `{
         wait_for_agent_to_finish=False,
     )
 
-    # Wait for the Q&A panel to appear
     ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
@@ -1249,7 +1178,6 @@ fake_claude:ask_user_question `{
     ask_panel.select_option("Other")
     ask_panel.type_other_text("Haskell is my favorite")
 
-    # The submit button should be enabled (answer provided)
     submit_button = ask_panel.get_submit_button()
     expect(submit_button).to_be_enabled()
 
@@ -1259,12 +1187,10 @@ fake_claude:ask_user_question `{
     # The Q&A panel should reappear (pendingUserQuestion persists in Jotai)
     expect(ask_panel).to_be_visible()
 
-    # The "Other" input should still be visible with the typed text preserved
     other_input = ask_panel.get_other_input()
     expect(other_input).to_be_visible()
     expect(other_input).to_have_value("Haskell is my favorite")
 
-    # The submit button should still be enabled
     expect(submit_button).to_be_enabled()
 
 
@@ -1299,24 +1225,19 @@ fake_claude:ask_user_question `{
         wait_for_agent_to_finish=False,
     )
 
-    # Wait for the Q&A panel to appear
     ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
-    # Select the first predefined option ("React")
     ask_panel.select_option("React")
 
-    # The submit button should be enabled
     submit_button = ask_panel.get_submit_button()
     expect(submit_button).to_be_enabled()
 
     # Navigate away and back
     navigate_away_and_back(page)
 
-    # The Q&A panel should reappear
     expect(ask_panel).to_be_visible()
 
-    # The submit button should still be enabled (option still selected)
     expect(submit_button).to_be_enabled()
 
     # Verify the selection was preserved by submitting and checking the answer
@@ -1372,7 +1293,6 @@ fake_claude:ask_user_question `{
     )
     chat_panel = task_page.get_chat_panel()
 
-    # Wait for Q&A panel
     ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
@@ -1391,7 +1311,6 @@ fake_claude:ask_user_question `{
     ask_panel.submit()
     expect(ask_panel).not_to_be_visible(timeout=30_000)
 
-    # Wait for agent to finish
     expect(chat_panel.get_thinking_indicator(), "agent to finish after batch 1").not_to_be_visible()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
 
@@ -1419,7 +1338,6 @@ fake_claude:ask_user_question `{
     expect(ask_panel).to_be_visible(timeout=30_000)
     expect(ask_panel.get_question_text()).to_contain_text("framework")
 
-    # Should be able to answer and submit normally
     options = ask_panel.get_options()
     options.first.click()
     ask_panel.submit()
@@ -1479,12 +1397,10 @@ fake_claude:multi_step `{
     # Queue a message while the agent is busy
     send_chat_message(chat_panel=chat_panel, message="this should stay queued")
 
-    # The queued message bar should be visible while the agent is sleeping
     queued_bar = chat_panel.get_queued_message_bar()
     expect(queued_bar).to_have_count(1)
     expect(queued_bar).to_contain_text("this should stay queued")
 
-    # Wait for the Q&A panel to appear (after the sleep finishes)
     ask_panel = get_ask_user_question_panel(page)
     expect(ask_panel).to_be_visible(timeout=30_000)
 
@@ -1509,7 +1425,6 @@ fake_claude:multi_step `{
     options.first.click()
     ask_panel.submit()
 
-    # After submission, the Q&A panel should disappear
     expect(ask_panel).not_to_be_visible(timeout=30_000)
 
     # Wait for the agent to finish processing the answer AND the queued message.
@@ -1562,12 +1477,10 @@ fake_claude:ask_user_question `{
     ask_panel.type_other_text(long_text)
     ask_panel.submit()
 
-    # Wait for completion
     expect(ask_panel).not_to_be_visible(timeout=30_000)
     expect(chat_panel.get_thinking_indicator(), "agent to finish").not_to_be_visible()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=3)
 
-    # Verify the tool block shows the full custom answer as a single element
     tool_block = get_first_ask_user_question_tool_block(page)
     tool_block.expect_submitted_state()
 
@@ -1685,7 +1598,6 @@ fake_claude:ask_user_question `{
     ask_panel.select_option("Other")
     ask_panel.type_other_text("Emacs")
 
-    # Verify we're on question 3 of 3.
     expect(ask_panel).to_contain_text("Question 3 of 3")
 
     # Now both agents have pending AUQs. Switch to agent 2.

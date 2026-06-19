@@ -47,7 +47,6 @@ def test_uncommitted_tab_shows_changes_from_all_agents(
     """
     page = sculptor_instance_.page
 
-    # Create first agent that writes a file
     task_page = start_task_and_wait_for_ready(
         page,
         prompt="""\
@@ -58,19 +57,15 @@ fake_claude:write_file `{
         workspace_name="Shared Changes WS",
     )
 
-    # Wait for agent 1 to finish
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    # Add a second agent to the same workspace
     agent_tab_bar = task_page.get_agent_tab_bar()
     agent_tab_bar.get_add_agent_button().click()
 
-    # Wait for the second agent tab to appear
     agent_tabs = agent_tab_bar.get_agent_tabs()
     expect(agent_tabs).to_have_count(2)
 
-    # Send a task to agent 2 that writes a different file
     task_page_2 = PlaywrightTaskPage(page=page)
     chat_panel_2 = task_page_2.get_chat_panel()
     send_chat_message(
@@ -83,13 +78,11 @@ fake_claude:write_file `{
     )
     wait_for_completed_message_count(chat_panel=chat_panel_2, expected_message_count=2)
 
-    # --- Assert: Agent 2's Changes panel shows BOTH files ---
     task_page_2.activate_changes_panel(scope="uncommitted")
     changes_tree = task_page_2.get_changes_panel().get_changes_tree()
     expect(changes_tree).to_be_visible()
     expect(changes_tree.get_tree_rows()).to_have_count(2)
 
-    # --- Switch to agent 1 and verify its Changes panel also shows BOTH files ---
     agent_tabs.first.click()
 
     task_page.activate_changes_panel(scope="uncommitted")
@@ -114,7 +107,6 @@ def test_review_modal_shows_changes_from_all_agents(
 
     _enable_review_all_via_settings(page)
 
-    # Create first agent that writes a file
     task_page = start_task_and_wait_for_ready(
         page,
         prompt="""\
@@ -128,7 +120,6 @@ fake_claude:write_file `{
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    # Add a second agent and have it write a different file
     agent_tab_bar = task_page.get_agent_tab_bar()
     agent_tab_bar.get_add_agent_button().click()
 
@@ -147,11 +138,9 @@ fake_claude:write_file `{
     )
     wait_for_completed_message_count(chat_panel=chat_panel_2, expected_message_count=2)
 
-    # Switch to Changes tab and click Review All
     task_page_2.activate_changes_panel()
     task_page_2.click_review_all()
 
-    # The diff panel should show both files
     diff_panel = task_page_2.get_diff_panel()
     expect(diff_panel).to_be_visible()
     expect(diff_panel).to_contain_text("review_file1.py")
@@ -177,7 +166,6 @@ def test_uncommitted_tab_updates_when_other_agent_modifies_files(
     """
     page = sculptor_instance_.page
 
-    # Create first agent that writes a file
     task_page = start_task_and_wait_for_ready(
         page,
         prompt="""\
@@ -191,13 +179,11 @@ fake_claude:write_file `{
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    # Verify agent 1 initially shows 1 file
     task_page.activate_changes_panel(scope="uncommitted")
     changes_tree = task_page.get_changes_panel().get_changes_tree()
     expect(changes_tree).to_be_visible()
     expect(changes_tree.get_tree_rows()).to_have_count(1)
 
-    # Add second agent and have it write another file
     agent_tab_bar = task_page.get_agent_tab_bar()
     agent_tab_bar.get_add_agent_button().click()
 
@@ -216,10 +202,8 @@ fake_claude:write_file `{
     )
     wait_for_completed_message_count(chat_panel=chat_panel_2, expected_message_count=2)
 
-    # Switch back to agent 1
     agent_tabs.first.click()
 
-    # Agent 1's Changes panel should now show BOTH files
     task_page.activate_changes_panel(scope="uncommitted")
     changes_tree_1 = task_page.get_changes_panel().get_changes_tree()
     expect(changes_tree_1).to_be_visible()

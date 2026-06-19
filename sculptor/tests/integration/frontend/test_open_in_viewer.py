@@ -15,8 +15,6 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
-# ========== Constants ==========
-
 WRITE_FILE_PROMPT = """\
 fake_claude:write_file `{
   "file_path": "greeting.txt",
@@ -29,9 +27,6 @@ fake_claude:edit_file `{
   "old_string": "Hello, world!",
   "new_string": "Hi, everyone!"
 }`"""
-
-
-# ========== Helper Functions ==========
 
 
 def open_diff_via_alpha_chip(chat_panel: PlaywrightChatPanelElement, file_path: str) -> None:
@@ -67,9 +62,6 @@ def assert_diff_panel_shows_diff_view(diff_panel: PlaywrightDiffPanelElement, ta
     expect(unified.or_(split)).to_be_visible(timeout=30_000)
 
     expect(diff_panel.get_read_only_preview()).to_have_count(0)
-
-
-# ========== Tests ==========
 
 
 @user_story("to open a created repo file in the diff viewer from the chat panel")

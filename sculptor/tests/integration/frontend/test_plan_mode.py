@@ -22,8 +22,6 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
-# ========== Constants ==========
-
 PLAN_MODE_MULTI_STEP_PROMPT = """\
 fake_claude:multi_step `{
   "steps": [
@@ -32,9 +30,6 @@ fake_claude:multi_step `{
     {"command": "exit_plan_mode"}
   ]
 }`"""
-
-
-# ========== Group A: Agent-Initiated Plan Mode (EnterPlanMode lights up toggle) ==========
 
 
 @user_story("to see the plan toggle light up when the agent enters plan mode")
@@ -193,9 +188,6 @@ def test_enter_plan_mode_not_hidden_in_collapsed_called_tools(sculptor_instance_
     expect(tool_names.first).to_be_visible()
 
 
-# ========== Group B: ExitPlanMode Approval Flow ==========
-
-
 @user_story("to approve a plan proposed by the agent")
 def test_exit_plan_mode_shows_approval_prompt(sculptor_instance_: SculptorInstance) -> None:
     """Test the full ExitPlanMode -> approval prompt -> approve flow."""
@@ -208,31 +200,24 @@ def test_exit_plan_mode_shows_approval_prompt(sculptor_instance_: SculptorInstan
     )
     chat_panel = task_page.get_chat_panel()
 
-    # Wait for the approval prompt
     auq_panel = get_ask_user_question_panel(page)
     expect(auq_panel).to_be_visible()
 
-    # Verify the question text
     question_text = auq_panel.get_question_text()
     expect(question_text).to_contain_text("How would you like to proceed")
 
-    # Verify "Approve plan" option and "Revise" other-option are visible
     options = auq_panel.get_options()
     expect(options.filter(has_text="Approve plan").first).to_be_visible()
     revise_option = auq_panel.get_other_option()
     expect(revise_option).to_contain_text("Revise")
 
-    # Select "Approve plan" and submit
     auq_panel.select_option("Approve plan")
     auq_panel.submit()
 
-    # Q&A panel should disappear
     expect(auq_panel).not_to_be_visible()
 
-    # Wait for the agent to finish
     expect(chat_panel.get_thinking_indicator(), "agent to finish").not_to_be_visible()
 
-    # Verify the ExitPlanMode tool block shows approved state
     exit_plan_block = chat_panel.get_exit_plan_mode_block()
     expect(exit_plan_block).to_be_visible()
     expect(exit_plan_block).to_contain_text("Plan approved")
@@ -251,26 +236,20 @@ def test_exit_plan_mode_revision_flow(sculptor_instance_: SculptorInstance) -> N
     )
     chat_panel = task_page.get_chat_panel()
 
-    # Wait for the approval prompt
     auq_panel = get_ask_user_question_panel(page)
     expect(auq_panel).to_be_visible()
 
     # Select the "Revise" option (the "other" slot, relabeled for plan approval)
     auq_panel.get_other_option().click()
 
-    # Type revision feedback
     auq_panel.type_other_text("Please also consider edge cases")
 
-    # Submit
     auq_panel.submit()
 
-    # Q&A panel should disappear
     expect(auq_panel).not_to_be_visible()
 
-    # Wait for the agent to finish
     expect(chat_panel.get_thinking_indicator(), "agent to finish").not_to_be_visible()
 
-    # Verify the ExitPlanMode tool block shows revision state
     exit_plan_block = chat_panel.get_exit_plan_mode_block()
     expect(exit_plan_block).to_be_visible()
     expect(exit_plan_block).to_contain_text("Plan revision requested")
@@ -301,16 +280,13 @@ def test_exit_plan_mode_revision_auto_expands(sculptor_instance_: SculptorInstan
     )
     chat_panel = task_page.get_chat_panel()
 
-    # Wait for the approval prompt
     auq_panel = get_ask_user_question_panel(page)
     expect(auq_panel).to_be_visible()
 
-    # Select "Revise" and type feedback
     auq_panel.get_other_option().click()
     auq_panel.type_other_text("Please also handle error cases")
     auq_panel.submit()
 
-    # Wait for the agent to finish
     expect(auq_panel).not_to_be_visible()
 
     # The revision feedback should be visible without clicking to expand
@@ -335,30 +311,24 @@ def test_exit_plan_mode_revision_preserves_text_after_navigation(sculptor_instan
         wait_for_agent_to_finish=False,
     )
 
-    # Wait for the approval prompt
     auq_panel = get_ask_user_question_panel(page)
     expect(auq_panel).to_be_visible()
 
-    # Select "Revise" and type feedback
     auq_panel.get_other_option().click()
     auq_panel.type_other_text("Add better error handling")
 
-    # The submit button should be enabled
     submit_button = auq_panel.get_submit_button()
     expect(submit_button).to_be_enabled()
 
-    # Navigate away and back
     navigate_away_and_back(page)
 
     # The approval prompt should reappear with state preserved
     expect(auq_panel).to_be_visible()
 
-    # The "Other" input (revision feedback) should still be visible with the typed text
     other_input = auq_panel.get_other_input()
     expect(other_input).to_be_visible()
     expect(other_input).to_have_value("Add better error handling")
 
-    # The submit button should still be enabled
     expect(submit_button).to_be_enabled()
 
 
@@ -374,17 +344,13 @@ def test_exit_plan_mode_dismiss_flow(sculptor_instance_: SculptorInstance) -> No
     )
     chat_panel = task_page.get_chat_panel()
 
-    # Wait for the approval prompt
     auq_panel = get_ask_user_question_panel(page)
     expect(auq_panel).to_be_visible()
 
-    # Click dismiss
     auq_panel.dismiss()
 
-    # Q&A panel should disappear
     expect(auq_panel).not_to_be_visible()
 
-    # Wait for the agent to finish
     expect(chat_panel.get_thinking_indicator(), "agent to finish").not_to_be_visible()
 
     # Verify the most recent ExitPlanMode tool block shows dismissed state.
@@ -408,30 +374,22 @@ def test_exit_plan_mode_survives_page_reload(sculptor_instance_: SculptorInstanc
     )
     chat_panel = task_page.get_chat_panel()
 
-    # Wait for the approval prompt to appear
     auq_panel = get_ask_user_question_panel(page)
     expect(auq_panel).to_be_visible()
 
-    # Soft reload the page
     soft_reload_page(page)
 
     # Approval prompt should re-appear after reload
     expect(auq_panel).to_be_visible()
 
-    # ExitPlanMode tool block should still be visible
     exit_plan_block = chat_panel.get_exit_plan_mode_block()
     expect(exit_plan_block).to_be_visible()
 
-    # Submit an approval answer
     auq_panel.select_option("Approve plan")
     auq_panel.submit()
 
-    # Wait for the agent to finish
     expect(auq_panel).not_to_be_visible()
     expect(chat_panel.get_thinking_indicator(), "agent to finish").not_to_be_visible()
-
-
-# ========== Group C: User-Initiated Plan Mode ("Plan First" Toggle) ==========
 
 
 @user_story("to see a plan-first toggle button in the chat input")
@@ -448,7 +406,6 @@ def test_plan_first_toggle_is_visible(sculptor_instance_: SculptorInstance) -> N
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    # Assert the plan-first toggle is visible
     toggle = chat_panel.get_plan_mode_toggle()
     expect(toggle).to_be_visible()
 
@@ -468,19 +425,14 @@ def test_plan_first_toggle_activates_and_deactivates(sculptor_instance_: Sculpto
 
     toggle = chat_panel.get_plan_mode_toggle()
 
-    # Initially the toggle should not have the active primary styling
     expect(toggle).to_have_attribute("data-active", "false")
 
-    # Click to activate
     toggle.click()
 
-    # The toggle should now have the active primary styling (inline style with primary color)
     expect(toggle).to_have_attribute("data-active", "true")
 
-    # Click again to deactivate
     toggle.click()
 
-    # The primary styling should be gone
     expect(toggle).to_have_attribute("data-active", "false")
 
 
@@ -499,18 +451,13 @@ def test_plan_first_toggle_persists_after_send(sculptor_instance_: SculptorInsta
 
     toggle = chat_panel.get_plan_mode_toggle()
 
-    # Activate the toggle
     toggle.click()
     expect(toggle).to_have_attribute("data-active", "true")
 
-    # Send a message
     send_chat_message(chat_panel=chat_panel, message="Implement feature Y")
 
     # The toggle should remain on after send (persistent mode toggle)
     expect(toggle).to_have_attribute("data-active", "true")
-
-
-# ========== Group D: Write + ExitPlanMode in Same Message ==========
 
 
 WRITE_AND_EXIT_PLAN_PROMPT = """\
@@ -558,7 +505,6 @@ def test_write_tool_shows_created_file_with_exit_plan_mode(sculptor_instance_: S
     exit_plan_block = chat_panel.get_exit_plan_mode_block()
     expect(exit_plan_block).to_be_visible()
 
-    # Dismiss the approval prompt
     auq_panel.dismiss()
     expect(auq_panel).not_to_be_visible()
 
@@ -613,12 +559,9 @@ def test_plan_file_write_with_other_tools_shows_exit_plan_mode_block(
     exit_plan_block = chat_panel.get_exit_plan_mode_block()
     expect(exit_plan_block).to_be_visible()
 
-    # Dismiss the approval prompt
     auq_panel.dismiss()
     expect(auq_panel).not_to_be_visible()
 
-
-# ========== Group E: Open Plan File in Document Viewer ==========
 
 # Writes the plan file to .claude/plans/ in the same parallel batch as
 # ExitPlanMode (mcp-namespaced — what real Claude emits, and what the live
@@ -675,9 +618,6 @@ def test_plan_file_opens_in_document_viewer(sculptor_instance_: SculptorInstance
     task_page.get_diff_panel().expect_shows_file_view("plan.md")
 
 
-# ========== Group F: Clicking ExitPlanMode Block Opens Plan File ==========
-
-
 @user_story("to see the plan file auto-open when the plan approval UI appears")
 def test_plan_file_auto_opens_on_exit_plan_mode(sculptor_instance_: SculptorInstance) -> None:
     """Test that the plan file automatically opens in the document viewer when ExitPlanMode is pending.
@@ -704,7 +644,6 @@ def test_plan_file_auto_opens_on_exit_plan_mode(sculptor_instance_: SculptorInst
     plan_tab = diff_panel.get_tab_by_name("plan.md")
     expect(plan_tab.first).to_be_visible()
 
-    # Verify the file content is displayed
     preview = diff_panel.get_read_only_preview()
     expect(preview).to_be_visible()
 
@@ -735,17 +674,14 @@ def test_exit_plan_mode_block_click_opens_plan_file(sculptor_instance_: Sculptor
     expect(exit_plan_block).to_be_visible()
     expect(exit_plan_block).to_contain_text("Plan ready for review")
 
-    # Click on the ExitPlanMode block to open the plan file
     exit_plan_block.click()
 
-    # Verify the diff panel opens with a tab for the plan file
     diff_panel = task_page.get_diff_panel()
     expect(diff_panel).to_be_visible()
 
     plan_tab = diff_panel.get_tab_by_name("plan.md")
     expect(plan_tab.first).to_be_visible()
 
-    # Verify the file content is displayed
     preview = diff_panel.get_read_only_preview()
     expect(preview).to_be_visible()
 
@@ -818,9 +754,6 @@ def test_plan_file_view_refreshes_when_rewritten(sculptor_instance_: SculptorIns
     expect(preview).to_contain_text("PLAN_TOKEN_VERSION_TWO")
 
 
-# ========== Group G: AskUserQuestion During Plan Mode ==========
-
-
 ASK_DURING_PLAN_MODE_PROMPT = """\
 fake_claude:enter_plan_mode_and_ask `{
   "questions": [
@@ -854,20 +787,15 @@ def test_ask_user_question_during_plan_mode(sculptor_instance_: SculptorInstance
     )
     chat_panel = task_page.get_chat_panel()
 
-    # The AUQ panel should appear with the question
     auq_panel = get_ask_user_question_panel(page)
     expect(auq_panel).to_be_visible()
 
-    # Verify the question text is displayed
     question_text = auq_panel.get_question_text()
     expect(question_text).to_contain_text("Which language")
 
-    # Select an option and submit
     auq_panel.get_options().first.click()
     auq_panel.submit()
 
-    # Q&A panel should disappear
     expect(auq_panel).not_to_be_visible()
 
-    # Agent should finish
     expect(chat_panel.get_thinking_indicator(), "agent to finish").not_to_be_visible()

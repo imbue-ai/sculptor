@@ -35,16 +35,13 @@ def test_status_pill_visible_during_agent_activity(sculptor_instance_: SculptorI
     )
     chat_panel = task_page.get_chat_panel()
 
-    # The status pill should be visible while the agent is working
     status_pill = chat_panel.get_status_pill()
     expect(status_pill).to_be_visible()
 
-    # It should have a label (Thinking..., Streaming..., or Calling tools...)
     label = chat_panel.get_status_pill_label()
     expect(label).to_be_visible()
     expect(label).not_to_be_empty()
 
-    # It should show elapsed time
     elapsed = chat_panel.get_status_pill_elapsed()
     expect(elapsed).to_be_visible()
     expect(elapsed).to_contain_text("s")
@@ -62,7 +59,6 @@ def test_status_pill_disappears_after_completion(sculptor_instance_: SculptorIns
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    # The status pill should NOT be visible after completion
     status_pill = chat_panel.get_status_pill()
     expect(status_pill).not_to_be_visible()
 
@@ -79,7 +75,6 @@ def test_status_pill_shows_stop_button(sculptor_instance_: SculptorInstance) -> 
     )
     chat_panel = task_page.get_chat_panel()
 
-    # Wait for the pill to appear
     status_pill = chat_panel.get_status_pill()
     expect(status_pill).to_be_visible()
 
@@ -100,11 +95,9 @@ def test_status_pill_shows_animation(sculptor_instance_: SculptorInstance) -> No
     )
     chat_panel = task_page.get_chat_panel()
 
-    # Wait for the pill to appear
     status_pill = chat_panel.get_status_pill()
     expect(status_pill).to_be_visible()
 
-    # Should have an animation element
     animation = chat_panel.get_status_pill_animation()
     expect(animation).to_be_visible()
 
@@ -141,20 +134,16 @@ def test_status_pill_timer_persists_across_tab_switch(sculptor_instance_: Sculpt
         }""",
     )
 
-    # Read the elapsed value before navigating away
     elapsed_before_text = elapsed_locator.text_content()
     assert elapsed_before_text is not None
     elapsed_before = float(elapsed_before_text.rstrip("s"))
     assert elapsed_before >= 2.0, f"Expected >= 2.0s before switch, got {elapsed_before}s"
 
-    # Navigate away from the workspace
     navigate_to_add_workspace_page(page)
 
-    # Navigate back by clicking the workspace tab
     workspace_tab = task_page.get_workspace_tabs().first
     workspace_tab.click()
 
-    # Wait for the status pill to reappear
     expect(status_pill).to_be_visible()
 
     # The timer should NOT have reset. On remount the timer is restored
@@ -220,6 +209,5 @@ fake_claude:ask_user_question `{
     auq_panel = get_ask_user_question_panel(page)
     expect(auq_panel).to_be_visible()
 
-    # The status pill must NOT be visible while WAITING.
     status_pill = chat_panel.get_status_pill()
     expect(status_pill).not_to_be_visible()

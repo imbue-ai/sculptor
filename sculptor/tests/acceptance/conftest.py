@@ -45,10 +45,8 @@ def test_user_org_project(
     test_user_email: str,
 ) -> tuple[UserReference, OrganizationReference, Project]:
     with test_service_collection.data_model_service.open_transaction(RequestID()) as transaction:
-        user_reference = UserReference("test_user")  # Using UserReference for consistency
-        organization_reference = OrganizationReference(
-            "test_organization"
-        )  # Using OrganizationReference for consistency
+        user_reference = UserReference("test_user")
+        organization_reference = OrganizationReference("test_organization")
         project_id = ProjectID()
         project = Project(
             object_id=project_id,

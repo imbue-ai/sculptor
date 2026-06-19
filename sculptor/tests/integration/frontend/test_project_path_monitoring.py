@@ -23,31 +23,23 @@ def test_project_path_monitoring(sculptor_instance_: SculptorInstance) -> None:
     task_starter = home_page.get_task_starter()  # type: ignore[attr-defined]
     task_starter.get_task_input().fill("Hello, world!")
 
-    # Store the original project path
     original_path = sculptor_instance_.repo.base_path
 
     with create_temp_dir(root_dir=get_temp_dir()) as temp_dir:
-        # Step 1: Move the project directory
         moved_path = temp_dir / original_path.name
         shutil.move(str(original_path), str(moved_path))
 
-        # Step 3: Verify the banner contains expected message
         warning_banner_element = home_page.get_warning_banner()
         expect(warning_banner_element).to_be_visible()
 
-        # Step 4: Click the "Learn more" link
         warning_banner_element.click_link()
 
-        # Step 5: Verify the dialog appears
         dialog = home_page.get_project_path_dialog()
         expect(dialog).to_be_visible()
 
-        # Step 6: Close the dialog
         dialog.close()
         expect(dialog).not_to_be_visible()
 
-        # Step 7: Move the project back to original location
         shutil.move(str(moved_path), str(original_path))
 
-        # Step 8: Wait for the warning banner to disappear
         expect(warning_banner_element).not_to_be_visible()

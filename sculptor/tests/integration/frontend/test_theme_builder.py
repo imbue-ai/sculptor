@@ -12,7 +12,6 @@ def test_theme_builder_navigation(sculptor_instance_: SculptorInstance):
     settings_page = navigate_to_settings_page(page=sculptor_instance_.page)
     theme_builder = settings_page.click_on_theme_builder()
 
-    # Verify all controls are visible
     expect(theme_builder.get_accent_color_control()).to_be_visible()
     expect(theme_builder.get_gray_color_control()).to_be_visible()
     expect(theme_builder.get_appearance_control()).to_be_visible()
@@ -31,10 +30,8 @@ def test_theme_builder_change_accent_color(sculptor_instance_: SculptorInstance)
     settings_page = navigate_to_settings_page(page=sculptor_instance_.page)
     theme_builder = settings_page.click_on_theme_builder()
 
-    # Verify default accent color
     theme_builder.expect_accent_color("gray")
 
-    # Change accent color to blue
     theme_builder.select_accent_color("blue")
     theme_builder.expect_accent_color("blue")
 
@@ -50,18 +47,14 @@ def test_theme_builder_reset_to_defaults(sculptor_instance_: SculptorInstance):
     settings_page = navigate_to_settings_page(page=sculptor_instance_.page)
     theme_builder = settings_page.click_on_theme_builder()
 
-    # Change multiple settings away from defaults
     theme_builder.select_accent_color("blue")
     theme_builder.select_danger_color("crimson")
 
-    # Verify they changed
     theme_builder.expect_accent_color("blue")
     theme_builder.expect_danger_color("crimson")
 
-    # Click reset
     theme_builder.click_reset()
 
-    # Verify all values returned to defaults
     theme_builder.expect_accent_color("gray")
     theme_builder.expect_danger_color("tomato")
     theme_builder.expect_gray_color("gray")
@@ -83,13 +76,10 @@ def test_theme_builder_component_gallery_button(sculptor_instance_: SculptorInst
     settings_page = navigate_to_settings_page(page=page)
     theme_builder = settings_page.click_on_theme_builder()
 
-    # Verify the Component Gallery button is visible
     expect(theme_builder.get_component_gallery_button()).to_be_visible()
 
-    # Click the Component Gallery button
     theme_builder.click_component_gallery_button()
 
-    # Verify a Component Gallery tab appears and is active
     gallery_tab = settings_page.get_component_gallery_tab()
     expect(gallery_tab).to_be_visible()
     expect(gallery_tab).to_have_attribute("aria-selected", "true")

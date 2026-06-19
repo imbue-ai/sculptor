@@ -71,7 +71,6 @@ def test_skills_panel_click_inserts_mention_chip(sculptor_instance_: SculptorIns
 
     chat_panel = task_page.get_chat_panel()
 
-    # The editor starts empty — no mention chip should be visible yet.
     expect(chat_panel.get_mention_spans()).not_to_be_visible()
 
     skills_panel = task_page.open_skills_panel()
@@ -123,7 +122,6 @@ def test_skills_panel_keyboard_navigation_inserts_chip(sculptor_instance_: Sculp
     alpha_chip = skills_panel.get_skill_chip(first)
     expect(alpha_chip).to_have_attribute("data-selected", "true")
 
-    # ArrowDown moves the selection to the second chip; Enter inserts it.
     search_input.press("ArrowDown")
     beta_chip = skills_panel.get_skill_chip(second)
     expect(beta_chip).to_have_attribute("data-selected", "true")
@@ -149,7 +147,6 @@ def test_skills_panel_search_filters_list(sculptor_instance_: SculptorInstance) 
 
     skills_panel = task_page.open_skills_panel()
 
-    # Both chips visible before searching.
     expect(skills_panel.get_skill_chip(keep)).to_be_visible()
     expect(skills_panel.get_skill_chip(drop)).to_be_visible()
 

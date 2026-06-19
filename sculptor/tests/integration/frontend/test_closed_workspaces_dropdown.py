@@ -31,7 +31,6 @@ def test_pill_visibility_toggles_with_closed_workspace_count(
     pill = layout.get_closed_workspaces_pill()
     expect(pill).not_to_be_visible()
 
-    # Close the first workspace tab
     layout.close_workspace_tab(workspace_tab_index=0)
 
     expect(pill).to_be_visible()
@@ -99,7 +98,6 @@ def test_reopen_workspace_from_dropdown(
     expect(row).to_be_visible()
     row.click()
 
-    # Workspace tab should reappear and pill should disappear
     expect(workspace_tabs).to_have_count(2)
     expect(pill).not_to_be_visible()
 
@@ -134,7 +132,6 @@ def test_delete_workspace_from_dropdown(
     expect(delete_button).to_be_visible()
     delete_button.click()
 
-    # Confirmation dialog should appear
     confirm_dialog = dropdown_element.get_delete_confirmation_dialog()
     expect(confirm_dialog).to_be_visible()
 
@@ -164,7 +161,6 @@ def test_pill_visible_on_add_workspace_page(
     expect(pill).to_be_visible()
     expect(pill).to_contain_text("1")
 
-    # Navigate to the add workspace page
     layout.get_add_workspace_button().click()
 
     # Pill should still be visible on the new workspace page
@@ -210,7 +206,6 @@ def test_open_all_reopens_all_closed_workspaces(
     expect(open_all_button).to_be_visible()
     open_all_button.click()
 
-    # Both closed workspace tabs should reappear and pill should disappear
     expect(workspace_tabs).to_have_count(3)
     expect(pill).not_to_be_visible()
     expect(dropdown_element).not_to_be_visible()

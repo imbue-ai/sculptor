@@ -21,8 +21,6 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
-# ── Zone auto-hide ────────────────────────────────────────────────────
-
 
 @user_story("to have empty panel zones auto-hide when the last panel is moved out")
 def test_zone_hides_when_last_panel_moved_out(sculptor_instance_: SculptorInstance) -> None:
@@ -157,9 +155,6 @@ def test_zone_with_no_panels_is_hidden_on_load(sculptor_instance_: SculptorInsta
     page.evaluate("localStorage.clear()")
 
 
-# ── Stale panel pruning ───────────────────────────────────────────────
-
-
 @user_story("to not see empty zones after a panel is removed in a new release")
 def test_stale_panel_id_pruned_from_persisted_layout(sculptor_instance_: SculptorInstance) -> None:
     """A removed panel's ID lingering in localStorage should be pruned on startup.
@@ -252,9 +247,6 @@ def test_stale_panel_id_pruned_from_persisted_layout(sculptor_instance_: Sculpto
     expect(bottom_right).to_be_visible()
 
 
-# ── New panel reconciliation ──────────────────────────────────────────
-
-
 @user_story("to see newly added panels after updating Sculptor")
 def test_new_panel_visible_after_loading_with_old_layout(sculptor_instance_: SculptorInstance) -> None:
     """A newly registered panel should be accessible even when the user has pre-existing panel state.
@@ -332,9 +324,6 @@ def test_new_panel_visible_after_loading_with_old_layout(sculptor_instance_: Scu
     # Cleanup: clear injected localStorage so subsequent tests on this
     # xdist worker start with default panel state.
     page.evaluate("localStorage.clear()")
-
-
-# ── Panel height persistence ──────────────────────────────────────────
 
 
 @user_story("to have sidebar panel heights persist after resizing them")

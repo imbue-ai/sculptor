@@ -42,7 +42,6 @@ def test_terminal_panel_creates_single_websocket_connection(sculptor_instance_: 
     """
     page = sculptor_instance_.page
 
-    # Create a workspace and wait for it to be ready
     start_task_and_wait_for_ready(sculptor_page=page, prompt="Hello")
 
     # Wait for the workspace page to load — the terminal sidebar icon only

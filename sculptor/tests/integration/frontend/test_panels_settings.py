@@ -1,6 +1,6 @@
 """Integration tests for the Settings → Panels page.
 
-Covers the user-facing flows added in the panel-registry-settings work:
+Covers the user-facing flows:
 1.  Toggle off / on a panel via the Settings switch.
 2.  Move a panel to a different zone via the Zone select.
 3.  Drag a panel icon in the layout diagram to a different zone.

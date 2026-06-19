@@ -35,16 +35,13 @@ def test_token_popover_shows_breakdown_on_click(
     alpha_view = get_alpha_chat_view(page)
     expect(alpha_view).to_be_visible()
 
-    # Turn footer should be visible with token count
     turn_footers = alpha_view.get_turn_footers()
     expect(turn_footers.first).to_be_visible()
     expect(turn_footers.first).to_contain_text("tokens")
 
-    # Click on the token count to open the popover
     token_count = alpha_view.get_turn_footer_token_count()
     token_count.click()
 
-    # Token popover should appear with "Input" and "Output" labels
     token_popover = alpha_view.get_token_popover()
     expect(token_popover).to_be_visible()
     expect(token_popover).to_contain_text("Input")
@@ -74,21 +71,17 @@ fake_claude:write_file `{
     alpha_view = get_alpha_chat_view(page)
     expect(alpha_view).to_be_visible()
 
-    # Turn footer should show "1 file"
     turn_footers = alpha_view.get_turn_footers()
     expect(turn_footers.first).to_be_visible()
     expect(turn_footers.first).to_contain_text("1 file")
 
-    # Click on the file count to open the popover
     file_count_trigger = alpha_view.get_turn_footer_file_count()
     file_count_trigger.click()
 
-    # Wait for popover to show the file row, then click it to open the diff
     file_row = alpha_view.get_turn_footer_file_row()
     expect(file_row).to_be_visible()
     file_row.click()
 
-    # The diff panel should open
     diff_panel = get_diff_panel_from_page(page)
     expect(diff_panel).to_be_visible()
 
@@ -118,7 +111,6 @@ fake_claude:write_file `{
     alpha_view = get_alpha_chat_view(page)
     expect(alpha_view).to_be_visible()
 
-    # Open the diff panel via the turn footer's file changes popover
     turn_footers = alpha_view.get_turn_footers()
     expect(turn_footers.first).to_be_visible()
     expect(turn_footers.first).to_contain_text("1 file")
@@ -130,7 +122,6 @@ fake_claude:write_file `{
     expect(file_row).to_be_visible()
     file_row.click()
 
-    # Diff panel should open
     diff_panel = get_diff_panel_from_page(page)
     expect(diff_panel).to_be_visible()
 

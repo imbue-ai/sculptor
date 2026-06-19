@@ -128,8 +128,7 @@ def test_sub_agent_pill_renders_under_both_harnesses(
     as the AlphaSubagentPill (the parent entry with nested, attributed child
     activity) under Claude AND pi.
 
-    This is the two-sided assertion for `supports_sub_agents` (REQ-TEST-4): the
-    render path was previously suppressed for pi (the gate hid the pill); pi now
+    This is the two-sided assertion for `supports_sub_agents`: pi
     spawns sub-agents through the pinned `sculptor_subagent` extension, whose
     structured per-child progress the adapter maps onto the same
     `parent_tool_use_id` grouping Claude uses. Pi's `fake_pi:subagent` directive
@@ -147,8 +146,7 @@ def test_sub_agent_pill_renders_under_both_harnesses(
         )
     send_chat_message(chat_panel=chat_panel, message=prompt)
 
-    # The sub-agent activity renders as the pill under both harnesses (the gate
-    # no longer suppresses it for pi).
+    # The sub-agent activity renders as the pill under both harnesses.
     expect(sculptor_instance_.page.get_by_test_id(ElementIDs.ALPHA_CHAT_SUBAGENT_PILL).first).to_be_visible(
         timeout=30000
     )
@@ -330,12 +328,11 @@ def test_uploads_usable_and_deliver_under_pi(sculptor_instance_: SculptorInstanc
     expect(page.get_by_test_id(ElementIDs.CHAT_INPUT)).to_be_visible()
     expect(page.get_by_test_id(ElementIDs.FILE_UPLOAD)).to_be_attached()
     if harness.first_agent_type != "pi":
-        # Claude branch unchanged: the upload affordance has always been live.
+        # The Claude upload affordance is live; nothing further to assert here.
         return
-    # Flipped pi branch: attachments are no longer dropped. Deliver one image
-    # and one non-image file through the upload transport, then assert FakePi
-    # received the image on `images[]` (one image, image/png) and the text file
-    # as a path in the prompt text — the exclusive split prompt assembly does.
+    # Deliver one image and one non-image file through the upload transport, then
+    # assert FakePi received the image on `images[]` (one image, image/png) and the
+    # text file as a path in the prompt text — the exclusive split prompt assembly does.
     image_id = upload_file_via_api(page, name="pic.png", mime_type="image/png", content=_png_bytes())
     text_id = upload_file_via_api(page, name="notes.txt", mime_type="text/plain", content=b"sentinel-99")
     send_message_via_api(page, message="fake_pi:report_inputs", files=[image_id, text_id])

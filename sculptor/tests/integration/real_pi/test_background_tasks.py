@@ -10,15 +10,15 @@ These exercise the two behaviours end-to-end against real pi:
 - the launch turn yields, the main thread stays interactive while the task runs,
   and the completion is reconciled into the conversation when it finishes;
 - a backgrounded task SURVIVES the user stopping a later turn (it is independent
-  of the turn that launched it) — the regression Danver hit, where Stop wrongly
-  killed the task. (No-orphan ON SHUTDOWN is covered by the unit tests:
+  of the turn that launched it) — the regression where Stop wrongly killed the
+  task. (No-orphan ON SHUTDOWN is covered by the unit tests:
   ``agent_wrapper_test.test_shutdown_cancels_background_tasks`` plus the
   extension's ``session_shutdown`` handler.)
 
 Divergence note (REQ-TEST-1): pi surfaces the completion as a reconciled summary
 block rather than a fresh agent turn reacting to a ``task_notification`` (pi
 0.78.0's extension model makes the post-notification agent turn add
-double-emit/race risk for marginal benefit — see the MR).
+double-emit/race risk for marginal benefit).
 """
 
 from __future__ import annotations

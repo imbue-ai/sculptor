@@ -81,11 +81,9 @@ def test_queued_message_bar_appears_and_shows_content(sculptor_instance_: Sculpt
 
     send_chat_message(chat_panel=chat_panel, message="queued content here")
 
-    # Bar should appear with count 1
     queued_bar = chat_panel.get_queued_message_bar()
     expect(queued_bar).to_have_count(1)
 
-    # Bar should contain the queued message text
     expect(queued_bar).to_contain_text("queued content here")
 
     # Send button is always visible; edit/cancel are in the DOM but hidden via opacity
@@ -141,10 +139,8 @@ def test_interrupt_and_send_queued_message(sculptor_instance_: SculptorInstance)
     send_chat_message(chat_panel=chat_panel, message='fake_claude:text `{"text": "promoted response"}`')
     expect(chat_panel.get_queued_message_bar()).to_have_count(1)
 
-    # Click interrupt-and-send button
     chat_panel.get_queued_message_send_button().click()
 
-    # Queued message bar should disappear
     expect(chat_panel.get_queued_message_bar()).to_have_count(0)
 
     # Wait for the promoted message to be processed by the agent.
@@ -164,7 +160,6 @@ def test_interrupt_and_send_shows_spinner_while_in_flight(sculptor_instance_: Sc
     send_button = chat_panel.get_queued_message_send_button()
     expect(send_button).to_be_enabled()
 
-    # Click interrupt — button should become disabled immediately
     send_button.click()
 
     # The bar should eventually disappear (interrupt completes)
@@ -218,7 +213,6 @@ def test_edit_with_text_in_editor_shows_dialog(sculptor_instance_: SculptorInsta
     _, chat_panel = _start_busy_agent(sculptor_instance_)
     page = chat_panel._page
 
-    # Queue a message
     send_chat_message(chat_panel=chat_panel, message="queued text")
     expect(chat_panel.get_queued_message_bar()).to_have_count(1)
 
@@ -342,7 +336,6 @@ def test_queued_message_persists_across_page_refresh(sculptor_instance_: Sculpto
     send_chat_message(chat_panel=chat_panel, message="persistent message")
     expect(chat_panel.get_queued_message_bar()).to_have_count(1)
 
-    # Reload the page
     page = chat_panel._page
     soft_reload_page(page)
 
@@ -367,7 +360,6 @@ def test_always_interrupt_setting_bypasses_queue(sculptor_instance_: SculptorIns
     experimental = settings_page.click_on_experimental()
     experimental.enable_always_interrupt()
 
-    # Start a busy agent
     _, chat_panel = _start_busy_agent(sculptor_instance_)
 
     # Send a message while agent is busy — with always-interrupt enabled,

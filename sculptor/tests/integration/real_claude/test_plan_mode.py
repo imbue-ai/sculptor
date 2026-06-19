@@ -36,14 +36,11 @@ def test_plan_mode_enter_and_approve(sculptor_instance_: SculptorInstance) -> No
     chat_panel = task_page.get_chat_panel()
     auq_panel = get_ask_user_question_panel(page)
 
-    # Wait for the approval prompt
     expect(auq_panel).to_be_visible(timeout=RESPONSE_TIMEOUT_MS)
 
-    # Approve the plan
     auq_panel.select_option("Approve")
     auq_panel.submit()
 
-    # Agent should execute the plan
     expect(chat_panel.get_thinking_indicator()).not_to_be_visible(timeout=RESPONSE_TIMEOUT_MS)
     assert_no_errors(chat_panel)
 
@@ -64,10 +61,8 @@ def test_plan_mode_with_revision(sculptor_instance_: SculptorInstance) -> None:
     chat_panel = task_page.get_chat_panel()
     auq_panel = get_ask_user_question_panel(page)
 
-    # Wait for approval prompt
     expect(auq_panel).to_be_visible(timeout=RESPONSE_TIMEOUT_MS)
 
-    # Revise the plan — select "Other" and type the revision
     auq_panel.select_option("Other")
     auq_panel.type_other_text("Change the filename to 'revised.txt' instead of 'original.txt'.")
     auq_panel.submit()
@@ -76,11 +71,9 @@ def test_plan_mode_with_revision(sculptor_instance_: SculptorInstance) -> None:
     expect(auq_panel).not_to_be_visible(timeout=RESPONSE_TIMEOUT_MS)
     expect(auq_panel).to_be_visible(timeout=RESPONSE_TIMEOUT_MS)
 
-    # Approve the revised plan
     auq_panel.select_option("Approve")
     auq_panel.submit()
 
-    # Agent should execute the revised plan
     expect(chat_panel.get_thinking_indicator()).not_to_be_visible(timeout=RESPONSE_TIMEOUT_MS)
     assert_no_errors(chat_panel)
 
@@ -101,10 +94,8 @@ def test_ask_user_question_during_plan_mode(sculptor_instance_: SculptorInstance
     chat_panel = task_page.get_chat_panel()
     auq_panel = get_ask_user_question_panel(page)
 
-    # Wait for the AskUserQuestion panel
     expect(auq_panel).to_be_visible(timeout=RESPONSE_TIMEOUT_MS)
 
-    # Answer the question
     auq_panel.select_option("Python")
     auq_panel.submit()
 
@@ -113,11 +104,9 @@ def test_ask_user_question_during_plan_mode(sculptor_instance_: SculptorInstance
     expect(auq_panel).not_to_be_visible(timeout=RESPONSE_TIMEOUT_MS)
     expect(auq_panel).to_be_visible(timeout=RESPONSE_TIMEOUT_MS)
 
-    # Approve
     auq_panel.select_option("Approve")
     auq_panel.submit()
 
-    # Agent executes
     expect(chat_panel.get_thinking_indicator()).not_to_be_visible(timeout=RESPONSE_TIMEOUT_MS)
     assert_no_errors(chat_panel)
 
@@ -135,13 +124,10 @@ def test_interrupt_during_plan_mode(sculptor_instance_: SculptorInstance) -> Non
     )
     chat_panel = task_page.get_chat_panel()
 
-    # Wait for some plan text to appear
     wait_for_streaming_text(chat_panel, "PLAN-MARKER-72045")
 
-    # Interrupt
     interrupt_agent(chat_panel)
     assert_interrupted(chat_panel)
 
-    # Follow-up: verify memory
     send_and_wait(chat_panel, "What were you just planning? Reply starting with PLAN-RECALL:")
     assert_last_message_contains(chat_panel, "PLAN-RECALL")
