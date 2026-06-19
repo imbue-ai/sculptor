@@ -81,33 +81,36 @@ export const AddRepoDialog = ({ open, onOpenChange, setToast }: AddRepoDialogPro
   // opened before the WS stream / dropdown prefetch populated the atom.
   const [isRefreshingDeps, setIsRefreshingDeps] = useState(false);
 
-  // effects
-  // Refresh dependency status when the dialog opens so the radio cards
-  // reflect the current CLI install/auth state on first paint.
+  // Re-fetch dependency status into the shared atom.
   // skipWsAck: the dependencies endpoint doesn't open a data-model
   // transaction, so it never produces the WS acknowledgment the SDK
   // waits on by default. Without this the call times out at 10s and
   // dependenciesStatus stays null, leaving every provider stuck on
   // the NotConfiguredSection.
+  const refreshDependencies = useCallback(async (): Promise<void> => {
+    try {
+      const { data } = await getDependenciesStatus({ meta: { skipWsAck: true } });
+      if (data) setDependenciesStatus(data);
+    } catch {
+      // Best-effort; the form falls back to NotConfiguredSection.
+    }
+  }, [setDependenciesStatus]);
+
+  // effects
+  // Refresh dependency status when the dialog opens so the radio cards
+  // reflect the current CLI install/auth state on first paint.
   useEffect(() => {
     if (!open) return;
     let isCancelled = false;
     setIsRefreshingDeps(true);
-    void (async (): Promise<void> => {
-      try {
-        const { data } = await getDependenciesStatus({ meta: { skipWsAck: true } });
-        if (!isCancelled && data) setDependenciesStatus(data);
-      } catch {
-        // Best-effort; the form falls back to NotConfiguredSection.
-      } finally {
-        if (!isCancelled) setIsRefreshingDeps(false);
-      }
-    })();
+    void refreshDependencies().finally(() => {
+      if (!isCancelled) setIsRefreshingDeps(false);
+    });
 
     return (): void => {
       isCancelled = true;
     };
-  }, [open, setDependenciesStatus]);
+  }, [open, refreshDependencies]);
 
   // callbacks
   const currentRemoteSubmit = useMemo(
@@ -214,6 +217,7 @@ export const AddRepoDialog = ({ open, onOpenChange, setToast }: AddRepoDialogPro
                   view={remoteState.github.view}
                   onViewChange={handleGithubViewChange}
                   onSubmittableChange={handleGithubSubmittableChange}
+                  onNotConfigured={refreshDependencies}
                 />
               </Box>
             </Flex>

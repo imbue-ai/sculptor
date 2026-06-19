@@ -25,6 +25,7 @@ from sculptor.web.remote_repos import _filter_remote_repos
 from sculptor.web.remote_repos import _github_user_repos_page_path
 from sculptor.web.remote_repos import _is_safe_clone_url
 from sculptor.web.remote_repos import _is_safe_repo_slug
+from sculptor.web.remote_repos import _is_safe_target_path
 from sculptor.web.remote_repos import _looks_like_already_exists
 from sculptor.web.remote_repos import _parse_github_repos
 from sculptor.web.remote_repos import _redact_url_credentials
@@ -325,6 +326,19 @@ def test_is_safe_repo_slug_accepts_owner_repo() -> None:
 def test_is_safe_repo_slug_rejects_dashes_and_non_slugs() -> None:
     for slug in ("-owner/repo", "owner", "--flag", "owner repo", ""):
         assert _is_safe_repo_slug(slug) is False
+
+
+def test_is_safe_target_path_accepts_normal_destinations() -> None:
+    for path in ("/Users/dev/code/github/repo", "repos/github/repo", "~/code/repo"):
+        assert _is_safe_target_path(Path(path)) is True
+
+
+def test_is_safe_target_path_rejects_leading_dash() -> None:
+    """A destination rendering to a leading ``-`` would be parsed as an option by
+    gh/git. ``gh repo clone``'s ``--`` forwards to ``git clone`` rather than
+    shielding the directory positional, so the rendered path is validated here."""
+    for path in ("-help/repo", "--upload-pack/repo", "-oProxyCommand"):
+        assert _is_safe_target_path(Path(path)) is False
 
 
 def test_redact_url_credentials_strips_userinfo() -> None:
@@ -1162,6 +1176,38 @@ def test_list_remote_repos_uses_single_fetch_in_browse_mode(
     # `&page=` is the paginated-search marker — must be absent in browse mode.
     # (Plain ``page=`` would false-positive on ``per_page=``.)
     assert "&page=" not in api_path
+
+
+def test_list_remote_repos_surfaces_502_from_fetch_without_500_wrapping(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+) -> None:
+    """``_fetch_repos`` raises HTTP 502 for gh subprocess / JSON failures. Because
+    that raise happens inside the concurrency-group ``with``, the route must
+    capture it and re-raise after the block — otherwise ConcurrencyExceptionGroup
+    wraps it on ``__exit__`` and FastAPI surfaces a generic 500."""
+    with (
+        patch.object(
+            DependencyManagementService,
+            "resolve_binary_path",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_binary_lookup()),
+        ),
+        patch.object(
+            DependencyManagementService,
+            "check_authenticated",
+            autospec=True,
+            side_effect=_resolve_for_self(_mock_auth_lookup()),
+        ),
+        patch(
+            "sculptor.web.remote_repos._fetch_repos",
+            side_effect=HTTPException(status_code=502, detail="gh api failed with exit code 1"),
+        ),
+    ):
+        response = client.get("/api/v1/remotes/github/repos")
+
+    assert response.status_code == 502, response.text
+    assert response.json()["detail"] == "gh api failed with exit code 1"
 
 
 def test_list_remote_repos_caps_limit_at_max(

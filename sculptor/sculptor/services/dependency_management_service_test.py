@@ -63,7 +63,7 @@ def _make_user_config(
         dep_paths = DependencyPaths(claude=claude_binary_mode, pi="pi")
     else:
         claude_value = dependency_paths.claude if dependency_paths.claude else claude_binary_mode
-        dep_paths = DependencyPaths(git=dependency_paths.git, claude=claude_value, pi="pi")
+        dep_paths = DependencyPaths(git=dependency_paths.git, gh=dependency_paths.gh, claude=claude_value, pi="pi")
     return UserConfig(
         user_email=user_email,
         user_id=user_id,
@@ -303,6 +303,31 @@ class TestResolveGitPath:
             result = service.resolve_binary_path(Dependency.GIT)
 
         assert result == "/custom/git"
+
+
+class TestResolveGhPath:
+    @patch("sculptor.services.dependency_management_service.get_user_config_instance")
+    @patch("shutil.which", return_value="/usr/bin/gh")
+    def test_default_path(self, mock_which: MagicMock, mock_config: MagicMock) -> None:
+        mock_config.return_value = _make_user_config()
+
+        with ConcurrencyGroup(name="test") as cg:
+            service = DependencyManagementService(concurrency_group=cg)
+            result = service.resolve_binary_path(Dependency.GH)
+
+        assert result == "/usr/bin/gh"
+
+    @patch("sculptor.services.dependency_management_service.get_user_config_instance")
+    def test_override_path(self, mock_config: MagicMock) -> None:
+        mock_config.return_value = _make_user_config(
+            dependency_paths=DependencyPaths(gh="/custom/gh"),
+        )
+
+        with ConcurrencyGroup(name="test") as cg:
+            service = DependencyManagementService(concurrency_group=cg)
+            result = service.resolve_binary_path(Dependency.GH)
+
+        assert result == "/custom/gh"
 
 
 class TestVersionRange:

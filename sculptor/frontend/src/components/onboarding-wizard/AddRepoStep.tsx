@@ -67,28 +67,33 @@ export const AddRepoStep = ({ onComplete, isLoading, error }: AddRepoStepProps):
     onSuccess: onComplete,
   });
 
+  // Re-fetch dependency status into the shared atom.
   // skipWsAck: the dependencies endpoint doesn't open a data-model
   // transaction, so it never produces the WS ack the SDK waits on by default.
   // Without this the call would time out at 10s and the GitHub form
   // would flash NotConfiguredSection.
+  const refreshDependencies = useCallback(async (): Promise<void> => {
+    try {
+      const { data } = await getDependenciesStatus({ meta: { skipWsAck: true } });
+      if (data) setDependenciesStatus(data);
+    } catch {
+      // Best-effort; the form falls back to NotConfiguredSection.
+    }
+  }, [setDependenciesStatus]);
+
+  // Onboarding runs outside of PageLayout, so the unified stream isn't
+  // populating the atom yet — refresh manually on mount.
   useEffect(() => {
     let isCancelled = false;
     setIsRefreshingDeps(true);
-    void (async (): Promise<void> => {
-      try {
-        const { data } = await getDependenciesStatus({ meta: { skipWsAck: true } });
-        if (!isCancelled && data) setDependenciesStatus(data);
-      } catch {
-        // Best-effort; the form falls back to NotConfiguredSection.
-      } finally {
-        if (!isCancelled) setIsRefreshingDeps(false);
-      }
-    })();
+    void refreshDependencies().finally(() => {
+      if (!isCancelled) setIsRefreshingDeps(false);
+    });
 
     return (): void => {
       isCancelled = true;
     };
-  }, [setDependenciesStatus]);
+  }, [refreshDependencies]);
 
   const currentRemoteSubmit = useMemo(
     () => (isRemoteProvider(mode) ? remoteState[mode].submit : { ready: false }),
@@ -175,6 +180,7 @@ export const AddRepoStep = ({ onComplete, isLoading, error }: AddRepoStepProps):
             view={remoteState.github.view}
             onViewChange={handleGithubViewChange}
             onSubmittableChange={handleGithubSubmittableChange}
+            onNotConfigured={refreshDependencies}
           />
         </Box>
 

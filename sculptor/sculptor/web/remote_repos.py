@@ -237,14 +237,28 @@ def list_remote_repos(
 
     logger.debug("Listing remote repos via {} for provider={}", tool.value, provider)
     root_concurrency_group = get_root_concurrency_group(request)
+    # Capture the failure inside the `with` and raise the HTTPException after it
+    # exits. Raising inside lets ConcurrencyExceptionGroup wrap the HTTPException
+    # on __exit__, which FastAPI surfaces as a 500 instead of the 502 that
+    # `_fetch_repos` crafts for gh subprocess / JSON failures. Mirrors the
+    # capture-then-raise pattern in `clone_remote_repo` below.
+    list_error: tuple[int, str, Exception] | None = None
+    repos: list[RemoteRepo] = []
     with root_concurrency_group.make_concurrency_group(name="list_remote_repos") as concurrency_group:
-        if has_query:
-            assert q is not None
-            fetch_page = functools.partial(_fetch_github_page, binary, concurrency_group)
-            repos = _search_github_user_repos(q, capped_limit, fetch_page)
-        else:
-            api_path = _build_remote_repos_api_path(capped_limit)
-            repos = _fetch_repos(binary, concurrency_group, api_path)
+        try:
+            if has_query:
+                assert q is not None
+                fetch_page = functools.partial(_fetch_github_page, binary, concurrency_group)
+                repos = _search_github_user_repos(q, capped_limit, fetch_page)
+            else:
+                api_path = _build_remote_repos_api_path(capped_limit)
+                repos = _fetch_repos(binary, concurrency_group, api_path)
+        except HTTPException as e:
+            list_error = (e.status_code, e.detail, e)
+
+    if list_error is not None:
+        status_code, detail, cause = list_error
+        raise HTTPException(status_code=status_code, detail=detail) from cause
 
     return repos[:capped_limit]
 
@@ -267,6 +281,19 @@ def _is_safe_clone_url(url: str) -> bool:
 def _is_safe_repo_slug(full_name: str) -> bool:
     """True when *full_name* is a plain ``owner/repo`` slug safe to pass to ``gh``."""
     return bool(_REPO_SLUG_RE.match(full_name.strip()))
+
+
+def _is_safe_target_path(target_path: Path) -> bool:
+    """True when *target_path* renders to a clone destination safe to pass positionally.
+
+    Guards against argument injection: a destination string beginning with ``-``
+    would be parsed as an option rather than a directory. The git fallback also
+    shields its positional with ``--``, but ``gh repo clone``'s ``--`` forwards
+    everything after it to ``git clone`` rather than marking end-of-options for
+    the directory — so it can't protect this slot. Validate the rendered path
+    directly so both the ``gh`` and ``git`` backends are covered.
+    """
+    return not str(target_path).startswith("-")
 
 
 def _redact_url_credentials(url: str) -> str:
@@ -341,6 +368,11 @@ def clone_remote_repo(
 
     target_dir = Path(clone_request.target_dir).expanduser()
     target_path = target_dir / clone_request.name
+
+    # The destination is the third positional handed to gh/git; reject a value
+    # that would be reinterpreted as an option before it reaches the subprocess.
+    if not _is_safe_target_path(target_path):
+        raise HTTPException(status_code=400, detail="Unsupported target path.")
 
     # Pre-flight check: bail out fast with a 409 if the destination already
     # exists. Without this we spawn the clone subprocess, gh / git eventually

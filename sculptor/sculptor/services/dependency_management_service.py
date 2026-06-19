@@ -484,7 +484,7 @@ class DependencyManagementService(Service):
             case Dependency.PI:
                 return self._resolve_pi_path()
             case Dependency.GH:
-                return shutil.which("gh")
+                return self._resolve_gh_path()
             case _ as unreachable:
                 assert_never(unreachable)
 
@@ -493,6 +493,12 @@ class DependencyManagementService(Service):
         if config.dependency_paths.git:
             return config.dependency_paths.git
         return shutil.which("git")
+
+    def _resolve_gh_path(self) -> str | None:
+        config = get_user_config_instance()
+        if config.dependency_paths.gh:
+            return config.dependency_paths.gh
+        return shutil.which("gh")
 
     def _resolve_pi_path(self) -> str | None:
         config = get_user_config_instance()
@@ -760,11 +766,17 @@ class DependencyManagementService(Service):
 
         with self._gh_auth_lock:
             self._terminate_gh_auth_session_locked()
-            process = run_background(
-                [binary, "auth", "login", "--hostname", "github.com", "--git-protocol", "https", "--web"],
-                open_stdin=True,
-                timeout=_AUTH_PROCESS_TIMEOUT_SECONDS,
-                isolate_process_group=True,
+            # Spawn through the concurrency group (like _spawn_auth_process) so the
+            # group owns and reaps the process. `gh auth login --web` deliberately
+            # stays alive polling GitHub while the user authorizes the device code,
+            # so a shutdown mid-sign-in would otherwise orphan it.
+            process = self.concurrency_group.start_background_process_from_factory(
+                lambda: run_background(
+                    [binary, "auth", "login", "--hostname", "github.com", "--git-protocol", "https", "--web"],
+                    open_stdin=True,
+                    timeout=_AUTH_PROCESS_TIMEOUT_SECONDS,
+                    isolate_process_group=True,
+                )
             )
             # Non-interactive gh skips the "Press Enter" prompt, but nudge stdin so
             # any default prompt is answered rather than blocking the poll loop.

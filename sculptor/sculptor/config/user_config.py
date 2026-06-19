@@ -49,8 +49,8 @@ class DependencyPaths(SerializableModel):
     user explicitly configures a value in Settings, it is persisted to the config
     file and takes precedence over the environment variable.
 
-    The ``git`` field is an optional override path; when ``None``, git is
-    resolved from the system PATH.
+    The ``git`` and ``gh`` fields are optional override paths; when ``None``,
+    the binary is resolved from the system PATH.
 
     The ``pi`` field is a unified mode + path value mirroring ``claude``:
       - ``"MANAGED"`` (default): Sculptor downloads and version-pins the pi CLI.
@@ -64,6 +64,7 @@ class DependencyPaths(SerializableModel):
     """
 
     git: str | None = None
+    gh: str | None = None
     claude: str = Field(default_factory=lambda: os.environ.get("SCULPTOR_CLAUDE_BINARY_DEFAULT_OVERRIDE", "MANAGED"))
     pi: str = "MANAGED"
 

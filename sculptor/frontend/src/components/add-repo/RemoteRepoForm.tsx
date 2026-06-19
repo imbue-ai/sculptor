@@ -49,6 +49,13 @@ type RemoteRepoFormProps = {
   view: RemoteRepoFormView;
   onViewChange: (view: RemoteRepoFormView) => void;
   onSubmittableChange: (submittable: { ready: boolean; payload?: RemoteCloneSubmit }) => void;
+  /**
+   * Called when the combobox discovers the provider CLI is no longer
+   * configured (a 412 mid-session). The owner of `dependenciesStatus` should
+   * refresh it so `isConfigured` flips false and the form swaps in
+   * NotConfiguredSection. No-op by default.
+   */
+  onNotConfigured?: () => void;
   searchInputRef?: Ref<HTMLInputElement>;
 };
 
@@ -60,6 +67,7 @@ export const RemoteRepoForm = ({
   view,
   onViewChange,
   onSubmittableChange,
+  onNotConfigured,
 }: RemoteRepoFormProps): ReactElement => {
   const capabilities = getBackendCapabilities();
   const canBrowse = isElectron() && capabilities.canSelectLocalDir;
@@ -218,6 +226,12 @@ export const RemoteRepoForm = ({
     [onViewChange, pushSubmittable],
   );
 
+  // Stable wrapper so the combobox's effect dependency doesn't churn when the
+  // parent passes an inline callback.
+  const handleNotConfigured = useCallback((): void => {
+    onNotConfigured?.();
+  }, [onNotConfigured]);
+
   // rendering
   const trimmedName = name.trim();
   const targetSuffix = trimmedName ? `/${trimmedName}` : undefined;
@@ -329,7 +343,7 @@ export const RemoteRepoForm = ({
                 <RemoteRepoCombobox
                   provider={provider}
                   onSelect={handleSelectRepo}
-                  onNotConfigured={() => handleViewChange("search")}
+                  onNotConfigured={handleNotConfigured}
                 />
               )}
               <Box>
