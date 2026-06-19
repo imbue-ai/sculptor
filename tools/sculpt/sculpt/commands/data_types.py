@@ -44,7 +44,11 @@ class WorkspaceListProjectItem(BaseModel):
     repo_id: str = Field(description="Associated repo/project ID")
     description: str | None = Field(description="User-provided description")
     strategy: str = Field(description="Workspace initialization strategy")
-    source_branch: str | None = Field(description="Source branch name")
+    source_branch: str | None = Field(description="Source branch the workspace was cut from")
+    target_branch: str | None = Field(
+        description="Diff/merge target branch (the parent branch for a stacked workspace)"
+    )
+    requested_branch_name: str | None = Field(description="The workspace's own working branch name")
     is_deleted: bool = Field(description="Whether the workspace has been deleted")
 
 
