@@ -97,7 +97,13 @@ class PackagedElectronFrontend:
         if os.getuid() == 0:
             cmd = cmd + ("--no-sandbox",)
 
-        if "DISPLAY" not in os.environ and "WAYLAND_DISPLAY" not in os.environ:
+        is_headless = "DISPLAY" not in os.environ and "WAYLAND_DISPLAY" not in os.environ
+        if is_headless:
+            # Under xvfb there is no real GPU and Chromium's GPU process
+            # crash-loops at init (more readily under Electron 42); force
+            # software rendering so webview/screenshot frames are produced
+            # deterministically. Mirrors the dev launcher in electron_frontend.py.
+            cmd = cmd + ("--disable-gpu",)
             cmd = ("xvfb-run", "-a", "-e", "/tmp/xvfb-error.log", "-s", "-screen 0 1600x1000x16") + cmd
 
         env_overrides = {
