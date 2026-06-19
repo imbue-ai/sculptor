@@ -454,9 +454,7 @@ See [our python style guide](./backend.md) for general naming conventions. Below
 
 ## Comments
 
-Comments can quickly become outdated, leading to confusion rather than clarity. Use comments when:
-* The context or reasoning isn't obvious from the code alone (e.g. config files, workarounds)
-* Referencing related issues, PRs, or planned improvements
+Comments can quickly become outdated, leading to confusion rather than clarity. See [Comments](../style_guide.md#comments) for how to write them. In short: comment when the reasoning isn't obvious from the code alone (e.g. config files, workarounds), and write for a future reader rather than narrating the current change. A `TODO` may reference a tracking issue for *planned* work; don't cite a ticket merely to explain why existing code changed.
 
 ## React
 
