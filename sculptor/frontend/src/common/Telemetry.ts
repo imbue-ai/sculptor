@@ -31,7 +31,7 @@ import { type TelemetryInfo, type UserConfig } from "~/api";
 
 import { computeAnalyticsUserId } from "./Analytics.ts";
 
-// Vite-baked constants (see `vite.renderer.config.ts:define` and
+// Vite-baked constants (see `vite.electron.config.ts:define` and
 // `builder/cli.py::setup_build_vars`).
 declare const FRONTEND_POSTHOG_TOKEN: string;
 declare const FRONTEND_POSTHOG_HOST: string;
