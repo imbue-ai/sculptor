@@ -128,7 +128,7 @@ def test_sub_agent_pill_renders_under_both_harnesses(
     as the AlphaSubagentPill (the parent entry with nested, attributed child
     activity) under Claude AND pi.
 
-    This is the two-sided assertion for `supports_sub_agents` (REQ-TEST-4): pi
+    This is the two-sided assertion for `supports_sub_agents`: pi
     spawns sub-agents through the pinned `sculptor_subagent` extension, whose
     structured per-child progress the adapter maps onto the same
     `parent_tool_use_id` grouping Claude uses. Pi's `fake_pi:subagent` directive
