@@ -29,39 +29,53 @@ const COMPILED_PLUGIN_IDS: ReadonlyArray<string> = ["linear-issue"];
 const buildCompiledPlugin = async (frontendRoot: string, id: string): Promise<void> => {
   const sourceDir = path.join(frontendRoot, "plugins", id);
   const outDir = path.join(frontendRoot, "public", "plugins", id);
-  await build({
-    configFile: false, // don't reload the host config — that would recurse
-    root: sourceDir,
-    publicDir: false,
-    logLevel: "warn",
-    // A compiled plugin is a production artifact: it shares the host's React
-    // singleton via the import map, which provides only the prod
-    // `react/jsx-runtime` (not `react/jsx-dev-runtime`). Pin production —
-    // otherwise this nested build inherits the dev server's mode and the JSX
-    // transform emits the dev runtime, which, not being externalized, gets
-    // bundled in and drags `process.env.NODE_ENV` into a browser bundle
-    // ("process is not defined"). The `define` is belt-and-suspenders: it
-    // replaces any residual `process.env.NODE_ENV` so no `process` global can
-    // reach the browser.
-    mode: "production",
-    define: { "process.env.NODE_ENV": JSON.stringify("production") },
-    plugins: [react()],
-    build: {
-      outDir,
-      emptyOutDir: true,
-      sourcemap: true,
-      lib: {
-        entry: path.join(sourceDir, "src", "index.tsx"),
-        formats: ["es"],
-        fileName: (): string => "main.js",
+  // A compiled plugin is a production artifact: it shares the host's React
+  // singleton via the import map, which provides only the prod
+  // `react/jsx-runtime` (not `react/jsx-dev-runtime`). It MUST build as
+  // production, or the JSX transform emits the dev runtime and plugin renders
+  // crash with "jsxDEV is not a function" (and a bundled dev runtime would also
+  // drag `process` in).
+  //
+  // Vite derives `isProduction` from `process.env.NODE_ENV || mode`, so NODE_ENV
+  // *wins* over our `mode: "production"`. In the dev-server path (`just start`,
+  // electron dev) the outer server sets NODE_ENV=development, which would force
+  // this nested build to dev despite `mode`. Pin NODE_ENV for the build so it's
+  // production in every path; restore it afterward so the outer dev server is
+  // unaffected. `mode` + the `define` are kept as defense-in-depth.
+  const priorNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = "production";
+  try {
+    await build({
+      configFile: false, // don't reload the host config — that would recurse
+      root: sourceDir,
+      publicDir: false,
+      logLevel: "warn",
+      mode: "production",
+      define: { "process.env.NODE_ENV": JSON.stringify("production") },
+      plugins: [react()],
+      build: {
+        outDir,
+        emptyOutDir: true,
+        sourcemap: true,
+        lib: {
+          entry: path.join(sourceDir, "src", "index.tsx"),
+          formats: ["es"],
+          fileName: (): string => "main.js",
+        },
+        rollupOptions: {
+          external: [...RUNTIME_MODULE_SPECIFIERS],
+          // Don't hash — the manifest references the entry as "main.js" by name.
+          output: { entryFileNames: "main.js", assetFileNames: "[name][extname]" },
+        },
       },
-      rollupOptions: {
-        external: [...RUNTIME_MODULE_SPECIFIERS],
-        // Don't hash — the manifest references the entry as "main.js" by name.
-        output: { entryFileNames: "main.js", assetFileNames: "[name][extname]" },
-      },
-    },
-  });
+    });
+  } finally {
+    if (priorNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = priorNodeEnv;
+    }
+  }
   // The manifest is served alongside the bundle; the host fetches it first.
   fs.copyFileSync(path.join(sourceDir, "manifest.json"), path.join(outDir, "manifest.json"));
 };
