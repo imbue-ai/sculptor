@@ -574,10 +574,19 @@ class CIBabysitterCoordinator(Service):
     ) -> TaskID | None:
         with self._lock:
             existing_task_id = state.babysitter_task_id
+        if existing_task_id is None:
+            # In-memory state is rebuilt lazily and starts empty after a restart,
+            # so the babysitter task created in a previous run is forgotten.
+            # Re-adopt the persisted task for this workspace before creating a new
+            # one — otherwise every restart leaves a duplicate "CI Babysitter" tab
+            # (SCU-1530).
+            existing_task_id = self._find_existing_babysitter_task_id(state)
         if existing_task_id is not None:
             with self._data_model_service.open_transaction(RequestID()) as transaction:
                 task = self._task_service.get_task(existing_task_id, transaction)
             if task is not None and not task.is_deleted:
+                with self._lock:
+                    state.babysitter_task_id = existing_task_id
                 return existing_task_id
             with self._lock:
                 state.babysitter_task_id = None
@@ -587,6 +596,26 @@ class CIBabysitterCoordinator(Service):
             with self._lock:
                 state.babysitter_task_id = task_id
         return task_id
+
+    def _find_existing_babysitter_task_id(self, state: CIBabysitterState) -> TaskID | None:
+        """The most recent persisted, non-deleted babysitter task for this
+        workspace, or None.
+
+        Lets a restarted coordinator — whose in-memory ``babysitter_task_id`` is
+        gone — re-adopt the existing babysitter task instead of spawning a
+        duplicate.
+        """
+        with self._data_model_service.open_transaction(RequestID()) as transaction:
+            workspace_tasks = self._workspace_agent_tasks(state.workspace_id, state.project_id, transaction)
+        babysitter_tasks = [
+            task
+            for task in workspace_tasks
+            if isinstance(task.current_state, AgentTaskStateV2) and task.current_state.title == _BABYSITTER_TITLE
+        ]
+        if not babysitter_tasks:
+            return None
+        most_recent = max(babysitter_tasks, key=lambda task: task.created_at)
+        return most_recent.object_id
 
     def _create_babysitter_task(
         self,
@@ -642,6 +671,33 @@ class CIBabysitterCoordinator(Service):
             return task.input_data.default_model
         return _model_from_config_or_fallback(config)
 
+    def _workspace_agent_tasks(
+        self,
+        workspace_id: WorkspaceID,
+        project_id: ProjectID,
+        transaction: DataModelTransaction,
+    ) -> list[Task]:
+        """All of the workspace's non-deleted agent tasks (the babysitter's own
+        included). Returns an empty list if the project's tasks can't be listed."""
+        try:
+            # pyrefly: ignore [missing-attribute]
+            project_tasks = transaction.get_tasks_for_project(
+                project_id=project_id,
+                input_data_classes=(AgentTaskInputsV2,),
+            )
+        except Exception as exc:
+            logger.debug("Could not list workspace tasks: {}", exc)
+            return []
+        return [
+            task
+            for task in project_tasks
+            if isinstance(task.current_state, AgentTaskStateV2)
+            and task.current_state.workspace_id == workspace_id
+            and isinstance(task.input_data, AgentTaskInputsV2)
+            and not task.is_deleted
+            and not task.is_deleting
+        ]
+
     def _workspace_agent_tasks_most_recent_first(
         self,
         workspace_id: WorkspaceID,
@@ -650,26 +706,12 @@ class CIBabysitterCoordinator(Service):
     ) -> list[Task]:
         """The workspace's agent tasks, most-recent-first, excluding
         deleted/deleting tasks and the babysitter's own."""
-        try:
-            # pyrefly: ignore [missing-attribute]
-            project_tasks = transaction.get_tasks_for_project(
-                project_id=project_id,
-                input_data_classes=(AgentTaskInputsV2,),
-            )
-        except Exception as exc:
-            logger.debug("Could not list workspace tasks for inheritance: {}", exc)
-            project_tasks = ()
-        workspace_agent_tasks = [
+        non_babysitter_tasks = [
             task
-            for task in project_tasks
-            if isinstance(task.current_state, AgentTaskStateV2)
-            and task.current_state.workspace_id == workspace_id
-            and isinstance(task.input_data, AgentTaskInputsV2)
-            and not task.is_deleted
-            and not task.is_deleting
-            and task.current_state.title != _BABYSITTER_TITLE
+            for task in self._workspace_agent_tasks(workspace_id, project_id, transaction)
+            if not (isinstance(task.current_state, AgentTaskStateV2) and task.current_state.title == _BABYSITTER_TITLE)
         ]
-        return sorted(workspace_agent_tasks, key=lambda t: t.created_at, reverse=True)
+        return sorted(non_babysitter_tasks, key=lambda t: t.created_at, reverse=True)
 
     def _select_model_for_workspace(
         self,
