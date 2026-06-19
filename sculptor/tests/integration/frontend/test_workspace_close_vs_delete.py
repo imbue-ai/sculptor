@@ -41,26 +41,20 @@ def test_close_workspace_tab_removes_tab_without_deletion(
     page = sculptor_instance_.page
     layout = PlaywrightProjectLayoutPage(page=page)
 
-    # Step 1: Create two workspaces.
     start_task_and_wait_for_ready(page, prompt="Task A", workspace_name="Workspace A")
     start_task_and_wait_for_ready(page, prompt="Task B", workspace_name="Workspace B")
 
-    # Step 2: Verify both workspace tabs exist.
     workspace_tabs = layout.get_workspace_tabs()
     expect(workspace_tabs).to_have_count(2)
 
-    # Step 3: Click the first tab to activate it, then click its close button.
     layout.close_workspace_tab(0)
 
-    # Step 4: Verify no delete confirmation dialog appears and tab count drops to 1.
     confirm_dialog = layout.get_delete_confirmation_dialog()
     expect(confirm_dialog).to_be_hidden()
     expect(workspace_tabs).to_have_count(1)
 
-    # Step 5: Navigate to the Home page.
     navigate_to_home_page(page)
 
-    # Step 6: Verify the closed workspace still exists in the workspace list.
     home_page = PlaywrightHomePage(page)
     workspace_rows = home_page.get_workspace_rows()
     expect(workspace_rows).to_have_count(2)
@@ -80,19 +74,15 @@ def test_cmd_w_closes_workspace_tab(
     page = sculptor_instance_.page
     layout = PlaywrightProjectLayoutPage(page=page)
 
-    # Step 1: Create two workspaces.
     start_task_and_wait_for_ready(page, prompt="Task 1", workspace_name="WS One")
     start_task_and_wait_for_ready(page, prompt="Task 2", workspace_name="WS Two")
 
-    # Step 2: Verify both workspace tabs exist.
     workspace_tabs = layout.get_workspace_tabs()
     expect(workspace_tabs).to_have_count(2)
 
-    # Step 3: Press Cmd+W to close the active tab.
     mod_key = get_playwright_modifier_key()
     page.keyboard.press(f"{mod_key}+w")
 
-    # Step 4: Verify no delete confirmation dialog appears and tab count drops to 1.
     confirm_dialog = layout.get_delete_confirmation_dialog()
     expect(confirm_dialog).to_be_hidden()
     expect(workspace_tabs).to_have_count(1)
@@ -118,27 +108,24 @@ def test_cmd_shift_w_deletes_active_workspace(
     page = sculptor_instance_.page
     layout = PlaywrightProjectLayoutPage(page=page)
 
-    # Step 1: Create two workspaces. "Delete WS" is active after creation.
+    # "Delete WS" is active after creation.
     start_task_and_wait_for_ready(page, prompt="Task 1", workspace_name="Keep WS")
     start_task_and_wait_for_ready(page, prompt="Task 2", workspace_name="Delete WS")
 
     workspace_tabs = layout.get_workspace_tabs()
     expect(workspace_tabs).to_have_count(2)
 
-    # Step 2: Press Cmd+Shift+W to delete the active workspace.
     mod_key = get_playwright_modifier_key()
     page.keyboard.press(f"{mod_key}+Shift+w")
 
-    # Step 3: Unlike Cmd+W, this opens the delete confirmation dialog.
+    # Unlike Cmd+W, this opens the delete confirmation dialog.
     confirm_dialog = layout.get_delete_confirmation_dialog()
     expect(confirm_dialog).to_be_visible()
 
-    # Step 4: Confirm the deletion; the tab count drops to 1.
     layout.confirm_delete()
     expect(workspace_tabs).to_have_count(1)
 
-    # Step 5: The deleted workspace no longer appears on the Home page. A
-    # closed (not deleted) workspace would still be listed here.
+    # A closed (not deleted) workspace would still be listed here.
     navigate_to_home_page(page)
     home_page = PlaywrightHomePage(page)
     expect(home_page.get_workspace_rows()).to_have_count(1)
@@ -161,30 +148,23 @@ def test_reopen_closed_workspace_from_list(
     page = sculptor_instance_.page
     layout = PlaywrightProjectLayoutPage(page=page)
 
-    # Step 1: Create two workspaces.
     start_task_and_wait_for_ready(page, prompt="Task A", workspace_name="Closeable WS")
     start_task_and_wait_for_ready(page, prompt="Task B", workspace_name="Remaining WS")
 
-    # Step 2: Verify both workspace tabs exist.
     workspace_tabs = layout.get_workspace_tabs()
     expect(workspace_tabs).to_have_count(2)
 
-    # Step 3: Close the first workspace tab.
     layout.close_workspace_tab(0)
 
-    # Step 4: Verify tab count drops to 1.
     expect(workspace_tabs).to_have_count(1)
 
-    # Step 5: Navigate to the Home page.
     navigate_to_home_page(page)
 
-    # Step 6: Find the closed workspace in the list and click it.
     home_page = PlaywrightHomePage(page)
     closed_workspace_row = home_page.get_workspace_rows().filter(has_text="Closeable WS")
     expect(closed_workspace_row).to_be_visible()
     closed_workspace_row.click()
 
-    # Step 7: Verify tab count goes back to 2.
     expect(workspace_tabs).to_have_count(2)
 
 
@@ -204,30 +184,23 @@ def test_close_all_workspace_tabs_via_context_menu(
     page = sculptor_instance_.page
     layout = PlaywrightProjectLayoutPage(page=page)
 
-    # Step 1: Create two workspaces.
     start_task_and_wait_for_ready(page, prompt="Task X", workspace_name="WS Alpha")
     start_task_and_wait_for_ready(page, prompt="Task Y", workspace_name="WS Beta")
 
-    # Step 2: Verify both workspace tabs exist.
     workspace_tabs = layout.get_workspace_tabs()
     expect(workspace_tabs).to_have_count(2)
 
-    # Step 3: Right-click one workspace tab to open the context menu.
     workspace_tabs.nth(0).click(button="right")
 
-    # Step 4: Click the 'Close All' item in the context menu.
     close_all_item = layout.get_tab_context_menu_close_all()
     expect(close_all_item).to_be_visible()
     close_all_item.click()
 
-    # Step 5: Verify all workspace tabs are gone.
     expect(workspace_tabs).to_have_count(0)
 
-    # Step 6: Verify the Add Workspace page is shown.
     add_ws_page = PlaywrightAddWorkspacePage(page=page)
     expect(add_ws_page.get_workspace_name_input()).to_be_visible()
 
-    # Step 7: Navigate to the Home page and verify both workspaces still exist.
     navigate_to_home_page(page)
     home_page = PlaywrightHomePage(page)
     expect(home_page.get_workspace_rows()).to_have_count(2)
@@ -248,23 +221,18 @@ def test_close_others_workspace_tabs_via_context_menu(
     page = sculptor_instance_.page
     layout = PlaywrightProjectLayoutPage(page=page)
 
-    # Step 1: Create two workspaces.
     start_task_and_wait_for_ready(page, prompt="Task P", workspace_name="WS First")
     start_task_and_wait_for_ready(page, prompt="Task Q", workspace_name="WS Second")
 
-    # Step 2: Verify both workspace tabs exist.
     workspace_tabs = layout.get_workspace_tabs()
     expect(workspace_tabs).to_have_count(2)
 
-    # Step 3: Right-click the second workspace tab to open the context menu.
     workspace_tabs.nth(1).click(button="right")
 
-    # Step 4: Click the 'Close Others' item in the context menu.
     close_others_item = layout.get_tab_context_menu_close_others()
     expect(close_others_item).to_be_visible()
     close_others_item.click()
 
-    # Step 5: Verify only 1 workspace tab remains.
     expect(workspace_tabs).to_have_count(1)
 
 
@@ -290,20 +258,16 @@ def test_reopen_closed_workspace_from_home_page(
     workspace_tabs = layout.get_workspace_tabs()
     expect(workspace_tabs).to_have_count(2)
 
-    # Close the first workspace tab
     layout.close_workspace_tab(0)
     expect(workspace_tabs).to_have_count(1)
 
-    # Navigate to Home page
     navigate_to_home_page(page)
 
-    # Click the closed workspace in the list
     home_page = PlaywrightHomePage(page)
     closed_workspace_row = home_page.get_workspace_rows().filter(has_text="Home Reopen WS")
     expect(closed_workspace_row).to_be_visible()
     closed_workspace_row.click()
 
-    # Verify tab count goes back to 2
     expect(workspace_tabs).to_have_count(2)
 
 
@@ -332,11 +296,9 @@ def test_closed_workspace_stays_closed(
     workspace_tabs = layout.get_workspace_tabs()
     expect(workspace_tabs).to_have_count(2)
 
-    # Close the first workspace
     layout.close_workspace_tab(0)
     expect(workspace_tabs).to_have_count(1)
 
-    # Reopen from the closed workspaces dropdown
     pill = layout.get_closed_workspaces_pill()
     expect(pill).to_be_visible()
     pill.click()
@@ -346,14 +308,12 @@ def test_closed_workspace_stays_closed(
     row.click()
     expect(workspace_tabs).to_have_count(2)
 
-    # Close it again
     layout.close_workspace_tab(0)
     expect(workspace_tabs).to_have_count(1)
 
     # Wait a moment for any WebSocket updates to arrive
     page.wait_for_timeout(2000)
 
-    # Verify the workspace stays closed — tab count should still be 1
     expect(workspace_tabs).to_have_count(1)
 
 
@@ -384,7 +344,6 @@ def test_close_after_reopen_from_home_page(
     workspace_tabs = layout.get_workspace_tabs()
     expect(workspace_tabs).to_have_count(2)
 
-    # Close both workspaces via context menu "Close All"
     workspace_tabs.nth(0).click(button="right")
     close_all_item = layout.get_tab_context_menu_close_all()
     expect(close_all_item).to_be_visible()
@@ -398,7 +357,6 @@ def test_close_after_reopen_from_home_page(
     add_ws_page = PlaywrightAddWorkspacePage(page=page)
     expect(add_ws_page.get_workspace_name_input()).to_be_visible()
 
-    # Reopen both from the closed workspaces dropdown
     pill = layout.get_closed_workspaces_pill()
     expect(pill).to_be_visible()
     expect(pill).to_contain_text("2")
@@ -417,14 +375,12 @@ def test_close_after_reopen_from_home_page(
     expect(workspace_tabs).to_have_count(2)
     expect(pill).not_to_be_visible()
 
-    # Close one workspace
     layout.close_workspace_tab(0)
     expect(workspace_tabs).to_have_count(1)
 
     # Wait for any out-of-order WebSocket updates to arrive
     page.wait_for_timeout(3000)
 
-    # Verify the workspace stays closed — dropdown path
     expect(workspace_tabs).to_have_count(1)
 
 
@@ -455,14 +411,12 @@ def test_close_after_reopen_from_home(
     workspace_tabs = layout.get_workspace_tabs()
     expect(workspace_tabs).to_have_count(2)
 
-    # Close both workspaces via context menu "Close All"
     workspace_tabs.nth(0).click(button="right")
     close_all_item = layout.get_tab_context_menu_close_all()
     expect(close_all_item).to_be_visible()
     close_all_item.click()
     expect(workspace_tabs).to_have_count(0)
 
-    # Reopen the first workspace from the Home page
     navigate_to_home_page(page)
     home_page = PlaywrightHomePage(page)
     first_row = home_page.get_workspace_rows().filter(has_text="Home Close A")
@@ -470,21 +424,18 @@ def test_close_after_reopen_from_home(
     first_row.click()
     expect(workspace_tabs).to_have_count(1)
 
-    # Reopen the second workspace from the Home page
     navigate_to_home_page(page)
     second_row = home_page.get_workspace_rows().filter(has_text="Home Close B")
     expect(second_row).to_be_visible()
     second_row.click()
     expect(workspace_tabs).to_have_count(2)
 
-    # Close one workspace
     layout.close_workspace_tab(0)
     expect(workspace_tabs).to_have_count(1)
 
     # Wait for any out-of-order WebSocket updates to arrive
     page.wait_for_timeout(3000)
 
-    # Verify the workspace stays closed — Home page path
     expect(workspace_tabs).to_have_count(1)
 
 
@@ -517,7 +468,6 @@ def test_localstorage_migration_preserves_closed_state(
     workspace_tabs = layout.get_workspace_tabs()
     expect(workspace_tabs).to_have_count(2)
 
-    # Get workspace IDs from tab elements
     open_ws_id = workspace_tabs.nth(0).get_attribute("data-tab-id")
     closed_ws_id = workspace_tabs.nth(1).get_attribute("data-tab-id")
     assert open_ws_id is not None
@@ -547,6 +497,5 @@ def test_localstorage_migration_preserves_closed_state(
     expect(pill).to_be_visible()
     expect(pill).to_contain_text("1")
 
-    # The old localStorage key should have been deleted
     old_key = get_local_storage_item(page, "sculptor-open-workspace-tab-ids")
     assert old_key is None, f"Old localStorage key should have been deleted, but found: {old_key}"

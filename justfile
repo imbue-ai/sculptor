@@ -1086,8 +1086,10 @@ package-desktop-installer:
     just unmount-dmg
     {{ nvm_use }}
     cd "{{justfile_directory()}}/sculptor/frontend"
-    # HACK: build with production vars so the shipped installer doesn't carry a dev/testing sentry dsn
-    eval $(uv run --project sculptor builder setup-build-vars production) && npm run electron:make
+    # Telemetry env baked into the installer. Defaults to production so a bare
+    # `just pkg` never ships a dev DSN; CI sets SCULPTOR_BUILD_ENV=dev for
+    # non-release builds.
+    eval "$(uv run --project sculptor builder setup-build-vars "${SCULPTOR_BUILD_ENV:-production}")" && npm run electron:make
     mkdir -p "{{justfile_directory()}}/dist"
     cp -r out/make/zip "{{justfile_directory()}}/dist"
     cp out/make/Sculptor.dmg "{{justfile_directory()}}/dist"
@@ -1216,7 +1218,10 @@ package-desktop-installer:
       aarch64|arm64) ELECTRON_ARCH="arm64" ;;
       *)             ELECTRON_ARCH="x64" ;;
     esac
-    npm run electron:make
+    # Inject the telemetry env before packaging, like the macOS recipe; without
+    # it the renderer bakes an empty DSN. Defaults to production; CI sets
+    # SCULPTOR_BUILD_ENV=dev for non-release builds.
+    eval "$(uv run --project sculptor builder setup-build-vars "${SCULPTOR_BUILD_ENV:-production}")" && npm run electron:make
 
     # The AppImage maker includes the version in the filename.
     # Rename the file to remove the version for consistent filenames.

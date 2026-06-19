@@ -44,11 +44,6 @@ _MAX_FIRST_TURN_SECONDS = 15
 _MIN_BG_WAIT_SECONDS = 15
 
 
-# ---------------------------------------------------------------------------
-# Agent tool background task waits for completion
-# ---------------------------------------------------------------------------
-
-
 @real_claude
 @pytest.mark.timeout(300)
 def test_agent_background_task_completes(sculptor_instance_: SculptorInstance) -> None:
@@ -96,11 +91,6 @@ def test_agent_background_task_completes(sculptor_instance_: SculptorInstance) -
         + f"{len(notifications)} notifications received. "
         + f"Started: {started}, Notifications: {notifications}"
     )
-
-
-# ---------------------------------------------------------------------------
-# Bash tool background task waits for completion
-# ---------------------------------------------------------------------------
 
 
 @real_claude
@@ -157,11 +147,6 @@ def test_bash_background_task_completes(sculptor_instance_: SculptorInstance) ->
     assert_no_errors(chat_panel)
 
 
-# ---------------------------------------------------------------------------
-# Bash background task is not killed by process shutdown
-# ---------------------------------------------------------------------------
-
-
 @real_claude
 @pytest.mark.timeout(300)
 def test_bash_background_task_not_killed(sculptor_instance_: SculptorInstance) -> None:
@@ -207,11 +192,6 @@ def test_bash_background_task_not_killed(sculptor_instance_: SculptorInstance) -
     # Also verify the agent received the completion notification
     assert_any_message_contains(chat_panel, "BG-NOTIFICATION-RECEIVED-49201")
     assert_no_errors(chat_panel)
-
-
-# ---------------------------------------------------------------------------
-# ThinkingIndicator stays visible during background Bash task
-# ---------------------------------------------------------------------------
 
 
 @real_claude
@@ -260,11 +240,6 @@ def test_thinking_indicator_visible_during_background_bash(sculptor_instance_: S
     assert_no_errors(chat_panel)
 
 
-# ---------------------------------------------------------------------------
-# Interrupt during background Agent task
-# ---------------------------------------------------------------------------
-
-
 @real_claude
 @pytest.mark.timeout(300)
 def test_interrupt_during_background_agent_task(sculptor_instance_: SculptorInstance) -> None:
@@ -291,11 +266,6 @@ def test_interrupt_during_background_agent_task(sculptor_instance_: SculptorInst
     # Verify recovery
     send_and_wait(chat_panel, "Reply with exactly: BG-AGENT-INTERRUPT-RECOVERED-52018")
     assert_last_message_contains(chat_panel, "BG-AGENT-INTERRUPT-RECOVERED-52018")
-
-
-# ---------------------------------------------------------------------------
-# Interrupt during background Bash task
-# ---------------------------------------------------------------------------
 
 
 @real_claude
@@ -332,11 +302,6 @@ def test_interrupt_during_background_bash_task(sculptor_instance_: SculptorInsta
     # Verify recovery (works whether we interrupted or agent finished naturally)
     send_and_wait(chat_panel, "Reply with exactly: BG-BASH-INTERRUPT-RECOVERED-38201")
     assert_last_message_contains(chat_panel, "BG-BASH-INTERRUPT-RECOVERED-38201")
-
-
-# ---------------------------------------------------------------------------
-# Post-notification assistant message is delivered to the UI
-# ---------------------------------------------------------------------------
 
 
 @real_claude
@@ -386,11 +351,6 @@ def test_post_notification_message_delivered(sculptor_instance_: SculptorInstanc
     assert_no_errors(chat_panel)
 
 
-# ---------------------------------------------------------------------------
-# Follow-up message after background task completes
-# ---------------------------------------------------------------------------
-
-
 @real_claude
 @pytest.mark.timeout(300)
 def test_follow_up_after_background_task(sculptor_instance_: SculptorInstance) -> None:
@@ -424,11 +384,6 @@ def test_follow_up_after_background_task(sculptor_instance_: SculptorInstance) -
         "What code did I ask you to remember? Reply starting with RECALL-DELTA:",
     )
     assert_last_message_contains(chat_panel, "ANCHOR-DELTA-77301")
-
-
-# ---------------------------------------------------------------------------
-# Background subagent pill stops ticking once the subagent finishes
-# ---------------------------------------------------------------------------
 
 
 @real_claude

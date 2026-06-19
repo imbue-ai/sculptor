@@ -58,8 +58,7 @@ def test_multiple_agent_tabs_shown_for_shared_workspace(
 ) -> None:
     """Create a workspace and add a second agent. Verify 2 agent tabs exist.
 
-    This is the workspace-tabs equivalent of the old workspace badge test:
-    instead of badges, the number of agent tabs indicates workspace sharing.
+    The number of agent tabs indicates workspace sharing.
     """
     page = sculptor_instance_.page
     task_page = PlaywrightTaskPage(page=page)
@@ -81,10 +80,7 @@ def test_multiple_agent_tabs_shown_for_shared_workspace(
 def test_single_agent_shows_one_agent_tab(
     sculptor_instance_: SculptorInstance,
 ) -> None:
-    """Create a workspace with a single agent. Verify exactly 1 agent tab.
-
-    This is the workspace-tabs equivalent of the old "no badge for single task" test.
-    """
+    """Create a workspace with a single agent. Verify exactly 1 agent tab."""
     page = sculptor_instance_.page
     task_page = PlaywrightTaskPage(page=page)
     agent_tab_bar = task_page.get_agent_tab_bar()

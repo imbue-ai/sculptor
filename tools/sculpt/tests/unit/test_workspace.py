@@ -69,6 +69,8 @@ def _workspace_response_dict(
     description: str = "Test workspace",
     strategy: str = "CLONE",
     source_branch: str | None = "main",
+    target_branch: str | None = None,
+    requested_branch_name: str | None = None,
 ) -> dict[str, Any]:
     return {
         "objectId": object_id,
@@ -76,8 +78,8 @@ def _workspace_response_dict(
         "description": description,
         "initializationStrategy": strategy,
         "sourceBranch": source_branch,
-        "targetBranch": None,
-        "requestedBranchName": None,
+        "targetBranch": target_branch,
+        "requestedBranchName": requested_branch_name,
         "environmentId": None,
         "isDeleted": False,
         "isOpen": True,
@@ -319,6 +321,34 @@ class TestWorkspaceList:
 
         assert result.exit_code == 0
         assert "ws_test123" in result.output
+
+    @respx.mock
+    def test_list_scoped_json_exposes_stack_fields(self, runner: CliRunner) -> None:
+        """The per-project list surfaces target_branch and requested_branch_name
+        so callers (e.g. the restack skill) can reconstruct the stack graph."""
+        _mock_session()
+        _mock_initialize_project()
+        respx.get("http://localhost:5050/api/v1/projects/prj_test123/workspaces").mock(
+            return_value=Response(
+                200,
+                json=[
+                    _workspace_response_dict(
+                        strategy="WORKTREE",
+                        source_branch="parent-branch",
+                        target_branch="parent-branch",
+                        requested_branch_name="child-branch",
+                    )
+                ],
+            )
+        )
+
+        result = runner.invoke(app, ["workspace", "list", "--repo", "/tmp/test", "--json"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert len(data) == 1
+        assert data[0]["target_branch"] == "parent-branch"
+        assert data[0]["requested_branch_name"] == "child-branch"
 
     @respx.mock
     def test_list_all_json(self, runner: CliRunner) -> None:

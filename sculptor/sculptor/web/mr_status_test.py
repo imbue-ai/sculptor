@@ -54,11 +54,6 @@ def _empty_pipeline_and_details(cmd, _working_dir):  # noqa: ANN001
     return _make_finished("[]")
 
 
-# ---------------------------------------------------------------------------
-# Open MR with matching target → normal open status
-# ---------------------------------------------------------------------------
-
-
 def test_open_mr_matching_target() -> None:
     mr = _open_mr(100, target_branch="main")
 
@@ -75,11 +70,6 @@ def test_open_mr_matching_target() -> None:
     assert result.pr_state == "open"
     assert result.pr_iid == 100
     assert result.mismatched_pr_iid is None
-
-
-# ---------------------------------------------------------------------------
-# Open MR with mismatched target → pr_state=none + mismatch fields
-# ---------------------------------------------------------------------------
 
 
 def test_open_mr_mismatched_target() -> None:
@@ -99,11 +89,6 @@ def test_open_mr_mismatched_target() -> None:
     assert result.mismatched_pr_web_url == "https://gitlab.com/project/-/merge_requests/200"
 
 
-# ---------------------------------------------------------------------------
-# No MRs at all → pr_state=none, no mismatch
-# ---------------------------------------------------------------------------
-
-
 def test_no_mrs_at_all() -> None:
     def cli_handler(cmd, _working_dir):  # noqa: ANN001
         return _make_finished("[]")
@@ -113,11 +98,6 @@ def test_no_mrs_at_all() -> None:
 
     assert result.pr_state == "none"
     assert result.mismatched_pr_iid is None
-
-
-# ---------------------------------------------------------------------------
-# Merged MR with matching target → pr_state=merged
-# ---------------------------------------------------------------------------
 
 
 def test_merged_mr_matching_target() -> None:
@@ -136,11 +116,6 @@ def test_merged_mr_matching_target() -> None:
     assert result.pr_state == "merged"
     assert result.pr_iid == 300
     assert result.mismatched_pr_iid is None
-
-
-# ---------------------------------------------------------------------------
-# Multiple open MRs, one matches target → normal open status
-# ---------------------------------------------------------------------------
 
 
 def test_multiple_open_mrs_one_matches() -> None:
@@ -164,11 +139,6 @@ def test_multiple_open_mrs_one_matches() -> None:
     assert result.mismatched_pr_iid is None
 
 
-# ---------------------------------------------------------------------------
-# Multiple open MRs, none match target → mismatch with first
-# ---------------------------------------------------------------------------
-
-
 def test_multiple_open_mrs_none_match() -> None:
     mrs = [
         _open_mr(500, target_branch="develop"),
@@ -188,11 +158,6 @@ def test_multiple_open_mrs_none_match() -> None:
     assert result.mismatched_pr_target_branch == "develop"
 
 
-# ---------------------------------------------------------------------------
-# origin/ prefix is stripped from target branch
-# ---------------------------------------------------------------------------
-
-
 def test_origin_prefix_stripped() -> None:
     mr = _open_mr(600, target_branch="main")
 
@@ -208,11 +173,6 @@ def test_origin_prefix_stripped() -> None:
 
     assert result.pr_state == "open"
     assert result.pr_iid == 600
-
-
-# ---------------------------------------------------------------------------
-# Open MR with has_conflicts → flag flows through to PrStatusInfo
-# ---------------------------------------------------------------------------
 
 
 def test_open_mr_has_conflicts_flag_flows_through() -> None:
@@ -231,11 +191,6 @@ def test_open_mr_has_conflicts_flag_flows_through() -> None:
 
     assert result.pr_state == "open"
     assert result.has_conflicts is True
-
-
-# ---------------------------------------------------------------------------
-# Closed-not-merged MR with matching target → pr_state=closed
-# ---------------------------------------------------------------------------
 
 
 def test_closed_mr_matching_target() -> None:

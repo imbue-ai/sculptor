@@ -187,7 +187,6 @@ def test_history_panel_refreshes_on_target_branch_change(sculptor_instance_: Scu
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2, timeout=60_000)
 
-    # Open the History tab
     task_page.activate_history_panel()
     history_panel = task_page.get_history_panel()
     expect(history_panel).to_be_visible()
@@ -259,7 +258,6 @@ def test_terminus_shows_fork_point_hash(sculptor_instance_: SculptorInstance) ->
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2, timeout=60_000)
 
-    # Open History tab
     task_page.activate_history_panel()
     history_panel = task_page.get_history_panel()
     expect(history_panel).to_be_visible()
@@ -285,7 +283,6 @@ def test_terminus_visible_with_no_commits(sculptor_instance_: SculptorInstance) 
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2, timeout=60_000)
 
-    # Open History tab
     task_page.activate_history_panel()
     history_panel = task_page.get_history_panel()
     expect(history_panel).to_be_visible()
@@ -375,7 +372,6 @@ def test_merge_commit_shows_spur(sculptor_instance_: SculptorInstance) -> None:
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2, timeout=60_000)
 
-    # Open History tab
     task_page.activate_history_panel()
     history_panel = task_page.get_history_panel()
     expect(history_panel).to_be_visible()
@@ -407,7 +403,6 @@ def test_commit_entry_shows_metadata_line(sculptor_instance_: SculptorInstance) 
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2, timeout=60_000)
 
-    # Open History tab
     task_page.activate_history_panel()
     history_panel = task_page.get_history_panel()
     expect(history_panel).to_be_visible()
@@ -435,7 +430,6 @@ def test_commit_hover_popover_shows_details(sculptor_instance_: SculptorInstance
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2, timeout=60_000)
 
-    # Open History tab
     task_page.activate_history_panel()
     history_panel = task_page.get_history_panel()
     expect(history_panel).to_be_visible()
@@ -466,7 +460,6 @@ def test_click_dismisses_popover(sculptor_instance_: SculptorInstance) -> None:
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2, timeout=60_000)
 
-    # Open History tab
     task_page.activate_history_panel()
     history_panel = task_page.get_history_panel()
     expect(history_panel).to_be_visible()
@@ -520,7 +513,6 @@ def test_folder_rename_shows_correct_paths(sculptor_instance_: SculptorInstance)
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    # Open History tab
     task_page.activate_history_panel()
     history_panel = task_page.get_history_panel()
     expect(history_panel).to_be_visible()
@@ -572,7 +564,6 @@ def test_clicking_renamed_file_in_commits_shows_rename_banner(sculptor_instance_
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    # Open History tab
     task_page.activate_history_panel()
     history_panel = task_page.get_history_panel()
     expect(history_panel).to_be_visible()

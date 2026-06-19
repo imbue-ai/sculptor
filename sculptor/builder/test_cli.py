@@ -22,7 +22,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
         ("0.1.2rc1", "sculptor-v0.1.2rc1", True),
         ("0.1.2", "sculptor-v0.1.2", True),
         ("0.1.2rc1", "sculptor-v0.1.2.rc1", True),  # PEP 440-normalized equality
-        ("0.34.0.dev0", "sculptor-v0.0.99rc1", False),  # the bug we hit: dev on a tag
+        ("0.34.0.dev0", "sculptor-v0.0.99rc1", False),  # dev on a tag
         ("0.34.0.dev0", "sculptor-v0.34.0.dev0", False),  # dev version, even if it matches
         ("0.1.3", "sculptor-v0.1.2", False),  # mismatch
         ("0.1.2", "sculptor-vNOTAVERSION", False),  # unparseable tag

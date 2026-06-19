@@ -9,7 +9,7 @@ Two tests:
   1. Single-mention round-trip — the draft re-renders as a chip, not as
      literal ``+[type:id|display_name]`` text.
   2. Multi-paragraph round-trip — both mentions hydrate after the cross-
-     paragraph hydration fix (commit ``e0fa91faa9c``), not just the first.
+     paragraph hydration fix, not just the first.
      The hydration walk scans every text node and applies replacements in
      descending position order so earlier indices stay valid.
 """

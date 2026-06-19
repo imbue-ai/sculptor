@@ -30,17 +30,13 @@ def test_settings_opens_as_tab(
     page = sculptor_instance_.page
     layout = PlaywrightProjectLayoutPage(page=page)
 
-    # Step 1: Create a workspace.
     start_task_and_wait_for_ready(page, prompt="Settings test", workspace_name="Settings WS")
 
-    # Step 2: Click the settings button.
     layout.get_settings_button().click()
 
-    # Step 3: Verify a Settings tab appears.
     settings_tab = layout.get_settings_tab()
     expect(settings_tab).to_be_visible()
 
-    # Step 4: Verify the Settings tab is active.
     expect(settings_tab).to_have_attribute("aria-selected", "true")
 
 
@@ -60,16 +56,12 @@ def test_settings_tab_is_closeable(
     page = sculptor_instance_.page
     layout = PlaywrightProjectLayoutPage(page=page)
 
-    # Step 1: Create a workspace.
     start_task_and_wait_for_ready(page, prompt="Close settings test", workspace_name="Close WS")
 
-    # Step 2: Open Settings tab.
     layout.open_settings_tab()
 
-    # Step 3: Click the close button on the Settings tab.
     layout.close_settings_tab()
 
-    # Step 4: Verify the Settings tab disappears.
     expect(layout.get_settings_tab()).to_have_count(0)
 
     # Step 5: Verify at least one workspace tab is active (the close action
@@ -94,16 +86,12 @@ def test_settings_tab_singleton(
     page = sculptor_instance_.page
     layout = PlaywrightProjectLayoutPage(page=page)
 
-    # Step 1: Create a workspace.
     start_task_and_wait_for_ready(page, prompt="Singleton test", workspace_name="Singleton WS")
 
-    # Step 2: Open Settings tab.
     layout.open_settings_tab()
 
-    # Step 3: Click the settings button again.
     layout.get_settings_button().click()
 
-    # Step 4: Verify there is still only one Settings tab.
     expect(layout.get_settings_tab()).to_have_count(1)
 
 
@@ -123,19 +111,14 @@ def test_settings_tab_context_menu_no_rename_or_delete(
     page = sculptor_instance_.page
     layout = PlaywrightProjectLayoutPage(page=page)
 
-    # Step 1: Create a workspace and open Settings.
     start_task_and_wait_for_ready(page, prompt="Menu test", workspace_name="Menu WS")
 
     settings_tab = layout.open_settings_tab()
 
-    # Step 2: Right-click the Settings tab.
     settings_tab.click(button="right")
 
-    # Step 3: Verify Close is visible.
     expect(layout.get_tab_context_menu_close()).to_be_visible()
 
-    # Step 4: Verify Rename is not present.
     expect(layout.get_tab_context_menu_rename()).to_have_count(0)
 
-    # Step 5: Verify Delete is not present.
     expect(layout.get_tab_context_menu_delete()).to_have_count(0)

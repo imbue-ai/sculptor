@@ -29,7 +29,6 @@ class FrozenDict(dict[T, TV], FrozenMapping[T, TV]):
 
     @cached_property
     def _hash(self) -> int:
-        # hashing the frozenset of items is fine
         return hash(self._key())
 
     def __hash__(self) -> int:  # type: ignore

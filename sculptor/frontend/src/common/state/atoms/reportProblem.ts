@@ -134,6 +134,19 @@ export const submitReportAtom: WritableAtom<null, [], Promise<void>> = atom(null
   const userEmail = get(userEmailAtom);
   const userFullName = get(userFullNameAtom);
 
+  // With no Sentry DSN there's no client, so captureFeedback would no-op yet
+  // still return an id — making the report look sent. Fail before uploading
+  // diagnostics for a report that can't be delivered.
+  if (Sentry.getClient() === undefined) {
+    set(updateReportProblemAtom, {
+      submitState: {
+        type: "error",
+        message: "Bug reporting isn't configured in this build, so the report couldn't be sent.",
+      },
+    });
+    return;
+  }
+
   let reportId: string | null = null;
   let s3Url: string | null = null;
   let didDiagnosticsFail = false;

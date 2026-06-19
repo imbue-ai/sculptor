@@ -213,7 +213,7 @@ def test_multiple_new_workspace_tabs_with_independent_drafts(
 
     all_tabs = add_ws_page.get_add_workspace_tabs()
     initial_tab_count = all_tabs.count()
-    first_tab_index = initial_tab_count - 1  # the current (last) tab
+    first_tab_index = initial_tab_count - 1
 
     first_workspace_name = "First Draft Workspace"
 
@@ -351,11 +351,6 @@ def test_create_workspace_without_prompt(
 
     # Step 5: Verify the agent responds (1 user message + 1 assistant response).
     wait_for_completed_message_count(chat_panel, expected_message_count=2)
-
-
-# ---------------------------------------------------------------------------
-# Focus management tests
-# ---------------------------------------------------------------------------
 
 
 @user_story("to start typing immediately after creating a workspace")
@@ -563,11 +558,6 @@ def test_cmd_enter_in_repo_autocomplete_does_not_create_workspace(
 
     # Confirm we are still on the New Workspace page (no navigation happened).
     expect(chat_panel).not_to_be_visible()
-
-
-# ---------------------------------------------------------------------------
-# Workspace cleanup on project deletion
-# ---------------------------------------------------------------------------
 
 
 def _extract_workspace_id(url: str) -> str:

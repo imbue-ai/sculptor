@@ -169,7 +169,7 @@ let config = {
         { entry: "src/preload.ts", config: "vite.preload.config.ts" },
       ],
       // Renderer process configuration (the web UI part of the app)
-      renderer: [{ name: "main_window", config: "vite.renderer.config.ts" }],
+      renderer: [{ name: "main_window", config: "vite.electron.config.ts" }],
     }),
 
     // Fuses plugin for security hardening - disables potentially dangerous features

@@ -33,7 +33,6 @@ def test_workspace_peek_popover_idle_state(
     page = sculptor_instance_.page
     layout = PlaywrightProjectLayoutPage(page=page)
 
-    # Create a workspace with a simple task that completes immediately
     start_task_and_wait_for_ready(
         page,
         prompt='fake_claude:text `{"text": "All done!"}`',
@@ -43,21 +42,17 @@ def test_workspace_peek_popover_idle_state(
     # Navigate away so we can hover over the workspace tab
     navigate_to_add_workspace_page(page)
 
-    # Hover over the workspace tab to trigger the popover
     workspace_tab = layout.get_workspace_tabs().first
     workspace_tab.hover()
 
-    # Verify the popover appears
     peek = layout.get_workspace_peek_popover()
     expect(peek).to_be_visible()
 
-    # Verify header shows workspace name
     expect(peek.get_header()).to_contain_text("Idle WS")
 
     # No alert banner for idle state
     expect(peek.get_banner()).to_be_hidden()
 
-    # Verify at least one agent row is present
     expect(peek.get_agent_rows().first).to_be_visible()
 
 
@@ -95,25 +90,20 @@ fake_claude:ask_user_question `{
         wait_for_agent_to_finish=False,
     )
 
-    # Verify the Q&A panel is showing (agent is in waiting state)
     auq_panel = get_ask_user_question_panel(page)
     expect(auq_panel).to_be_visible(timeout=30_000)
 
     # Navigate away so we can hover over the workspace tab
     navigate_to_add_workspace_page(page)
 
-    # Hover over the workspace tab to trigger the popover
     workspace_tab = layout.get_workspace_tabs().first
     workspace_tab.hover()
 
-    # Verify the popover appears
     peek = layout.get_workspace_peek_popover()
     expect(peek).to_be_visible()
 
-    # Verify header shows workspace name
     expect(peek.get_header()).to_contain_text("Waiting WS")
 
-    # Verify orange banner shows waiting message
     expect(peek.get_banner()).to_be_visible()
     expect(peek.get_banner()).to_contain_text("needs your input")
 
@@ -128,7 +118,6 @@ def test_workspace_peek_popover_hover_mechanics(
     page = sculptor_instance_.page
     layout = PlaywrightProjectLayoutPage(page=page)
 
-    # Create a workspace with a completed task
     start_task_and_wait_for_ready(
         page,
         prompt='fake_claude:text `{"text": "Done"}`',
@@ -141,18 +130,14 @@ def test_workspace_peek_popover_hover_mechanics(
     workspace_tab = layout.get_workspace_tabs().first
     peek = layout.get_workspace_peek_popover()
 
-    # Initially the popover should not be visible
     expect(peek).to_be_hidden()
 
-    # Hover over the tab — popover should appear
     workspace_tab.hover()
     expect(peek).to_be_visible()
 
-    # Verify all popover sections are present
     expect(peek.get_header()).to_be_visible()
     expect(peek.get_agent_rows().first).to_be_visible()
 
-    # Move mouse away from the tab — popover should dismiss.
     # Move to the top-left corner which is far from the tab.
     page.mouse.move(0, 0)
     expect(peek).to_be_hidden()
@@ -191,7 +176,6 @@ def test_workspace_peek_popover_on_scrolled_tab(
     ws1_tab.scroll_into_view_if_needed()
     ws1_tab.hover()
 
-    # The peek popover should appear
     peek = layout.get_workspace_peek_popover()
     expect(peek).to_be_visible()
 
@@ -254,7 +238,6 @@ def test_workspace_peek_waiting_overrides_running_in_banner(
     # Navigate away so the workspace tab is hoverable
     navigate_to_add_workspace_page(page)
 
-    # Hover over the workspace tab to trigger the popover
     workspace_tab = task_page.get_workspace_tabs().first
     workspace_tab.hover()
 
@@ -280,16 +263,13 @@ def test_peek_popover_shows_diff_stats(sculptor_instance_: SculptorInstance) -> 
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    # Hover over the workspace tab in the tab bar to trigger the peek popover
     workspace_tab = task_page.get_workspace_tabs().first
     expect(workspace_tab).to_be_visible()
     workspace_tab.hover()
 
-    # The popover should appear with diff stats
     peek = task_page.get_workspace_peek_popover()
     expect(peek).to_be_visible()
 
-    # The footer should show diff additions
     footer = peek.get_footer()
     expect(footer).to_be_visible()
     expect(footer).to_contain_text("+")

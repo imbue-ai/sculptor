@@ -39,7 +39,8 @@ export default tseslint.config(
       "src/quarantine/**",
       "src/views/tasks_deprecated/**",
       "tailwind.config.js",
-      "vite.config.ts",
+      "vite.base.config.ts",
+      "vite.web.config.ts",
       "out/**",
       "storybook-static/**",
       // Built plugin output sits in public/ and is not part of the host's TS

@@ -109,7 +109,7 @@ def test_log_exception() -> None:
             x = 1 / 0
         except Exception as e:
             log_exception(e, "Test log_exception")
-            assert True  # If we reach here, the test passes
+            assert True
         else:
             assert False, "log_exception did not raise an exception"
 
@@ -121,7 +121,7 @@ def test_log_exception_with_priority() -> None:
             x = 1 / 0
         except Exception as e:
             log_exception(e, "Test log_exception", priority=ExceptionPriority.LOW_PRIORITY)
-            assert True  # If we reach here, the test passes
+            assert True
         else:
             assert False, "log_exception did not raise an exception"
 

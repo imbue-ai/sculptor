@@ -6,9 +6,12 @@ on:
   push:
     branches: [main]
 
-# Offload runs cost real Modal time, so let runs finish.
+# Offload runs cost real Modal time, so never cancel a run. Key on github.ref so
+# every main push shares one group and serializes; each PR (refs/pull/N/merge)
+# keeps its own group. Do NOT key on head_ref -- it is empty on push, so main
+# would collapse to a unique run_id and never queue.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -61,8 +64,10 @@ jobs:
 
       - name: Install system packages
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends rsync jq unzip ca-certificates
+          # Retry/timeout-harden apt against transient mirror stalls (SCU-1545).
+          APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y --no-install-recommends rsync jq unzip ca-certificates
 
       - name: Install Vault CLI
         # Matches the GitLab pipeline's pinned version + sha. Installing
@@ -208,8 +213,10 @@ jobs:
 
       - name: Install system packages
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends rsync jq unzip ca-certificates
+          # Retry/timeout-harden apt against transient mirror stalls (SCU-1545).
+          APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y --no-install-recommends rsync jq unzip ca-certificates
 
       - name: Install Vault CLI
         run: |

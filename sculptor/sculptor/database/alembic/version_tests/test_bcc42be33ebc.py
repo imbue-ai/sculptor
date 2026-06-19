@@ -20,7 +20,6 @@ class TestBackfillTargetBranchDefault(MigrationTestFixture):
         return "eedceaef0697"
 
     def seed(self, connection: sa.engine.Connection) -> None:
-        # Insert a project
         connection.execute(
             sa.text("""
                 INSERT INTO project_latest (

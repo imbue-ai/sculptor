@@ -24,10 +24,6 @@ from sculptor.testing.user_stories import user_story
 # Mark for tests that hit external services (download from the internet, etc.)
 external_deps = pytest.mark.external_deps
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 
 def _populate_with_custom_mode(path: Path) -> None:
     """Write a config with dependency_paths.claude=claude so the instance uses custom mode.
@@ -68,11 +64,6 @@ def _delete_managed_claude_cache(sculptor_folder: Path) -> None:
     claude_dir = sculptor_folder / "internal" / DEPENDENCIES_DIR_NAME / "claude"
     if claude_dir.exists():
         shutil.rmtree(claude_dir)
-
-
-# ---------------------------------------------------------------------------
-# Settings section tests
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.release
@@ -208,11 +199,6 @@ def test_settings_git_section_visible(sculptor_instance_: SculptorInstance) -> N
     expect(git_status).to_contain_text("Installed")
 
 
-# ---------------------------------------------------------------------------
-# Onboarding tests
-# ---------------------------------------------------------------------------
-
-
 @user_story("to see that Claude is not found during onboarding and can use a custom path")
 @custom_sculptor_folder_populator.with_args(_populate_with_custom_mode)
 @stub_dependency("claude", state=DependencyState.NOT_INSTALLED)
@@ -299,10 +285,6 @@ def test_onboarding_claude_override_invalid_path(sculptor_instance_factory_: Scu
         expect(error).to_be_visible()
         expect(error).to_contain_text("No executable found")
 
-
-# ---------------------------------------------------------------------------
-# Real installation tests (require internet access)
-# ---------------------------------------------------------------------------
 
 INSTALL_TIMEOUT_MS = 120_000
 

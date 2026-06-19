@@ -20,7 +20,6 @@ class TestAddLastReadAtToTask(MigrationTestFixture):
         return "8522ec5edc2a"
 
     def seed(self, connection: sa.engine.Connection) -> None:
-        # Insert a project
         connection.execute(
             sa.text("""
                 INSERT INTO project_latest (
@@ -35,7 +34,6 @@ class TestAddLastReadAtToTask(MigrationTestFixture):
             {"project_id": PROJECT_ID},
         )
 
-        # Insert a task
         input_data = json.dumps(
             {
                 "object_type": "AgentTaskInputsV2",
@@ -86,11 +84,9 @@ class TestAddLastReadAtToTask(MigrationTestFixture):
         )
 
     def verify(self, connection: sa.engine.Connection) -> None:
-        # Check last_read_at column exists on task
         task_columns = {row[1] for row in connection.execute(sa.text("PRAGMA table_info(task)"))}
         assert "last_read_at" in task_columns, "last_read_at column not found in task"
 
-        # Check last_read_at column exists on task_latest
         task_latest_columns = {row[1] for row in connection.execute(sa.text("PRAGMA table_info(task_latest)"))}
         assert "last_read_at" in task_latest_columns, "last_read_at column not found in task_latest"
 

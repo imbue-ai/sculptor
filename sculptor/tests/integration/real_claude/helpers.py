@@ -287,11 +287,6 @@ def assert_has_completed_tool_calls(chat_panel: PlaywrightChatPanelElement, min_
         expect(combined).to_have_count(min_count, timeout=RESPONSE_TIMEOUT_MS)
 
 
-# ---------------------------------------------------------------------------
-# Transcript file helpers
-# ---------------------------------------------------------------------------
-
-
 def _extract_workspace_id(url: str) -> str:
     """Extract workspace ID from a Sculptor task page URL."""
     match = re.search(r"/ws/([a-zA-Z0-9_-]+)/", url)

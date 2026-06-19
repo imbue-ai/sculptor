@@ -1,5 +1,5 @@
 {
   "name": "sculptor-experimental",
-  "description": "Experimental Sculptor skills built on the sculpt CLI: stack, handoff",
+  "description": "Experimental Sculptor skills built on the sculpt CLI: stack, restack, handoff",
   "version": "0.1.0"
 }

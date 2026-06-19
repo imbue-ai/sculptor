@@ -251,7 +251,6 @@ def normalize_diff(diff: str | None) -> str | None:
     # and replaces with "index 0000000..0000000 100644"
     diff = re.sub(r"index [0-9a-f]+\.\.[0-9a-f]+", "index 0000000..0000000", diff)
 
-    # For new files: "index 0000000000..b47864eced" -> "index 0000000..0000000"
     diff = re.sub(r"index [0-9a-f]+\.\.[0-9a-f]+", "index 0000000..0000000", diff)
 
     return diff
@@ -304,7 +303,6 @@ index 0000000..0000000
 
 def test_no_newline_at_end_of_file(test_root_concurrency_group: ConcurrencyGroup) -> None:
     """Test handling files without newline at end."""
-    # Adding newline to file without one
     result = create_unified_diff(
         "no_newline.txt", "Line without newline", "Line without newline\n", test_root_concurrency_group
     )

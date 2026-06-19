@@ -234,7 +234,6 @@ def test_fetch_agent_state_skips_null_message() -> None:
         task_views={task_id: _make_task_view(task_id=task_id)},
         task_updates={task_id: {"chatMessages": [{"role": "user", "content": "hi"}]}},
     )
-    # Server sends "null" first, then the real dump
     shutdown_event = threading.Event()
     ready_event = threading.Event()
     server_info: dict[str, Any] = {}

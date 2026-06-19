@@ -54,10 +54,8 @@ def test_post_compaction_message_appears_after_context_summary(sculptor_instance
 
     messages = chat_panel.get_messages()
 
-    # Message 0: user message
     expect_message_to_have_role(message=messages.nth(0), role=ElementIDs.USER_MESSAGE)
 
-    # Message 1: pre-compaction assistant message
     expect_message_to_have_role(message=messages.nth(1), role=ElementIDs.ASSISTANT_MESSAGE)
     expect(messages.nth(1)).to_contain_text("Pre-compaction content")
 

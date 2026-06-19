@@ -180,8 +180,8 @@ guide for property shapes.
 
 | Variable | Set in | Used by |
 |---|---|---|
-| `SCULPTOR_FRONTEND_POSTHOG_TOKEN` | `sculptor/builder/cli.py::setup_build_vars` | `vite.renderer.config.ts` `define` block |
-| `SCULPTOR_FRONTEND_POSTHOG_HOST` | `sculptor/builder/cli.py::setup_build_vars` | `vite.renderer.config.ts` `define` block |
+| `SCULPTOR_FRONTEND_POSTHOG_TOKEN` | `sculptor/builder/cli.py::setup_build_vars` | `vite.electron.config.ts` `define` block |
+| `SCULPTOR_FRONTEND_POSTHOG_HOST` | `sculptor/builder/cli.py::setup_build_vars` | `vite.electron.config.ts` `define` block |
 
 Token values are sourced from `sculptor/sculptor/posthog_settings.py`. The
 production value is shipped in built distributions; dev and testing values

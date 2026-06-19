@@ -58,10 +58,7 @@ from sculptor.testing.test_repo_factory import TestRepoFactory
 # Timeout for the initial SPA render after server startup (shared + factory instances).
 # Longer than the default 30s to allow headroom for cold Electron starts on CI.
 # Cold Electron startup on the contended shared CI runners (the
-# ``integration_tests_electron`` job) regularly takes 50-60s — well past the
-# previous 45s ceiling.
-# Bumping to 90s eats one extra wall-second per failure but lets the slow path
-# pass instead of erroring in fixture setup.
+# ``integration_tests_electron`` job) regularly takes 50-60s.
 _INITIAL_RENDER_TIMEOUT_MS = 90_000
 
 
@@ -165,11 +162,11 @@ def _get_or_create_shared_instance(
     port_manager = PortManager()
     backend_port = port_manager.get_free_port()
 
-    # Temp directories
     sculptor_folder = Path(tempfile.mkdtemp(prefix="sculptor_test_"))
     tmp_path = Path(tempfile.mkdtemp(prefix="sculptor_tmp_"))
     default_timeout_ms = _DEFAULT_TIMEOUT_MS
 
+    # Temp directories
     # Create a fake bin directory and prepend it to PATH before spawning the
     # backend subprocess, so tests can drop fake CLIs (e.g. gh) into the
     # directory at any time and have the running backend find them via PATH

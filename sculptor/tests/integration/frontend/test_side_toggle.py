@@ -30,28 +30,23 @@ def test_right_side_toggle_hides_and_shows_panels(sculptor_instance_: SculptorIn
     page = sculptor_instance_.page
     panel_zones = PlaywrightPanelZonesElement(page)
 
-    # Step 1: Create a workspace and navigate to the agent page
     start_task_and_wait_for_ready(sculptor_page=page, prompt="Hello")
 
-    # Step 2: Ensure right side is visible — the right side may or may not
-    # have visible panels depending on the default layout.  Toggle a panel
-    # on if needed so we have something to hide/show.
+    # The right side may or may not have visible panels depending on the
+    # default layout.  Toggle a panel on if needed so we have something to
+    # hide/show.
     right_area = panel_zones.get_right_area()
     ensure_right_area_visible(page)
     expect(right_area).to_be_visible()
 
-    # Step 3: Click the right side toggle button to hide the right area
     right_toggle = panel_zones.get_side_toggle_right()
     expect(right_toggle).to_be_visible()
     right_toggle.click()
 
-    # Step 4: The right area should be hidden
     expect(right_area).not_to_be_visible()
 
-    # Step 5: Click the right side toggle again to restore
     right_toggle.click()
 
-    # Step 6: The right area should be visible again
     expect(right_area).to_be_visible()
 
 
@@ -69,27 +64,22 @@ def test_bottom_toggle_hides_and_shows_terminal(sculptor_instance_: SculptorInst
     page = sculptor_instance_.page
     panel_zones = PlaywrightPanelZonesElement(page)
 
-    # Step 1
     start_task_and_wait_for_ready(sculptor_page=page, prompt="Hello")
 
-    # Step 2: Ensure the terminal panel is visible (may already be open
-    # depending on the default layout).
+    # The terminal panel may already be open depending on the default layout.
     terminal_icon = panel_zones.get_terminal_icon()
     expect(terminal_icon).to_be_visible()
     ensure_terminal_visible(page)
     add_terminal_button = get_add_terminal_button(page)
 
-    # Step 3: Click the bottom toggle to hide it
     bottom_toggle = panel_zones.get_side_toggle_bottom()
     expect(bottom_toggle).to_be_visible()
     bottom_toggle.click()
 
-    # Step 4: Terminal icon should still be accessible, but the bottom zone content is gone
+    # Terminal icon should still be accessible, but the bottom zone content is gone
     expect(terminal_icon).to_be_visible()
     expect(add_terminal_button).not_to_be_visible()
 
-    # Step 5: Restore
     bottom_toggle.click()
 
-    # The bottom zone should be visible again
     expect(add_terminal_button).to_be_visible()

@@ -23,10 +23,6 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
-# ---------------------------------------------------------------------------
-# Plan-mode prompt used by ExitPlanMode tests
-# ---------------------------------------------------------------------------
-
 PLAN_MODE_PROMPT = """\
 fake_claude:multi_step `{
   "steps": [
@@ -35,11 +31,6 @@ fake_claude:multi_step `{
     {"command": "exit_plan_mode", "args": {"allowedPrompts": []}}
   ]
 }`"""
-
-
-# ---------------------------------------------------------------------------
-# Alpha chat view feature tests (ported from classic view)
-# ---------------------------------------------------------------------------
 
 
 @user_story("to see ask-user-question blocks rendered in the new chat view")

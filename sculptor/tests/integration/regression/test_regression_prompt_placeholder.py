@@ -41,11 +41,6 @@ def _get_agent_id_from_url(url: str) -> str:
     return match.group(1)
 
 
-# ---------------------------------------------------------------------------
-# Test 1: ZWSP must not leak into localStorage after sending a message
-# ---------------------------------------------------------------------------
-
-
 @user_story("to see the placeholder and slash suggestions after reloading a workspace")
 def test_placeholder_and_slash_suggestions_survive_reload(sculptor_instance_: SculptorInstance) -> None:
     """Placeholder and / suggestions must work after sending a message and reloading.
@@ -89,11 +84,6 @@ def test_placeholder_and_slash_suggestions_survive_reload(sculptor_instance_: Sc
     type_trigger_char(chat_input, "/")
     mention_list = chat_panel.get_mention_list()
     expect(mention_list).to_be_visible()
-
-
-# ---------------------------------------------------------------------------
-# Test 2: Placeholder must not show on empty paragraphs within content
-# ---------------------------------------------------------------------------
 
 
 @user_story("to not see the placeholder when the editor has content")

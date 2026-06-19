@@ -638,7 +638,6 @@ def test_large_dag_scale_rules(sculptor_instance_: SculptorInstance) -> None:
     expect(status_pill).to_be_visible()
     status_pill.click()
 
-    # All 60 task rows render — leading-completed collapse has been removed.
     rows = agent_tasks.get_rows()
     expect(rows).to_have_count(60)
 

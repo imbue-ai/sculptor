@@ -86,7 +86,7 @@ def validate_binary(
     This is meant to be called by the build script, it uses typer to print coloured responses. It returns a bool of whether the check was successful.
     """
 
-    # Allow overriding via env like the Bash version
+    # Allow overriding via env
     lipo = lipo or os.environ.get("LIPO") or "lipo"
     file_bin = file_bin or os.environ.get("FILE_BIN") or "file"
     otool = otool or os.environ.get("OTOOL") or "otool"
@@ -151,7 +151,6 @@ def validate_binary(
     else:
         typer.secho("   otool not found on PATH", fg=typer.colors.YELLOW)
 
-    # codesign -dv --verbose=2
     if which(codesign_bin):
         rc, out, err = _run([codesign_bin, "-dv", "--verbose=2", str(binary_path)])
         if rc == 0:

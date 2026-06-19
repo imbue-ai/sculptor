@@ -62,7 +62,6 @@ def test_simple_local_environment_run(
     """Test creating a local environment and running a process in it."""
     project_path = initial_commit_repo[0]
 
-    # Create environment directly with project path (no image concept)
     environment = environment_manager.create_environment(
         project_path=project_path,
         project_id=test_project.object_id,
@@ -92,19 +91,16 @@ def test_simple_local_environment_run_with_content(
     """Test that files in the project path are accessible in the environment."""
     project_path = initial_commit_repo[0]
 
-    # Create a test file in the project directory
     test_file_name = "test_file.txt"
     test_file_content = "hello"
     (project_path / test_file_name).write_text(test_file_content)
 
-    # Create environment directly with project path
     environment = environment_manager.create_environment(
         project_path=project_path,
         project_id=test_project.object_id,
         concurrency_group=test_root_concurrency_group,
     )
     try:
-        # The environment should be able to access files in the project directory
         process = environment.run_process_in_background(["cat", test_file_name], secrets={})
         queue = process.get_queue()
         while not process.is_finished() or not queue.empty():
@@ -127,7 +123,6 @@ def test_create_environment_directly(
     """Test creating an environment directly from a project path."""
     project_path = initial_commit_repo[0]
 
-    # Create environment directly
     environment = environment_manager.create_environment(
         project_path=project_path,
         project_id=test_project.object_id,
@@ -135,9 +130,7 @@ def test_create_environment_directly(
     )
 
     try:
-        # Verify the environment is working
         assert environment.is_alive()
-        # Verify the workspace points to the project path
         assert isinstance(environment, LocalEnvironment)
     finally:
         environment.close()
@@ -152,7 +145,6 @@ def test_resume_environment(
     """Test resuming an environment from an environment ID."""
     project_path = initial_commit_repo[0]
 
-    # Create initial environment
     environment = environment_manager.create_environment(
         project_path=project_path,
         project_id=test_project.object_id,
@@ -161,7 +153,6 @@ def test_resume_environment(
     environment_id = environment.environment_id
     environment.close()
 
-    # Resume the environment using the explicit resume_environment method
     resumed_environment = environment_manager.resume_environment(
         environment_id=environment_id,
         project_path=project_path,
@@ -170,7 +161,6 @@ def test_resume_environment(
     )
 
     try:
-        # Verify the environment is working
         assert resumed_environment.is_alive()
         assert resumed_environment.environment_id == environment_id
     finally:

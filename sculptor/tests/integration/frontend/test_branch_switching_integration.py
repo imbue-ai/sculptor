@@ -22,17 +22,14 @@ def test_branch_switching_with_untracked_file(sculptor_instance_: SculptorInstan
     """
     page = sculptor_instance_.page
 
-    # Set up test branches
     branch_a = "branch_a"
     branch_b = "branch_b"
 
-    # Create and set up branch A
     sculptor_instance_.repo.create_reset_and_checkout_branch(branch_a)
     sculptor_instance_.repo.write_file("src/file_a.py", "print('Hello from branch A!')")
     sculptor_instance_.repo.stage_all_changes()
     sculptor_instance_.repo.commit("Add file A", commit_time="2025-01-01T00:00:01")
 
-    # Create and set up branch B
     sculptor_instance_.repo.create_reset_and_checkout_branch(branch_b)
     sculptor_instance_.repo.write_file("src/file_b.py", "print('Hello from branch B!')")
     sculptor_instance_.repo.stage_all_changes()
@@ -41,14 +38,11 @@ def test_branch_switching_with_untracked_file(sculptor_instance_: SculptorInstan
     # Switch back to branch A (this is our current branch when Sculptor starts)
     sculptor_instance_.repo.checkout_branch(branch_a)
 
-    # Create an untracked file
     sculptor_instance_.repo.write_file("untracked_file.txt", "This is an untracked file")
 
-    # Verify initial state
     current_branch = sculptor_instance_.repo.get_current_branch_name()
     assert current_branch == branch_a, f"Expected to be on {branch_a}, but on {current_branch}"
 
-    # Verify both branches exist
     all_branches = sculptor_instance_.repo.get_branches()
     assert branch_a in all_branches, f"Branch {branch_a} not found in repo. Available branches: {all_branches}"
     assert branch_b in all_branches, f"Branch {branch_b} not found in repo. Available branches: {all_branches}"

@@ -37,25 +37,20 @@ def test_terminal_tab_double_click_rename(
     """
     page = sculptor_instance_.page
 
-    # Step 1: Create workspace and open terminal.
     start_task_and_wait_for_ready(page, prompt="Terminal test", workspace_name="Term WS")
     open_terminal_and_wait(page)
 
-    # Step 2: Double-click the terminal tab.
     terminal_tabs = get_terminal_tabs(page)
     expect(terminal_tabs).to_have_count(1)
     terminal_tabs.first.dblclick()
 
-    # Step 3: Verify inline rename input appears.
     rename_input = get_inline_rename_input(page)
     expect(rename_input).to_be_visible()
 
-    # Step 4: Type a new name and press Enter.
     rename_input.fill("My Shell")
     rename_input.press("Enter")
     expect(rename_input).not_to_be_visible()
 
-    # Step 5: Verify the terminal tab shows the new name.
     expect(terminal_tabs.first).to_have_text("My Shell")
 
 
@@ -72,7 +67,6 @@ def test_terminal_context_menu_has_close_all_and_rename(
     """
     page = sculptor_instance_.page
 
-    # Step 1: Create workspace and terminal.
     start_task_and_wait_for_ready(page, prompt="Term menu test", workspace_name="Term Menu WS")
     open_terminal_and_wait(page)
 
@@ -82,10 +76,8 @@ def test_terminal_context_menu_has_close_all_and_rename(
     terminal_tabs = get_terminal_tabs(page)
     expect(terminal_tabs).to_have_count(2)
 
-    # Step 2: Right-click a terminal tab.
     terminal_tabs.nth(0).click(button="right")
 
-    # Step 3: Verify Rename and Close others items are visible.
     rename_item = get_tab_context_menu_rename(page)
     expect(rename_item).to_be_visible()
 
@@ -106,14 +98,11 @@ def test_terminal_compact_layout_no_heading(
     """
     page = sculptor_instance_.page
 
-    # Step 1: Create workspace and open terminal.
     start_task_and_wait_for_ready(page, prompt="Layout test", workspace_name="Layout WS")
     open_terminal_and_wait(page)
 
-    # Step 2: Verify the terminal heading is not present.
     terminal_heading = get_terminal_heading(page)
     expect(terminal_heading).to_have_count(0)
 
-    # Step 3: Verify terminal tabs are rendered.
     terminal_tabs = get_terminal_tabs(page)
     expect(terminal_tabs).to_have_count(1)

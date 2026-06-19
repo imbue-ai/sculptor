@@ -67,17 +67,14 @@ class TestDropWorkspaceStatusColumn(MigrationTestFixture):
         )
 
     def verify(self, connection: sa.engine.Connection) -> None:
-        # Check status column no longer exists on workspace
         workspace_columns = {row[1] for row in connection.execute(sa.text("PRAGMA table_info(workspace)"))}
         assert "status" not in workspace_columns, "status column still in workspace table"
 
-        # Check status column no longer exists on workspace_latest
         workspace_latest_columns = {
             row[1] for row in connection.execute(sa.text("PRAGMA table_info(workspace_latest)"))
         }
         assert "status" not in workspace_latest_columns, "status column still in workspace_latest table"
 
-        # Check other workspace data is preserved
         result = connection.execute(
             sa.text("""
                 SELECT object_id, description, diff_status, initialization_strategy

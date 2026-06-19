@@ -9,9 +9,8 @@ from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
 class PlaywrightPiSettingsElement(PlaywrightIntegrationTestElement):
     """Page Object Model for the Pi (experimental) section in Settings.
 
-    Mirrors ``PlaywrightClaudeCliSettingsElement``; pi gained a managed-install
-    mode this cycle, so the controls (mode selector, install/retry, progress)
-    parallel Claude's.
+    Mirrors ``PlaywrightClaudeCliSettingsElement``: the controls (mode selector,
+    install/retry, progress) parallel Claude's.
     """
 
     def get_mode_selector(self) -> Locator:

@@ -15,10 +15,6 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
-# ---------------------------------------------------------------------------
-# Prompts
-# ---------------------------------------------------------------------------
-
 # Creates a branch with a single commit that touches TWO files.
 _MULTI_FILE_COMMIT_PROMPT = """\
 fake_claude:multi_step `{
@@ -165,11 +161,6 @@ fake_claude:multi_step `{
 }`"""
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
 def _open_history_and_expand_first_commit(
     task_page: PlaywrightTaskPage,
 ) -> tuple[PlaywrightHistoryPanelElement, Locator]:
@@ -187,9 +178,7 @@ def _open_history_and_expand_first_commit(
     return history_panel, first_commit
 
 
-# ---------------------------------------------------------------------------
 # Bug 1: clicking a file in a multi-file commit crashes
-# ---------------------------------------------------------------------------
 
 
 @user_story("to view a single file's diff from a multi-file commit without the diff viewer crashing")
@@ -224,9 +213,7 @@ def test_click_file_in_multi_file_commit(
     expect(diff_panel).to_contain_text("a = 1")
 
 
-# ---------------------------------------------------------------------------
 # Bug 2: commit-diff tab not re-selectable after opening same file from Changes
-# ---------------------------------------------------------------------------
 
 
 @user_story("to switch between a commit-diff tab and an uncommitted-diff tab for the same file")
@@ -277,9 +264,7 @@ def test_commit_diff_tab_selectable_alongside_regular_tab(
     expect(commit_tab).to_have_attribute("aria-selected", "true")
 
 
-# ---------------------------------------------------------------------------
 # Additional bug exploration: clicking files from two different commits
-# ---------------------------------------------------------------------------
 
 
 @user_story("to open diffs from two different commits and switch between them")
@@ -340,9 +325,7 @@ def test_open_files_from_different_commits(
     expect(first_tab).to_have_attribute("aria-selected", "true")
 
 
-# ---------------------------------------------------------------------------
 # Additional: closing a commit-diff tab should not affect regular tabs
-# ---------------------------------------------------------------------------
 
 
 @user_story("to close a commit-diff tab without losing the regular diff tab for the same file")
@@ -398,9 +381,7 @@ def test_close_commit_diff_tab_keeps_regular_tab(
     expect(diff_panel).to_contain_text("x = 2")
 
 
-# ---------------------------------------------------------------------------
 # Edge case: same file modified in two commits shows correct diff per tab
-# ---------------------------------------------------------------------------
 
 
 @user_story("to view the correct diff content when the same file is modified across two commits")
@@ -467,9 +448,7 @@ def test_same_file_two_commits_shows_correct_content(
     expect(diff_panel).to_contain_text("version_two")
 
 
-# ---------------------------------------------------------------------------
 # Edge case: switching between files within a single multi-file commit
-# ---------------------------------------------------------------------------
 
 
 @user_story("to switch between different file diffs within the same commit")
@@ -513,9 +492,7 @@ def test_switch_files_within_same_commit(
     expect(diff_panel).to_contain_text("a = 1")
 
 
-# ---------------------------------------------------------------------------
 # Bug 3: DiffFileHeader shows +0 -0 for commit-diff tabs
-# ---------------------------------------------------------------------------
 
 
 @user_story("to see correct line count stats in the file header for a commit-scoped diff")
@@ -547,9 +524,7 @@ def test_commit_diff_file_header_shows_line_counts(
     expect(diff_panel.get_file_header()).to_contain_text("+1")
 
 
-# ---------------------------------------------------------------------------
 # Edge case: commit-diff tab shows only its commit's content
-# ---------------------------------------------------------------------------
 
 
 @user_story("to verify that a commit-diff tab shows the commit's changes, not uncommitted edits")
@@ -605,9 +580,7 @@ def test_commit_diff_shows_committed_content_not_uncommitted(
     expect(diff_panel).not_to_contain_text("x = 2")
 
 
-# ---------------------------------------------------------------------------
 # Bug 4: split-view handle rendered for an added file inside a commit diff
-# ---------------------------------------------------------------------------
 
 
 @user_story("to not see a useless splitter when viewing a newly added file inside a commit diff")

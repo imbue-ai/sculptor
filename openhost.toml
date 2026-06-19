@@ -1,0 +1,44 @@
+# OpenHost app manifest for running Sculptor as a self-hosted app.
+#
+# Deploy onto an OpenHost compute space from the dashboard ("Deploy New App")
+# or with the `oh` CLI:
+#
+#   oh app deploy https://github.com/imbue-ai/sculptor@<branch> --name sculptor
+#
+# The router builds `openhost.Dockerfile` (build context = repo root), runs the
+# container under rootless podman, and reverse-proxies HTTPS to it at
+# https://sculptor.<your-zone-domain>/ behind OpenHost's owner login.
+#
+# See docs/development/ in the openhost repo, or docs/src/manifest_spec.md there,
+# for the full field reference.
+
+[app]
+name = "sculptor"
+version = "0.1.0"
+description = "Sculptor — AI coding agent platform by Imbue"
+authors = ["Imbue"]
+
+[runtime.container]
+# Path to the Dockerfile, relative to the repo root. The build context is always
+# the repo root, so this Dockerfile can COPY the existing container recipe scripts.
+image = "openhost.Dockerfile"
+# Port the Sculptor backend listens on inside the container (SCULPTOR_API_PORT).
+# Kept in sync with the value set in openhost.Dockerfile.
+port = 5050
+
+[routing]
+# Backend readiness probe (unauthenticated). Used by the router to know the app is up.
+health_check = "/api/v1/health"
+
+[resources]
+# Sculptor runs Claude Code agents as local subprocesses inside this container,
+# so size it for the backend plus a few concurrent agents. Tune to taste / host.
+memory_mb = 4096
+cpu_millicores = 4000
+
+[data]
+# Persistent, backed-up directory mounted at /data/app_data/sculptor (also exposed
+# as $OPENHOST_APP_DATA_DIR). openhost.Dockerfile points SCULPTOR_FOLDER and the
+# Claude config dir here so the database, workspaces, downloaded agent binary, and
+# Claude auth all survive rebuilds / "update and reload".
+app_data = true

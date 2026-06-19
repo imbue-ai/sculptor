@@ -261,9 +261,7 @@ class App(FastAPI):
 @asynccontextmanager
 async def lifespan(app: App):
     """
-    Formerly `@app.on_event("startup")`, this is used to initialize the application.
-    (It has to be async.)
-
+    Initializes the application. (It has to be async.)
     """
     ensure_sculptor_folder_ready()
     cleanup_obsolete_mru_files()

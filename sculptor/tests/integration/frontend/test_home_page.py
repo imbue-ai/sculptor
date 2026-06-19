@@ -26,14 +26,12 @@ def test_recent_workspaces_shown_on_home_page(
     """After creating a workspace, navigating to /home should show it in the recent list."""
     page = sculptor_instance_.page
 
-    # Create a workspace
     start_task_and_wait_for_ready(
         sculptor_page=page,
         prompt="Build the feature",
         workspace_name="My Feature Workspace",
     )
 
-    # Navigate to Home page
     navigate_to_home_page(page)
 
     # Wait for the recent workspaces to load and verify the workspace appears
@@ -49,7 +47,6 @@ def test_empty_state_shown_for_new_user(
     """When a user has zero workspaces, the empty state should be shown on the home page."""
     page = sculptor_instance_.page
 
-    # Navigate to the home page
     navigate_to_home_page(page)
 
     # The empty state heading should be visible
@@ -80,7 +77,6 @@ def test_workspace_search_filters_list(
         workspace_name="Dark Mode Feature",
     )
 
-    # Navigate to Home page
     navigate_to_home_page(page)
 
     # Wait for recent workspaces to load
@@ -105,14 +101,12 @@ def test_clicking_workspace_row_navigates_to_workspace(
     """Clicking a workspace row should navigate to that workspace."""
     page = sculptor_instance_.page
 
-    # Create a workspace
     start_task_and_wait_for_ready(
         sculptor_page=page,
         prompt="Build feature",
         workspace_name="Navigation Test",
     )
 
-    # Navigate to Home page
     navigate_to_home_page(page)
 
     # Wait for and click the workspace row

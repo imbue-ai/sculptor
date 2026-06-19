@@ -1245,8 +1245,6 @@ class ClaudeOutputProcessor:
             self._transcript_collector.record_stdin(stdin_line)
         self.process.write_stdin(stdin_line)
 
-    # ========== Control Request Handling ==========
-
     def _maybe_handle_control_request(self, line: str) -> bool:
         """Handle control_request messages from the CLI.
 
@@ -1351,8 +1349,6 @@ class ClaudeOutputProcessor:
         except (OSError, AssertionError) as e:
             logger.info("Failed to send control response for request_id={}: {}", request_id, e)
 
-    # ========== Context Usage Request Handling ==========
-
     def _send_context_usage_request(self) -> None:
         """Send a get_context_usage control request on stdin.
 
@@ -1437,8 +1433,6 @@ class ClaudeOutputProcessor:
             }
         )
         self.output_message_queue.put(TurnMetricsAgentMessage(turn_metrics=enriched))
-
-    # ========== Streaming Methods ==========
 
     def _handle_stream_event(self, event: ParsedStreamEvent) -> None:
         """Handle streaming event:

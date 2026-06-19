@@ -34,11 +34,6 @@ def _add_repo_via_settings(page: Page, repo_path: Path) -> None:
     repos_section.add_repo(str(repo_path.resolve()))
 
 
-# ============================================================================
-# Project Creation Tests
-# ============================================================================
-
-
 @user_story("to create new projects and use them in workspaces")
 def test_create_new_project_from_add_workspace_page(
     sculptor_instance_: SculptorInstance, test_repo_factory_: TestRepoFactory
@@ -125,11 +120,6 @@ def test_git_init_dialog_for_non_git_directories(sculptor_instance_: SculptorIns
     project_option = add_ws_page.get_project_options().filter(has_text=project_name)
     expect(project_option).to_be_visible()
     page.keyboard.press("Escape")
-
-
-# ============================================================================
-# Multi-Project Workspace Tests
-# ============================================================================
 
 
 @user_story("to create workspaces in different projects and switch between them")
@@ -259,11 +249,6 @@ def test_send_messages_across_multiple_project_workspaces(
     expect(chat_panel_b.get_messages()).to_have_count(4)
 
 
-# ============================================================================
-# MRU Project Selection Tests
-# ============================================================================
-
-
 @user_story("to have the most recently used project pre-selected when creating a new workspace")
 def test_mru_project_updates_after_creating_workspace(
     sculptor_instance_: SculptorInstance, test_repo_factory_: TestRepoFactory
@@ -305,20 +290,10 @@ def test_mru_project_updates_after_creating_workspace(
     expect(add_ws_page.get_project_selector()).to_contain_text(project_a_name)
 
 
-# ============================================================================
-# Duplicate Project Name Tests
-# ============================================================================
-
-
 @pytest.mark.skip(reason="Duplicate project name disambiguation requires redesign for workspace-tabs UI")
 @user_story("to distinguish between projects with the same folder name")
 def test_duplicate_project_names() -> None:
     """Test handling of projects with same leaf folder names but different paths."""
-
-
-# ============================================================================
-# Repo Validation Tests
-# ============================================================================
 
 
 @user_story("to create an initial commit when adding an empty git repo")

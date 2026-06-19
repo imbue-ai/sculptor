@@ -26,15 +26,6 @@ def test_unread_indicator_when_switching_agents_within_workspace(
     """Create a workspace with two agents, verify read/unread transitions on agent tabs.
 
     Flow:
-    1. Create workspace with agent 1 (runs, finishes, user sees it → read)
-    2. Add agent 2 via "+" button (navigates to agent 2, agent 1 is still read)
-    3. Send a follow-up message to agent 2 (agent 2 becomes read with new content)
-    4. Agent 1 should still be read (no new updates since last viewed)
-    5. Navigate back to agent 1, then back to agent 2
-    6. Agent 2 should now be unread (it got a response while we were on agent 1)
-       Note: agent 2's response was seen before switching.
-
-    Revised flow:
     1. Create workspace with agent 1 (finishes, user sees it → read)
     2. Add agent 2 (auto-navigates to agent 2, both are read/unread appropriately)
     3. Send a message on agent 2 so it gets activity

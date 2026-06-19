@@ -30,18 +30,14 @@ def test_settings_git_section(sculptor_instance_: SculptorInstance) -> None:
     settings_page = navigate_to_settings_page(page=page)
     git_section = settings_page.click_on_git()
 
-    # Verify the three settings fields are visible
     expect(git_section.get_creation_prompt_textarea()).to_be_visible()
     expect(git_section.get_poll_interval_input()).to_be_visible()
     expect(git_section.get_default_target_branch_input()).to_be_visible()
 
-    # Edit default target branch and verify persistence
     git_section.set_default_target_branch("develop")
 
-    # Wait for toast to confirm the change was saved
     toast = settings_page.get_toast()
     expect(toast).to_be_visible()
 
-    # Read config file and verify the setting was persisted
     config = load_config(config_path)
     assert config.pr_default_target_branch == "develop"

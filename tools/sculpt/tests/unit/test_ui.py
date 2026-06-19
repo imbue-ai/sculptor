@@ -55,7 +55,6 @@ class TestUiOpenFile:
         assert "file" in result.output
 
     def test_missing_workspace_returns_2(self, runner: CliRunner) -> None:
-        # Make sure env var is not set.
         os.environ.pop("SCULPT_WORKSPACE_ID", None)
         result = runner.invoke(app, ["ui", "open-file", "/tmp/something.txt"])
         assert result.exit_code == 2

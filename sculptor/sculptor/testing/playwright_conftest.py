@@ -78,13 +78,11 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     items[:] = factory_tests + electron_tests + browser_tests
 
 
-# ---------------------------------------------------------------------------
 # Session budget guard lives in the root conftest.py (pytest_runtest_setup
 # hook). It uses pytest.fail() rather than pytest.exit() because with xdist,
 # pytest.exit() crashes the worker and the controller then blocks in
 # execnet.safe_terminate() waiting for other workers that may be stuck in
 # per-test timeouts.
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture(scope="session")
