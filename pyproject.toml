@@ -52,9 +52,10 @@ sculptor = { workspace = true }
 cache-keys = [{ git = { commit = true } }]
 
 package = false
-# 0.8.13 is the first uv whose bundled python-downloads metadata includes
-# cpython 3.13.7, which the sidecar builder scripts pin.
-required-version = ">=0.8.13"
+# Require a uv whose bundled python-downloads metadata includes a stable managed
+# cpython 3.14.x (the sidecar builder scripts pin cpython-3.14.4 via `uv python
+# install`). uv 0.8.x only shipped 3.14.0rc2; 0.11.22 ships stable 3.14.4/3.14.6.
+required-version = ">=0.11.22"
 
 [tool.ruff]
 # Pin the syntax target below requires-python. Python 3.14's PEP 758 lets `except`
