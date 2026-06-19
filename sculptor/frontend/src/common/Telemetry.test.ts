@@ -26,7 +26,7 @@ vi.mock("@sentry/react", () => ({
   }),
 }));
 
-// Vite normally bakes these in via `define` (see `vite.renderer.config.ts`).
+// Vite normally bakes these in via `define` (see `vite.electron.config.ts`).
 // In jsdom they're undefined unless we stub them. The values themselves don't
 // matter — `posthog.init` is mocked below — they just need to be non-empty so
 // `initializeTelemetry()` takes the init branch instead of the early return.

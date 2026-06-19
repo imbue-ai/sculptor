@@ -6,7 +6,7 @@
 //   - vite.web.config.ts      (web / OpenHost):  API_URL_BASE "" (same-origin),
 //                                                 sentry release from the git sha,
 //                                                 a type-generation plugin
-//   - vite.renderer.config.ts (Electron renderer): API_URL_BASE undefined
+//   - vite.electron.config.ts (Electron renderer): API_URL_BASE undefined
 //                                                 (preload injects the port),
 //                                                 outDir .vite/build/renderer,
 //                                                 HMR gated under pytest
