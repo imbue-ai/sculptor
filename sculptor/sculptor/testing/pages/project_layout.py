@@ -109,6 +109,25 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
         tab = self.get_workspace_tabs().nth(workspace_tab_index)
         tab.click(button="right")
 
+    def open_workspace_diagnostics_submenu(self, workspace_tab_index: int = 0) -> None:
+        """Right-click a workspace tab and hover Diagnostics to open the submenu."""
+        self.open_workspace_tab_context_menu(workspace_tab_index)
+        trigger = self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_DIAGNOSTICS)
+        expect(trigger).to_be_visible()
+        trigger.hover()
+
+    def get_copy_workspace_name_item(self) -> Locator:
+        """Copy workspace name lives in the top-level context menu (Rename group)."""
+        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_COPY_WORKSPACE_NAME)
+
+    def get_copy_branch_item(self) -> Locator:
+        """Copy branch lives in the top-level context menu (Rename group)."""
+        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_COPY_BRANCH)
+
+    def get_copy_workspace_id_item(self) -> Locator:
+        """Copy workspace id lives in the Diagnostics sub-menu (open it first)."""
+        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_COPY_WORKSPACE_ID)
+
     def rename_workspace_tab(self, new_name: str, workspace_tab_index: int = 0) -> None:
         """Rename a workspace tab via context menu."""
         self.open_workspace_tab_context_menu(workspace_tab_index)

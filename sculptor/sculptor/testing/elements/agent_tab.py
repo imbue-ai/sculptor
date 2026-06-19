@@ -74,6 +74,14 @@ class PlaywrightAgentTabBarElement:
     def get_copy_sculptor_transcript_item(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_COPY_SCULPTOR_TRANSCRIPT_PATH)
 
+    def get_copy_agent_id_item(self) -> Locator:
+        """Copy agent id lives in the Diagnostics sub-menu (open it first)."""
+        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_COPY_AGENT_ID)
+
+    def get_copy_agent_name_item(self) -> Locator:
+        """Copy agent name lives in the top-level context menu (not Diagnostics)."""
+        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_COPY_AGENT_NAME)
+
     def open_context_menu(self, tab: Locator) -> None:
         """Right-click a tab to open the context menu."""
         tab.click(button="right")

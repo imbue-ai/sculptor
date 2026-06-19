@@ -3,6 +3,7 @@
 Tests cover:
 - Diagnostics copy items are disabled when no session exists
 - Copy session id and transcript path copy correct values to clipboard
+- Copy agent name (top-level menu) and Copy agent id (Diagnostics) copy correct values
 """
 
 from playwright.sync_api import expect
@@ -120,3 +121,54 @@ def test_agent_diagnostics_copy_session_id_and_transcript_path(
     assert sculptor_transcript_path.endswith("transcript.jsonl"), (
         f"Expected transcript.jsonl path, got: {sculptor_transcript_path}"
     )
+
+
+@user_story("to copy the agent name and id from the agent tab context menu")
+def test_agent_context_menu_copy_name_and_id(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """Copy agent name (top-level menu) and Copy agent id (Diagnostics) copy the right values.
+
+    Unlike the session/transcript items, these don't depend on a running
+    session — they are available as soon as the agent exists.
+
+    Steps:
+    1. Create a workspace with an agent
+    2. Install clipboard interceptor
+    3. Copy agent name from the top-level context menu and verify it matches the tab name
+    4. Copy agent id from the Diagnostics sub-menu and verify a non-empty value
+    """
+    page = sculptor_instance_.page
+    tab_bar = PlaywrightAgentTabBarElement(page)
+
+    # Step 1: Create a workspace with an agent.
+    start_task_and_wait_for_ready(page, prompt="Diagnostics name/id test", workspace_name="Diag Name Id WS")
+
+    # Step 2: Install clipboard interceptor.
+    install_clipboard_interceptor(page)
+    agent_tabs = tab_bar.get_agent_tabs()
+    expect(agent_tabs).to_have_count(1)
+
+    # Step 3: Copy agent name from the top-level context menu.
+    tab_bar.open_context_menu(agent_tabs.first)
+    copy_agent_name = tab_bar.get_copy_agent_name_item()
+    expect(copy_agent_name).to_be_visible()
+    reset_intercepted_clipboard(page)
+    copy_agent_name.click()
+
+    page.wait_for_function("() => window.__clipboardWritten !== null")
+    agent_name = read_intercepted_clipboard(page)
+    assert agent_name, "Expected agent name to be copied to clipboard"
+    # The copied name is the agent's display name, which the tab shows.
+    expect(agent_tabs.first).to_contain_text(agent_name)
+
+    # Step 4: Copy agent id from the Diagnostics sub-menu.
+    tab_bar.open_diagnostics_submenu(agent_tabs.first)
+    copy_agent_id = tab_bar.get_copy_agent_id_item()
+    expect(copy_agent_id).to_be_visible()
+    reset_intercepted_clipboard(page)
+    copy_agent_id.click()
+
+    page.wait_for_function("() => window.__clipboardWritten !== null")
+    agent_id = read_intercepted_clipboard(page)
+    assert agent_id, "Expected agent id to be copied to clipboard"
