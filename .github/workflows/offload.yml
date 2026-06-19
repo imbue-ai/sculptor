@@ -6,9 +6,12 @@ on:
   push:
     branches: [main]
 
-# Offload runs cost real Modal time, so let runs finish.
+# Offload runs cost real Modal time, so never cancel a run. Key on github.ref so
+# every main push shares one group and serializes; each PR (refs/pull/N/merge)
+# keeps its own group. Do NOT key on head_ref -- it is empty on push, so main
+# would collapse to a unique run_id and never queue.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 env:

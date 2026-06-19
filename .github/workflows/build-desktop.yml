@@ -27,9 +27,17 @@ on:
     tags:
       - 'sculptor-v*'
 
-# Builds are expensive; let runs finish rather than cancel mid-flight.
+# Builds are expensive, so never cancel an in-flight build (cancel-in-progress:
+# false). Key on github.ref so every main push shares one group and the builds
+# serialize, while each sculptor-v* tag gets its own group and builds
+# independently. Do NOT key on head_ref: it is empty outside pull_request events,
+# so on push/tag builds the group collapses to a unique run_id and every run gets
+# its own group of one -- no serialization. With a shared group and no
+# cancellation, a new main push waits behind the running build and a still-newer
+# push supersedes the pending, never-started one, so the next build to start is
+# always the newest main.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 env:
