@@ -12,13 +12,16 @@ help:
 
 # === Global Variables ===
 
-# Reusable, embeddable snippet to ensure Node via nvm is active in THIS shell
+# Reusable, embeddable snippet to ensure Node via nvm is active in THIS shell.
+# Pinned to 24.17.0 (LTS security release). Anything >=24.16.0 needs the `yauzl`
+# override in sculptor/frontend/package.json to avoid the extract-zip packaging
+# hang (Node 24's stream-cleanup change vs extract-zip 2.0.1).
 nvm_use := '''
 set +u
 : "${NVM_DIR:="$HOME/.nvm"}"
 . "$NVM_DIR/nvm.sh"
-nvm use --silent 24.13.0 2>/dev/null || nvm install 24.13.0 >/dev/null
-nvm use --silent 24.13.0
+nvm use --silent 24.17.0 2>/dev/null || nvm install 24.17.0 >/dev/null
+nvm use --silent 24.17.0
 set -u
 '''
 

@@ -27,7 +27,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 RUN curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
 
 # Node via nvm (needed for frontend unit tests and integration test frontend build)
-ENV NODE_VERSION="24.13.0"
+ENV NODE_VERSION="24.17.0"
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash && \
     bash -c "source /root/.nvm/nvm.sh && nvm install $NODE_VERSION"
 

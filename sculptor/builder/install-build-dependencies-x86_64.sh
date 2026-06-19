@@ -62,8 +62,8 @@ arch -arm64 /opt/homebrew/bin/uv python install cpython-3.13.7-macos-aarch64-non
 # Ensure nvm setup happens in x86_64 context too
 arch -x86_64 /usr/local/bin/bash -c '
   source /usr/local/opt/nvm/nvm.sh
-  nvm install 24.13.0
-  nvm alias electron-x64 24.13.0
+  nvm install 24.17.0
+  nvm alias electron-x64 24.17.0
 '
 
 echo "Build Dependencies for Intel Mac successfully installed"
