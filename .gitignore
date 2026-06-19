@@ -141,6 +141,9 @@ fly/_warmup/
 **/.dmypy.json
 **/dmypy.json
 
+# pyre
+**/.pyre/
+
 # pycharm
 **/.idea/
 
