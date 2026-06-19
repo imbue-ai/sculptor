@@ -64,9 +64,9 @@ export const RepoSelector = ({
   // Repository dialog paints with real data on first frame:
   //   1. Dependencies status → skips the NotConfiguredSection flash while the
   //      dialog's own first poll is in flight.
-  //   2. github/gitlab initial repo lists → the search combobox paints with
-  //      results instead of a spinner. Fired in parallel; 412 (unconfigured
-  //      CLI) is harmless since the combobox doesn't mount for that provider.
+  //   2. The github initial repo list → the search combobox paints with
+  //      results instead of a spinner. 412 (unconfigured CLI) is harmless
+  //      since the combobox doesn't mount in that case.
   // All best-effort; on failure the dialog falls back to its own fetches.
   const handleSelectOpenChange = useCallback(
     (isOpen: boolean): void => {
@@ -80,7 +80,6 @@ export const RepoSelector = ({
         }
       })();
       void prefetchInitialRemoteRepos("github");
-      void prefetchInitialRemoteRepos("gitlab");
     },
     [setDependenciesStatus],
   );

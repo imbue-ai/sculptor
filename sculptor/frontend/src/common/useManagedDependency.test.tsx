@@ -38,7 +38,6 @@ const makeStatus = (overrides: Partial<DependenciesStatus>): DependenciesStatus 
   claude: makeInfo({}),
   pi: makeInfo({}),
   gh: makeInfo({}),
-  glab: makeInfo({}),
   ...overrides,
 });
 

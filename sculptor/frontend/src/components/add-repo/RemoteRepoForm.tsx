@@ -1,9 +1,9 @@
 import { Box, Button, Checkbox, Flex, Link, Spinner, Text, TextField } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import type { ReactElement, Ref } from "react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { DependenciesStatus, DependencyInfo } from "~/api";
+import type { DependenciesStatus } from "~/api";
 import { ElementIds } from "~/api";
 import { defaultClonesDirAtom, getBackendCapabilities } from "~/common/state/atoms/backendCapabilities.ts";
 import { defaultCloneTargetDirAtom } from "~/common/state/atoms/userConfig.ts";
@@ -16,7 +16,13 @@ import type { RemoteRepo } from "./RemoteRepoCombobox.tsx";
 import { RemoteRepoCombobox } from "./RemoteRepoCombobox.tsx";
 import styles from "./RemoteRepoForm.module.scss";
 import type { SubmittableInputs } from "./remoteRepoFormHelpers.ts";
-import { computeSubmittable, deriveNameFromUrl } from "./remoteRepoFormHelpers.ts";
+import {
+  computeSubmittable,
+  deriveNameFromUrl,
+  getRemoteCliDependencyInfo,
+  isRemoteFormShowingNotConfigured,
+  stripGitSuffix,
+} from "./remoteRepoFormHelpers.ts";
 import type { RemoteProvider } from "./SourceRadioCards.tsx";
 
 export type RemoteCloneSubmit = {
@@ -26,10 +32,9 @@ export type RemoteCloneSubmit = {
   name: string;
   /**
    * `owner/repo` slug for picker selections. Omitted in the manual-URL view.
-   * The backend uses this — when present — to invoke `gh/glab repo clone`
-   * with the slug rather than the URL, so the CLI's configured protocol
-   * (SSH vs HTTPS) is respected. Without it, `glab` forces HTTPS and fails
-   * for SSH-only users.
+   * The backend uses this — when present — to invoke `gh repo clone` with the
+   * slug rather than the URL, so `gh` picks the protocol from the user's CLI
+   * config rather than the one embedded in the URL.
    */
   fullName?: string;
 };
@@ -45,13 +50,6 @@ type RemoteRepoFormProps = {
   onViewChange: (view: RemoteRepoFormView) => void;
   onSubmittableChange: (submittable: { ready: boolean; payload?: RemoteCloneSubmit }) => void;
   searchInputRef?: Ref<HTMLInputElement>;
-};
-
-const stripGitSuffix = (name: string): string => (name.endsWith(".git") ? name.slice(0, -4) : name);
-
-const getDependencyInfo = (status: DependenciesStatus | null, provider: RemoteProvider): DependencyInfo | undefined => {
-  if (!status) return undefined;
-  return provider === "github" ? status.gh : status.glab;
 };
 
 export const RemoteRepoForm = ({
@@ -91,7 +89,7 @@ export const RemoteRepoForm = ({
   // hooks
   const { fetchDirectories } = useDirectoryListing();
 
-  const dependencyInfo = getDependencyInfo(dependenciesStatus, provider);
+  const dependencyInfo = getRemoteCliDependencyInfo(dependenciesStatus);
   const isConfigured = Boolean(dependencyInfo?.installed && dependencyInfo.isAuthenticated);
   // Suppress the configured/not-configured branches until the first poll
   // resolves; otherwise dialogs opened without a pre-populated atom flash
@@ -123,6 +121,21 @@ export const RemoteRepoForm = ({
     },
     [provider, view, selectedRepo, urlInput, name, effectiveTargetDir, onSubmittableChange],
   );
+
+  // Latest-ref so the effect below can re-push without listing every input as a
+  // dependency (which would re-run it on every keystroke).
+  const pushSubmittableRef = useRef(pushSubmittable);
+  pushSubmittableRef.current = pushSubmittable;
+
+  // Re-push when `effectiveTargetDir` changes on its own — i.e. the resolved
+  // default target folder arrives asynchronously (the backend-capabilities and
+  // user-config atoms settle after first paint). Without this, the displayed
+  // value updates but the parent's cached submittable keeps the stale
+  // targetDir, so a fast click would clone into the wrong folder. User edits
+  // already push via their handlers; this only catches the late default.
+  useEffect(() => {
+    pushSubmittableRef.current({});
+  }, [effectiveTargetDir]);
 
   // callbacks
   const handleSelectRepo = useCallback(
@@ -210,10 +223,13 @@ export const RemoteRepoForm = ({
   const targetSuffix = trimmedName ? `/${trimmedName}` : undefined;
   // The "Search my repositories instead" toggle is always available so the
   // user can land on the NotConfiguredSection from URL view. Form fields below
-  // are hidden in that state since there's no URL to clone. Suppress this
-  // while the first poll is in flight so the footer doesn't flash a
-  // "Configure …" CTA before the real status arrives.
-  const isShowingNotConfiguredSection = view === "search" && !isConfigured && !isWaitingForFirstStatus;
+  // are hidden in that state since there's no URL to clone. Shared with
+  // AddRepoDialog's footer-CTA logic so the two can't drift.
+  const isShowingNotConfiguredSection = isRemoteFormShowingNotConfigured(
+    dependenciesStatus,
+    view,
+    isLoadingDependencies,
+  );
 
   const renderTargetFolderInput = (): ReactElement => {
     if (canBrowse) {
@@ -277,7 +293,7 @@ export const RemoteRepoForm = ({
             <Flex align="center" justify="center" py="5" gap="2">
               <Spinner size="2" />
               <Text size="2" color="gray">
-                Checking {provider === "github" ? "gh" : "glab"} CLI…
+                Checking gh CLI…
               </Text>
             </Flex>
           ) : isConfigured ? (

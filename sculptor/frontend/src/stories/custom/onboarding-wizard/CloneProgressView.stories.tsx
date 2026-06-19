@@ -30,10 +30,10 @@ export const Default: Story = {
   },
 };
 
-export const NestedGitLabPath: Story = {
+export const NestedGroupPath: Story = {
   args: {
     displayName: "group/subgroup/long-project-name-here",
-    webUrl: "https://gitlab.com/group/subgroup/long-project-name-here",
+    webUrl: "https://github.com/group/subgroup/long-project-name-here",
   },
 };
 

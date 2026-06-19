@@ -27,10 +27,6 @@ RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
     apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
 
-# pnpm via Corepack (ships with Node). The pinned version comes from the
-# `packageManager` field in sculptor/frontend/package.json.
-RUN corepack enable pnpm
-
 # GitHub CLI (gh) — used by the Add Repository remote-clone flow and signed in
 # via the in-app auth flow. Installed from GitHub's official apt repo.
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
@@ -41,6 +37,10 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     apt-get update && \
     apt-get install -y --no-install-recommends gh && \
     rm -rf /var/lib/apt/lists/*
+
+# pnpm via Corepack (ships with Node). The pinned version comes from the
+# `packageManager` field in sculptor/frontend/package.json.
+RUN corepack enable pnpm
 
 # uv — Python package/venv manager; it provisions the right Python for the project.
 RUN curl -fsSL https://astral.sh/uv/install.sh | sh

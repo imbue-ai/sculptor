@@ -37,10 +37,10 @@ const ghInstalled: DependencyInfo = {
   isAuthenticated: true,
 };
 
-const glabInstalledNotAuthed: DependencyInfo = {
+const ghInstalledNotAuthed: DependencyInfo = {
   installed: true,
-  path: "/opt/homebrew/bin/glab",
-  version: "1.48.0",
+  path: "/opt/homebrew/bin/gh",
+  version: "2.65.0",
   isOverride: false,
   mode: null,
   versionRange: null,
@@ -70,7 +70,6 @@ const managedUpToDate: DependenciesStatus = {
   },
   pi: piNotInstalled,
   gh: optionalCliNotInstalled,
-  glab: optionalCliNotInstalled,
 };
 
 const managedOutOfRange: DependenciesStatus = {
@@ -95,7 +94,6 @@ const managedOutOfRange: DependenciesStatus = {
   },
   pi: piNotInstalled,
   gh: optionalCliNotInstalled,
-  glab: optionalCliNotInstalled,
 };
 
 const pathMode: DependenciesStatus = {
@@ -119,7 +117,6 @@ const pathMode: DependenciesStatus = {
   },
   pi: piNotInstalled,
   gh: optionalCliNotInstalled,
-  glab: optionalCliNotInstalled,
 };
 
 const customMode: DependenciesStatus = {
@@ -143,7 +140,6 @@ const customMode: DependenciesStatus = {
   },
   pi: piNotInstalled,
   gh: optionalCliNotInstalled,
-  glab: optionalCliNotInstalled,
 };
 
 const notInstalled: DependenciesStatus = {
@@ -167,7 +163,6 @@ const notInstalled: DependenciesStatus = {
   },
   pi: piNotInstalled,
   gh: optionalCliNotInstalled,
-  glab: optionalCliNotInstalled,
 };
 
 const withInstallProgress: DependenciesStatus = {
@@ -209,13 +204,16 @@ const managedUpgradeFailed: DependenciesStatus = {
   },
   pi: piNotInstalled,
   gh: optionalCliNotInstalled,
-  glab: optionalCliNotInstalled,
 };
 
-const optionalClisMixed: DependenciesStatus = {
+const ghInstalledAuthed: DependenciesStatus = {
   ...managedUpToDate,
   gh: ghInstalled,
-  glab: glabInstalledNotAuthed,
+};
+
+const ghNotAuthed: DependenciesStatus = {
+  ...managedUpToDate,
+  gh: ghInstalledNotAuthed,
 };
 
 const Wrapper = ({ deps }: { deps: DependenciesStatus }): ReactElement => {
@@ -260,8 +258,12 @@ export const CustomMode: Story = {
   args: { deps: customMode },
 };
 
-export const OptionalClisMixed: Story = {
-  args: { deps: optionalClisMixed },
+export const GithubCliInstalledAndAuthed: Story = {
+  args: { deps: ghInstalledAuthed },
+};
+
+export const GithubCliInstalledNotAuthed: Story = {
+  args: { deps: ghNotAuthed },
 };
 
 export const NothingInstalled: Story = {

@@ -695,11 +695,10 @@ class DependenciesStatus(SerializableModel):
     claude: DependencyInfo
     pi: DependencyInfo
     gh: DependencyInfo
-    glab: DependencyInfo
 
 
 class RemoteRepo(SerializableModel):
-    """A repository listed from a remote provider (GitHub or GitLab)."""
+    """A repository listed from GitHub."""
 
     full_name: str
     clone_url: str
@@ -712,15 +711,14 @@ class RemoteRepo(SerializableModel):
 class RemoteCloneRequest(RequestModel):
     """Request to clone a remote repository into a local directory."""
 
-    provider: Literal["github", "gitlab"]
+    provider: Literal["github"]
     url: str
     target_dir: str
     name: str
     # When the user picked from the repo list (not the manual-URL form), we
     # also send the `owner/repo` slug. The backend prefers passing this to
-    # `gh repo clone` / `glab repo clone`, which then picks the protocol from
-    # the user's CLI config — necessary for SSH-only `glab` users, where
-    # passing the HTTPS URL forces git into an HTTPS auth flow that fails.
+    # `gh repo clone`, which then picks the protocol from the user's CLI
+    # config rather than forcing the protocol embedded in the URL.
     full_name: str | None = None
 
 

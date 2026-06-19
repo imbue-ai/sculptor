@@ -26,7 +26,9 @@ from sculptor.services.dependency_management_service import DependencyCheckResul
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.dependency_management_service import PI_VERSION_RANGE
 from sculptor.services.dependency_management_service import VersionRange
+from sculptor.services.dependency_management_service import _GH_DEVICE_CODE_RE
 from sculptor.services.dependency_management_service import _parse_dependency_config
+from sculptor.services.dependency_management_service import _parse_remote_cli_version
 from sculptor.services.dependency_management_service import parse_pi_version
 from sculptor.services.managed_tools import BlockedVersionRange
 from sculptor.services.managed_tools import ClaudeManagedTool
@@ -1090,12 +1092,10 @@ class TestCheckAuthenticated:
 
         mock_cg = MagicMock()
         # Order of calls in _get_status: git --version, claude --version, pi --version,
-        # claude auth status, gh --version, gh auth status, glab --version, glab auth status.
+        # claude auth status, gh --version, gh auth status.
         mock_cg.run_process_to_completion.side_effect = [
             version_result,
             version_result,
-            version_result,
-            auth_result,
             version_result,
             auth_result,
             version_result,
@@ -1108,7 +1108,6 @@ class TestCheckAuthenticated:
         assert status.claude.is_authenticated is True
         assert status.git.is_authenticated is None
         assert status.gh.is_authenticated is True
-        assert status.glab.is_authenticated is True
 
 
 class TestCheckInstalled:
@@ -1688,6 +1687,28 @@ class TestParsePiVersion:
 
     def test_returns_none_on_unparseable_input(self) -> None:
         assert parse_pi_version("not a version") is None
+
+
+class TestParseRemoteCliVersion:
+    def test_parses_gh_version_line(self) -> None:
+        assert _parse_remote_cli_version("gh version 2.65.0 (2024-12-19)") == "2.65.0"
+
+    def test_parses_pre_release_suffix(self) -> None:
+        assert _parse_remote_cli_version("gh version 2.65.0-beta.1 (test)") == "2.65.0-beta.1"
+
+    def test_returns_none_on_unparseable_input(self) -> None:
+        assert _parse_remote_cli_version("gh: command not found") is None
+
+
+class TestGhDeviceCodeRegex:
+    def test_extracts_one_time_code_from_gh_prompt(self) -> None:
+        line = "! First copy your one-time code: ABCD-1234"
+        match = _GH_DEVICE_CODE_RE.search(line)
+        assert match is not None
+        assert match.group(1) == "ABCD-1234"
+
+    def test_returns_no_match_without_code_prompt(self) -> None:
+        assert _GH_DEVICE_CODE_RE.search("Opening github.com in your browser") is None
 
 
 class TestResolvePiPath:

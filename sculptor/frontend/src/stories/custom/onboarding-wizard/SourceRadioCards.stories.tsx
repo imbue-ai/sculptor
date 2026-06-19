@@ -20,10 +20,6 @@ export const GithubSelected: Story = {
   args: { value: "github" },
 };
 
-export const GitlabSelected: Story = {
-  args: { value: "gitlab" },
-};
-
 export const LocalSelected: Story = {
   args: { value: "local" },
 };

@@ -26,7 +26,3 @@ type Story = StoryObj<typeof meta>;
 export const GitHub: Story = {
   args: { provider: "github" },
 };
-
-export const GitLab: Story = {
-  args: { provider: "gitlab" },
-};

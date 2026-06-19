@@ -40,7 +40,6 @@ class Dependency(UpperCaseStrEnum):
     GIT = auto()
     PI = auto()
     GH = auto()
-    GLAB = auto()
 
 
 @runtime_checkable

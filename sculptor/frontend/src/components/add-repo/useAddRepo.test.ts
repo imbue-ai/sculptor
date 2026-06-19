@@ -16,8 +16,8 @@ describe("deriveDisplayName", () => {
     expect(deriveDisplayName("git@github.com:imbue-ai/sculptor.git", "fallback")).toBe("imbue-ai/sculptor");
   });
 
-  it("extracts group/sub/repo from a nested GitLab path", () => {
-    expect(deriveDisplayName("https://gitlab.com/group/sub/project.git", "fallback")).toBe("group/sub/project");
+  it("extracts a nested group/sub/repo path", () => {
+    expect(deriveDisplayName("https://example.com/group/sub/project.git", "fallback")).toBe("group/sub/project");
   });
 
   it("trims whitespace before parsing", () => {
@@ -39,7 +39,7 @@ describe("deriveWebUrl", () => {
   });
 
   it("rewrites ssh URLs to https for self-hosted hosts", () => {
-    expect(deriveWebUrl("git@gitlab.internal:team/svc.git")).toBe("https://gitlab.internal/team/svc");
+    expect(deriveWebUrl("git@git.internal:team/svc.git")).toBe("https://git.internal/team/svc");
   });
 
   it("passes https URLs through, stripping the .git suffix", () => {

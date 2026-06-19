@@ -88,7 +88,7 @@ export const RemoteRepoCombobox = ({
     [visibleRepos],
   );
 
-  // 412 means gh/glab isn't installed/authenticated — bubble that up to the
+  // 412 means gh isn't installed/authenticated — bubble that up to the
   // parent so it can swap in the NotConfiguredSection.
   useEffect(() => {
     if (isError && error instanceof HTTPException && error.status === 412) {

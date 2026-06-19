@@ -9,8 +9,10 @@ import type { ToastContent } from "~/components/Toast.tsx";
 import { ToastType } from "~/components/Toast.tsx";
 import { isElectron, selectProjectDirectory } from "~/electron/utils.ts";
 
+import { stripGitSuffix } from "./remoteRepoFormHelpers.ts";
+
 type CloneAndOpenArgs = {
-  provider: "github" | "gitlab";
+  provider: "github";
   url: string;
   targetDir: string;
   name: string;
@@ -22,7 +24,7 @@ type ValidatingPhase = { type: "validating"; repoPath: string };
 type CloningPhase = {
   type: "cloning";
   repoPath: string;
-  /** "owner/repo" (or "group/sub/repo" on GitLab), shown in the progress card title. */
+  /** "owner/repo" (or a nested "group/sub/repo" path), shown in the progress card title. */
   displayName: string;
   /** https URL to the repo's web page; renders as a clickable link in the title. */
   webUrl?: string;
@@ -65,10 +67,8 @@ export type AddRepoAction =
 
 export const initialPhase: AddRepoPhase = { type: "form" };
 
-const stripGitSuffix = (s: string): string => (s.endsWith(".git") ? s.slice(0, -4) : s);
-
 /**
- * Extract "owner/repo" (or "group/sub/repo" on nested GitLab paths) from a clone
+ * Extract "owner/repo" (or a nested "group/sub/repo" path) from a clone
  * URL. Accepts both HTTPS (`https://host/owner/repo.git`) and SSH
  * (`git@host:owner/repo.git`) shapes. Falls back to the trimmed input if the
  * URL doesn't match either — the caller still gets *something* renderable.
@@ -223,7 +223,7 @@ export const useAddRepo = ({
             localPathSuggestion: repoPath,
           });
         } else if (error instanceof HTTPException && error.status === 412) {
-          // 412 = gh/glab not installed or not signed in. The local-folder
+          // 412 = gh not installed or not signed in. The local-folder
           // hint isn't relevant — the path probably doesn't exist yet.
           dispatch({ type: "CLONE_FAILED", repoPath, errorMessage: error.detail });
         } else if (error instanceof HTTPException) {
@@ -300,8 +300,8 @@ export const useAddRepo = ({
     try {
       const path = await selectProjectDirectory();
       return path ?? undefined;
-    } catch (error) {
-      console.error("Failed to select directory:", error);
+    } catch {
+      // The toast is the user-facing signal; no separate console log needed.
       setToast({ title: "Failed to select directory", type: ToastType.ERROR });
       return undefined;
     }

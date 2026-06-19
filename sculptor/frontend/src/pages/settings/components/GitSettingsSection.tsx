@@ -173,7 +173,7 @@ export const GitSettingsSection = ({ onSettingChange }: GitSettingsSectionProps)
 
       <SettingRow
         title="Default Target Folder"
-        description="Pre-fills the Target Folder field when cloning a repo from GitHub/GitLab. Leave empty to default to ~/.sculptor/repos/<provider>."
+        description="Pre-fills the Target Folder field when cloning a repo from GitHub. Leave empty to default to ~/.sculptor/repos/github."
       >
         <TextField.Root
           placeholder="~/.sculptor/repos"

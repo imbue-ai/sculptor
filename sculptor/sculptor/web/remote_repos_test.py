@@ -23,9 +23,11 @@ from sculptor.web.remote_repos import _REMOTE_REPO_MAX_SEARCH_PAGES
 from sculptor.web.remote_repos import _build_remote_repos_api_path
 from sculptor.web.remote_repos import _filter_remote_repos
 from sculptor.web.remote_repos import _github_user_repos_page_path
+from sculptor.web.remote_repos import _is_safe_clone_url
+from sculptor.web.remote_repos import _is_safe_repo_slug
 from sculptor.web.remote_repos import _looks_like_already_exists
 from sculptor.web.remote_repos import _parse_github_repos
-from sculptor.web.remote_repos import _parse_gitlab_repos
+from sculptor.web.remote_repos import _redact_url_credentials
 from sculptor.web.remote_repos import _resolve_provider_cli
 from sculptor.web.remote_repos import _search_github_user_repos
 
@@ -41,18 +43,21 @@ def _repo(full_name: str, description: str | None = None) -> RemoteRepo:
     )
 
 
-# --- _build_remote_repos_api_path: GitHub (single-fetch / browse mode) ---
+# --- _build_remote_repos_api_path: GitHub (browse mode) ---
 
 
-def test_github_empty_query_uses_display_limit_per_page() -> None:
-    """No query → browse mode, just enough rows for the dropdown."""
-    path = _build_remote_repos_api_path(Dependency.GH, None, 5)
+def test_github_browse_uses_display_limit_per_page() -> None:
+    """Browse mode (empty query) asks for just enough rows for the dropdown."""
+    path = _build_remote_repos_api_path(5)
     assert path == "/user/repos?affiliation=owner,collaborator,organization_member&sort=pushed&per_page=5"
 
 
-def test_github_whitespace_query_is_treated_as_empty() -> None:
-    path = _build_remote_repos_api_path(Dependency.GH, "   ", 5)
-    assert path == "/user/repos?affiliation=owner,collaborator,organization_member&sort=pushed&per_page=5"
+def test_github_browse_caps_per_page_at_api_max() -> None:
+    path = _build_remote_repos_api_path(10_000)
+    assert (
+        path
+        == f"/user/repos?affiliation=owner,collaborator,organization_member&sort=pushed&per_page={_REMOTE_REPO_MAX_LIMIT}"
+    )
 
 
 # --- _github_user_repos_page_path (paginated search) ---
@@ -79,35 +84,6 @@ def test_github_paged_search_stays_scoped_to_user_repos() -> None:
     path = _github_user_repos_page_path(1)
     assert "/search/repositories" not in path
     assert "affiliation=owner,collaborator,organization_member" in path
-
-
-# --- _build_remote_repos_api_path: GitLab ---
-
-
-def test_gitlab_empty_query_orders_by_created_at_not_last_activity() -> None:
-    """Regression: ``order_by=last_activity_at`` here makes gitlab.com 500
-    because the cross-table sort over the user's full membership set is too
-    expensive without a ``search=`` filter. ``order_by=created_at`` is cheap
-    on the same scope (the projects table is indexed that way), so use it
-    in browse mode."""
-    path = _build_remote_repos_api_path(Dependency.GLAB, None, 5)
-    assert path == "/projects?membership=true&order_by=created_at&per_page=5"
-
-
-def test_gitlab_non_empty_query_keeps_membership_and_adds_search() -> None:
-    """GitLab's /projects endpoint accepts ?search= alongside ?membership=true,
-    so we can push the filter server-side without losing the membership scope.
-    ``order_by=last_activity_at`` is safe here because ``search=`` bounds the
-    set being sorted."""
-    path = _build_remote_repos_api_path(Dependency.GLAB, "cli", 5)
-    assert path == "/projects?membership=true&order_by=last_activity_at&per_page=5&search=cli"
-
-
-def test_gitlab_search_param_is_url_encoded() -> None:
-    path = _build_remote_repos_api_path(Dependency.GLAB, "foo bar&baz", 5)
-    # The ``&`` and space must be percent-encoded so they don't break out of
-    # the search query and contaminate other params.
-    assert path.endswith("&search=foo%20bar%26baz")
 
 
 # --- _filter_remote_repos ---
@@ -313,78 +289,49 @@ def test_parse_github_repos_defaults_missing_url_fields_to_empty_string() -> Non
     assert repo.description is None
 
 
-# --- _parse_gitlab_repos ---
+# --- clone-source validation / log redaction (argument-injection hardening) ---
 
 
-def test_parse_gitlab_repos_raises_502_on_non_list_payload() -> None:
-    for payload in (None, {"projects": []}, "oops", 42):
-        with pytest.raises(HTTPException) as exc_info:
-            _parse_gitlab_repos(payload)
-        assert exc_info.value.status_code == 502
+def test_is_safe_clone_url_accepts_known_schemes() -> None:
+    for url in (
+        "https://github.com/owner/repo.git",
+        "http://example.com/owner/repo",
+        "ssh://git@github.com/owner/repo.git",
+        "git://github.com/owner/repo.git",
+        "git@github.com:owner/repo.git",
+    ):
+        assert _is_safe_clone_url(url) is True
 
 
-def test_parse_gitlab_repos_skips_non_dict_entries() -> None:
-    payload = [None, "string", 42, {"path_with_namespace": "ok/repo"}]
-    repos = _parse_gitlab_repos(payload)
-    assert [r.full_name for r in repos] == ["ok/repo"]
+def test_is_safe_clone_url_rejects_leading_dash_and_unknown_schemes() -> None:
+    """A leading ``-`` would be parsed by git/gh as an option, not a repo —
+    this is the argument-injection surface the validator closes."""
+    for url in (
+        "--upload-pack=touch /tmp/pwn",
+        "-oProxyCommand=evil",
+        "file:///etc/passwd",
+        "",
+        "   ",
+        "not a url",
+    ):
+        assert _is_safe_clone_url(url) is False
 
 
-def test_parse_gitlab_repos_marks_private_visibility_as_private() -> None:
-    repos = _parse_gitlab_repos([{"path_with_namespace": "a/b", "visibility": "private"}])
-    assert repos[0].is_private is True
+def test_is_safe_repo_slug_accepts_owner_repo() -> None:
+    for slug in ("owner/repo", "octocat/Hello-World", "my-org/sub.repo"):
+        assert _is_safe_repo_slug(slug) is True
 
 
-def test_parse_gitlab_repos_marks_public_visibility_as_not_private() -> None:
-    repos = _parse_gitlab_repos([{"path_with_namespace": "a/b", "visibility": "public"}])
-    assert repos[0].is_private is False
+def test_is_safe_repo_slug_rejects_dashes_and_non_slugs() -> None:
+    for slug in ("-owner/repo", "owner", "--flag", "owner repo", ""):
+        assert _is_safe_repo_slug(slug) is False
 
 
-def test_parse_gitlab_repos_marks_internal_visibility_as_not_private() -> None:
-    """GitLab's third visibility level ``internal`` is not the same as
-    ``private`` — only members of the instance can see it, but it's not
-    private to the project. Treat it as non-private."""
-    repos = _parse_gitlab_repos([{"path_with_namespace": "a/b", "visibility": "internal"}])
-    assert repos[0].is_private is False
-
-
-def test_parse_gitlab_repos_treats_uppercase_visibility_as_private() -> None:
-    """Regression for the ``.lower()`` normalization — if GitLab ever upcases
-    the value (or a future maintainer drops the case fold), we still want to
-    classify it correctly."""
-    repos = _parse_gitlab_repos([{"path_with_namespace": "a/b", "visibility": "PRIVATE"}])
-    assert repos[0].is_private is True
-
-
-def test_parse_gitlab_repos_defaults_missing_visibility_to_not_private() -> None:
-    """Regression: a missing ``visibility`` key must not crash, and the safe
-    default for an unknown visibility level is public (not private)."""
-    repos = _parse_gitlab_repos([{"path_with_namespace": "a/b"}])
-    assert repos[0].is_private is False
-
-
-def test_parse_gitlab_repos_maps_every_field_from_input() -> None:
-    """Pin the GitLab → ``RemoteRepo`` field mapping so a future field rename
-    or accidental swap (e.g. ``http_url_to_repo`` ↔ ``ssh_url_to_repo``)
-    breaks this test."""
-    payload = [
-        {
-            "path_with_namespace": "gitlab-org/gitlab",
-            "http_url_to_repo": "https://gitlab.com/gitlab-org/gitlab.git",
-            "ssh_url_to_repo": "git@gitlab.com:gitlab-org/gitlab.git",
-            "last_activity_at": "2024-02-20T08:15:00Z",
-            "description": "The flagship project",
-            "visibility": "public",
-        }
-    ]
-    repos = _parse_gitlab_repos(payload)
-    assert len(repos) == 1
-    repo = repos[0]
-    assert repo.full_name == "gitlab-org/gitlab"
-    assert repo.clone_url == "https://gitlab.com/gitlab-org/gitlab.git"
-    assert repo.ssh_url == "git@gitlab.com:gitlab-org/gitlab.git"
-    assert repo.is_private is False
-    assert repo.pushed_at == "2024-02-20T08:15:00Z"
-    assert repo.description == "The flagship project"
+def test_redact_url_credentials_strips_userinfo() -> None:
+    assert _redact_url_credentials("https://user:token@github.com/o/r.git") == "https://github.com/o/r.git"
+    # No credentials → unchanged. The scp-form "git@" is a username, not a secret.
+    assert _redact_url_credentials("https://github.com/o/r.git") == "https://github.com/o/r.git"
+    assert _redact_url_credentials("git@github.com:o/r.git") == "git@github.com:o/r.git"
 
 
 # --- _looks_like_already_exists ---
@@ -405,12 +352,6 @@ def test_already_exists_matches_real_gh_repo_clone_stderr() -> None:
         "fatal: destination path 'foo' already exists and is not an empty directory.\n"
         "exit status 128"
     )
-    assert _looks_like_already_exists(stderr) is True
-
-
-def test_already_exists_matches_real_glab_repo_clone_stderr() -> None:
-    """``glab repo clone`` likewise wraps ``git clone``."""
-    stderr = "Cloning into 'foo'...\nfatal: destination path 'foo' already exists and is not an empty directory.\n"
     assert _looks_like_already_exists(stderr) is True
 
 
@@ -444,7 +385,7 @@ def test_already_exists_returns_false_for_unrelated_clone_errors() -> None:
 # Route-level tests for POST /api/v1/remotes/clone
 #
 # These exercise clone_remote_repo end-to-end through FastAPI but stub the
-# subprocess boundary (gh / glab / git) so no real network or git CLI is
+# subprocess boundary (gh / git) so no real network or git CLI is
 # touched. We mock the dependency-management probes (resolve_binary_path /
 # check_authenticated) per-test to walk every branch of _resolve_clone_command
 # and the route handler, and we patch ConcurrencyGroup.run_process_to_completion
@@ -485,7 +426,6 @@ def _ok_process(command: list[str]) -> FinishedProcess:
 def _mock_binary_lookup(
     *,
     gh: str | None = "/fake/bin/gh",
-    glab: str | None = "/fake/bin/glab",
     git: str | None = "/fake/bin/git",
 ):
     """Return a side_effect for resolve_binary_path keyed on Dependency."""
@@ -493,8 +433,6 @@ def _mock_binary_lookup(
     def _side_effect(tool: Dependency) -> str | None:
         if tool == Dependency.GH:
             return gh
-        if tool == Dependency.GLAB:
-            return glab
         if tool == Dependency.GIT:
             return git
         return None
@@ -505,15 +443,12 @@ def _mock_binary_lookup(
 def _mock_auth_lookup(
     *,
     gh: bool | None = True,
-    glab: bool | None = True,
 ):
     """Return a side_effect for check_authenticated keyed on Dependency."""
 
     def _side_effect(tool: Dependency) -> bool | None:
         if tool == Dependency.GH:
             return gh
-        if tool == Dependency.GLAB:
-            return glab
         return None
 
     return _side_effect
@@ -617,22 +552,20 @@ def test_clone_happy_path_uses_gh_repo_clone_and_returns_project_path(
     ]
 
 
-def test_clone_with_full_name_passes_slug_to_glab_so_configured_protocol_is_honored(
+def test_clone_with_full_name_passes_slug_to_gh_so_configured_protocol_is_honored(
     client: TestClient,
     test_services: CompleteServiceCollection,
     tmp_path: Path,
 ) -> None:
     """Picker selections include ``full_name``; the route must pass that
-    slug — not the HTTPS URL — to ``glab repo clone``. ``glab repo clone
-    <https-url>`` forces git into an HTTPS auth flow and hangs/fails for
-    users whose ``glab`` is configured for SSH; ``glab repo clone owner/repo``
-    honors the CLI's configured protocol."""
+    slug — not the HTTPS URL — to ``gh repo clone`` so ``gh`` picks the
+    protocol from the user's CLI config rather than the one embedded in the
+    URL."""
     target_dir = tmp_path / "clones"
     payload = _clone_payload(
         target_dir,
         name="hw1",
-        provider="gitlab",
-        url="https://gitlab.com/sigmachirality/hw1.git",
+        url="https://github.com/sigmachirality/hw1.git",
         full_name="sigmachirality/hw1",
     )
     captured: dict[str, object] = {}
@@ -662,7 +595,7 @@ def test_clone_with_full_name_passes_slug_to_glab_so_configured_protocol_is_hono
     assert response.status_code == 200, response.text
     expected_path = str(target_dir / "hw1")
     assert captured["command"] == [
-        "/fake/bin/glab",
+        "/fake/bin/gh",
         "repo",
         "clone",
         "sigmachirality/hw1",
@@ -783,6 +716,7 @@ def test_clone_falls_back_to_git_when_gh_unauthenticated(
     assert captured["command"] == [
         "/fake/bin/git",
         "clone",
+        "--",
         "https://github.com/owner/my-repo.git",
         expected_path,
     ]
@@ -1053,15 +987,15 @@ def test_resolve_provider_cli_returns_412_when_explicitly_unauthenticated() -> N
     explicit "signed out" signal. The frontend's NotConfiguredSection footer
     references this 412 detail string for the auth-CTA copy."""
     services = MagicMock()
-    services.dependency_management_service.resolve_binary_path.return_value = "/fake/bin/glab"
+    services.dependency_management_service.resolve_binary_path.return_value = "/fake/bin/gh"
     services.dependency_management_service.check_authenticated.return_value = False
     with (
         patch("sculptor.web.remote_repos.get_services_from_request_or_websocket", return_value=services),
         pytest.raises(HTTPException) as exc_info,
     ):
-        _resolve_provider_cli(_fake_request_with_services(services), "gitlab")
+        _resolve_provider_cli(_fake_request_with_services(services), "github")
     assert exc_info.value.status_code == 412
-    assert exc_info.value.detail == "GLAB CLI not authenticated"
+    assert exc_info.value.detail == "GH CLI not authenticated"
 
 
 def test_resolve_provider_cli_returns_binary_when_authenticated() -> None:
@@ -1221,7 +1155,7 @@ def test_list_remote_repos_uses_single_fetch_in_browse_mode(
 
     assert response.status_code == 200, response.text
     assert response.json()[0]["fullName"] == "owner/everything"
-    # api_path is the third positional arg in _fetch_repos(binary, cg, api_path, tool).
+    # api_path is the third positional arg in _fetch_repos(binary, cg, api_path).
     call_kwargs = fetch_mock.call_args
     api_path = call_kwargs.args[2]
     assert "/user/repos" in api_path
@@ -1238,7 +1172,7 @@ def test_list_remote_repos_caps_limit_at_max(
     so we never page through GitHub at silly sizes."""
     captured: dict[str, object] = {}
 
-    def fetch_and_capture(binary: str, cg, api_path: str, tool: Dependency) -> list[RemoteRepo]:
+    def fetch_and_capture(binary: str, cg, api_path: str) -> list[RemoteRepo]:
         captured["api_path"] = api_path
         return []
 
@@ -1287,7 +1221,7 @@ def test_get_clones_folder_creates_intermediate_directories(tmp_path: Path, monk
     would fail without it."""
     monkeypatch.setattr("sculptor.utils.build.get_sculptor_folder", lambda: tmp_path)
 
-    folder = get_clones_folder("gitlab")
+    folder = get_clones_folder("github")
     assert folder.is_dir()
 
 
@@ -1303,15 +1237,15 @@ def test_get_clones_folder_is_idempotent_on_existing_directory(tmp_path: Path, m
 
 
 def test_get_clones_folder_keeps_providers_separated(tmp_path: Path, monkeypatch) -> None:
-    """github and gitlab must land in different subdirectories so the
+    """Distinct providers must land in different subdirectories so the
     per-provider default in the dialog reads the right one."""
     monkeypatch.setattr("sculptor.utils.build.get_sculptor_folder", lambda: tmp_path)
-    assert get_clones_folder("github") != get_clones_folder("gitlab")
+    assert get_clones_folder("github") != get_clones_folder("other")
 
 
 # ---------------------------------------------------------------------------
 # DependencyManagementService.check_authenticated — timeout → None
-# (covered indirectly by dependency_management_service_test.py for the gh/glab
+# (covered indirectly by dependency_management_service_test.py for the gh
 # happy path; this pins the timeout-returns-None contract that the clone-route
 # `is not False` policy depends on.)
 # ---------------------------------------------------------------------------

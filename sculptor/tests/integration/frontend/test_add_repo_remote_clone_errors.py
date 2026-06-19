@@ -88,7 +88,7 @@ def test_clone_409_offers_add_as_local_cta(sculptor_instance_: SculptorInstance)
 
 @user_story("not to see the Add as local folder CTA on a 412 unauthorized clone failure")
 def test_clone_412_does_not_offer_add_as_local_cta(sculptor_instance_: SculptorInstance) -> None:
-    """A 412 means gh/glab isn't installed / signed in — the path conflict
+    """A 412 means gh isn't installed / signed in — the path conflict
     isn't the root cause, so the "Add as local folder" CTA must NOT render.
     The clone-failed view still shows the backend's detail string so the
     user sees what went wrong."""
@@ -120,7 +120,7 @@ def test_clone_504_shows_timeout_message(sculptor_instance_: SculptorInstance) -
     page = sculptor_instance_.page
     stub = _stub_clone_with_status(
         504,
-        "Clone timed out after 300s. If the repo is private, check that gh/glab is signed in.",
+        "Clone timed out after 300s. If the repo is private, check that gh is signed in.",
     )
     page.route(_CLONE_ROUTE_PATTERN, stub)
 

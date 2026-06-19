@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { HTTPException } from "~/common/Errors.ts";
+import { SCULPTOR_QUERY_KEY_PREFIX } from "~/common/queryClient.ts";
 
 import {
   normalizeQuery,
@@ -31,16 +32,14 @@ describe("remoteReposQueryKey", () => {
     expect(b).toEqual(c);
   });
 
-  it("keeps different providers on separate keys", () => {
-    expect(remoteReposQueryKey("github", "foo", 5)).not.toEqual(remoteReposQueryKey("gitlab", "foo", 5));
-  });
-
   it("keeps different limits on separate keys (caller may want more rows)", () => {
     expect(remoteReposQueryKey("github", "foo", 5)).not.toEqual(remoteReposQueryKey("github", "foo", 50));
   });
 
-  it("uses 'remoteRepos' as the top-level scope so cache invalidation by prefix is possible", () => {
-    expect(remoteReposQueryKey("github", "", 5)[0]).toBe("remoteRepos");
+  it("nests under the reserved sculptor prefix so plugin caches can't collide", () => {
+    const key = remoteReposQueryKey("github", "", 5);
+    expect(key[0]).toBe(SCULPTOR_QUERY_KEY_PREFIX);
+    expect(key[1]).toBe("remoteRepos");
   });
 });
 
@@ -66,12 +65,18 @@ describe("shouldRetryRemoteRepos", () => {
 describe("shouldKeepPreviousRemoteReposData", () => {
   it("carries previous results forward when query changes within the same provider", () => {
     // Previous query was github + "foo"; new query is github + "fo" — same provider.
-    expect(shouldKeepPreviousRemoteReposData("github", ["remoteRepos", "github", "foo", 5])).toBe(true);
+    // The provider sits at index 2 of the key (after the prefix and "remoteRepos").
+    expect(
+      shouldKeepPreviousRemoteReposData("github", [SCULPTOR_QUERY_KEY_PREFIX, "remoteRepos", "github", "foo", 5]),
+    ).toBe(true);
   });
 
-  it("clears placeholder data when the provider changes so the wrong provider's repos don't flash", () => {
-    // Previous query was github + "foo"; new query is gitlab — wipe.
-    expect(shouldKeepPreviousRemoteReposData("gitlab", ["remoteRepos", "github", "foo", 5])).toBe(false);
+  it("clears placeholder data when the previous key is for a different scope", () => {
+    // A previous key whose provider slot doesn't match the new provider must
+    // not carry forward — otherwise the wrong scope's repos would flash.
+    expect(
+      shouldKeepPreviousRemoteReposData("github", [SCULPTOR_QUERY_KEY_PREFIX, "remoteRepos", "other", "foo", 5]),
+    ).toBe(false);
   });
 
   it("clears when there's no previous query (first mount)", () => {

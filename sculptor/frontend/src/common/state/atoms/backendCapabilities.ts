@@ -43,7 +43,7 @@ export const getBackendCapabilities = (): BackendCapabilities => capabilities;
 
 /**
  * Absolute path on the backend host where Sculptor will place repos cloned
- * from GitHub / GitLab when the user doesn't pick a custom target folder.
+ * from GitHub when the user doesn't pick a custom target folder.
  * Populated asynchronously by `initBackendCapabilities` from the backend's
  * `/api/v1/config/backend-capabilities` endpoint so the path matches the
  * backend's actual sculptor folder (matters in dev mode, where the folder

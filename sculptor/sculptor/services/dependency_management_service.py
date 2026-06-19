@@ -121,9 +121,9 @@ def parse_pi_version(stdout: str) -> str | None:
 
 
 def _parse_remote_cli_version(stdout: str) -> str | None:
-    """Extract a semver from gh/glab --version output.
+    """Extract a semver from the gh --version output.
 
-    Handles both ``gh version 2.65.0 (2024-...)`` and ``glab 1.48.0`` shapes.
+    Handles the ``gh version 2.65.0 (2024-...)`` shape with a generic semver match.
     """
     match = re.search(r"(\d+\.\d+\.\d+\S*)", stdout)
     return match.group(1) if match else None
@@ -133,8 +133,8 @@ def _parse_version_for_tool(tool: Dependency, stdout: str) -> str | None:
     """Dispatch to the per-tool version parser.
 
     CLAUDE/PI route through their ``ManagedTool`` seam (one shared semver parse); GIT
-    has no conformer and keeps its own ``git version`` parser; GH/GLAB are unmanaged
-    remote-host CLIs whose ``--version`` output we parse with a generic semver match.
+    has no conformer and keeps its own ``git version`` parser; GH is an unmanaged
+    remote-host CLI whose ``--version`` output we parse with a generic semver match.
     """
     managed_tool = get_managed_tool(tool)
     if managed_tool is not None:
@@ -142,7 +142,7 @@ def _parse_version_for_tool(tool: Dependency, stdout: str) -> str | None:
     match tool:
         case Dependency.GIT:
             return _parse_git_version(stdout)
-        case Dependency.GH | Dependency.GLAB:
+        case Dependency.GH:
             return _parse_remote_cli_version(stdout)
         case Dependency():
             raise ValueError(f"Unhandled dependency: {tool}")
@@ -485,8 +485,6 @@ class DependencyManagementService(Service):
                 return self._resolve_pi_path()
             case Dependency.GH:
                 return shutil.which("gh")
-            case Dependency.GLAB:
-                return shutil.which("glab")
             case _ as unreachable:
                 assert_never(unreachable)
 
@@ -613,7 +611,7 @@ class DependencyManagementService(Service):
         binary = self.resolve_binary_path(tool)
         if binary is None:
             return None
-        # 3s is more than enough — `gh`/`glab`/`claude auth status` read a local
+        # 3s is more than enough — `gh`/`claude auth status` read a local
         # credentials file. Keeping the timeout tight matters because this is
         # called from `_get_status`, which runs on every status snapshot.
         try:
@@ -772,8 +770,8 @@ class DependencyManagementService(Service):
             # any default prompt is answered rather than blocking the poll loop.
             try:
                 process.write_stdin("\n")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Could not nudge gh auth stdin: {}", e)
 
             user_code, auth_url = _await_gh_device_code(process)
             if user_code is None or auth_url is None:
@@ -791,14 +789,8 @@ class DependencyManagementService(Service):
         :meth:`_terminate_auth_session_locked` for the ``gh`` poll process.
         """
         session = process if process is not None else self._gh_auth_session
-        if session is not None and not session.is_finished():
-            try:
-                session.terminate(force_kill_seconds=2.0)
-            except Exception:
-                try:
-                    session.kill_now(signal.SIGKILL)
-                except Exception:
-                    pass
+        if session is not None:
+            _terminate_process(session)
         if process is None or process is self._gh_auth_session:
             self._gh_auth_session = None
 
@@ -871,22 +863,20 @@ class DependencyManagementService(Service):
         )
 
         gh_info = self._get_remote_cli_info(Dependency.GH)
-        glab_info = self._get_remote_cli_info(Dependency.GLAB)
 
         return DependenciesStatus(
             git=git_info,
             claude=claude_info,
             pi=pi_info,
             gh=gh_info,
-            glab=glab_info,
         )
 
     def _get_remote_cli_info(self, tool: Dependency) -> DependencyInfo:
-        """Build a DependencyInfo for the gh/glab remote-host CLIs.
+        """Build a DependencyInfo for the gh remote-host CLI.
 
-        These have no managed binary, no version range, and no per-tool mode;
+        This has no managed binary, no version range, and no per-tool mode;
         we just surface install + auth state so the frontend can decide
-        whether the Add Repository → GitHub/GitLab flow is usable.
+        whether the Add Repository → GitHub flow is usable.
         """
         check = self.check_installed(tool)
         is_authenticated = self.check_authenticated(tool) if check.installed else None

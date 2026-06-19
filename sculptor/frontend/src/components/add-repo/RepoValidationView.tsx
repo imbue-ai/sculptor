@@ -150,10 +150,10 @@ export const RepoValidationView = ({
           <Text size="2" className={styles.messageBox} data-testid={ElementIds.ADD_REPO_CLONE_FAILED_MESSAGE}>
             {phase.errorMessage}
           </Text>
-          {phase.localPathSuggestion && (
+          {localPathSuggestion && (
             <Flex align="center" justify="between" gap="2" className={styles.pathBox}>
               <Text size="2" className={styles.pathText} data-testid={ElementIds.ADD_REPO_CLONE_FAILED_PATH}>
-                {phase.localPathSuggestion}
+                {localPathSuggestion}
               </Text>
               <IconButton
                 variant="ghost"
@@ -172,10 +172,10 @@ export const RepoValidationView = ({
             <Button variant="soft" color="gray" onClick={onCancel} data-testid={ElementIds.ADD_REPO_CLONE_FAILED_CLOSE}>
               Close
             </Button>
-            {phase.localPathSuggestion && onOpenLocal && (
+            {localPathSuggestion && onOpenLocal && (
               <Button
                 variant="solid"
-                onClick={() => onOpenLocal(phase.localPathSuggestion!)}
+                onClick={() => onOpenLocal(localPathSuggestion)}
                 data-testid={ElementIds.ADD_REPO_CLONE_FAILED_ADD_LOCAL}
               >
                 Add as local folder

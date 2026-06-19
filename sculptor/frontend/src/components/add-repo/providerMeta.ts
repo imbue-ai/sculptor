@@ -1,6 +1,10 @@
-import { GithubIcon, GitlabIcon } from "lucide-react";
+import { GitHubLogoIcon } from "@radix-ui/react-icons";
+import type { ComponentType } from "react";
 
 import type { RemoteProvider } from "./SourceRadioCards.tsx";
+
+/** Icon component sized via `width`/`height` — compatible with both Radix and lucide icons. */
+export type ProviderIcon = ComponentType<{ width?: number | string; height?: number | string }>;
 
 // Single source of truth for per-provider strings, URLs, and icons used across
 // the Add Repository surface (AddRepoDialog footer CTA, NotConfiguredSection
@@ -17,8 +21,8 @@ export type ProviderMeta = {
   installUrl: string;
   /** Shell command to authenticate the CLI. */
   authCommand: string;
-  /** Lucide icon used in the radio cards. Typed against `GithubIcon` for compat. */
-  Icon: typeof GithubIcon;
+  /** Icon component used in the radio cards. */
+  Icon: ProviderIcon;
 };
 
 export const PROVIDER_META: Record<RemoteProvider, ProviderMeta> = {
@@ -28,14 +32,6 @@ export const PROVIDER_META: Record<RemoteProvider, ProviderMeta> = {
     cliLabel: "GitHub CLI",
     installUrl: "https://github.com/cli/cli#installation",
     authCommand: "gh auth login",
-    Icon: GithubIcon,
-  },
-  gitlab: {
-    label: "GitLab",
-    cliBinary: "glab",
-    cliLabel: "GitLab CLI",
-    installUrl: "https://gitlab.com/gitlab-org/cli/#installation",
-    authCommand: "glab auth login",
-    Icon: GitlabIcon,
+    Icon: GitHubLogoIcon,
   },
 };

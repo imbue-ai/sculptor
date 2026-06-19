@@ -1,7 +1,7 @@
 """Slow-tier integration test for the Add Repository "not configured" CTA.
 
 Uses ``sculptor_instance_factory_`` so we can spawn a backend whose PATH
-*excludes* the real gh/glab binaries — the dialog's
+*excludes* the real gh binary — the dialog's
 NotConfiguredSection branch is unreachable when gh is on PATH and authed
 because the dependency status atom (driven by both the initial GET and a
 WebSocket stream) ends up reporting installed=true.

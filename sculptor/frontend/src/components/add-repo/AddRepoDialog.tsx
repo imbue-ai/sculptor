@@ -4,7 +4,6 @@ import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import type { DependenciesStatus } from "~/api";
 import { ElementIds, getDependenciesStatus } from "~/api";
 import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus.ts";
 import { useDirectoryListing } from "~/components/path-autocomplete/useDirectoryListing.ts";
@@ -16,6 +15,7 @@ import { CloneProgressView } from "./CloneProgressView.tsx";
 import { PROVIDER_META } from "./providerMeta.ts";
 import type { RemoteCloneSubmit, RemoteRepoFormView } from "./RemoteRepoForm.tsx";
 import { RemoteRepoForm } from "./RemoteRepoForm.tsx";
+import { isRemoteFormShowingNotConfigured } from "./remoteRepoFormHelpers.ts";
 import { RepoValidationView } from "./RepoValidationView.tsx";
 import type { AddRepoSource, RemoteProvider } from "./SourceRadioCards.tsx";
 import { SourceRadioCards } from "./SourceRadioCards.tsx";
@@ -27,7 +27,7 @@ type AddRepoDialogProps = {
   setToast: (toast: ToastContent | null) => void;
 };
 
-const isRemoteProvider = (mode: AddRepoSource): mode is RemoteProvider => mode === "github" || mode === "gitlab";
+const isRemoteProvider = (mode: AddRepoSource): mode is RemoteProvider => mode === "github";
 
 // Per-provider form state. `submit` is the form's readiness + payload for the
 // dialog's submit button; `view` is the form's "search" / "url" toggle. These
@@ -40,24 +40,6 @@ type PerProviderState = {
 
 const INITIAL_REMOTE_STATE: Record<RemoteProvider, PerProviderState> = {
   github: { submit: { ready: false }, view: "search" },
-  gitlab: { submit: { ready: false }, view: "search" },
-};
-
-// Mirrors the readiness check inside RemoteRepoForm so the dialog footer can
-// derive the "Configure …" CTA without the form pushing a notification up. The
-// two paths must stay aligned: if the form's `isShowingNotConfiguredSection`
-// formula changes, update this helper to match.
-const getIsShowingNotConfigured = (
-  status: DependenciesStatus | null,
-  provider: RemoteProvider,
-  view: RemoteRepoFormView,
-  isRefreshing: boolean,
-): boolean => {
-  if (view !== "search") return false;
-  const info = provider === "github" ? status?.gh : status?.glab;
-  const isConfigured = Boolean(info?.installed && info?.isAuthenticated);
-  const isWaitingForFirstStatus = isRefreshing && !info;
-  return !isConfigured && !isWaitingForFirstStatus;
 };
 
 export const AddRepoDialog = ({ open, onOpenChange, setToast }: AddRepoDialogProps): ReactElement => {
@@ -172,14 +154,8 @@ export const AddRepoDialog = ({ open, onOpenChange, setToast }: AddRepoDialogPro
   const handleGithubSubmittableChange = useCallback((next: { ready: boolean; payload?: RemoteCloneSubmit }): void => {
     setRemoteState((prev) => ({ ...prev, github: { ...prev.github, submit: next } }));
   }, []);
-  const handleGitlabSubmittableChange = useCallback((next: { ready: boolean; payload?: RemoteCloneSubmit }): void => {
-    setRemoteState((prev) => ({ ...prev, gitlab: { ...prev.gitlab, submit: next } }));
-  }, []);
   const handleGithubViewChange = useCallback((next: RemoteRepoFormView): void => {
     setRemoteState((prev) => (prev.github.view === next ? prev : { ...prev, github: { ...prev.github, view: next } }));
-  }, []);
-  const handleGitlabViewChange = useCallback((next: RemoteRepoFormView): void => {
-    setRemoteState((prev) => (prev.gitlab.view === next ? prev : { ...prev, gitlab: { ...prev.gitlab, view: next } }));
   }, []);
 
   // Rendering
@@ -192,7 +168,7 @@ export const AddRepoDialog = ({ open, onOpenChange, setToast }: AddRepoDialogPro
   const isSubmitDisabled = isSubmitting || (mode === "local" ? !path.trim() : !currentRemoteSubmit.ready);
   const configureProvider: RemoteProvider | null =
     isRemoteProvider(mode) &&
-    getIsShowingNotConfigured(dependenciesStatus, mode, remoteState[mode].view, isRefreshingDeps)
+    isRemoteFormShowingNotConfigured(dependenciesStatus, remoteState[mode].view, isRefreshingDeps)
       ? mode
       : null;
   const isConfigureCtaVisible = configureProvider !== null && !isSubmitting;
@@ -216,7 +192,7 @@ export const AddRepoDialog = ({ open, onOpenChange, setToast }: AddRepoDialogPro
             <Flex direction="column" gap="4" mt="4">
               <SourceRadioCards value={mode} onValueChange={setMode} disabled={isSubmitting} />
 
-              {/* All three forms stay mounted (display:none, not conditional render)
+              {/* Both forms stay mounted (display:none, not conditional render)
                   so each preserves its internal state across radio-card switches. */}
               <Box style={{ display: mode === "local" ? "block" : "none" }}>
                 <AddRepoForm
@@ -238,17 +214,6 @@ export const AddRepoDialog = ({ open, onOpenChange, setToast }: AddRepoDialogPro
                   view={remoteState.github.view}
                   onViewChange={handleGithubViewChange}
                   onSubmittableChange={handleGithubSubmittableChange}
-                />
-              </Box>
-              <Box style={{ display: mode === "gitlab" ? "block" : "none" }}>
-                <RemoteRepoForm
-                  provider="gitlab"
-                  dependenciesStatus={dependenciesStatus}
-                  isLoadingDependencies={isRefreshingDeps}
-                  disabled={isSubmitting}
-                  view={remoteState.gitlab.view}
-                  onViewChange={handleGitlabViewChange}
-                  onSubmittableChange={handleGitlabSubmittableChange}
                 />
               </Box>
             </Flex>

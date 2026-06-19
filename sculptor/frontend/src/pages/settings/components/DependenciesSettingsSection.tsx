@@ -102,7 +102,6 @@ export const DependenciesSettingsSection = ({ onSettingChange }: DependenciesSet
   const dependenciesStatus = useAtomValue(dependenciesStatusAtom);
   const git = dependenciesStatus?.git ?? null;
   const gh = dependenciesStatus?.gh ?? null;
-  const glab = dependenciesStatus?.glab ?? null;
   const canInstallOptionalClis = getBackendCapabilities().canSelectLocalDir;
   const {
     info: claude,
@@ -121,7 +120,7 @@ export const DependenciesSettingsSection = ({ onSettingChange }: DependenciesSet
     handleApplyCustomPath,
   } = useManagedDependency({ tool: "CLAUDE", onSettingChange });
 
-  // Deep-link from onboarding ("?cli=gh" / "?cli=glab") scrolls to that CLI section.
+  // Deep-link from onboarding ("?cli=gh") scrolls to that CLI section.
   const [searchParams] = useSearchParams();
   const targetCli = searchParams.get("cli");
 
@@ -314,16 +313,6 @@ export const DependenciesSettingsSection = ({ onSettingChange }: DependenciesSet
             authCommand="gh auth login"
             installUrl="https://github.com/cli/cli#installation"
             info={gh}
-            loading={dependenciesStatus === null}
-          />
-
-          <Separator size="4" my="5" />
-          <OptionalCliSection
-            title="GitLab CLI"
-            cliName="glab"
-            authCommand="glab auth login"
-            installUrl="https://gitlab.com/gitlab-org/cli/#installation"
-            info={glab}
             loading={dependenciesStatus === null}
           />
         </>

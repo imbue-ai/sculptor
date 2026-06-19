@@ -33,7 +33,7 @@
 "." = 25
 
 [no-inline-functions]
-"." = 34
+"." = 33
 
 [no-inline-imports]
 "." = 63

@@ -29,7 +29,7 @@ def test_add_repo_remote_clone_via_url_fallback(sculptor_instance_: SculptorInst
     """Open the Add Repository dialog -> switch to GitHub -> use URL fallback -> submit.
 
     Verifies:
-      * SourceRadioCards renders the three options (GitHub / GitLab / Local)
+      * SourceRadioCards renders the two options (GitHub / Local)
         with their new test IDs.
       * The URL toggle switches the GitHub form into the URL view, exposing
         the URL TextField.
@@ -65,9 +65,8 @@ def test_add_repo_remote_clone_via_url_fallback(sculptor_instance_: SculptorInst
         repos_settings = settings_page.click_on_repositories()
         add_repo_dialog = repos_settings.open_add_repo_dialog()
 
-        # All three source cards should be rendered with their new test IDs.
+        # Both source cards should be rendered with their new test IDs.
         expect(add_repo_dialog.get_source_github_card()).to_be_visible()
-        expect(add_repo_dialog.get_source_gitlab_card()).to_be_visible()
         expect(add_repo_dialog.get_source_local_card()).to_be_visible()
 
         # GitHub is the default selection, but click it explicitly to exercise

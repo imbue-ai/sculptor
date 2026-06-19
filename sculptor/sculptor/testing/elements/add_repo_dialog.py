@@ -30,9 +30,6 @@ class PlaywrightAddRepoDialogElement(PlaywrightIntegrationTestElement):
     def get_source_github_card(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.ADD_REPO_SOURCE_GITHUB)
 
-    def get_source_gitlab_card(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.ADD_REPO_SOURCE_GITLAB)
-
     def get_source_local_card(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.ADD_REPO_SOURCE_LOCAL)
 

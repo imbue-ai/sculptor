@@ -22,12 +22,12 @@ describe("deriveNameFromUrl", () => {
     expect(deriveNameFromUrl("https://github.com/owner/repo")).toBe("repo");
   });
 
-  it("returns the last segment of a nested GitLab https path", () => {
-    expect(deriveNameFromUrl("https://gitlab.com/group/sub/name.git")).toBe("name");
+  it("returns the last segment of a nested group path", () => {
+    expect(deriveNameFromUrl("https://github.com/group/sub/name.git")).toBe("name");
   });
 
   it("returns the repo segment of an ssh URL", () => {
-    expect(deriveNameFromUrl("git@gitlab.com:group/sub/name.git")).toBe("name");
+    expect(deriveNameFromUrl("git@github.com:group/sub/name.git")).toBe("name");
   });
 
   it("returns empty string for empty input so the form stays not-ready", () => {
@@ -80,18 +80,18 @@ describe("computeSubmittable", () => {
   });
 
   const baseUrlInputs = {
-    provider: "gitlab" as const,
+    provider: "github" as const,
     view: "url" as const,
     selectedRepo: undefined,
-    urlInput: "https://gitlab.com/group/repo.git",
+    urlInput: "https://github.com/group/repo.git",
     name: "repo",
-    effectiveTargetDir: "/home/user/code/gitlab",
+    effectiveTargetDir: "/home/user/code/github",
   };
 
   it("returns ready=true in URL view with no selectedRepo", () => {
     const result = computeSubmittable(baseUrlInputs);
     expect(result.ready).toBe(true);
-    expect(result.payload?.url).toBe("https://gitlab.com/group/repo.git");
+    expect(result.payload?.url).toBe("https://github.com/group/repo.git");
   });
 
   it("omits fullName in URL view (the manual-URL flow has no slug)", () => {
@@ -102,10 +102,10 @@ describe("computeSubmittable", () => {
   it("trims surrounding whitespace from urlInput and name before submitting", () => {
     const result = computeSubmittable({
       ...baseUrlInputs,
-      urlInput: "  https://gitlab.com/group/repo.git  ",
+      urlInput: "  https://github.com/group/repo.git  ",
       name: "  repo  ",
     });
-    expect(result.payload?.url).toBe("https://gitlab.com/group/repo.git");
+    expect(result.payload?.url).toBe("https://github.com/group/repo.git");
     expect(result.payload?.name).toBe("repo");
   });
 

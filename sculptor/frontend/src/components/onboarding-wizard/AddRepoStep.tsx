@@ -20,7 +20,7 @@ import styles from "./OnboardingWizard.module.scss";
 
 const noopSetToast = (): void => {};
 
-const isRemoteProvider = (mode: AddRepoSource): mode is RemoteProvider => mode === "github" || mode === "gitlab";
+const isRemoteProvider = (mode: AddRepoSource): mode is RemoteProvider => mode === "github";
 
 // Per-provider form state, mirroring AddRepoDialog so switching radio cards
 // preserves each form's submit payload and "search" / "url" view.
@@ -31,7 +31,6 @@ type PerProviderState = {
 
 const INITIAL_REMOTE_STATE: Record<RemoteProvider, PerProviderState> = {
   github: { submit: { ready: false }, view: "search" },
-  gitlab: { submit: { ready: false }, view: "search" },
 };
 
 type AddRepoStepProps = {
@@ -70,7 +69,7 @@ export const AddRepoStep = ({ onComplete, isLoading, error }: AddRepoStepProps):
 
   // skipWsAck: the dependencies endpoint doesn't open a data-model
   // transaction, so it never produces the WS ack the SDK waits on by default.
-  // Without this the call would time out at 10s and the GitHub/GitLab forms
+  // Without this the call would time out at 10s and the GitHub form
   // would flash NotConfiguredSection.
   useEffect(() => {
     let isCancelled = false;
@@ -111,14 +110,8 @@ export const AddRepoStep = ({ onComplete, isLoading, error }: AddRepoStepProps):
   const handleGithubSubmittableChange = useCallback((next: { ready: boolean; payload?: RemoteCloneSubmit }): void => {
     setRemoteState((prev) => ({ ...prev, github: { ...prev.github, submit: next } }));
   }, []);
-  const handleGitlabSubmittableChange = useCallback((next: { ready: boolean; payload?: RemoteCloneSubmit }): void => {
-    setRemoteState((prev) => ({ ...prev, gitlab: { ...prev.gitlab, submit: next } }));
-  }, []);
   const handleGithubViewChange = useCallback((next: RemoteRepoFormView): void => {
     setRemoteState((prev) => (prev.github.view === next ? prev : { ...prev, github: { ...prev.github, view: next } }));
-  }, []);
-  const handleGitlabViewChange = useCallback((next: RemoteRepoFormView): void => {
-    setRemoteState((prev) => (prev.gitlab.view === next ? prev : { ...prev, gitlab: { ...prev.gitlab, view: next } }));
   }, []);
 
   const handleLocalSubmit = useCallback(
@@ -159,7 +152,7 @@ export const AddRepoStep = ({ onComplete, isLoading, error }: AddRepoStepProps):
           <SourceRadioCards value={mode} onValueChange={setMode} disabled={isSubmitting} />
         </Box>
 
-        {/* All three forms stay mounted (display:none, not conditional render)
+        {/* Both forms stay mounted (display:none, not conditional render)
             so each preserves its internal state across radio-card switches. */}
         <Box mt="3" style={{ display: mode === "local" ? "block" : "none" }}>
           <AddRepoForm
@@ -182,17 +175,6 @@ export const AddRepoStep = ({ onComplete, isLoading, error }: AddRepoStepProps):
             view={remoteState.github.view}
             onViewChange={handleGithubViewChange}
             onSubmittableChange={handleGithubSubmittableChange}
-          />
-        </Box>
-        <Box mt="3" style={{ display: mode === "gitlab" ? "block" : "none" }}>
-          <RemoteRepoForm
-            provider="gitlab"
-            dependenciesStatus={dependenciesStatus}
-            isLoadingDependencies={isRefreshingDeps}
-            disabled={isSubmitting}
-            view={remoteState.gitlab.view}
-            onViewChange={handleGitlabViewChange}
-            onSubmittableChange={handleGitlabSubmittableChange}
           />
         </Box>
 

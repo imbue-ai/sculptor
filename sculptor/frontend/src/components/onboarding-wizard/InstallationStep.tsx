@@ -1,4 +1,3 @@
-import { Provider as TooltipProvider } from "@radix-ui/react-tooltip";
 import { Button, Flex, Link, Text, Tooltip } from "@radix-ui/themes";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useState } from "react";
@@ -340,7 +339,7 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
     return (): void => window.removeEventListener("keydown", handleKeyDown);
   });
 
-  const handleOverride = async (depKey: "claude" | "git" | "gh" | "glab", path: string): Promise<void> => {
+  const handleOverride = async (depKey: "claude" | "git" | "gh", path: string): Promise<void> => {
     const { data: currentConfig } = await getUserConfig({ meta: { skipWsAck: true } });
     if (!currentConfig) throw new Error("Config not loaded");
 
@@ -381,8 +380,6 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
   );
   const gitStatus = deriveGitStatus(dependencies?.git);
   const ghStatus = deriveOptionalCliStatus(dependencies?.gh);
-  // glab/GitLab temporarily disabled — restore alongside the commented-out GitLab card below.
-  // const glabStatus = deriveOptionalCliStatus(dependencies?.glab);
   const canInstallOptionalClis = getBackendCapabilities().canSelectLocalDir;
 
   const claudeMode = dependencies?.claude?.mode ?? null;
@@ -429,70 +426,35 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
         />
       </Flex>
 
-      {/* Optional CLIs for cloning from GitHub / GitLab. Hidden in web-remote
-          mode since the user can't install binaries on the backend host. */}
+      {/* Optional CLI for cloning from GitHub. Hidden in web-remote mode since
+          the user can't install binaries on the backend host. */}
       {canInstallOptionalClis && (
         <>
           <Text size="2" mt="2" color="gray">
             Recommended for{" "}
-            {/* Shared provider so moving from the GitHub tooltip to the GitLab one
-                (or vice versa) opens the second instantly, within skipDelayDuration. */}
-            <TooltipProvider delayDuration={700} skipDelayDuration={300}>
-              <Tooltip
-                content={
-                  <Flex direction="column" gap="2" style={{ maxWidth: 280 }}>
-                    <Text size="2" weight="medium">
-                      Sculptor uses gh (GitHub CLI) to:
-                    </Text>
-                    <Flex direction="column" gap="1">
-                      <Text size="1">• Create projects from your GitHub repos</Text>
-                      <Text size="1">• Create workspaces from your remote branches</Text>
-                      <Text size="1">• Warn when local and remote diverge</Text>
-                    </Flex>
-                    <Button asChild size="1" variant="surface" mt="1">
-                      <a href="https://github.com/cli/cli#installation" target="_blank" rel="noreferrer">
-                        Read GitHub CLI docs
-                      </a>
-                    </Button>
+            <Tooltip
+              content={
+                <Flex direction="column" gap="2" style={{ maxWidth: 280 }}>
+                  <Text size="2" weight="medium">
+                    Sculptor uses gh (GitHub CLI) to:
+                  </Text>
+                  <Flex direction="column" gap="1">
+                    <Text size="1">• Create projects from your GitHub repos</Text>
+                    <Text size="1">• Create workspaces from your remote branches</Text>
+                    <Text size="1">• Warn when local and remote diverge</Text>
                   </Flex>
-                }
-              >
-                <Link href="https://github.com/cli/cli#installation" target="_blank" className={styles.inlineLink}>
-                  GitHub
-                </Link>
-              </Tooltip>
-              {/* glab/GitLab temporarily disabled — restore this block to bring GitLab back.
-              {" "}
-              or{" "}
-              <Tooltip
-                content={
-                  <Flex direction="column" gap="2" style={{ maxWidth: 280 }}>
-                    <Text size="2" weight="medium">
-                      Sculptor uses glab (GitLab CLI) to:
-                    </Text>
-                    <Flex direction="column" gap="1">
-                      <Text size="1">• Create projects from your GitLab repos</Text>
-                      <Text size="1">• Create workspaces from your remote branches</Text>
-                      <Text size="1">• Warn when local and remote diverge</Text>
-                    </Flex>
-                    <Button asChild size="1" variant="surface" mt="1">
-                      <a href="https://gitlab.com/gitlab-org/cli/#installation" target="_blank" rel="noreferrer">
-                        Read GitLab CLI docs
-                      </a>
-                    </Button>
-                  </Flex>
-                }
-              >
-                <Link
-                  href="https://gitlab.com/gitlab-org/cli/#installation"
-                  target="_blank"
-                  className={styles.inlineLink}
-                >
-                  GitLab
-                </Link>
-              </Tooltip>
-              */}
-            </TooltipProvider>
+                  <Button asChild size="1" variant="surface" mt="1">
+                    <a href="https://github.com/cli/cli#installation" target="_blank" rel="noreferrer">
+                      Read GitHub CLI docs
+                    </a>
+                  </Button>
+                </Flex>
+              }
+            >
+              <Link href="https://github.com/cli/cli#installation" target="_blank" className={styles.inlineLink}>
+                GitHub
+              </Link>
+            </Tooltip>
           </Text>
           <Flex direction="column" gap="3">
             <DependencyCard
@@ -509,18 +471,6 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
               userCode={ghUserCode}
               authError={ghAuthError}
             />
-            {/* glab/GitLab temporarily disabled — restore this card to bring GitLab back.
-            <DependencyCard
-              name="GitLab CLI"
-              cliName="glab"
-              optional
-              status={glabStatus}
-              installUrl="https://gitlab.com/gitlab-org/cli/#installation"
-              brewPackage="glab"
-              helpText="Used to clone GitLab projects from inside Sculptor. Run 'glab auth login' after install."
-              onApplyOverride={(path) => handleOverride("glab", path)}
-            />
-            */}
           </Flex>
         </>
       )}
