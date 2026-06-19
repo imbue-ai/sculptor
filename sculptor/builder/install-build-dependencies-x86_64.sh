@@ -54,9 +54,9 @@ echo "Now bootstrapping x86_64 Homebrew packages under Rosetta..."
 arch -x86_64 /usr/local/bin/brew install bash
 arch -x86_64 /usr/local/bin/brew install uv nvm just tmux
 
-# Install an Intel build of Python (example: 3.13)
-arch -x86_64 /usr/local/bin/uv python install cpython-3.13.7-macos-x86_64-none
-arch -arm64 /opt/homebrew/bin/uv python install cpython-3.13.7-macos-aarch64-none
+# Install an Intel build of Python (example: 3.14)
+arch -x86_64 /usr/local/bin/uv python install cpython-3.14.4-macos-x86_64-none
+arch -arm64 /opt/homebrew/bin/uv python install cpython-3.14.4-macos-aarch64-none
 
 
 # Ensure nvm setup happens in x86_64 context too

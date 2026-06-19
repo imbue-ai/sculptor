@@ -137,7 +137,7 @@ build_frontend_app() (
   npm_with_node ci
 
   # Backend & assets
-  just sidecar "cpython-3.13.7-macos-x86_64-none"
+  just sidecar "cpython-3.14.4-macos-x86_64-none"
   ARCH=$ARCH just electron-assets
 
   # Build via Electron Forge (darwin x64)

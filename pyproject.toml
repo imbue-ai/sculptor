@@ -1,7 +1,7 @@
 [project]
 name = "sculptor-workspace"
 version = "0.0.1"
-requires-python = ">=3.13,<3.14"
+requires-python = ">=3.14,<3.15"
 license = { text = "MIT" }
 dependencies = [
     "mcp>=1.23.0,<2",
@@ -57,6 +57,11 @@ package = false
 required-version = ">=0.8.13"
 
 [tool.ruff]
+# Pin the syntax target below requires-python. Python 3.14's PEP 758 lets `except`
+# omit parentheses (`except A, B:`), and ruff's formatter strips them under a py314
+# target — but that form is 3.14-only and reads like the Python 2 `except A, e:`
+# footgun, so keep the parenthesized, version-portable style.
+target-version = "py313"
 line-length = 119
 exclude = [
   "**/__mock_llm_responses__/**",

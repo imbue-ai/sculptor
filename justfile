@@ -753,7 +753,7 @@ install-build-deps:
       # The uv python commands shouldn't be necessary most of the time,
       # but these need to be macOS x64 builds to function correctly -
       # we have a weird setup there where some workflows are run with arm mode and some with x64 mode.
-      uv python install 3.13
+      uv python install 3.14
       uv python update-shell
       brew install depot/tap/depot
       {{ nvm_use }}
@@ -818,7 +818,7 @@ install-build-deps:
     {{ _quiet_by_default_fn }}
     _do_install_build_deps() {
       echo "Installing platform-specific build dependencies"
-      uv python install 3.13
+      uv python install 3.14
       uv python update-shell
       curl -L https://depot.dev/install-cli.sh | sh -s
       {{ nvm_use }}
@@ -1039,7 +1039,7 @@ build-desktop-app--x86_64:
     {{ nvm_use }}
     set -e
     just refresh-assets
-    just sidecar "cpython-3.13.7-macos-x86_64-none"
+    just sidecar "cpython-3.14.4-macos-x86_64-none"
     cd "{{justfile_directory()}}/sculptor/frontend"
     npm ci
     eval $(uv run --project sculptor builder setup-build-vars "${MODE:-dev}") && npm run electron:package -- --  --platform=darwin --arch=x64
