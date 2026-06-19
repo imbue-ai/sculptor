@@ -9,11 +9,14 @@ on:
   push:
     branches: [main]
 
-# GitLab's `auto_cancel.on_new_commit: interruptible` equivalent. PR runs
-# cancel on new pushes; main runs are queued (no cancel) so we don't lose
-# signal on merged commits.
+# GitLab's `auto_cancel.on_new_commit: interruptible` equivalent. Key on
+# github.ref: PR runs (refs/pull/N/merge) collapse per-PR and cancel on new
+# pushes; main runs (refs/heads/main) share one group and queue (cancel-in-progress
+# is false off PRs) so we don't lose signal on merged commits. Do NOT key on
+# head_ref -- it is empty on push, so main collapses to a unique run_id and never
+# queues.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Pin the GITHUB_TOKEN scopes this workflow needs. The
