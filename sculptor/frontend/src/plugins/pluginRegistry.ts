@@ -27,6 +27,17 @@ export const pluginSettingsComponentsAtom = atom<Readonly<Record<string, Compone
 export const pluginOverlaysAtom = atom<ReadonlyArray<{ id: string; component: ComponentType }>>([]);
 
 /**
+ * Workspace-scoped widgets contributed by plugins via `registerWorkspaceWidget`.
+ * The workspace banner renders each one in its action row, ordered (and
+ * progressively collapsed) by `collapsePriority`. Each entry's component is
+ * already wrapped by the loader in an error boundary and the plugin's
+ * PluginContext; the banner supplies the per-render WorkspacePluginContext.
+ */
+export const pluginWorkspaceWidgetsAtom = atom<
+  ReadonlyArray<{ id: string; component: ComponentType; collapsePriority: number }>
+>([]);
+
+/**
  * User-added plugin sources, persisted to localStorage. A source is a URL or
  * directory that contains a `manifest.json` (e.g. `http://localhost:5174/my-plugin`
  * or `/plugins/my-plugin`). Built-in sources are loaded separately and are not
