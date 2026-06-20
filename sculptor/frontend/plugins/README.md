@@ -24,7 +24,11 @@ a **workspace widget** (`registerWorkspaceWidget`) — a compact ticket shortcut
 the host renders in the workspace banner beside the PR button. The widget
 defaults to the branch ticket but follows whatever the user assigns from the
 panel; the two share a single per-workspace `shortcut` setting, so the ticket
-reference stays consistent across both surfaces. It is structured as a
+reference stays consistent across both surfaces.
+
+![The Linear workspace widget — a "# SCU-1234" ticket shortcut — in the workspace banner](linear-issue/docs/workspace-widget.png)
+
+It is structured as a
 reference: a `linear/` core (Linear client, source-merging, query hooks) kept
 separate from presentational `components/`, with `index.tsx` doing only
 `activate()` wiring.
