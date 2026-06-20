@@ -105,7 +105,7 @@ For videos (MP4, WebM, MOV):
 The media will be rendered inline in the chat UI. Users can click to view full-size or play videos.
 Only absolute local paths (starting with /) are supported. HTTP URLs will not be rendered.
 
-Place downloads in the workspace attachments directory which is referenced below.
+The workspace attachments directory (referenced below) is ONLY for media you intend to display inline in the chat — images and videos such as screenshots or screen recordings. Do NOT put markdown files, documents, reports, notes, code, logs, or any other non-media files there. Write those into the repository or working directory instead.
 </MediaDisplay instructions>
 
 """

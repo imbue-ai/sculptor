@@ -346,6 +346,25 @@ def get_xterm_theme_foreground(page: Page) -> str:
     )
 
 
+def get_xterm_theme_color(page: Page, key: str) -> str:
+    """Return an arbitrary color from the xterm theme options by key.
+
+    Reads ``xterm.options.theme[key]`` (e.g. ``"white"``, ``"brightWhite"``,
+    one of the 16 ANSI palette entries) — the theme *config object* our code
+    builds, not a rendered/computed style. Returns ``""`` when the entry is
+    unset, which is exactly the buggy state for the ANSI palette in light mode
+    (an unset entry falls back to xterm.js's dark-tuned default).
+    """
+    return page.evaluate(
+        """(key) => {
+        const xterm = window.__xterm;
+        if (!xterm || !xterm.options.theme) return '';
+        return xterm.options.theme[key] || '';
+    }""",
+        key,
+    )
+
+
 def wait_for_xterm_theme_ready(page: Page) -> None:
     """Wait until the xterm theme has non-empty background and foreground colors."""
     try:

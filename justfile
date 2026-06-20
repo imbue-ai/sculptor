@@ -1031,21 +1031,6 @@ build-desktop-app:
     mkdir -p "{{justfile_directory()}}/dist/darwin-arm64"
     cp -r out/Sculptor-darwin-arm64/ "{{justfile_directory()}}/dist/darwin-arm64"
 
-# Uses electron forge to create an executable application for MacOS on x86_64. This app will not be bundled into an installer.
-[group("build")]
-[macos]
-build-desktop-app--x86_64:
-    #!/usr/bin/env arch -x86_64 /usr/local/bin/bash -l
-    {{ nvm_use }}
-    set -e
-    just refresh-assets
-    just sidecar "cpython-3.14.4-macos-x86_64-none"
-    cd "{{justfile_directory()}}/sculptor/frontend"
-    npm ci
-    eval $(uv run --project sculptor builder setup-build-vars "${MODE:-dev}") && npm run electron:package -- --  --platform=darwin --arch=x64
-    mkdir -p "{{justfile_directory()}}/dist/Darwin-x86_64"
-    cp -r out/Sculptor-darwin-x64/ "{{justfile_directory()}}/dist/darwin-x86_64"
-
 # Uses electron forge to create an executable application for Linux. This app will not be bundled into an installer.
 [group("build")]
 [linux]

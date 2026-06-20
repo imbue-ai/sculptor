@@ -37,8 +37,11 @@ agent sessions.
 The default mode is **worktree** (above). Two other modes are available under
 **Settings > Experimental**:
 
-- **Clone** — a full, separate clone of the repo with its own `local` remote that
-  you sync back explicitly.
+- **Clone** — a full, separate clone of the repo with its own history and git
+  remotes that mirror your repo's (or, if your repo has no remotes, a single
+  `origin` pointing at your repo on disk). Changes stay in the clone; you bring
+  them back explicitly — push to a shared remote and pull locally, or push
+  directly to your on-disk repo.
 - **In-place** — the agent works directly in your original repository, with no
   separate copy.
 

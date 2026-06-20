@@ -168,6 +168,15 @@ const buildTerminalTheme = (panelBg: string, appTheme: string): ITheme => {
     cursor: "#3B352B",
     cursorAccent: panelBg,
     selectionBackground: "#D4D0C8",
+    // xterm.js's built-in ANSI palette is tuned for a dark background — its
+    // "white" (#d3d7cf) and "brightWhite" (#eeeeec) are near-white. Programs
+    // that paint default/secondary text with ANSI white (e.g. Claude Code's
+    // diff context lines) therefore rendered white-on-white on the light panel
+    // background. Remap the white-family entries to the dark foreground tones
+    // so that text stays legible. Dark mode keeps xterm's defaults, which
+    // already read correctly against the dark background.
+    white: "#3B352B",
+    brightWhite: "#1C1813",
   };
 };
 

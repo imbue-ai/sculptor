@@ -51,6 +51,16 @@ class PlaywrightPluginsSettingsElement(PlaywrightIntegrationTestElement):
         """Click the remove (trash) button on a source's row."""
         self.get_source_row(source).get_by_test_id(ElementIDs.SETTINGS_PLUGINS_SOURCE_REMOVE).click()
 
+    def open_source_settings(self, source: str) -> None:
+        """Reveal a source's plugin-rendered settings component (clicks the gear).
+
+        The settings component is the plugin's own React, mounted under the
+        plugin error boundary, so revealing it exercises the bundle's render
+        path — not just whether it loaded. Its content then appears inside the
+        source's row (see ``get_source_row``).
+        """
+        self.get_source_row(source).get_by_test_id(ElementIDs.SETTINGS_PLUGINS_SOURCE_SETTINGS).click()
+
     def get_toggle(self, source: str) -> Locator:
         """Locate the enable/disable switch on a source's row."""
         return self.get_source_row(source).get_by_test_id(ElementIDs.SETTINGS_PLUGINS_SOURCE_TOGGLE)
