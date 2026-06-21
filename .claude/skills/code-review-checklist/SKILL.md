@@ -163,7 +163,7 @@ This category applies when the stated goal is an MR/PR body produced by an auton
 
 ### Comments
 - Comments describe the code and explain *why*; they are not narration.
-- No incidental history or persuasive rationale — strip comments that explain
+- No incidental history or defensive justification — strip comments that explain
   today's bug fix, argue for the code's correctness, or narrate how the code
   used to work. The comment should help a future maintainer, not relitigate
   the change that introduced it.
