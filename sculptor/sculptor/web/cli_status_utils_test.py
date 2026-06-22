@@ -13,7 +13,7 @@ def test_classify_cli_error_not_logged_into_returns_not_authenticated() -> None:
 
 
 def test_classify_cli_error_not_logged_returns_not_authenticated() -> None:
-    assert classify_cli_error("error: not logged in. Run `glab auth login`") == "not_authenticated"
+    assert classify_cli_error("error: not logged in. Run `gh auth login`") == "not_authenticated"
 
 
 def test_classify_cli_error_log_in_returns_not_authenticated() -> None:

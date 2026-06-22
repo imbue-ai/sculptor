@@ -1,7 +1,7 @@
-"""App-level service for PR/MR status polling.
+"""App-level service for PR status polling.
 
 Runs a fixed-size worker pool that pulls poll jobs from a priority queue,
-executes CLI calls (gh/glab) to fetch PR status, caches results, and fans
+executes ``gh`` CLI calls to fetch PR status, caches results, and fans
 changes out to all registered observer queues. Per-connection scope
 filtering is the caller's responsibility — see `project_for_scope` in
 `streams.py`, which drops out-of-scope `pr_status_by_workspace_id` entries
@@ -40,11 +40,10 @@ from sculptor.services.workspace_service.api import WorkspaceService
 from sculptor.web.cli_status_utils import strip_remote_prefix
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import PrStatusInfo
-from sculptor.web.mr_status import fetch_mr_status
 from sculptor.web.pr_status import fetch_pr_status
 
 # Git host providers we know how to poll. Matches ``PrStatusInfo.error_provider``.
-_Provider = Literal["github", "gitlab"]
+_Provider = Literal["github"]
 # The terminal/non-terminal PR states. Matches ``PrStatusInfo.pr_state``.
 _PrState = Literal["none", "open", "merged", "closed"]
 
@@ -69,8 +68,8 @@ _MIN_POLL_INTERVAL_SECONDS = 10.0
 # Minimum spacing between the *start* of any two API-backed polls, enforced
 # globally across the whole worker pool. GitHub's GraphQL guidance is to avoid
 # concurrent requests; staggering poll starts keeps the workers from firing
-# gh/glab simultaneously and smooths bursts under the per-minute limit. The
-# ``gh``/``glab`` commands we run are GraphQL-backed, so each poll spends real
+# gh simultaneously and smooths bursts under the per-minute limit. The
+# ``gh`` commands we run are GraphQL-backed, so each poll spends real
 # GraphQL points — spacing them is what keeps a fleet of workspaces under the
 # hourly budget.
 _GLOBAL_MIN_POLL_SPACING_SECONDS = 1.5
@@ -122,7 +121,7 @@ class _HostThrottle:
     per-workspace. Two responsibilities:
 
     - **Spacing**: ``reserve_slot`` hands out start times at least
-      ``min_interval`` apart, so concurrent workers stagger their gh/glab
+      ``min_interval`` apart, so concurrent workers stagger their gh
       calls instead of firing them at once.
     - **Cooldown**: when a provider returns a rate-limit error,
       ``enter_cooldown`` suppresses every poll for that provider until the
@@ -213,10 +212,6 @@ def _extract_hostname(url: str) -> str:
     return parsed.hostname or ""
 
 
-def _is_gitlab_url(url: str) -> bool:
-    return "gitlab" in _extract_hostname(url).lower()
-
-
 def _is_github_url(url: str) -> bool:
     return "github" in _extract_hostname(url).lower()
 
@@ -259,7 +254,7 @@ class _WorkspacePollState:
 
 
 class PrPollingService(Service):
-    """App-level service that polls PR/MR status using a fixed-size worker pool."""
+    """App-level service that polls PR status using a fixed-size worker pool."""
 
     _data_model_service: DataModelService = PrivateAttr()
     _workspace_service: WorkspaceService = PrivateAttr()
@@ -281,8 +276,7 @@ class PrPollingService(Service):
     _worker_sleep_until: dict[int, float] = PrivateAttr(default_factory=dict)
     _worker_sleep_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
     _gh_available: bool | None = PrivateAttr(default=None)
-    _glab_available: bool | None = PrivateAttr(default=None)
-    # Process-global throttle/cooldown shared by every worker. The gh/glab
+    # Process-global throttle/cooldown shared by every worker. The gh
     # commands are GraphQL-backed and the rate limit is per-user, so spacing
     # and cooldown must be coordinated across the whole pool, not per workspace.
     _throttle: _HostThrottle = PrivateAttr(default_factory=lambda: _HostThrottle(_GLOBAL_MIN_POLL_SPACING_SECONDS))
@@ -327,14 +321,6 @@ class PrPollingService(Service):
         available = shutil.which("gh") is not None
         if available:
             self._gh_available = True
-        return available
-
-    def _is_glab_available(self) -> bool:
-        if self._glab_available is True:
-            return True
-        available = shutil.which("glab") is not None
-        if available:
-            self._glab_available = True
         return available
 
     # -- Lifecycle ---------------------------------------------------------
@@ -738,27 +724,6 @@ class PrPollingService(Service):
                 target_branch=target_branch,
             )
             self._note_rate_limit(status, "github")
-            return status
-
-        if origin_url is not None and _is_gitlab_url(origin_url):
-            if not self._is_glab_available():
-                return PrStatusInfo(
-                    workspace_id=workspace_id,
-                    pr_state="none",
-                    error_category="cli_missing",
-                    error_provider="gitlab",
-                    error_message="glab CLI not found in PATH",
-                )
-            deferred = self._respect_throttle("gitlab")
-            if deferred is not None:
-                return deferred
-            status = fetch_mr_status(
-                workspace_id=workspace_id,
-                working_dir=working_dir,
-                current_branch=current_branch,
-                target_branch=target_branch,
-            )
-            self._note_rate_limit(status, "gitlab")
             return status
 
         return PrStatusInfo(workspace_id=workspace_id, pr_state="none")

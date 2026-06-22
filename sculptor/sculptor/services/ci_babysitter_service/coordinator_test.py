@@ -480,7 +480,7 @@ def _seed_baseline(coordinator: CIBabysitterCoordinator, workspace_id: Workspace
 
     The classifier suppresses PIPELINE_FAILED and MERGE_CONFLICT on
     `prev is None` to avoid burning a retry on Sculptor restart against
-    an already-red MR (architecture's first-poll baseline mitigation).
+    an already-red PR (architecture's first-poll baseline mitigation).
     Tests that want to exercise an actionable transition must seed a
     clean baseline poll first.
     """
@@ -572,13 +572,13 @@ def test_merge_conflict_present_at_first_observation_is_surfaced(
     env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
 ) -> None:
     """SCU-1361: a conflict already present the first time the coordinator
-    observes the MR (no clean baseline poll first) must still dispatch a
+    observes the PR (no clean baseline poll first) must still dispatch a
     MERGE_CONFLICT prompt.
 
     This is the common case: a branch cut from a stale main conflicts within
-    seconds of MR creation, so the very first poll already shows
+    seconds of PR creation, so the very first poll already shows
     has_conflicts=True. It also covers any backend restart against an
-    already-conflicted MR, since the coordinator's prev_status is in-memory
+    already-conflicted PR, since the coordinator's prev_status is in-memory
     and resets to None on restart. The deliberate absence of a _seed_baseline
     call is the whole point of the regression.
     """
@@ -728,7 +728,7 @@ def test_same_cycle_merge_and_failed_suppresses_prompt(
 ) -> None:
     """If MR_MERGED arrives in the same diff as PIPELINE_FAILED, retire wins.
 
-    Reproduces a race where a user manually merges a still-red MR. The
+    Reproduces a race where a user manually merges a still-red PR. The
     coordinator must process the retire transition before any pipeline-
     failed dispatch in the same diff, so no spurious prompt is sent.
     """
@@ -764,7 +764,7 @@ def test_transient_pr_state_none_does_not_clobber_prev_status(
 ) -> None:
     """A transient pr_state="none" gap (e.g. detached HEAD mid-rebase)
     must not overwrite prev_status. If it did, the next poll that re-finds
-    the MR would look like a fresh False→True merge_conflict transition
+    the PR would look like a fresh False→True merge_conflict transition
     and dispatch a duplicate prompt.
     """
     coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
@@ -774,10 +774,10 @@ def test_transient_pr_state_none_does_not_clobber_prev_status(
     coordinator._handle_status(_make_status(env.workspace_id, pr_state="open", has_conflicts=True))
     assert len(task_service.create_message_calls) == 1
 
-    # 2. Branch flips: MR can't be matched → polling emits pr_state="none".
+    # 2. Branch flips: PR can't be matched → polling emits pr_state="none".
     coordinator._handle_status(_make_status(env.workspace_id, pr_state="none", has_conflicts=None))
 
-    # 3. Branch back: MR re-found, conflict still present.
+    # 3. Branch back: PR re-found, conflict still present.
     coordinator._handle_status(_make_status(env.workspace_id, pr_state="open", has_conflicts=True))
 
     # The prompt MUST NOT have been resent.

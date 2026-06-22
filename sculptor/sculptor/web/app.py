@@ -3176,11 +3176,6 @@ def _extract_hostname(url: str) -> str:
     return parsed.hostname or ""
 
 
-def _is_gitlab_url(url: str) -> bool:
-    """Check if a URL points to a GitLab instance."""
-    return "gitlab" in _extract_hostname(url).lower()
-
-
 def _is_github_url(url: str) -> bool:
     """Check if a URL points to a GitHub instance."""
     return "github" in _extract_hostname(url).lower()
@@ -3354,7 +3349,6 @@ def get_repo_info(
 
         # Get origin URL and provider detection info
         origin_url = _get_origin_url(repo_path)
-        is_gitlab_origin = _is_gitlab_url(origin_url) if origin_url is not None else False
         is_github_origin = _is_github_url(origin_url) if origin_url is not None else False
         remote_branches = _get_remote_branches(repo_path)
 
@@ -3363,7 +3357,6 @@ def get_repo_info(
             current_branch=current_branch,
             recent_branches=branches,
             project_id=project.object_id,
-            is_gitlab_origin=is_gitlab_origin,
             is_github_origin=is_github_origin,
             remote_branches=remote_branches,
         )

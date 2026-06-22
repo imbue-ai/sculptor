@@ -262,11 +262,10 @@ def test_status_check_rollup_state_maps_to_pipeline_status(rollup_state: str | N
 
 
 # ---------------------------------------------------------------------------
-# Open PR merge conflict → has_conflicts flows through (parity with GitLab MRs).
+# Open PR merge conflict → has_conflicts flows through.
 # GitHub reports mergeability via the ``mergeable`` enum; CONFLICTING means the
 # PR cannot merge cleanly. Surfacing it as has_conflicts=True is what lets the
-# CI babysitter's MERGE_CONFLICT transition fire for PRs the same way it does
-# for MRs (mr_status sets has_conflicts from glab's ``has_conflicts``).
+# CI babysitter's MERGE_CONFLICT transition fire for PRs.
 # ---------------------------------------------------------------------------
 
 

@@ -352,7 +352,7 @@ def create_cli_stub(stub_dir: Path, name: str, script: str) -> Path:
     Returns the path to the created stub.  Callers should prepend *stub_dir*
     to ``PATH`` so the stub shadows any real binary of the same name.
 
-    Available for tests that need custom CLI fakes (e.g. gh/glab with
+    Available for tests that need custom CLI fakes (e.g. gh with
     mode-file switching in ``test_pr_button_errors.py``).
     """
     stub_path = stub_dir / name

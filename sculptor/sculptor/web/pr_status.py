@@ -233,9 +233,9 @@ def _parse_conflict_status(pr_node: dict) -> bool | None:
     cannot merge cleanly into its base (a merge conflict); ``MERGEABLE`` means
     it can. ``UNKNOWN`` (GitHub hasn't finished computing, common right after a
     push) and any unrecognized/missing value map to None, so we neither claim a
-    conflict nor claim cleanliness until GitHub is sure. This mirrors GitLab's
-    ``has_conflicts`` (bool | None) so the CI babysitter's MERGE_CONFLICT
-    transition fires identically for PRs and MRs.
+    conflict nor claim cleanliness until GitHub is sure. The resulting tri-state
+    ``has_conflicts`` (bool | None) drives the CI babysitter's MERGE_CONFLICT
+    transition.
     """
     mergeable = pr_node.get("mergeable")
     if mergeable == "CONFLICTING":

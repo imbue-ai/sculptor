@@ -49,7 +49,6 @@ def _make_service() -> PrPollingService:
     svc._worker_sleep_until = {}
     svc._worker_sleep_lock = threading.Lock()
     svc._gh_available = None
-    svc._glab_available = None
     svc._throttle = _HostThrottle(_GLOBAL_MIN_POLL_SPACING_SECONDS)
     object.__setattr__(svc, "_data_model_service", MagicMock())
     object.__setattr__(svc, "_workspace_service", MagicMock())
@@ -114,29 +113,6 @@ def test_gh_becomes_available_after_install() -> None:
     # Now should be cached
     with patch("shutil.which", side_effect=AssertionError("should not be called")):
         assert svc._is_gh_available() is True
-
-
-def test_glab_available_cached_when_found() -> None:
-    svc = _make_service()
-    with patch("shutil.which", return_value="/usr/bin/glab"):
-        assert svc._is_glab_available() is True
-    with patch("shutil.which", side_effect=AssertionError("should not be called")):
-        assert svc._is_glab_available() is True
-
-
-def test_glab_not_cached_when_missing() -> None:
-    svc = _make_service()
-    call_count = 0
-
-    def counting_which(name: str) -> None:
-        nonlocal call_count
-        call_count += 1
-        return None
-
-    with patch("shutil.which", side_effect=counting_which):
-        assert svc._is_glab_available() is False
-        assert svc._is_glab_available() is False
-    assert call_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -583,8 +559,6 @@ def test_host_throttle_cooldown_remaining_tracks_window() -> None:
     assert throttle.cooldown_remaining("github") == 0.0
     throttle.enter_cooldown("github", 30.0)
     assert 29.0 <= throttle.cooldown_remaining("github") <= 30.0
-    # Cooldown is per-provider.
-    assert throttle.cooldown_remaining("gitlab") == 0.0
 
 
 def test_host_throttle_enter_cooldown_never_shortens() -> None:
