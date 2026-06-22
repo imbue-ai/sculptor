@@ -4,6 +4,9 @@
   reviewing changes, opening pull requests, and more.
 - **[Developer documentation](development/)** — how to work on Sculptor itself:
   setup, style guide, testing, and review rules.
+- **[Specification](specs/)** — the product spec set: what Sculptor is, the
+  measurable requirements and contracts it upholds, and the scenarios and test
+  coverage that verify its behavior.
 - **[History](history.md)** — how Sculptor came to be, and the architectural
   decisions behind it.
 - **[Competitors](competitors.md)** — how Sculptor compares to other coding
