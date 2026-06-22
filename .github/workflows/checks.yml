@@ -92,7 +92,7 @@ jobs:
             ${{ runner.temp }}/ratchets-cargo/.crates2.json
           # Bump the version suffix in lockstep with `ratchets_version` in the
           # justfile, and bump the -v3 suffix whenever the cached `path:` set changes.
-          key: ratchets-bin-${{ runner.os }}-0.3.1-v3
+          key: ratchets-bin-${{ runner.os }}-0.4.0-v3
 
       - name: Install ratchets
         env:
