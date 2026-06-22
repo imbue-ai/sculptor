@@ -12,8 +12,11 @@
 }
 
 .dirPath {
-  // stylelint-disable-next-line sculptor/no-hardcoded-values -- enough room for the ellipsis character
-  min-width: 2ch;
+  // Size to content and shrink/ellipsize under pressure. A fixed floor (e.g.
+  // `min-width: 2ch`, meant to reserve room for the ellipsis) padded a
+  // single-character directory — a home-dir `~` — out to two characters,
+  // leaving a visible gap between the `~` and the `/` separator.
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
