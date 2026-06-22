@@ -60,6 +60,18 @@ class PlaywrightPanelZonesElement:
     def get_file_browser_panel(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.FILE_BROWSER_PANEL)
 
+    def activate_plugin_panel(self, plugin_id: str) -> None:
+        """Click a plugin-contributed panel's sidebar icon to make it the active
+        panel in its zone.
+
+        Plugin panels render `data-panel-icon=<id>` with no ElementIDs testid
+        (unlike built-in panels, which are in PANEL_ICON_TEST_IDS), so they're
+        located by that attribute.
+        """
+        icon = self._page.locator(f'[data-panel-icon="{plugin_id}"]')
+        expect(icon).to_be_visible()
+        icon.click()
+
     def move_panel_to_zone(self, panel_icon_id: ElementIDs, zone_key: str) -> None:
         """Move a panel to a different zone via its sidebar icon context menu.
 
