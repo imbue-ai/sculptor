@@ -456,6 +456,18 @@ class ElementIDs(StrEnum):
     PI_INSTALL_BUTTON = "pi-install-button"
     PI_INSTALL_PROGRESS = "pi-install-progress"
     PI_UP_TO_DATE = "pi-up-to-date"
+    # Pi provider authentication (Settings -> Pi -> Providers master/detail)
+    PI_PROVIDERS_RAIL = "pi-providers-rail"
+    PI_PROVIDERS_GROUP_CONNECTED = "pi-providers-group-connected"
+    PI_PROVIDERS_GROUP_AVAILABLE = "pi-providers-group-available"
+    PI_PROVIDERS_GROUP_SESSION_ONLY = "pi-providers-group-session-only"
+    # Per-provider rail row, suffixed by provider id (e.g. pi-provider-row-anthropic).
+    PI_PROVIDER_ROW = "pi-provider-row"
+    PI_PROVIDER_DETAIL = "pi-provider-detail"
+    PI_PROVIDER_DETAIL_STATUS = "pi-provider-detail-status"
+    # Mount point for the Authenticate/Disconnect actions, inline login terminal, and
+    # paste-key form added in later tasks.
+    PI_PROVIDER_ACTIONS = "pi-provider-actions"
 
     # Custom backend settings (in Experimental tab)
     SETTINGS_CUSTOM_BACKEND_COMMAND = "SETTINGS_CUSTOM_BACKEND_COMMAND"

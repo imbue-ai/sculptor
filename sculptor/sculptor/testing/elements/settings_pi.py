@@ -71,3 +71,27 @@ class PlaywrightPiSettingsElement(PlaywrightIntegrationTestElement):
         assertions.
         """
         return self.get_by_text(re.compile(r"sign in", re.IGNORECASE))
+
+    def get_providers_rail(self) -> Locator:
+        """Get the Providers master rail container."""
+        return self.get_by_test_id(ElementIDs.PI_PROVIDERS_RAIL)
+
+    def get_providers_group_connected(self) -> Locator:
+        """Get the Connected provider group container."""
+        return self.get_by_test_id(ElementIDs.PI_PROVIDERS_GROUP_CONNECTED)
+
+    def get_providers_group_available(self) -> Locator:
+        """Get the Available provider group container."""
+        return self.get_by_test_id(ElementIDs.PI_PROVIDERS_GROUP_AVAILABLE)
+
+    def get_providers_group_session_only(self) -> Locator:
+        """Get the Session-only provider group container."""
+        return self.get_by_test_id(ElementIDs.PI_PROVIDERS_GROUP_SESSION_ONLY)
+
+    def get_provider_row(self, provider_id: str) -> Locator:
+        """Get the rail row for a specific provider id."""
+        return self.get_by_test_id(f"{ElementIDs.PI_PROVIDER_ROW}-{provider_id}")
+
+    def get_provider_detail(self) -> Locator:
+        """Get the detail pane for the selected provider."""
+        return self.get_by_test_id(ElementIDs.PI_PROVIDER_DETAIL)
