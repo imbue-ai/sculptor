@@ -264,7 +264,7 @@ class ManualTestHarness:
         }
         logger.info("Starting Vite dev server on port {} (proxying to backend port {})", self._vite_port, self._port)
         self._vite_process = subprocess.Popen(
-            ["npm", "run", "dev"],
+            ["pnpm", "run", "dev"],
             cwd=str(frontend_dir),
             env=vite_env,
             stdout=subprocess.PIPE,

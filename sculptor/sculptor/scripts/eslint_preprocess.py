@@ -56,17 +56,17 @@ def setup_node_version(frontend_path: Path) -> None:
 
 
 def install_npm_dependencies(frontend_path: Path) -> None:
-    """Install npm dependencies."""
-    print("Installing npm dependencies...")
+    """Install frontend dependencies via pnpm."""
+    print("Installing frontend dependencies...")
     try:
         result = subprocess.run(
-            ["npm", "install", "--silent"], check=True, cwd=frontend_path, capture_output=True, text=True
+            ["pnpm", "install", "--silent"], check=True, cwd=frontend_path, capture_output=True, text=True
         )
-        print("  npm dependencies installed successfully")
+        print("  frontend dependencies installed successfully")
         if result.stdout.strip():
             print(f"  {result.stdout.strip()}")
     except subprocess.CalledProcessError as e:
-        print(f"Error installing npm dependencies: {e}")
+        print(f"Error installing frontend dependencies: {e}")
         print(f"  stdout: {e.stdout}")
         print(f"  stderr: {e.stderr}")
         sys.exit(1)

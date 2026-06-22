@@ -1,5 +1,5 @@
 """
-Runs frontend `npm run` commands from python.
+Runs frontend `pnpm run` commands from python.
 
 This allows us to control the behavior of these commands and ensure that they are run in the correct environment.
 
@@ -39,7 +39,7 @@ def verify_node_is_installed(frontend_path: Path = get_frontend_path()) -> None:
 def install_node_packages(frontend_path: Path = get_frontend_path(), is_auto_verifying_node: bool = True) -> None:
     if is_auto_verifying_node:
         verify_node_is_installed(frontend_path=frontend_path)
-    subprocess.run(("npm", "install", "--silent"), check=True, cwd=frontend_path)
+    subprocess.run(("pnpm", "install", "--silent"), check=True, cwd=frontend_path)
 
 
 def run_npm_command(
@@ -62,7 +62,7 @@ def run_npm_command(
     else:
         other_args_tuple = tuple(other_args)
 
-    fully_resolved_command = ("npm",) + sub_command + other_args_tuple
+    fully_resolved_command = ("pnpm",) + sub_command + other_args_tuple
     if help:
         fully_resolved_command += ("--help",)
 
@@ -117,7 +117,7 @@ def _register_command(cmd: tuple[str, ...]) -> None:
 
     app.command(
         name=cmd[-1],
-        help=f"Runs `npm {' '.join(cmd)}`",
+        help=f"Runs `pnpm {' '.join(cmd)}`",
     )(command_callback)
 
 

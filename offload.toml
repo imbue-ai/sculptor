@@ -18,7 +18,7 @@ sandbox_repo_root = "/app"
 # (frontend api client + bundle, sculpt CLI client) lives in
 # post_patch_cmd below, which runs after the thin-diff applies.
 sandbox_init_cmd = "bash /app/scripts/finalize-base-image.sh"
-post_patch_cmd = "export PATH=/root/.nvm/versions/node/v${NODE_VERSION}/bin:$PATH && cd /app/sculptor/frontend && npm run generate-api && npm run build && cd /app && just generate-sculpt-client"
+post_patch_cmd = "export PATH=/root/.nvm/versions/node/v${NODE_VERSION}/bin:$PATH && cd /app/sculptor/frontend && pnpm run generate-api && pnpm run build && cd /app && just generate-sculpt-client"
 
 [provider]
 type = "modal"
@@ -59,7 +59,7 @@ build_inputs = [
     "pyproject.toml",
     "sculptor/pyproject.toml",
     "sculptor/frontend/package.json",
-    "sculptor/frontend/package-lock.json",
+    "sculptor/frontend/pnpm-lock.yaml",
     "uv.lock",
 ]
 

@@ -27,7 +27,7 @@ export default defineFrontendConfig({
       name: "generate-types",
       buildStart(): void {
         console.log("Generating dynamic types...");
-        execSync("npm run generate-api", { stdio: "inherit" });
+        execSync("pnpm run generate-api", { stdio: "inherit" });
       },
     },
   ],
