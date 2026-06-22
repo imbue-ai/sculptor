@@ -3161,6 +3161,51 @@ def test_curate_models_keeps_current_model_absent_from_catalog() -> None:
     assert curated[0].model_id == "claude-opus-9-9"
 
 
+_MULTI_PROVIDER_OPTIONS: list[ModelOption] = [
+    ModelOption(provider="anthropic", model_id="claude-opus-4-8", display_name="Claude Opus 4.8"),
+    ModelOption(provider="openai", model_id="gpt-5", display_name="GPT-5"),
+    ModelOption(provider="google", model_id="gemini-3", display_name="Gemini 3"),
+]
+
+
+def test_curate_models_filters_to_single_authenticated_provider() -> None:
+    """Only options whose provider is in the authenticated set survive."""
+    curated = _curate_models(_MULTI_PROVIDER_OPTIONS, current_model=None, authenticated_providers={"anthropic"})
+    assert {option.provider for option in curated} == {"anthropic"}
+    assert [option.model_id for option in curated] == ["claude-opus-4-8"]
+
+
+def test_curate_models_filters_to_multiple_authenticated_providers() -> None:
+    curated = _curate_models(
+        _MULTI_PROVIDER_OPTIONS, current_model=None, authenticated_providers={"anthropic", "openai"}
+    )
+    assert {option.provider for option in curated} == {"anthropic", "openai"}
+
+
+def test_curate_models_empty_authenticated_set_yields_empty() -> None:
+    """An empty authenticated set drops everything (this drives the empty-state CTA)."""
+    curated = _curate_models(_MULTI_PROVIDER_OPTIONS, current_model=None, authenticated_providers=set())
+    assert curated == []
+
+
+def test_curate_models_retains_current_model_even_when_provider_unauthenticated() -> None:
+    """The current model is always offered, even if its provider isn't authenticated."""
+    current = ModelOption(provider="openai", model_id="gpt-5", display_name="GPT-5")
+    curated = _curate_models(_MULTI_PROVIDER_OPTIONS, current_model=current, authenticated_providers={"anthropic"})
+    assert current in curated
+    assert "gemini-3" not in {option.model_id for option in curated}
+
+
+def test_curate_models_filter_preserves_blacklist_and_sort() -> None:
+    """The authenticated filter layers on top of the existing blacklist/sort rules."""
+    curated = _curate_models(
+        _options_from_raw(_RAW_PI_MODELS), current_model=None, authenticated_providers={"anthropic"}
+    )
+    # _RAW_PI_MODELS are all anthropic, so the filter is a no-op here and the curated
+    # list matches the unfiltered curation exactly (REQ-COMPAT-2).
+    assert [option.model_id for option in curated] == _CURATED_PI_MODEL_IDS
+
+
 def test_model_option_from_pi_defaults_provider_and_name() -> None:
     # Missing provider defaults to anthropic; missing name falls back to the id.
     option = _model_option_from_pi({"id": "claude-opus-4-8"})
@@ -3198,7 +3243,10 @@ def test_fetch_models_into_state_emits_curated_catalog_and_current_model() -> No
     agent = _make_agent()
     current_raw = {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic"}
     agent._process = _make_process([_models_response(_RAW_PI_MODELS), _state_response_with_model(current_raw)])
-    with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-models", "cmd-state"]):
+    with (
+        patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-models", "cmd-state"]),
+        patch("sculptor.agents.pi_agent.agent_wrapper.compute_authenticated_provider_ids", return_value={"anthropic"}),
+    ):
         agent._fetch_models_into_state()
 
     emitted = [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
@@ -3269,9 +3317,12 @@ def test_fetch_available_models_probe_returns_curated_catalog_and_current_model(
     probe_process = _make_process([_models_response(_RAW_PI_MODELS), _state_response_with_model(current_raw)])
     env = _make_probe_env(probe_process)
     agent = _make_agent(env)
-    with patch(
-        "sculptor.agents.pi_agent.agent_wrapper.generate_id",
-        side_effect=["probe-sess", "cmd-models", "cmd-state"],
+    with (
+        patch(
+            "sculptor.agents.pi_agent.agent_wrapper.generate_id",
+            side_effect=["probe-sess", "cmd-models", "cmd-state"],
+        ),
+        patch("sculptor.agents.pi_agent.agent_wrapper.compute_authenticated_provider_ids", return_value={"anthropic"}),
     ):
         available_models, current_model = agent.fetch_available_models_probe(secrets={})
 

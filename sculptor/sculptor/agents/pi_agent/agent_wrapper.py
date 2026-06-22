@@ -63,6 +63,7 @@ from sculptor.agents.attachments import save_attachments_to_environment
 from sculptor.agents.default.agent_wrapper import DefaultAgentWrapper
 from sculptor.agents.default.utils import get_state_file_contents
 from sculptor.agents.default.utils import get_turn_request_id
+from sculptor.agents.pi_agent.authenticated_providers import compute_authenticated_provider_ids
 from sculptor.agents.pi_agent.backchannel import PLAN_APPROVAL_DIALOG_TITLE
 from sculptor.agents.pi_agent.backchannel import build_ask_user_question_data
 from sculptor.agents.pi_agent.backchannel import extension_ui_response_body
@@ -317,13 +318,23 @@ def _model_sort_key(model: ModelOption) -> tuple[int, int, str]:
     return (-major, -minor, model.model_id)
 
 
-def _curate_models(models: list[ModelOption], current_model: ModelOption | None) -> list[ModelOption]:
+def _curate_models(
+    models: list[ModelOption],
+    current_model: ModelOption | None,
+    authenticated_providers: set[str] | None = None,
+) -> list[ModelOption]:
     """Trim pi's raw catalog to the models the switcher should offer, newest-first.
 
     Drops the obsolete `_PI_MODEL_BLACKLIST` ids and dated-pin duplicates
     (`_DATED_PIN_SUFFIX_RE`), then sorts newest-first (`_model_sort_key`). The
     current model is always kept even if a rule would drop it, so the switcher
     never shows an empty selection. Duplicate ids are de-duplicated, first-wins.
+
+    When `authenticated_providers` is provided, options whose `provider` is not in
+    that set are also dropped — pi gates its catalog on credential presence, not
+    validity, so a stray ambient key would otherwise leak that provider's models
+    into the picker. `None` (the default) disables the filter. The current model is
+    exempt from every rule, including this one.
     """
     kept: list[ModelOption] = []
     seen_ids: set[str] = set()
@@ -335,6 +346,8 @@ def _curate_models(models: list[ModelOption], current_model: ModelOption | None)
         if not is_current and model.model_id in _PI_MODEL_BLACKLIST:
             continue
         if not is_current and _DATED_PIN_SUFFIX_RE.search(model.model_id):
+            continue
+        if not is_current and authenticated_providers is not None and model.provider not in authenticated_providers:
             continue
         seen_ids.add(model.model_id)
         kept.append(model)
@@ -1139,7 +1152,7 @@ class PiAgent(DefaultAgentWrapper):
             option = _model_option_from_pi(raw)
             if option is not None:
                 options.append(option)
-        curated = _curate_models(options, current_model)
+        curated = _curate_models(options, current_model, compute_authenticated_provider_ids())
         if not curated and current_model is None:
             logger.info("PiAgent get_available_models returned no usable models; switcher will fall back to defaults")
             return
@@ -1241,7 +1254,7 @@ class PiAgent(DefaultAgentWrapper):
             option = _model_option_from_pi(raw)
             if option is not None:
                 options.append(option)
-        curated = _curate_models(options, current_model)
+        curated = _curate_models(options, current_model, compute_authenticated_provider_ids())
         if not curated and current_model is None:
             logger.info("PiAgent model probe found no usable models; switcher will fall back to defaults")
             return [], None
