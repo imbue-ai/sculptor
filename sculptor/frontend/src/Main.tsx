@@ -26,6 +26,11 @@ import { initializeSentry } from "./instrument.ts";
     console.log("Initialization failed", e);
   }
 
+  // React 19's default root error handlers already reach Sentry: uncaught
+  // render errors go through reportError (captured by Sentry's global
+  // handlers) and boundary-caught errors are console.error'd (captured by
+  // captureConsoleIntegration). Custom onUncaughtError/onCaughtError
+  // handlers would silence the console logging and double-report.
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <App />

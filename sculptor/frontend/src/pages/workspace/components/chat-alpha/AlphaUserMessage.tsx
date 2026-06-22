@@ -30,7 +30,7 @@ export const UserMessageContent = ({
   messageIndex?: number;
 }): ReactElement => {
   const [isCopied, setIsCopied] = useState(false);
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const textBlocks = useMemo(
     () => message.content.filter((block: BlockUnion) => isTextBlock(block)),
     [message.content],

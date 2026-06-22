@@ -59,6 +59,7 @@ build_inputs = [
     "pyproject.toml",
     "sculptor/pyproject.toml",
     "sculptor/frontend/package.json",
+    "sculptor/frontend/package-lock.json",
     "uv.lock",
 ]
 

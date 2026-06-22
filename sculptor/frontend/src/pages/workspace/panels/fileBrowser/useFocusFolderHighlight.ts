@@ -19,7 +19,7 @@ type Options = {
   workspaceId: string;
   flatRows: Array<FlatRowEntry>;
   virtualizer: Virtualizer<HTMLDivElement, Element>;
-  scrollContainerRef: RefObject<HTMLDivElement>;
+  scrollContainerRef: RefObject<HTMLDivElement | null>;
 };
 
 /**
@@ -51,7 +51,7 @@ export const useFocusFolderHighlight = ({ workspaceId, flatRows, virtualizer, sc
   // effect return, because that cleanup fires on every deps change (e.g.
   // when `flatRows` updates due to background tree refreshes), which would
   // strip the class before the 500ms + 1500ms fade can play out.
-  const clearPendingRef = useRef<() => void>();
+  const clearPendingRef = useRef<() => void>(undefined);
   clearPendingRef.current = (): void => {
     if (fadeTimeoutRef.current !== null) {
       clearTimeout(fadeTimeoutRef.current);

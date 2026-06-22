@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { BrowserViewStatus } from "./browserViewRegistry";
 
 export type BrowserWebviewController = {
-  webviewRef: RefObject<WebviewTag>;
+  webviewRef: RefObject<WebviewTag | null>;
   webContentsId: number | null;
   goBack: () => void;
   goForward: () => void;

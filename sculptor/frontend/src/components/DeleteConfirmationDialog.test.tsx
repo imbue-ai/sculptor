@@ -55,9 +55,7 @@ describe("popoverFriendlyModalGuard.onInteractOutside", () => {
   // The guard only reads `event.target` and may call `event.preventDefault()`.
   const makeEvent = (
     target: EventTarget | null,
-  ): { target: EventTarget | null; preventDefault: () => void } & {
-    preventDefault: ReturnType<typeof vi.fn>;
-  } => ({
+  ): { target: EventTarget | null; preventDefault: ReturnType<typeof vi.fn> } => ({
     target,
     preventDefault: vi.fn(),
   });

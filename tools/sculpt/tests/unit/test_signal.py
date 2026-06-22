@@ -14,7 +14,9 @@ _BASE_URL = "http://localhost:5050"
 
 @pytest.fixture
 def runner() -> CliRunner:
-    return CliRunner(mix_stderr=False)
+    # click 8.2 (vendored by typer 0.26) removed the mix_stderr kwarg; stdout and
+    # stderr are now always captured separately, which is the behavior these tests want.
+    return CliRunner()
 
 
 def _mock_session(base_url: str = _BASE_URL) -> None:

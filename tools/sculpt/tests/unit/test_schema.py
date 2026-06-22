@@ -2,13 +2,12 @@
 
 import json
 
-from typer.testing import CliRunner
-
 from sculpt.commands.data_types import AgentShowOutput
 from sculpt.commands.data_types import RunOutput
 from sculpt.commands.data_types import WorkspaceCreateOutput
 from sculpt.commands.schema import get_schema_names
 from sculpt.main import app
+from typer.testing import CliRunner
 
 runner = CliRunner()
 
@@ -26,7 +25,7 @@ def test_schema_outputs_valid_json_for_each_command() -> None:
     for name in get_schema_names():
         result = runner.invoke(app, ["schema", name])
         assert result.exit_code == 0, f"schema {name} failed: {result.output}"
-        parsed = json.loads(result.output)
+        parsed = json.loads(result.stdout)
         assert "description" in parsed
 
 

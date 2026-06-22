@@ -349,7 +349,7 @@ export const WorkspacePeekPopover = ({
   const setChangesScope = useSetAtom(changesScopeAtomFamily(workspaceId));
   const [isExpanded, setIsExpanded] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [shouldShowFade, setShouldShowFade] = useState(false);
   const agentListRef = useRef<HTMLDivElement>(null);
 

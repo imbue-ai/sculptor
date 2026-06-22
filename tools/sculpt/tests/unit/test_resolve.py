@@ -3,9 +3,9 @@
 import os
 from typing import Any
 
-import click
 import pytest
 import respx
+import typer
 from httpx import ConnectError
 from httpx import Response
 from sculpt.client import Client
@@ -50,7 +50,7 @@ class TestResolveProject:
             return_value=Response(500)
         )
 
-        with pytest.raises(click.exceptions.Exit):
+        with pytest.raises(typer.Exit):
             resolve_project(repo="/tmp/my-repo", client=client)
 
     @respx.mock
@@ -60,7 +60,7 @@ class TestResolveProject:
             side_effect=ConnectError("Connection refused")
         )
 
-        with pytest.raises(click.exceptions.Exit):
+        with pytest.raises(typer.Exit):
             resolve_project(repo="/tmp/my-repo", client=client)
 
     @respx.mock
@@ -116,7 +116,7 @@ class TestResolveProject:
             return_value=Response(200, json=[]),
         )
 
-        with pytest.raises(click.exceptions.Exit):
+        with pytest.raises(typer.Exit):
             resolve_project(repo="/tmp/my-repo", client=client)
         captured = capsys.readouterr()
         assert "already added" in captured.err
@@ -141,7 +141,7 @@ class TestResolveProject:
             )
         )
 
-        with pytest.raises(click.exceptions.Exit):
+        with pytest.raises(typer.Exit):
             resolve_project(repo="/tmp/not-a-repo", client=client)
         captured = capsys.readouterr()
         assert "not a git repository" in captured.err
@@ -160,7 +160,7 @@ class TestResolveProject:
             )
         )
 
-        with pytest.raises(click.exceptions.Exit):
+        with pytest.raises(typer.Exit):
             resolve_project(repo="/tmp/missing", client=client)
         captured = capsys.readouterr()
         assert "does not exist" in captured.err
@@ -186,7 +186,7 @@ class TestResolveProject:
             )
         )
 
-        with pytest.raises(click.exceptions.Exit):
+        with pytest.raises(typer.Exit):
             resolve_project(repo="/tmp/empty-repo", client=client)
         captured = capsys.readouterr()
         assert "no commits" in captured.err
@@ -238,7 +238,7 @@ class TestResolveProject:
             )
         )
 
-        with pytest.raises(click.exceptions.Exit):
+        with pytest.raises(typer.Exit):
             resolve_project(repo=None, client=client)
 
     @respx.mock
@@ -248,7 +248,7 @@ class TestResolveProject:
             return_value=Response(200, json=[])
         )
 
-        with pytest.raises(click.exceptions.Exit):
+        with pytest.raises(typer.Exit):
             resolve_project(repo=None, client=client)
 
     @respx.mock
@@ -264,7 +264,7 @@ class TestResolveProject:
             return_value=Response(200, json=[]),
         )
 
-        with pytest.raises(click.exceptions.Exit):
+        with pytest.raises(typer.Exit):
             resolve_project(repo=None, client=client)
         captured = capsys.readouterr()
         assert "SCULPT_PROJECT_ID" in captured.err
@@ -283,12 +283,12 @@ class TestResolveByPrefix:
 
     def test_ambiguous_prefix(self) -> None:
         items = ["abc123", "abc456"]
-        with pytest.raises(click.exceptions.Exit):
+        with pytest.raises(typer.Exit):
             resolve_by_prefix("abc", items, lambda x: x)
 
     def test_no_match(self) -> None:
         items = ["abc123", "def456"]
-        with pytest.raises(click.exceptions.Exit):
+        with pytest.raises(typer.Exit):
             resolve_by_prefix("xyz", items, lambda x: x)
 
     def test_with_id_getter(self) -> None:
@@ -364,7 +364,7 @@ class TestResolveWorkspaceId:
             return_value=Response(200, json=_mock_workspaces_response("ws_abc123full", "ws_def456full"))
         )
 
-        with pytest.raises(click.exceptions.Exit):
+        with pytest.raises(typer.Exit):
             resolve_workspace_id(client, "ws_xyz")
 
     @respx.mock
@@ -374,7 +374,7 @@ class TestResolveWorkspaceId:
             return_value=Response(200, json=_mock_workspaces_response("ws_abc123", "ws_abc456"))
         )
 
-        with pytest.raises(click.exceptions.Exit):
+        with pytest.raises(typer.Exit):
             resolve_workspace_id(client, "ws_abc")
 
     @respx.mock
@@ -384,7 +384,7 @@ class TestResolveWorkspaceId:
             side_effect=ConnectError("Connection refused")
         )
 
-        with pytest.raises(click.exceptions.Exit):
+        with pytest.raises(typer.Exit):
             resolve_workspace_id(client, "ws_abc")
 
     @respx.mock
@@ -394,5 +394,5 @@ class TestResolveWorkspaceId:
             return_value=Response(500)
         )
 
-        with pytest.raises(click.exceptions.Exit):
+        with pytest.raises(typer.Exit):
             resolve_workspace_id(client, "ws_abc")

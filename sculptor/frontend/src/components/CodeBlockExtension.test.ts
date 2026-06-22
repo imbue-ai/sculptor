@@ -292,7 +292,8 @@ describe("Placeholder functionality", () => {
 
   it("does not create a paragraph when contentType markdown parses empty string", () => {
     // This test documents the @tiptap/markdown bug: parsing "" with
-    // contentType: "markdown" produces an empty document.
+    // contentType: "markdown" produces an empty document. (Fixed upstream by
+    // tiptap 3.26 — flip this expectation when the tiptap hold-back lifts.)
     const editor = new TipTapEditorClass({
       extensions: [Document, Paragraph, Text, Markdown, CustomCodeBlockLowlight.configure({ lowlight })],
       content: "",

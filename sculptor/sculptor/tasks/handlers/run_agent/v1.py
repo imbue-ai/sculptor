@@ -1006,10 +1006,8 @@ def sync_artifacts(
                         raise err
                     continue
                 contents = environment.read_file(remote_path)
-                callbacks_by_name[artifact.name] = (
-                    lambda name=artifact.name, data=contents: task_service.set_artifact_file_data(
-                        task.object_id, name, data
-                    )
+                callbacks_by_name[artifact.name] = lambda name=artifact.name, data=contents: (
+                    task_service.set_artifact_file_data(task.object_id, name, data)
                 )
                 logger.debug("synced file artifact: {}", remote_path)
             case _ as unreachable:

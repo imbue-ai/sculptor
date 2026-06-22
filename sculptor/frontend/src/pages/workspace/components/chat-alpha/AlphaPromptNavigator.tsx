@@ -104,7 +104,7 @@ export const AlphaPromptNavigator = ({
   const [hasAnimated, setHasAnimated] = useState(false);
 
   const [isCopied, setIsCopied] = useState(false);
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const popoverRef = useRef<HTMLDivElement>(null);
   const openTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

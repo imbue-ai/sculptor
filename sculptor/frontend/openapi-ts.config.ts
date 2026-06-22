@@ -15,7 +15,6 @@ export default defineConfig({
     },
     {
       name: "@hey-api/sdk",
-      asClass: false,
     },
   ],
 });

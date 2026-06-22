@@ -20,14 +20,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         xvfb xauth libgtk-3-0t64 libnotify4 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+# Install uv. Pinned (not :latest) so the version satisfies pyproject's
+# required-version (>=0.11.22, needed for managed CPython 3.14) and so the
+# Modal layer cache can't pin us to an older uv than the project requires.
+COPY --from=ghcr.io/astral-sh/uv:0.11.22 /uv /usr/local/bin/uv
 
 # Install just
 RUN curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
 
 # Node via nvm (needed for frontend unit tests and integration test frontend build)
-ENV NODE_VERSION="20.13.1"
+ENV NODE_VERSION="24.17.0"
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash && \
     bash -c "source /root/.nvm/nvm.sh && nvm install $NODE_VERSION"
 

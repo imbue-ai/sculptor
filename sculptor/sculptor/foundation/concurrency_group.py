@@ -204,7 +204,7 @@ class ConcurrencyGroup(MutableModel, AbstractContextManager):
         except ConcurrencyExceptionGroup as exception_group:
             failure_exception_group = exception_group
 
-        exceptions = []
+        exceptions: list[BaseException] = []
         message: str | None = None
         if timeout_exception_group is not None:
             exceptions.extend(timeout_exception_group.exceptions)
@@ -236,12 +236,17 @@ class ConcurrencyGroup(MutableModel, AbstractContextManager):
         assert main_exception is None or isinstance(main_exception, Exception)
 
         # For consistency, we always raise a ConcurrencyExceptionGroup even if there is only one exception.
-        if len(exceptions) > 0:
-            exceptions = _deduplicate_exceptions(tuple(exceptions))
+        # Any BaseException was re-raised above, so every remaining entry is an Exception; narrow the type
+        # so it can be wrapped in a ConcurrencyExceptionGroup (which only accepts Exceptions).
+        wrapped_exceptions = tuple(exception for exception in exceptions if isinstance(exception, Exception))
+        if len(wrapped_exceptions) > 0:
+            wrapped_exceptions = _deduplicate_exceptions(wrapped_exceptions)
             assert message is not None
             if main_exception is not None:
-                raise ConcurrencyExceptionGroup(message, exceptions, main_exception=main_exception) from main_exception
-            raise ConcurrencyExceptionGroup(message, exceptions)
+                raise ConcurrencyExceptionGroup(
+                    message, wrapped_exceptions, main_exception=main_exception
+                ) from main_exception
+            raise ConcurrencyExceptionGroup(message, wrapped_exceptions)
 
     def _wait_for_all_strands_to_finish_with_timeout(self, timeout_seconds: float) -> None:
         start_time = time.monotonic()

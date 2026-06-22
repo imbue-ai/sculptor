@@ -23,19 +23,17 @@
     "allowSyntheticDefaultImports": true,
     /* Testing specific */
     "esModuleInterop": true,
-    "types": ["jest", "node", "@testing-library/jest-dom"]
+    "types": ["node", "@testing-library/jest-dom"]
   },
   "include": [
     "src",
     "src/globals.d.ts",
     "src/generated-types.d.ts",
     "eslint.config.ts",
-    "jest.config.ts",
-    "jest.setup.ts",
     "openapi-ts.config.ts",
     "vitest.config.ts",
     "vitest.setup.ts",
     "vitest.workspace.ts"
   ],
-  "exclude": ["src/pages/tasks_deprecated/**/*", "src/quarantine/**/*", "src/electron/main.ts", "babel.config.ts"]
+  "exclude": ["src/pages/tasks_deprecated/**/*", "src/quarantine/**/*", "src/electron/main.ts"]
 }

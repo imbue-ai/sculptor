@@ -18,7 +18,7 @@ type AlphaBlockquoteProps = {
  */
 export const AlphaBlockquote = memo(({ children }: AlphaBlockquoteProps): ReactElement => {
   const quoteRef = useRef<HTMLQuoteElement>(null);
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [isCopied, setIsCopied] = useState(false);
 
   useEffect(() => {

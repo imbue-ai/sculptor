@@ -12,13 +12,16 @@ help:
 
 # === Global Variables ===
 
-# Reusable, embeddable snippet to ensure Node via nvm is active in THIS shell
+# Reusable, embeddable snippet to ensure Node via nvm is active in THIS shell.
+# Pinned to 24.17.0 (LTS security release). Anything >=24.16.0 needs the `yauzl`
+# override in sculptor/frontend/package.json to avoid the extract-zip packaging
+# hang (Node 24's stream-cleanup change vs extract-zip 2.0.1).
 nvm_use := '''
 set +u
 : "${NVM_DIR:="$HOME/.nvm"}"
 . "$NVM_DIR/nvm.sh"
-nvm use --silent 20.13.1 2>/dev/null || nvm install 20.13.1 >/dev/null
-nvm use --silent 20.13.1
+nvm use --silent 24.17.0 2>/dev/null || nvm install 24.17.0 >/dev/null
+nvm use --silent 24.17.0
 set -u
 '''
 
@@ -722,7 +725,6 @@ clean:
     cd "{{justfile_directory()}}/sculptor"
     echo "Cleaning up..."
     rm -rf frontend/node_modules
-    rm -rf frontend/package-lock.json
     rm -rf sculptor/web/frontend
     find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
     find . -name "*.pyc" -delete 2>/dev/null || true
@@ -751,7 +753,7 @@ install-build-deps:
       # The uv python commands shouldn't be necessary most of the time,
       # but these need to be macOS x64 builds to function correctly -
       # we have a weird setup there where some workflows are run with arm mode and some with x64 mode.
-      uv python install 3.11
+      uv python install 3.14
       uv python update-shell
       brew install depot/tap/depot
       {{ nvm_use }}
@@ -791,7 +793,7 @@ install-frontend: && generate-api
         return 0
       fi
       echo "Installing frontend dependencies..."
-      npm install --force
+      npm ci
     }
     quiet_by_default install-frontend _do_install_frontend
 
@@ -816,7 +818,7 @@ install-build-deps:
     {{ _quiet_by_default_fn }}
     _do_install_build_deps() {
       echo "Installing platform-specific build dependencies"
-      uv python install 3.11
+      uv python install 3.14
       uv python update-shell
       curl -L https://depot.dev/install-cli.sh | sh -s
       {{ nvm_use }}
@@ -1275,7 +1277,7 @@ test-unit-frontend:
       if [ ! -f "$stamp" ] \
           || [ package.json -nt "$stamp" ] \
           || [ package-lock.json -nt "$stamp" ]; then
-        npm install
+        npm ci
       else
         echo "Frontend dependencies up to date, skipping npm install."
       fi

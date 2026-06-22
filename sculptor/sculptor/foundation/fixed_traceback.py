@@ -1,3 +1,5 @@
+from collections.abc import Callable
+from types import FrameType
 from types import TracebackType
 from typing import Any
 from typing import Self
@@ -14,8 +16,10 @@ class FixedTraceback(Traceback):
     It also fixes the types for the methods we use.
     """
 
-    def __init__(self, tb: TracebackType) -> None:
-        super().__init__(tb)
+    def __init__(self, tb: TracebackType, *, get_locals: Callable[[FrameType], dict[str, Any]] | None = None) -> None:
+        # tblib 3.x's Traceback.from_dict instantiates cls(tb, get_locals=...),
+        # so the subclass must accept and forward the keyword.
+        super().__init__(tb, get_locals=get_locals)
         tb_next = self
         while tb_next:
             setattr(tb_next, "tb_lasti", -1)

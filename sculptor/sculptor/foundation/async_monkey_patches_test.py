@@ -31,8 +31,8 @@ def check_logged_errors(check_func: Callable[[list[str]], None]) -> Iterator[Non
     )
 
     # pyrefly: ignore [missing-attribute]
-    logger._log = (
-        lambda level, flag, options, message, args, kwargs: (
+    logger._log = lambda level, flag, options, message, args, kwargs: (
+        (
             accumulated_errors.append(message) is None
             and original_log_func(
                 "INFO", flag, options, "CAUGHT ERROR LOG: " + message.splitlines()[0][:100], args, kwargs

@@ -105,7 +105,7 @@ const makeProps = (
   return { props, command, chainRuns };
 };
 
-const pressKey = (ref: React.RefObject<SuggestionListRef>, key: string, shiftKey = false): void => {
+const pressKey = (ref: React.RefObject<SuggestionListRef | null>, key: string, shiftKey = false): void => {
   act(() => {
     const event = { key, shiftKey } as unknown as KeyboardEvent;
     ref.current!.onKeyDown({ event });
@@ -117,7 +117,7 @@ const renderList = (
   query = "",
 ): {
   command: ReturnType<typeof vi.fn>;
-  ref: React.RefObject<SuggestionListRef>;
+  ref: React.RefObject<SuggestionListRef | null>;
   chainRuns: Array<unknown>;
 } => {
   const { props, command, chainRuns } = makeProps(rows, query);

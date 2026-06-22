@@ -1,15 +1,9 @@
 [project]
 name = "sculptor-workspace"
 version = "0.0.1"
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.14,<3.15"
 license = { text = "MIT" }
-dependencies = [
-    "pydevd-pycharm>=251.23774.123",
-    "pyjson5==1.6.9",
-    "mcp>=1.9.1",
-    "fastmcp>=2.1.2",
-    "junit2html>=31.0.2",
-]
+dependencies = []
 
 [build-system]
 requires = ["setuptools", "wheel"]
@@ -52,20 +46,19 @@ sculptor = { workspace = true }
 
 [tool.uv]
 cache-keys = [{ git = { commit = true } }]
-override-dependencies = [
-    "colorama==0.4.4",
-    "editdistance>=0.6.2",
-    "fsspec==2023.5.0",
-    "htmldate==1.5.1",
-    "lxml==4.9.2",
-    "s3fs==2024.6.1",
-]
-
 
 package = false
-required-version = ">=0.7.22"
+# Require a uv whose bundled python-downloads metadata includes a stable managed
+# cpython 3.14.x (the sidecar builder scripts pin cpython-3.14.4 via `uv python
+# install`). uv 0.8.x only shipped 3.14.0rc2; 0.11.22 ships stable 3.14.4/3.14.6.
+required-version = ">=0.11.22"
 
 [tool.ruff]
+# Pin the syntax target below requires-python. Python 3.14's PEP 758 lets `except`
+# omit parentheses (`except A, B:`), and ruff's formatter strips them under a py314
+# target — but that form is 3.14-only and reads like the Python 2 `except A, e:`
+# footgun, so keep the parenthesized, version-portable style.
+target-version = "py313"
 line-length = 119
 exclude = [
   "**/__mock_llm_responses__/**",
@@ -105,12 +98,8 @@ no-lines-before = ["future"]
 [dependency-groups]
 dev = [
     "ipdb>=0.13.13",
-    "ipython>=8.12.0",
-    "pydevd-pycharm>=251.23774.123",
-    "pydevd>=3.3.0",
     "pyrefly>=1.0.0",
-    "pytest-watcher>=0.4.3",
-    # Ruff uses minor versions to signal breaking changes until 1.0.0 is reached.
     "pytest-xdist>=3.8.0",
-    "ruff~=0.12.8",
+    # Ruff uses minor versions to signal breaking changes until 1.0.0 is reached.
+    "ruff~=0.15.17",
 ]

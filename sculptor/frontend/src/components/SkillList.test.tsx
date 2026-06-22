@@ -44,7 +44,7 @@ const makeSkillProps = (items: Array<SkillItemShape>, query = ""): SuggestionPro
 
 const renderSkillList = (
   props: SuggestionProps,
-): { ref: React.RefObject<SuggestionListRef>; container: HTMLElement } => {
+): { ref: React.RefObject<SuggestionListRef | null>; container: HTMLElement } => {
   const ref = createRef<SuggestionListRef>();
   const Wrapper = ({ children }: { children: ReactNode }): ReactElement => <Theme>{children}</Theme>;
   const { container } = render(

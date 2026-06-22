@@ -14,7 +14,7 @@ import time
 import urllib.parse
 from asyncio import CancelledError
 from importlib import resources
-from importlib.abc import Traversable
+from importlib.resources.abc import Traversable
 from pathlib import Path
 from threading import Event
 from typing import Any

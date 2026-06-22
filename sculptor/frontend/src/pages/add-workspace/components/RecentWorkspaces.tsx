@@ -16,7 +16,7 @@ import { WorkspaceSearchBar } from "./WorkspaceSearchBar.tsx";
 const PAGE_SIZE = 25;
 
 type RecentWorkspacesProps = {
-  searchInputRef: RefObject<HTMLInputElement>;
+  searchInputRef: RefObject<HTMLInputElement | null>;
   autoFocusSearch?: boolean;
   onWorkspaceClick: (workspace: RecentWorkspaceResponse) => void;
   onOpenInNewTab: (workspace: RecentWorkspaceResponse) => void;

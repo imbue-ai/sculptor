@@ -13,7 +13,7 @@ from typer.testing import CliRunner
 
 @pytest.fixture
 def runner() -> CliRunner:
-    return CliRunner(mix_stderr=False)
+    return CliRunner()
 
 
 def _mock_session(base_url: str = "http://localhost:5050") -> None:
@@ -66,7 +66,7 @@ class TestRepoList:
         result = runner.invoke(app, ["repo", "list", "--json"])
 
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert len(data) == 1
         assert data[0]["id"] == "prj_test123"
         assert data[0]["name"] == "my-repo"
@@ -152,7 +152,7 @@ class TestRepoShow:
         result = runner.invoke(app, ["repo", "show", "prj_test123", "--json"])
 
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["id"] == "prj_test123"
         assert data["name"] == "my-repo"
         assert data["path"] == "/Users/test/projects/my-repo"

@@ -15,9 +15,9 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import MutableMapping
 from importlib import resources
 from pathlib import Path
-from typing import Container
 from typing import assert_never
 
 import tomlkit
@@ -742,7 +742,9 @@ def write_project_version(new_version: str) -> None:
         config = tomlkit.load(f)
 
     project = config["project"]
-    assert isinstance(project, Container)
+    # [project] parses as OutOfOrderTableProxy (its subtables are interleaved
+    # with [tool.*] tables), not Table, so assert on the mapping behavior.
+    assert isinstance(project, MutableMapping)
     project["version"] = new_version
 
     with resources.as_file(pyproject) as path, path.open("w") as f:

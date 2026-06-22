@@ -81,18 +81,7 @@ export const sharedPlugins = (root: string): Array<Plugin> => [
   externalizeXterm(root),
   pluginRuntimeStubs(),
   bundledPlugins(),
-  react({
-    plugins: [
-      [
-        "@swc/plugin-styled-components",
-        {
-          displayName: true,
-          fileName: true,
-          ssr: false,
-        },
-      ],
-    ],
-  }),
+  react(),
 ];
 
 /** Module-path alias (`~` -> src) shared by both builds. */
@@ -106,9 +95,9 @@ export const sharedResolve = (root: string): { alias: Record<string, string> } =
 export const sharedCss = (root: string): import("vite").CSSOptions => ({
   preprocessorOptions: {
     scss: {
-      // Vite 5 defaults to the legacy Sass API, which expects `includePaths`
-      // (the modern API's equivalent is `loadPaths`).
-      includePaths: [path.resolve(root, "src/styles")],
+      // Vite 6 uses the modern Sass API, whose load-path option is `loadPaths`
+      // (the legacy API's equivalent was `includePaths`).
+      loadPaths: [path.resolve(root, "src/styles")],
     },
   },
 });

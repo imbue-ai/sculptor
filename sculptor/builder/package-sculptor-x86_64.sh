@@ -13,7 +13,7 @@ SOURCE_DIR="$(pwd)"
 WORKTREE="../../../sculptor-${ARCH}"
 FRONTEND_DIR="${WORKTREE}/sculptor/frontend"
 NVM_DIR_X64="$HOME/.nvm-x64"
-NODE_VERSION="v20.13.1"   # keep exactly as your .nvmrc
+NODE_VERSION="v24.17.0"   # keep exactly as your .nvmrc
 ELECTRON_ARCH="x64"
 
 # --- Functions ---------------------------------------------------------------
@@ -134,10 +134,10 @@ build_frontend_app() (
   rm -rf .node_modules/.cache ~/.cache/electron ~/.cache/electron-builder 2>/dev/null || true
 
   # Install JS deps
-  npm_with_node install --force
+  npm_with_node ci
 
   # Backend & assets
-  just sidecar "cpython-3.11.13-macos-x86_64-none"
+  just sidecar "cpython-3.14.4-macos-x86_64-none"
   ARCH=$ARCH just electron-assets
 
   # Build via Electron Forge (darwin x64)
@@ -156,7 +156,7 @@ build_frontend_app() (
   # But there is a bug which prevents the right electron from being run in the right arch mode!
 
   # Actual exec of the electron:make command; Note we don't call pre/post inside here.
-  nvm exec v20.13.1 -- npx --no-install electron-forge package \
+  nvm exec v24.17.0 -- npx --no-install electron-forge package \
      --platform=darwin \
      --arch=x64
 
@@ -206,7 +206,7 @@ make_worktree_and_stage_assets
   verify_node_arch_x64
 
   # First, we need to manually trigger `pre electron make` to ensure that the correct version is seen by electron
-  nvm exec v20.13.1 -- npm run preelectron:package
+  nvm exec v24.17.0 -- npm run preelectron:package
 
   build_frontend_app
   echo "App was built, on to package"
@@ -229,9 +229,11 @@ make_worktree_and_stage_assets
           echo "ARM nvm not found at /opt/homebrew/opt/nvm/nvm.sh" >&2; exit 1
         fi
 
-        # We are incrementing to build with the next Node version here so it will not conflict with the other
-        # version we have.
-        NODE_VERSION="v20.14.0"
+        # Native arm64 Node for this inner shell. The outer x64 build uses a
+        # dedicated NVM_DIR ($HOME/.nvm-x64, see require_nvm_intel); this shell
+        # uses $HOME/.nvm. Separate nvm trees, so both arches can share one
+        # version without colliding. Keep in sync with .nvmrc / the outer build.
+        NODE_VERSION="v24.17.0"
 
         nvm install $NODE_VERSION
         nvm use $NODE_VERSION
@@ -253,7 +255,7 @@ make_worktree_and_stage_assets
 
         # Let us nuke the old node_modules and get new ones
         rm -rf node_modules
-        npm install --foreground-scripts
+        npm ci --foreground-scripts
 
         npx --no-install electron-forge make \
           --platform=darwin \

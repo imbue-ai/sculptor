@@ -147,7 +147,7 @@ export const HoverCard = ({
   suppressHover = false,
 }: HoverCardProps): ReactElement => {
   const [isOpen, setIsOpen] = useState<boolean>(false);
-  const closeTimerRef = useRef<number>();
+  const closeTimerRef = useRef<number>(undefined);
   // Tracks whether this card is currently counted in its group. Prevents
   // double-register and ensures cleanup on unmount-while-open.
   const registeredRef = useRef(false);

@@ -50,6 +50,8 @@ log.transports.file.maxSize = 100 * 1024 * 1024; // 100MB
 log.transports.file.resolvePathFn = (): string => TEMP_LOG_PATH;
 log.transports.console.level = "debug";
 
+// NOTE: sculptor/sculptor/testing/electron_frontend.py keys test readiness
+// on this exact string; update ELECTRON_READY_MESSAGE there if rewording.
 log.info(`Logging to temp file: ${TEMP_LOG_PATH}`);
 
 /**

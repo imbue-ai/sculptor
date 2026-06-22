@@ -22,7 +22,7 @@ type AlphaTableProps = {
 export const AlphaTable = memo(({ children }: AlphaTableProps): ReactElement => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLTableElement>(null);
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [isCopied, setIsCopied] = useState(false);
   const [isWrapping, setIsWrapping] = useState(false);
 

@@ -1,5 +1,5 @@
 import { act, render, renderHook } from "@testing-library/react";
-import type { MutableRefObject, ReactNode, RefObject } from "react";
+import type { MutableRefObject, ReactElement, ReactNode, RefObject } from "react";
 import { useRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -35,10 +35,10 @@ const trueRef = (): MutableRefObject<boolean> => ({ current: true });
 describe("ChatScrollProvider", () => {
   it("fires subscribers on user-initiated scroll", async () => {
     const el = document.createElement("div");
-    const scrollRef: RefObject<HTMLElement> = { current: el };
+    const scrollRef: RefObject<HTMLElement | null> = { current: el };
     const onClose = vi.fn();
 
-    const wrapper = ({ children }: { children: ReactNode }): JSX.Element => (
+    const wrapper = ({ children }: { children: ReactNode }): ReactElement => (
       <ChatScrollProvider scrollContainerRef={scrollRef} isUserScrollingRef={trueRef()}>
         {children}
       </ChatScrollProvider>
@@ -59,10 +59,10 @@ describe("ChatScrollProvider", () => {
     // those as user scrolls dismissed every pinned popover ~15ms after the
     // click that opened it.
     const el = document.createElement("div");
-    const scrollRef: RefObject<HTMLElement> = { current: el };
+    const scrollRef: RefObject<HTMLElement | null> = { current: el };
     const onClose = vi.fn();
 
-    const wrapper = ({ children }: { children: ReactNode }): JSX.Element => (
+    const wrapper = ({ children }: { children: ReactNode }): ReactElement => (
       <ChatScrollProvider scrollContainerRef={scrollRef} isUserScrollingRef={trueRef()}>
         {children}
       </ChatScrollProvider>
@@ -86,11 +86,11 @@ describe("ChatScrollProvider", () => {
     // reliable way to tell user intent from system motion is to consult
     // the user-input ref owned by `useAlphaAutoScroll`.
     const el = document.createElement("div");
-    const scrollRef: RefObject<HTMLElement> = { current: el };
+    const scrollRef: RefObject<HTMLElement | null> = { current: el };
     const isUserScrollingRef = { current: false };
     const onClose = vi.fn();
 
-    const wrapper = ({ children }: { children: ReactNode }): JSX.Element => (
+    const wrapper = ({ children }: { children: ReactNode }): ReactElement => (
       <ChatScrollProvider scrollContainerRef={scrollRef} isUserScrollingRef={isUserScrollingRef}>
         {children}
       </ChatScrollProvider>
@@ -109,10 +109,10 @@ describe("ChatScrollProvider", () => {
 
   it("does not fire subscribers when enabled is false", async () => {
     const el = document.createElement("div");
-    const scrollRef: RefObject<HTMLElement> = { current: el };
+    const scrollRef: RefObject<HTMLElement | null> = { current: el };
     const onClose = vi.fn();
 
-    const wrapper = ({ children }: { children: ReactNode }): JSX.Element => (
+    const wrapper = ({ children }: { children: ReactNode }): ReactElement => (
       <ChatScrollProvider scrollContainerRef={scrollRef} isUserScrollingRef={trueRef()}>
         {children}
       </ChatScrollProvider>
@@ -136,7 +136,7 @@ describe("ChatScrollProvider", () => {
       return null;
     };
 
-    const Harness = (): JSX.Element => {
+    const Harness = (): ReactElement => {
       const ref = useRef(el);
       const isUserScrollingRef = useRef(true);
       return (

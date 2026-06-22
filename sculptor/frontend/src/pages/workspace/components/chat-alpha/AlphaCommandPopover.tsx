@@ -49,8 +49,8 @@ export const AlphaCommandPopover = ({
 
   const [isCommandCopied, setIsCommandCopied] = useState<boolean>(false);
   const [isOutputCopied, setIsOutputCopied] = useState<boolean>(false);
-  const commandCopyTimerRef = useRef<ReturnType<typeof setTimeout>>();
-  const outputCopyTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const commandCopyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const outputCopyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(
     () => (): void => {

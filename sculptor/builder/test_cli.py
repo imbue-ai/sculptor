@@ -1,3 +1,4 @@
+import contextlib
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
@@ -172,15 +173,23 @@ LINUX_ARTIFACT_CONTENT = b"fake appimage content for testing"
 LINUX_ARTIFACT_SHA512 = "MvY5+dd6Z2GNYn7zuzYVBIwBByrmYuSwam/Cz7Gwytp11NMYzh/ndTesGlUVnVp2Gj7A63e8KZ3kZSchJhMhQg=="
 
 
-def _invoke_generate_manifest(tmp_path: Path, platform: str, arch: str, version: str) -> None:
-    """Helper to invoke generate-autoupdate-manifest with a tmp_path as the dist dir."""
+def _invoke_generate_manifest(dist_dir: Path, platform: str, arch: str, version: str) -> None:
+    """Invoke generate-autoupdate-manifest so its output lands in `dist_dir`.
+
+    The command resolves its output as ``Path("../dist")`` relative to the working
+    directory, so run it from a sibling "build" dir whose ``../dist`` is `dist_dir`
+    (which must therefore be named "dist"). We deliberately do NOT patch
+    ``builder.cli.Path``: that mock would shadow the ``Path``-typed parameter
+    annotations on other CLI commands and break typer's app introspection.
+    """
+    work_dir = dist_dir.parent / "build"
+    work_dir.mkdir(exist_ok=True)
     runner = CliRunner()
     with (
         patch("builder.cli.pyproject_version", return_value=version),
         patch("builder.cli.pep_440_to_semver", return_value=version),
-        patch("builder.cli.Path") as path_mock,
+        contextlib.chdir(work_dir),
     ):
-        path_mock.side_effect = lambda p: tmp_path if p == "../dist" else Path(p)
         result = runner.invoke(app, ["generate-autoupdate-manifest", platform, arch])
 
     assert result.exit_code == 0, f"CLI failed: {result.output}"
@@ -189,12 +198,13 @@ def _invoke_generate_manifest(tmp_path: Path, platform: str, arch: str, version:
 def test_generate_autoupdate_manifest_darwin(tmp_path: Path) -> None:
     """Test that generate_autoupdate_manifest produces a valid manifest for macOS."""
     version = "1.2.3"
-    artifact_dir = tmp_path / "zip" / "darwin" / "arm64"
+    dist_dir = tmp_path / "dist"
+    artifact_dir = dist_dir / "zip" / "darwin" / "arm64"
     artifact_dir.mkdir(parents=True)
     artifact_filename = f"Sculptor-darwin-arm64-{version}.zip"
     (artifact_dir / artifact_filename).write_bytes(DARWIN_ARTIFACT_CONTENT)
 
-    _invoke_generate_manifest(tmp_path, "darwin", "arm64", version)
+    _invoke_generate_manifest(dist_dir, "darwin", "arm64", version)
 
     manifest = yaml.safe_load((artifact_dir / "latest-mac.yml").read_text())
     assert manifest["version"] == "1.2.3"
@@ -207,11 +217,12 @@ def test_generate_autoupdate_manifest_darwin(tmp_path: Path) -> None:
 
 def test_generate_autoupdate_manifest_linux(tmp_path: Path) -> None:
     """Test that generate_autoupdate_manifest produces a valid manifest for Linux."""
-    artifact_dir = tmp_path / "AppImage" / "x64"
+    dist_dir = tmp_path / "dist"
+    artifact_dir = dist_dir / "AppImage" / "x64"
     artifact_dir.mkdir(parents=True)
     (artifact_dir / "Sculptor.AppImage").write_bytes(LINUX_ARTIFACT_CONTENT)
 
-    _invoke_generate_manifest(tmp_path, "linux", "x64", "2.0.0")
+    _invoke_generate_manifest(dist_dir, "linux", "x64", "2.0.0")
 
     manifest = yaml.safe_load((artifact_dir / "latest-linux.yml").read_text())
     assert manifest["version"] == "2.0.0"

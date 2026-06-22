@@ -14,7 +14,7 @@ from typer.testing import CliRunner
 
 @pytest.fixture
 def runner() -> CliRunner:
-    return CliRunner(mix_stderr=False)
+    return CliRunner()
 
 
 def _mock_session(base_url: str = "http://localhost:5050") -> None:

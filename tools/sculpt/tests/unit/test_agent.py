@@ -19,7 +19,7 @@ from typer.testing import CliRunner
 
 @pytest.fixture
 def runner() -> CliRunner:
-    return CliRunner(mix_stderr=False)
+    return CliRunner()
 
 
 @pytest.fixture(autouse=True)
@@ -154,7 +154,7 @@ class TestAgentCreate:
         )
 
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["id"] == "tsk_abc123def456"
         assert data["status"] == "RUNNING"
 
@@ -236,7 +236,7 @@ class TestAgentList:
         result = runner.invoke(app, ["agent", "list", "-w", "ws_test123", "--json"])
 
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert len(data) == 1
         assert data[0]["id"] == "tsk_abc123def456"
 
@@ -341,7 +341,7 @@ class TestAgentShow:
         result = runner.invoke(app, ["agent", "show", "tsk_abc123def456", "--json"])
 
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["id"] == "tsk_abc123def456"
         assert data["status"] == "RUNNING"
         assert data["workspace_id"] == "ws_test123"
@@ -430,7 +430,7 @@ class TestAgentDelete:
         )
 
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["deleted"] is True
         assert data["id"] == "tsk_abc123def456"
 
@@ -503,7 +503,7 @@ class TestAgentRename:
         )
 
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["id"] == "tsk_abc123def456"
         assert data["title"] == "New Title"
 
@@ -577,7 +577,7 @@ class TestAgentSend:
         )
 
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["sent"] is True
         assert data["agent_id"] == "tsk_abc123def456"
 
@@ -755,7 +755,7 @@ class TestAgentStatus:
         result = runner.invoke(app, ["agent", "status", "tsk_abc123def456", "--json"])
 
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["id"] == "tsk_abc123def456"
         assert data["status"] == "RUNNING"
         assert "last_activity" in data
@@ -931,7 +931,7 @@ class TestAgentMessages:
         result = runner.invoke(app, ["agent", "messages", "tsk_abc123def456", "--json"])
 
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert len(data) == 2
         assert data[0]["role"] == "user"
         assert data[1]["role"] == "assistant"
@@ -1084,7 +1084,7 @@ class TestAgentInterrupt:
         result = runner.invoke(app, ["agent", "interrupt", "tsk_abc123def456", "-w", "ws_test123", "--json"])
 
         assert result.exit_code == 0
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["interrupted"] is True
         assert data["id"] == "tsk_abc123def456"
 

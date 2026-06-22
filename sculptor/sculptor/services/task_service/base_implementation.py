@@ -442,8 +442,9 @@ class BaseTaskService(TaskService, ABC):
             user_reference=user_reference,
             registry=self._subscriptions_by_workspace_id_for_containers,
             registry_key=workspace_id,
-            task_filter=lambda t: isinstance(t.current_state, AgentTaskStateV2)
-            and t.current_state.workspace_id == workspace_id,
+            task_filter=lambda t: (
+                isinstance(t.current_state, AgentTaskStateV2) and t.current_state.workspace_id == workspace_id
+            ),
         ) as listener:
             yield listener
 

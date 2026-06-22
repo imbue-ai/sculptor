@@ -17,7 +17,7 @@ type ChatSearchBarProps = {
   onNext: () => void;
   onPrev: () => void;
   onClose: () => void;
-  inputRef: RefObject<HTMLInputElement>;
+  inputRef: RefObject<HTMLInputElement | null>;
 };
 
 export const ChatSearchBar = ({

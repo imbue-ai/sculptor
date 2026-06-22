@@ -54,16 +54,16 @@ echo "Now bootstrapping x86_64 Homebrew packages under Rosetta..."
 arch -x86_64 /usr/local/bin/brew install bash
 arch -x86_64 /usr/local/bin/brew install uv nvm just tmux
 
-# Install an Intel build of Python (example: 3.11)
-arch -x86_64 /usr/local/bin/uv python install cpython-3.11.13-macos-x86_64-none
-arch -arm64 /opt/homebrew/bin/uv python install cpython-3.11.13-macos-aarch64-none
+# Install an Intel build of Python (example: 3.14)
+arch -x86_64 /usr/local/bin/uv python install cpython-3.14.4-macos-x86_64-none
+arch -arm64 /opt/homebrew/bin/uv python install cpython-3.14.4-macos-aarch64-none
 
 
 # Ensure nvm setup happens in x86_64 context too
 arch -x86_64 /usr/local/bin/bash -c '
   source /usr/local/opt/nvm/nvm.sh
-  nvm install 20.13.1
-  nvm alias electron-x64 20.13.1
+  nvm install 24.17.0
+  nvm alias electron-x64 24.17.0
 '
 
 echo "Build Dependencies for Intel Mac successfully installed"

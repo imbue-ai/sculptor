@@ -34,7 +34,7 @@ const createFile = (name: string, size: number, type: string): File => {
   return new File([content], name, { type });
 };
 
-const createFileWithContent = (name: string, content: Uint8Array, type: string): File => {
+const createFileWithContent = (name: string, content: Uint8Array<ArrayBuffer>, type: string): File => {
   return new File([content], name, { type });
 };
 
