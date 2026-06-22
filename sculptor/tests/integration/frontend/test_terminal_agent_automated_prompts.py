@@ -12,6 +12,7 @@ import re
 
 from playwright.sync_api import expect
 
+from sculptor.testing.elements.action_dialog import get_action_dialog
 from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.terminal import get_agent_terminal_panel
@@ -119,3 +120,95 @@ def test_prompt_features_route_to_capable_terminal_agent(sculptor_instance_: Scu
     finally:
         (registrations_dir / "fake-prompts.toml").unlink(missing_ok=True)
         (registrations_dir / "fake-noprompt.toml").unlink(missing_ok=True)
+
+
+@user_story("to draft a non-auto-send action into a capable terminal agent without submitting it")
+def test_non_auto_send_action_drafts_into_terminal_without_submitting(sculptor_instance_: SculptorInstance) -> None:
+    """A non-auto-submit ("draft") action must insert its text into a capable
+    terminal agent's PTY *without* submitting it — mirroring how the same action
+    populates a rich-chat composer for the user to edit/send. Before the fix,
+    terminal agents registered only ``sendMessage`` and left ``appendText`` null,
+    so clicking a draft action was a silent no-op.
+
+    Proof strategy: a draft insert (``submit=false``) writes a bracketed-paste
+    body with no trailing Enter, so the program's ``read`` stays blocked and the
+    drafted text sits in the line buffer (echoed, but unsubmitted). A later
+    auto-submit action sends the Enter, completing that same line — so the
+    program receives BOTH prompts concatenated in a single ``RECEIVED:`` line.
+    That single line proves the draft was inserted (it is present) AND that it
+    was not submitted on its own (it only surfaced once the second action sent
+    the Enter). With the bug present, the draft never reaches the PTY, so only
+    the second prompt appears.
+    """
+    page = sculptor_instance_.page
+
+    task_page = start_task_and_wait_for_ready(
+        page, prompt="Draft action terminal test", workspace_name="Draft Action WS"
+    )
+
+    registrations_dir = sculptor_instance_.sculptor_folder / "terminal_agents"
+    registrations_dir.mkdir(parents=True, exist_ok=True)
+    (registrations_dir / "fake-prompts.toml").write_text(
+        f'display_name = "Fake Prompts"\nlaunch_command = "{_FAKE_PROMPTS_COMMAND}"\naccepts_automated_prompts = true\n'
+    )
+    try:
+        # Create a draft action (auto-submit OFF) and an auto-submit action.
+        # No spaces in the prompts so they land on a single xterm line and the
+        # concatenated RECEIVED line is matched exactly.
+        actions_panel = task_page.get_actions_panel()
+        actions_panel.get_add_button().click()
+        draft_dialog = get_action_dialog(page)
+        expect(draft_dialog).to_be_visible()
+        draft_dialog.fill_name("Draft Insert")
+        draft_dialog.fill_prompt("DRAFT-INSERT-PART")
+        # The auto-submit switch defaults ON; toggle it OFF so the chip drafts.
+        draft_dialog.get_auto_submit_switch().click()
+        draft_dialog.click_save()
+        expect(draft_dialog).not_to_be_visible()
+
+        actions_panel.get_add_button().click()
+        send_dialog = get_action_dialog(page)
+        expect(send_dialog).to_be_visible()
+        send_dialog.fill_name("Send Now")
+        send_dialog.fill_prompt("SEND-NOW-PART")
+        send_dialog.click_save()  # auto-submit stays ON
+        expect(send_dialog).not_to_be_visible()
+
+        # Launch the capable terminal agent and wait until it is at its prompt.
+        agent_tab_bar = PlaywrightAgentTabBarElement(page)
+        agent_tab_bar.open_agent_type_menu()
+        registered_item = agent_tab_bar.get_agent_type_menu_item_registered("fake-prompts")
+        expect(registered_item).to_be_visible()
+        registered_item.click()
+        prompts_tab = agent_tab_bar.get_agent_tab_by_name("Fake Prompts 1").first
+        expect(prompts_tab).to_be_visible()
+        expect(get_agent_terminal_panel(page)).to_be_visible()
+        wait_for_xterm_substring(page, "FAKE-PROMPTS-BANNER")
+        wait_for_xterm_substring(page, "IDLE-DONE")
+        expect(prompts_tab).to_have_attribute("data-dot-status", _NEUTRAL_DOT)
+
+        # Click the DRAFT action: its text must reach the PTY (visible via the
+        # line-discipline echo) WITHOUT being submitted. The echo is both the
+        # core regression assertion (a null appendText writes nothing) and the
+        # sync point that the write landed before the submit below.
+        actions_panel = task_page.get_actions_panel()
+        draft_chip = actions_panel.get_action_chip_by_name("Draft Insert")
+        expect(draft_chip).to_be_enabled()
+        draft_chip.click()
+        wait_for_xterm_substring(page, "DRAFT-INSERT-PART")
+
+        # A draft does not submit: no line was read, so the program never went
+        # busy and the tab dot stays neutral.
+        expect(prompts_tab).to_have_attribute("data-dot-status", _NEUTRAL_DOT)
+
+        # Click the AUTO-SUBMIT action: it sends the Enter that completes the
+        # single line already holding the drafted text.
+        send_chip = actions_panel.get_action_chip_by_name("Send Now")
+        expect(send_chip).to_be_enabled()
+        send_chip.click()
+
+        # One RECEIVED line carries BOTH prompts — proof the draft was inserted
+        # but held until the auto-submit action sent the Enter.
+        wait_for_xterm_substring(page, "RECEIVED:DRAFT-INSERT-PARTSEND-NOW-PART")
+    finally:
+        (registrations_dir / "fake-prompts.toml").unlink(missing_ok=True)
