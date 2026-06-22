@@ -63,7 +63,7 @@ def open_workspace_entity_drill(page: Page, chat_input: Locator) -> Locator:
     # Wait for "+wor" to narrow the category list to the single
     # "Workspaces and Agents" row so Enter commits a settled selection.
     category_items = page.get_by_test_id(ElementIDs.MENTION_PICKER_CATEGORY_ITEM)
-    expect(category_items).to_have_count(1, timeout=10_000)
+    expect(category_items).to_have_count(1)
 
     chat_input.press("Enter")
 
@@ -73,7 +73,7 @@ def open_workspace_entity_drill(page: Page, chat_input: Locator) -> Locator:
     # one row to be present before callers start typing — otherwise the next
     # keystroke can race the items() refresh.
     entity_items = entity_list.get_by_test_id(ElementIDs.ENTITY_MENTION_ITEM)
-    expect(entity_items.first).to_be_visible(timeout=10_000)
+    expect(entity_items.first).to_be_visible()
     return entity_items
 
 
@@ -96,5 +96,5 @@ def insert_workspace_entity_mention(page: Page, chat_input: Locator, workspace_n
     # before committing, so Enter doesn't race the next items() refresh
     # and commit a stale item (or fall through to a newline when items
     # is momentarily empty).
-    expect(entity_items).to_have_count(1, timeout=10_000)
+    expect(entity_items).to_have_count(1)
     chat_input.press("Enter")

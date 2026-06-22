@@ -61,7 +61,7 @@ def _open_workspace_drill_state(page: Page, chat_input: Locator, workspace_name:
     # wait for the filter to settle to the single matching row before the
     # caller drills further.
     chat_input.press_sequentially(workspace_name, delay=30)
-    expect(entity_items).to_have_count(1, timeout=10_000)
+    expect(entity_items).to_have_count(1)
 
 
 @user_story("to drill into a workspace from the entity picker and see only its agents")
