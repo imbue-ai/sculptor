@@ -47,11 +47,10 @@ Check for `.sculptor/docs.md` (for spec / plan paths). Same rule.
 - `Architecture path:` absolute or repo-relative
 - `Plan folder:` absolute or repo-relative path to the `plan/` folder
 
-If no slug is provided, ask via `mcp__sculptor__ask_user_question`,
-offering glob-discovered slugs.
+If no slug is provided, ask with your question tool — `mcp__sculptor__ask_user_question` if it's available, otherwise the built-in `AskUserQuestion` — offering glob-discovered slugs. (The tool call raises the "waiting for input" status that alerts the user; don't ask in plain text.)
 
 Verify the plan folder exists at the resolved path. If not, stop and
-ask the user how to proceed.
+ask the user how to proceed with your question tool.
 
 ## Step 3: Read the overview and implement_task.md
 
@@ -98,8 +97,7 @@ For each TODO entry, in order:
 5. Mark the TODO as `completed`.
 6. Move to the next TODO.
 
-If a task hard-fails with a blocker you cannot resolve, stop and use
-`mcp__sculptor__ask_user_question` to ask the user how to proceed.
+If a task hard-fails with a blocker you cannot resolve, stop and ask the user how to proceed with your question tool.
 Do NOT skip the task.
 
 ## When the TODO list is empty
@@ -123,8 +121,7 @@ skip it), report that clearly so the user can spawn Review manually.
 - Do NOT make empty commits — `implement_task.md` covers when to
   skip the commit step.
 - Do NOT make architectural decisions that contradict the task
-  file — if something seems wrong, surface it via
-  `mcp__sculptor__ask_user_question` rather than improvising.
+  file — if something seems wrong, surface it to the user with your question tool rather than improvising.
 - Do NOT read task files ahead of time — only read each task file
   when you start working on it.
 - Do NOT proceed past a failed task without asking the user.

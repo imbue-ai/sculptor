@@ -29,26 +29,25 @@ Before doing anything else, rename this agent to "Review" via the
 Most of this skill runs autonomously (Steps 1-8). A Q&A loop only
 kicks in if the user picks **Address findings in this tab** at
 Step 9's finalize. The rules below apply to that loop and to any
-other turn where you call `mcp__sculptor__ask_user_question`
+other turn where you ask the user a question with your question tool
 (including the finalize question itself).
 
-### Every turn ends with mcp__sculptor__ask_user_question
+### Every turn ends by asking the user a question
 
-**Every turn in a Q&A loop MUST end with an
-`mcp__sculptor__ask_user_question` tool call.** This is the single
+**Every turn in a Q&A loop MUST end by asking the user a question with your question tool.**
+This is the single
 rule that determines whether the turn succeeded. If you end a turn
 without it, you have stopped silently and the user has nothing to
 respond to.
 
 The ritual holds regardless of what happened earlier in the turn —
 research, fixing a finding, answering the user's question, long
-discussion. Every one of those ends with
-`mcp__sculptor__ask_user_question`.
+discussion. Every one of those ends by asking the user a question with your question tool.
 
 **One narrow exception: spawning a fixer agent.** When the user
 picks "Spawn a fixer agent" at finalize and you spawn it, the
 spawning turn ends with **text instructions** rather than
-`mcp__sculptor__ask_user_question`. The workspace's "waiting for
+by asking the user a question. The workspace's "waiting for
 input" state must belong to the fixer agent, not to this one. The
 exception applies only to the spawn turn.
 
@@ -57,8 +56,8 @@ exception applies only to the spawn turn.
 The user will often ask a question back, push back on a finding, or
 want to drill into a topic. This is a feature, not a problem — but
 it's the moment the skill fails most often: the agent goes into
-"answer the user" mode and forgets to close with
-`mcp__sculptor__ask_user_question`.
+"answer the user" mode and forgets to close by asking the user a
+question with your question tool.
 
 Handle it like this:
 
@@ -67,7 +66,7 @@ Handle it like this:
 2. Update `review.md` to reflect anything new the conversation
    surfaced — mark findings as resolved with commit references when
    a fix has landed.
-3. End the turn with `mcp__sculptor__ask_user_question` — usually a
+3. End the turn by asking the user a question with your question tool — usually a
    follow-up that builds on the discussion, or a "address the next
    finding or stop?" pacing question.
 
@@ -75,7 +74,7 @@ Research does not excuse skipping the ritual.
 
 ### Do not announce upcoming tool calls
 
-When you're about to call `mcp__sculptor__ask_user_question`, do
+When you're about to ask the user a question, do
 **not** announce it in text first. Just make the call.
 
 Any sentence that announces an upcoming tool call ("Here are the
@@ -122,15 +121,13 @@ Read them. Key sections:
 - `Plan folder:` absolute or repo-relative
 - `Diff range:` git diff range, defaults to `origin/main...HEAD`
 
-If no slug is provided, ask via `mcp__sculptor__ask_user_question`,
-offering glob-discovered slugs.
+If no slug is provided, ask with your question tool, offering glob-discovered slugs.
 
 Resolve all paths from the slug + docs config if any are missing
 from the seed.
 
 If `origin/main` doesn't exist, or no commits are ahead of it, use
-`mcp__sculptor__ask_user_question` to ask the user what base
-reference to compare against.
+your question tool to ask the user what base reference to compare against.
 
 ## Step 3: Read upstream artifacts
 
@@ -255,7 +252,7 @@ Show the path in a code block.
 
 ## Step 9: Finalize
 
-Emit the finalize `mcp__sculptor__ask_user_question` on its own turn
+Emit the finalizing question on its own turn
 with these options:
 
 - **Address findings in this tab** — switch into a Q&A loop where
@@ -265,7 +262,7 @@ with these options:
 - **Spawn a fixer agent** — spawn a fresh agent (renamed `Fix`)
   seeded with `review.md` and the list of findings to address. Use
   `/sculptor:sculpt-cli` to spawn; end the spawn turn with text
-  instructions (no `mcp__sculptor__ask_user_question`).
+  instructions (no question).
 - **Done** — stop cleanly.
 
 Act on the user's choice.
@@ -281,9 +278,8 @@ Each turn:
    logical change).
 3. Update `review.md` to mark the finding as **Resolved** with a
    reference to the commit hash.
-4. End the turn with `mcp__sculptor__ask_user_question` asking
-   whether to address the next finding, hand off to a fixer agent,
-   or stop.
+4. End the turn by asking the user, with your question tool, whether to
+   address the next finding, hand off to a fixer agent, or stop.
 
 ## Rules
 
@@ -293,10 +289,10 @@ Each turn:
   even if the diff looks clean.
 - Do NOT block on a failing test by halting Review. Capture the
   failure in `review.md`, continue, and surface it in the Summary.
-- **Use `mcp__sculptor__ask_user_question` for every question.**
+- **Ask every question with your question tool** — `mcp__sculptor__ask_user_question` if it's available, otherwise the built-in `AskUserQuestion`. Never ask in plain text: only the tool call puts the workspace into the "waiting for input" state that alerts the user.
 - The finalize question is its own turn.
 - When spawning a fixer agent, end the spawn turn with **text
-  instructions** rather than `mcp__sculptor__ask_user_question`.
+  instructions** rather than by asking the user a question.
 - Re-run the test suite even if Build already did — Review is the
   one phase that re-verifies; other phases trust prior phases'
   verification.

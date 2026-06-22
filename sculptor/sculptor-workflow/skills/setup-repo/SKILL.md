@@ -45,7 +45,7 @@ from the repo root.
 
 ## Step 2: Ask the user how to proceed
 
-Use `mcp__sculptor__ask_user_question`:
+Ask with your question tool:
 
 > I'd like to set up Sculptor configs for this repo so I can build, test, and
 > fix bugs effectively. This is a one-time setup — the configs will be saved
@@ -415,13 +415,13 @@ Write all three files to `.sculptor/code.md`, `.sculptor/testing.md`, and
 
 ### Ask the user to review
 
-Use the `mcp__sculptor__ask_user_question` tool to ask the user to review the files:
+Use your question tool to ask the user to review the files:
 
 > I've written the config files to `.sculptor/code.md`,
 > `.sculptor/testing.md`, and `.sculptor/docs.md`. Please review them and
 > let me know if anything needs to be adjusted.
 
-**You MUST use the `mcp__sculptor__ask_user_question` tool here**, not a plain text message.
+**You MUST ask with your question tool here** — `mcp__sculptor__ask_user_question` if it's available, otherwise the built-in `AskUserQuestion` — not a plain text message. The tool call is what raises the "waiting for input" status that alerts the user.
 The tool triggers a UI notification in Sculptor that grabs the user's attention
 — without it, the user may not notice the question.
 

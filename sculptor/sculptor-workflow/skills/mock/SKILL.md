@@ -77,17 +77,16 @@ another agent, may include these markers:
   exploration mode (no spec exists yet).
 
 If the feature description is missing or too vague (1-3 words like
-"settings page"), use `mcp__sculptor__ask_user_question` to ask the user
+"settings page"), use your question tool to ask the user
 to describe the feature in a sentence or two before continuing.
 
 If mode is **confirmation** and `Associated spec:` is missing, stop and
-ask the user via `mcp__sculptor__ask_user_question` for the spec path
+ask with your question tool for the spec path
 before proceeding — confirmation mocks without a spec are meaningless.
 
 ## Step 3: Determine mode
 
-If `Mode:` is in the input, use it. Otherwise ask via
-`mcp__sculptor__ask_user_question`:
+If `Mode:` is in the input, use it. Otherwise ask with your question tool:
 
 - **Exploration** — "I'll generate 3+ end-to-end variants to help you
   explore ideas before you commit to a direction."
@@ -102,8 +101,7 @@ spec.
 1. **Slug.** If a slug was provided, use it. Otherwise derive one from
    the feature description: kebab-case, 2-5 words, lowercase,
    alphanumeric + hyphens only. If the derived slug is not obvious from
-   the feature description, confirm it with
-   `mcp__sculptor__ask_user_question`.
+   the feature description, confirm it with your question tool.
 2. **Paths.** If a `Target path:` was provided, use it. Otherwise derive
    from the **Spec Location** pattern in `.sculptor/docs.md`:
    - **Directory-per-spec** pattern (e.g. `specs/<slug>/spec.md`) →
@@ -111,8 +109,8 @@ spec.
      `specs/<slug>/mocks.context.md`.
    - **Flat** pattern (e.g. `docs/<slug>.md`) → mocks live at
      `docs/<slug>.mocks.html` and `docs/<slug>.mocks.context.md`.
-3. If `mocks.html` already exists at the target location, ask the user
-   via `mcp__sculptor__ask_user_question` whether to extend it, replace
+3. If `mocks.html` already exists at the target location, use your question tool to ask
+   whether to extend it, replace
    it, or pick a new slug.
 
 ## Step 5: Resolve the visual anchor
@@ -125,8 +123,7 @@ Look at the **UI Reference** section of `.sculptor/docs.md`:
   Look for a component library, design tokens, or existing pages you
   can imitate.
 - If the UI Reference is empty **and** the repo has no discoverable
-  frontend code (brand-new project, pure backend), STOP and ask the
-  user via `mcp__sculptor__ask_user_question`:
+  frontend code (brand-new project, pure backend), STOP and ask with your question tool:
   - What visual style the mocks should follow (e.g. clean minimal,
     dashboard, mobile-first)
   - Any reference sites or apps to imitate
@@ -207,8 +204,7 @@ match the visual style from Step 5's resolution, realistic sample
 data — no `foo`/`bar`/`lorem ipsum`.
 
 After generating, show the user both file paths in code blocks so they
-can open them, then immediately enter Step 8's iteration loop by asking
-what they want to change (via `mcp__sculptor__ask_user_question`) and
+can open them, then immediately enter Step 8's iteration loop by asking — with your question tool — what they want to change, and
 emitting the checklist footer.
 
 ## Step 8: Iterate
@@ -225,12 +221,12 @@ Every turn in Step 8 MUST end with both:
    Logged tweak in mocks.context.md: yes/no
    Summary: <one line describing what you did this turn>
    ```
-2. A call to `mcp__sculptor__ask_user_question` (asking what to tweak
+2. A question via your question tool (asking what to tweak
    next, or offering to wrap up — see below).
 
 The text-output footer comes first, then the tool call closes the turn.
 Ending a turn without the footer is the primary failure mode of this
-skill. Ending without `mcp__sculptor__ask_user_question` is the second.
+skill. Ending without a question to the user is the second.
 
 ### On every user answer
 
@@ -251,8 +247,7 @@ skill. Ending without `mcp__sculptor__ask_user_question` is the second.
 ### When to offer to wrap up
 
 When the user seems satisfied (no new tweaks landing, they say they're
-happy, or the conversation is clearly winding down), use
-`mcp__sculptor__ask_user_question` to offer:
+happy, or the conversation is clearly winding down), ask with your question tool, offering:
 
 - **I'm done** — wrap up the mock session
 - **Keep iterating** — stay in Step 8
@@ -283,11 +278,9 @@ the spec using Decisions and Rejected Alternatives as input.
 
 ## Rules
 
-- **Use `mcp__sculptor__ask_user_question` for every question.** The
-  built-in `AskUserQuestion` tool is blocked in Sculptor. Always use
-  `mcp__sculptor__ask_user_question`.
+- **Ask every question with your question tool** — `mcp__sculptor__ask_user_question` if it's available, otherwise the built-in `AskUserQuestion`. Never ask in plain text: only the tool call puts the workspace into the "waiting for input" state that alerts the user.
 - **Every turn in Step 8 MUST end with the checklist footer AND
-  `mcp__sculptor__ask_user_question`.** The footer is the drift-prevention
+  a question to the user via your question tool.** The footer is the drift-prevention
   anchor; the tool call keeps the ritual intact. Missing either is a
   failure.
 - **Do NOT commit.** The mock skill never runs `git commit`. Users
