@@ -21,10 +21,6 @@ import * as PImage from "pureimage";
 
 import { logger } from "./logger";
 
-// ---------------------------------------------------------------------------
-// Font discovery
-// ---------------------------------------------------------------------------
-
 /**
  * Well-known monospace font paths per platform.  Checked first before falling
  * back to `fc-list` on Linux.
@@ -60,10 +56,6 @@ function findFont(): string | null {
 
   return null;
 }
-
-// ---------------------------------------------------------------------------
-// Hue-shift helpers
-// ---------------------------------------------------------------------------
 
 function hashString(s: string): number {
   let h = 0;
@@ -125,10 +117,6 @@ function invertAndHueShift(bitmap: Buffer, hueShift: number): void {
     bitmap[i + 2] = Math.round(nb * 255);
   }
 }
-
-// ---------------------------------------------------------------------------
-// Text overlay
-// ---------------------------------------------------------------------------
 
 /**
  * Render text overlays onto the icon bitmap:
@@ -193,10 +181,6 @@ function renderTextOverlays(
 
   return Buffer.from(img.data);
 }
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
 
 type DevIconOptions = {
   /** Large label rendered at the top of the icon (e.g. "src", "pytest"). */

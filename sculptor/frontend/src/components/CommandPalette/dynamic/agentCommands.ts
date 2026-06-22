@@ -12,9 +12,7 @@ const taskDisplayTitle = (task: { title?: string | null; initialPrompt: string }
 /**
  * Surfaces agents in the palette, scoped to the workspace the user is
  * currently viewing. Cross-workspace switching is intentionally not
- * supported: the user said "we only need to be able to switch between
- * agents in the current workspace" — every other entry-point either
- * cluttered the root list or made the flow slower.
+ * supported.
  *
  * Flow:
  *   "Switch agent…" (root, primary)  →  agents.switch sub-page  →  one

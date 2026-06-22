@@ -1,13 +1,9 @@
 import fs from "node:fs";
-// Import Node.js path utility for resolving file paths across platforms
 import path from "node:path";
 
-// Import Electron Fuses types and options for security configuration
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
 import type { MakerDMGConfig } from "@electron-forge/maker-dmg";
-// Import the Fuses plugin to apply security settings at build time
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
-// Import Vite plugin for modern bundling and development experience
 import { VitePlugin } from "@electron-forge/plugin-vite";
 import type { ForgeConfig, ForgeMakeResult } from "@electron-forge/shared-types";
 
@@ -77,7 +73,6 @@ let config = {
         // Name of the Windows setup executable file
         setupExe: "sculptor-setup.exe",
       },
-      // Only run this maker on Windows platforms
       platforms: ["win32"],
     },
     {
@@ -133,7 +128,6 @@ let config = {
         },
         name: "Sculptor",
       }),
-      // Only run on macOS (darwin)
       platforms: ["darwin"],
     },
     {
@@ -147,7 +141,6 @@ let config = {
           bin: "Sculptor",
         },
       },
-      //Only run on Linux platforms
       platforms: ["linux"],
     },
   ],
@@ -175,7 +168,6 @@ let config = {
     // Fuses plugin for security hardening - disables potentially dangerous features
     // These settings are applied at build time and cannot be changed at runtime
     new FusesPlugin({
-      // Use version 1 of the fuses system
       version: FuseVersion.V1,
       // Disable running as Node.js (prevents access to Node APIs in renderer)
       [FuseV1Options.RunAsNode]: false,

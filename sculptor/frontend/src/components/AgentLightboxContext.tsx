@@ -36,10 +36,9 @@ export const AgentLightboxProvider = ({ taskId, children }: AgentLightboxProvide
   const [, forceUpdate] = useReducer((n: number) => n + 1, 0);
   const [lightboxPath, setLightboxPath] = useState<string | null>(null);
 
-  // Reset media registry and close lightbox when switching agents.
-  // This replaces the previous key={taskID} approach which remounted
-  // the entire subtree, causing scroll container DOM element swaps
-  // and visible scroll flickering.
+  // Reset media registry and close lightbox when switching agents. Resetting in
+  // an effect rather than remounting the subtree (via key={taskId}) avoids scroll
+  // container DOM element swaps and visible scroll flickering.
   useEffect(() => {
     listsRef.current.clear();
     setLightboxPath(null);

@@ -21,12 +21,11 @@ import type { Command, DynamicProvider } from "../types.ts";
  *   - Scoped to the `view.panels` sub-page so the root list isn't
  *     dominated by N "Toggle X" rows. The user opens the page via
  *     "Toggle panel visibility..." (see builtinCommands/panels.ts).
- *   - The palette closes after each toggle. Earlier we used
- *     `keepOpen: true` so users could flip several panels in a row, but
- *     mounting a heavy panel (e.g. the file browser) while the palette
- *     is still on screen made the toggle feel noticeably laggier than
- *     toggling via the topbar button. Closing first lets the panel mount
- *     alone, matching the mouse-toggle latency.
+ *   - The palette closes after each toggle rather than using
+ *     `keepOpen: true`. Mounting a heavy panel (e.g. the file browser)
+ *     while the palette is still on screen makes the toggle feel
+ *     noticeably laggier than toggling via the topbar button. Closing
+ *     first lets the panel mount alone, matching the mouse-toggle latency.
  *
  * Ranking:
  *   - `boost` lifts these rows above same-tier Settings sub-page entries

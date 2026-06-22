@@ -20,9 +20,7 @@ import { COMPONENT_GALLERY_TAB_ID, HOME_TAB_ID, SETTINGS_TAB_ID } from "./worksp
 /**
  * The three "close-tab" handlers used by the workspace tab bar AND the
  * Cmd+K command palette. Both surfaces must close + navigate identically;
- * keeping the logic in one hook avoids the kind of drift that previously
- * left the palette's Close action removing the tab without closing the
- * workspace contents (per review of MR !1021).
+ * keeping the logic in one hook avoids drift between them.
  *
  * Returns three handlers and the `navigateToNextTab` helper so callers
  * that want to close-then-navigate (e.g. delete flows) can reuse the

@@ -332,7 +332,6 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
 
       {/* Dependencies Section */}
       <Flex direction="column" gap="3">
-        {/* Claude CLI */}
         <DependencyCard
           name="Claude Code CLI"
           cliName="claude"
@@ -350,7 +349,6 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
           installProgress={dependencies?.claude?.installProgress ?? null}
         />
 
-        {/* Git */}
         <DependencyCard
           name="Git"
           cliName="git"

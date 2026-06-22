@@ -1021,7 +1021,6 @@ app.whenReady().then(async () => {
   }
 
   traceMark("electron.app_ready");
-  // Create application menu
   createApplicationMenu();
 
   ipcMain.handle(BACKEND_PORT_CHANNEL_NAME, () => PORT);
@@ -1092,7 +1091,6 @@ app.whenReady().then(async () => {
     registerTestIpcHandlers(ipcMain);
   }
 
-  // New file storage handlers
   ipcMain.handle(SAVE_FILE_CHANNEL_NAME, async (_event, fileData: ArrayBuffer, originalFilename: string) => {
     try {
       const userDataPath = app.getPath("userData");
@@ -1134,7 +1132,6 @@ app.whenReady().then(async () => {
         ".mp4": "video/mp4",
         ".webm": "video/webm",
         ".mov": "video/quicktime",
-        // ".pdf": "application/pdf",
       };
       if (!mimeTypes[ext]) {
         throw new Error(`Unsupported file extension: ${ext}`);

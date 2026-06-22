@@ -12,9 +12,7 @@ const workspaceName = (description: string | undefined): string => (description 
 
 /**
  * Surfaces the right-click menu actions for the CURRENT workspace in
- * Cmd+K. Cross-workspace action picking is intentionally not supported:
- * the user said "we only want to take workspace actions on the workspace
- * we are on right now."
+ * Cmd+K. Cross-workspace action picking is intentionally not supported.
  *
  * Flow:
  *   "Workspace actions…" (root, primary, only when ctx.activeWorkspaceId)
@@ -98,8 +96,6 @@ export const buildWorkspaceActionsProvider = (
       });
     }
 
-    // ── "Open in..." sub-page ───────────────────────────────────────────
-    //
     // Stays in sync with the workspace metadata bar's repo-path dropdown
     // — both consume `getOpenWithItems()` from openInApp/items.ts.
     const openWithItems = getOpenWithItems();

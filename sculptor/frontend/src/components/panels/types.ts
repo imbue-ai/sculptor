@@ -1,20 +1,17 @@
 import type { LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
 
-// Zone IDs
 export const ZONE_IDS = ["top-left", "bottom-left", "bottom", "top-right", "bottom-right"] as const;
 export type ZoneId = (typeof ZONE_IDS)[number];
 
 // Panel IDs — dynamic string type since panels are registered at runtime
 export type PanelId = string;
 
-// Context menu item type
 export type ContextMenuItem = {
   label: string;
   action: () => void;
 };
 
-// Panel definition type
 export type PanelDefinition = {
   id: PanelId;
   displayName: string;

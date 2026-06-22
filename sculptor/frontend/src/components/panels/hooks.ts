@@ -23,16 +23,12 @@ import type { LayoutSide, PanelDefinition, PanelId, ZoneId } from "~/components/
 import { SIDE_ZONE_MAP, ZONE_IDS } from "~/components/panels/types.ts";
 import { computeToggleAction } from "~/components/panels/utils.ts";
 
-// ── usePanelById ────────────────────────────────────────────────────
-
 /** Look up a single panel definition from the registry by ID. */
 export const usePanelById = (id: PanelId | null): PanelDefinition | undefined => {
   const registry = useAtomValue(panelRegistryAtom);
   if (!id) return undefined;
   return registry.find((p) => p.id === id);
 };
-
-// ── usePanelsByZone ─────────────────────────────────────────────────
 
 /** Per-zone enabled-panel lists. Use this for any guard or layout logic that
  *  must respect `panelEnabledAtom` — disabled panels are filtered out. */
@@ -48,8 +44,6 @@ export const usePanelsByZone = (): Partial<Record<ZoneId, ReadonlyArray<PanelId>
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, zonePanelArrays);
 };
-
-// ── usePanelEnabled ─────────────────────────────────────────────────
 
 type UsePanelEnabledResult = {
   enabled: Record<PanelId, boolean>;
@@ -96,8 +90,6 @@ export const usePanelEnabled = (): UsePanelEnabledResult => {
 
   return { enabled, setEnabled };
 };
-
-// ── usePanelActions ─────────────────────────────────────────────────
 
 type UsePanelActionsResult = {
   movePanel: (panelId: PanelId, targetZone: ZoneId, insertIndex?: number) => void;
@@ -275,8 +267,6 @@ export const usePanelActions = (): UsePanelActionsResult => {
   return { movePanel, togglePanel };
 };
 
-// ── useSideToggle ───────────────────────────────────────────────────
-
 type UseSideToggleResult = {
   isVisible: boolean;
   toggle: () => void;
@@ -407,8 +397,6 @@ export const useSideToggle = (side: LayoutSide): UseSideToggleResult => {
   return { isVisible, toggle };
 };
 
-// ── useFocusMode ────────────────────────────────────────────────────
-
 type UseFocusModeResult = {
   isFocusModeActive: boolean;
   toggleFocusMode: () => void;
@@ -500,8 +488,6 @@ export const useFocusMode = (): UseFocusModeResult => {
   return { isFocusModeActive, toggleFocusMode };
 };
 
-// ── useZenMode ──────────────────────────────────────────────────────
-
 type UseZenModeResult = {
   isZenModeActive: boolean;
   toggleZenMode: () => void;
@@ -547,8 +533,6 @@ export const useZenMode = (): UseZenModeResult => {
 
   return { isZenModeActive, toggleZenMode };
 };
-
-// ── usePanelKeyboardShortcuts ───────────────────────────────────────
 
 /**
  * PyCharm/VS Code-style focus-then-toggle dispatch. Disabled panels are

@@ -10,8 +10,7 @@ import styles from "./HoverCard.module.scss";
 // REOPEN_GRACE_PERIOD_MS) opens with zero delay — so sliding the mouse from
 // one chip to the next feels seamless. The group also tracks the most recent
 // opener id; when it changes, sibling cards that are still open force-close
-// themselves so only one popover in the group is ever visible. Ported from
-// AlphaPromptNavigator.
+// themselves so only one popover in the group is ever visible.
 const REOPEN_GRACE_PERIOD_MS = 300;
 
 type GroupState = {

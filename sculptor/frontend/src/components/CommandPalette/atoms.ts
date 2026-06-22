@@ -5,8 +5,8 @@ import type { CommandId, PageId } from "./types.ts";
 export const commandPaletteOpenAtom = atom<boolean>(false);
 
 /**
- * Search query. Intentionally not persisted: the old SearchModal persisted
- * its query and reopened with stale text, which caused confusing behavior.
+ * Search query. Intentionally not persisted: persisting it would reopen the
+ * palette with stale text.
  */
 export const commandPaletteSearchAtom = atom<string>("");
 

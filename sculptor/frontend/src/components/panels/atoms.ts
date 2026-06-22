@@ -8,13 +8,11 @@ import { atomWithDebouncedStorage } from "~/common/state/atoms/atomWithDebounced
 import type { LayoutSide, PanelDefinition, PanelId, ZoneId } from "~/components/panels/types.ts";
 import { LAYOUT_SIDES, SIDE_ZONE_MAP, ZONE_IDS } from "~/components/panels/types.ts";
 
-// ── Panel registry atom ─────────────────────────────────────────────
 // Writable atom holding the current set of registered panels.
 // Starts empty; set via PanelRegistryProvider (React) or
 // createPanelStore (tests / programmatic).
 export const panelRegistryAtom = atom<ReadonlyArray<PanelDefinition>>([]);
 
-// ── Primary atoms with localStorage persistence ──────────────────────
 // Debounced: a single drag-and-drop move updates all four move-related
 // atoms in the same frame. Synchronous localStorage writes would stack up on
 // the drop frame and produce visible lag — debouncing keeps in-memory state
@@ -50,8 +48,6 @@ export const panelEnabledAtom = atomWithStorage<Record<PanelId, boolean>>("sculp
   getOnInit: true,
 });
 
-// ── Focus mode atoms (persisted) ─────────────────────────────────────
-
 export const focusModeActiveAtom = atomWithStorage<boolean>("sculptor-focus-mode-active", false, undefined, {
   getOnInit: true,
 });
@@ -63,8 +59,6 @@ export const focusModeSavedVisibilityAtom = atomWithStorage<Partial<Record<ZoneI
   { getOnInit: true },
 );
 
-// ── Zen mode atoms (persisted) ───────────────────────────────────────
-
 export const zenModeActiveAtom = atomWithStorage<boolean>("sculptor-zen-mode-active", false, undefined, {
   getOnInit: true,
 });
@@ -74,8 +68,6 @@ export const zenModeActiveAtom = atomWithStorage<boolean>("sculptor-zen-mode-act
 export const didZenImplyFocusModeAtom = atomWithStorage<boolean>("sculptor-zen-mode-implied-focus", false, undefined, {
   getOnInit: true,
 });
-
-// ── Non-persisted atoms ──────────────────────────────────────────────
 
 // Tracks the currently active workspace ID for per-workspace panel layout.
 // Set by WorkspacePageContent on mount/navigation; null when not viewing a workspace.
@@ -95,13 +87,10 @@ export const chatPanelMountedAtom = atom<boolean>(false);
 // a terminal to act on at all.
 export const terminalPanelMountedAtom = atom<boolean>(false);
 
-// ── Panel-to-keybinding mapping ─────────────────────────────────────
 // Synthetic keybinding ID for a panel; used as the key into
 // `userConfig.keybindings` for per-panel shortcuts.
 export const panelKeybindingId = (panelId: PanelId): KeybindingId => `panel_${panelId}`;
 
-// ── Enabled-state helpers ───────────────────────────────────────────
-// ── Shortcuts (derived from the keybinding registry) ────────────────
 // Read-only map of panel id → bound shortcut string, sourced from
 // `keybindingsMapAtom` via `panel_<id>` keys. Disabled panels and
 // panels with empty/null bindings are omitted entirely.
@@ -120,7 +109,6 @@ export const panelShortcutsAtom = atom<Record<PanelId, string>>((get) => {
   return result;
 });
 
-// ── Memoized derived atom factories ──────────────────────────────────
 // Each zone ID maps to a stable atom instance to avoid creating new atoms
 // on every render (which causes infinite re-render loops in Jotai).
 
@@ -191,7 +179,6 @@ export const isBottomVisibleAtom = atom<boolean>((get) => {
   return get(isZoneVisibleAtomMap.get("bottom")!);
 });
 
-// ── Side-level visibility (for bottom bar toggle buttons) ───────────
 // Stores the per-zone visibility snapshot taken when a side is hidden,
 // so it can be fully restored when toggled back on.
 export const savedSideVisibilityAtom = atom<Partial<Record<LayoutSide, Partial<Record<ZoneId, boolean>>>>>({});
@@ -243,12 +230,10 @@ export const activePanelInZoneAtom = (zoneId: ZoneId): Atom<PanelDefinition | un
   return activePanelInZoneAtomMap.get(zoneId)!;
 };
 
-// ── Expand mode ──────────────────────────────────────────────────────
 // When non-null, the layout enters "expand mode": only the zone containing
 // this panel and the center diff area are visible; everything else is hidden.
 export const expandedPanelIdAtom = atom<PanelId | null>(null);
 
-// ── Derived zone atom for "files" panel ────────────────────────────
 // Narrows the subscription so consumers that only need the zone for the
 // "files" panel don't re-render when other panels' zone assignments change.
 export const filesZoneAtom = atom<ZoneId | undefined>((get) => {
@@ -256,14 +241,12 @@ export const filesZoneAtom = atom<ZoneId | undefined>((get) => {
   return assignments["files"] as ZoneId | undefined;
 });
 
-// ── File Browser tab state (per workspace) ───────────────────────────
 export type FileBrowserTab = "all" | "changes" | "history";
 
 export const activeFileBrowserTabAtomFamily = atomFamily((workspaceId: string) =>
   atomWithStorage<FileBrowserTab>(`sculptor-fb-tab-${workspaceId}`, "all"),
 );
 
-// ── Store factory ────────────────────────────────────────────────────
 // Unified way to create an initialised panel store.  Usable in tests,
 // Storybook decorators, or the main app bootstrap.
 

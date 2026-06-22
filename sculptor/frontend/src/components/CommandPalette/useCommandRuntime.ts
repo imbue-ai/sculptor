@@ -84,13 +84,8 @@ export const useCommandRuntime = (): CommandRuntime => {
 
   const { updateField } = useUserConfig();
 
-  // ── Stable runtime methods ─────────────────────────────────────────
-  //
   // Each method below is a useEvent-style stable callback: identity
   // never changes, the body always runs against the latest closure.
-  // This is what previously the latest-values-ref pattern did inline
-  // in CommandRegistrations.tsx, lifted into a proper helper so the
-  // intent is obvious and the wiring file is readable.
   const invokeAction = useEvent((id: CommandActionId): void => {
     const actions = store.get(commandActionsAtom);
     actions[id]?.();

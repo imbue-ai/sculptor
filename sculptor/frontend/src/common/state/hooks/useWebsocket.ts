@@ -139,7 +139,6 @@ export function useWebsocket<T>({
       }
     };
 
-    // Initial connection
     connect();
 
     // Cleanup function

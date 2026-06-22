@@ -29,10 +29,8 @@ const fetchProjectSkills = async (projectId: string, signal: AbortSignal): Promi
 // queries refresh via explicit invalidation; the project hook overrides
 // `staleTime` to a short window so the next `/` press or remount after the
 // window picks up on-disk edits (the user adds a skill file and types `/`
-// again). The bespoke fetcher this replaced cleared its cache on every `/`
-// keystroke — a 10s window preserves that "feels-fresh-on-each-/" UX while
-// still deduping rapid `/` re-presses, the eager prefetch, and concurrent
-// editor mounts within the window.
+// again), while still deduping rapid `/` re-presses, the eager prefetch, and
+// concurrent editor mounts within the window.
 const PROJECT_SKILLS_STALE_TIME_MS = 10_000;
 
 /**
