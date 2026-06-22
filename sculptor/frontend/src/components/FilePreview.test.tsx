@@ -250,6 +250,26 @@ describe("FilePreview inline mode", () => {
     });
   });
 
+  describe("copy image context menu", () => {
+    it("shows Copy Image on right-click when allowCopyImage is set", async () => {
+      renderPreview({ displayMode: "inline", allowCopyImage: true });
+      fireEvent.contextMenu(screen.getByTestId(ElementIds.FILE_PREVIEW));
+      expect(await screen.findByTestId(ElementIds.FILE_PREVIEW_COPY_IMAGE)).toBeInTheDocument();
+    });
+
+    it("does not show Copy Image when allowCopyImage is not set", () => {
+      renderPreview({ displayMode: "inline" });
+      fireEvent.contextMenu(screen.getByTestId(ElementIds.FILE_PREVIEW));
+      expect(screen.queryByTestId(ElementIds.FILE_PREVIEW_COPY_IMAGE)).not.toBeInTheDocument();
+    });
+
+    it("does not show Copy Image for videos even when allowCopyImage is set", () => {
+      renderPreview({ displayMode: "inline", isVideo: true, allowCopyImage: true });
+      fireEvent.contextMenu(screen.getByTestId(ElementIds.FILE_PREVIEW));
+      expect(screen.queryByTestId(ElementIds.FILE_PREVIEW_COPY_IMAGE)).not.toBeInTheDocument();
+    });
+  });
+
   describe("container", () => {
     it("uses inlineWrapper class instead of previewWrapper", () => {
       const { container } = renderPreview({ displayMode: "inline" });

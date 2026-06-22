@@ -72,7 +72,9 @@ export const AgentLightboxProvider = ({ taskId, children }: AgentLightboxProvide
   return (
     <AgentLightboxContext.Provider value={contextValue}>
       {children}
-      {lightboxIndex >= 0 && <ImageLightbox media={allMedia} initialIndex={lightboxIndex} onClose={handleClose} />}
+      {lightboxIndex >= 0 && (
+        <ImageLightbox media={allMedia} initialIndex={lightboxIndex} onClose={handleClose} allowCopyImage />
+      )}
     </AgentLightboxContext.Provider>
   );
 };

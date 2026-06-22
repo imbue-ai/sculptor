@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ElementIds } from "~/api";
 
+import { CopyImageContextMenu } from "./CopyImageContextMenu.tsx";
 import styles from "./ImageLightbox.module.scss";
 
 type MediaFile = {
@@ -18,9 +19,16 @@ type ImageLightboxProps = {
   media: Array<MediaFile>;
   initialIndex: number;
   onClose: () => void;
+  /** When true, the full-size image gets a right-click "Copy Image" context menu. */
+  allowCopyImage?: boolean;
 };
 
-export const ImageLightbox = ({ media, initialIndex, onClose }: ImageLightboxProps): ReactElement => {
+export const ImageLightbox = ({
+  media,
+  initialIndex,
+  onClose,
+  allowCopyImage = false,
+}: ImageLightboxProps): ReactElement => {
   const [currentIndex, setCurrentIndex] = useState<number>(initialIndex);
   const currentItem = media[currentIndex];
   const hasMultiple = media.length > 1;
@@ -82,6 +90,10 @@ export const ImageLightbox = ({ media, initialIndex, onClose }: ImageLightboxPro
         <Flex direction="column" align="center" gap="3">
           {currentItem.isVideo ? (
             <video src={currentItem.url} className={styles.image} controls autoPlay muted />
+          ) : allowCopyImage ? (
+            <CopyImageContextMenu url={currentItem.url}>
+              <img src={currentItem.url} alt={`Full size: ${currentItem.name}`} className={styles.image} />
+            </CopyImageContextMenu>
           ) : (
             <img src={currentItem.url} alt={`Full size: ${currentItem.name}`} className={styles.image} />
           )}

@@ -76,6 +76,7 @@ export const UserMessageContent = ({
         <FilePreviewList
           files={fileBlocks.map((b) => b.source)}
           displayMode="inline"
+          allowCopyImage
           listId={`${messageIndex}-user`}
           listOrder={messageIndex * 1000 + 999}
         />
