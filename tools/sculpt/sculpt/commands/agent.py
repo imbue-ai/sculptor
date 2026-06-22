@@ -17,7 +17,6 @@ from sculpt.client import Client
 from sculpt.client.api.default import create_workspace_agent
 from sculpt.client.api.default import delete_workspace_agent
 from sculpt.client.api.default import interrupt_workspace_agent
-from sculpt.client.api.default import list_terminal_agent_registrations
 from sculpt.client.api.default import list_workspace_agents
 from sculpt.client.api.default import rename_workspace_agent
 from sculpt.client.api.default import send_workspace_agent_messages
@@ -28,7 +27,6 @@ from sculpt.client.models.http_validation_error import HTTPValidationError
 from sculpt.client.models.rename_agent_request import RenameAgentRequest
 from sculpt.client.models.send_message_request import SendMessageRequest
 from sculpt.client.models.task_status import TaskStatus
-from sculpt.client.models.terminal_agent_registration import TerminalAgentRegistration
 from sculpt.client.types import UNSET
 from sculpt.commands._follow_helpers import follow_and_stream_messages
 from sculpt.commands._follow_helpers import get_session_token_safe
@@ -42,6 +40,7 @@ from sculpt.commands._follow_helpers import on_reconnect_json
 from sculpt.commands._follow_helpers import on_reconnect_separator
 from sculpt.commands._follow_helpers import on_reconnect_text
 from sculpt.commands._follow_helpers import on_status_json
+from sculpt.commands._harness_helpers import resolve_harness_selection
 from sculpt.commands.data_types import AgentCreateOutput
 from sculpt.commands.data_types import AgentDeleteOutput
 from sculpt.commands.data_types import AgentInterruptOutput
@@ -57,10 +56,6 @@ from sculpt.formatting import handle_connection_error
 from sculpt.formatting import is_tty
 from sculpt.formatting import overwrite_lines
 from sculpt.formatting import truncate
-from sculpt.harness import HarnessSelection
-from sculpt.harness import available_harness_names
-from sculpt.harness import resolve_builtin_harness
-from sculpt.harness import resolve_harness_name
 from sculpt.message_formatting import format_message
 from sculpt.resolve import resolve_agent_id
 from sculpt.resolve import resolve_by_prefix
@@ -122,40 +117,6 @@ def _format_snapshot_datetime(iso_str: str) -> str:
         return iso_str
 
 
-def _fetch_terminal_agent_registrations(client: Client, json_output: bool) -> list[TerminalAgentRegistration]:
-    """Fetch the registered terminal agents the server currently offers."""
-    try:
-        result = list_terminal_agent_registrations.sync(client=client)
-    except httpx.ConnectError:
-        handle_connection_error(json_output)
-    if result is None:
-        cli_error("Failed to list harnesses", detail="No response from server", json_output=json_output)
-    return result.registrations
-
-
-def _resolve_harness_selection(harness: str | None, client: Client, json_output: bool) -> HarnessSelection | None:
-    """Resolve an explicitly requested harness, or None to let the server decide.
-
-    An explicit choice is validated against the built-in harnesses (Claude,
-    Pi, Terminal) and the server's registered terminal agents. With no
-    choice, this returns None so the caller omits the agent type and the
-    server applies the user's most-recently-used harness from the app.
-    """
-    if harness is None:
-        return None
-
-    builtin = resolve_builtin_harness(harness)
-    if builtin is not None:
-        return builtin
-
-    registrations = _fetch_terminal_agent_registrations(client, json_output)
-    selection = resolve_harness_name(harness, registrations)
-    if selection is None:
-        valid = ", ".join(available_harness_names(registrations))
-        cli_error(f"Invalid harness '{harness}'. Valid options: {valid}", json_output=json_output)
-    return selection
-
-
 @agent_app.command("create")
 def create(
     workspace: str | None = typer.Option(None, "--workspace", "-w", help="Workspace ID (or set SCULPT_WORKSPACE_ID)"),
@@ -192,7 +153,7 @@ def create(
 
     llm_model = MODEL_MAPPING[model_lower]
 
-    selection = _resolve_harness_selection(harness, client, json_output)
+    selection = resolve_harness_selection(harness, client, json_output)
     if (
         prompt
         and selection is not None

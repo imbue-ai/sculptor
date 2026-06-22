@@ -6,10 +6,13 @@ from sculpt.auth import get_authenticated_client
 from sculpt.auth import get_default_base_url
 from sculpt.client.api.default import create_workspace_agent
 from sculpt.client.api.default import create_workspace_v2
+from sculpt.client.models.agent_type_name import AgentTypeName
 from sculpt.client.models.create_agent_request import CreateAgentRequest
 from sculpt.client.models.create_workspace_request_v2 import CreateWorkspaceRequestV2
 from sculpt.client.models.http_validation_error import HTTPValidationError
+from sculpt.client.types import UNSET
 from sculpt.commands._follow_helpers import follow_and_stream_messages
+from sculpt.commands._harness_helpers import resolve_harness_selection
 from sculpt.commands._workspace_helpers import STRATEGY_MAPPING
 from sculpt.commands._workspace_helpers import resolve_requested_branch_name
 from sculpt.commands._workspace_helpers import resolve_strategy
@@ -50,6 +53,16 @@ def run_cmd(
         help="Diff/merge target branch (auto-resolved from the repo if omitted)",
     ),
     name: str | None = typer.Option(None, "--name", help="Agent name"),
+    harness: str | None = typer.Option(
+        None,
+        "--harness",
+        help=(
+            "Chat harness to run the prompt with: Claude or Pi. Terminal harnesses"
+            + " can't take a prompt, so they're rejected here. If omitted, uses your"
+            + " most-recently-used harness from the Sculptor app (falling back to"
+            + " Claude when that is a terminal harness)."
+        ),
+    ),
     file: list[str] | None = typer.Option(None, "--file", help="Files to include (repeatable)"),
     follow: bool = typer.Option(False, "--follow", "-f", help="Stream the agent's response after creation"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
@@ -65,6 +78,19 @@ def run_cmd(
 
     llm_model = MODEL_MAPPING[model_lower]
     client = get_authenticated_client(base_url)
+
+    # Resolve the harness up front so a bad or terminal choice fails before we
+    # create a workspace. `run` always sends a prompt, so terminal harnesses
+    # (which have no chat stream) are rejected; an omitted harness lets the
+    # server apply the user's most-recently-used one.
+    selection = resolve_harness_selection(harness, client, json_output)
+    if selection is not None and selection.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED):
+        cli_error(
+            "Terminal agents cannot be created with `sculpt run` because it always sends a prompt."
+            + " Use `sculpt agent create --harness ...` to create a terminal agent.",
+            json_output=json_output,
+        )
+
     project_id = resolve_project(repo, client)
 
     strategy_enum = resolve_strategy(strategy, json_output=json_output)
@@ -101,7 +127,9 @@ def run_cmd(
 
     workspace_id = ws_result.object_id
 
-    # Create agent
+    # Create agent. An omitted --harness sends no agent type, so the server
+    # applies the user's most-recently-used harness (the same default the app's
+    # "+" button uses).
     agent_request = CreateAgentRequest(
         prompt=prompt,
         model=llm_model,
@@ -109,6 +137,7 @@ def run_cmd(
         files=file or [],
         name=name,
         sent_via="sculpt",
+        agent_type=selection.agent_type if selection is not None else UNSET,
     )
 
     try:
