@@ -120,6 +120,20 @@ class SetModelUserMessage(PersistentUserMessage):
     model_id: str = Field(description="The chosen model's id (pi's `modelId`)")
 
 
+class RefreshModelsUserMessage(PersistentUserMessage):
+    """Tell a running pi agent to re-read its credentials and re-emit its catalog.
+
+    Persistent like `ClearContextUserMessage` so the harness runs it between turns.
+    Carries no payload — it is a pure "re-fetch the model catalog and re-emit
+    `ModelsAvailableAgentMessage`" signal, fanned out to every running pi agent when
+    credentials change globally (login/logout terminal close, paste-key write) so
+    the picker reflects the new auth.json without a restart. Claude has no handler
+    and ignores it.
+    """
+
+    object_type: str = Field(default="RefreshModelsUserMessage")
+
+
 class UserQuestionAnswerMessage(PersistentUserMessage):
     object_type: str = Field(default="UserQuestionAnswerMessage")
     answers: dict[str, str] = Field(description="Map from question text to answer text")
@@ -148,6 +162,7 @@ PersistentUserMessageUnion = (
     Annotated[ChatInputUserMessage, Tag("ChatInputUserMessage")]
     | Annotated[ClearContextUserMessage, Tag("ClearContextUserMessage")]
     | Annotated[SetModelUserMessage, Tag("SetModelUserMessage")]
+    | Annotated[RefreshModelsUserMessage, Tag("RefreshModelsUserMessage")]
     | Annotated[UserQuestionAnswerMessage, Tag("UserQuestionAnswerMessage")]
 )
 EphemeralUserMessageUnion = (

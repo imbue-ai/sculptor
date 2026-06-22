@@ -85,6 +85,7 @@ from sculptor.interfaces.agents.agent import ClearContextUserMessage
 from sculptor.interfaces.agents.agent import InterruptProcessUserMessage
 from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessage
 from sculptor.interfaces.agents.agent import PiAgentConfig
+from sculptor.interfaces.agents.agent import RefreshModelsUserMessage
 from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageUserMessage
 from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
@@ -680,6 +681,37 @@ def _cleanup_task_file_attachments(
         except Exception as e:
             log_exception(e, "Failed to delete {file_path}", file_path=file_path)
     logger.info("Cleaned up {} file(s) for task {}", len(file_paths), task_id)
+
+
+def broadcast_pi_models_refresh(
+    services: CompleteServiceCollection,
+    transaction: DataModelTransaction,
+) -> int:
+    """Fan a RefreshModelsUserMessage out to every active pi agent (fire-and-forget).
+
+    A credential change (login/logout terminal close, paste-key write) is global —
+    Settings has no current-agent concept — so every running pi agent re-reads
+    auth.json and re-emits its catalog between turns. Returns the number of pi
+    agents messaged. Non-pi agents are skipped: a Claude agent has no refresh
+    handler and would just drop the message.
+    """
+    messaged_count = 0
+    # get_active_tasks lives on the concrete task transaction; narrow from the
+    # web-layer DataModelTransaction (mirrors the upsert_task call sites).
+    assert isinstance(transaction, TaskAndDataModelTransaction)
+    for task in transaction.get_active_tasks((AgentTaskInputsV2,)):
+        if not isinstance(task.input_data, AgentTaskInputsV2):
+            continue
+        if not isinstance(task.input_data.agent_config, PiAgentConfig):
+            continue
+        services.task_service.create_message(
+            message=RefreshModelsUserMessage(),
+            task_id=task.object_id,
+            transaction=transaction,
+        )
+        messaged_count += 1
+    logger.info("Broadcast pi models refresh to {} agent(s)", messaged_count)
+    return messaged_count
 
 
 @router.post("/api/v1/workspaces")

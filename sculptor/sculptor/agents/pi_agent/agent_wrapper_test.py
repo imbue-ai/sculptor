@@ -59,6 +59,7 @@ from sculptor.interfaces.agents.agent import ModelsAvailableAgentMessage
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import PiAgentConfig
 from sculptor.interfaces.agents.agent import PlanModeAgentMessage
+from sculptor.interfaces.agents.agent import RefreshModelsUserMessage
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageUserMessage
 from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
 from sculptor.interfaces.agents.agent import RequestSkippedAgentMessage
@@ -3215,6 +3216,36 @@ def test_fetch_models_into_state_emits_nothing_when_pi_lists_no_models() -> None
     with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-models", "cmd-state"]):
         agent._fetch_models_into_state()
     assert not [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+
+
+def test_push_message_enqueues_refresh_models_returns_true() -> None:
+    """A RefreshModelsUserMessage goes on the same FIFO as chat turns — handled, not dead-lettered."""
+    agent = _make_agent()
+    refresh = RefreshModelsUserMessage(message_id=AgentMessageID())
+    with expect_exact_logged_errors([]):
+        handled = agent._push_message(refresh)
+    assert handled is True
+    assert agent._input_agent_messages.get_nowait() is refresh
+
+
+def test_handle_refresh_models_re_fetches_and_re_emits_catalog() -> None:
+    """A delivered refresh re-runs the fetch between turns and re-emits the catalog.
+
+    This is the live-refresh carrier the credential-change flows (login/logout
+    close, paste-key write) broadcast so the picker reflects the new auth.json
+    without a restart.
+    """
+    agent = _make_agent()
+    current_raw = {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic"}
+    agent._process = _make_process([_models_response(_RAW_PI_MODELS), _state_response_with_model(current_raw)])
+    with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-models", "cmd-state"]):
+        agent._handle_refresh_models(RefreshModelsUserMessage(message_id=AgentMessageID()))
+
+    emitted = [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+    assert len(emitted) == 1
+    assert [option.model_id for option in emitted[0].available_models] == _CURATED_PI_MODEL_IDS
+    assert emitted[0].current_model is not None
+    assert emitted[0].current_model.model_id == "claude-opus-4-8"
 
 
 def _make_probe_env(probe_process: MagicMock) -> MagicMock:

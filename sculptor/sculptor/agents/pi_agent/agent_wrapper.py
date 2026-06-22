@@ -130,6 +130,7 @@ from sculptor.interfaces.agents.agent import ModelsAvailableAgentMessage
 from sculptor.interfaces.agents.agent import PartialResponseBlockAgentMessage
 from sculptor.interfaces.agents.agent import PiAgentConfig
 from sculptor.interfaces.agents.agent import PlanModeAgentMessage
+from sculptor.interfaces.agents.agent import RefreshModelsUserMessage
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageUserMessage
 from sculptor.interfaces.agents.agent import RequestSkippedAgentMessage
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
@@ -544,9 +545,9 @@ class PiAgent(DefaultAgentWrapper):
     # model switch) through one FIFO so each runs strictly after any in-flight
     # turn — the sole-reader window where the control RPCs' responses can be
     # consumed safely (see _process_message_queue).
-    _input_agent_messages: Queue[ChatInputUserMessage | ClearContextUserMessage | SetModelUserMessage] = PrivateAttr(
-        default_factory=Queue
-    )
+    _input_agent_messages: Queue[
+        ChatInputUserMessage | ClearContextUserMessage | SetModelUserMessage | RefreshModelsUserMessage
+    ] = PrivateAttr(default_factory=Queue)
     _shutdown_event: Event = PrivateAttr(default_factory=Event)
     _message_processing_thread: ObservableThread | None = PrivateAttr(default=None)
     # The pi session id this process resumes / creates (pinned via --session-id);
@@ -746,6 +747,12 @@ class PiAgent(DefaultAgentWrapper):
         if isinstance(message, SetModelUserMessage):
             # Enqueued on the same FIFO as chat turns so the switch runs strictly
             # between turns (see _handle_set_model); supports_model_selection.
+            self._input_agent_messages.put(message)
+            return True
+        if isinstance(message, RefreshModelsUserMessage):
+            # Enqueued on the same FIFO so the credential re-read + catalog re-emit
+            # runs strictly between turns (see _handle_refresh_models), where the
+            # get_* RPCs are safe. Broadcast on a global credential change.
             self._input_agent_messages.put(message)
             return True
         if isinstance(message, ResumeAgentResponseRunnerMessage):
@@ -1400,6 +1407,11 @@ class PiAgent(DefaultAgentWrapper):
                 # Between-turns model switch (see _handle_set_model).
                 self._handle_set_model(message)
                 continue
+            if isinstance(message, RefreshModelsUserMessage):
+                # Between-turns credential re-read + catalog re-emit (see
+                # _handle_refresh_models).
+                self._handle_refresh_models(message)
+                continue
             self._run_prompt_turn(message)
 
     def _has_background_tasks(self) -> bool:
@@ -1705,6 +1717,19 @@ class PiAgent(DefaultAgentWrapper):
                     current_model=new_model,
                 )
             )
+
+    def _handle_refresh_models(self, message: RefreshModelsUserMessage) -> None:
+        """Re-fetch pi's catalog and re-emit it after a global credential change.
+
+        Routed through the `_input_agent_messages` FIFO so it runs between turns,
+        where `get_available_models` / `get_state` are safe. Reuses
+        `_fetch_models_into_state` so Task 5.1's authenticated-set filter (added
+        inside that shared path) applies here for free. Best-effort and
+        fire-and-forget: a re-fetch that finds nothing leaves the cached catalog
+        as-is rather than blanking it.
+        """
+        del message
+        self._fetch_models_into_state()
 
     def _consume_until_turn_end(self, prompt_id: str = "") -> None:
         """Drive pi's stdout until the current agent run terminates.
