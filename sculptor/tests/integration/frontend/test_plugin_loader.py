@@ -21,6 +21,8 @@ export or throws on activate. The companion "plugin runtime" tests (a plugin
 actually interacting with Sculptor) are intentionally out of scope here.
 """
 
+import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -36,6 +38,7 @@ from sculptor.testing.resources import _default_sculptor_folder_populator
 from sculptor.testing.resources import custom_sculptor_folder_populator
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
+from sculptor.web.app import _display_path
 
 # A minimal valid plugin entry: a default-exported activate that contributes
 # nothing. Reaching "loaded" proves the whole chain ran (fetch -> validate ->
@@ -56,6 +59,53 @@ def _enable_frontend_plugins_populator(folder_path: Path) -> None:
     config_path = folder_path / "internal" / "config.toml"
     config = load_config(config_path).model_copy(update={"enable_frontend_plugins": True})
     save_config(config, config_path)
+
+
+def _local_plugin_populator(folder_path: Path) -> None:
+    """Seed the per-test sculptor folder with the flag on AND a drop-in plugin.
+
+    Writes a complete plugin under ``<folder>/plugins/local-hello/`` — exactly
+    the "drop a folder into ``~/.sculptor/plugins/``" flow — so the backend
+    discovers it and the renderer auto-loads it as a read-only "local" source,
+    with no user action and no cross-origin dev server. This proves the host can
+    run *arbitrary* local plugin code end-to-end.
+    """
+    _enable_frontend_plugins_populator(folder_path)
+    plugin_dir = folder_path / "plugins" / "local-hello"
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+    (plugin_dir / "manifest.json").write_text(
+        json.dumps(_valid_manifest("local-hello", name="Local Hello", version="0.2.0"))
+    )
+    (plugin_dir / "main.js").write_text(_VALID_PLUGIN_JS)
+
+
+def _competing_local_plugins_populator(folder_path: Path) -> None:
+    """Seed two local plugins that declare the SAME manifest id, so they compete.
+
+    On boot only one may be active; the other is shown but "shadowed" with its
+    enable toggle locked. The two are equal priority (both local), so the
+    discovery order (sorted by directory name) breaks the tie — ``dupe-a`` wins.
+    """
+    _enable_frontend_plugins_populator(folder_path)
+    for dir_name in ("dupe-a", "dupe-b"):
+        plugin_dir = folder_path / "plugins" / dir_name
+        plugin_dir.mkdir(parents=True, exist_ok=True)
+        (plugin_dir / "manifest.json").write_text(
+            json.dumps(_valid_manifest("dupe-demo", name="Dupe Demo", version="0.1.0"))
+        )
+        (plugin_dir / "main.js").write_text(_VALID_PLUGIN_JS)
+
+
+def _broken_local_plugin_populator(folder_path: Path) -> None:
+    """Seed a local plugin whose manifest fails validation (missing required
+    fields). The loader's error handling is shared with the URL path, but this
+    proves an error row renders for a discovered *local* source too.
+    """
+    _enable_frontend_plugins_populator(folder_path)
+    plugin_dir = folder_path / "plugins" / "broken-local"
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+    # No `entry` / `sdkVersion`: validateManifest rejects it (validate phase).
+    (plugin_dir / "manifest.json").write_text(json.dumps({"id": "broken-local", "name": "Broken", "version": "0.1.0"}))
 
 
 def _valid_manifest(plugin_id: str, **overrides: object) -> dict[str, object]:
@@ -212,6 +262,142 @@ def test_valid_plugin_loads_and_can_be_removed(sculptor_instance_factory_: Sculp
         settings_page = navigate_to_settings_page(page=instance.page)
         plugins = settings_page.click_on_plugins()
         _exercise_valid_load_and_remove(plugins, server)
+
+
+@custom_sculptor_folder_populator.with_args(_local_plugin_populator)
+def test_local_plugin_is_discovered_and_loaded(sculptor_instance_factory_: SculptorInstanceFactory) -> None:
+    """A plugin dropped into ``~/.sculptor/plugins/`` is auto-discovered and loaded.
+
+    No source is added by hand: on boot the backend lists the directory, the
+    renderer registers each entry as a read-only "local" source, and the normal
+    loader fetches + imports + activates it. The row shows the plugin's
+    name/version, is tagged ``local``, and offers no Remove control (removing
+    would be meaningless — it would reappear on the next rescan).
+    """
+    with sculptor_instance_factory_.spawn_instance() as instance:
+        settings_page = navigate_to_settings_page(page=instance.page)
+        plugins = settings_page.click_on_plugins()
+
+        local_rows = plugins.get_rows_by_kind("local")
+        expect(local_rows).to_have_count(1)
+        row = local_rows.first
+        expect(row).to_have_attribute("data-status", "loaded")
+        expect(row).to_contain_text("Local Hello")
+        expect(row).to_contain_text("v0.2.0")
+        # Read-only: a discovered local plugin can't be removed from the UI.
+        expect(plugins.get_remove_button_in(row)).to_have_count(0)
+
+
+@custom_sculptor_folder_populator.with_args(_competing_local_plugins_populator)
+def test_competing_plugins_one_active_one_shadowed(sculptor_instance_factory_: SculptorInstanceFactory) -> None:
+    """Two sources providing the same plugin id: one loads, the other is shadowed.
+
+    Both rows are shown. The shadowed one carries a locked enable toggle (you
+    can't run two versions of one plugin at once) — the manifest of "the local
+    dev / workspace / remote version" story. Switching is manual: disable the
+    active one first.
+    """
+    with sculptor_instance_factory_.spawn_instance() as instance:
+        settings_page = navigate_to_settings_page(page=instance.page)
+        plugins = settings_page.click_on_plugins()
+
+        expect(plugins.get_rows_by_kind("local")).to_have_count(2)
+        expect(plugins.get_rows_by_kind_and_status(kind="local", status="loaded")).to_have_count(1)
+        shadowed = plugins.get_rows_by_kind_and_status(kind="local", status="shadowed")
+        expect(shadowed).to_have_count(1)
+        # The shadowed version's toggle is locked while the other is active.
+        expect(plugins.get_toggle_in(shadowed)).to_be_disabled()
+
+
+@custom_sculptor_folder_populator.with_args(_broken_local_plugin_populator)
+def test_local_plugin_with_invalid_manifest_shows_error(sculptor_instance_factory_: SculptorInstanceFactory) -> None:
+    """A discovered local plugin whose manifest fails validation surfaces as an
+    error row tagged with the failing phase — the same loader contract as a
+    malformed URL source, exercised here for the local path.
+    """
+    with sculptor_instance_factory_.spawn_instance() as instance:
+        settings_page = navigate_to_settings_page(page=instance.page)
+        plugins = settings_page.click_on_plugins()
+
+        errored = plugins.get_rows_by_kind_and_status(kind="local", status="error")
+        expect(errored).to_have_count(1)
+        expect(errored).to_have_attribute("data-phase", "validate")
+
+
+@custom_sculptor_folder_populator.with_args(_enable_frontend_plugins_populator)
+def test_refresh_discovers_added_plugin_and_dead_traces_a_removed_one(
+    sculptor_instance_factory_: SculptorInstanceFactory,
+) -> None:
+    """The manual Refresh button re-scans ``~/.sculptor/plugins/`` live.
+
+    Two halves of the same contract: (1) a plugin folder dropped in *after* the
+    app loaded is picked up by Refresh — no hard reload — and (2) once the user
+    has a persisted on/off choice for a local plugin, removing it from disk
+    leaves a ``missing`` dead-trace row (so the choice is visible and re-applied
+    if it returns) rather than vanishing silently; that row can be forgotten with
+    Remove.
+    """
+    with sculptor_instance_factory_.spawn_instance() as instance:
+        settings_page = navigate_to_settings_page(page=instance.page)
+        plugins = settings_page.click_on_plugins()
+
+        # Nothing under ~/.sculptor/plugins/ at boot.
+        expect(plugins.get_rows_by_kind("local")).to_have_count(0)
+
+        # Drop a complete plugin in while the app is running. The source identity
+        # is the port-stable relative dir, so we can address its row directly.
+        source = "/plugins/local/late-arrival"
+        plugin_dir = instance.sculptor_folder / "plugins" / "late-arrival"
+        plugin_dir.mkdir(parents=True, exist_ok=True)
+        (plugin_dir / "manifest.json").write_text(
+            json.dumps(_valid_manifest("late-arrival", name="Late Arrival", version="1.2.3"))
+        )
+        (plugin_dir / "main.js").write_text(_VALID_PLUGIN_JS)
+
+        # Refresh discovers and loads it — no full reload.
+        plugins.refresh()
+        plugins.expect_loaded(source, name="Late Arrival", version="1.2.3")
+
+        # Give it a persisted choice (disable it), then remove it from disk.
+        plugins.set_enabled(source, enabled=False)
+        plugins.expect_disabled(source)
+        shutil.rmtree(plugin_dir)
+
+        # It's gone from disk but the choice is remembered, so it stays as a
+        # "missing" dead-trace row (not loaded, so safe to drop the live plugin).
+        plugins.refresh()
+        expect(plugins.get_source_row(source)).to_have_attribute("data-status", "missing")
+
+        # The dead-trace row is forgettable via Remove (a present local row is not).
+        plugins.remove_source(source)
+        expect(plugins.get_source_row(source)).to_have_count(0)
+
+
+@custom_sculptor_folder_populator.with_args(_enable_frontend_plugins_populator)
+def test_plugins_directory_shows_real_backend_path(sculptor_instance_factory_: SculptorInstanceFactory) -> None:
+    """The directory chip shows this instance's real data folder, not a placeholder.
+
+    The section renders the plugins directory the backend reports (home collapsed
+    to ``~``), with a layered fallback. Asserting the chip matches that real path
+    guards against the hardcoded ``~/.sculptor/plugins`` placeholder leaking
+    through when the real directory differs — the regression this addresses.
+
+    Scope: here the dedicated ``/api/v1/plugins/dir`` endpoint and the
+    health-check fallback resolve to the *same* string — the per-test data folder
+    is outside ``$HOME``, so ``_display_path`` has no ``~`` to collapse — so this
+    asserts the rendered path is correct without isolating which source produced
+    it. The endpoint's home-collapse formatting is covered separately by the
+    backend unit tests in ``app_local_plugins_test.py``.
+    """
+    with sculptor_instance_factory_.spawn_instance() as instance:
+        settings_page = navigate_to_settings_page(page=instance.page)
+        plugins = settings_page.click_on_plugins()
+
+        expected = _display_path(instance.sculptor_folder / "plugins")
+        # Sanity-check the assertion is meaningful: the real path must differ from
+        # the hardcoded placeholder, or this test couldn't catch that regression.
+        assert expected != "~/.sculptor/plugins"
+        expect(plugins.get_directory_label()).to_have_text(expected)
 
 
 @pytest.mark.electron

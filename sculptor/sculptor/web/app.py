@@ -1508,6 +1508,77 @@ def workspace_read_file_at_ref(
     return ReadFileAtRefResponse(content=result.content, encoding=result.encoding)
 
 
+class LocalPluginInfo(SerializableModel):
+    """A frontend plugin discovered in the Sculptor plugins directory.
+
+    That directory is the backend data folder's ``plugins/`` subdirectory (e.g.
+    ``~/.sculptor/plugins``; it varies by build and environment — see
+    ``get_sculptor_folder``).
+
+    ``manifest_url`` is the origin-relative path to the plugin's manifest; the
+    frontend resolves it against the backend origin, registers it as a read-only
+    "local" plugin source, and loads it through the normal plugin loader (the
+    files are served by the ``/plugins/local`` static mount).
+    """
+
+    id: str
+    manifest_url: str
+
+
+@router.get("/api/v1/plugins/local")
+def get_local_plugins() -> list[LocalPluginInfo]:
+    """List frontend plugins the user has dropped into the Sculptor plugins directory.
+
+    The directory is the backend data folder's ``plugins/`` subdirectory (e.g.
+    ``~/.sculptor/plugins``; varies by build/environment).
+    Each immediate subdirectory that contains a ``manifest.json`` is reported as
+    a loadable source, sorted by directory name for a stable order. Returns an
+    empty list when the directory is absent. This only enumerates; the manifest
+    and bundle bytes are served by the ``/plugins/local`` static mount (see
+    ``sculptor.web.middleware.mount_plugin_files``).
+    """
+    plugins_dir = get_sculptor_folder() / "plugins"
+    if not plugins_dir.is_dir():
+        return []
+    try:
+        entries = sorted(plugins_dir.iterdir())
+    except OSError as e:
+        log_exception(e, "Failed to list local plugins directory")
+        return []
+    plugins: list[LocalPluginInfo] = []
+    for entry in entries:
+        if entry.is_dir() and (entry / "manifest.json").is_file():
+            # Percent-encode the directory name: a name with URL-special chars
+            # (#, ?, space) would otherwise corrupt the manifest URL the frontend
+            # fetches. `safe=""` encodes everything but unreserved chars.
+            encoded_name = urllib.parse.quote(entry.name, safe="")
+            plugins.append(LocalPluginInfo(id=entry.name, manifest_url=f"/plugins/local/{encoded_name}/manifest.json"))
+    return plugins
+
+
+class LocalPluginsDirectory(SerializableModel):
+    """The on-disk directory Sculptor scans for drop-in frontend plugins.
+
+    ``path`` is formatted for display — the user's home directory is collapsed to
+    ``~`` (see ``_display_path``), so the settings UI can show e.g.
+    ``~/.sculptor/plugins`` rather than an absolute path that embeds the username.
+    A from-source checkout outside ``$HOME`` shows its full path instead.
+    """
+
+    path: str
+
+
+@router.get("/api/v1/plugins/dir")
+def get_local_plugins_directory() -> LocalPluginsDirectory:
+    """Report where drop-in frontend plugins are loaded from, formatted for display.
+
+    The directory is the backend data folder's ``plugins/`` subdirectory; it need
+    not exist yet (the settings copy tells the user where to create it). This only
+    reports the path — enumerating the plugins inside it is ``get_local_plugins``.
+    """
+    return LocalPluginsDirectory(path=_display_path(get_sculptor_folder() / "plugins"))
+
+
 @router.get("/api/v1/skills")
 def get_skills(
     request: Request,
