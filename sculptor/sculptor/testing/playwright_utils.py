@@ -467,17 +467,39 @@ def request_with_retry(
 
 
 def navigate_to_settings_page(page: Page, **_kwargs: object) -> PlaywrightSettingsPage:
-    """Navigate to the settings page by setting the SPA hash route.
+    """Open Settings the way a user does — click the gear in the top bar.
 
-    Mirrors how a user reaches settings: a hash-only navigation within the
-    already-loaded SPA, with no document reload. Assigning
-    ``window.location.hash`` fires a ``hashchange`` event the hash router
-    handles, so this avoids re-fetching ``index.html`` (and its assets)
-    altogether — important under the ``sculptor://app`` origin, where the
-    built renderer references assets via absolute paths and a fresh document
-    navigation is unnecessary just to change routes.
+    The settings button lives in the persistent ``TopBar``, which ``PageLayout``
+    renders on every in-app route (Home, Add Workspace, Workspace, Settings), so
+    it is reachable from any state this helper is called from — including the
+    add-workspace page that pre-test cleanup lands on after deleting all
+    workspaces. Clicking routes via React Router with no document reload, so it
+    keeps the WebSocket connection alive and avoids re-fetching ``index.html``
+    (and its assets) under the ``sculptor://app`` origin, where the built
+    renderer references assets via absolute paths.
+
+    The click is retried until the settings page actually renders. A single
+    click can lose a race with an in-flight imperative redirect: deleting the
+    last workspace makes WorkspacePage queue a ``navigate("/ws/new/<uuid>")``
+    that may commit *after* our navigation and bounce us off ``/settings``.
+    Re-clicking from the now-settled state lands cleanly — the redirect only
+    fires while WorkspacePage is mounted, so once we reach Settings nothing
+    redirects away again.
     """
-    page.evaluate("window.location.hash = '/settings'")
+    settings_button = page.get_by_test_id(ElementIDs.SETTINGS_BUTTON)
+    settings_page_marker = page.get_by_test_id(ElementIDs.SETTINGS_PAGE)
+
+    def _click_into_settings() -> None:
+        expect(settings_button).to_be_visible(timeout=5_000)
+        settings_button.click()
+        expect(settings_page_marker).to_be_visible(timeout=5_000)
+
+    retry(
+        stop=stop_after_delay(30),
+        wait=wait_fixed(0.1),
+        retry=retry_if_exception_type(AssertionError),
+        reraise=True,
+    )(_click_into_settings)()
     return PlaywrightSettingsPage(page=page)
 
 
