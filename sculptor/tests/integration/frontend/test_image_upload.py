@@ -98,7 +98,7 @@ def test_image_attach_preview_renders_over_http(sculptor_instance_: SculptorInst
     A rendered ``FILE_PREVIEW`` <img> only exists once both succeed, so this
     is the regression guard for the web-mode capability selection. The
     ``browser_and_electron`` marker runs it in both browser and Electron
-    modes, since the other tests in this file are Electron-only.
+    modes, so the HTTP path is exercised in the default browser run.
 
     No message is sent, so no agent turn is required.
     """

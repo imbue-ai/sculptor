@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as ApiClientModule from "~/apiClient.ts";
 import { initBackendCapabilities } from "~/common/state/atoms/backendCapabilities.ts";
 
 import {
@@ -11,6 +12,15 @@ import {
   validateFileContent,
   validateFileData,
 } from "./FileUploadUtils";
+
+// uploadFilesToBackend builds `${baseUrl}/api/v1/upload-file`. Pin baseUrl to a
+// known origin so the http-mode test can assert the whole URL — and would fail
+// if baseUrl were ever undefined (e.g. "undefined/api/v1/upload-file").
+const { TEST_BASE_URL } = vi.hoisted(() => ({ TEST_BASE_URL: "https://backend.test" }));
+vi.mock("~/apiClient.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof ApiClientModule>()),
+  baseUrl: TEST_BASE_URL,
+}));
 
 // jsdom's Blob doesn't implement arrayBuffer(), so polyfill it for tests
 beforeAll(() => {
@@ -301,7 +311,7 @@ describe("saveFiles (http mode)", () => {
     expect(result).toEqual(["abc123.png"]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toContain("/api/v1/upload-file");
+    expect(url).toBe(`${TEST_BASE_URL}/api/v1/upload-file`);
     expect(init.method).toBe("POST");
     expect(init.body).toBeInstanceOf(FormData);
   });

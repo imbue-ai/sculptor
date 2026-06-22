@@ -5,9 +5,19 @@ import type { ReactElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ElementIds } from "~/api";
+import type * as ApiClientModule from "~/apiClient.ts";
 import { initBackendCapabilities } from "~/common/state/atoms/backendCapabilities.ts";
 
 import { FilePreviewList } from "./FilePreviewList";
+
+// FilePreviewList fetches `${baseUrl}/api/v1/uploaded-file/<id>` in http mode.
+// Pin baseUrl to a known origin so the http-mode test can assert the whole URL —
+// and would fail if baseUrl were ever undefined (e.g. "undefined/api/v1/...").
+const { TEST_BASE_URL } = vi.hoisted(() => ({ TEST_BASE_URL: "https://backend.test" }));
+vi.mock("~/apiClient.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof ApiClientModule>()),
+  baseUrl: TEST_BASE_URL,
+}));
 
 const Wrapper = ({ children }: { children: ReactNode }): ReactElement => <Theme>{children}</Theme>;
 
@@ -433,7 +443,7 @@ describe("FilePreviewList", () => {
 
       expect(fetchMock).toHaveBeenCalledTimes(1);
       const [url] = fetchMock.mock.calls[0] as [string];
-      expect(url).toContain("/api/v1/uploaded-file/abc123.png");
+      expect(url).toBe(`${TEST_BASE_URL}/api/v1/uploaded-file/abc123.png`);
       // The Electron IPC path must not be used in http mode.
       expect(mockGetFileData).not.toHaveBeenCalled();
     });
