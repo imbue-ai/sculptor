@@ -1,6 +1,6 @@
 """Unit tests for :mod:`sculptor.web.repo_polling_manager`.
 
-These cover the background branch/remote-branch pollers' behaviour when a
+These cover the background branch/target-branch pollers' behaviour when a
 workspace's git repo is torn down out from under them. A workspace repo can
 vanish two ways:
 
@@ -9,7 +9,7 @@ vanish two ways:
   gitdir was pruned — which makes git print ``fatal: not a git repository``.
 
 In the orphaned-backend scenario from SCU-1429 neither poller ever gives up:
-they keep invoking git every few seconds (and the remote-branches poller keeps
+they keep invoking git every few seconds (and the target-branches poller keeps
 logging errors) until process shutdown, dragging the host. The pollers must
 instead raise :class:`StopPolling` so their source stops.
 
@@ -31,9 +31,9 @@ from sculptor.service_collections.service_collection import CompleteServiceColle
 from sculptor.services.git_repo_service.default_implementation import LocalWritableGitRepo
 from sculptor.testing.local_git_repo import LocalGitRepo
 from sculptor.web.derived import WorkspaceBranchInfo
-from sculptor.web.derived import WorkspaceRemoteBranchesInfo
+from sculptor.web.derived import WorkspaceTargetBranchesInfo
 from sculptor.web.repo_polling_manager import _WorkspaceBranchPollingCallback
-from sculptor.web.repo_polling_manager import _WorkspaceRemoteBranchesPollingCallback
+from sculptor.web.repo_polling_manager import _WorkspaceTargetBranchesPollingCallback
 
 
 def _make_base_repo(base: Path, cg: ConcurrencyGroup) -> None:
@@ -71,8 +71,8 @@ def _branch_callback(worktree: Path, cg: ConcurrencyGroup) -> _WorkspaceBranchPo
     )
 
 
-def _remote_branches_callback(worktree: Path, cg: ConcurrencyGroup) -> _WorkspaceRemoteBranchesPollingCallback:
-    return _WorkspaceRemoteBranchesPollingCallback(
+def _target_branches_callback(worktree: Path, cg: ConcurrencyGroup) -> _WorkspaceTargetBranchesPollingCallback:
+    return _WorkspaceTargetBranchesPollingCallback(
         workspace_id=WorkspaceID(),
         workspace_working_dir=worktree,
         concurrency_group=cg,
@@ -88,14 +88,18 @@ def test_branch_callback_returns_info_for_healthy_repo(
     assert result.current_branch == "wsbranch"
 
 
-def test_remote_branches_callback_returns_info_for_healthy_repo(
+def test_target_branches_callback_falls_back_to_local_branches_when_no_remote(
     healthy_worktree: tuple[Path, Path], test_root_concurrency_group: ConcurrencyGroup
 ) -> None:
-    _base, worktree = healthy_worktree
-    result = _remote_branches_callback(worktree, test_root_concurrency_group)()
-    assert isinstance(result, WorkspaceRemoteBranchesInfo)
-    # A fresh local worktree has no remotes.
-    assert result.remote_branches == ()
+    base, worktree = healthy_worktree
+    # A repo with no remote has no remote-tracking branches, so the poller falls
+    # back to the repo's local branches (so the target-branch selector is never
+    # empty), excluding the workspace's own checked-out branch.
+    LocalGitRepo(base).run_git(["branch", "feature-x"])
+    result = _target_branches_callback(worktree, test_root_concurrency_group)()
+    assert isinstance(result, WorkspaceTargetBranchesInfo)
+    assert "feature-x" in result.target_branches
+    assert "wsbranch" not in result.target_branches
 
 
 def test_branch_callback_raises_stop_polling_when_working_dir_deleted(
@@ -121,21 +125,21 @@ def test_branch_callback_raises_stop_polling_when_git_dir_dangling(
         callback()
 
 
-def test_remote_branches_callback_raises_stop_polling_when_working_dir_deleted(
+def test_target_branches_callback_raises_stop_polling_when_working_dir_deleted(
     healthy_worktree: tuple[Path, Path], test_root_concurrency_group: ConcurrencyGroup
 ) -> None:
     _base, worktree = healthy_worktree
-    callback = _remote_branches_callback(worktree, test_root_concurrency_group)
+    callback = _target_branches_callback(worktree, test_root_concurrency_group)
     shutil.rmtree(worktree)
     with pytest.raises(StopPolling):
         callback()
 
 
-def test_remote_branches_callback_raises_stop_polling_when_git_dir_dangling(
+def test_target_branches_callback_raises_stop_polling_when_git_dir_dangling(
     healthy_worktree: tuple[Path, Path], test_root_concurrency_group: ConcurrencyGroup
 ) -> None:
     base, worktree = healthy_worktree
-    callback = _remote_branches_callback(worktree, test_root_concurrency_group)
+    callback = _target_branches_callback(worktree, test_root_concurrency_group)
     shutil.rmtree(base / ".git")
     assert worktree.exists()
     with pytest.raises(StopPolling):

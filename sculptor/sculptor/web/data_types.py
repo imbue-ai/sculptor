@@ -55,11 +55,16 @@ class WorkspaceBranchInfo(SerializableModel):
     workspace_id: WorkspaceID
 
 
-class WorkspaceRemoteBranchesInfo(SerializableModel):
-    """Remote-tracking branches available in a workspace's working directory."""
+class WorkspaceTargetBranchesInfo(SerializableModel):
+    """Branches a workspace can target as its merge/diff base.
+
+    These are the repo's remote-tracking branches, or its local branches when
+    the repo has no remote, so the selector can still offer merge targets on a
+    repo with no remote.
+    """
 
     workspace_id: WorkspaceID
-    remote_branches: tuple[str, ...]
+    target_branches: tuple[str, ...]
 
 
 class PrApproval(SerializableModel):
@@ -763,7 +768,7 @@ StreamingUpdateSourceTypes = (
     | TaskUpdateTypes
     | UserUpdateSourceTypes
     | WorkspaceBranchInfo
-    | WorkspaceRemoteBranchesInfo
+    | WorkspaceTargetBranchesInfo
     | DependenciesStatus
     | WorkspaceSetupStatus
     | WorkspaceSetupOutputChunk

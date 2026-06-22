@@ -16,7 +16,7 @@ import { zenModeActiveAtom } from "~/components/panels/atoms.ts";
 import { getBranchName } from "~/pages/home/Utils";
 
 import { useProgressiveCollapse } from "../hooks/useProgressiveCollapse";
-import { useWorkspaceRemoteBranches } from "../hooks/useWorkspaceRemoteBranches";
+import { useWorkspaceTargetBranches } from "../hooks/useWorkspaceTargetBranches";
 import { DiffSummary } from "./DiffSummary";
 import { PrButton } from "./PrButton";
 import { RepoSegment } from "./RepoSegment";
@@ -35,7 +35,7 @@ export const WorkspaceBanner = (): ReactElement | null => {
   const prDefaultTargetBranch = useAtomValue(prDefaultTargetBranchAtom);
 
   const prStatus = useAtomValue(prStatusAtomFamily(workspaceID));
-  const remoteBranches = useWorkspaceRemoteBranches(workspaceID);
+  const targetBranches = useWorkspaceTargetBranches(workspaceID);
   const containerRef = useRef<HTMLDivElement>(null);
   const { hiddenPriorities } = useProgressiveCollapse(containerRef);
 
@@ -81,8 +81,8 @@ export const WorkspaceBanner = (): ReactElement | null => {
     async (newTarget: string) => {
       // MRs live on the origin remote, so prefer "origin/{bare}".
       const fullBranch =
-        remoteBranches.find((b) => b === `origin/${newTarget}`) ??
-        remoteBranches.find((b) => b.endsWith(`/${newTarget}`)) ??
+        targetBranches.find((b) => b === `origin/${newTarget}`) ??
+        targetBranches.find((b) => b.endsWith(`/${newTarget}`)) ??
         `origin/${newTarget}`;
       try {
         await updateWorkspace({
@@ -93,7 +93,7 @@ export const WorkspaceBanner = (): ReactElement | null => {
         console.error("Failed to switch target branch:", e);
       }
     },
-    [workspaceID, remoteBranches],
+    [workspaceID, targetBranches],
   );
 
   const gitProvider: "gitlab" | "github" | null = repoInfo?.isGitlabOrigin
@@ -147,8 +147,8 @@ export const WorkspaceBanner = (): ReactElement | null => {
 
   // Resolve the full remote branch name for the mismatch target (e.g. "upstream/main")
   const mismatchedFullBranch = hasMismatch
-    ? (remoteBranches.find((b) => b === `origin/${prStatus.mismatchedPrTargetBranch}`) ??
-      remoteBranches.find((b) => b.endsWith(`/${prStatus.mismatchedPrTargetBranch}`)) ??
+    ? (targetBranches.find((b) => b === `origin/${prStatus.mismatchedPrTargetBranch}`) ??
+      targetBranches.find((b) => b.endsWith(`/${prStatus.mismatchedPrTargetBranch}`)) ??
       `origin/${prStatus.mismatchedPrTargetBranch}`)
     : null;
   const mismatchInfo = hasMismatch
@@ -207,7 +207,7 @@ export const WorkspaceBanner = (): ReactElement | null => {
         <span>
           <TargetBranchSelector
             currentTargetBranch={currentTargetBranch}
-            remoteBranches={remoteBranches}
+            targetBranches={targetBranches}
             onBranchChange={handleTargetBranchChange}
             onOpenChange={setIsTargetBranchOpen}
             variant={isMismatched ? "amber" : "default"}

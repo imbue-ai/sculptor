@@ -40,7 +40,7 @@ _EXPECTED_STREAMING_UPDATE_FIELDS: frozenset[str] = frozenset(
         "task_views_by_task_id",
         "user_update",
         "workspace_branch_by_workspace_id",
-        "workspace_remote_branches_by_workspace_id",
+        "workspace_target_branches_by_workspace_id",
         "pr_status_by_workspace_id",
         "finished_request_ids",
         "dependencies_status",
