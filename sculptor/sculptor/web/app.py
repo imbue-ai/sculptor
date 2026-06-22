@@ -52,6 +52,7 @@ from sculptor import version
 from sculptor.agents.attachments import resolve_attachment_source
 from sculptor.agents.default.claude_code_sdk.btw_process_manager import NoBtwSessionAvailable
 from sculptor.agents.harness_registry import get_harness_for_config
+from sculptor.agents.pi_agent.authenticated_providers import get_provider_auth_statuses
 from sculptor.common.plugin import get_plugin_dirs
 from sculptor.config.settings import SculptorSettings
 from sculptor.config.user_config import UserConfig
@@ -187,6 +188,8 @@ from sculptor.web.data_types import AnswerQuestionRequest
 from sculptor.web.data_types import ArtifactDataResponse
 from sculptor.web.data_types import AuthResult
 from sculptor.web.data_types import AuthStartResult
+from sculptor.web.data_types import AuthenticatedProviderEntry
+from sculptor.web.data_types import AuthenticatedProvidersResponse
 from sculptor.web.data_types import BatchUpdateOpenStateRequest
 from sculptor.web.data_types import BranchExistsResponse
 from sculptor.web.data_types import BtwRequest
@@ -4236,6 +4239,33 @@ def get_env_var_names(
         global_var_names=global_var_names,
         global_env_path=_display_path(global_env_path),
         projects=tuple(project_entries),
+    )
+
+
+@router.get("/api/v1/pi/providers/authenticated")
+def get_pi_authenticated_providers(
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> AuthenticatedProvidersResponse:
+    """Return the full pi provider catalog crossed with current authentication status.
+
+    Global (no workspace/agent): Settings reads process-level auth.json + env. The
+    underlying readers are best-effort, so a missing/garbled auth.json yields all
+    in_auth_json=False rather than an error.
+    """
+    return AuthenticatedProvidersResponse(
+        providers=tuple(
+            AuthenticatedProviderEntry(
+                provider_id=status.provider_id,
+                display_name=status.display_name,
+                group=status.group,
+                in_auth_json=status.in_auth_json,
+                env_detected=status.env_detected,
+                env_var_names=status.env_var_names,
+                is_subscription=status.is_subscription,
+            )
+            for status in get_provider_auth_statuses()
+        )
     )
 
 

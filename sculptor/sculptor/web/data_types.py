@@ -11,6 +11,7 @@ from pydantic import EmailStr
 from pydantic import Field
 from pydantic import Tag
 
+from sculptor.agents.pi_agent.provider_catalog import ProviderGroup
 from sculptor.config.settings import SculptorSettings
 from sculptor.database.workspace_enums import WorkspaceInitializationStrategy
 from sculptor.foundation.pydantic_serialization import SerializableModel
@@ -264,6 +265,24 @@ class EnvVarNamesResponse(SerializableModel):
     global_var_names: tuple[str, ...]
     global_env_path: str
     projects: tuple[ProjectEnvVarNames, ...]
+
+
+class AuthenticatedProviderEntry(SerializableModel):
+    """One pi provider's catalog metadata annotated with its authentication status."""
+
+    provider_id: str
+    display_name: str
+    group: ProviderGroup
+    in_auth_json: bool
+    env_detected: bool
+    env_var_names: tuple[str, ...]
+    is_subscription: bool
+
+
+class AuthenticatedProvidersResponse(SerializableModel):
+    """The full pi provider catalog crossed with current authentication status."""
+
+    providers: tuple[AuthenticatedProviderEntry, ...]
 
 
 class RecentWorkspaceResponse(SerializableModel):
