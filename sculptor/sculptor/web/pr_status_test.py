@@ -31,15 +31,18 @@ def _pr_node(
     check_state: str | None = None,
     reviews: list[dict] | None = None,
     threads: list[dict] | None = None,
+    mergeable: str | None = None,
 ) -> dict:
     """Build one graphql ``pullRequests.nodes`` entry in the given GitHub state.
 
     Mirrors the shape returned by the single ``gh api graphql`` query the
     backend now issues: identity fields alongside the check/review/comment
-    detail (``statusCheckRollup`` is null when no checks have run).
+    detail (``statusCheckRollup`` is null when no checks have run). ``mergeable``
+    is GitHub's ``MERGEABLE`` / ``CONFLICTING`` / ``UNKNOWN`` merge-conflict enum;
+    it is included only when provided so unrelated tests keep their minimal shape.
     """
     rollup = {"state": check_state} if check_state is not None else None
-    return {
+    node = {
         "number": number,
         "title": f"PR #{number}",
         "url": f"https://github.com/org/repo/pull/{number}",
@@ -49,6 +52,9 @@ def _pr_node(
         "latestReviews": {"nodes": reviews or []},
         "reviewThreads": {"nodes": threads or []},
     }
+    if mergeable is not None:
+        node["mergeable"] = mergeable
+    return node
 
 
 def _open_node(number: int, base_ref: str = "main", **kwargs) -> dict:  # noqa: ANN003
@@ -256,6 +262,43 @@ def test_status_check_rollup_state_maps_to_pipeline_status(rollup_state: str | N
 
 
 # ---------------------------------------------------------------------------
+# Open PR merge conflict → has_conflicts flows through (parity with GitLab MRs).
+# GitHub reports mergeability via the ``mergeable`` enum; CONFLICTING means the
+# PR cannot merge cleanly. Surfacing it as has_conflicts=True is what lets the
+# CI babysitter's MERGE_CONFLICT transition fire for PRs the same way it does
+# for MRs (mr_status sets has_conflicts from glab's ``has_conflicts``).
+# ---------------------------------------------------------------------------
+
+
+def test_open_pr_has_conflicts_flag_flows_through() -> None:
+    with _patch_cli(_graphql_handler([_open_node(700, mergeable="CONFLICTING")])):
+        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+
+    assert result.pr_state == "open"
+    assert result.has_conflicts is True
+
+
+@pytest.mark.parametrize(
+    ("mergeable", "expected"),
+    [
+        ("CONFLICTING", True),
+        ("MERGEABLE", False),
+        # GitHub computes mergeability asynchronously; UNKNOWN (common right
+        # after a push) and any unrecognized/absent value stay None so we never
+        # claim a conflict — or claim cleanliness — before GitHub is sure.
+        ("UNKNOWN", None),
+        (None, None),
+        ("SOMETHING_NEW", None),
+    ],
+)
+def test_mergeable_state_maps_to_has_conflicts(mergeable: str | None, expected: bool | None) -> None:
+    with _patch_cli(_graphql_handler([_open_node(10, mergeable=mergeable)])):
+        result = fetch_pr_status(WORKSPACE_ID, WORKING_DIR, "feat-1", "origin/main")
+
+    assert result.has_conflicts is expected
+
+
+# ---------------------------------------------------------------------------
 # The query must request the fields the parser reads, via `gh api graphql`.
 # This is the unit-level guard against regressing to the broken approach
 # (mocks can never exercise real gh field validation — see the live test below).
@@ -277,7 +320,15 @@ def test_graphql_query_requests_the_fields_the_parser_reads() -> None:
     assert cmd[:3] == ["gh", "api", "graphql"]
     query = _captured_query(cmd)
     # Every field the parser navigates must be present in the query.
-    for field in ("statusCheckRollup", "state", "baseRefName", "latestReviews", "reviewThreads", "commits"):
+    for field in (
+        "statusCheckRollup",
+        "state",
+        "baseRefName",
+        "latestReviews",
+        "reviewThreads",
+        "commits",
+        "mergeable",
+    ):
         assert field in query, f"query is missing field {field!r}"
     # `reviewThreads` is requested directly (it is a valid GraphQL PullRequest
     # field, unlike `gh pr view --json`'s curated subset that shipped the bug).

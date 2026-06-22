@@ -133,6 +133,7 @@ def _build_open_pr_status(
     return PrStatusInfo(
         workspace_id=workspace_id,
         pr_state="open",
+        has_conflicts=_parse_conflict_status(pr_node),
         pr_iid=pr_node["number"],
         pr_title=pr_node.get("title"),
         pr_web_url=pr_node.get("url"),
@@ -155,6 +156,8 @@ _PR_QUERY_LIMIT = 5
 # field on the GraphQL ``PullRequest`` type, so unresolved-comment surfacing
 # actually works. Requesting ``statusCheckRollup { state }`` (one aggregate
 # enum) rather than every individual check context also lowers the point cost.
+# ``mergeable`` (MERGEABLE / CONFLICTING / UNKNOWN) surfaces merge conflicts so
+# the CI babysitter can act on a conflicted PR the same way it does for an MR.
 # ``{owner}`` / ``{repo}`` in the field args are expanded by gh from the
 # working directory's ``origin`` remote, so no repo plumbing is needed here.
 _GRAPHQL_PR_QUERY = """
@@ -167,6 +170,7 @@ query($owner: String!, $name: String!, $branch: String!, $limit: Int!) {
         url
         state
         baseRefName
+        mergeable
         commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
         latestReviews(first: 20) { nodes { state author { login } } }
         reviewThreads(first: 30) {
@@ -219,6 +223,26 @@ def _fetch_prs_with_details(working_dir: Path, source_branch: str) -> list[dict]
     if repository is None:
         return []
     return (repository.get("pullRequests") or {}).get("nodes") or []
+
+
+def _parse_conflict_status(pr_node: dict) -> bool | None:
+    """Map a PR's GitHub ``mergeable`` enum to our tri-state conflict flag.
+
+    GitHub computes mergeability asynchronously and exposes it as
+    ``MERGEABLE`` / ``CONFLICTING`` / ``UNKNOWN``. ``CONFLICTING`` means the PR
+    cannot merge cleanly into its base (a merge conflict); ``MERGEABLE`` means
+    it can. ``UNKNOWN`` (GitHub hasn't finished computing, common right after a
+    push) and any unrecognized/missing value map to None, so we neither claim a
+    conflict nor claim cleanliness until GitHub is sure. This mirrors GitLab's
+    ``has_conflicts`` (bool | None) so the CI babysitter's MERGE_CONFLICT
+    transition fires identically for PRs and MRs.
+    """
+    mergeable = pr_node.get("mergeable")
+    if mergeable == "CONFLICTING":
+        return True
+    if mergeable == "MERGEABLE":
+        return False
+    return None
 
 
 def _parse_check_status(pr_node: dict) -> Literal["running", "passed", "failed"] | None:
