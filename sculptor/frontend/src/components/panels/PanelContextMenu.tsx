@@ -13,17 +13,10 @@ type PanelContextMenuProps = {
   panelId: PanelId;
   zoneId: ZoneId;
   children: ReactNode;
-  onOpenInModal?: () => void;
   onOpenChange?: (open: boolean) => void;
 };
 
-export const PanelContextMenu = ({
-  panelId,
-  zoneId,
-  children,
-  onOpenInModal,
-  onOpenChange,
-}: PanelContextMenuProps): ReactElement => {
+export const PanelContextMenu = ({ panelId, zoneId, children, onOpenChange }: PanelContextMenuProps): ReactElement => {
   const panelDef = usePanelById(panelId);
   const panelsByZone = usePanelsByZone();
   const { movePanel } = usePanelActions();
@@ -62,8 +55,6 @@ export const PanelContextMenu = ({
             ))}
           </ContextMenu.SubContent>
         </ContextMenu.Sub>
-
-        <ContextMenu.Item onSelect={() => onOpenInModal?.()}>Open in Modal</ContextMenu.Item>
 
         <ContextMenu.Item onSelect={handleConfigurePanels} data-testid={ElementIds.PANEL_CONTEXT_MENU_CONFIGURE}>
           Configure panels…
