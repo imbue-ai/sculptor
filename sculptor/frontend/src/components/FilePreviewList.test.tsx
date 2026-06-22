@@ -404,6 +404,10 @@ describe("FilePreviewList", () => {
     // through Electron IPC.
     beforeEach(() => {
       initBackendCapabilities(true);
+      // The shared mockGetFileData accumulates calls across this file's tests
+      // (vitest does not auto-clear vi.fn() call history), so clear it here to
+      // keep "the Electron IPC path must not be used in http mode" accurate.
+      mockGetFileData.mockClear();
       // jsdom does not implement URL.createObjectURL; stub it so the http path
       // can turn the fetched blob into an <img> src.
       (URL as unknown as { createObjectURL: unknown }).createObjectURL = vi.fn(() => "blob:mock-url");
