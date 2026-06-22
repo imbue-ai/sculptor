@@ -1,3 +1,4 @@
+import time
 from collections.abc import Sequence
 from typing import Any
 
@@ -90,13 +91,10 @@ _FIND_TIPTAP_EDITOR_JS = """
 """.strip()
 
 
-# How long type_into_tiptap polls for the editor's React fiber to attach before
-# giving up. The contenteditable DOM node is visible and clickable well before
-# the Tiptap editor prop is wired onto its fiber, and after an agent/workspace
-# switch the input remounts from scratch — under heavy CI parallelism that wiring
-# has been observed to take longer than a few seconds. A generous budget keeps
-# the poll from concluding "no editor" while one is still on its way; a genuinely
-# missing editor still fails, just later.
+# Total budget for type_into_tiptap to land its insert, across re-resolutions of
+# the chat-input locator. After an agent/workspace switch the input remounts, so
+# a single bind can land on the old, detaching editor; we re-resolve and retry
+# within this window. A genuinely missing editor still fails, just later.
 _TIPTAP_EDITOR_FIND_TIMEOUT_MS = 15_000
 
 
@@ -121,34 +119,50 @@ def type_into_tiptap(page: Page, locator: Locator, text: str) -> None:
     - Clipboard paste (Cmd-V) goes through Tiptap's markdown parser, which
       mangles backticks, and also interferes with the user's system clipboard.
     """
-    locator.click()
-    # After a page reload or an agent/workspace switch the React fiber tree may
-    # not have the Tiptap editor prop attached yet even though the DOM element is
-    # visible and clickable. Poll with requestAnimationFrame (once per frame,
-    # ~16 ms) up to _TIPTAP_EDITOR_FIND_TIMEOUT_MS before giving up.
-    locator.evaluate(
-        f"""(el, text) => new Promise((resolve, reject) => {{
-            const deadline = Date.now() + {_TIPTAP_EDITOR_FIND_TIMEOUT_MS};
-            const findEditor = (el) => {{ {_FIND_TIPTAP_EDITOR_JS} }};
-            const tryInsert = () => {{
-                try {{
-                    const editor = findEditor(el);
-                    const {{ tr }} = editor.state;
-                    tr.insertText(text);
-                    editor.view.dispatch(tr);
-                    resolve();
-                }} catch (e) {{
-                    if (Date.now() < deadline) {{
-                        requestAnimationFrame(tryInsert);
-                    }} else {{
-                        reject(e);
-                    }}
-                }}
-            }};
-            tryInsert();
-        }})""",
-        text,
-    )
+    # Retry at the Python level, re-resolving the locator each attempt.
+    #
+    # After an agent/workspace switch the chat input remounts: the old editor
+    # detaches and a new one mounts a beat later. A one-shot ``locator.evaluate``
+    # binds whichever element ``get_by_test_id`` resolved at call time -- which
+    # can be the *old, detaching* editor, whose React fiber never regains an
+    # ``editor`` prop. An in-JS ``requestAnimationFrame`` loop on that captured
+    # element would then spin until timeout while the new editor mounts unseen.
+    # Re-invoking ``locator.click`` / ``locator.evaluate`` re-runs the locator,
+    # so a stale bind is replaced by the live element on the next attempt; the
+    # short in-JS poll still absorbs the ordinary "editor prop not wired yet"
+    # case once we are on the right element.
+    deadline = time.monotonic() + _TIPTAP_EDITOR_FIND_TIMEOUT_MS / 1000.0
+    while True:
+        locator.click()
+        try:
+            locator.evaluate(
+                f"""(el, text) => new Promise((resolve, reject) => {{
+                    const deadline = Date.now() + 1000;
+                    const findEditor = (el) => {{ {_FIND_TIPTAP_EDITOR_JS} }};
+                    const tryInsert = () => {{
+                        try {{
+                            const editor = findEditor(el);
+                            const {{ tr }} = editor.state;
+                            tr.insertText(text);
+                            editor.view.dispatch(tr);
+                            resolve();
+                        }} catch (e) {{
+                            if (Date.now() < deadline) {{
+                                requestAnimationFrame(tryInsert);
+                            }} else {{
+                                reject(e);
+                            }}
+                        }}
+                    }};
+                    tryInsert();
+                }})""",
+                text,
+            )
+            return
+        except Exception as exc:  # noqa: BLE001 — retried below until the budget is spent
+            if "Could not find Tiptap editor instance" in str(exc) and time.monotonic() < deadline:
+                continue
+            raise
 
 
 def insert_mention_into_tiptap(locator: Locator, mention_id: str, suggestion_char: str) -> None:
