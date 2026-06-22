@@ -476,8 +476,24 @@ def navigate_to_settings_page(page: Page, **_kwargs: object) -> PlaywrightSettin
     altogether — important under the ``sculptor://app`` origin, where the
     built renderer references assets via absolute paths and a fresh document
     navigation is unnecessary just to change routes.
+
+    A single hash assignment can lose a race with an in-flight imperative
+    redirect: deleting the last workspace makes WorkspacePage queue a
+    ``navigate("/ws/new/<uuid>")`` that can commit *after* this assignment and
+    bounce the page back off ``/settings``. React Router defers the
+    hashchange-driven navigation in a transition, so the imperative navigate
+    can win. Re-assert the hash until the settings route actually sticks — once
+    it does, WorkspacePage has unmounted and nothing redirects away again.
     """
-    page.evaluate("window.location.hash = '/settings'")
+    page.wait_for_function(
+        """() => {
+            if (!window.location.hash.startsWith('#/settings')) {
+                window.location.hash = '/settings';
+                return false;
+            }
+            return true;
+        }"""
+    )
     return PlaywrightSettingsPage(page=page)
 
 
