@@ -37,7 +37,7 @@ fi
 
 # Pinned version of the `ratchets` lint binary (https://crates.io/crates/ratchets).
 # Bump this and re-run `just install-ratchets` (and update CI) when adopting a new release.
-ratchets_version := "0.3.1"
+ratchets_version := "0.4.0"
 
 # Reusable snippet to abort early when the `ratchets` CLI is not installed.
 _require_ratchets := '''
