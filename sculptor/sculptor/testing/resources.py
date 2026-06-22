@@ -50,7 +50,6 @@ from sculptor.testing.sculptor_instance import create_sculptor_instance_factory
 from sculptor.testing.server_utils import SculptorServer
 from sculptor.testing.server_utils import get_sculptor_command_backend_only
 from sculptor.testing.server_utils import get_testing_environment
-from sculptor.testing.server_utils import get_v1_frontend_path
 from sculptor.testing.server_utils import start_server_process_and_validate_readiness
 from sculptor.testing.subprocess_utils import Forwarder
 from sculptor.testing.test_repo_factory import TestRepoFactory
@@ -214,7 +213,6 @@ def _get_or_create_shared_instance(
         sculptor_folder=sculptor_folder,
         tmp_path=tmp_path,
         hide_keys=True,
-        static_files_path=(get_v1_frontend_path() / "dist").absolute(),
     )
 
     if use_custom_command:
@@ -687,7 +685,6 @@ def sculptor_instance_factory_(
         sculptor_folder=sculptor_folder,
         tmp_path=tmp_path,
         hide_keys=True,
-        static_files_path=(get_v1_frontend_path() / "dist").absolute(),
     )
 
     # Apply @stub_dependency markers to the environment

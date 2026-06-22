@@ -239,7 +239,6 @@ class ManualTestHarness:
             sculptor_folder=self._sculptor_folder,
             tmp_path=self._tmp_path,
             hide_keys=False,
-            static_files_path=(get_v1_frontend_path() / "dist").absolute(),
         )
         # Opt-out used by /update-help-docs so screenshots don't include the
         # "Fake Claude" and "Fake Claude 2" test-only models in the model picker.
