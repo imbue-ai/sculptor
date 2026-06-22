@@ -32,6 +32,17 @@ def get_user_config_instance() -> UserConfig:
     return _CONFIG_INSTANCE or get_default_user_config_instance()
 
 
+def get_user_config_instance_if_set() -> UserConfig | None:
+    """Return the loaded config instance, or None if none has been set.
+
+    Unlike ``get_user_config_instance`` (which falls back to a default
+    placeholder), this distinguishes "no real config yet" — onboarding, or
+    tests that never set one — so callers can avoid persisting derived state
+    (e.g. the most-recently-used harness) onto a throwaway default config.
+    """
+    return _CONFIG_INSTANCE
+
+
 def set_user_config_instance(config: UserConfig | None) -> None:
     """Set the global config instance."""
     # The file log sink captures DEBUG and is bundled into bug-report

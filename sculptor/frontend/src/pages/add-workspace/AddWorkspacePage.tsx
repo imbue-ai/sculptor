@@ -30,6 +30,7 @@ import {
   isCloneWorkspacesEnabledAtom,
   isInPlaceWorkspacesEnabledAtom,
   isPiAgentEnabledAtom,
+  userConfigAtom,
 } from "../../common/state/atoms/userConfig.ts";
 import {
   clearDraftCreatingAtom,
@@ -93,7 +94,16 @@ export const AddWorkspacePage = (): ReactElement => {
   // change freely; the MRU is written back only when a workspace is actually
   // created. A stored "pi" is unusable when pi-agent is off.
   const lastUsedAgentType = useAtomValue(lastUsedAgentTypeAtom);
-  const setLastUsedAgentType = useSetAtom(lastUsedAgentTypeAtom);
+  const setUserConfig = useSetAtom(userConfigAtom);
+  // Optimistically reflect the chosen harness in the shared config (the same
+  // value the tab bar's + button reads). The backend persists it as the
+  // most-recently-used harness when the agent is created (record-on-create).
+  const setLastUsedAgentType = useCallback(
+    (stored: StoredAgentType): void => {
+      setUserConfig((prev) => (prev ? { ...prev, lastUsedAgentType: stored } : prev));
+    },
+    [setUserConfig],
+  );
   const [agentTypeValue, setAgentTypeValue] = useState<string>(
     lastUsedAgentType === "pi" && !isPiAgentEnabled ? "claude" : lastUsedAgentType,
   );

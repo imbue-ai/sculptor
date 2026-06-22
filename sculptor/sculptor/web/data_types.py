@@ -133,8 +133,10 @@ class StartTaskRequest(RequestModel):
     fast_mode: bool = False
     effort: EffortLevel = EffortLevel.EXTRA_HIGH
     sent_via: str | None = None
-    # Prompt-ful creation is always a chat agent; terminal types are rejected (422).
-    agent_type: AgentTypeName = AgentTypeName.CLAUDE
+    # None means "use the user's most-recently-used harness" (the server
+    # resolves it). Prompt-ful creation is always a chat agent; terminal types
+    # are rejected (422).
+    agent_type: AgentTypeName | None = None
 
 
 class CreateWorkspaceRequestV2(RequestModel):
@@ -174,7 +176,9 @@ class CreateAgentRequest(RequestModel):
     fast_mode: bool = False
     effort: EffortLevel = EffortLevel.EXTRA_HIGH
     sent_via: str | None = None
-    agent_type: AgentTypeName = AgentTypeName.CLAUDE
+    # None means "use the user's most-recently-used harness" (the server
+    # resolves it, matching the app's "+" button default).
+    agent_type: AgentTypeName | None = None
     # Required iff agent_type is REGISTERED.
     registration_id: str | None = None
 

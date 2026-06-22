@@ -1101,6 +1101,119 @@ def test_create_terminal_agent_stamps_terminal_config_and_names_terminal_n(
     assert third.json()["title"] == "Terminal 1"
 
 
+@pytest.fixture
+def isolated_user_config(tmp_path, monkeypatch) -> Generator[None, None, None]:
+    """Isolate the on-disk config path and reset the config singleton after.
+
+    The most-recently-used harness tests set a real config instance (so the
+    server records/reads it) and must not write the developer's actual config
+    or leak the singleton into other tests.
+    """
+    monkeypatch.setattr(user_config_module, "_CONFIG_PATH", tmp_path / "config.toml")
+    yield
+    set_user_config_instance(None)
+
+
+def _set_user_config_with(**fields: object) -> None:
+    set_user_config_instance(model_update(user_config_module.get_default_user_config_instance(), fields))
+
+
+def _agent_config_for_created(response: httpx.Response, test_services: CompleteServiceCollection) -> object:
+    task_id = TaskID(response.json()["id"])
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        task = test_services.task_service.get_task(task_id, transaction)
+    assert task is not None
+    assert isinstance(task.input_data, AgentTaskInputsV2)
+    return task.input_data.agent_config
+
+
+def test_create_agent_without_type_uses_mru_harness(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    test_project: Project,
+    isolated_user_config: None,
+) -> None:
+    """A prompt-less create with no agent_type resolves the user's stored MRU."""
+    _set_user_config_with(last_used_agent_type="terminal")
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+
+    response = _post_agent(client, workspace, {})
+    assert response.status_code == 200, response.text
+    assert isinstance(_agent_config_for_created(response, test_services), TerminalAgentConfig)
+    assert response.json()["title"] == "Terminal 1"
+
+
+def test_create_agent_records_explicit_type_as_mru(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    test_project: Project,
+    isolated_user_config: None,
+) -> None:
+    """An explicit agent_type is persisted as the new most-recently-used harness."""
+    _set_user_config_with()  # no MRU yet
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+
+    assert _post_agent(client, workspace, {"agentType": "terminal"}).status_code == 200
+    assert user_config_module.get_user_config_instance().last_used_agent_type == "terminal"
+
+
+def test_create_agent_without_type_defaults_to_claude_when_mru_unset(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    test_project: Project,
+    isolated_user_config: None,
+) -> None:
+    _set_user_config_with()  # no MRU
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+
+    response = _post_agent(client, workspace, {})
+    assert response.status_code == 200, response.text
+    assert isinstance(_agent_config_for_created(response, test_services), ClaudeCodeSDKAgentConfig)
+
+
+def test_create_agent_pi_mru_falls_back_to_claude_when_pi_disabled(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    test_project: Project,
+    isolated_user_config: None,
+) -> None:
+    """A stored Pi harness is unusable once the pi agent is disabled."""
+    _set_user_config_with(last_used_agent_type="pi", enable_pi_agent=False)
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+
+    response = _post_agent(client, workspace, {})
+    assert response.status_code == 200, response.text
+    assert isinstance(_agent_config_for_created(response, test_services), ClaudeCodeSDKAgentConfig)
+
+
+def test_start_task_terminal_mru_falls_back_to_claude_for_prompt(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    test_project: Project,
+    isolated_user_config: None,
+) -> None:
+    """A prompt-ful create with a terminal MRU uses Claude rather than 422ing."""
+    _set_user_config_with(last_used_agent_type="terminal")
+    response = client.post(
+        f"/api/v1/projects/{test_project.object_id}/tasks",
+        json=model_dump(
+            StartTaskRequest(prompt="hello", model=LLMModel.CLAUDE_4_SONNET),
+            is_camel_case=True,
+        ),
+    )
+    assert response.status_code == 200, response.text
+    assert isinstance(_agent_config_for_created(response, test_services), ClaudeCodeSDKAgentConfig)
+
+
 def test_create_terminal_agent_with_prompt_is_rejected(
     client: TestClient, test_services: CompleteServiceCollection, test_project: Project
 ) -> None:
