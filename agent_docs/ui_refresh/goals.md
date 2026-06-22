@@ -1,6 +1,6 @@
-This document outlines a redesign of the Sculptor workspace page around a uniform panel/section model. The goal is to update Sculptor’s UI to support a vertical sidebar, revamp the panel system and reduce some of the chrome. As a part of this change, we’ve converted existing components to be a panel, including chat.
+This document outlines a redesign of the Sculptor workspace page around a uniform panel/section model. The goal is to update Sculptor’s UI to support a vertical sidebar, revamp the panel system and reduce some of the chrome. As a part of this change, we’ve converted existing components to be panels, including chat.
 
-We’ve created a prototype branch of this already but need to make several changes to make this branch production ready.
+We’ve created a prototype branch of this already but need to make several changes to make this branch production-ready.
 
 This document is written from the perspective of updating the existing Sculptor to this new design.
 
@@ -12,7 +12,7 @@ The new design has a workspace sidebar on the left and the workspace page conten
 The workspace page content has a workspace header and four workspace sections: left, center, right, bottom.
 Each workspace section can render multiple panels.
 
-The workspace header has been simplified, refer to the prototype branch to see the changes.
+The workspace header has been simplified. Refer to the prototype branch to see the changes.
 
 #### Default layout
 When a user first opens Sculptor, the workspace is in the following state:
@@ -25,12 +25,12 @@ When a user first opens Sculptor, the workspace is in the following state:
 
 We’re replacing the existing top bar navigation with a collapsible vertical sidebar located on the left side of the screen.
 
-The top of the side bar contains links to perform the following actions:
+The top of the sidebar contains links to perform the following actions:
 - Switch to the home page
-- Quickly open the CMD+K window
+- Quickly open the Cmd+K window
 - Create a new workspace
 
-After the top links, we show workspaces grouped by collapse repository section. 
+After the top links, we show workspaces grouped into collapsible repository sections. 
 
 For each repo
 - You can collapse the section
@@ -47,7 +47,7 @@ The bottom of the sidebar contains the following links:
 - Report a bug which opens the existing report bug popover.
 
 The bottom of the sidebar should also show the current version of Sculptor.
-You can also collapse the sidebar which should only show the expand sidebar icon. We need to take careful care to show this on the home page and not collide with the application controls in the top left.
+You can also collapse the sidebar which should only show the expand sidebar icon. We need to take care to show this on the home page and not collide with the application controls in the top left.
 You can resize the workspace sidebar by dragging the right border.
 The workspace sidebar has a minimum size and cannot be dragged smaller than that size.
 There is a keyboard shortcut to toggle the sidebar collapsed or expanded state.
@@ -60,14 +60,14 @@ Functionality:
 - Each section has a header which consists of panel tabs. It also has an area for panel content beneath the header.
 - Within a section, it’s possible to add new panels or close existing panels.
 - The header contains an icon to expand a given section.
-- The left, right and bottom section can be collapsed and expanded with hotkeys.
-- The center panel has the most recently used agent type created by default.
-- The bottom panel has a terminal panel created by default.
-- The left and right section can be split horizontally (top/down).
+- The left, right and bottom sections can be collapsed and expanded with hotkeys.
+- The center section has the most recently used agent type created by default.
+- The bottom section has a terminal panel created by default.
+- The left and right sections can be split horizontally (top/bottom).
 - The bottom section can be split vertically (left/right).
 - There is a keyboard shortcut to cycle between active panels within a section.
 - Sections can be resized by dragging on either the right, left or top border depending on the section. For example, the left section is resized by the right border and can only be resized in the x-direction.
-- Section states (which panel is open) is NOT preserved between workspaces.
+- Section states (which panel is open) are NOT preserved between workspaces.
 - Section sizes are preserved between workspaces.
 
 #### Focus
@@ -77,7 +77,7 @@ When cycling with the keyboard shortcut and on workspace load, the last focused 
 #### Expanded section
 Expanded sections cover the entire workspace page content.
 The workspace sidebar, if expanded, is still visible.
-The expanded section still displays the section header but they do not show the workspace header.
+The expanded section still displays the section header but it does not show the workspace header.
 When the workspace sidebar is collapsed, the show workspace sidebar icon is present in the left of the panel section and the appropriate left padding is applied for the OS window application icons (close, minimize, expand).
 There is a keyboard shortcut for expanding the last focused section.
 
@@ -89,34 +89,34 @@ By default, we always show “New {recent} agent” and “New terminal” quick
 We reserve the last three slots for the most recently created panels that are not open.
 
 #### Split sections
-Splits can be performed by right clicking on a panel and accessing it via the context menu (shown as “Split {direction} and move panel").
+Splits can be performed by right clicking on a panel and accessing it via the context menu (shown as “Split {direction} and move panel”).
 Splits remain after the last panel is removed.
 Splits are closed by a new option that appears on the section empty state.
 
 ### Panels
 Panels represent specific content and functionality that can be displayed inside a workspace section.
-Panels can either by single or multi instance. 
+Panels can either be single or multi instance. 
 By default, all panels are single instance outside of the agent and terminal panels.
 
 Functionality:
 - Panels can be placed in any one of the four sections.
-- Panels can be opened and closed. When a panel is closed it now longer appears in the section header.
+- Panels can be opened and closed. When a panel is closed it no longer appears in the section header.
 - Panels can be dragged to other sections and re-ordered in their existing section.
 - Each panel can expose its own keyboard shortcuts which are active when the panel is focused.
-- Each panel can define its own actions that are display in a right click context menu.
-- Panels can also expose functionality that can be accessed in CMD+k.
-- Every multi instance panel can be renamed, single instance panels cannot.
+- Each panel can define its own actions that are displayed in a right click context menu.
+- Panels can also expose functionality that can be accessed in Cmd+K.
+- Every multi instance panel can be renamed; single instance panels cannot.
 - Keyboard shortcuts can be configured to focus a single instance panel or the last active multi instance panel.
 
 #### Adding a panel
 Each section header renders a plus button which opens a dropdown. 
-The dropdown has recent agent creation pinned to the top with a default keyboard binding (cmd+shift+t) visible.
+The dropdown has recent agent creation pinned to the top with a default keyboard binding (Cmd+Shift+T) visible.
 The new agent keyboard binding always creates an agent in the center section.
 There is a sub-dropdown menu to create an agent of a different type.
 A new terminal tab is directly beneath these two options.
 Every other non-visible single instance panel option is included below.
 
-Panels can also be added via CMD+k.
+Panels can also be added via Cmd+K.
 There’s an option to “Add panel” which takes you to a submenu where you select the location and then are presented with the list of valid panels.
 
 #### Agent Panel
@@ -136,8 +136,8 @@ Each panel has a sidebar that consists of the file browser, the changes file bro
 The sidebar can be resized by dragging and has a minimum size.
 The size of the sidebar is shared between each of these panels.
 The sidebar visibility can be toggled and the icon is displayed in the file viewer header.
-The file viewer is always visible and displays an empty state when now file is selected.
-All existing icons and options for configuring the panels has been move into the triple dot menu in the file viewer header.
+The file viewer is always visible and displays an empty state when no file is selected.
+All existing icons and options for configuring the panels have been moved into the triple dot menu in the file viewer header.
 
 See the prototype for a faithful recreation of this.
 
@@ -147,8 +147,8 @@ Review all has been split into its own panel. All existing functionality is pres
 ### Workspace creation
 Workspaces can be created in the following way:
 - The new workspace button in the workspace sidebar
-- The new workspace keyboard shortcut (default: cmd/meta+T)
-- The CMD+K window
+- The new workspace keyboard shortcut (default: Cmd/Meta+T)
+- The Cmd+K window
 - The plus icon in a repo section in the workspace sidebar
 
 The first option directly creates a new workspace with the previously selected settings in the workspace.
@@ -193,5 +193,5 @@ Once a workspace is created, we display the full workspace page (including the s
 
 ## Deviations from the prototype
 
-- Add panel previously relied on CMD+k but we’re moving to using a dropdown
+- Add panel previously relied on Cmd+K but we’re moving to using a dropdown
 
