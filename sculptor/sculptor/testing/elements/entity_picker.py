@@ -6,11 +6,25 @@ trip the ``integration_test_non_testid_queries`` ratchet) and to mirror the
 way a real user reaches a chip with the keyboard.
 """
 
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Locator
 from playwright.sync_api import Page
 from playwright.sync_api import expect
+from tenacity import retry
+from tenacity import retry_if_exception_type
+from tenacity import stop_after_delay
+from tenacity import wait_fixed
 
 from sculptor.constants import ElementIDs
+from sculptor.testing.elements.base import clear_tiptap
+
+# Per-attempt budget for one open-and-drill try. Short on purpose: combined with
+# the _DRILL_TOTAL_TIMEOUT retry budget below it replaces a single 30s expect()
+# wait rather than tightening it (the dismiss_with_escape pattern in
+# docs/development/review/integration_tests.md), so it is not a no_lowered_timeouts
+# violation.
+_DRILL_ATTEMPT_TIMEOUT_MS = 4_000
+_DRILL_TOTAL_TIMEOUT_S = 30.0
 
 
 class PlaywrightEntityPickerElement:
@@ -38,6 +52,34 @@ class PlaywrightEntityPickerElement:
         return self._page.get_by_test_id(ElementIDs.MENTION_PICKER_TOOLBAR_BUTTON)
 
 
+@retry(
+    stop=stop_after_delay(_DRILL_TOTAL_TIMEOUT_S),
+    wait=wait_fixed(0.2),
+    retry=retry_if_exception_type((AssertionError, PlaywrightError)),
+    reraise=True,
+)
+def _attempt_open_workspace_drill(
+    chat_input: Locator,
+    mention_list: Locator,
+    category_items: Locator,
+    entity_list: Locator,
+) -> None:
+    """One open-and-drill try: type ``+wor`` and Enter into the workspace list.
+
+    Retried as a unit by the decorator so either race below recovers on a later
+    attempt. Start from an empty editor: a prior attempt may have left ``+wor``
+    behind when its picker closed without drilling.
+    """
+    clear_tiptap(chat_input)
+    chat_input.press_sequentially("+wor")
+    expect(mention_list).to_be_visible(timeout=_DRILL_ATTEMPT_TIMEOUT_MS)
+    # Wait for "+wor" to narrow the category list to the single
+    # "Workspaces and Agents" row so Enter commits a settled selection.
+    expect(category_items).to_have_count(1, timeout=_DRILL_ATTEMPT_TIMEOUT_MS)
+    chat_input.press("Enter")
+    expect(entity_list).to_be_visible(timeout=_DRILL_ATTEMPT_TIMEOUT_MS)
+
+
 def open_workspace_entity_drill(page: Page, chat_input: Locator) -> Locator:
     """Open the ``+`` picker and drill into the workspace-pinned entity list.
 
@@ -49,26 +91,30 @@ def open_workspace_entity_drill(page: Page, chat_input: Locator) -> Locator:
     Returns the entity-item locator, left on the pinned-workspace list with at
     least one row rendered, so callers can filter and commit (or drill further).
 
-    Gating on the category list having settled to the single matching row
-    *before* pressing Enter is what keeps the drill deterministic: the
-    suggestion plugin's selected index lags a beat behind the filtered items
-    (see ``MentionPickerList.test.tsx``), so an Enter fired while the list is
-    still mid-filter can commit the wrong category — or, when the list is
-    momentarily empty, fall through to a newline that closes the picker
-    entirely, leaving the entity list to never appear.
+    The whole open-and-drill is retried as a unit, because two independent races
+    each break a single-shot attempt (both confirmed via offload-repro traces):
+
+    1. The ``+wor`` keystrokes can land in the chat input before its Tiptap
+       editor is wired after an agent/workspace switch, so the picker never
+       opens (or its category filter resolves to zero rows).
+    2. Even with the category list settled to the single "Workspaces and Agents"
+       row, the Enter that should drill in occasionally commits-and-closes the
+       picker instead — the suggestion plugin's keydown handler races the
+       filtered render — so the entity sub-list never appears.
+
+    Re-issuing the whole sequence (clear the input, retype, re-press Enter)
+    recovers from either: a later attempt types into the now-ready editor and
+    its Enter lands the drill. Each attempt is short; the retry budget supplies
+    the overall wait.
     """
-    chat_input.press_sequentially("+wor")
-
-    expect(page.get_by_test_id(ElementIDs.MENTION_LIST)).to_be_visible()
-    # Wait for "+wor" to narrow the category list to the single
-    # "Workspaces and Agents" row so Enter commits a settled selection.
-    category_items = page.get_by_test_id(ElementIDs.MENTION_PICKER_CATEGORY_ITEM)
-    expect(category_items).to_have_count(1)
-
-    chat_input.press("Enter")
-
     entity_list = page.get_by_test_id(ElementIDs.ENTITY_MENTION_LIST)
-    expect(entity_list).to_be_visible()
+    _attempt_open_workspace_drill(
+        chat_input=chat_input,
+        mention_list=page.get_by_test_id(ElementIDs.MENTION_LIST),
+        category_items=page.get_by_test_id(ElementIDs.MENTION_PICKER_CATEGORY_ITEM),
+        entity_list=entity_list,
+    )
+
     # The drill-in fetches entity rows in an effect, so wait for at least
     # one row to be present before callers start typing — otherwise the next
     # keystroke can race the items() refresh.
