@@ -90,6 +90,16 @@ _FIND_TIPTAP_EDITOR_JS = """
 """.strip()
 
 
+# How long type_into_tiptap polls for the editor's React fiber to attach before
+# giving up. The contenteditable DOM node is visible and clickable well before
+# the Tiptap editor prop is wired onto its fiber, and after an agent/workspace
+# switch the input remounts from scratch — under heavy CI parallelism that wiring
+# has been observed to take longer than a few seconds. A generous budget keeps
+# the poll from concluding "no editor" while one is still on its way; a genuinely
+# missing editor still fails, just later.
+_TIPTAP_EDITOR_FIND_TIMEOUT_MS = 15_000
+
+
 # NOTE: This is an exception to our rule to not use page.evaluate().
 # Normally we prefer Playwright's built-in locator methods, but Tiptap/ProseMirror
 # editors don't work with fill() (bypasses editor state) or type() for long strings
@@ -112,14 +122,13 @@ def type_into_tiptap(page: Page, locator: Locator, text: str) -> None:
       mangles backticks, and also interferes with the user's system clipboard.
     """
     locator.click()
-    # After a page reload the React fiber tree may not have the Tiptap editor
-    # prop attached yet even though the DOM element is visible and clickable.
-    # Poll with requestAnimationFrame (once per frame, ~16 ms) for up to 5 s
-    # before giving up.  On contended CI runners after shared-instance recreation,
-    # the editor can take >2 s to initialize.
+    # After a page reload or an agent/workspace switch the React fiber tree may
+    # not have the Tiptap editor prop attached yet even though the DOM element is
+    # visible and clickable. Poll with requestAnimationFrame (once per frame,
+    # ~16 ms) up to _TIPTAP_EDITOR_FIND_TIMEOUT_MS before giving up.
     locator.evaluate(
         f"""(el, text) => new Promise((resolve, reject) => {{
-            const deadline = Date.now() + 5000;
+            const deadline = Date.now() + {_TIPTAP_EDITOR_FIND_TIMEOUT_MS};
             const findEditor = (el) => {{ {_FIND_TIPTAP_EDITOR_JS} }};
             const tryInsert = () => {{
                 try {{
