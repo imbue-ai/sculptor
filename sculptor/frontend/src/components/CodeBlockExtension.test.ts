@@ -87,7 +87,6 @@ describe("CustomCodeBlockLowlight input rules", () => {
   it("creates a code block and includes text after cursor", () => {
     // Insert text first, then move cursor to start and type ```
     editor.commands.insertContent("hello world");
-    // Move cursor to start of the text block
     editor.commands.focus("start");
     typeText(editor, "```");
 

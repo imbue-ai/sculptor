@@ -14,7 +14,7 @@ import type { Command } from "../types.ts";
 // jsdom doesn't define `scrollIntoView`. cmdk calls it during keyboard
 // navigation. We stub it on the prototype for the duration of each test
 // and restore the original descriptor in `afterEach` so the global
-// doesn't leak across files (T11 in review-findings.md).
+// doesn't leak across files.
 let originalScrollIntoViewDescriptor: PropertyDescriptor | undefined;
 let hasInstalledScrollIntoViewStub = false;
 const installScrollIntoViewStub = (): void => {

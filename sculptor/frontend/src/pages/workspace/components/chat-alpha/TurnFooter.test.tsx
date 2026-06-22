@@ -27,10 +27,6 @@ const MULTI_FILES: ReadonlyArray<TurnFile> = [
 ];
 
 describe("TurnFooter", () => {
-  // -----------------------------------------------------------------------
-  // Basic rendering (pre-existing behavior)
-  // -----------------------------------------------------------------------
-
   it("renders with data-testid", () => {
     renderWithProviders(<TurnFooter metrics={METRICS} />);
     expect(screen.getByTestId(ElementIds.TURN_FOOTER)).toBeTruthy();
@@ -64,10 +60,6 @@ describe("TurnFooter", () => {
     expect(screen.getByText("Stopped")).toBeTruthy();
   });
 
-  // -----------------------------------------------------------------------
-  // File changes
-  // -----------------------------------------------------------------------
-
   describe("file changes", () => {
     it("shows file count trigger for a single file", () => {
       renderWithProviders(<TurnFooter metrics={METRICS} files={SINGLE_FILE} />);
@@ -88,7 +80,6 @@ describe("TurnFooter", () => {
     it("does not show file changes when files array is empty", () => {
       renderWithProviders(<TurnFooter metrics={METRICS} files={[]} />);
       const footer = screen.getByTestId(ElementIds.TURN_FOOTER);
-      // Should just have duration and tokens
       expect(footer.textContent).toBe("8.0s · 900 tokens");
     });
 
@@ -116,14 +107,12 @@ describe("TurnFooter", () => {
       const handleFileClick = vi.fn();
       renderWithProviders(<TurnFooter metrics={METRICS} files={SINGLE_FILE} onFileClick={handleFileClick} />);
 
-      // Open popover
       fireEvent.click(screen.getByText("1 file changed"));
 
       await waitFor(() => {
         expect(screen.getByText("pagination.py")).toBeTruthy();
       });
 
-      // Click the file row
       const fileRow = screen.getByText("pagination.py").closest("[role='button']");
       expect(fileRow).toBeTruthy();
       fireEvent.click(fileRow!);
@@ -135,21 +124,18 @@ describe("TurnFooter", () => {
       const handleFileClick = vi.fn();
       renderWithProviders(<TurnFooter metrics={METRICS} files={MULTI_FILES} onFileClick={handleFileClick} />);
 
-      // Open popover
       fireEvent.click(screen.getByText("3 files changed"));
 
       await waitFor(() => {
         expect(screen.getByText("user.py")).toBeTruthy();
       });
 
-      // Click a file row — this may cause layout changes that fire scroll events
       const fileRow = screen.getByText("user.py").closest("[role='button']");
       fireEvent.click(fileRow!);
 
       // Simulate a scroll event (e.g. from diff panel opening and resizing the layout)
       fireEvent.scroll(window);
 
-      // Popover should still be open — all files still visible
       expect(screen.getByText("user.py")).toBeTruthy();
       expect(screen.getByText("validators.py")).toBeTruthy();
       expect(screen.getByText("test_user.py")).toBeTruthy();
@@ -195,10 +181,6 @@ describe("TurnFooter", () => {
       expect(handleFileClick).toHaveBeenCalledWith("sculptor/backend/utils/pagination.py");
     });
   });
-
-  // -----------------------------------------------------------------------
-  // Token popover
-  // -----------------------------------------------------------------------
 
   describe("token popover", () => {
     it("opens token popover when token count is clicked", async () => {
@@ -246,10 +228,6 @@ describe("TurnFooter", () => {
       expect(screen.getByText("1,000 tokens")).toBeTruthy();
     });
   });
-
-  // -----------------------------------------------------------------------
-  // Edge cases
-  // -----------------------------------------------------------------------
 
   describe("edge cases", () => {
     it("shows only file changes when metrics are absent", () => {

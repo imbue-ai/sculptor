@@ -12,10 +12,6 @@ import type { SubagentMetadata, SubagentTreeNode } from "~/pages/workspace/utils
 
 let fixtureIdCounter = 0;
 
-// ---------------------------------------------------------------------------
-// Low-level block builders (same pattern as AlphaChipRow.stories)
-// ---------------------------------------------------------------------------
-
 export const toolUse = (id: string, name: string, input: Record<string, unknown> = {}): ToolUseBlock =>
   ({ type: "tool_use", id, name, input }) as unknown as ToolUseBlock;
 
@@ -29,9 +25,7 @@ export const toolResult = (toolUseId: string, toolName: string, text: string, is
     isError,
   }) as unknown as ToolResultBlock;
 
-// ---------------------------------------------------------------------------
-// PillData fixtures — only tools that render as pills (not Bash/Edit/Write)
-// ---------------------------------------------------------------------------
+// PillData fixtures — only tools that render as pills.
 
 export const completedReadPill: PillData = {
   id: "tu-001",
@@ -168,10 +162,6 @@ export const errorReadPill: PillData = {
   results: [toolResult("tu-020", "Read", "Error: ENOENT: no such file or directory", true)],
 };
 
-// ---------------------------------------------------------------------------
-// Subagent tree node helpers
-// ---------------------------------------------------------------------------
-
 const chatMessage = (
   content: ReadonlyArray<Record<string, unknown>>,
   role: ChatMessageRole = ChatMessageRole.ASSISTANT,
@@ -191,10 +181,6 @@ export const makeSubagentTreeNodes = (
     message: chatMessage(result ? [use, result] : [use]),
     children: new Map(),
   }));
-
-// ---------------------------------------------------------------------------
-// Pre-built subagent scenarios
-// ---------------------------------------------------------------------------
 
 const parentBlock = toolUse("agent-001", "Agent", {
   description: "Explore repo structure",
@@ -275,9 +261,7 @@ export const noToolsSubagent = {
   ]),
 };
 
-// ---------------------------------------------------------------------------
-// Background subagent scenarios (run_in_background: true)
-// ---------------------------------------------------------------------------
+// Background subagent scenarios (run_in_background: true).
 
 const bgCompletedParent = toolUse("agent-bg-001", "Agent", {
   description: "Explore repo structure",

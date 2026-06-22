@@ -23,8 +23,6 @@ import { RightSidebar } from "~/components/panels/RightSidebar";
 import { renderWithProviders } from "~/components/panels/testUtils";
 import type { PanelDefinition, PanelId } from "~/components/panels/types.ts";
 
-// ── Test Panel Configuration ─────────────────────────────────────────
-
 const TEST_PANEL_CONTENT = {
   info: "TEST_INFO_CONTENT",
   cost: "TEST_COST_CONTENT",
@@ -71,8 +69,6 @@ const TEST_PANELS: ReadonlyArray<PanelDefinition> = [
   },
 ];
 
-// ── Test Store Helpers ───────────────────────────────────────────────
-
 const createTestStore = (): ReturnType<typeof createStore> => createStore();
 
 const createDefaultTestStore = (): ReturnType<typeof createStore> =>
@@ -109,8 +105,6 @@ const fireShortcut = (panelId: PanelId): void => {
 beforeEach(() => localStorage.clear());
 afterEach(cleanup);
 
-// ── Helpers ──────────────────────────────────────────────────────────
-
 const getIconElement = (container: HTMLElement, panelId: string): HTMLElement | null =>
   container.querySelector(`[data-panel-icon="${panelId}"]`);
 
@@ -129,8 +123,6 @@ const getIconsInZone = (container: HTMLElement, zoneId: string): Array<string> =
 
 const getZoneContent = (container: HTMLElement, zoneId: string): HTMLElement | null =>
   container.querySelector(`[data-zone-id="${zoneId}"]`);
-
-// ── Group 1: Default Layout Rendering ────────────────────────────────
 
 describe("DockingLayout", () => {
   describe("default layout rendering", () => {
@@ -210,8 +202,6 @@ describe("DockingLayout", () => {
     });
   });
 
-  // ── Group 2: Icon Toggle ────────────────────────────────────────────
-
   describe("icon toggle", () => {
     it("clicking active icon hides zone content", () => {
       const store = createDefaultTestStore();
@@ -233,11 +223,9 @@ describe("DockingLayout", () => {
       const { container } = renderTest(<DockingLayout />, store);
 
       const infoIcon = getClickableIcon(container, "info");
-      // Close
       fireEvent.click(infoIcon!);
       expect(screen.queryByText(TEST_PANEL_CONTENT.info)).not.toBeInTheDocument();
 
-      // Reopen
       fireEvent.click(infoIcon!);
       expect(screen.getByText(TEST_PANEL_CONTENT.info)).toBeInTheDocument();
     });
@@ -309,8 +297,6 @@ describe("DockingLayout", () => {
     });
   });
 
-  // ── Group 3: Sidebar Dividers ───────────────────────────────────────
-
   describe("sidebar dividers", () => {
     it("shows divider in left sidebar when both top-left and bottom-left have panels", () => {
       const store = createTestStore();
@@ -375,9 +361,6 @@ describe("DockingLayout", () => {
       expect(divider).not.toBeNull();
     });
   });
-
-  // ── Group 4: Drag Visual Feedback ──────────────────────────────────
-  // Strategy: render LeftSidebar / RightSidebar directly with controlled props
 
   describe("drag visual feedback", () => {
     it("shows placeholder before the first icon when drop target is index 0", () => {
@@ -485,8 +468,6 @@ describe("DockingLayout", () => {
     });
   });
 
-  // ── Group 5: Reorder Within Zone ───────────────────────────────────
-
   describe("reorder within zone", () => {
     it("renders icons in the order specified by zoneOrderAtom", () => {
       const store = createDefaultTestStore();
@@ -519,8 +500,6 @@ describe("DockingLayout", () => {
       expect(assignmentsAfter).toEqual(assignmentsBefore);
     });
   });
-
-  // ── Group 6: Cross-Zone Move ───────────────────────────────────────
 
   describe("cross-zone move", () => {
     it("moves icon from left to right sidebar when atoms are updated", () => {
@@ -641,8 +620,6 @@ describe("DockingLayout", () => {
     });
   });
 
-  // ── Group 7: Context Menu ──────────────────────────────────────────
-
   describe("context menu", () => {
     it("right-clicking an icon opens a context menu with the panel name", () => {
       const store = createDefaultTestStore();
@@ -671,8 +648,6 @@ describe("DockingLayout", () => {
     });
   });
 
-  // ── Group 8: Keyboard Shortcuts ────────────────────────────────────
-
   describe("keyboard shortcuts", () => {
     it("Cmd+1 hides the Info panel when it already has focus", () => {
       const store = createDefaultTestStore();
@@ -692,12 +667,10 @@ describe("DockingLayout", () => {
       const store = createDefaultTestStore();
       renderTest(<DockingLayout />, store);
 
-      // Hide
       focusZone("top-left");
       fireShortcut("info");
       expect(screen.queryByText(TEST_PANEL_CONTENT.info)).not.toBeInTheDocument();
 
-      // Reopen
       fireShortcut("info");
       expect(screen.getByText(TEST_PANEL_CONTENT.info)).toBeInTheDocument();
     });
@@ -740,8 +713,6 @@ describe("DockingLayout", () => {
     });
   });
 
-  // ── Group 9: Context Menu Actions ───────────────────────────────────
-
   describe("context menu actions", () => {
     it("context menu 'Open in Modal' option is rendered for each panel", () => {
       const store = createDefaultTestStore();
@@ -761,8 +732,6 @@ describe("DockingLayout", () => {
       expect(screen.getByText("Open in Modal")).toBeInTheDocument();
     });
   });
-
-  // ── Group 10: Modal ─────────────────────────────────────────────────
 
   describe("modal", () => {
     it("opens when modalPanelIdAtom is set", () => {
@@ -813,8 +782,6 @@ describe("DockingLayout", () => {
       }
     });
   });
-
-  // ── Group 11: Zone Order Consistency ─────────────────────────────────
 
   describe("zone order consistency", () => {
     it("panelsInZoneAtom returns deterministic order without explicit zoneOrder", () => {
@@ -903,8 +870,6 @@ describe("DockingLayout", () => {
     });
   });
 
-  // ── Group 12: Keyboard Shortcuts After Move ──────────────────────────
-
   describe("keyboard shortcuts after move", () => {
     it("Cmd+1 toggles Info panel in its new zone after reassignment", () => {
       const store = createTestStore();
@@ -971,8 +936,6 @@ describe("DockingLayout", () => {
       expect(screen.queryByText(TEST_PANEL_CONTENT.changes)).not.toBeInTheDocument();
     });
   });
-
-  // ── Group 13: Cross-Zone Move Edge Cases ─────────────────────────────
 
   describe("cross-zone move edge cases", () => {
     it("moving active panel from zone with one other panel leaves that panel active", () => {
@@ -1105,8 +1068,6 @@ describe("DockingLayout", () => {
       expect(screen.queryByText(TEST_PANEL_CONTENT.terminal)).not.toBeInTheDocument();
     });
   });
-
-  // ── Group 14: Zone Size Persistence ────────────────────────────────────
 
   describe("zone size persistence", () => {
     it("preserves zone sizes in localStorage across store instances", () => {

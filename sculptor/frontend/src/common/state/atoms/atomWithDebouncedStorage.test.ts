@@ -43,7 +43,6 @@ describe("atomWithDebouncedStorage", () => {
 
     store.set(testAtom, "updated");
 
-    // Not yet written to localStorage
     expect(localStorage.getItem("test-key")).toBeNull();
 
     vi.advanceTimersByTime(100);
@@ -62,7 +61,6 @@ describe("atomWithDebouncedStorage", () => {
 
     vi.advanceTimersByTime(100);
 
-    // Only one setItem call for the final value
     const calls = spy.mock.calls.filter(([key]) => key === "test-key");
     expect(calls).toHaveLength(1);
     expect(calls[0][1]).toBe(JSON.stringify(3));
@@ -123,13 +121,10 @@ describe("atomWithDebouncedStorage beforeunload flush", () => {
 
     store.set(testAtom, "pending-value");
 
-    // Not yet in localStorage
     expect(localStorage.getItem("flush-key")).toBeNull();
 
-    // Simulate page unload
     window.dispatchEvent(new Event("beforeunload"));
 
-    // Now it should be flushed
     expect(localStorage.getItem("flush-key")).toBe(JSON.stringify("pending-value"));
   });
 
@@ -143,7 +138,6 @@ describe("atomWithDebouncedStorage beforeunload flush", () => {
 
     const callsAfterFlush = spy.mock.calls.filter(([key]) => key === "flush-key").length;
 
-    // Advance past the debounce timer — should not write again
     vi.advanceTimersByTime(200);
 
     const callsAfterTimer = spy.mock.calls.filter(([key]) => key === "flush-key").length;

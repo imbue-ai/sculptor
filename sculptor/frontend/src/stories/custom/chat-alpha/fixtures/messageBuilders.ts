@@ -17,10 +17,6 @@
 import type { ChatMessage } from "~/api";
 import { ChatMessageRole } from "~/api";
 
-// ---------------------------------------------------------------------------
-// Timestamp helpers
-// ---------------------------------------------------------------------------
-
 const BASE_TIME = new Date("2026-03-09T14:30:00.000Z");
 let offsetCounter = 0;
 
@@ -33,10 +29,6 @@ const nextTs = (): string => {
   offsetCounter += 1500;
   return t;
 };
-
-// ---------------------------------------------------------------------------
-// Content block builders
-// ---------------------------------------------------------------------------
 
 let toolIdCounter = 0;
 
@@ -97,10 +89,6 @@ export const blocks = {
 
   file: (source: string): { type: "file"; source: string } => ({ type: "file", source }),
 };
-
-// ---------------------------------------------------------------------------
-// Message builders
-// ---------------------------------------------------------------------------
 
 let msgIdCounter = 0;
 

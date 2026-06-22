@@ -152,7 +152,6 @@ describe("ActionContextMenu", () => {
       renderContextMenu({ groups });
 
       fireEvent.contextMenu(screen.getByTestId("trigger"));
-      // Submenu trigger is visible
       expect(screen.getByText("Move to group...")).toBeInTheDocument();
     });
 

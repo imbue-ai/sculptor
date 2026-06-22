@@ -13,9 +13,7 @@ const render = (
   options?: Omit<Parameters<typeof rtlRender>[1], "wrapper">,
 ): ReturnType<typeof rtlRender> => rtlRender(ui, { wrapper: ThemeWrapper, ...options });
 
-// ---------------------------------------------------------------------------
 // Mock workspace hooks and Jotai atoms that AlphaMarkdownBlock now depends on
-// ---------------------------------------------------------------------------
 
 const mockOpenFileViewTab = vi.fn();
 
@@ -185,9 +183,7 @@ describe("AlphaMarkdownBlock", () => {
     expect(container.firstChild).toBeTruthy();
   });
 
-  // -----------------------------------------------------------------------
   // GFM extensions
-  // -----------------------------------------------------------------------
 
   it("renders GFM task lists with checkboxes", () => {
     const md = ["- [x] Done", "- [ ] Todo"].join("\n");
@@ -205,9 +201,7 @@ describe("AlphaMarkdownBlock", () => {
     expect(del!.textContent).toBe("deleted");
   });
 
-  // -----------------------------------------------------------------------
   // Nested / combined formatting
-  // -----------------------------------------------------------------------
 
   it("renders nested blockquotes", () => {
     const md = ["> outer", "> ", "> > inner"].join("\n");
@@ -236,9 +230,7 @@ describe("AlphaMarkdownBlock", () => {
     expect(paragraphs[1].textContent).toBe("Paragraph two.");
   });
 
-  // -----------------------------------------------------------------------
   // Code block routing
-  // -----------------------------------------------------------------------
 
   it("routes fenced code blocks to AlphaCodeBlock (pre > code structure)", () => {
     const md = "```python\nprint('hi')\n```";
@@ -259,9 +251,7 @@ describe("AlphaMarkdownBlock", () => {
     expect(code!.textContent).toBe("foo");
   });
 
-  // -----------------------------------------------------------------------
   // Table routing
-  // -----------------------------------------------------------------------
 
   it("renders table data from markdown correctly", () => {
     const md = "| A | B |\n|---|---|\n| 1 | 2 |";
@@ -272,9 +262,7 @@ describe("AlphaMarkdownBlock", () => {
     expect(container.querySelectorAll("td")).toHaveLength(2);
   });
 
-  // -----------------------------------------------------------------------
   // Link security
-  // -----------------------------------------------------------------------
 
   it("renders multiple links all with noopener noreferrer", () => {
     const md = "[A](https://a.com) and [B](https://b.com)";
@@ -287,9 +275,7 @@ describe("AlphaMarkdownBlock", () => {
     }
   });
 
-  // -----------------------------------------------------------------------
   // Image suppression edge cases
-  // -----------------------------------------------------------------------
 
   it("suppresses images even when mixed with text", () => {
     const md = "Before ![img](https://example.com/img.png) after";
@@ -299,9 +285,7 @@ describe("AlphaMarkdownBlock", () => {
     expect(container.textContent).toContain("after");
   });
 
-  // -----------------------------------------------------------------------
   // Search highlighting
-  // -----------------------------------------------------------------------
 
   it("highlights search matches in plain text without error", () => {
     const { container } = render(
@@ -359,9 +343,7 @@ describe("AlphaMarkdownBlock", () => {
     expect(marks[2].className).toBe("alphaSearchMatch");
   });
 
-  // -----------------------------------------------------------------------
   // Clickable file paths
-  // -----------------------------------------------------------------------
 
   describe("clickable file paths", () => {
     beforeEach(() => {
@@ -557,9 +539,7 @@ describe("AlphaMarkdownBlock", () => {
     });
   });
 
-  // -----------------------------------------------------------------------
   // showCursor prop
-  // -----------------------------------------------------------------------
 
   describe("showCursor", () => {
     const cursorSelector = `[data-testid="${ElementIds.STREAMING_CURSOR}"]`;

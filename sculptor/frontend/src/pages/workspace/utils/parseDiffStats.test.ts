@@ -116,7 +116,6 @@ describe("parseDiffStats", () => {
       "+actual addition",
     ].join("\n");
 
-    // +++ should not be counted, only the actual +actual addition line
     expect(parseDiffStats(diff)).toEqual({ additions: 1, deletions: 0, filesChanged: 1 });
   });
 
@@ -130,7 +129,6 @@ describe("parseDiffStats", () => {
       "-actual deletion",
     ].join("\n");
 
-    // --- should not be counted, only the actual -actual deletion line
     expect(parseDiffStats(diff)).toEqual({ additions: 0, deletions: 1, filesChanged: 1 });
   });
 

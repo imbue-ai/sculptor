@@ -29,8 +29,6 @@ import { PanelRegistryProvider } from "~/components/panels/PanelRegistryProvider
 import type { LayoutSide, PanelDefinition } from "~/components/panels/types.ts";
 import { ZONE_IDS } from "~/components/panels/types.ts";
 
-// ── Test fixtures ────────────────────────────────────────────────────
-
 const TEST_PANELS: ReadonlyArray<PanelDefinition> = [
   {
     id: "info",
@@ -82,8 +80,6 @@ const TEST_PANELS: ReadonlyArray<PanelDefinition> = [
 beforeEach(() => localStorage.clear());
 afterEach(() => localStorage.clear());
 
-// ── Helpers ──────────────────────────────────────────────────────────
-
 const renderSideToggle = (
   side: LayoutSide,
   store: ReturnType<typeof createStore>,
@@ -98,8 +94,6 @@ const renderSideToggle = (
 
 const createDefaultStore = (): ReturnType<typeof createStore> =>
   createPanelStore(TEST_PANELS, { useDefaultLayout: true });
-
-// ── useSideToggle ────────────────────────────────────────────────────
 
 describe("useSideToggle", () => {
   describe("isVisible", () => {
@@ -302,8 +296,6 @@ describe("useSideToggle", () => {
   });
 });
 
-// ── Hook render helpers ─────────────────────────────────────────────
-
 const renderFocusMode = (
   store: ReturnType<typeof createStore>,
 ): ReturnType<typeof renderHook<ReturnType<typeof useFocusMode>, unknown>> => {
@@ -331,8 +323,6 @@ const hasAnyVisibleZone = (store: ReturnType<typeof createStore>): boolean => {
   const vis = store.get(zoneVisibilityAtom);
   return ZONE_IDS.some((z) => vis[z] === true);
 };
-
-// ── useFocusMode ────────────────────────────────────────────────────
 
 describe("useFocusMode", () => {
   describe("entering focus mode", () => {
@@ -417,8 +407,6 @@ describe("useFocusMode", () => {
     });
   });
 });
-
-// ── useZenMode ──────────────────────────────────────────────────────
 
 describe("useZenMode", () => {
   describe("entering zen mode from nothing active", () => {
@@ -674,8 +662,6 @@ describe("useZenMode", () => {
   });
 });
 
-// ── usePanelEnabled ─────────────────────────────────────────────────
-
 const renderPanelEnabled = (
   store: ReturnType<typeof createStore>,
   panels: ReadonlyArray<PanelDefinition> = TEST_PANELS,
@@ -711,8 +697,6 @@ describe("usePanelEnabled", () => {
     expect(store.get(panelsInZoneAtom("top-left"))).toEqual(["info"]);
   });
 });
-
-// ── usePanelKeyboardShortcuts (focus-then-toggle) ───────────────────
 
 const Stub = (): null => {
   usePanelKeyboardShortcuts();

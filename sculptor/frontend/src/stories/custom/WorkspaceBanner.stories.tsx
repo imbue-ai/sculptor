@@ -7,19 +7,11 @@ import prStyles from "~/pages/workspace/components/PrButton.module.scss";
 import { TargetBranchSelector } from "~/pages/workspace/components/TargetBranchSelector";
 import bannerStyles from "~/pages/workspace/components/WorkspaceBanner.module.scss";
 
-// ---------------------------------------------------------------------------
-// Fixtures
-// ---------------------------------------------------------------------------
-
 const REMOTE_BRANCHES = ["origin/main", "origin/develop", "origin/release/v2"];
 
 const handleBranchChange = (branch: string): void => {
   console.log("Target branch changed:", branch);
 };
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
 type MrState = "none" | "open" | "loading";
 
@@ -35,10 +27,6 @@ type StoryProps = {
   /** The branch the mismatched MR actually targets */
   mismatchedMrTarget: string;
 };
-
-// ---------------------------------------------------------------------------
-// "Assign MR" button (single button, no dropdown)
-// ---------------------------------------------------------------------------
 
 // Static mock of AssignPrButton from PrButton.tsx — the real component uses
 // Jotai atoms and chat actions that aren't available in Storybook. If the real
@@ -62,15 +50,7 @@ const AssignMrButton = ({ gitProvider }: { gitProvider: "gitlab" | "github" }): 
   );
 };
 
-// ---------------------------------------------------------------------------
-// SVG helpers
-// ---------------------------------------------------------------------------
-
 const ChevronDownIcon = (): ReactElement => <ChevronDown size={12} />;
-
-// ---------------------------------------------------------------------------
-// Diff summary placeholder
-// ---------------------------------------------------------------------------
 
 const DiffSummaryMock = (): ReactElement => (
   <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, flexShrink: 0 }}>
@@ -78,10 +58,6 @@ const DiffSummaryMock = (): ReactElement => (
     <span style={{ color: "var(--red-9)" }}>-8</span>
   </span>
 );
-
-// ---------------------------------------------------------------------------
-// Banner shell
-// ---------------------------------------------------------------------------
 
 const BannerShell = ({
   currentBranch,
@@ -105,7 +81,6 @@ const BannerShell = ({
   return (
     <div style={{ width: 900 }}>
       <div className={bannerStyles.banner} style={{ overflow: "visible" }}>
-        {/* Branch name */}
         <Tooltip content="Workspace branch" side="bottom">
           <span className={bannerStyles.branchSection}>
             <GitBranchIcon size={12} className={bannerStyles.branchIcon} />
@@ -113,10 +88,8 @@ const BannerShell = ({
           </span>
         </Tooltip>
 
-        {/* Arrow */}
         <span className={bannerStyles.arrowSeparator}>&rarr;</span>
 
-        {/* Target branch selector — amber when mismatched, with badge in dropdown */}
         <Tooltip content={tooltipContent} side="bottom">
           <span>
             <TargetBranchSelector
@@ -139,12 +112,10 @@ const BannerShell = ({
           </span>
         </Tooltip>
 
-        {/* Spacer */}
         <div className={bannerStyles.spacer} />
 
         <DiffSummaryMock />
 
-        {/* PR Button area */}
         {isMismatch ? (
           <AssignMrButton gitProvider={gitProvider} />
         ) : (
@@ -188,10 +159,6 @@ const BannerShell = ({
   );
 };
 
-// ---------------------------------------------------------------------------
-// Meta
-// ---------------------------------------------------------------------------
-
 const meta = {
   title: "Custom/WorkspaceBanner",
   component: BannerShell,
@@ -223,10 +190,6 @@ const meta = {
 export default meta;
 
 type Story = StoryObj<typeof meta>;
-
-// ---------------------------------------------------------------------------
-// Stories
-// ---------------------------------------------------------------------------
 
 /** Normal state — no MR exists, target matches intent. */
 export const CreateMr: Story = {

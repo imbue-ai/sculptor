@@ -4,10 +4,6 @@ import type { DiffToolContent, GenericToolContent, ToolResultBlock, ToolUseBlock
 
 import { buildChipData, disambiguateFileNames, getFilePathFromToolBlock, segmentToolBlocks } from "../chipRowUtils.ts";
 
-// ---------------------------------------------------------------------------
-// Factories
-// ---------------------------------------------------------------------------
-
 const makeToolUseBlock = (overrides: Partial<ToolUseBlock> & { id: string; name: string }): ToolUseBlock => ({
   type: "tool_use",
   objectType: "ToolUseBlock",
@@ -58,10 +54,6 @@ index 1234..5678 100644
  line3
 `;
 
-// ---------------------------------------------------------------------------
-// getFilePathFromToolBlock
-// ---------------------------------------------------------------------------
-
 describe("getFilePathFromToolBlock", () => {
   it("returns filePath from DiffToolContent result when available", () => {
     const block = makeToolUseBlock({ id: "1", name: "Edit", input: { file_path: "old/path.ts" } });
@@ -90,10 +82,6 @@ describe("getFilePathFromToolBlock", () => {
     expect(getFilePathFromToolBlock(block)).toBeNull();
   });
 });
-
-// ---------------------------------------------------------------------------
-// disambiguateFileNames
-// ---------------------------------------------------------------------------
 
 describe("disambiguateFileNames", () => {
   it("returns just the basename for unique files", () => {
@@ -172,10 +160,6 @@ describe("disambiguateFileNames", () => {
     expect(result.get("src/utils/Button.tsx")).toBe("utils/.../Button.tsx");
   });
 });
-
-// ---------------------------------------------------------------------------
-// buildChipData
-// ---------------------------------------------------------------------------
 
 describe("buildChipData", () => {
   it("returns one completed chip for a single completed block", () => {
@@ -492,10 +476,6 @@ describe("buildChipData", () => {
     expect(chips[0].blocks[0]).toBe(real);
   });
 });
-
-// ---------------------------------------------------------------------------
-// segmentToolBlocks
-// ---------------------------------------------------------------------------
 
 describe("segmentToolBlocks", () => {
   it("places a single non-diff tool_result into a tools segment", () => {

@@ -91,10 +91,6 @@ describe("AlphaCodeBlock", () => {
     }
   });
 
-  // -----------------------------------------------------------------------
-  // Multi-line and token rendering
-  // -----------------------------------------------------------------------
-
   it("renders multi-line tokens with newline separators between lines", async () => {
     const { highlightCode } = await import("./shikiHighlighter.ts");
     vi.mocked(highlightCode).mockResolvedValueOnce([
@@ -110,7 +106,6 @@ describe("AlphaCodeBlock", () => {
       expect(lineSpans).toHaveLength(3);
     });
 
-    // Verify text content includes all lines
     expect(container.querySelector("code")!.textContent).toBe("line1\nline2\nline3");
   });
 

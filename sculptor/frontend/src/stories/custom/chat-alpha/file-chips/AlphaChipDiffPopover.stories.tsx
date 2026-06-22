@@ -6,10 +6,6 @@ import type { ToolResultBlock } from "~/api";
 import { AlphaChipDiffPopover } from "~/pages/workspace/components/chat-alpha/AlphaChipDiffPopover.tsx";
 import type { ChipData } from "~/pages/workspace/components/chat-alpha/chipRow.types.ts";
 
-// ---------------------------------------------------------------------------
-// Diff fixture
-// ---------------------------------------------------------------------------
-
 const sampleDiff = `--- a/src/components/Button.tsx
 +++ b/src/components/Button.tsx
 @@ -10,7 +10,9 @@
@@ -40,10 +36,6 @@ const newFileDiff = `--- /dev/null
 +  return <div className="modal" onClick={onClose} />;
 +};
 `;
-
-// ---------------------------------------------------------------------------
-// Chip data fixtures
-// ---------------------------------------------------------------------------
 
 const makeResult = (diff: string, filePath: string): ToolResultBlock => ({
   type: "tool_result" as const,
@@ -121,10 +113,7 @@ const longPathChip: ChipData = {
   errorContentType: null,
 };
 
-// ---------------------------------------------------------------------------
-// Wrapper — provides routing + Jotai context required by the popover
-// ---------------------------------------------------------------------------
-
+// Provides the routing + Jotai context required by the popover.
 const Wrapper = ({
   chipData,
   onClose,
@@ -148,10 +137,6 @@ const Wrapper = ({
   </MemoryRouter>
 );
 
-// ---------------------------------------------------------------------------
-// Meta
-// ---------------------------------------------------------------------------
-
 const meta = {
   title: "Chat Alpha/File Chips/AlphaChipDiffPopover",
   component: Wrapper,
@@ -173,10 +158,6 @@ const meta = {
 export default meta;
 
 type Story = StoryObj<typeof meta>;
-
-// ---------------------------------------------------------------------------
-// Stories
-// ---------------------------------------------------------------------------
 
 /** Completed edit with copy-path and open-diff icon buttons in the header. */
 export const Completed: Story = {};

@@ -547,8 +547,6 @@ export const IdleEmpty: Story = {
   },
 };
 
-// ── MR/PR Status Stories ──
-
 const BASE_PR_STATUS: PrStatusInfo = {
   workspaceId: WORKSPACE_ID,
   prState: "open",

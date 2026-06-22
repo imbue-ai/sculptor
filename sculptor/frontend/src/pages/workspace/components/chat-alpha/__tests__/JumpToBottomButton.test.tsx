@@ -89,14 +89,11 @@ describe("JumpToBottomButton", () => {
       <JumpToBottomButton isVisible={true} label="jump" onClick={vi.fn()} scrollContainerRef={scrollRef} />,
     );
 
-    // Button is visible and interactive
     const button = screen.getByTestId(ElementIds.ALPHA_JUMP_TO_BOTTOM_BUTTON);
     expect(button).toHaveAttribute("tabindex", "0");
 
-    // Hide the button
     rerender(<JumpToBottomButton isVisible={false} label="jump" onClick={vi.fn()} scrollContainerRef={scrollRef} />);
 
-    // Button is still in DOM but hidden and non-interactive
     expect(button).toHaveAttribute("tabindex", "-1");
     expect(button.closest("[aria-hidden]")).toHaveAttribute("aria-hidden", "true");
   });

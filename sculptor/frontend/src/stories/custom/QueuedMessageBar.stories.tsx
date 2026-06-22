@@ -7,8 +7,6 @@ import type { ChatMessage } from "~/api";
 import { ChatInput } from "~/pages/workspace/components/ChatInput";
 import { QueuedMessageBar } from "~/pages/workspace/components/QueuedMessageBar";
 
-// --- Sample data fixtures ---
-
 const SHORT_MESSAGE: ChatMessage = {
   id: "msg-1",
   role: "USER",
@@ -40,8 +38,6 @@ const MULTILINE_MESSAGE: ChatMessage = {
   approximateCreationTime: new Date().toISOString(),
 };
 
-// --- Callbacks ---
-
 const handleEditConflict = (data: {
   rawTextContent: string;
   plainTextContent: string;
@@ -49,8 +45,6 @@ const handleEditConflict = (data: {
 }): void => {
   console.log("Edit conflict:", data);
 };
-
-// --- Wrapper ---
 
 const Wrapper = ({ message }: { message: ChatMessage }): ReactElement => (
   <JotaiProvider>

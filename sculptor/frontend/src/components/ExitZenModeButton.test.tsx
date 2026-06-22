@@ -10,8 +10,6 @@ import type { PanelDefinition } from "~/components/panels/types.ts";
 
 import { ExitZenModeButton } from "./ExitZenModeButton";
 
-// ── Test fixtures ────────────────────────────────────────────────────
-
 const TEST_PANELS: ReadonlyArray<PanelDefinition> = [
   {
     id: "info",
@@ -51,8 +49,6 @@ const TEST_PANELS: ReadonlyArray<PanelDefinition> = [
   },
 ];
 
-// ── Helpers ──────────────────────────────────────────────────────────
-
 const renderInZenMode = (): ReturnType<typeof renderWithProviders> => {
   const store = createPanelStore(TEST_PANELS, { useDefaultLayout: true });
   act(() => store.set(zenModeActiveAtom, true));
@@ -66,8 +62,6 @@ const getHotZone = (): HTMLElement => {
 };
 
 const getButtonContainer = (): HTMLElement => screen.getByTestId(ElementIds.EXIT_ZEN_MODE_BUTTON);
-
-// ── Tests ────────────────────────────────────────────────────────────
 
 beforeEach(() => {
   vi.useFakeTimers();

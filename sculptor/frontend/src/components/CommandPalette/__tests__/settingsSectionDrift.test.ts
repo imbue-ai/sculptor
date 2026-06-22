@@ -10,15 +10,9 @@ import { buildSettingsCommands } from "../builtinCommands/settings.ts";
 import type { CommandRuntime } from "../runtime.ts";
 
 /**
- * Drift guardrail for Comment 7 in MR !1021. The Settings page sidebar
- * AND the Cmd+K palette read from the same `SETTINGS_SECTIONS` array.
- * If a future change drops or renames a section in only one of those
- * consumers, this test fails.
- *
- * Adding a new sidebar section without a palette command (or vice
- * versa) is the kind of drift flagged in review. Keeping a
- * mechanical "every section has a command" check in CI prevents
- * deferring the Cmd+K update.
+ * Drift guardrail: the Settings page sidebar AND the Cmd+K palette read
+ * from the same `SETTINGS_SECTIONS` array. If a future change drops or
+ * renames a section in only one of those consumers, this test fails.
  */
 
 const noop = (): void => {};

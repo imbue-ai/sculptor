@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { filterFilesBySubstring } from "./utils.ts";
 
-// ── filterFilesBySubstring ──────────────────────────────────────────
-
 describe("filterFilesBySubstring", () => {
   const files = [
     { path: "src/components/Button.tsx", type: "file" as const },

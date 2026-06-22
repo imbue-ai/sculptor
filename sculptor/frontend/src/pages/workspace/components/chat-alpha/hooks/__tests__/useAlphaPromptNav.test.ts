@@ -7,10 +7,6 @@ import { type ChatMessage, ChatMessageRole, ElementIds } from "~/api";
 import type { ActivePromptIndex } from "../useAlphaActivePromptIndex.ts";
 import { useAlphaPromptNav } from "../useAlphaPromptNav.ts";
 
-// ---------------------------------------------------------------------------
-// Fixtures / helpers
-// ---------------------------------------------------------------------------
-
 const makeMessage = (id: string, role: ChatMessageRole): ChatMessage =>
   ({
     id,
@@ -98,10 +94,6 @@ const flushRaf = async (): Promise<void> => {
   });
 };
 
-// ---------------------------------------------------------------------------
-// Test suite
-// ---------------------------------------------------------------------------
-
 describe("useAlphaPromptNav", () => {
   let mockScrollToBottom: ReturnType<typeof vi.fn>;
   let mockSetIsSuppressed: ReturnType<typeof vi.fn>;
@@ -163,18 +155,10 @@ describe("useAlphaPromptNav", () => {
     return { result, rerender, virtualizer, controller };
   };
 
-  // -------------------------------------------------------------------------
-  // 1. Baseline
-  // -------------------------------------------------------------------------
-
   it("starts with isNavigating === false", () => {
     const { result } = render(buildMessages());
     expect(result.current.isNavigating).toBe(false);
   });
-
-  // -------------------------------------------------------------------------
-  // 2. ArrowUp entry
-  // -------------------------------------------------------------------------
 
   it("ArrowUp from focused chat input (caret at 0) enters navigation", () => {
     // 3 user prompts; start the controller cursor at the last (index 2 into
@@ -262,10 +246,6 @@ describe("useAlphaPromptNav", () => {
     expect(controller.setIndex).not.toHaveBeenCalled();
   });
 
-  // -------------------------------------------------------------------------
-  // 3. Modifier keys are inert
-  // -------------------------------------------------------------------------
-
   it.each([
     ["altKey", { altKey: true }],
     ["ctrlKey", { ctrlKey: true }],
@@ -281,10 +261,6 @@ describe("useAlphaPromptNav", () => {
     expect(virtualizer.scrollToIndex).not.toHaveBeenCalled();
     expect(controller.setIndex).not.toHaveBeenCalled();
   });
-
-  // -------------------------------------------------------------------------
-  // 4. Overlay / editable-outside guards
-  // -------------------------------------------------------------------------
 
   it("does nothing while a dialog overlay is open", () => {
     const overlay = document.createElement("div");
@@ -349,10 +325,6 @@ describe("useAlphaPromptNav", () => {
     expect(virtualizer.scrollToIndex).not.toHaveBeenCalled();
   });
 
-  // -------------------------------------------------------------------------
-  // 5. Empty prompt list
-  // -------------------------------------------------------------------------
-
   it("empty user prompt list: ArrowUp is a no-op", () => {
     const messages: ReadonlyArray<ChatMessage> = [makeMessage("a", ChatMessageRole.ASSISTANT)];
     const controller = createController(0);
@@ -364,10 +336,6 @@ describe("useAlphaPromptNav", () => {
     expect(virtualizer.scrollToIndex).not.toHaveBeenCalled();
     expect(controller.setIndex).not.toHaveBeenCalled();
   });
-
-  // -------------------------------------------------------------------------
-  // 6. Repeated ArrowUp cycles through prompts
-  // -------------------------------------------------------------------------
 
   it("ArrowUp decrements the active cursor on each press", () => {
     const controller = createController(2);
@@ -396,10 +364,6 @@ describe("useAlphaPromptNav", () => {
     expect(virtualizer.scrollToIndex).not.toHaveBeenCalled();
     expect(controller.setIndex).not.toHaveBeenCalled();
   });
-
-  // -------------------------------------------------------------------------
-  // 7. ArrowDown behavior
-  // -------------------------------------------------------------------------
 
   it("ArrowDown when not navigating does nothing", () => {
     const controller = createController(2);
@@ -446,10 +410,6 @@ describe("useAlphaPromptNav", () => {
     expect(mockSetIsSuppressed).toHaveBeenCalledWith(false);
   });
 
-  // -------------------------------------------------------------------------
-  // 8. Escape / Enter exit
-  // -------------------------------------------------------------------------
-
   it("Escape while navigating exits, clears highlight, and re-focuses chat input", async () => {
     // Build DOM with a highlighted message so we can verify class removal.
     const wrapper = document.createElement("div");
@@ -491,10 +451,6 @@ describe("useAlphaPromptNav", () => {
     expect(mockSetIsSuppressed).toHaveBeenLastCalledWith(false);
   });
 
-  // -------------------------------------------------------------------------
-  // 9. External navigateToPrompt (dot rail click)
-  // -------------------------------------------------------------------------
-
   it("navigateToPrompt(idx) enters navigation and drives the controller", () => {
     const controller = createController(2);
     const { result, virtualizer } = render(buildMessages(), { controller });
@@ -527,10 +483,6 @@ describe("useAlphaPromptNav", () => {
     expect(scrollToIndex).toHaveBeenCalledWith(2, { align: "start" });
   });
 
-  // -------------------------------------------------------------------------
-  // 10. Focus-in / shrinking message list
-  // -------------------------------------------------------------------------
-
   it("focus-in on the chat input container while navigating exits navigation", () => {
     const controller = createController(2);
     const { result } = render(buildMessages(), { controller });
@@ -545,10 +497,6 @@ describe("useAlphaPromptNav", () => {
     expect(result.current.isNavigating).toBe(false);
     expect(mockSetIsSuppressed).toHaveBeenLastCalledWith(false);
   });
-
-  // -------------------------------------------------------------------------
-  // 11. navigateToPrompt bounds checking
-  // -------------------------------------------------------------------------
 
   it("navigateToPrompt with a negative index is a no-op", () => {
     const controller = createController(2);
@@ -574,10 +522,6 @@ describe("useAlphaPromptNav", () => {
     expect(virtualizer.scrollToIndex).not.toHaveBeenCalled();
   });
 
-  // -------------------------------------------------------------------------
-  // 12. Escape / Enter while NOT navigating are inert
-  // -------------------------------------------------------------------------
-
   it("Escape while not navigating has no side effects", () => {
     const controller = createController(2);
     const { result } = render(buildMessages(), { controller });
@@ -601,10 +545,6 @@ describe("useAlphaPromptNav", () => {
     expect(mockSetIsSuppressed).not.toHaveBeenCalled();
     expect(controller.setIndex).not.toHaveBeenCalled();
   });
-
-  // -------------------------------------------------------------------------
-  // 13. Unmount cleans up pending highlight rAF
-  // -------------------------------------------------------------------------
 
   it("unmount cancels any pending highlight animation frame", () => {
     // Build DOM so applyHighlight has something to target.
@@ -636,10 +576,6 @@ describe("useAlphaPromptNav", () => {
     cancelSpy.mockRestore();
   });
 
-  // -------------------------------------------------------------------------
-  // 14. Radix popper wrapper treated as an open overlay
-  // -------------------------------------------------------------------------
-
   it("ArrowUp still navigates turns while a Radix popper-content-wrapper is mounted", () => {
     // Tool/chip/subagent popovers must NOT block turn navigation — up/down
     // should always move between turns even when a popover is open. Only
@@ -657,10 +593,6 @@ describe("useAlphaPromptNav", () => {
     expect(virtualizer.scrollToIndex).toHaveBeenCalled();
     expect(controller.setIndex).toHaveBeenCalled();
   });
-
-  // -------------------------------------------------------------------------
-  // 15. Highlight cleanup after unmount
-  // -------------------------------------------------------------------------
 
   it("unmount leaves no highlight class on any message element", async () => {
     const wrapper = document.createElement("div");

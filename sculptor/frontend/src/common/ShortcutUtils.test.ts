@@ -27,10 +27,6 @@ const fakeKeyEvent = (overrides: {
     shiftKey: overrides.shiftKey ?? false,
   }) as unknown as KeyboardEvent;
 
-// ---------------------------------------------------------------------------
-// parseShortcut
-// ---------------------------------------------------------------------------
-
 describe("parseShortcut", () => {
   it("parses Cmd modifier", () => {
     const parsed = parseShortcut("Cmd+K");
@@ -64,10 +60,6 @@ describe("parseShortcut", () => {
     expect(parseShortcut("⇧+K")).toEqual({ meta: false, ctrl: false, alt: false, shift: true, key: "k" });
   });
 });
-
-// ---------------------------------------------------------------------------
-// shouldHandleKeybinding — platform-aware matching
-// ---------------------------------------------------------------------------
 
 describe("shouldHandleKeybinding", () => {
   const savedSculptor = window.sculptor;
@@ -291,15 +283,10 @@ describe("shouldHandleKeybinding", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// formatShortcutForDisplay — platform-specific
-// ---------------------------------------------------------------------------
-
 describe("formatShortcutForDisplay", () => {
   const savedSculptor = window.sculptor;
 
   afterEach(() => {
-    // Restore original window.sculptor
     if (savedSculptor === undefined) {
       delete (window as unknown as Record<string, unknown>).sculptor;
     } else {

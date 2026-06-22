@@ -342,10 +342,6 @@ describe("buildPanelCommands", () => {
   });
 
   it("the panels page-opener title matches what users search for", () => {
-    // Coworker feedback: the previous "Toggle plugin visibility" label
-    // didn't surface when typing "Toggle panel..." (the natural phrase
-    // users reach for). The new label is exactly that phrase, and it
-    // points at the page that actually lists the panels.
     const cmds = buildPanelCommands(makeRuntime());
     const panelsOpener = cmds.find((c) => c.id === "view.toggle_panels")!;
     expect(panelsOpener.title).toBe("Toggle panel visibility...");

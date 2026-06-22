@@ -10,8 +10,6 @@ import type { PanelDefinition } from "~/components/panels/types.ts";
 
 import { BottomBar } from "./BottomBar";
 
-// ── Test fixtures ────────────────────────────────────────────────────
-
 const TEST_PANELS: ReadonlyArray<PanelDefinition> = [
   {
     id: "info",
@@ -47,8 +45,6 @@ const createDefaultStore = (): ReturnType<typeof createPanelStore> =>
 
 beforeEach(() => localStorage.clear());
 afterEach(cleanup);
-
-// ── BottomBar ────────────────────────────────────────────────────────
 
 describe("BottomBar", () => {
   it("renders three side toggle buttons", () => {

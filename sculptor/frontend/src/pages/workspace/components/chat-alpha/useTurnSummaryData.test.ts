@@ -9,10 +9,6 @@ import { DIFF_PAGINATION_FIX, DIFF_VALIDATORS_NEW } from "~/stories/custom/chat-
 import type { TurnFile } from "./useTurnSummaryData";
 import { useTurnSummaryData } from "./useTurnSummaryData";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 /** Create a ToolUseBlock (present during streaming, before replacement). */
 const makeToolUse = (id: string, toolName: string, filePath: string): ToolUseBlock =>
   ({
@@ -77,10 +73,6 @@ const makeTurnMetrics = (overrides: Partial<TurnMetrics> = {}): TurnMetrics =>
     ...overrides,
   }) as TurnMetrics;
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 describe("useTurnSummaryData", () => {
   it("returns undefined when message has no tool uses or results", () => {
     const message = makeMessage([{ type: "text", text: "Hello" }]);
@@ -102,10 +94,6 @@ describe("useTurnSummaryData", () => {
     const { result } = renderHook(() => useTurnSummaryData(message, makeNode(message)));
     expect(result.current).toBeUndefined();
   });
-
-  // -----------------------------------------------------------------------
-  // Source 1: ToolUseBlock inputs (streaming state, before replacement)
-  // -----------------------------------------------------------------------
 
   it("extracts file path from ToolUseBlock.input during streaming", () => {
     const toolUse = makeToolUse("tu-1", "Edit", "utils/pagination.py");
@@ -140,10 +128,6 @@ describe("useTurnSummaryData", () => {
     expect(result.current).toBeUndefined();
   });
 
-  // -----------------------------------------------------------------------
-  // Source 2: DiffToolContent on ToolResultBlock (post-persistence state)
-  // -----------------------------------------------------------------------
-
   it("extracts file path from DiffToolContent after persistence", () => {
     const diffResult = makeDiffResult("tu-1", DIFF_PAGINATION_FIX, "utils/pagination.py");
     const message = makeMessage([diffResult]);
@@ -174,10 +158,6 @@ describe("useTurnSummaryData", () => {
     const { result } = renderHook(() => useTurnSummaryData(message, makeNode(message)));
     expect(result.current).toBeUndefined();
   });
-
-  // -----------------------------------------------------------------------
-  // Deduplication and ordering
-  // -----------------------------------------------------------------------
 
   it("deduplicates when both ToolUseBlock and DiffToolContent provide the same path", () => {
     const toolUse = makeToolUse("tu-1", "Edit", "utils/pagination.py");
@@ -214,10 +194,6 @@ describe("useTurnSummaryData", () => {
     expect(files[0].path).toBe("utils/pagination.py");
     expect(files[1].path).toBe("utils/validators.py");
   });
-
-  // -----------------------------------------------------------------------
-  // Subagent children
-  // -----------------------------------------------------------------------
 
   it("includes file changes from subagent child messages", () => {
     const parentMessage = makeMessage([{ type: "text", text: "Starting" }], { id: "parent" });
@@ -268,10 +244,6 @@ describe("useTurnSummaryData", () => {
     expect(files[0].path).toBe("utils/pagination.py");
   });
 
-  // -----------------------------------------------------------------------
-  // MultiEdit tool support
-  // -----------------------------------------------------------------------
-
   it("extracts file path from MultiEdit ToolUseBlock", () => {
     const toolUse = makeToolUse("tu-1", "MultiEdit", "utils/pagination.py");
     const genericResult = makeGenericResult("tu-1", "MultiEdit");
@@ -283,10 +255,6 @@ describe("useTurnSummaryData", () => {
     expect(files).toHaveLength(1);
     expect(files[0].path).toBe("utils/pagination.py");
   });
-
-  // -----------------------------------------------------------------------
-  // Edge cases
-  // -----------------------------------------------------------------------
 
   it("skips ToolUseBlock with missing file_path input", () => {
     const toolUse = {
@@ -353,10 +321,6 @@ describe("useTurnSummaryData", () => {
     expect(files[0].path).toBe("utils/pagination.py");
   });
 
-  // -----------------------------------------------------------------------
-  // Source 3: Backend changedFiles on TurnMetrics (post-turn, authoritative)
-  // -----------------------------------------------------------------------
-
   it("uses turnMetrics.changedFiles as authoritative source when available", () => {
     const message = makeMessage([{ type: "text", text: "Done" }], {
       turnMetrics: makeTurnMetrics({ changedFiles: ["config.yaml", "README.md"] }),
@@ -409,10 +373,6 @@ describe("useTurnSummaryData", () => {
     expect(files).toHaveLength(1);
     expect(files[0].path).toBe("utils/pagination.py");
   });
-
-  // -----------------------------------------------------------------------
-  // Recursive subagent traversal (grandchildren)
-  // -----------------------------------------------------------------------
 
   it("includes file changes from nested sub-subagent messages", () => {
     const parentMessage = makeMessage([{ type: "text", text: "Starting" }], { id: "parent" });

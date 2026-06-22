@@ -4,10 +4,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ToolNavigationProvider, useToolNavigation } from "../ToolNavigationContext.tsx";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 const wrapper = ({ children }: { children: ReactNode }): ReactElement => (
   <ToolNavigationProvider>{children}</ToolNavigationProvider>
 );
@@ -41,10 +37,6 @@ const makeFakeItemEl = (left: number, width = 40): HTMLButtonElement => {
   el.focus = vi.fn();
   return el;
 };
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("ToolNavigationContext", () => {
   afterEach(() => {
@@ -243,7 +235,6 @@ describe("ToolNavigationContext", () => {
         result.current.registerRow(0, ["a", "b"]);
         result.current.setItemRef("a", el);
         result.current.setItemRef("b", makeFakeItemEl(50));
-        // Drop the ref for "a".
         result.current.setItemRef("a", null);
       });
 

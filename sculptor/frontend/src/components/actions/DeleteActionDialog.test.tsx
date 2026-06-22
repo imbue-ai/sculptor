@@ -49,11 +49,8 @@ describe("DeleteActionDialog", () => {
 
     it("does not render a trash icon", () => {
       const { container } = renderDialog();
-      // The trash icon was removed — ensure no lucide trash SVG exists
       const svgs = container.querySelectorAll("svg");
       for (const svg of svgs) {
-        // Lucide Trash2 would have a specific path, but we just check there's
-        // no icon before the title (inside the Flex wrapper if it existed)
         expect(svg.closest("[role='dialog']")).toBeTruthy();
       }
     });

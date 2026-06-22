@@ -35,8 +35,6 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-// --- Basic variants ---
-
 export const WithSwitch: Story = {
   args: {
     title: "Smooth Streaming",
@@ -132,8 +130,6 @@ export const ReadOnlyDisplay: Story = {
   },
 };
 
-// --- Footer variants ---
-
 export const WithTextAreaFooter: Story = {
   args: {
     title: "Commit prompt",
@@ -171,8 +167,6 @@ export const WithDocumentationFooter: Story = {
   },
 };
 
-// --- Complex control variants ---
-
 export const WithMultipleControls: Story = {
   args: {
     title: "Software Updates",
@@ -191,8 +185,6 @@ export const WithMultipleControls: Story = {
     ),
   },
 };
-
-// --- Inline label + footer picker ---
 
 export const WithInlineLabelAndFooter: Story = {
   args: {
@@ -222,8 +214,6 @@ export const WithInlineLabelAndFooter: Story = {
   },
 };
 
-// --- ReactNode description ---
-
 export const WithReactNodeDescription: Story = {
   args: {
     title: "Custom Setting",
@@ -236,8 +226,6 @@ export const WithReactNodeDescription: Story = {
   },
 };
 
-// --- With data-testid ---
-
 export const WithTestId: Story = {
   args: {
     title: "Testable Setting",
@@ -246,8 +234,6 @@ export const WithTestId: Story = {
     "data-testid": "my-setting-row",
   },
 };
-
-// --- Multiple rows together ---
 
 const MultipleRowsExample = (): ReactElement => {
   const [isSmoothStreaming, setIsSmoothStreaming] = useState(true);

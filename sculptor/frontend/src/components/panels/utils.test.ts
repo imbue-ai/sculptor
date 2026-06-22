@@ -3,8 +3,6 @@ import { describe, expect, it } from "vitest";
 import type { PanelId, ZoneId } from "~/components/panels/types.ts";
 import { computeToggleAction, isZoneMoveDisabled } from "~/components/panels/utils.ts";
 
-// ── computeToggleAction ──────────────────────────────────────────────
-
 describe("computeToggleAction", () => {
   const defaultAssignments = {
     info: "top-left" as const,
@@ -69,8 +67,6 @@ describe("computeToggleAction", () => {
     expect(action).toEqual({ type: "switch-panel", zone: "top-left", panelId: "terminal" });
   });
 });
-
-// ── isZoneMoveDisabled ───────────────────────────────────────────────
 
 type MakeInputsOverrides = {
   panelId?: PanelId;

@@ -6,8 +6,6 @@ import type { DependenciesStatus } from "~/api";
 import { dependenciesStatusAtom } from "~/common/state/atoms/dependenciesStatus";
 import { DependenciesSettingsSection } from "~/pages/settings/components/DependenciesSettingsSection";
 
-// ── Fixtures ──────────────────────────────────────────────────────────
-
 const piNotInstalled = {
   installed: false,
   path: null,
@@ -169,8 +167,6 @@ const managedUpgradeFailed: DependenciesStatus = {
   },
   pi: piNotInstalled,
 };
-
-// ── Wrapper ───────────────────────────────────────────────────────────
 
 const Wrapper = ({ deps }: { deps: DependenciesStatus }): ReactElement => {
   const store = createStore();

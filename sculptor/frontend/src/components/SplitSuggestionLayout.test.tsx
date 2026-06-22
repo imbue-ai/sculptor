@@ -116,9 +116,8 @@ describe("SplitSuggestionLayout", () => {
   });
 
   it("followHover defaults to true — mouse-entering a row moves the active item", () => {
-    // This is the load-bearing default: the skill picker used to pass
-    // `followHover` explicitly and the wrapper exists so the entity picker
-    // gets the same behaviour without having to opt in.
+    // This is the load-bearing default: the wrapper defaults followHover on so
+    // pickers get hover-driven selection without having to opt in.
     const items: Array<TestItem> = [
       { id: "a", label: "Alpha" },
       { id: "b", label: "Bravo" },
