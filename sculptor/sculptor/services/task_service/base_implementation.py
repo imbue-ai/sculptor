@@ -218,6 +218,23 @@ class BaseTaskService(TaskService, ABC):
         transaction.add_callback(lambda: self._publish_task_update(task=updated_task))
         return updated_task
 
+    def rename_task(self, task_id: TaskID, title: str, transaction: DataModelTransaction) -> Task:
+        assert isinstance(transaction, SQLTransaction)
+        task = self.get_task(task_id, transaction)
+        if not task:
+            raise TaskNotFound(f"{task_id} not found")
+        assert isinstance(task.current_state, AgentTaskStateV2)
+        logger.debug("Renaming task {} to {!r}", task_id, title)
+        updated_state = task.current_state.evolve(task.current_state.ref().title, title)
+        updated_task = task.evolve(task.ref().current_state, updated_state)
+        updated_task = transaction.upsert_task(updated_task)
+        # Publish the same task-update a message write registers, so live
+        # subscribers refresh even though this rename created no message. Without
+        # it, an idle terminal agent (no message activity to piggyback on) keeps
+        # its old tab name until a tab switch forces a re-fetch (SCU-1531).
+        transaction.add_callback(lambda: self._publish_task_update(task=updated_task))
+        return updated_task
+
     def update_available_models(
         self,
         task_id: TaskID,

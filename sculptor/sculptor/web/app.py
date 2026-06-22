@@ -1997,11 +1997,10 @@ def rename_workspace_agent(
         workspace = _get_workspace_or_404(workspace_id, transaction)
         task = _validate_agent_in_workspace(agent_id, workspace, transaction, services)
 
-        assert isinstance(task.current_state, AgentTaskStateV2)
-        updated_state = task.current_state.evolve(task.current_state.ref().title, rename_request.title)
-        updated_task = task.evolve(task.ref().current_state, updated_state)
-        # pyrefly: ignore [missing-attribute]
-        transaction.upsert_task(updated_task)
+        # rename_task both persists the new title and publishes a task update,
+        # so live subscribers (e.g. an idle terminal agent's tab) refresh
+        # immediately without a tab switch (SCU-1531).
+        updated_task = services.task_service.rename_task(task.object_id, rename_request.title, transaction)
 
         task_view = create_initial_task_view(updated_task, settings)
         assert isinstance(task_view, CodingAgentTaskView)

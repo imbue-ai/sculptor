@@ -162,6 +162,9 @@ class _StubTaskService(TaskService):
     def mark_unread(self, task_id: TaskID, transaction: DataModelTransaction) -> Task:
         return _stub(task_id, transaction)
 
+    def rename_task(self, task_id: TaskID, title: str, transaction: DataModelTransaction) -> Task:
+        return _stub(task_id, title, transaction)
+
     def update_available_models(
         self,
         task_id: TaskID,
