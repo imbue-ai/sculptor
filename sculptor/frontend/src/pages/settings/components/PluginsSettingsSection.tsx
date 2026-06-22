@@ -53,15 +53,23 @@ export const PluginsSettingsSection = (): ReactElement => {
   const [reportedPluginsDir, setReportedPluginsDir] = useState<string | null>(null);
 
   useEffect(() => {
+    // Guard the post-await state update: if the section unmounts (or StrictMode
+    // re-runs the effect) before the fetch resolves, don't set state on a dead
+    // component.
+    let isIgnored = false;
     void (async (): Promise<void> => {
       try {
         const response = await getLocalPluginsDirectory({ meta: { skipWsAck: true } });
-        if (response.data?.path) setReportedPluginsDir(response.data.path);
+        if (!isIgnored && response.data?.path) setReportedPluginsDir(response.data.path);
       } catch {
         // Fall back to the health check's data directory (below); the label is
         // cosmetic, not load-critical.
       }
     })();
+
+    return (): void => {
+      isIgnored = true;
+    };
   }, []);
 
   // Prefer the backend's display-formatted path. If that endpoint is missing

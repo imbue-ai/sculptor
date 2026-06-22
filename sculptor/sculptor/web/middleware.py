@@ -58,10 +58,10 @@ def mount_plugin_files(app: FastAPI) -> None:
     plugins still load over http from the backend). No session-token gating —
     the mount lives outside the ``/api/`` prefix the auth middleware guards,
     which is intentional: these are the user's own local files, cross-origin
-    browser reads are already blocked by the CORS allowlist, and the existing
-    read-file endpoint is no better protected against a port-reachable
-    non-browser client (it can read the token from the auth-exempt
-    ``/api/v1/session-token`` response).
+    browser reads are already blocked by the CORS allowlist, and a session-token
+    gate is not a meaningful boundary for a port-reachable non-browser client, so
+    CORS is the real boundary here (consistent with the existing read-file
+    endpoint).
 
     The mount is inserted at the FRONT of the route table, not appended: the SPA
     catch-all (``/{filename:path}``, registered at construction) would otherwise

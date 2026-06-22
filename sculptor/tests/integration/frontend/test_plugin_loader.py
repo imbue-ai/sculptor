@@ -375,20 +375,28 @@ def test_refresh_discovers_added_plugin_and_dead_traces_a_removed_one(
 
 @custom_sculptor_folder_populator.with_args(_enable_frontend_plugins_populator)
 def test_plugins_directory_shows_real_backend_path(sculptor_instance_factory_: SculptorInstanceFactory) -> None:
-    """The directory chip reflects the backend's actual data folder, not a fallback.
+    """The directory chip shows this instance's real data folder, not a placeholder.
 
-    The section fetches the plugins directory from the backend and shows it
-    (home collapsed to ``~``); if that fetch is broken the UI silently falls back
-    to a hardcoded ``~/.sculptor/plugins``, which would hide a real directory from
-    the user. Assert the rendered path matches what the backend reports for this
-    instance's data folder, so a broken fetch fails the test instead of degrading
-    quietly.
+    The section renders the plugins directory the backend reports (home collapsed
+    to ``~``), with a layered fallback. Asserting the chip matches that real path
+    guards against the hardcoded ``~/.sculptor/plugins`` placeholder leaking
+    through when the real directory differs — the regression this addresses.
+
+    Scope: here the dedicated ``/api/v1/plugins/dir`` endpoint and the
+    health-check fallback resolve to the *same* string — the per-test data folder
+    is outside ``$HOME``, so ``_display_path`` has no ``~`` to collapse — so this
+    asserts the rendered path is correct without isolating which source produced
+    it. The endpoint's home-collapse formatting is covered separately by the
+    backend unit tests in ``app_local_plugins_test.py``.
     """
     with sculptor_instance_factory_.spawn_instance() as instance:
         settings_page = navigate_to_settings_page(page=instance.page)
         plugins = settings_page.click_on_plugins()
 
         expected = _display_path(instance.sculptor_folder / "plugins")
+        # Sanity-check the assertion is meaningful: the real path must differ from
+        # the hardcoded placeholder, or this test couldn't catch that regression.
+        assert expected != "~/.sculptor/plugins"
         expect(plugins.get_directory_label()).to_have_text(expected)
 
 
