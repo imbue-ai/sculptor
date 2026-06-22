@@ -9,8 +9,11 @@ must lift that reason into a clean, actionable error block — not the generic
 FakePi scripts that exact wire shape via the ``fake_pi:turn_error`` directive.
 """
 
+import re
+
 from playwright.sync_api import expect
 
+from sculptor.constants import ElementIDs
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.fake_pi import install_fake_pi_binary
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -51,3 +54,10 @@ def test_failed_pi_turn_shows_clean_actionable_error(
     expect(clean_block).to_contain_text("401 Authentication Fails")
     # The generic placeholder must NOT be what the user sees in any error block.
     expect(chat_panel.get_error_block().filter(has_text="pi message ended in error")).to_have_count(0)
+
+    # The auth-shaped failure also offers a one-click route to authenticate a
+    # provider, deep-linking into Settings -> Pi.
+    login_cta = clean_block.get_by_test_id(ElementIDs.PI_ERROR_LOGIN_CTA)
+    expect(login_cta).to_be_visible()
+    login_cta.click()
+    expect(page).to_have_url(re.compile("section=PI"))

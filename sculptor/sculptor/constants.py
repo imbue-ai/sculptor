@@ -479,6 +479,8 @@ class ElementIDs(StrEnum):
     # Model-picker empty state when a pi agent has no authenticated providers.
     PI_PICKER_EMPTY_STATE = "pi-picker-empty-state"
     PI_PICKER_LOGIN_CTA = "pi-picker-login-cta"
+    # Failed-turn error block CTA that deep-links into the pi login flow.
+    PI_ERROR_LOGIN_CTA = "pi-error-login-cta"
 
     # Custom backend settings (in Experimental tab)
     SETTINGS_CUSTOM_BACKEND_COMMAND = "SETTINGS_CUSTOM_BACKEND_COMMAND"
