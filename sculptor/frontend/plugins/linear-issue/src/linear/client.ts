@@ -159,3 +159,13 @@ export const searchIssues = async (inputs: {
 /** Whether an attachment points at a code-host pull/merge request. */
 export const isPullRequestAttachment = (attachment: LinearAttachment): boolean =>
   /\/(pull|merge_requests)\//.test(attachment.url);
+
+/** Short label for a PR/MR URL: "#74" for a GitHub pull, "!74" for a GitLab MR. */
+export const prLabel = (url: string): string => {
+  const match = url.match(/\/(pull|merge_requests)\/(\d+)/);
+  if (!match) return "PR";
+  // Key the sigil off the matched route segment, not a substring scan of the
+  // whole URL — a query string or fragment could otherwise contain
+  // "/merge_requests/" and mislabel a GitHub pull as a GitLab MR.
+  return `${match[1] === "merge_requests" ? "!" : "#"}${match[2]}`;
+};
