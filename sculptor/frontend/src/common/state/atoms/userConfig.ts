@@ -58,7 +58,10 @@ export const defaultModelAtom = atom<string>((get) => {
   if (lastUsedModel && isLlmModel(lastUsedModel)) {
     return lastUsedModel;
   }
-  return LlmModel.CLAUDE_FABLE_5;
+  // Product default when nothing else is selected. Fable is currently disabled
+  // with an indefinite timeline, so the default falls back to Opus (SCU-1576);
+  // Fable stays available in the switcher for if/when it returns.
+  return LlmModel.CLAUDE_4_OPUS_200K;
 });
 
 // User identity settings
