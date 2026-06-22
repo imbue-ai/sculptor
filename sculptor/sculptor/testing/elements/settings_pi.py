@@ -95,3 +95,19 @@ class PlaywrightPiSettingsElement(PlaywrightIntegrationTestElement):
     def get_provider_detail(self) -> Locator:
         """Get the detail pane for the selected provider."""
         return self.get_by_test_id(ElementIDs.PI_PROVIDER_DETAIL)
+
+    def get_authenticate_button(self) -> Locator:
+        """Get the Authenticate / Re-authenticate button in the detail pane."""
+        return self.get_by_test_id(ElementIDs.PI_PROVIDER_AUTHENTICATE_BUTTON)
+
+    def get_disconnect_button(self) -> Locator:
+        """Get the Disconnect button (present only for auth.json-backed providers)."""
+        return self.get_by_test_id(ElementIDs.PI_PROVIDER_DISCONNECT_BUTTON)
+
+    def get_login_terminal(self) -> Locator:
+        """Get the inline pi login terminal container."""
+        return self.get_by_test_id(ElementIDs.PI_LOGIN_TERMINAL)
+
+    def get_login_done_button(self) -> Locator:
+        """Get the Done button that tears down the inline login session."""
+        return self.get_by_test_id(ElementIDs.PI_LOGIN_DONE_BUTTON)

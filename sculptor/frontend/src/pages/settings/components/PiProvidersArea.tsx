@@ -1,13 +1,19 @@
-import { Badge, Box, Flex, Spinner, Text } from "@radix-ui/themes";
-import { useAtomValue } from "jotai";
-import { type ReactElement, useMemo, useState } from "react";
+import { Badge, Box, Button, Flex, Spinner, Text } from "@radix-ui/themes";
+import { useAtomValue, useSetAtom } from "jotai";
+import { type ReactElement, useCallback, useMemo, useState } from "react";
 
 import type { AuthenticatedProviderEntry } from "~/api";
-import { ElementIds, ProviderGroup } from "~/api";
+import { ElementIds, finishPiLogin, ProviderGroup, startPiLogin } from "~/api";
 import { getProviderDisplayName } from "~/common/modelConstants";
-import { piAuthenticatedProvidersAtom } from "~/common/state/atoms/piAuthenticatedProviders";
+import { piAuthenticatedProvidersAtom, refreshPiProvidersAtom } from "~/common/state/atoms/piAuthenticatedProviders";
 
+import { PiLoginTerminal } from "./PiLoginTerminal.tsx";
 import { groupProviders, isAuthenticated } from "./piProvidersGrouping.ts";
+
+type ActiveLogin = {
+  loginId: string;
+  mode: "login" | "logout";
+};
 
 const SESSION_ONLY_EXPLAINER = "Works this session via environment variables; full standalone persistence is deferred.";
 
@@ -108,6 +114,93 @@ const ConnectedSource = ({ provider }: { provider: AuthenticatedProviderEntry })
   );
 };
 
+const ProviderActions = ({ provider }: { provider: AuthenticatedProviderEntry }): ReactElement => {
+  const refreshProviders = useSetAtom(refreshPiProvidersAtom);
+  const [activeLogin, setActiveLogin] = useState<ActiveLogin | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const startLogin = useCallback(
+    async (mode: "login" | "logout"): Promise<void> => {
+      setErrorMessage(null);
+      try {
+        const response = await startPiLogin({
+          body: { mode, providerId: provider.providerId },
+          meta: { skipWsAck: true },
+        });
+        if (response.data) {
+          setActiveLogin({ loginId: response.data.loginId, mode });
+        }
+      } catch {
+        setErrorMessage("Could not start the pi session. Check that pi is installed in Settings → Pi.");
+      }
+    },
+    [provider.providerId],
+  );
+
+  const handleDone = useCallback(async (): Promise<void> => {
+    const login = activeLogin;
+    setActiveLogin(null);
+    if (login !== null) {
+      try {
+        await finishPiLogin({ path: { login_id: login.loginId }, meta: { skipWsAck: true } });
+      } catch {
+        // Best-effort teardown; the PTY is also reaped on WebSocket close.
+      }
+    }
+    // Refetch the Settings list so the provider moves Connected<->Available; the
+    // picker is refreshed separately by the backend's login-teardown broadcast.
+    refreshProviders((count) => count + 1);
+  }, [activeLogin, refreshProviders]);
+
+  if (activeLogin !== null) {
+    const verb = activeLogin.mode === "login" ? "authenticate" : "log out";
+    return (
+      <Flex direction="column" gap="2" data-testid={ElementIds.PI_PROVIDER_ACTIONS}>
+        <Text size="2" color="gray">
+          In the pi selector below, choose <Text weight="bold">{displayNameFor(provider)}</Text> to {verb}, then click
+          Done.
+        </Text>
+        <PiLoginTerminal loginId={activeLogin.loginId} onDone={handleDone} />
+      </Flex>
+    );
+  }
+
+  const isConnectedViaEnvOnly = provider.envDetected && !provider.inAuthJson;
+  return (
+    <Flex direction="column" gap="2" data-testid={ElementIds.PI_PROVIDER_ACTIONS}>
+      <Flex gap="2" align="center">
+        <Button
+          variant="solid"
+          onClick={() => void startLogin("login")}
+          data-testid={ElementIds.PI_PROVIDER_AUTHENTICATE_BUTTON}
+        >
+          {provider.inAuthJson ? "Re-authenticate" : "Authenticate"}
+        </Button>
+        {provider.inAuthJson && (
+          <Button
+            variant="soft"
+            color="red"
+            onClick={() => void startLogin("logout")}
+            data-testid={ElementIds.PI_PROVIDER_DISCONNECT_BUTTON}
+          >
+            Disconnect
+          </Button>
+        )}
+      </Flex>
+      {isConnectedViaEnvOnly && (
+        <Text size="2" color="gray">
+          Connected via environment variable {provider.envVarNames[0] ?? "—"} — clear that variable to disconnect.
+        </Text>
+      )}
+      {errorMessage !== null && (
+        <Text size="2" color="red">
+          {errorMessage}
+        </Text>
+      )}
+    </Flex>
+  );
+};
+
 const ProviderDetail = ({ provider }: { provider: AuthenticatedProviderEntry }): ReactElement => {
   const isSessionOnly = provider.group === ProviderGroup.SESSION_ONLY;
   const isConnected = isAuthenticated(provider);
@@ -148,10 +241,9 @@ const ProviderDetail = ({ provider }: { provider: AuthenticatedProviderEntry }):
         Unlocks {displayNameFor(provider)} models
       </Text>
 
-      {/* Mount point for Authenticate/Disconnect, the inline login terminal, and the
-          paste-key form added in later tasks. Session-only providers carry no auth
-          actions (their persistence is deferred). */}
-      {!isSessionOnly && <Box data-testid={ElementIds.PI_PROVIDER_ACTIONS} />}
+      {/* Session-only providers carry no auth actions (their persistence is
+          deferred); the paste-key form (Task 4.2) mounts alongside these actions. */}
+      {!isSessionOnly && <ProviderActions provider={provider} />}
     </Flex>
   );
 };
@@ -214,7 +306,9 @@ export const PiProvidersArea = (): ReactElement => {
               onSelect={setSelectedId}
             />
           </Box>
-          <Box flexGrow="1">{selected !== null && <ProviderDetail provider={selected} />}</Box>
+          <Box flexGrow="1">
+            {selected !== null && <ProviderDetail key={selected.providerId} provider={selected} />}
+          </Box>
         </Flex>
       )}
     </Flex>

@@ -468,6 +468,10 @@ class ElementIDs(StrEnum):
     # Mount point for the Authenticate/Disconnect actions, inline login terminal, and
     # paste-key form added in later tasks.
     PI_PROVIDER_ACTIONS = "pi-provider-actions"
+    PI_PROVIDER_AUTHENTICATE_BUTTON = "pi-provider-authenticate-button"
+    PI_PROVIDER_DISCONNECT_BUTTON = "pi-provider-disconnect-button"
+    PI_LOGIN_TERMINAL = "pi-login-terminal"
+    PI_LOGIN_DONE_BUTTON = "pi-login-done-button"
 
     # Custom backend settings (in Experimental tab)
     SETTINGS_CUSTOM_BACKEND_COMMAND = "SETTINGS_CUSTOM_BACKEND_COMMAND"
