@@ -74,6 +74,49 @@ def compute_authenticated_provider_ids() -> set[str]:
     return read_auth_json_provider_ids() | detect_env_authenticated_provider_ids()
 
 
+class PiAuthJsonError(Exception):
+    """Raised when an existing auth.json cannot be safely merged into."""
+
+
+def write_auth_json_entry(provider_id: str, key_value: str) -> None:
+    """Merge one provider's api-key entry into ``auth.json``, preserving all others.
+
+    Reads the current file (a missing file starts from ``{}``), sets
+    ``data[provider_id] = {"type": "api_key", "key": key_value}``, and writes back
+    atomically with mode ``0600``. The value is stored verbatim — a literal key, a
+    ``$ENV`` reference, or a ``!command`` — so pi resolves it at read time and no
+    secret is resolved/logged here. A garbled (non-dict / unparseable) existing file
+    raises rather than clobbering the user's credentials.
+    """
+    auth_json_path = resolve_pi_auth_json_path()
+    data: dict[str, object] = {}
+    if auth_json_path.exists():
+        try:
+            parsed = json.loads(auth_json_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, ValueError) as error:
+            raise PiAuthJsonError(f"existing auth.json at {auth_json_path} is unreadable") from error
+        if not isinstance(parsed, dict):
+            raise PiAuthJsonError(f"existing auth.json at {auth_json_path} is not a JSON object")
+        data = parsed
+    data[provider_id] = {"type": "api_key", "key": key_value}
+    auth_json_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_auth_json_atomically(auth_json_path, json.dumps(data, indent=2))
+
+
+def _write_auth_json_atomically(auth_json_path: Path, content: str) -> None:
+    """Write ``content`` to ``auth_json_path`` via a temp file + rename, mode 0600."""
+    temp_path = auth_json_path.with_name(auth_json_path.name + ".tmp")
+    file_descriptor = os.open(str(temp_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(file_descriptor, "w", encoding="utf-8") as temp_file:
+            temp_file.write(content)
+    except BaseException:
+        temp_path.unlink(missing_ok=True)
+        raise
+    os.replace(temp_path, auth_json_path)
+    os.chmod(auth_json_path, 0o600)
+
+
 def get_provider_auth_statuses() -> tuple[ProviderAuthStatus, ...]:
     """Return the per-provider auth status for every catalog entry, annotated once."""
     auth_json_provider_ids = read_auth_json_provider_ids()

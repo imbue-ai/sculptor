@@ -52,7 +52,11 @@ from sculptor import version
 from sculptor.agents.attachments import resolve_attachment_source
 from sculptor.agents.default.claude_code_sdk.btw_process_manager import NoBtwSessionAvailable
 from sculptor.agents.harness_registry import get_harness_for_config
+from sculptor.agents.pi_agent.authenticated_providers import PiAuthJsonError
 from sculptor.agents.pi_agent.authenticated_providers import get_provider_auth_statuses
+from sculptor.agents.pi_agent.authenticated_providers import write_auth_json_entry
+from sculptor.agents.pi_agent.provider_catalog import ProviderGroup
+from sculptor.agents.pi_agent.provider_catalog import get_provider_entry
 from sculptor.common.plugin import get_plugin_dirs
 from sculptor.config.settings import SculptorSettings
 from sculptor.config.user_config import UserConfig
@@ -117,6 +121,7 @@ from sculptor.services.git_repo_service.error_types import GitRepoError
 from sculptor.services.git_repo_service.error_types import GitRepoNotFoundError
 from sculptor.services.git_repo_service.git_commands import run_git_command_local
 from sculptor.services.pi_login_service import PiLoginMode
+from sculptor.services.pi_login_service import broadcast_pi_models_refresh
 from sculptor.services.pi_login_service import pi_login_terminal_id
 from sculptor.services.project_service.default_implementation import get_most_recently_used_project_id
 from sculptor.services.project_service.default_implementation import update_most_recently_used_project
@@ -219,6 +224,7 @@ from sculptor.web.data_types import OpenFileUiRequest
 from sculptor.web.data_types import OpenInOsRequest
 from sculptor.web.data_types import OpenPathInAppRequest
 from sculptor.web.data_types import OpenPathInAppResult
+from sculptor.web.data_types import PasteKeyRequest
 from sculptor.web.data_types import PiLoginRequest
 from sculptor.web.data_types import PiLoginResponse
 from sculptor.web.data_types import PreviewBranchNameResponse
@@ -4305,6 +4311,34 @@ def finish_pi_login(
     """Tear down a login PTY (Done button) and broadcast a model refresh. Idempotent."""
     services = get_services_from_request_or_websocket(request)
     services.pi_login_service.teardown(login_id)
+    return Response(status_code=204)
+
+
+@router.post("/api/v1/pi/providers/paste-key")
+def write_pi_provider_key(
+    request: Request,
+    paste_key_request: PasteKeyRequest,
+    user_session: UserSession = Depends(get_user_session),
+) -> Response:
+    """Merge a single-key provider's api key into auth.json and refresh running pi agents.
+
+    The optional power-user path (the primary path is interactive /login). The value
+    is written verbatim (literal / $ENV / !command); session-only and unknown
+    providers are rejected (their config is not expressible as a single auth.json key).
+    """
+    entry = get_provider_entry(paste_key_request.provider_id)
+    if entry is None or entry.group is not ProviderGroup.SINGLE_KEY:
+        raise HTTPException(status_code=400, detail="paste-key is only supported for single-key providers")
+    if not paste_key_request.key_value.strip():
+        raise HTTPException(status_code=400, detail="a key value is required")
+    try:
+        write_auth_json_entry(paste_key_request.provider_id, paste_key_request.key_value)
+    except PiAuthJsonError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    services = get_services_from_request_or_websocket(request)
+    with user_session.open_transaction(services) as transaction:
+        broadcast_pi_models_refresh(services.task_service, transaction)
     return Response(status_code=204)
 
 

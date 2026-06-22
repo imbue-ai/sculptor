@@ -302,6 +302,17 @@ class PiLoginResponse(SerializableModel):
     login_id: str
 
 
+class PasteKeyRequest(RequestModel):
+    """Power-user paste-key write for a single-key provider.
+
+    ``key_value`` is stored verbatim in auth.json (a literal key, a ``$ENV``
+    reference, or a ``!command``); pi resolves it at read time.
+    """
+
+    provider_id: str
+    key_value: str
+
+
 class RecentWorkspaceResponse(SerializableModel):
     """Workspace with denormalized project info and computed fields for cross-project listing."""
 

@@ -10,11 +10,13 @@ from pathlib import Path
 
 import pytest
 
+from sculptor.agents.pi_agent.authenticated_providers import PiAuthJsonError
 from sculptor.agents.pi_agent.authenticated_providers import compute_authenticated_provider_ids
 from sculptor.agents.pi_agent.authenticated_providers import detect_env_authenticated_provider_ids
 from sculptor.agents.pi_agent.authenticated_providers import get_provider_auth_statuses
 from sculptor.agents.pi_agent.authenticated_providers import read_auth_json_provider_ids
 from sculptor.agents.pi_agent.authenticated_providers import resolve_pi_auth_json_path
+from sculptor.agents.pi_agent.authenticated_providers import write_auth_json_entry
 from sculptor.agents.pi_agent.provider_catalog import get_provider_catalog
 
 
@@ -116,6 +118,51 @@ def test_provider_statuses_cover_every_entry_once() -> None:
     catalog_ids = [entry.provider_id for entry in get_provider_catalog()]
     assert sorted(status_ids) == sorted(catalog_ids)
     assert len(status_ids) == len(set(status_ids))
+
+
+def test_write_creates_auth_json_0600(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path))
+    write_auth_json_entry("openrouter", "sk-or-123")
+
+    auth_json_path = tmp_path / "auth.json"
+    assert json.loads(auth_json_path.read_text(encoding="utf-8")) == {
+        "openrouter": {"type": "api_key", "key": "sk-or-123"}
+    }
+    assert (auth_json_path.stat().st_mode & 0o777) == 0o600
+
+
+def test_write_merges_and_preserves_other_entries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path))
+    (tmp_path / "auth.json").write_text(
+        json.dumps({"openai": {"type": "api_key", "key": "sk-x"}, "weird-oauth": {"type": "oauth", "token": "t"}}),
+        encoding="utf-8",
+    )
+
+    write_auth_json_entry("anthropic", "sk-ant-y")
+
+    data = json.loads((tmp_path / "auth.json").read_text(encoding="utf-8"))
+    assert data["openai"] == {"type": "api_key", "key": "sk-x"}
+    assert data["weird-oauth"] == {"type": "oauth", "token": "t"}
+    assert data["anthropic"] == {"type": "api_key", "key": "sk-ant-y"}
+
+
+def test_write_stores_env_and_command_values_verbatim(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path))
+    write_auth_json_entry("openai", "$MY_OPENAI_KEY")
+    write_auth_json_entry("anthropic", "!op read 'op://vault/key'")
+
+    data = json.loads((tmp_path / "auth.json").read_text(encoding="utf-8"))
+    assert data["openai"]["key"] == "$MY_OPENAI_KEY"
+    assert data["anthropic"]["key"] == "!op read 'op://vault/key'"
+
+
+def test_write_raises_on_garbled_existing_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path))
+    (tmp_path / "auth.json").write_text("{not valid json", encoding="utf-8")
+    with pytest.raises(PiAuthJsonError):
+        write_auth_json_entry("anthropic", "sk-ant-z")
+    # The garbled file is left untouched (not clobbered).
+    assert (tmp_path / "auth.json").read_text(encoding="utf-8") == "{not valid json"
 
 
 def _clear_all_catalog_env_vars(monkeypatch: pytest.MonkeyPatch) -> None:

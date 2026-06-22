@@ -4,6 +4,7 @@ provider catalog crossed with authentication status (auth.json + env detection).
 
 import json
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -63,3 +64,44 @@ def test_authenticated_providers_cover_full_catalog_with_groups(
     by_id = {entry["providerId"]: entry for entry in providers}
     assert by_id["amazon-bedrock"]["group"] == "session_only"
     assert by_id["anthropic"]["group"] == "single_key"
+
+
+def test_paste_key_writes_entry_and_broadcasts(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path))
+    broadcast_mock = MagicMock(return_value=0)
+    monkeypatch.setattr("sculptor.web.app.broadcast_pi_models_refresh", broadcast_mock)
+
+    response = client.post(
+        "/api/v1/pi/providers/paste-key",
+        json={"providerId": "openrouter", "keyValue": "sk-or-abc"},
+    )
+    assert response.status_code == 204
+
+    auth_json = json.loads((tmp_path / "auth.json").read_text(encoding="utf-8"))
+    assert auth_json["openrouter"] == {"type": "api_key", "key": "sk-or-abc"}
+    broadcast_mock.assert_called_once()
+
+
+def test_paste_key_rejects_session_only_provider(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path))
+    response = client.post(
+        "/api/v1/pi/providers/paste-key",
+        json={"providerId": "amazon-bedrock", "keyValue": "x"},
+    )
+    assert response.status_code == 400
+    assert not (tmp_path / "auth.json").exists()
+
+
+def test_paste_key_rejects_unknown_provider(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path))
+    response = client.post(
+        "/api/v1/pi/providers/paste-key",
+        json={"providerId": "does-not-exist", "keyValue": "x"},
+    )
+    assert response.status_code == 400
