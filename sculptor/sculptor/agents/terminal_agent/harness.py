@@ -37,6 +37,7 @@ class TerminalHarness(Harness):
             supports_interruption=False,
             supports_file_references=False,
             supports_model_selection=False,
+            uses_backend_model_catalog=False,
         )
 
 

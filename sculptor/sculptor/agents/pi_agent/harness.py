@@ -156,6 +156,10 @@ class PiHarness(Harness):
             # catalog and set_model honors a pick (see the get_available_models
             # override and agent_wrapper's set_model handling).
             supports_model_selection=True,
+            # Pi sources its own catalog (filtered to the authenticated providers), so
+            # an empty list means "no authenticated providers" -> the login CTA, not the
+            # built-in Claude fallback.
+            uses_backend_model_catalog=True,
         )
 
     def get_available_models(self, task_state: AgentTaskStateV2 | None) -> list[ModelOption]:
