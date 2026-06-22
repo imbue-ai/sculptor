@@ -1,5 +1,5 @@
 import { ContextMenu } from "@radix-ui/themes";
-import type { ReactElement, ReactNode } from "react";
+import type { ReactElement } from "react";
 
 import { ElementIds } from "~/api";
 import { copyImageToClipboard } from "~/common/copyImageToClipboard.ts";
@@ -7,8 +7,10 @@ import { copyImageToClipboard } from "~/common/copyImageToClipboard.ts";
 type CopyImageContextMenuProps = {
   /** Full-size image URL (blob: or data:) to copy to the clipboard. */
   url: string;
-  /** The image element to attach the right-click menu to. */
-  children: ReactNode;
+  // A single image element. `@radix-ui/themes` strips `asChild` from its
+  // Trigger, so it wraps this in a span rather than reusing the element
+  // directly; requiring one ReactElement keeps the wrapped content well-formed.
+  children: ReactElement;
 };
 
 export const CopyImageContextMenu = ({ url, children }: CopyImageContextMenuProps): ReactElement => {
