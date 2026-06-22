@@ -130,21 +130,20 @@ _FAKE_PI_MODELS: list[dict[str, str]] = [
     {"id": "fake-pi-haiku-4-5", "name": "FakePi Haiku 4.5", "provider": "anthropic"},
 ]
 
-# The model `get_state` reports as current until a `set_model` changes it (pi
-# defaults to its newest model; FakePi mirrors that with the first catalog entry).
-_DEFAULT_FAKE_PI_MODEL: dict[str, str] = _FAKE_PI_MODELS[0]
-
 # Env var a test sets (via update_environment) to override the reported catalog with
 # a JSON array of {id, name, provider} entries — e.g. to span multiple providers and
-# exercise the authenticated-set filter.
+# exercise the authenticated-set filter, or `[]` to model a no-authenticated-providers
+# state (empty catalog + no current model).
 _FAKE_PI_CATALOG_ENV_VAR = "FAKE_PI_CATALOG"
 
 
 def _resolve_fake_pi_models() -> list[dict[str, str]]:
     """Return the catalog `get_available_models` reports.
 
-    Falls back to the fixed `_FAKE_PI_MODELS` when `FAKE_PI_CATALOG` is unset or
-    not a non-empty JSON list, so existing pi integration tests are unaffected.
+    A JSON list in `FAKE_PI_CATALOG` is honored verbatim, including the empty list
+    (which models "no authenticated providers"). Falls back to the fixed
+    `_FAKE_PI_MODELS` when the var is unset or not a JSON list, so existing pi
+    integration tests are unaffected.
     """
     raw = os.environ.get(_FAKE_PI_CATALOG_ENV_VAR)
     if not raw:
@@ -153,9 +152,16 @@ def _resolve_fake_pi_models() -> list[dict[str, str]]:
         parsed = json.loads(raw)
     except (json.JSONDecodeError, ValueError):
         return _FAKE_PI_MODELS
-    if not isinstance(parsed, list) or not parsed:
+    if not isinstance(parsed, list):
         return _FAKE_PI_MODELS
     return parsed
+
+
+def _default_fake_pi_current_model() -> dict[str, str]:
+    """The model `get_state` reports as current (the first catalog entry, mirroring
+    pi defaulting to its newest model); an empty catalog reports no current model."""
+    models = _resolve_fake_pi_models()
+    return dict(models[0]) if models else {}
 
 
 def _skill_invocation_name(prompt_text: str) -> str | None:
@@ -260,7 +266,7 @@ class _SessionState(MutableModel):
     # The model `get_state` reports as current; a `set_model` updates it in place.
     # In-memory only (not persisted): the model-selection test exercises a switch
     # within one process, and PiAgent re-fetches the model at every start.
-    current_model: dict[str, str] = Field(default_factory=lambda: dict(_resolve_fake_pi_models()[0]))
+    current_model: dict[str, str] = Field(default_factory=_default_fake_pi_current_model)
 
     @classmethod
     def load(cls, session_dir: Path | None, session_id: str) -> "_SessionState":

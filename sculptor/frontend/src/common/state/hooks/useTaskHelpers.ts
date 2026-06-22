@@ -25,6 +25,7 @@ import {
   taskSupportsSkillsAtomFamily,
   taskSupportsSubAgentsAtomFamily,
   taskSupportsToolUseRenderingAtomFamily,
+  taskUsesBackendModelCatalogAtomFamily,
 } from "../atoms/tasks";
 
 export const useTask = (taskId: string): CodingAgentTaskView | null => {
@@ -112,6 +113,10 @@ export const useTaskSupportsChatInterface = (taskId: string): boolean | undefine
 /** Subscribe to only the task's `supports_model_selection` capability. */
 export const useTaskSupportsModelSelection = (taskId: string): boolean | undefined =>
   useAtomValue(taskSupportsModelSelectionAtomFamily(taskId));
+
+/** Subscribe to only the task's `uses_backend_model_catalog` capability (pi). */
+export const useTaskUsesBackendModelCatalog = (taskId: string): boolean | undefined =>
+  useAtomValue(taskUsesBackendModelCatalogAtomFamily(taskId));
 
 /** Subscribe to only the task's `accepts_automated_prompts` field — true
  * only for registered terminal agents whose registration opted in. */

@@ -476,6 +476,9 @@ class ElementIDs(StrEnum):
     PI_PASTE_KEY_TOGGLE = "pi-paste-key-toggle"
     PI_PASTE_KEY_INPUT = "pi-paste-key-input"
     PI_PASTE_KEY_SAVE = "pi-paste-key-save"
+    # Model-picker empty state when a pi agent has no authenticated providers.
+    PI_PICKER_EMPTY_STATE = "pi-picker-empty-state"
+    PI_PICKER_LOGIN_CTA = "pi-picker-login-cta"
 
     # Custom backend settings (in Experimental tab)
     SETTINGS_CUSTOM_BACKEND_COMMAND = "SETTINGS_CUSTOM_BACKEND_COMMAND"
