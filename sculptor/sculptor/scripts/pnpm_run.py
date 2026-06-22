@@ -3,7 +3,7 @@ Runs frontend `pnpm run` commands from python.
 
 This allows us to control the behavior of these commands and ensure that they are run in the correct environment.
 
-Run `uv run sculptor_npm_run --help` to see the available commands.
+Run `uv run sculptor_pnpm_run --help` to see the available commands.
 
 Note: this command must be run from within the Generally Intelligent repo.
 """
@@ -42,7 +42,7 @@ def install_node_packages(frontend_path: Path = get_frontend_path(), is_auto_ver
     subprocess.run(("pnpm", "install", "--silent"), check=True, cwd=frontend_path)
 
 
-def run_npm_command(
+def run_pnpm_command(
     sub_command: tuple[str, ...],
     other_args: list[str],
     help: bool = False,
@@ -83,7 +83,7 @@ app = Typer(pretty_exceptions_enable=False)
 def setup(
     skip_install: bool = typer.Option(False, "--skip-install", is_flag=True),
 ) -> None:
-    """Run npm commands with proper environment setup."""
+    """Run pnpm commands with proper environment setup."""
     is_help_present = any(arg in sys.argv for arg in ["--help", "-h"])
     if not skip_install and not is_help_present:
         install_node_packages()
@@ -106,7 +106,7 @@ def _register_command(cmd: tuple[str, ...]) -> None:
         is_auto_verifying_node: bool = typer.Option(True, "--is-auto-verifying-node/--no-is-auto-verifying-node"),
         allow_failures: bool = typer.Option(False, "--allow-failures", is_flag=True),
     ) -> None:
-        run_npm_command(
+        run_pnpm_command(
             sub_command=cmd,
             other_args=other_args or [],
             help=help,

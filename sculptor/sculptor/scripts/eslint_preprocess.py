@@ -4,7 +4,7 @@ ESLint preprocessing script for pre-commit hooks.
 
 This script:
 1. Configures the correct Node version via nvm
-2. Installs npm dependencies
+2. Installs frontend dependencies via pnpm
 """
 
 import shlex
@@ -55,7 +55,7 @@ def setup_node_version(frontend_path: Path) -> None:
             print("  Continuing anyway...")
 
 
-def install_npm_dependencies(frontend_path: Path) -> None:
+def install_frontend_dependencies(frontend_path: Path) -> None:
     """Install frontend dependencies via pnpm."""
     print("Installing frontend dependencies...")
     try:
@@ -116,8 +116,8 @@ def main() -> None:
     # 1. Setup Node version via nvm
     setup_node_version(frontend_path)
 
-    # 2. Install npm dependencies
-    install_npm_dependencies(frontend_path)
+    # 2. Install frontend dependencies
+    install_frontend_dependencies(frontend_path)
 
     # 3. Print files to be linted
     print_files_to_lint(frontend_path, files_to_check)
