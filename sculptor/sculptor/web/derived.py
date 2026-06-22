@@ -403,12 +403,13 @@ class CodingAgentTaskView(TaskView[AgentTaskInputsV2, AgentTaskStateV2]):
                 return message.model_name
         # Fall back to the model selected at agent creation time, then to the
         # product default. Fable is currently disabled with an indefinite
-        # timeline, so the default falls back to Opus (SCU-1576); Fable stays
-        # available in the switcher for if/when it returns.
+        # timeline, so the default falls back to the 1M-context Opus
+        # (CLAUDE_4_OPUS, shown as "Opus (1M)"; SCU-1576); Fable stays available
+        # in the switcher for if/when it returns.
         input_data = self.task.input_data
         if isinstance(input_data, AgentTaskInputsV2) and input_data.default_model is not None:
             return input_data.default_model
-        return LLMModel.CLAUDE_4_OPUS_200K
+        return LLMModel.CLAUDE_4_OPUS
 
     @computed_field
     @property
