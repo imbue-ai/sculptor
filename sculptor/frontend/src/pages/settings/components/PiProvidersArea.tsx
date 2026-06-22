@@ -8,6 +8,7 @@ import { getProviderDisplayName } from "~/common/modelConstants";
 import { piAuthenticatedProvidersAtom, refreshPiProvidersAtom } from "~/common/state/atoms/piAuthenticatedProviders";
 
 import { PiLoginTerminal } from "./PiLoginTerminal.tsx";
+import { PiPasteKeyForm } from "./PiPasteKeyForm.tsx";
 import { groupProviders, isAuthenticated } from "./piProvidersGrouping.ts";
 
 type ActiveLogin = {
@@ -197,6 +198,7 @@ const ProviderActions = ({ provider }: { provider: AuthenticatedProviderEntry })
           {errorMessage}
         </Text>
       )}
+      <PiPasteKeyForm providerId={provider.providerId} onSaved={() => refreshProviders((count) => count + 1)} />
     </Flex>
   );
 };

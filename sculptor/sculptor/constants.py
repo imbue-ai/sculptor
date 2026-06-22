@@ -472,6 +472,10 @@ class ElementIDs(StrEnum):
     PI_PROVIDER_DISCONNECT_BUTTON = "pi-provider-disconnect-button"
     PI_LOGIN_TERMINAL = "pi-login-terminal"
     PI_LOGIN_DONE_BUTTON = "pi-login-done-button"
+    # Collapsible power-user paste-key form in the detail pane.
+    PI_PASTE_KEY_TOGGLE = "pi-paste-key-toggle"
+    PI_PASTE_KEY_INPUT = "pi-paste-key-input"
+    PI_PASTE_KEY_SAVE = "pi-paste-key-save"
 
     # Custom backend settings (in Experimental tab)
     SETTINGS_CUSTOM_BACKEND_COMMAND = "SETTINGS_CUSTOM_BACKEND_COMMAND"

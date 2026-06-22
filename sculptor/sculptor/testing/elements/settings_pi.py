@@ -111,3 +111,15 @@ class PlaywrightPiSettingsElement(PlaywrightIntegrationTestElement):
     def get_login_done_button(self) -> Locator:
         """Get the Done button that tears down the inline login session."""
         return self.get_by_test_id(ElementIDs.PI_LOGIN_DONE_BUTTON)
+
+    def get_paste_key_toggle(self) -> Locator:
+        """Get the collapsible 'Paste API key' toggle (single-key providers only)."""
+        return self.get_by_test_id(ElementIDs.PI_PASTE_KEY_TOGGLE)
+
+    def get_paste_key_input(self) -> Locator:
+        """Get the paste-key value input field."""
+        return self.get_by_test_id(ElementIDs.PI_PASTE_KEY_INPUT)
+
+    def get_paste_key_save(self) -> Locator:
+        """Get the paste-key Save button."""
+        return self.get_by_test_id(ElementIDs.PI_PASTE_KEY_SAVE)
