@@ -375,6 +375,14 @@ class SculptorInstance:
         shipping config; add new entries when a test starts toggling a
         new flag.
 
+        The most-recently-used harness (lastUsedAgentType) is the same kind
+        of shared, persistent state: the server records it whenever an agent
+        is created with an explicit type, and a later create that omits the
+        type resolves back to it. Without resetting it, a prior test that
+        created a Pi or terminal agent makes the next agent-type-less create
+        resolve to that harness (e.g. Pi, whose binary is absent in CI)
+        instead of Claude, so it is cleared back to None here too.
+
         Transient PUT failures under load would silently leave a flag stuck,
         so we retry and raise loudly if the reset never succeeds — a leaked
         flag is better caught here than as a failure later.
@@ -399,15 +407,23 @@ class SculptorInstance:
         config = response.json()
         # Persistent flags that tests can mutate. Each must be reset between
         # tests because the user config lives on disk in the shared instance.
+        # enablePiAgent is included because it gates harness resolution: a
+        # leaked "pi" most-recently-used type only resolves to Pi while it is
+        # on, so clearing it keeps an omitted agent_type defaulting to Claude.
         flags_to_reset_to_false = (
             "enableInPlaceWorkspaces",
             "enableCloneWorkspaces",
+            "enablePiAgent",
         )
-        needs_reset = any(config.get(flag) is not False for flag in flags_to_reset_to_false)
-        if not needs_reset:
+        # The recorded most-recently-used harness (see the docstring); reset to
+        # None so an agent-type-less create defaults to Claude.
+        needs_flag_reset = any(config.get(flag) is not False for flag in flags_to_reset_to_false)
+        needs_mru_reset = config.get("lastUsedAgentType") not in (None, "")
+        if not (needs_flag_reset or needs_mru_reset):
             return
         for flag in flags_to_reset_to_false:
             config[flag] = False
+        config["lastUsedAgentType"] = None
         last_status: int | None = None
         for attempt in range(3):
             try:
