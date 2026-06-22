@@ -1,0 +1,1142 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pi Provider Auth — Sculptor mocks</title>
+<style>
+  /* ===========================================================================
+     Sculptor dark default theme (monochrome gray accent, indigo primary).
+     Hex values lifted from the app's Radix dark gray + indigo scales and
+     tokens.css (see agent_docs/pi-auth/mocks.context.md). Standalone copy so
+     the mock renders without the app's CSS.
+     ======================================================================== */
+  :root {
+    --gray-1:#111113; --gray-2:#19191b; --gray-3:#222325; --gray-4:#292a2e;
+    --gray-5:#303136; --gray-6:#393a40; --gray-7:#46484f; --gray-8:#5f606a;
+    --gray-9:#6c6e79; --gray-10:#797b86; --gray-11:#b2b3bd; --gray-12:#eeeef0;
+    --gray-a5:rgba(215,221,253,.16); --gray-a8:rgba(224,227,253,.38);
+
+    /* primary action = indigo-9, regardless of (gray) accent */
+    --indigo-3:#172448; --indigo-5:#243974; --indigo-9:#3d63dd; --indigo-10:#3f5cb0;
+    --indigo-11:#93b4ff;
+    --green-2:#132d21; --green-3:#113b29; --green-5:#20573e; --green-9:#30a46c;
+    --green-11:#3dd68c;
+    --red-3:#3c181a; --red-5:#541b1f; --red-9:#e5484d; --red-11:#ff9592;
+    --amber-3:#341c00; --amber-9:#ffc53d; --amber-11:#ffca16;
+
+    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px;
+    --space-6:24px; --space-7:28px; --space-8:32px; --space-9:36px;
+    --radius-1:4px; --radius-2:6px; --radius-3:8px; --radius-4:12px; --radius-full:9999px;
+    --fs-1:12px; --fs-2:14px; --fs-3:16px; --fs-4:18px; --fs-5:20px;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --shadow-overlay:0 4px 16px rgba(0,0,0,.5);
+  }
+
+  * { box-sizing:border-box; }
+  html,body { margin:0; }
+  body {
+    background:#0c0c0e;
+    color:var(--gray-12);
+    font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    font-size:var(--fs-2);
+    line-height:1.5;
+    padding:24px 24px 80px;
+  }
+
+  /* ---- doc-level layout (not part of the app — the mock gallery itself) ---- */
+  .doc-head { max-width:1080px; margin:0 auto 20px; }
+  .doc-head h1 { font-size:22px; margin:0 0 6px; letter-spacing:-.01em; }
+  .doc-head p { color:var(--gray-11); margin:0; max-width:760px; }
+  .doc-head code { font-family:var(--mono); font-size:12px; color:var(--indigo-11);
+    background:var(--gray-3); padding:1px 5px; border-radius:4px; }
+
+  .variant-tabs { max-width:1080px; margin:18px auto 0; display:flex; gap:6px;
+    border-bottom:1px solid var(--gray-5); padding-bottom:0; flex-wrap:wrap; }
+  .variant-tab { appearance:none; border:0; background:transparent; cursor:pointer;
+    color:var(--gray-11); font:inherit; font-weight:600; padding:10px 16px;
+    border-bottom:2px solid transparent; margin-bottom:-1px; border-radius:6px 6px 0 0; }
+  .variant-tab:hover { color:var(--gray-12); background:var(--gray-3); }
+  .variant-tab.active { color:var(--gray-12); border-bottom-color:var(--indigo-9); }
+  .variant-tab span { display:block; font-weight:400; font-size:11px; color:var(--gray-9); }
+
+  .variant { max-width:1080px; margin:0 auto; }
+  .variant[hidden] { display:none; }
+  .variant-intro { padding:18px 2px 4px; }
+  .variant-intro h2 { font-size:16px; margin:0 0 6px; }
+  .variant-intro p { color:var(--gray-11); margin:0; max-width:820px; font-size:13px; }
+  .variant-intro .sig { display:inline-block; margin-top:8px; font-size:12px;
+    color:var(--gray-12); background:var(--gray-3); border:1px solid var(--gray-5);
+    border-radius:var(--radius-full); padding:3px 12px; }
+
+  /* state labels between screens */
+  .state-label { display:flex; align-items:baseline; gap:10px; margin:30px 2px 10px; }
+  .state-label .n { font-family:var(--mono); font-size:11px; color:var(--gray-1);
+    background:var(--gray-11); border-radius:var(--radius-full); padding:2px 9px;
+    font-weight:700; }
+  .state-label h3 { font-size:14px; margin:0; }
+  .state-label .desc { color:var(--gray-9); font-size:12px; }
+
+  /* ---- app window chrome ---- */
+  .win { border:1px solid var(--gray-5); border-radius:10px; overflow:hidden;
+    background:var(--gray-2); box-shadow:0 12px 40px rgba(0,0,0,.45); }
+  .topbar { height:40px; display:flex; align-items:center; gap:12px; padding:0 12px;
+    background:var(--gray-3); border-bottom:1px solid var(--gray-a5); }
+  .tb-dots { display:flex; gap:7px; }
+  .tb-dots i { width:11px; height:11px; border-radius:50%; display:block; }
+  .tb-dots i:nth-child(1){ background:#f25c54;} .tb-dots i:nth-child(2){ background:#f7b032;}
+  .tb-dots i:nth-child(3){ background:#34c759;}
+  .tb-icon { width:24px; height:24px; border-radius:6px; display:grid; place-items:center;
+    color:var(--gray-11); }
+  .tabs { display:flex; gap:4px; margin-left:6px; }
+  .wtab { font-size:12px; color:var(--gray-11); padding:4px 12px; border-radius:6px;
+    display:flex; align-items:center; gap:7px; }
+  .wtab.active { background:var(--gray-1); color:var(--gray-12); }
+  .wtab .pi-chip { font-size:9px; background:var(--indigo-3); color:var(--indigo-11);
+    border-radius:4px; padding:1px 5px; font-weight:600; letter-spacing:.03em; }
+  .tb-right { margin-left:auto; display:flex; gap:4px; color:var(--gray-10); }
+
+  /* settings page shell */
+  .settings { display:flex; min-height:560px; background:var(--gray-2); }
+  .snav { width:240px; flex-shrink:0; padding:26px 16px; border-right:1px solid var(--gray-a5); }
+  .snav .grp { font-size:10px; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--gray-9); padding:0 12px; margin:14px 0 6px; }
+  .snav .grp:first-child { margin-top:0; }
+  .nav-item { display:flex; align-items:center; gap:10px; padding:8px 12px;
+    border-radius:var(--radius-3); color:var(--gray-11); font-size:13px; cursor:pointer; }
+  .nav-item:hover { background:var(--gray-4); color:var(--gray-12); }
+  .nav-item.active { background:var(--gray-4); color:var(--gray-12); font-weight:500; }
+  .scontent { flex:1; overflow:auto; }
+  .scontent-inner { padding:30px 28px; max-width:760px; }
+  .page-title { font-size:20px; margin:0 0 4px; letter-spacing:-.01em; }
+  .page-sub { color:var(--gray-11); font-size:13px; margin:0 0 24px; }
+  .section-eyebrow { font-size:10px; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--gray-9); margin:26px 0 10px; }
+
+  /* cards & rows (PiSettingsSection / SettingRow) */
+  .card { background:var(--gray-1); border:1px solid var(--gray-5); border-radius:var(--radius-4);
+    overflow:hidden; }
+  .card.pad { padding:4px 18px; }
+  .srow { display:flex; align-items:center; gap:18px; padding:16px 2px;
+    border-bottom:1px solid var(--gray-4); }
+  .srow:last-child { border-bottom:0; }
+  .srow .lbl { flex:1 1 auto; min-width:0; }
+  .srow .lbl .t { font-weight:500; display:flex; align-items:center; gap:8px; }
+  .srow .lbl .d { color:var(--gray-11); font-size:12.5px; margin-top:2px; }
+  .srow .ctl { flex-shrink:0; display:flex; align-items:center; gap:8px; }
+
+  /* provider identity */
+  .prov { display:flex; align-items:center; gap:12px; min-width:0; }
+  .pmark { width:30px; height:30px; border-radius:8px; flex-shrink:0; display:grid;
+    place-items:center; font-weight:700; font-size:13px; color:var(--gray-12);
+    background:var(--gray-4); border:1px solid var(--gray-6); }
+  .pmark.anthropic{ background:#3a2417; border-color:#5c3a22; color:#e8a06a;}
+  .pmark.openai{ background:#0f2c24; border-color:#1c4a3c; color:#5fcfa8;}
+  .pmark.google{ background:#11233f; border-color:#1d3a66; color:#7aa7f0;}
+  .pmark.openrouter{ background:#2a223f; border-color:#473a66; color:#b69cf0;}
+  .pmark.groq{ background:#3a1717; border-color:#5c2222; color:#f08a8a;}
+  .pmark.mistral{ background:#3a2c10; border-color:#5c481c; color:#f0c46a;}
+  .pmark.xai{ background:#222325; border-color:#46484f; color:#eeeef0;}
+  .pmark.deepseek{ background:#13233a; border-color:#1f3a5c; color:#6aa0e8;}
+  .pmark.azure,.pmark.bedrock,.pmark.cloudflare{ background:var(--gray-3); color:var(--gray-11);}
+  .prov .meta { min-width:0; }
+  .prov .nm { font-weight:500; }
+  .prov .sub { font-size:12px; color:var(--gray-11); margin-top:1px; }
+  .prov .sub code, .mono { font-family:var(--mono); font-size:11.5px; }
+
+  /* badges */
+  .badge { display:inline-flex; align-items:center; gap:5px; font-size:11px;
+    font-weight:600; padding:2px 9px; border-radius:var(--radius-full);
+    border:1px solid transparent; white-space:nowrap; }
+  .badge .dot { width:6px; height:6px; border-radius:50%; }
+  .badge.connected { background:var(--green-2); color:var(--green-11); border-color:var(--green-5); }
+  .badge.connected .dot { background:var(--green-9); }
+  .badge.available { background:var(--gray-3); color:var(--gray-11); border-color:var(--gray-6); }
+  .badge.available .dot { background:var(--gray-8); }
+  .badge.session { background:var(--amber-3); color:var(--amber-11); border-color:#5c4a16; }
+  .badge.session .dot { background:var(--amber-9); }
+  .badge.env { background:var(--gray-3); color:var(--gray-11); border-color:var(--gray-6); }
+
+  /* buttons */
+  .btn { appearance:none; font:inherit; font-size:13px; font-weight:500; cursor:pointer;
+    border-radius:var(--radius-2); padding:7px 14px; border:1px solid transparent;
+    display:inline-flex; align-items:center; gap:7px; white-space:nowrap; }
+  .btn.primary { background:var(--indigo-9); color:#fff; }
+  .btn.primary:hover { background:var(--indigo-10); }
+  .btn.soft { background:var(--gray-4); color:var(--gray-12); }
+  .btn.soft:hover { background:var(--gray-5); }
+  .btn.ghost { background:transparent; color:var(--gray-11); padding:7px 10px; }
+  .btn.ghost:hover { background:var(--gray-4); color:var(--gray-12); }
+  .btn.danger { background:transparent; color:var(--red-11); border-color:var(--red-5); }
+  .btn.danger:hover { background:var(--red-3); }
+  .btn.sm { padding:5px 11px; font-size:12px; }
+  .btn .ic { width:14px; height:14px; }
+  .btn.block { width:100%; justify-content:center; }
+
+  .link { color:var(--indigo-11); cursor:pointer; text-decoration:none; }
+  .link:hover { text-decoration:underline; }
+
+  /* callout */
+  .callout { display:flex; gap:10px; align-items:flex-start; padding:11px 14px;
+    border-radius:var(--radius-3); font-size:12.5px; margin-bottom:18px; }
+  .callout.info { background:var(--indigo-3); color:#c4d4ff; border:1px solid #2a3f6b; }
+  .callout.warn { background:var(--amber-3); color:var(--amber-11); border:1px solid #5c4a16; }
+  .callout svg { flex-shrink:0; margin-top:1px; }
+
+  /* empty state */
+  .empty { text-align:center; padding:54px 30px; }
+  .empty .glyph { width:54px; height:54px; border-radius:14px; margin:0 auto 16px;
+    display:grid; place-items:center; background:var(--gray-3); border:1px solid var(--gray-6);
+    color:var(--gray-10); }
+  .empty h4 { margin:0 0 6px; font-size:16px; }
+  .empty p { color:var(--gray-11); font-size:13px; margin:0 auto 18px; max-width:420px; }
+
+  /* terminal (pi /login) */
+  .term { background:#1a1814; border:1px solid var(--gray-6); border-radius:var(--radius-3);
+    overflow:hidden; font-family:var(--mono); }
+  .term-bar { display:flex; align-items:center; gap:8px; padding:7px 12px;
+    background:#211e19; border-bottom:1px solid #322d25; color:#cdbfa8; font-size:11px; }
+  .term-bar .dots { display:flex; gap:6px; } .term-bar .dots i{width:9px;height:9px;border-radius:50%;display:block;}
+  .term-bar .dots i:nth-child(1){background:#f25c54;}.term-bar .dots i:nth-child(2){background:#f7b032;}.term-bar .dots i:nth-child(3){background:#34c759;}
+  .term-bar .ttl { font-family:var(--mono); }
+  .term-bar .tag { margin-left:auto; font-size:10px; color:#8c8270; }
+  .term-body { padding:14px 16px; font-size:12.5px; line-height:1.7; color:#e6e2dc;
+    white-space:pre-wrap; }
+  .term-body .c-prompt{ color:#7fae6e; } .term-body .c-cmd{ color:#e6e2dc; }
+  .term-body .c-dim{ color:#8c8270; } .term-body .c-sel{ color:#f7b032; }
+  .term-body .c-ok{ color:#7fd6a0; } .term-body .c-key{ color:#e8912d; }
+  .term-body .c-url{ color:#7aa7f0; text-decoration:underline; }
+  .cursor { display:inline-block; width:8px; height:15px; background:#e6e2dc;
+    vertical-align:text-bottom; animation:blink 1.1s step-end infinite; }
+  @keyframes blink { 50% { opacity:0; } }
+
+  /* paste-key form */
+  .field { margin-bottom:14px; }
+  .field label { display:block; font-size:12px; font-weight:500; margin-bottom:6px; }
+  .field .hint { color:var(--gray-9); font-weight:400; font-size:11.5px; }
+  .input, .select { width:100%; background:var(--gray-1); border:1px solid var(--gray-6);
+    border-radius:var(--radius-2); color:var(--gray-12); font:inherit; font-size:13px;
+    padding:8px 11px; }
+  .input.mono { font-family:var(--mono); font-size:12px; }
+  .input:focus,.select:focus { outline:2px solid var(--indigo-9); outline-offset:-1px; border-color:var(--indigo-9); }
+  .toggle-row { display:flex; align-items:center; gap:10px; font-size:12.5px; color:var(--gray-11);
+    background:var(--gray-2); border:1px solid var(--gray-5); border-radius:var(--radius-2);
+    padding:10px 12px; }
+  .switch { width:34px; height:20px; border-radius:var(--radius-full); background:var(--indigo-9);
+    position:relative; flex-shrink:0; }
+  .switch::after { content:""; position:absolute; top:2px; right:2px; width:16px; height:16px;
+    border-radius:50%; background:#fff; }
+  .switch.off { background:var(--gray-6); } .switch.off::after { right:auto; left:2px; }
+
+  /* model picker */
+  .composer { background:var(--gray-2); border-top:1px solid var(--gray-a5); padding:14px 16px; }
+  .composer .box { background:var(--gray-1); border:1px solid var(--gray-6);
+    border-radius:var(--radius-4); padding:12px 14px; }
+  .composer .ph { color:var(--gray-9); font-size:13px; }
+  .composer .bar { display:flex; align-items:center; gap:6px; margin-top:12px; }
+  .mtrigger { display:inline-flex; align-items:center; gap:6px; font-size:12px;
+    font-weight:500; color:var(--gray-11); background:transparent; border:0;
+    padding:4px 8px; border-radius:var(--radius-2); cursor:pointer; }
+  .mtrigger:hover { background:var(--gray-4); color:var(--gray-12); }
+  .mtrigger .car { color:var(--gray-9); }
+  .composer .send { margin-left:auto; width:30px; height:30px; border-radius:8px;
+    background:var(--indigo-9); display:grid; place-items:center; color:#fff; }
+
+  .dropdown { width:300px; background:var(--gray-2); border:1px solid var(--gray-6);
+    border-radius:var(--radius-3); box-shadow:var(--shadow-overlay); padding:6px;
+    font-size:13px; }
+  .dd-label { font-size:10.5px; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--gray-9); padding:8px 9px 4px; display:flex; align-items:center; gap:7px; }
+  .dd-label .pm { width:15px; height:15px; border-radius:4px; font-size:9px; }
+  .dd-item { display:flex; align-items:center; gap:9px; padding:7px 9px; border-radius:var(--radius-2);
+    color:var(--gray-12); cursor:pointer; }
+  .dd-item:hover { background:var(--gray-4); }
+  .dd-item.sel { background:var(--gray-4); }
+  .dd-item .ck { width:14px; color:var(--indigo-11); }
+  .dd-item .ck.empty { color:transparent; }
+  .dd-sep { height:1px; background:var(--gray-5); margin:6px 4px; }
+  .dd-empty { padding:20px 16px; text-align:center; }
+  .dd-empty .m { color:var(--gray-11); font-size:12.5px; margin-bottom:12px; }
+
+  /* generic layout helpers */
+  .row { display:flex; align-items:center; gap:10px; }
+  .between { justify-content:space-between; }
+  .wrap { flex-wrap:wrap; }
+  .muted { color:var(--gray-11); }
+  .tiny { font-size:11.5px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .stack-sm > * + * { margin-top:10px; }
+
+  /* provider grid (variant B "add a provider") */
+  .pgrid { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+  .pcell { display:flex; align-items:center; gap:11px; padding:12px 13px; background:var(--gray-1);
+    border:1px solid var(--gray-5); border-radius:var(--radius-3); }
+  .pcell .meta{ flex:1 1 auto; min-width:0; }
+  .pcell .add { color:var(--indigo-11); font-size:18px; line-height:1; }
+
+  /* connected provider card (variant B) */
+  .ccard { background:var(--gray-1); border:1px solid var(--gray-5); border-radius:var(--radius-4);
+    padding:16px 18px; }
+  .ccard + .ccard { margin-top:12px; }
+  .ccard .head { display:flex; align-items:center; gap:12px; }
+  .ccard .models { margin-top:12px; padding-top:12px; border-top:1px solid var(--gray-4);
+    display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { font-size:11px; color:var(--gray-11); background:var(--gray-3); border:1px solid var(--gray-5);
+    border-radius:var(--radius-full); padding:2px 9px; }
+
+  /* master-detail (variant C) */
+  .md { display:flex; min-height:430px; border:1px solid var(--gray-5); border-radius:var(--radius-4);
+    overflow:hidden; background:var(--gray-1); }
+  .md-rail { width:230px; flex-shrink:0; border-right:1px solid var(--gray-4); padding:8px;
+    background:var(--gray-2); overflow:auto; }
+  .rail-grp { font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--gray-9);
+    padding:10px 10px 5px; }
+  .rail-item { display:flex; align-items:center; gap:9px; padding:8px 10px; border-radius:var(--radius-2);
+    cursor:pointer; }
+  .rail-item:hover { background:var(--gray-4); }
+  .rail-item.active { background:var(--gray-4); }
+  .rail-item .pm { width:22px; height:22px; border-radius:6px; font-size:10px; }
+  .rail-item .nm { font-size:13px; flex:1 1 auto; }
+  .rail-item .st { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .rail-item .st.on { background:var(--green-9); } .rail-item .st.off { background:var(--gray-7); }
+  .md-detail { flex:1; padding:22px 24px; overflow:auto; }
+
+  .modal-note { font-size:11px; color:var(--gray-9); margin-top:8px; display:flex; gap:6px; align-items:center; }
+
+  /* modal overlay (shared pi /login) */
+  .overlay { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none;
+    align-items:center; justify-content:center; z-index:1000; padding:30px; }
+  .overlay.open { display:flex; }
+  .modal { width:620px; max-width:100%; background:var(--gray-2); border:1px solid var(--gray-6);
+    border-radius:var(--radius-4); box-shadow:var(--shadow-overlay); overflow:hidden; }
+  .modal-head { display:flex; align-items:center; gap:12px; padding:16px 18px;
+    border-bottom:1px solid var(--gray-5); }
+  .modal-head h4 { margin:0; font-size:15px; }
+  .modal-head .x { margin-left:auto; cursor:pointer; color:var(--gray-10); font-size:18px;
+    width:28px; height:28px; display:grid; place-items:center; border-radius:6px; }
+  .modal-head .x:hover { background:var(--gray-4); color:var(--gray-12); }
+  .modal-body { padding:18px; }
+  .modal-foot { padding:14px 18px; border-top:1px solid var(--gray-5); display:flex;
+    align-items:center; gap:10px; }
+
+  svg.i { width:15px; height:15px; display:block; }
+</style>
+</head>
+<body>
+
+<div class="doc-head">
+  <h1>Pi Provider Authentication — exploration mocks</h1>
+  <p>Three end-to-end directions for <strong>Settings → Pi → Providers</strong> and the
+  authenticated-only model picker. Authenticate is primarily an interactive
+  <code>pi /login</code> (Sculptor's terminal-agent stack); disconnect uses <code>pi /logout</code>;
+  credentials live in the shared <code>~/.pi/agent/auth.json</code>. Each tab shows the full flow:
+  populated list, empty state, the <code>/login</code> terminal, the optional paste-key path,
+  disconnect, and the model picker (populated + empty).</p>
+</div>
+
+<nav class="variant-tabs" id="tabs">
+  <button class="variant-tab" data-v="A">Variant A — Unified list<span>dense single list, inline-expand terminal</span></button>
+  <button class="variant-tab" data-v="B">Variant B — Connected vs. Add<span>two sections, modal login, model counts</span></button>
+  <button class="variant-tab active" data-v="C">Variant C — Master / detail ★<span>chosen direction · rail + embedded terminal</span></button>
+</nav>
+
+<!-- ====================================================================== -->
+<!-- VARIANT A — UNIFIED LIST                                               -->
+<!-- ====================================================================== -->
+<section class="variant" data-variant="A" hidden>
+  <div class="variant-intro">
+    <h2>Variant A — Unified connections list</h2>
+    <p>Every provider lives in one flat, scannable list (like an integrations / connected-accounts
+    page). Each row carries an identity, a status, and a single contextual action — <em>Authenticate</em>
+    when disconnected, <em>Disconnect</em> when connected. Highest information density; the whole provider
+    set is visible in one scroll. The <code>pi /login</code> terminal opens as an overlay.</p>
+    <span class="sig">Signature: one list · row-level status · overflow menu hides paste-key &amp; per-provider extras</span>
+  </div>
+
+  <!-- STATE 1 -->
+  <div class="state-label"><span class="n">1</span><h3>Providers list — populated</h3>
+    <span class="desc">full Settings shell; mix of connected + available; imported-from-pi callout (US-1)</span></div>
+  <div class="win">
+    <div class="topbar">
+      <div class="tb-dots"><i></i><i></i><i></i></div>
+      <div class="tb-icon">⌂</div>
+      <div class="tabs">
+        <div class="wtab active"><span class="pi-chip">PI</span> auth-providers</div>
+        <div class="wtab">payments-api</div>
+      </div>
+      <div class="tb-right"><div class="tb-icon">⚲</div><div class="tb-icon">⚙</div><div class="tb-icon">?</div></div>
+    </div>
+    <div class="settings">
+      <div class="snav">
+        <div class="grp">Settings</div>
+        <div class="nav-item">General</div>
+        <div class="nav-item">Agent</div>
+        <div class="nav-item active">Pi</div>
+        <div class="nav-item">Appearance</div>
+        <div class="nav-item">Keyboard</div>
+        <div class="grp">Advanced</div>
+        <div class="nav-item">Experimental</div>
+      </div>
+      <div class="scontent">
+        <div class="scontent-inner">
+          <h2 class="page-title">Pi</h2>
+          <p class="page-sub">Configure the pi coding agent and the model providers it can use.</p>
+
+          <div class="callout info">
+            <svg class="i" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm.75 4.5a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM7 7.5a.5.5 0 011 0v3.5a.5.5 0 01-1 0V7.5z"/></svg>
+            <div>Imported <strong>2 providers</strong> from your existing pi credentials at <code>~/.pi/agent/auth.json</code> — no re-authentication needed.</div>
+          </div>
+
+          <div class="section-eyebrow">Model providers</div>
+          <div class="card pad">
+            <!-- connected -->
+            <div class="srow">
+              <div class="prov">
+                <div class="pmark anthropic">A</div>
+                <div class="meta"><div class="nm">Anthropic</div>
+                  <div class="sub">Connected via Claude subscription (OAuth) · 24 models</div></div>
+              </div>
+              <div class="ctl">
+                <span class="badge connected"><span class="dot"></span>Connected</span>
+                <button class="btn ghost sm" title="More">⋯</button>
+              </div>
+            </div>
+            <!-- connected (api key env) -->
+            <div class="srow">
+              <div class="prov">
+                <div class="pmark openai">O</div>
+                <div class="meta"><div class="nm">OpenAI</div>
+                  <div class="sub">Connected via API key · <code class="mono">$OPENAI_API_KEY</code> · 42 models</div></div>
+              </div>
+              <div class="ctl">
+                <span class="badge connected"><span class="dot"></span>Connected</span>
+                <button class="btn ghost sm" title="More">⋯</button>
+              </div>
+            </div>
+            <!-- available -->
+            <div class="srow">
+              <div class="prov">
+                <div class="pmark google">G</div>
+                <div class="meta"><div class="nm">Google</div><div class="sub">Gemini · 16 models available</div></div>
+              </div>
+              <div class="ctl">
+                <span class="badge available"><span class="dot"></span>Not connected</span>
+                <button class="btn primary sm" data-open-login="Google">Authenticate</button>
+              </div>
+            </div>
+            <div class="srow">
+              <div class="prov">
+                <div class="pmark openrouter">R</div>
+                <div class="meta"><div class="nm">OpenRouter</div><div class="sub">Aggregator · 300+ models</div></div>
+              </div>
+              <div class="ctl">
+                <span class="badge available"><span class="dot"></span>Not connected</span>
+                <button class="btn primary sm" data-open-login="OpenRouter">Authenticate</button>
+              </div>
+            </div>
+            <div class="srow">
+              <div class="prov">
+                <div class="pmark groq">Q</div>
+                <div class="meta"><div class="nm">Groq</div><div class="sub">Fast inference</div></div>
+              </div>
+              <div class="ctl">
+                <span class="badge available"><span class="dot"></span>Not connected</span>
+                <button class="btn primary sm" data-open-login="Groq">Authenticate</button>
+              </div>
+            </div>
+            <div class="srow">
+              <div class="prov">
+                <div class="pmark mistral">M</div>
+                <div class="meta"><div class="nm">Mistral</div><div class="sub">Mistral &amp; Codestral</div></div>
+              </div>
+              <div class="ctl">
+                <span class="badge available"><span class="dot"></span>Not connected</span>
+                <button class="btn primary sm" data-open-login="Mistral">Authenticate</button>
+              </div>
+            </div>
+            <div class="srow">
+              <div class="prov">
+                <div class="pmark xai">X</div>
+                <div class="meta"><div class="nm">xAI</div><div class="sub">Grok</div></div>
+              </div>
+              <div class="ctl">
+                <span class="badge available"><span class="dot"></span>Not connected</span>
+                <button class="btn primary sm" data-open-login="xAI">Authenticate</button>
+              </div>
+            </div>
+            <div class="srow">
+              <div class="prov">
+                <div class="pmark deepseek">D</div>
+                <div class="meta"><div class="nm">DeepSeek</div><div class="sub">DeepSeek-V3 / R1</div></div>
+              </div>
+              <div class="ctl">
+                <span class="badge available"><span class="dot"></span>Not connected</span>
+                <button class="btn primary sm" data-open-login="DeepSeek">Authenticate</button>
+              </div>
+            </div>
+            <!-- multi-value / session-only -->
+            <div class="srow">
+              <div class="prov">
+                <div class="pmark bedrock">B</div>
+                <div class="meta"><div class="nm">Amazon Bedrock</div>
+                  <div class="sub">Needs region + IAM — session-only for now</div></div>
+              </div>
+              <div class="ctl">
+                <span class="badge session"><span class="dot"></span>Session only</span>
+                <button class="btn soft sm" data-open-login="Amazon Bedrock">Set up</button>
+              </div>
+            </div>
+            <div class="srow">
+              <div class="prov">
+                <div class="pmark azure">Z</div>
+                <div class="meta"><div class="nm">Azure OpenAI</div>
+                  <div class="sub">Needs endpoint + deployment — session-only for now</div></div>
+              </div>
+              <div class="ctl">
+                <span class="badge session"><span class="dot"></span>Session only</span>
+                <button class="btn soft sm" data-open-login="Azure OpenAI">Set up</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="row between wrap" style="margin-top:14px;">
+            <div class="muted tiny">Credentials are read from and written to <code class="mono">~/.pi/agent/auth.json</code>.</div>
+            <button class="btn ghost sm" data-open-paste="1">Paste an API key instead →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATE 2 -->
+  <div class="state-label"><span class="n">2</span><h3>Providers list — empty state</h3>
+    <span class="desc">no providers in auth.json or env; single clear CTA</span></div>
+  <div class="win"><div class="settings"><div class="snav">
+    <div class="grp">Settings</div>
+    <div class="nav-item">General</div><div class="nav-item">Agent</div>
+    <div class="nav-item active">Pi</div><div class="nav-item">Appearance</div>
+  </div><div class="scontent"><div class="scontent-inner">
+    <h2 class="page-title">Pi</h2>
+    <p class="page-sub">Configure the pi coding agent and the model providers it can use.</p>
+    <div class="section-eyebrow">Model providers</div>
+    <div class="card">
+      <div class="empty">
+        <div class="glyph">
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+        </div>
+        <h4>No providers connected yet</h4>
+        <p>Authenticate an LLM provider to unlock its models. Sculptor opens an interactive
+        <code class="mono">pi /login</code> so pi can securely store the credential.</p>
+        <button class="btn primary" data-open-login="">Authenticate a provider</button>
+        <div class="modal-note" style="justify-content:center;">or <span class="link" data-open-paste="1">paste an API key</span></div>
+      </div>
+    </div>
+  </div></div></div></div>
+
+  <!-- STATE 3 -->
+  <div class="state-label"><span class="n">3</span><h3>Authenticate — interactive <code>pi /login</code></h3>
+    <span class="desc">primary action; opens as an overlay over Settings (click any “Authenticate” above)</span></div>
+  <div class="win"><div class="modal-head">
+      <svg class="i" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12v10H2z" opacity=".25"/><path d="M4 6l2 2-2 2M8 10h4"/></svg>
+      <h4>Authenticate Google · pi /login</h4></div>
+    <div style="padding:18px;">
+      <div class="term">
+        <div class="term-bar"><div class="dots"><i></i><i></i><i></i></div><span class="ttl">pi — login</span><span class="tag">terminal-agent</span></div>
+        <div class="term-body"><span class="c-prompt">$</span> <span class="c-cmd">pi /login</span>
+
+  <span class="c-dim">pi 0.78.0 — provider authentication</span>
+
+  Select a provider to authenticate:
+    <span class="c-dim">›</span> Anthropic
+    <span class="c-dim">›</span> OpenAI
+    <span class="c-sel">▸ Google</span>
+    <span class="c-dim">›</span> OpenRouter   Groq   Mistral   xAI   DeepSeek
+
+  <span class="c-ok">✓</span> Selected <span class="c-key">Google</span>. Choose a method:
+    <span class="c-sel">▸ Paste API key</span>   <span class="c-dim">(GOOGLE_API_KEY / Gemini)</span>
+
+  Enter your API key: <span class="c-dim">AIza••••••••••••••••••••••••••••••</span><span class="cursor"></span>
+
+  <span class="c-ok">✓</span> Validated. Wrote <span class="c-key">google</span> → <span class="c-dim">~/.pi/agent/auth.json</span> (mode 0600)
+  <span class="c-ok">✓</span> 16 Gemini models now available.</div>
+      </div>
+      <div class="modal-note">
+        <svg class="i" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm.75 4.5a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM7 7.5a.5.5 0 011 0v3.5a.5.5 0 01-1 0V7.5z"/></svg>
+        pi owns every write to <code class="mono">auth.json</code> — no clobber. OAuth/subscription providers
+        (Anthropic, Claude) open a browser link in this same session.</div>
+    </div>
+  </div>
+
+  <!-- STATE 4 -->
+  <div class="state-label"><span class="n">4</span><h3>Paste API key — secondary power-user path</h3>
+    <span class="desc">merge-safe auth.json write; literal key or <code>$ENV</code> pointer</span></div>
+  <div class="win" style="padding:0;"><div style="padding:18px; max-width:520px;">
+    <h4 style="margin:0 0 4px;">Paste an API key</h4>
+    <p class="muted tiny" style="margin:0 0 16px;">For providers that use a single key. Written merge-safe to <code class="mono">~/.pi/agent/auth.json</code>.</p>
+    <div class="field">
+      <label>Provider</label>
+      <select class="select"><option>OpenAI</option><option>Anthropic</option><option selected>Mistral</option><option>Groq</option><option>xAI</option><option>DeepSeek</option><option>OpenRouter</option></select>
+    </div>
+    <div class="field">
+      <label>API key <span class="hint">— stored by pi, never shown again</span></label>
+      <input class="input mono" type="password" value="sk-mst-3f9c2a1b7e4d8602fa1c9b" />
+    </div>
+    <div class="field">
+      <div class="toggle-row"><div class="switch"></div>
+        <div>Store as an environment-variable reference (<code class="mono">$MISTRAL_API_KEY</code>) instead of a literal key
+        <div class="tiny" style="color:var(--gray-9);">Keeps the plaintext key out of <code class="mono">auth.json</code>. Also supports <code class="mono">!op read …</code> / keychain commands.</div></div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:18px; gap:10px;">
+      <button class="btn primary">Save credential</button>
+      <button class="btn ghost">Cancel</button>
+    </div>
+  </div></div>
+
+  <!-- STATE 5 -->
+  <div class="state-label"><span class="n">5</span><h3>Disconnect — <code>pi /logout</code></h3>
+    <span class="desc">from the row overflow menu; confirm, then pi removes the credential</span></div>
+  <div class="win" style="padding:0;"><div style="padding:18px; max-width:520px;">
+    <div class="row" style="gap:12px; margin-bottom:14px;">
+      <div class="pmark openai">O</div>
+      <div><div class="nm" style="font-weight:600;">Disconnect OpenAI?</div>
+        <div class="muted tiny">Runs <code class="mono">pi /logout</code> and removes <code class="mono">openai</code> from <code class="mono">~/.pi/agent/auth.json</code>. OpenAI models disappear from the picker until you re-authenticate.</div></div>
+    </div>
+    <div class="term" style="margin-bottom:16px;">
+      <div class="term-bar"><div class="dots"><i></i><i></i><i></i></div><span class="ttl">pi — logout</span></div>
+      <div class="term-body"><span class="c-prompt">$</span> <span class="c-cmd">pi /logout openai</span>
+  <span class="c-ok">✓</span> Removed <span class="c-key">openai</span> from ~/.pi/agent/auth.json</div>
+    </div>
+    <div class="row" style="gap:10px;">
+      <button class="btn danger">Disconnect</button>
+      <button class="btn ghost">Cancel</button>
+    </div>
+  </div></div>
+
+  <!-- STATE 6 -->
+  <div class="state-label"><span class="n">6</span><h3>Model picker — populated (authenticated only)</h3>
+    <span class="desc">extends #53 grouped dropdown; only Anthropic + OpenAI appear (the connected set)</span></div>
+  <div class="win"><div class="composer">
+    <div class="box"><div class="ph">Ask pi to make a change, or describe a task…</div>
+      <div class="bar">
+        <button class="mtrigger" data-mp-toggle="A">Claude Opus 4.8 <span class="car">▾</span></button>
+        <div class="send">↑</div>
+      </div>
+    </div>
+    <div style="margin-top:10px;">
+      <div class="dropdown">
+        <div class="dd-label"><span class="pmark anthropic pm">A</span> Anthropic</div>
+        <div class="dd-item sel"><span class="ck">✓</span> Claude Opus 4.8</div>
+        <div class="dd-item"><span class="ck empty">✓</span> Claude Sonnet 4.6</div>
+        <div class="dd-item"><span class="ck empty">✓</span> Claude Haiku 4.5</div>
+        <div class="dd-sep"></div>
+        <div class="dd-label"><span class="pmark openai pm">O</span> OpenAI</div>
+        <div class="dd-item"><span class="ck empty">✓</span> GPT-5</div>
+        <div class="dd-item"><span class="ck empty">✓</span> GPT-5 mini</div>
+        <div class="dd-item"><span class="ck empty">✓</span> o4</div>
+      </div>
+    </div>
+    <div class="modal-note">Google, Groq, Mistral, etc. are hidden because they are not authenticated — even if a stray key is in the environment.</div>
+  </div></div>
+
+  <!-- STATE 7 -->
+  <div class="state-label"><span class="n">7</span><h3>Model picker — empty state</h3>
+    <span class="desc">nothing authenticated → locked message + login CTA</span></div>
+  <div class="win"><div class="composer">
+    <div class="box"><div class="ph">Ask pi to make a change, or describe a task…</div>
+      <div class="bar">
+        <button class="mtrigger" style="color:var(--gray-9);">No model <span class="car">▾</span></button>
+        <div class="send" style="background:var(--gray-6);">↑</div>
+      </div>
+    </div>
+    <div style="margin-top:10px;">
+      <div class="dropdown">
+        <div class="dd-empty">
+          <div class="m">No models available — please log in to authenticate</div>
+          <button class="btn primary sm block" data-open-login="">Open pi login</button>
+        </div>
+      </div>
+    </div>
+  </div></div>
+</section>
+
+<!-- ====================================================================== -->
+<!-- VARIANT B — CONNECTED vs ADD                                           -->
+<!-- ====================================================================== -->
+<section class="variant" data-variant="B" hidden>
+  <div class="variant-intro">
+    <h2>Variant B — “Connected” vs. “Add a provider”</h2>
+    <p>Two distinct groups. <em>Connected providers</em> are first-class cards at the top — each shows how it
+    authenticated, the models it unlocks, and a Disconnect action. <em>Add a provider</em> is a tidy grid of
+    everything else below. Emphasizes what you already have and makes “what does this unlock?” obvious via
+    model chips. The <code>pi /login</code> terminal opens in a centered modal.</p>
+    <span class="sig">Signature: connected cards w/ model chips · add-grid · centered modal login</span>
+  </div>
+
+  <!-- STATE 1 -->
+  <div class="state-label"><span class="n">1</span><h3>Providers — populated (two sections)</h3>
+    <span class="desc">connected cards on top, add-grid below; model counts &amp; chips surfaced</span></div>
+  <div class="win">
+    <div class="topbar">
+      <div class="tb-dots"><i></i><i></i><i></i></div><div class="tb-icon">⌂</div>
+      <div class="tabs"><div class="wtab active"><span class="pi-chip">PI</span> auth-providers</div></div>
+      <div class="tb-right"><div class="tb-icon">⚙</div></div>
+    </div>
+    <div class="settings">
+      <div class="snav">
+        <div class="grp">Settings</div>
+        <div class="nav-item">General</div><div class="nav-item">Agent</div>
+        <div class="nav-item active">Pi</div><div class="nav-item">Appearance</div>
+        <div class="nav-item">Keyboard</div>
+      </div>
+      <div class="scontent"><div class="scontent-inner">
+        <h2 class="page-title">Pi</h2>
+        <p class="page-sub">Configure the pi coding agent and the model providers it can use.</p>
+
+        <div class="row between" style="margin:4px 0 10px;">
+          <div class="section-eyebrow" style="margin:0;">Connected · 2</div>
+          <span class="badge env">imported from ~/.pi/agent/auth.json</span>
+        </div>
+
+        <div class="ccard">
+          <div class="head">
+            <div class="pmark anthropic">A</div>
+            <div style="flex:1;"><div class="nm" style="font-weight:600;">Anthropic</div>
+              <div class="prov sub" style="margin-top:1px;">Claude subscription · OAuth</div></div>
+            <span class="badge connected"><span class="dot"></span>Connected</span>
+            <button class="btn danger sm" style="margin-left:8px;">Disconnect</button>
+          </div>
+          <div class="models">
+            <span class="chip">Claude Opus 4.8</span><span class="chip">Claude Sonnet 4.6</span>
+            <span class="chip">Claude Haiku 4.5</span><span class="chip">+21 more</span>
+          </div>
+        </div>
+        <div class="ccard">
+          <div class="head">
+            <div class="pmark openai">O</div>
+            <div style="flex:1;"><div class="nm" style="font-weight:600;">OpenAI</div>
+              <div class="prov sub" style="margin-top:1px;">API key · <code class="mono">$OPENAI_API_KEY</code></div></div>
+            <span class="badge connected"><span class="dot"></span>Connected</span>
+            <button class="btn danger sm" style="margin-left:8px;">Disconnect</button>
+          </div>
+          <div class="models">
+            <span class="chip">GPT-5</span><span class="chip">GPT-5 mini</span>
+            <span class="chip">o4</span><span class="chip">GPT-4.1</span><span class="chip">+38 more</span>
+          </div>
+        </div>
+
+        <div class="section-eyebrow">Add a provider</div>
+        <div class="pgrid">
+          <div class="pcell"><div class="pmark google">G</div><div class="meta"><div class="nm">Google</div><div class="prov sub">Gemini · 16 models</div></div><span class="add">+</span></div>
+          <div class="pcell"><div class="pmark openrouter">R</div><div class="meta"><div class="nm">OpenRouter</div><div class="prov sub">300+ models</div></div><span class="add">+</span></div>
+          <div class="pcell"><div class="pmark groq">Q</div><div class="meta"><div class="nm">Groq</div><div class="prov sub">Fast inference</div></div><span class="add">+</span></div>
+          <div class="pcell"><div class="pmark mistral">M</div><div class="meta"><div class="nm">Mistral</div><div class="prov sub">Mistral &amp; Codestral</div></div><span class="add">+</span></div>
+          <div class="pcell"><div class="pmark xai">X</div><div class="meta"><div class="nm">xAI</div><div class="prov sub">Grok</div></div><span class="add">+</span></div>
+          <div class="pcell"><div class="pmark deepseek">D</div><div class="meta"><div class="nm">DeepSeek</div><div class="prov sub">V3 / R1</div></div><span class="add">+</span></div>
+        </div>
+
+        <div class="callout warn" style="margin:16px 0 0;">
+          <svg class="i" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5l6.5 11.5H1.5L8 1.5z" opacity=".3"/><path d="M8 6v3.5M8 11.2v.1"/></svg>
+          <div><strong>Azure OpenAI, Amazon Bedrock, Cloudflare</strong> need endpoint/region config from environment
+          variables. They work for this session, but full standalone persistence is coming in a later release.
+          <span class="link" data-open-login="Amazon Bedrock">Set up for this session →</span></div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- STATE 2 -->
+  <div class="state-label"><span class="n">2</span><h3>Providers — empty state</h3>
+    <span class="desc">no “Connected” section yet; the page leads with the CTA</span></div>
+  <div class="win"><div class="settings"><div class="snav">
+    <div class="grp">Settings</div><div class="nav-item">General</div><div class="nav-item">Agent</div>
+    <div class="nav-item active">Pi</div><div class="nav-item">Appearance</div>
+  </div><div class="scontent"><div class="scontent-inner">
+    <h2 class="page-title">Pi</h2>
+    <p class="page-sub">Configure the pi coding agent and the model providers it can use.</p>
+    <div class="card"><div class="empty">
+      <div class="glyph"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></div>
+      <h4>Connect your first provider</h4>
+      <p>You haven’t authenticated any LLM providers yet. Connect one to start using pi — Sculptor opens an
+      interactive <code class="mono">pi /login</code> and pi stores the credential.</p>
+      <button class="btn primary" data-open-login="">Authenticate a provider</button>
+    </div></div>
+    <div class="section-eyebrow">Or add directly</div>
+    <div class="pgrid">
+      <div class="pcell"><div class="pmark anthropic">A</div><div class="meta"><div class="nm">Anthropic</div><div class="prov sub">Claude</div></div><span class="add">+</span></div>
+      <div class="pcell"><div class="pmark openai">O</div><div class="meta"><div class="nm">OpenAI</div><div class="prov sub">GPT</div></div><span class="add">+</span></div>
+      <div class="pcell"><div class="pmark google">G</div><div class="meta"><div class="nm">Google</div><div class="prov sub">Gemini</div></div><span class="add">+</span></div>
+      <div class="pcell"><div class="pmark groq">Q</div><div class="meta"><div class="nm">Groq</div><div class="prov sub">Fast inference</div></div><span class="add">+</span></div>
+    </div>
+  </div></div></div></div>
+
+  <!-- STATE 3 -->
+  <div class="state-label"><span class="n">3</span><h3>Authenticate — modal <code>pi /login</code> (Anthropic / OAuth)</h3>
+    <span class="desc">centered modal; shows the OAuth/subscription branch with a browser link</span></div>
+  <div class="win" style="padding:24px; display:flex; justify-content:center; background:var(--gray-3);">
+    <div class="modal" style="box-shadow:none;">
+      <div class="modal-head"><div class="pmark anthropic">A</div><h4>Authenticate Anthropic</h4><div class="x">✕</div></div>
+      <div class="modal-body">
+        <div class="term">
+          <div class="term-bar"><div class="dots"><i></i><i></i><i></i></div><span class="ttl">pi — login</span><span class="tag">terminal-agent</span></div>
+          <div class="term-body"><span class="c-prompt">$</span> <span class="c-cmd">pi /login</span>
+
+  <span class="c-ok">✓</span> Selected <span class="c-key">Anthropic</span>. Method:
+    <span class="c-sel">▸ Sign in with Claude subscription (OAuth)</span>
+    <span class="c-dim">›</span> Paste API key (ANTHROPIC_API_KEY)
+
+  Opening browser to authorize…
+  <span class="c-url">https://claude.ai/oauth/authorize?client=pi&code=7F2A</span>
+
+  Waiting for authorization… <span class="cursor"></span></div>
+        </div>
+        <div class="modal-note">
+          <svg class="i" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm.75 4.5a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM7 7.5a.5.5 0 011 0v3.5a.5.5 0 01-1 0V7.5z"/></svg>
+          One terminal path covers both OAuth/subscription and API-key providers. pi writes <code class="mono">auth.json</code> itself.</div>
+      </div>
+      <div class="modal-foot"><button class="btn soft" data-open-paste="1">Paste API key instead</button>
+        <button class="btn ghost" style="margin-left:auto;">Cancel</button></div>
+    </div>
+  </div>
+
+  <!-- STATE 4 -->
+  <div class="state-label"><span class="n">4</span><h3>Paste API key — secondary path (modal)</h3>
+    <span class="desc">same merge-safe write; $ENV toggle on</span></div>
+  <div class="win" style="padding:24px; display:flex; justify-content:center; background:var(--gray-3);">
+    <div class="modal" style="box-shadow:none; width:480px;">
+      <div class="modal-head"><div class="pmark openrouter">R</div><h4>Paste API key — OpenRouter</h4><div class="x">✕</div></div>
+      <div class="modal-body">
+        <div class="field"><label>API key</label><input class="input mono" type="password" value="sk-or-v1-8a3e91c0fb6d472e" /></div>
+        <div class="field"><div class="toggle-row"><div class="switch"></div>
+          <div>Store as <code class="mono">$OPENROUTER_API_KEY</code> reference (recommended)</div></div></div>
+        <div class="modal-note">Merged into <code class="mono">~/.pi/agent/auth.json</code> (0600) without touching other entries.</div>
+      </div>
+      <div class="modal-foot"><button class="btn primary">Save credential</button>
+        <button class="btn ghost" style="margin-left:auto;">Cancel</button></div>
+    </div>
+  </div>
+
+  <!-- STATE 5 -->
+  <div class="state-label"><span class="n">5</span><h3>Disconnect — confirm dialog</h3>
+    <span class="desc">Disconnect button on a connected card → confirm running <code>/logout</code></span></div>
+  <div class="win" style="padding:24px; display:flex; justify-content:center; background:var(--gray-3);">
+    <div class="modal" style="box-shadow:none; width:440px;">
+      <div class="modal-head"><div class="pmark anthropic">A</div><h4>Disconnect Anthropic?</h4><div class="x">✕</div></div>
+      <div class="modal-body">
+        <p class="muted" style="margin:0; font-size:13px;">This runs <code class="mono">pi /logout</code> and removes <code class="mono">anthropic</code> from
+        <code class="mono">~/.pi/agent/auth.json</code>. Claude models will be hidden from the picker until you reconnect.</p>
+      </div>
+      <div class="modal-foot"><button class="btn danger">Disconnect</button>
+        <button class="btn ghost" style="margin-left:auto;">Cancel</button></div>
+    </div>
+  </div>
+
+  <!-- STATE 6 -->
+  <div class="state-label"><span class="n">6</span><h3>Model picker — populated</h3>
+    <span class="desc">grouped by the 2 connected providers</span></div>
+  <div class="win"><div class="composer">
+    <div class="box"><div class="ph">Ask pi to make a change, or describe a task…</div>
+      <div class="bar"><button class="mtrigger">GPT-5 <span class="car">▾</span></button><div class="send">↑</div></div></div>
+    <div style="margin-top:10px;"><div class="dropdown">
+      <div class="dd-label"><span class="pmark anthropic pm">A</span> Anthropic</div>
+      <div class="dd-item"><span class="ck empty">✓</span> Claude Opus 4.8</div>
+      <div class="dd-item"><span class="ck empty">✓</span> Claude Sonnet 4.6</div>
+      <div class="dd-sep"></div>
+      <div class="dd-label"><span class="pmark openai pm">O</span> OpenAI</div>
+      <div class="dd-item sel"><span class="ck">✓</span> GPT-5</div>
+      <div class="dd-item"><span class="ck empty">✓</span> GPT-5 mini</div>
+      <div class="dd-item"><span class="ck empty">✓</span> o4</div>
+    </div></div>
+  </div></div>
+
+  <!-- STATE 7 -->
+  <div class="state-label"><span class="n">7</span><h3>Model picker — empty state</h3>
+    <span class="desc">locked message + CTA</span></div>
+  <div class="win"><div class="composer">
+    <div class="box"><div class="ph">Ask pi to make a change, or describe a task…</div>
+      <div class="bar"><button class="mtrigger" style="color:var(--gray-9);">No model <span class="car">▾</span></button><div class="send" style="background:var(--gray-6);">↑</div></div></div>
+    <div style="margin-top:10px;"><div class="dropdown"><div class="dd-empty">
+      <div class="m">No models available — please log in to authenticate</div>
+      <button class="btn primary sm block" data-open-login="">Open pi login</button>
+    </div></div></div>
+  </div></div>
+</section>
+
+<!-- ====================================================================== -->
+<!-- VARIANT C — MASTER / DETAIL                                            -->
+<!-- ====================================================================== -->
+<section class="variant" data-variant="C">
+  <div class="variant-intro">
+    <h2>Variant C — Master / detail with embedded terminal</h2>
+    <p>A provider rail on the left, a detail pane on the right. Selecting a provider drives the pane, which
+    shows status, a prominent <em>Open pi login</em> action, the paste-key alternative as a collapsible, and the
+    models it provides. The <code>pi /login</code> terminal is embedded <em>in the pane</em> (not a modal), giving it
+    the most room and keeping context. Best when there are many providers and per-provider detail matters.</p>
+    <span class="sig">Signature: rail + detail · inline terminal pane · per-provider detail &amp; collapsibles</span>
+  </div>
+
+  <!-- STATE 1 -->
+  <div class="state-label"><span class="n">1</span><h3>Providers — master/detail (connected provider selected)</h3>
+    <span class="desc">rail shows status dots; detail shows Anthropic connected + its models</span></div>
+  <div class="win">
+    <div class="topbar">
+      <div class="tb-dots"><i></i><i></i><i></i></div><div class="tb-icon">⌂</div>
+      <div class="tabs"><div class="wtab active"><span class="pi-chip">PI</span> auth-providers</div></div>
+      <div class="tb-right"><div class="tb-icon">⚙</div></div>
+    </div>
+    <div class="settings">
+      <div class="snav">
+        <div class="grp">Settings</div>
+        <div class="nav-item">General</div><div class="nav-item">Agent</div>
+        <div class="nav-item active">Pi</div><div class="nav-item">Appearance</div>
+      </div>
+      <div class="scontent"><div class="scontent-inner" style="max-width:none;">
+        <h2 class="page-title">Pi</h2>
+        <p class="page-sub">Authenticate model providers. pi stores credentials in <code class="mono">~/.pi/agent/auth.json</code>.</p>
+        <div class="md">
+          <div class="md-rail">
+            <div class="rail-grp">Connected</div>
+            <div class="rail-item active"><span class="pmark anthropic pm">A</span><span class="nm">Anthropic</span><span class="st on"></span></div>
+            <div class="rail-item"><span class="pmark openai pm">O</span><span class="nm">OpenAI</span><span class="st on"></span></div>
+            <div class="rail-grp">Available</div>
+            <div class="rail-item"><span class="pmark google pm">G</span><span class="nm">Google</span><span class="st off"></span></div>
+            <div class="rail-item"><span class="pmark openrouter pm">R</span><span class="nm">OpenRouter</span><span class="st off"></span></div>
+            <div class="rail-item"><span class="pmark groq pm">Q</span><span class="nm">Groq</span><span class="st off"></span></div>
+            <div class="rail-item"><span class="pmark mistral pm">M</span><span class="nm">Mistral</span><span class="st off"></span></div>
+            <div class="rail-item"><span class="pmark xai pm">X</span><span class="nm">xAI</span><span class="st off"></span></div>
+            <div class="rail-item"><span class="pmark deepseek pm">D</span><span class="nm">DeepSeek</span><span class="st off"></span></div>
+            <div class="rail-grp">Session only</div>
+            <div class="rail-item"><span class="pmark bedrock pm">B</span><span class="nm">Bedrock</span><span class="st off"></span></div>
+            <div class="rail-item"><span class="pmark azure pm">Z</span><span class="nm">Azure</span><span class="st off"></span></div>
+          </div>
+          <div class="md-detail">
+            <div class="row" style="gap:13px;">
+              <div class="pmark anthropic" style="width:38px;height:38px;border-radius:10px;font-size:15px;">A</div>
+              <div style="flex:1;"><div style="font-weight:600; font-size:16px;">Anthropic</div>
+                <div class="muted tiny">Claude Opus, Sonnet &amp; Haiku</div></div>
+              <span class="badge connected"><span class="dot"></span>Connected</span>
+            </div>
+            <div class="card pad" style="margin:16px 0;">
+              <div class="srow"><div class="lbl"><div class="t">Authentication</div><div class="d">Claude subscription via OAuth</div></div>
+                <div class="ctl"><span class="badge env">auth.json · <code class="mono">anthropic</code></span></div></div>
+              <div class="srow"><div class="lbl"><div class="t">Models unlocked</div><div class="d">24 models</div></div>
+                <div class="ctl"><span class="chip">Opus 4.8</span><span class="chip">Sonnet 4.6</span><span class="chip">+22</span></div></div>
+            </div>
+            <button class="btn danger">Disconnect (pi /logout)</button>
+          </div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- STATE 2 -->
+  <div class="state-label"><span class="n">2</span><h3>Providers — empty state (no connections)</h3>
+    <span class="desc">rail “Connected” group empty; detail is the global CTA</span></div>
+  <div class="win"><div class="scontent-inner" style="max-width:none; padding:24px;">
+    <div class="md">
+      <div class="md-rail">
+        <div class="rail-grp">Connected</div>
+        <div class="muted tiny" style="padding:4px 10px 8px;">None yet</div>
+        <div class="rail-grp">Available</div>
+        <div class="rail-item"><span class="pmark anthropic pm">A</span><span class="nm">Anthropic</span><span class="st off"></span></div>
+        <div class="rail-item"><span class="pmark openai pm">O</span><span class="nm">OpenAI</span><span class="st off"></span></div>
+        <div class="rail-item"><span class="pmark google pm">G</span><span class="nm">Google</span><span class="st off"></span></div>
+        <div class="rail-item"><span class="pmark groq pm">Q</span><span class="nm">Groq</span><span class="st off"></span></div>
+        <div class="rail-item"><span class="pmark mistral pm">M</span><span class="nm">Mistral</span><span class="st off"></span></div>
+      </div>
+      <div class="md-detail" style="display:grid; place-items:center;">
+        <div class="empty" style="padding:20px;">
+          <div class="glyph"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></div>
+          <h4>No providers connected</h4>
+          <p>Pick a provider on the left, or open pi login to authenticate your first one.</p>
+          <button class="btn primary" data-open-login="">Authenticate a provider</button>
+        </div>
+      </div>
+    </div>
+  </div></div>
+
+  <!-- STATE 3 -->
+  <div class="state-label"><span class="n">3</span><h3>Authenticate — terminal embedded in the detail pane</h3>
+    <span class="desc">Google selected (not connected); “Open pi login” reveals the terminal in-pane</span></div>
+  <div class="win"><div class="scontent-inner" style="max-width:none; padding:24px;">
+    <div class="md">
+      <div class="md-rail">
+        <div class="rail-grp">Connected</div>
+        <div class="rail-item"><span class="pmark anthropic pm">A</span><span class="nm">Anthropic</span><span class="st on"></span></div>
+        <div class="rail-item"><span class="pmark openai pm">O</span><span class="nm">OpenAI</span><span class="st on"></span></div>
+        <div class="rail-grp">Available</div>
+        <div class="rail-item active"><span class="pmark google pm">G</span><span class="nm">Google</span><span class="st off"></span></div>
+        <div class="rail-item"><span class="pmark groq pm">Q</span><span class="nm">Groq</span><span class="st off"></span></div>
+      </div>
+      <div class="md-detail">
+        <div class="row" style="gap:13px;">
+          <div class="pmark google" style="width:38px;height:38px;border-radius:10px;font-size:15px;">G</div>
+          <div style="flex:1;"><div style="font-weight:600; font-size:16px;">Google</div>
+            <div class="muted tiny">Gemini · 16 models</div></div>
+          <span class="badge available"><span class="dot"></span>Not connected</span>
+        </div>
+        <div class="term" style="margin:16px 0;">
+          <div class="term-bar"><div class="dots"><i></i><i></i><i></i></div><span class="ttl">pi — login · Google</span><span class="tag">terminal-agent</span></div>
+          <div class="term-body"><span class="c-prompt">$</span> <span class="c-cmd">pi /login google</span>
+
+  <span class="c-dim">pi 0.78.0</span>
+  Enter your Gemini API key (GOOGLE_API_KEY):
+  <span class="c-dim">AIza••••••••••••••••••••••••••••</span><span class="cursor"></span></div>
+        </div>
+        <details style="margin-bottom:8px;">
+          <summary class="link" style="font-size:13px;">Paste an API key instead</summary>
+          <div class="field" style="margin-top:12px;"><input class="input mono" type="password" value="AIzaSyD8c1f02b9a" /></div>
+          <div class="toggle-row"><div class="switch"></div><div>Store as <code class="mono">$GOOGLE_API_KEY</code> reference</div></div>
+          <button class="btn primary sm" style="margin-top:12px;">Save credential</button>
+        </details>
+      </div>
+    </div>
+  </div></div>
+
+  <!-- STATE 4 -->
+  <div class="state-label"><span class="n">4</span><h3>Paste API key — collapsible expanded (detail pane)</h3>
+    <span class="desc">same secondary path, lives inside the selected provider’s pane</span></div>
+  <div class="win" style="padding:0;"><div style="padding:22px; max-width:560px;">
+    <div class="row" style="gap:13px; margin-bottom:14px;">
+      <div class="pmark mistral" style="width:34px;height:34px;border-radius:9px;">M</div>
+      <div><div style="font-weight:600;">Mistral</div><div class="muted tiny">Paste API key</div></div>
+    </div>
+    <div class="field"><label>API key <span class="hint">— stored by pi</span></label>
+      <input class="input mono" type="password" value="mst-9f3c2a1b7e4d8602" /></div>
+    <div class="toggle-row" style="margin-bottom:14px;"><div class="switch off"></div>
+      <div>Store literal key in <code class="mono">auth.json</code> <span class="tiny" style="color:var(--gray-9);">(toggle on to use a <code class="mono">$MISTRAL_API_KEY</code> reference)</span></div></div>
+    <button class="btn primary">Save credential</button>
+    <div class="modal-note">Written merge-safe to <code class="mono">~/.pi/agent/auth.json</code> — other providers untouched.</div>
+  </div></div>
+
+  <!-- STATE 5 -->
+  <div class="state-label"><span class="n">5</span><h3>Disconnect — inline in the detail pane</h3>
+    <span class="desc">connected provider’s pane shows /logout running inline</span></div>
+  <div class="win" style="padding:0;"><div style="padding:22px; max-width:560px;">
+    <div class="row" style="gap:13px; margin-bottom:14px;">
+      <div class="pmark openai" style="width:34px;height:34px;border-radius:9px;">O</div>
+      <div style="flex:1;"><div style="font-weight:600;">OpenAI</div><div class="muted tiny">Disconnecting…</div></div>
+    </div>
+    <div class="term" style="margin-bottom:14px;">
+      <div class="term-bar"><div class="dots"><i></i><i></i><i></i></div><span class="ttl">pi — logout</span></div>
+      <div class="term-body"><span class="c-prompt">$</span> <span class="c-cmd">pi /logout openai</span>
+  <span class="c-ok">✓</span> Removed <span class="c-key">openai</span> from ~/.pi/agent/auth.json
+  OpenAI models removed from the picker.</div>
+    </div>
+    <div class="muted tiny">The row will move back to <strong>Available</strong> in the rail.</div>
+  </div></div>
+
+  <!-- STATE 6 -->
+  <div class="state-label"><span class="n">6</span><h3>Model picker — populated</h3>
+    <span class="desc">grouped, authenticated-only (Anthropic + OpenAI)</span></div>
+  <div class="win"><div class="composer">
+    <div class="box"><div class="ph">Ask pi to make a change, or describe a task…</div>
+      <div class="bar"><button class="mtrigger">Claude Sonnet 4.6 <span class="car">▾</span></button><div class="send">↑</div></div></div>
+    <div style="margin-top:10px;"><div class="dropdown">
+      <div class="dd-label"><span class="pmark anthropic pm">A</span> Anthropic</div>
+      <div class="dd-item"><span class="ck empty">✓</span> Claude Opus 4.8</div>
+      <div class="dd-item sel"><span class="ck">✓</span> Claude Sonnet 4.6</div>
+      <div class="dd-item"><span class="ck empty">✓</span> Claude Haiku 4.5</div>
+      <div class="dd-sep"></div>
+      <div class="dd-label"><span class="pmark openai pm">O</span> OpenAI</div>
+      <div class="dd-item"><span class="ck empty">✓</span> GPT-5</div>
+      <div class="dd-item"><span class="ck empty">✓</span> o4</div>
+    </div></div>
+  </div></div>
+
+  <!-- STATE 7 -->
+  <div class="state-label"><span class="n">7</span><h3>Model picker — empty state</h3>
+    <span class="desc">locked message + CTA into the same /login flow</span></div>
+  <div class="win"><div class="composer">
+    <div class="box"><div class="ph">Ask pi to make a change, or describe a task…</div>
+      <div class="bar"><button class="mtrigger" style="color:var(--gray-9);">No model <span class="car">▾</span></button><div class="send" style="background:var(--gray-6);">↑</div></div></div>
+    <div style="margin-top:10px;"><div class="dropdown"><div class="dd-empty">
+      <div class="m">No models available — please log in to authenticate</div>
+      <button class="btn primary sm block" data-open-login="">Open pi login</button>
+    </div></div></div>
+  </div></div>
+</section>
+
+<!-- shared pi /login overlay (opened by Authenticate buttons) -->
+<div class="overlay" id="loginOverlay">
+  <div class="modal">
+    <div class="modal-head">
+      <svg class="i" viewBox="0 0 16 16" fill="currentColor"><path d="M11 5V4a3 3 0 10-6 0v1H4v8h8V5h-1zM6.5 4a1.5 1.5 0 113 0v1h-3V4z"/></svg>
+      <h4 id="loginTitle">Authenticate provider · pi /login</h4>
+      <div class="x" data-close>✕</div>
+    </div>
+    <div class="modal-body">
+      <div class="term">
+        <div class="term-bar"><div class="dots"><i></i><i></i><i></i></div><span class="ttl">pi — login</span><span class="tag">terminal-agent</span></div>
+        <div class="term-body" id="loginTerm"></div>
+      </div>
+      <div class="modal-note">
+        <svg class="i" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm.75 4.5a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM7 7.5a.5.5 0 011 0v3.5a.5.5 0 01-1 0V7.5z"/></svg>
+        Interactive <code class="mono">pi /login</code> in Sculptor's terminal-agent stack. pi writes the credential to
+        <code class="mono">~/.pi/agent/auth.json</code> itself.</div>
+    </div>
+    <div class="modal-foot"><button class="btn ghost" style="margin-left:auto;" data-close>Close</button></div>
+  </div>
+</div>
+
+<!-- paste-key overlay -->
+<div class="overlay" id="pasteOverlay">
+  <div class="modal" style="width:480px;">
+    <div class="modal-head"><h4>Paste an API key</h4><div class="x" data-close>✕</div></div>
+    <div class="modal-body">
+      <div class="field"><label>Provider</label>
+        <select class="select"><option>OpenAI</option><option>Anthropic</option><option>Google</option><option>Mistral</option><option>Groq</option></select></div>
+      <div class="field"><label>API key <span class="hint">— stored by pi, never shown again</span></label>
+        <input class="input mono" type="password" value="sk-•••••••••••••••••••" /></div>
+      <div class="toggle-row"><div class="switch"></div>
+        <div>Store as an environment-variable reference instead of a literal key</div></div>
+    </div>
+    <div class="modal-foot"><button class="btn primary">Save credential</button>
+      <button class="btn ghost" style="margin-left:auto;" data-close>Cancel</button></div>
+  </div>
+</div>
+
+<script>
+  // top-level variant tabs
+  document.getElementById('tabs').addEventListener('click', function (e) {
+    var btn = e.target.closest('.variant-tab'); if (!btn) return;
+    var v = btn.dataset.v;
+    document.querySelectorAll('.variant-tab').forEach(function (t) { t.classList.toggle('active', t === btn); });
+    document.querySelectorAll('.variant').forEach(function (s) { s.hidden = s.dataset.variant !== v; });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  // shared pi /login terminal content (typed per provider when opened)
+  function loginScript(provider) {
+    var p = provider || 'a provider';
+    var key = { 'Google': 'GOOGLE_API_KEY', 'OpenAI': 'OPENAI_API_KEY', 'Groq': 'GROQ_API_KEY',
+      'Mistral': 'MISTRAL_API_KEY', 'xAI': 'XAI_API_KEY', 'DeepSeek': 'DEEPSEEK_API_KEY',
+      'OpenRouter': 'OPENROUTER_API_KEY' }[provider] || 'PROVIDER_API_KEY';
+    var slug = (provider || 'provider').toLowerCase().replace(/[^a-z]/g, '');
+    return '<span class="c-prompt">$</span> <span class="c-cmd">pi /login</span>\n\n'
+      + '  <span class="c-dim">pi 0.78.0 — provider authentication</span>\n\n'
+      + '  <span class="c-ok">✓</span> Selected <span class="c-key">' + p + '</span>\n'
+      + '  Enter your API key <span class="c-dim">(' + key + ')</span>:\n'
+      + '  <span class="c-dim">' + '•'.repeat(28) + '</span><span class="cursor"></span>\n\n'
+      + '  <span class="c-ok">✓</span> Validated. Wrote <span class="c-key">' + slug + '</span> → <span class="c-dim">~/.pi/agent/auth.json</span> (0600)';
+  }
+
+  function openOverlay(id) { document.getElementById(id).classList.add('open'); }
+  function closeOverlays() { document.querySelectorAll('.overlay').forEach(function (o) { o.classList.remove('open'); }); }
+
+  document.body.addEventListener('click', function (e) {
+    var login = e.target.closest('[data-open-login]');
+    if (login) {
+      var prov = login.getAttribute('data-open-login');
+      document.getElementById('loginTitle').textContent = prov
+        ? ('Authenticate ' + prov + ' · pi /login') : 'Authenticate a provider · pi /login';
+      document.getElementById('loginTerm').innerHTML = loginScript(prov);
+      openOverlay('loginOverlay'); return;
+    }
+    if (e.target.closest('[data-open-paste]')) { openOverlay('pasteOverlay'); return; }
+    if (e.target.closest('[data-close]') || e.target.classList.contains('overlay')) { closeOverlays(); }
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeOverlays(); });
+</script>
+</body>
+</html>
