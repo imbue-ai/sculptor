@@ -25,7 +25,34 @@ _WEBVIEW_LOAD_TIMEOUT_SECONDS: float = 30.0
 _URL_POLL_INTERVAL_SECONDS: float = 0.1
 _DEFAULT_ADDRESS_BAR_TIMEOUT_SECONDS: float = 10.0
 _PNG_MAGIC: bytes = b"\x89PNG\r\n\x1a\n"
-_CLIPBOARD_TIMEOUT_SECONDS: float = 10.0
+# The screenshot -> clipboard round-trip goes through Electron's main process
+# and the OS clipboard, which under xvfb + software rendering can take well
+# over the snappy budget a local run sees. Match the webview load budget so a
+# slow-but-healthy CI host isn't mistaken for a missing screenshot.
+_CLIPBOARD_TIMEOUT_SECONDS: float = 30.0
+
+# How long ``webview_evaluate`` retries a *transient* bridge error before giving
+# up. A workspace switch or panel reopen re-creates the guest webContents, and
+# for a short window the test bridge can point at a guest that is mid-load or
+# just re-attached. Executing into it then rejects; retrying (and re-reading the
+# current webContentsId each attempt) lets the guest settle. The injected script
+# itself can also throw transiently -- e.g. ``getElementById(...)`` is null for a
+# beat right after re-focus -- which Electron surfaces as "Script failed to
+# execute". A genuine error still surfaces once the budget is exhausted.
+_WEBVIEW_EXECUTE_RETRY_SECONDS: float = 15.0
+
+# Substrings that mark a webview-execute failure as a transient "guest not ready
+# yet" condition rather than a real assertion failure. Matched against the
+# Playwright error text bubbled up from the Electron ``executeJavaScript`` IPC.
+_TRANSIENT_WEBVIEW_EXECUTE_MARKERS: tuple[str, ...] = (
+    # Electron's executeJavaScript rejects with this when the guest's page threw
+    # (e.g. a null element during a load) or the target webContents is gone.
+    "Script failed to execute",
+    # The bridge is briefly absent while focus moves between workspace slots.
+    "browser panel test bridge not available",
+    # loadURL/eval before the <webview> has fired did-attach.
+    "WebView must be attached",
+)
 
 
 class PlaywrightBrowserPanelElement(PlaywrightIntegrationTestElement):
@@ -93,21 +120,40 @@ class PlaywrightBrowserPanelElement(PlaywrightIntegrationTestElement):
     def webview_evaluate(self, code: str) -> Any:
         """Run ``code`` inside the panel's webview guest page via the test-only IPC.
 
-        Raises ``RuntimeError`` if the Electron bridge is not installed (e.g. when
-        the test is running in browser-launch mode rather than Electron).
+        Retries transient "guest not ready" failures (see
+        ``_TRANSIENT_WEBVIEW_EXECUTE_MARKERS``) for up to
+        ``_WEBVIEW_EXECUTE_RETRY_SECONDS``, re-reading the current
+        ``webContentsId`` each attempt so a guest re-created by a workspace
+        switch or panel reopen is picked up rather than executed into while it
+        is still attaching. A non-transient error (a real bug, or the bridge
+        being absent because the test runs in browser-launch mode) is re-raised
+        immediately; a transient one is re-raised only once the budget is spent.
         """
-        self._wait_for_webview_attached()
-        return self._page.evaluate(
-            """async (code) => {
-              const api = window.sculptor;
-              const test = window.__BROWSER_PANEL_TEST__;
-              if (!api || !api.__testBrowserWebviewExecute || !test) {
-                throw new Error('browser panel test bridge not available');
-              }
-              return api.__testBrowserWebviewExecute(test.webContentsId, code);
-            }""",
-            code,
-        )
+        deadline = time.monotonic() + _WEBVIEW_EXECUTE_RETRY_SECONDS
+        while True:
+            # Re-resolve the bridge each attempt: the webContentsId mirrored onto
+            # window.__BROWSER_PANEL_TEST__ changes when the focused workspace's
+            # guest is re-created, so a value cached across the retry loop could
+            # point at a torn-down webContents.
+            self._wait_for_webview_attached()
+            try:
+                return self._page.evaluate(
+                    """async (code) => {
+                      const api = window.sculptor;
+                      const test = window.__BROWSER_PANEL_TEST__;
+                      if (!api || !api.__testBrowserWebviewExecute || !test) {
+                        throw new Error('browser panel test bridge not available');
+                      }
+                      return api.__testBrowserWebviewExecute(test.webContentsId, code);
+                    }""",
+                    code,
+                )
+            except Exception as exc:  # noqa: BLE001 — re-raised below unless transient
+                message = str(exc)
+                is_transient = any(marker in message for marker in _TRANSIENT_WEBVIEW_EXECUTE_MARKERS)
+                if not is_transient or time.monotonic() >= deadline:
+                    raise
+                self._page.wait_for_timeout(int(_URL_POLL_INTERVAL_SECONDS * 1000))
 
     def read_clipboard_png_bytes(self) -> bytes | None:
         """Read the PNG bytes currently on the system clipboard.
@@ -166,15 +212,22 @@ class PlaywrightBrowserPanelElement(PlaywrightIntegrationTestElement):
         """
         deadline = time.monotonic() + timeout_seconds
         last_value = ""
+        last_error: Exception | None = None
         while time.monotonic() < deadline:
             try:
                 last_value = str(self.webview_evaluate("document.location.href"))
-            except Exception:  # noqa: BLE001 — bridge may briefly raise mid-navigation
+                last_error = None
+            except Exception as exc:  # noqa: BLE001 — bridge may briefly raise mid-navigation
                 last_value = ""
+                last_error = exc
             if needle in last_value:
                 return
             self._page.wait_for_timeout(int(_URL_POLL_INTERVAL_SECONDS * 1000))
-        raise AssertionError(f"Webview location did not reach {needle!r}; last value was {last_value!r}")
+        # Surface the last bridge error if we never got a readable location: a
+        # bare "last value was ''" hides a persistently-stale webContentsId,
+        # which is the failure mode worth diagnosing when this does trip.
+        suffix = f" (last webview-execute error: {last_error})" if last_error is not None else ""
+        raise AssertionError(f"Webview location did not reach {needle!r}; last value was {last_value!r}{suffix}")
 
     def _wait_for_webview_attached(self) -> None:
         deadline = time.monotonic() + _WEBVIEW_ATTACH_TIMEOUT_SECONDS
