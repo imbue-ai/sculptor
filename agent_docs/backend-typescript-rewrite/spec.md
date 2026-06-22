@@ -55,8 +55,8 @@ what's in and out of scope, and how we'll know the rewrite succeeded.
 
 - **Cutover — big-bang replacement.** The TypeScript backend fully
   replaces the Python backend in a single release. A **one-time data
-  migration** runs on upgrade to move existing users' data into the new
-  schema. There is no period of Python/TS coexistence.
+  migration** (a standalone tool the user runs once at upgrade) moves existing
+  users' data into the new schema. There is no period of Python/TS coexistence.
 
 _(This Overview is a rough starting point — we'll sharpen it through
 Q&A.)_
@@ -70,9 +70,9 @@ of them.
 
 ### Existing user upgrades to the new backend
 A user running the current (Python-backend) Sculptor upgrades to the
-release containing the TypeScript backend. On first launch, a one-time
-data migration runs against their existing `~/.sculptor` data store and
-moves it into the new schema (`REQ-DATA-1`, `REQ-DATA-2`). After
+release containing the TypeScript backend. They run the one-time migration
+tool, which moves their existing `~/.sculptor` data store into the new schema
+(`REQ-DATA-1`, `REQ-DATA-2`). After
 migration, all of their projects, workspaces, past agents, and
 conversation history are present exactly as before (`REQ-DATA-3`). They
 resume work without re-onboarding (`REQ-DATA-4`).
@@ -196,8 +196,11 @@ the change with far less ceremony than the Python backend required
 - **REQ-DATA-1 (MUST):** Existing users' data MUST survive the upgrade.
   The new backend MAY define a different database schema, but a
   migration path from the current schema MUST exist.
-- **REQ-DATA-2 (MUST):** The migration MUST run automatically as a
-  one-time step on upgrade, with no manual user action required.
+- **REQ-DATA-2 (MUST):** A one-time migration MUST move existing users' data
+  into the new schema. It MAY be a **standalone tool the user runs once**
+  rather than an automatic on-upgrade step — automatic execution is **not**
+  required. It MUST be a single, self-contained operation (no multi-step manual
+  data wrangling).
 - **REQ-DATA-3 (MUST):** After migration, all user-visible state the
   current backend persists (projects, workspaces, agents/their runs,
   conversation history, notifications, user settings) MUST be present
@@ -225,7 +228,7 @@ the change with far less ceremony than the Python backend required
   on-disk Sculptor folder layout / durability guarantees
   (`requirements.md` REQ-DATA-001/002/010) survive upgrade.
 - **REQ-DATA-8 (SHOULD):** The new migration SHOULD uphold the same
-  safety bar the current one does — automatic at startup, forward-only,
+  safety bar the current one does — forward-only,
   failing loudly on an incompatible/newer store rather than corrupting
   data (`requirements.md` REQ-DATA-011), and covered by a seed →
   migrate → verify test (`requirements.md` REQ-DATA-012).
