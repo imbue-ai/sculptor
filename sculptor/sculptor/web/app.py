@@ -85,7 +85,6 @@ from sculptor.interfaces.agents.agent import ClearContextUserMessage
 from sculptor.interfaces.agents.agent import InterruptProcessUserMessage
 from sculptor.interfaces.agents.agent import PersistentRequestCompleteAgentMessage
 from sculptor.interfaces.agents.agent import PiAgentConfig
-from sculptor.interfaces.agents.agent import RefreshModelsUserMessage
 from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.interfaces.agents.agent import RemoveQueuedMessageUserMessage
 from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
@@ -117,6 +116,8 @@ from sculptor.services.git_repo_service.default_implementation import LocalWrita
 from sculptor.services.git_repo_service.error_types import GitRepoError
 from sculptor.services.git_repo_service.error_types import GitRepoNotFoundError
 from sculptor.services.git_repo_service.git_commands import run_git_command_local
+from sculptor.services.pi_login_service import PiLoginMode
+from sculptor.services.pi_login_service import pi_login_terminal_id
 from sculptor.services.project_service.default_implementation import get_most_recently_used_project_id
 from sculptor.services.project_service.default_implementation import update_most_recently_used_project
 from sculptor.services.task_service.errors import InvalidTaskOperation
@@ -218,6 +219,8 @@ from sculptor.web.data_types import OpenFileUiRequest
 from sculptor.web.data_types import OpenInOsRequest
 from sculptor.web.data_types import OpenPathInAppRequest
 from sculptor.web.data_types import OpenPathInAppResult
+from sculptor.web.data_types import PiLoginRequest
+from sculptor.web.data_types import PiLoginResponse
 from sculptor.web.data_types import PreviewBranchNameResponse
 from sculptor.web.data_types import ProjectEnvVarNames
 from sculptor.web.data_types import ProjectInitializationRequest
@@ -681,37 +684,6 @@ def _cleanup_task_file_attachments(
         except Exception as e:
             log_exception(e, "Failed to delete {file_path}", file_path=file_path)
     logger.info("Cleaned up {} file(s) for task {}", len(file_paths), task_id)
-
-
-def broadcast_pi_models_refresh(
-    services: CompleteServiceCollection,
-    transaction: DataModelTransaction,
-) -> int:
-    """Fan a RefreshModelsUserMessage out to every active pi agent (fire-and-forget).
-
-    A credential change (login/logout terminal close, paste-key write) is global —
-    Settings has no current-agent concept — so every running pi agent re-reads
-    auth.json and re-emits its catalog between turns. Returns the number of pi
-    agents messaged. Non-pi agents are skipped: a Claude agent has no refresh
-    handler and would just drop the message.
-    """
-    messaged_count = 0
-    # get_active_tasks lives on the concrete task transaction; narrow from the
-    # web-layer DataModelTransaction (mirrors the upsert_task call sites).
-    assert isinstance(transaction, TaskAndDataModelTransaction)
-    for task in transaction.get_active_tasks((AgentTaskInputsV2,)):
-        if not isinstance(task.input_data, AgentTaskInputsV2):
-            continue
-        if not isinstance(task.input_data.agent_config, PiAgentConfig):
-            continue
-        services.task_service.create_message(
-            message=RefreshModelsUserMessage(),
-            task_id=task.object_id,
-            transaction=transaction,
-        )
-        messaged_count += 1
-    logger.info("Broadcast pi models refresh to {} agent(s)", messaged_count)
-    return messaged_count
 
 
 @router.post("/api/v1/workspaces")
@@ -4299,6 +4271,65 @@ def get_pi_authenticated_providers(
             for status in get_provider_auth_statuses()
         )
     )
+
+
+@router.post("/api/v1/pi/login")
+def start_pi_login(
+    request: Request,
+    pi_login_request: PiLoginRequest,
+    user_session: UserSession = Depends(get_user_session),
+) -> PiLoginResponse:
+    """Spawn an interactive pi /login (or /logout) PTY and return its login-session id.
+
+    Global (no workspace/agent): the PTY drives pi's own interactive flow against the
+    user's real ~/.pi/agent. The frontend attaches at GET /api/v1/pi/login/{id}/ws.
+    """
+    services = get_services_from_request_or_websocket(request)
+    pi_binary_path = services.dependency_management_service.resolve_binary_path(Dependency.PI)
+    if pi_binary_path is None:
+        raise HTTPException(status_code=400, detail="pi is not installed — configure it in Settings → Pi")
+    login_id = services.pi_login_service.spawn(
+        PiLoginMode(pi_login_request.mode),
+        pi_binary_path,
+        pi_login_request.provider_id,
+    )
+    return PiLoginResponse(login_id=login_id)
+
+
+@router.post("/api/v1/pi/login/{login_id}/done")
+def finish_pi_login(
+    login_id: str,
+    request: Request,
+    user_session: UserSession = Depends(get_user_session),
+) -> Response:
+    """Tear down a login PTY (Done button) and broadcast a model refresh. Idempotent."""
+    services = get_services_from_request_or_websocket(request)
+    services.pi_login_service.teardown(login_id)
+    return Response(status_code=204)
+
+
+@APP.websocket("/api/v1/pi/login/{login_id}/ws")
+async def pi_login_websocket(
+    websocket: WebSocket,
+    login_id: str,
+) -> None:
+    """Attach a WebSocket to a pi login PTY, reaping it (and refreshing models) on close.
+
+    Unlike agent terminals (which persist across disconnect), a login PTY is
+    ephemeral: when the socket closes the session is torn down and a model-catalog
+    refresh is broadcast, since credentials may have changed.
+    """
+    services = get_services_from_request_or_websocket(websocket)
+    if not services.pi_login_service.is_active(login_id):
+        # Accept before closing so the client receives a proper 4404 close frame
+        # (see agent_terminal_websocket for the full explanation).
+        await websocket.accept()
+        await websocket.close(code=4404, reason=f"pi login session {login_id} not found")
+        return
+    try:
+        await _connect_terminal_websocket(websocket, pi_login_terminal_id(login_id))
+    finally:
+        services.pi_login_service.teardown(login_id)
 
 
 @router.post("/api/v1/projects/init-git")

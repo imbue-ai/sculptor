@@ -285,6 +285,23 @@ class AuthenticatedProvidersResponse(SerializableModel):
     providers: tuple[AuthenticatedProviderEntry, ...]
 
 
+class PiLoginRequest(RequestModel):
+    """Start an interactive pi login or logout PTY.
+
+    ``provider_id`` is on-screen guidance / refresh context only — pi's /login and
+    /logout take no provider argument (the user selects in pi's own TUI selector).
+    """
+
+    mode: Literal["login", "logout"]
+    provider_id: str | None = None
+
+
+class PiLoginResponse(SerializableModel):
+    """Identifies the spawned login session; the WS attaches at /pi/login/{id}/ws."""
+
+    login_id: str
+
+
 class RecentWorkspaceResponse(SerializableModel):
     """Workspace with denormalized project info and computed fields for cross-project listing."""
 
