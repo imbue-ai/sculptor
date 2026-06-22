@@ -8,8 +8,6 @@
   @include thin-scrollbar;
 }
 
-/* Graph column --------------------------------------------------------------- */
-
 .graphColumn {
   align-items: center;
   display: flex;
@@ -60,8 +58,6 @@
   width: 8px;
 }
 
-/* Commit entry --------------------------------------------------------------- */
-
 .commitEntry {
   display: flex;
   flex-direction: column;
@@ -107,8 +103,6 @@
   font-family: var(--font-mono);
 }
 
-/* Commit hover popover ------------------------------------------------------ */
-
 .popoverContent {
   background: var(--color-panel-solid);
   border-radius: var(--radius-4);
@@ -134,8 +128,6 @@
   color: var(--gray-11);
   font-family: var(--font-mono);
 }
-
-/* Commit files --------------------------------------------------------------- */
 
 .commitFiles {
   padding-left: 20px;
@@ -167,8 +159,6 @@
   width: 20px;
 }
 
-/* Merge spur ---------------------------------------------------------------- */
-
 .mergeSpurRow {
   align-items: flex-end;
   display: flex;
@@ -189,15 +179,11 @@
   white-space: nowrap;
 }
 
-/* Side branch (nested under merge commits) ---------------------------------- */
-
 .sideBranch {
   display: flex;
   flex-direction: column;
 }
 
-
-/* Terminus ------------------------------------------------------------------- */
 
 .terminus {
   display: flex;

@@ -21,9 +21,7 @@ import { getNextTerminalLabel } from "./terminalLabelUtils";
 import styles from "./TerminalPanel.module.scss";
 import { useTerminal } from "./useTerminal";
 
-// ---------------------------------------------------------------------------
 // TerminalInstance — one xterm.js + WebSocket per tab
-// ---------------------------------------------------------------------------
 
 type TerminalTab = {
   id: string;
@@ -52,12 +50,7 @@ const TerminalInstance = ({ workspaceID, terminalIndex, isVisible, onOutput }: T
   );
 };
 
-// ---------------------------------------------------------------------------
 // useWorkspaceTerminalTabs — workspace-scoped access to persisted tab atoms
-//
-// Eliminates the local-state-plus-sync-effects pattern by reading/writing
-// atoms directly, scoped to the current workspaceID.
-// ---------------------------------------------------------------------------
 
 const DEFAULT_TAB: TerminalTab = { id: "terminal-0", index: 0, label: "Terminal 1" };
 const DEFAULT_NEXT_INDEX = 1;
@@ -119,9 +112,7 @@ const useWorkspaceTerminalTabs = (workspaceID: string): WorkspaceTerminalTabsRes
   return { tabs, activeTabId, nextIndex, setTabs, setActiveTabId, setNextIndex };
 };
 
-// ---------------------------------------------------------------------------
 // TerminalPanelWrapper — manages terminal tabs
-// ---------------------------------------------------------------------------
 
 export const TerminalPanelWrapper = (): ReactElement | null => {
   const { workspaceID } = useWorkspacePageParams();

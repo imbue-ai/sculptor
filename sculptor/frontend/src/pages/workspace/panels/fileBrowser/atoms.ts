@@ -55,10 +55,6 @@ export const getUncommittedFileStatusMap = (
 /** Per-workspace scope for the Changes tab (independent of the Review All scope). Resets on page refresh. */
 export const changesScopeAtomFamily = atomFamily((_workspaceId: string) => atom<DiffScope>("vs-target-branch"));
 
-// ---------------------------------------------------------------------------
-// Folder expand/collapse atoms — parameterized by state key
-// ---------------------------------------------------------------------------
-
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 const createToggleFolderAtom = (key: FolderStateKey) =>
   atom(null, (get, set, { workspaceId, folderPath }: { workspaceId: string; folderPath: string }) => {
@@ -103,10 +99,6 @@ export const collapseAllChangesFoldersAtom = atom(null, (get, set, { workspaceId
   set(stateAtom, { ...state, changesExpandedFolders: [] });
 });
 
-// ---------------------------------------------------------------------------
-// Other state atoms
-// ---------------------------------------------------------------------------
-
 export const toggleViewModeAtom = atom(null, (get, set, { workspaceId }: { workspaceId: string }) => {
   const stateAtom = fileBrowserStateAtomFamily(workspaceId);
   const state = get(stateAtom);
@@ -114,11 +106,9 @@ export const toggleViewModeAtom = atom(null, (get, set, { workspaceId }: { works
   set(stateAtom, { ...state, viewMode });
 });
 
-// ---------------------------------------------------------------------------
 // Folder reveal: expand ancestors, show the file browser panel, and signal
 // FileTree to scroll + briefly highlight the row. Used by @-folder mention
 // chips in chat messages.
-// ---------------------------------------------------------------------------
 
 export type FocusFolderRequest = {
   workspaceId: string;

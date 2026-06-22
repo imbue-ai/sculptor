@@ -45,8 +45,6 @@
   gap: var(--space-1);
 }
 
-// ─── Title role classes ──────────────────────────────────────────────────────
-//
 // Shared typography roles for content placed inside `<PopoverHeader title={…}>`.
 // PopoverHeader's default title style is a sans-serif "label" (descriptions,
 // tool names). When the title is a code identifier (file path, command,

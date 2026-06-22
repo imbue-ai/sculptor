@@ -11,12 +11,10 @@
   // column wider than its container (horizontal overflow).
   overflow-wrap: anywhere;
 
-  // First child should not have top margin
   > :first-child {
     margin-top: 0;
   }
 
-  // Last child should not have bottom margin
   > :last-child {
     margin-bottom: 0;
   }
@@ -69,7 +67,6 @@
     margin: 1em 0;
   }
 
-  // Links
   a {
     color: var(--blue-11);
     text-decoration: underline;
@@ -82,7 +79,6 @@
     }
   }
 
-  // Lists
   ul,
   ol {
     margin: 0.5em 0;
@@ -158,7 +154,6 @@
   }
   /* stylelint-enable selector-class-pattern */
 
-  // Inline code
   .inlineCode {
     background-color: var(--gray-4);
     border: 1px solid var(--gray-5);
@@ -196,7 +191,6 @@
     }
   }
 
-  // Horizontal rules
   hr {
     border: none;
     border-top: 1px solid var(--gray-5);

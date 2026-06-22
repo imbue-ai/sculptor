@@ -17,10 +17,6 @@ import { getColorScale, resolveGrayColor } from "~/common/theme/radixColorHexMap
 import { useResolvedTheme } from "~/common/Utils.ts";
 import { commandActionsAtom } from "~/components/CommandPalette/commandActions.ts";
 
-// ---------------------------------------------------------------------------
-// Pure helper functions (extracted for testability and readability)
-// ---------------------------------------------------------------------------
-
 // ESC character code (0x1B)
 const ESC = "\u001b";
 
@@ -302,10 +298,6 @@ export const shouldClearActiveTerminal = (
   if (!shouldHandleKeybinding(event, binding)) return false;
   return container != null && container.contains(document.activeElement);
 };
-
-// ---------------------------------------------------------------------------
-// useTerminal hook
-// ---------------------------------------------------------------------------
 
 type UseTerminalArgs = {
   /** The backend WebSocket path for this terminal's PTY, e.g.
@@ -680,8 +672,6 @@ export const useTerminal = ({
     };
   }, [isVisible, handleResize]);
 
-  // ── Clear-terminal keybinding (focus-gated) ────────────────────────
-  //
   // Mirrors the `interrupt_agent` pattern in ChatInput.tsx — we read the
   // resolved binding from the keybindings registry and attach a window-level
   // keydown listener that only fires when this terminal instance has

@@ -17,8 +17,6 @@
   @include thin-scrollbar;
 }
 
-// ─── Entry ────────────────────────────────────────────────────────────────────
-
 // Each entry is a PopoverHeader (with its own padding) plus an optional body.
 // No surrounding padding here — the header and body each style themselves.
 .entry {

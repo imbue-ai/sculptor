@@ -114,9 +114,7 @@ export const AlphaChipDiffPopover = ({
     // the change against HEAD. Files outside the clone — and plan files at
     // `.claude/plans/`, which are documents, not code changes — have no
     // useful diff context, so route them to a file-view tab that renders the
-    // contents directly. Mirrors the classic-chat fix that landed under
-    // SCU-366; the same bug existed in alpha because the file-chip popover
-    // routed unconditionally through openDiffTab.
+    // contents directly.
     const { display: pathRel, isOutsideWorkspace } = makeRelative(chipData.filePath, workspaceCodePath);
     // `.claude/plans/` always sits at the workspace root, so check the
     // relative path with `startsWith` rather than `includes` on the absolute
@@ -197,7 +195,6 @@ export const AlphaChipDiffPopover = ({
 
   return (
     <div className={styles.popover} data-testid={ElementIds.ALPHA_CHAT_CHIP_POPOVER} onKeyDown={handleKeyDown}>
-      {/* Header */}
       <div className={headerClass.join(" ")}>
         <div className={styles.headerLeft}>
           {chipData.state === "completed" && chipData.isNewFile && (
@@ -256,7 +253,6 @@ export const AlphaChipDiffPopover = ({
         </div>
       </div>
 
-      {/* Body */}
       <div className={styles.body}>
         {chipData.state === "completed" && diffPatches.length > 0 && (
           <div ref={pierreRef}>

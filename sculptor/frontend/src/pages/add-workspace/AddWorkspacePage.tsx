@@ -256,7 +256,6 @@ export const AddWorkspacePage = (): ReactElement => {
       // a duplicate tab.  The flag is cleared by convertNewWorkspaceToTab.
       markDraftCreating(draftId);
 
-      // Create workspace
       const wsResponse = await createWorkspaceV2({
         body: {
           projectId: selectedProjectId,
@@ -329,7 +328,6 @@ export const AddWorkspacePage = (): ReactElement => {
         has_source_branch: sourceBranch != null,
       });
 
-      // Navigate to the new workspace + agent
       navigateToAgent(workspaceId, agentResponse.data.id);
     } catch (error) {
       // Clear the pending-creation flag so auto-open resumes normally.
@@ -439,7 +437,6 @@ export const AddWorkspacePage = (): ReactElement => {
               />
             }
           >
-            {/* Project/repo selector */}
             <RepoSelector
               projects={projects}
               selectedProjectId={selectedProjectId}
@@ -447,7 +444,6 @@ export const AddWorkspacePage = (): ReactElement => {
               className={styles.compactSelector}
             />
 
-            {/* Branch selector */}
             {repoInfo ? (
               mode === WorkspaceInitializationStrategy.IN_PLACE ? (
                 <Tooltip content="In-place workspaces use the current branch in your repository">

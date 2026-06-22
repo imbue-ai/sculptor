@@ -82,7 +82,6 @@ export const SettingsPage = (): ReactElement => {
       setActiveSection(sectionParam as SettingsSection);
     }
   }, [searchParams, setActiveSection]);
-  // Read from derived atoms for current values
   const [themeSettings, setThemeSettings] = useAtom(themeBuilderSettingsAtom);
   const configuredDefaultModel = useAtomValue(configuredDefaultModelAtom);
   const userEmail = useAtomValue(userEmailAtom);
@@ -113,7 +112,6 @@ export const SettingsPage = (): ReactElement => {
 
   const { updateField } = useUserConfig();
 
-  // Handler for updating individual settings - now uses snake_case field names.
   const handleSettingChange = async (fieldConstant: UserConfigField, value: unknown): Promise<void> => {
     try {
       await updateField(fieldConstant, value);

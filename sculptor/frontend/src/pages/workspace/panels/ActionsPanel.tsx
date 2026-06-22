@@ -276,8 +276,6 @@ export const ActionsPanel = (): ReactElement => {
 
   const isAgentRunning = task?.status === "RUNNING" || task?.status === "BUILDING";
 
-  // --- CRUD handlers ---
-
   const handleAddAction = (): void => {
     setEditingAction(undefined);
     setIsDialogOpen(true);
@@ -523,8 +521,6 @@ export const ActionsPanel = (): ReactElement => {
     setDropTarget(null);
     dropTargetRef.current = null;
   };
-
-  // --- Render ---
 
   const isGroupDrag = activeDragId?.startsWith("group:") ?? false;
   const activeDragAction = !isGroupDrag && activeDragId ? actions.find((a) => a.id === activeDragId) : null;

@@ -38,13 +38,11 @@ export const DependenciesSettingsSection = ({ onSettingChange }: DependenciesSet
     ? `Supported range: ${claude.versionRange.minVersion} \u2013 ${claude.versionRange.maxVersion}`
     : undefined;
 
-  // ── Compact views ──
   const isClaudeHealthy = isManagedUpToDate && !isInstalling && !effectiveInstallError && !installProgress;
   const isGitHealthy = git?.installed === true;
 
   return (
     <SettingsSectionLayout description="Manage external tool dependencies used by Sculptor.">
-      {/* ── Claude ── */}
       <SectionTitle>Claude</SectionTitle>
 
       <SettingRow title="Binary Source" description="Choose how Sculptor locates the Claude CLI binary.">
@@ -185,7 +183,6 @@ export const DependenciesSettingsSection = ({ onSettingChange }: DependenciesSet
 
       <Separator size="4" my="5" />
 
-      {/* ── Git ── */}
       <SectionTitle>Git</SectionTitle>
 
       <SettingRow title="Status" description="Git must be available on your PATH.">
