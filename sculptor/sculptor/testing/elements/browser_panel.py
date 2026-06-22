@@ -41,6 +41,15 @@ _CLIPBOARD_TIMEOUT_SECONDS: float = 30.0
 # execute". A genuine error still surfaces once the budget is exhausted.
 _WEBVIEW_EXECUTE_RETRY_SECONDS: float = 15.0
 
+# Budget for navigate() to land a typed URL, across re-resolutions of the URL
+# input. A workspace switch remounts the panel, so a one-shot fill can land in
+# the old, detaching input while the new one still shows the persisted
+# about:blank. We re-issue fill+Enter on a freshly-resolved input within this
+# window; each attempt's address-bar check is short so the budget supplies the
+# overall wait (the retry pattern, not a lowered single timeout).
+_NAVIGATE_RETRY_SECONDS: float = 30.0
+_NAVIGATE_ATTEMPT_SECONDS: float = 3.0
+
 # Substrings that mark a webview-execute failure as a transient "guest not ready
 # yet" condition rather than a real assertion failure. Matched against the
 # Playwright error text bubbled up from the Electron ``executeJavaScript`` IPC.
@@ -94,14 +103,27 @@ class PlaywrightBrowserPanelElement(PlaywrightIntegrationTestElement):
 
         Set ``wait_for_webview_load=False`` for negative-path tests where the
         URL is intentionally invalid and the webview will never reach it.
+
+        The fill is retried on a freshly-resolved URL input each attempt: a
+        workspace switch remounts the panel, so a one-shot fill can land in the
+        old, detaching input while the address bar then reads the new input
+        (still showing the persisted ``about:blank``). Re-issuing fill+Enter on
+        the live input lands the value.
         """
-        input_locator = self.get_url_input()
-        expect(input_locator).to_be_visible()
-        input_locator.click(click_count=3)
-        input_locator.fill(url)
-        input_locator.press("Enter")
         bare_url = url.split("#", 1)[0]
-        self.wait_for_address_bar_contains(bare_url)
+        deadline = time.monotonic() + _NAVIGATE_RETRY_SECONDS
+        while True:
+            input_locator = self.get_url_input()
+            expect(input_locator).to_be_visible()
+            input_locator.click(click_count=3)
+            input_locator.fill(url)
+            input_locator.press("Enter")
+            try:
+                self.wait_for_address_bar_contains(bare_url, timeout_seconds=_NAVIGATE_ATTEMPT_SECONDS)
+                break
+            except AssertionError:
+                if time.monotonic() >= deadline:
+                    raise
         if wait_for_webview_load:
             self._wait_for_webview_location_contains(bare_url)
 
