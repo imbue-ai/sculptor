@@ -18,13 +18,19 @@ import { TicketSection } from "./TicketSection.tsx";
 export const LinearPanel = (): ReactElement => {
   const branch = useCurrentWorkspace((workspace) => workspace?.branch ?? null);
   const workspaceId = useCurrentWorkspace((workspace) => workspace?.id ?? null);
+  const pullRequestUrl = useCurrentWorkspace((workspace) => workspace?.pullRequestUrl ?? null);
   const [apiKey] = usePluginSetting("apiKey");
   const { pinnedIds, pin, unpin } = usePinnedIds(workspaceId);
   const { overrides, setExpanded } = useExpandedIds(workspaceId);
   // A separate map for each ticket's sub-issue disclosure, keyed by the same
   // ticket identifier but namespaced so it can't collide with the section map.
   const { overrides: subOverrides, setExpanded: setSubExpanded } = useExpandedIds(workspaceId, "subissues");
-  const { tickets, isFetching, isError, error, refetch } = useLinearTickets({ apiKey, branch, pinnedIds });
+  const { tickets, isFetching, isError, error, refetch } = useLinearTickets({
+    apiKey,
+    branch,
+    pullRequestUrl,
+    pinnedIds,
+  });
 
   const refreshAction = apiKey ? (
     <IconButton size="1" variant="ghost" color="gray" onClick={() => refetch()} disabled={isFetching} title="Refresh">

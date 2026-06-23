@@ -4,6 +4,7 @@ import { useContext, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
 
 import type { CodingAgentTaskView, Workspace } from "~/api";
+import { prStatusAtomFamily } from "~/common/state/atoms/prStatus.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { workspaceBranchAtomFamily } from "~/common/state/atoms/workspaceBranch.ts";
 import { workspaceAtomFamily, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
@@ -29,6 +30,14 @@ export type CurrentWorkspace = {
   /** Live current branch, or `null` until the backend has reported it. */
   branch: string | null;
   targetBranch: string | null;
+  /**
+   * Web URL of the workspace's pull/merge request, or `null` when there is none
+   * (or the backend hasn't reported PR status yet). The authoritative link
+   * between a Sculptor workspace and an external code host — useful when the
+   * branch name alone can't be resolved, since Sculptor-generated branch names
+   * carry no issue identifier and no host-side VCS link.
+   */
+  pullRequestUrl: string | null;
 };
 
 // One derived view atom per workspace id, composing the workspace model with
@@ -43,6 +52,7 @@ const currentWorkspaceViewAtomFamily = atomFamily((id: string) =>
       description: workspace.description,
       branch: get(workspaceBranchAtomFamily(id))?.currentBranch ?? null,
       targetBranch: workspace.targetBranch ?? null,
+      pullRequestUrl: get(prStatusAtomFamily(id))?.prWebUrl ?? null,
     };
   }),
 );

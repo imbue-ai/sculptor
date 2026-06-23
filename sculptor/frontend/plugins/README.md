@@ -15,9 +15,11 @@ not unloaded mid-session. The section also stays reachable at
 
 The bundled example is `linear-issue`. It shows the Linear issues linked to a
 workspace as collapsible sections, each tagged with where it came from: the
-issue Linear links to the branch (`issueVcsBranchSearch`, treated as primary),
-the issues that issue's PR links to (`attachmentsForURL`), and any the user
-pins via a quick-search box (`searchIssues`). It renders descriptions with the
+branch's issue (primary — `issueVcsBranchSearch`, then an identifier parsed from
+the branch name, then the workspace's PR resolved via `attachmentsForURL`, so
+Sculptor-generated branches that Linear has no link for still resolve), the
+issues that issue's PR links to (`attachmentsForURL`), and any the user pins via
+a quick-search box (`searchIssues`). It renders descriptions with the
 SDK `Markdown` component, opens links via `openExternal`, and stores its API
 key and per-workspace pins through the plugin-settings SDK. It is structured as
 a reference: a `linear/` core (Linear client, source-merging, query hooks) kept
@@ -59,8 +61,9 @@ the exact set the import map provides, derived from `RUNTIME_MODULE_SPECIFIERS`
 ## SDK surface plugins target (`@sculptor/plugin-sdk`)
 
 - `useCurrentWorkspace(selector?)` — the active workspace as a curated view
-  (`id`, `description`, `branch`, `targetBranch`); pass a selector to subscribe
-  to one field, e.g. `useCurrentWorkspace((w) => w?.branch ?? null)`.
+  (`id`, `description`, `branch`, `targetBranch`, `pullRequestUrl`); pass a
+  selector to subscribe to one field, e.g.
+  `useCurrentWorkspace((w) => w?.branch ?? null)`.
 - `useWorkspaces()` — every workspace (app-global; works in overlays).
 - `useWorkspaceTasks()` — the workspace's tasks (host task data).
 - `usePluginSetting(key)` — a persisted string setting scoped to the plugin
@@ -90,7 +93,7 @@ request. Rules:
   queries are invalidated by the WebSocket stream); without an override your
   data will never refetch.
 - **Scope imperative calls to your namespace**: `invalidateQueries({ queryKey:
-  ["<your-id>"] })` is fine; never call `clear()` or unfiltered
+["<your-id>"] })` is fine; never call `clear()` or unfiltered
   `invalidateQueries()` — the cache is shared with the host.
 - `QueryClient`/`QueryClientProvider` are intentionally not exported by the
   runtime stub: don't construct your own client, it would cut host components
