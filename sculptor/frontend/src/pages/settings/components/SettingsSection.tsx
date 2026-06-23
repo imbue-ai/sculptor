@@ -3,7 +3,7 @@ import type { ReactElement, ReactNode } from "react";
 
 import styles from "./SettingsSection.module.scss";
 
-type SettingsSectionProps = {
+type SettingsSectionLayoutProps = {
   description?: ReactNode;
   toolbar?: ReactNode;
   children: ReactNode;
@@ -15,7 +15,7 @@ export const SectionTitle = ({ children }: { children: ReactNode }): ReactElemen
   </Text>
 );
 
-export const SettingsSectionLayout = ({ description, toolbar, children }: SettingsSectionProps): ReactElement => (
+export const SettingsSectionLayout = ({ description, toolbar, children }: SettingsSectionLayoutProps): ReactElement => (
   <Flex direction="column" className={styles.section}>
     {description && (
       <Text size="2" color="gray" mt="2" mb="7">

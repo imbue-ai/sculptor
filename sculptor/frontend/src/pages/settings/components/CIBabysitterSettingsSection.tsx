@@ -47,6 +47,9 @@ const DEFAULT_PIPELINE_FAILED_PROMPT =
 const DEFAULT_MERGE_CONFLICT_PROMPT =
   "This MR has a merge conflict with its base branch. Fetch the latest, then rebase against the base branch, resolve all conflicts, and force-push the result.";
 
+const MIN_RETRY_CAP = 1;
+const MAX_RETRY_CAP = 10;
+
 type CIBabysitterSettingsSectionProps = {
   onSettingChange: (field: UserConfigField, value: unknown) => Promise<void>;
 };
@@ -85,7 +88,7 @@ export const CIBabysitterSettingsSection = ({ onSettingChange }: CIBabysitterSet
 
   const handleRetryCapBlur = (): void => {
     const parsed = parseInt(retryCapValue, 10);
-    if (isNaN(parsed) || parsed < 1 || parsed > 10) {
+    if (isNaN(parsed) || parsed < MIN_RETRY_CAP || parsed > MAX_RETRY_CAP) {
       setRetryCapValue(String(retryCap));
       return;
     }
@@ -145,8 +148,8 @@ export const CIBabysitterSettingsSection = ({ onSettingChange }: CIBabysitterSet
       >
         <TextField.Root
           type="number"
-          min={1}
-          max={10}
+          min={MIN_RETRY_CAP}
+          max={MAX_RETRY_CAP}
           value={retryCapValue}
           onChange={(e) => setRetryCapValue(e.target.value)}
           onBlur={handleRetryCapBlur}

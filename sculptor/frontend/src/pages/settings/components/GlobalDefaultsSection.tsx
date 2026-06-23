@@ -1,6 +1,6 @@
 import { Select, Text, TextField } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
-import type { ReactElement } from "react";
+import type { FocusEvent, ReactElement } from "react";
 import { Fragment } from "react";
 
 import { ElementIds, UserConfigField } from "~/api";
@@ -21,7 +21,7 @@ export const GlobalDefaultsSection = ({ onSettingChange }: GlobalDefaultsSection
   const defaultPattern = useAtomValue(defaultWorkspaceBranchNamingPatternAtom);
   const deletionPolicy = useAtomValue(workspaceBranchDeletionPolicyAtom);
 
-  const handlePatternBlur = (e: React.FocusEvent<HTMLInputElement>): void => {
+  const handlePatternBlur = (e: FocusEvent<HTMLInputElement>): void => {
     const trimmed = e.target.value.trim() || DEFAULT_PATTERN_FALLBACK;
     if (trimmed !== defaultPattern) {
       void onSettingChange(UserConfigField.DEFAULT_WORKSPACE_BRANCH_NAMING_PATTERN, trimmed);

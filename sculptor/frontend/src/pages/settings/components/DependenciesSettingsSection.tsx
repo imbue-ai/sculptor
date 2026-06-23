@@ -172,7 +172,11 @@ export const DependenciesSettingsSection = ({ onSettingChange }: DependenciesSet
                   data-testid={ElementIds.CLAUDE_CLI_CUSTOM_PATH_INPUT}
                   style={{ minWidth: "300px" }}
                 />
-                <Button variant="soft" onClick={handleApplyCustomPath} data-testid="claude-cli-custom-path-apply">
+                <Button
+                  variant="soft"
+                  onClick={handleApplyCustomPath}
+                  data-testid={ElementIds.CLAUDE_CLI_CUSTOM_PATH_APPLY}
+                >
                   Apply
                 </Button>
               </Flex>

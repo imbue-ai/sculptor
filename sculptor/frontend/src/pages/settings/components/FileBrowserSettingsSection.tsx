@@ -3,7 +3,7 @@ import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 
-import type { UserConfigField } from "~/api";
+import { UserConfigField } from "~/api";
 import {
   commitPromptAtom,
   DEFAULT_COMMIT_PROMPT,
@@ -16,6 +16,10 @@ import {
 import { SettingRow } from "./SettingRow.tsx";
 import { SettingsSectionLayout } from "./SettingsSection.tsx";
 import { TextAreaSettingRow } from "./TextAreaSettingRow.tsx";
+
+const MIN_SPLIT_RATIO = 20;
+const MAX_SPLIT_RATIO = 80;
+const SPLIT_RATIO_STEP = 5;
 
 type FileBrowserSettingsSectionProps = {
   onSettingChange: (field: UserConfigField, value: unknown) => Promise<void>;
@@ -34,13 +38,13 @@ export const FileBrowserSettingsSection = ({ onSettingChange }: FileBrowserSetti
 
   const handleSplitRatioBlur = (): void => {
     const parsed = parseInt(splitRatioValue, 10);
-    if (isNaN(parsed) || parsed < 20 || parsed > 80) {
+    if (isNaN(parsed) || parsed < MIN_SPLIT_RATIO || parsed > MAX_SPLIT_RATIO) {
       setSplitRatioValue(String(splitRatio));
       return;
     }
 
     if (parsed !== splitRatio) {
-      onSettingChange("fileBrowserDefaultSplitRatio" as UserConfigField, parsed);
+      onSettingChange(UserConfigField.FILE_BROWSER_DEFAULT_SPLIT_RATIO, parsed);
     }
   };
 
@@ -50,9 +54,9 @@ export const FileBrowserSettingsSection = ({ onSettingChange }: FileBrowserSetti
         <Flex align="center" gap="2">
           <TextField.Root
             type="number"
-            min={20}
-            max={80}
-            step={5}
+            min={MIN_SPLIT_RATIO}
+            max={MAX_SPLIT_RATIO}
+            step={SPLIT_RATIO_STEP}
             value={splitRatioValue}
             onChange={(e) => setSplitRatioValue(e.target.value)}
             onBlur={handleSplitRatioBlur}
@@ -65,7 +69,7 @@ export const FileBrowserSettingsSection = ({ onSettingChange }: FileBrowserSetti
       <SettingRow title="Tab close behavior" description="Which tab becomes active after closing the current tab">
         <Select.Root
           value={tabCloseBehavior}
-          onValueChange={(value) => onSettingChange("fileBrowserTabCloseBehavior" as UserConfigField, value)}
+          onValueChange={(value) => onSettingChange(UserConfigField.FILE_BROWSER_TAB_CLOSE_BEHAVIOR, value)}
         >
           <Select.Trigger variant="soft" />
           <Select.Content>
@@ -78,7 +82,7 @@ export const FileBrowserSettingsSection = ({ onSettingChange }: FileBrowserSetti
       <SettingRow title="Line wrapping" description="How long lines are displayed in the diff view">
         <Select.Root
           value={lineWrapping}
-          onValueChange={(value) => onSettingChange("fileBrowserLineWrapping" as UserConfigField, value)}
+          onValueChange={(value) => onSettingChange(UserConfigField.FILE_BROWSER_LINE_WRAPPING, value)}
         >
           <Select.Trigger variant="soft" />
           <Select.Content>
@@ -91,7 +95,7 @@ export const FileBrowserSettingsSection = ({ onSettingChange }: FileBrowserSetti
       <SettingRow title="Default diff view" description="Default layout for viewing diffs">
         <Select.Root
           value={diffViewType}
-          onValueChange={(value) => onSettingChange("fileBrowserDiffViewType" as UserConfigField, value)}
+          onValueChange={(value) => onSettingChange(UserConfigField.FILE_BROWSER_DIFF_VIEW_TYPE, value)}
         >
           <Select.Trigger variant="soft" />
           <Select.Content>
@@ -106,7 +110,7 @@ export const FileBrowserSettingsSection = ({ onSettingChange }: FileBrowserSetti
         description="The prompt sent to the agent when you click Commit Changes."
         value={commitPrompt}
         defaultValue={DEFAULT_COMMIT_PROMPT}
-        onSave={(value) => onSettingChange("commitPrompt" as UserConfigField, value)}
+        onSave={(value) => onSettingChange(UserConfigField.COMMIT_PROMPT, value)}
       />
     </SettingsSectionLayout>
   );

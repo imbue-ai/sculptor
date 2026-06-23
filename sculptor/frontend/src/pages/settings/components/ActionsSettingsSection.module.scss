@@ -22,7 +22,7 @@
   background-color: var(--color-surface);
   border: 1px solid var(--accent-a7);
   border-radius: var(--radius-2);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 15%);
+  box-shadow: var(--shadow-overlay);
   color: var(--gray-12);
   cursor: grabbing;
   display: flex;

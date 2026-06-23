@@ -4,8 +4,8 @@ import { RefreshCw } from "lucide-react";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useState } from "react";
 
-import type { ProjectEnvVarNames, UserConfigField } from "~/api";
-import { ElementIds, getEnvVarNames } from "~/api";
+import type { ProjectEnvVarNames } from "~/api";
+import { ElementIds, getEnvVarNames, UserConfigField } from "~/api";
 import { envVarOverrideEnabledAtom } from "~/common/state/atoms/userConfig.ts";
 import { Code } from "~/components/Code.tsx";
 
@@ -33,9 +33,9 @@ export const EnvironmentVariablesSection = ({ onSettingChange }: EnvironmentVari
       const response = await getEnvVarNames({ meta: { skipWsAck: true } });
       if (response.data) {
         setEnvData({
-          globalVarNames: response.data.globalVarNames as Array<string>,
-          globalEnvPath: response.data.globalEnvPath as string,
-          projects: response.data.projects as Array<ProjectEnvVarNames>,
+          globalVarNames: response.data.globalVarNames,
+          globalEnvPath: response.data.globalEnvPath,
+          projects: response.data.projects,
         });
       }
     } catch {
@@ -100,7 +100,7 @@ export const EnvironmentVariablesSection = ({ onSettingChange }: EnvironmentVari
       >
         <Switch
           checked={isEnvVarOverrideEnabled}
-          onCheckedChange={(checked) => onSettingChange("envVarOverrideEnabled" as UserConfigField, checked)}
+          onCheckedChange={(checked) => onSettingChange(UserConfigField.ENV_VAR_OVERRIDE_ENABLED, checked)}
           data-testid={ElementIds.SETTINGS_ENV_VAR_OVERRIDE_TOGGLE}
         />
       </SettingRow>
@@ -144,15 +144,15 @@ export const EnvironmentVariablesSection = ({ onSettingChange }: EnvironmentVari
                   </Text>
                 </Flex>
                 {envData.projects.map((project) => (
-                  <Flex key={String(project.projectPath)} direction="column" gap="1" align="start">
+                  <Flex key={project.projectPath} direction="column" gap="1" align="start">
                     <Text size="2" weight="medium">
-                      {String(project.projectName)}{" "}
+                      {project.projectName}{" "}
                       <Code size="2" style={inlineCodeStyle}>
-                        {String(project.projectPath)}
+                        {project.projectPath}
                       </Code>
                     </Text>
                     <Flex direction="column" gap="1" align="start">
-                      {(project.varNames as Array<string>).map((name: string) => (
+                      {project.varNames.map((name: string) => (
                         <Code key={name} size="2" style={inlineCodeStyle}>
                           {name}
                         </Code>
