@@ -623,8 +623,25 @@ export const optimisticDeleteWorkspaceAtom = atom(null, (get, set, workspaceId: 
   // arriving before the server confirms deletion doesn't treat it as
   // a "new" workspace and auto-open it as a tab. workspacesArrayAtom
   // filters out null atoms, so it won't appear in the UI.
-  // Remove from tab order so the tab disappears immediately
-  set(tabsAtom, applyClose(get(tabsAtom), workspaceId));
+  // Remove from tab order so the tab disappears immediately.
+  //
+  // When the deleted workspace was the active tab, applyClose leaves
+  // activeIndex at INVALID_ACTIVE_INDEX (-1). The navigation that follows
+  // usually re-points it at a surviving tab, but only synchronously on the
+  // navigateToAgent path; the navigateToWorkspace / new-workspace-fallback
+  // paths defer it to an async effect that can be starved, leaving the
+  // *persisted* tabs state at -1 while tabs still exist. On reload, rootLoader
+  // then reads order[-1] === undefined and bounces to /ws/new instead of
+  // restoring the surviving tab. Clamp to a valid neighbor synchronously so the
+  // persisted state is never invalid; the following navigation refines it.
+  const beforeClose = get(tabsAtom);
+  const removedIndex = beforeClose.order.findIndex((e) => e.tabId === workspaceId);
+  const afterClose = applyClose(beforeClose, workspaceId);
+  const nextTabs =
+    afterClose.activeIndex === INVALID_ACTIVE_INDEX && afterClose.order.length > 0
+      ? { ...afterClose, activeIndex: Math.min(removedIndex, afterClose.order.length - 1) }
+      : afterClose;
+  set(tabsAtom, nextTabs);
   // Track the deletion so components with their own workspace lists
   // (e.g. RecentWorkspaces) can filter it out without a page reload.
   const deleted = new Set(get(deletedWorkspaceIdsAtom));
