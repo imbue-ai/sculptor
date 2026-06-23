@@ -34,7 +34,7 @@
   overflow: hidden;
   padding: 0 var(--space-2);
   text-align: left;
-  transition: background-color var(--duration-fast) ease;
+  transition: background-color var(--duration-fast) var(--ease-default);
   white-space: nowrap;
   width: 100%;
 }

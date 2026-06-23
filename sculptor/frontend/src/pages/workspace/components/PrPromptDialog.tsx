@@ -3,7 +3,7 @@ import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 
-import { ElementIds, type UserConfigField } from "../../../api";
+import { ElementIds, UserConfigField } from "../../../api";
 import { prCreationPromptAtom } from "../../../common/state/atoms/userConfig.ts";
 import { useUserConfig } from "../../../common/state/hooks/useUserConfig.ts";
 import type { GitProvider } from "./PrButton.tsx";
@@ -26,13 +26,13 @@ export const PrPromptDialog = ({ open, onOpenChange, gitProvider }: PrPromptDial
   }, [open, prCreationPrompt]);
 
   const handleSave = async (): Promise<void> => {
-    await updateField("prCreationPrompt" as UserConfigField, promptValue);
+    await updateField(UserConfigField.PR_CREATION_PROMPT, promptValue);
     onOpenChange(false);
   };
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content style={{ maxWidth: 500 }} data-testid={ElementIds.PR_PROMPT_DIALOG}>
+      <Dialog.Content maxWidth="500px" data-testid={ElementIds.PR_PROMPT_DIALOG}>
         <Dialog.Title>Edit PR Creation Prompt</Dialog.Title>
         <Dialog.Description size="2" mb="4">
           This prompt is sent to the agent when you click {gitProvider === "gitlab" ? "Create MR" : "Create PR"}. The

@@ -15,7 +15,8 @@ export const ConfigLoader = ({ children }: ConfigLoaderProps): ReactElement => {
   const { loadConfig } = useUserConfig();
 
   useEffect(() => {
-    loadConfig();
+    // Fire-and-forget on mount; loadConfig logs its own failures internally.
+    void loadConfig();
   }, [loadConfig]);
 
   return <>{children}</>;

@@ -3,6 +3,8 @@ import { atomFamily, atomWithStorage } from "jotai/utils";
 
 import type { TaskID } from "../../Types.ts";
 
-export const attachedFilesAtomFamily = atomFamily<TaskID, PrimitiveAtom<Array<string>>>((taskId) => {
-  return atomWithStorage<Array<string>>(`sculptor-attached-files-${taskId}`, []);
-});
+export const attachedFilesAtomFamily = atomFamily<TaskID, PrimitiveAtom<Array<string>>>(
+  (taskId): PrimitiveAtom<Array<string>> => {
+    return atomWithStorage<Array<string>>(`sculptor-attached-files-${taskId}`, []);
+  },
+);

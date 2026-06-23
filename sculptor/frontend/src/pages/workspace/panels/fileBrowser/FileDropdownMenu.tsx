@@ -1,5 +1,6 @@
 import { DropdownMenu } from "@radix-ui/themes";
 import type { ReactElement, ReactNode } from "react";
+import { Fragment } from "react";
 
 import type { FileContextMenuContext } from "./types.ts";
 import { useFileMenuGroups } from "./useFileMenuGroups.tsx";
@@ -18,7 +19,7 @@ export const FileDropdownMenu = ({ children, context, workspaceId }: FileDropdow
       <DropdownMenu.Trigger>{children}</DropdownMenu.Trigger>
       <DropdownMenu.Content size="1">
         {menuGroups.map((group, groupIndex) => (
-          <span key={groupIndex}>
+          <Fragment key={group[0].key}>
             {groupIndex > 0 && <DropdownMenu.Separator />}
             {group.map((item) => (
               <DropdownMenu.Item
@@ -31,7 +32,7 @@ export const FileDropdownMenu = ({ children, context, workspaceId }: FileDropdow
                 {item.label}
               </DropdownMenu.Item>
             ))}
-          </span>
+          </Fragment>
         ))}
       </DropdownMenu.Content>
     </DropdownMenu.Root>

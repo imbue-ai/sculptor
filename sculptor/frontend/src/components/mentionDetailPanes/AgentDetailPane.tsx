@@ -11,11 +11,15 @@ type AgentDetailPaneProps = {
   entityDisplayName: string;
 };
 
+// Cap a goal-derived title so the hover card stays compact when the task has
+// no explicit title and we fall back to the first line of its goal.
+const GOAL_TITLE_MAX_LENGTH = 60;
+
 const fallbackTitle = (task: { title: string | null; goal?: string | null } | null, fallback: string): string => {
   if (task === null) return fallback;
   if (task.title !== null && task.title !== "") return task.title;
   if (task.goal != null && task.goal !== "") {
-    const firstLine = task.goal.split("\n")[0].slice(0, 60);
+    const firstLine = task.goal.split("\n")[0].slice(0, GOAL_TITLE_MAX_LENGTH);
     return firstLine;
   }
   return fallback;

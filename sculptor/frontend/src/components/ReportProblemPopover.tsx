@@ -1,7 +1,7 @@
 import { Button, Checkbox, Flex, IconButton, Popover, Spinner, Text, TextArea } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import { Bug, Camera, Check, CheckCircle, ChevronDown, ChevronUp, CopyIcon, Trash2, Undo2, X } from "lucide-react";
-import { type ReactElement, useCallback, useRef, useState } from "react";
+import { type ReactElement, useCallback, useEffect, useRef, useState } from "react";
 
 import { healthCheckDataAtom } from "~/common/state/atoms/backend.ts";
 import type { DiagnosticEntry, ScreenshotState, SubmitState } from "~/common/state/atoms/reportProblem.ts";
@@ -27,6 +27,9 @@ type ReportProblemPopoverProps = {
 
 const COLLAPSED_ENTRY_COUNT = 3;
 
+/** How long the "copied" checkmark stays visible after copying to the clipboard. */
+const COPIED_RESET_DELAY_MS = 2000;
+
 const useDiagnosticEntries = (): ReadonlyArray<DiagnosticEntry> | null => {
   const healthCheckData = useAtomValue(healthCheckDataAtom);
   if (!healthCheckData) return null;
@@ -42,13 +45,29 @@ type DiagnosticsSectionProps = {
 const DiagnosticsSection = ({ isExpanded, onExpand, onCollapse }: DiagnosticsSectionProps): ReactElement => {
   const entries = useDiagnosticEntries();
   const [isDiagnosticsCopied, setIsDiagnosticsCopied] = useState(false);
+  const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => (): void => {
+      if (copiedTimeoutRef.current) {
+        clearTimeout(copiedTimeoutRef.current);
+      }
+    },
+    [],
+  );
 
   const handleCopyDiagnostics = useCallback(async (): Promise<void> => {
     if (!entries) return;
     try {
       await navigator.clipboard.writeText(formatDiagnosticsAsText(entries));
       setIsDiagnosticsCopied(true);
-      setTimeout(() => setIsDiagnosticsCopied(false), 2000);
+      if (copiedTimeoutRef.current) {
+        clearTimeout(copiedTimeoutRef.current);
+      }
+      copiedTimeoutRef.current = setTimeout(() => {
+        setIsDiagnosticsCopied(false);
+        copiedTimeoutRef.current = null;
+      }, COPIED_RESET_DELAY_MS);
     } catch {
       // Clipboard write failed silently
     }
@@ -359,6 +378,15 @@ export const ReportProblemPopover = ({ children }: ReportProblemPopoverProps): R
   const submitReport = useSetAtom(submitReportAtom);
   const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  useEffect(
+    () => (): void => {
+      if (copiedTimeoutRef.current) {
+        clearTimeout(copiedTimeoutRef.current);
+      }
+    },
+    [],
+  );
+
   const handleCopyReference = useCallback(async (): Promise<void> => {
     if (state.submitState.type !== "success") return;
     try {
@@ -370,7 +398,7 @@ export const ReportProblemPopover = ({ children }: ReportProblemPopoverProps): R
       copiedTimeoutRef.current = setTimeout(() => {
         update({ copiedField: null });
         copiedTimeoutRef.current = null;
-      }, 2000);
+      }, COPIED_RESET_DELAY_MS);
     } catch {
       // Clipboard write failed silently
     }

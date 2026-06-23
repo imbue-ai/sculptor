@@ -9,11 +9,11 @@ import { deleteProject, ElementIds, type Project, updateNamingPattern, updateWor
 import { HTTPException } from "~/common/Errors.ts";
 import { projectAtomFamily, removeProjectAtom } from "~/common/state/atoms/projects.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
+import { useProjects } from "~/common/state/hooks/useProjects.ts";
 import { AddRepoDialog } from "~/components/add-repo/AddRepoDialog.tsx";
+import type { ToastContent } from "~/components/Toast.tsx";
+import { ToastType } from "~/components/Toast.tsx";
 
-import { useProjects } from "../../../common/state/hooks/useProjects.ts";
-import type { ToastContent } from "../../../components/Toast.tsx";
-import { ToastType } from "../../../components/Toast.tsx";
 import { RemoveRepoDialog } from "./RemoveRepoDialog.tsx";
 import { RepoRow } from "./RepoRow.tsx";
 import styles from "./ReposSection.module.scss";
@@ -23,6 +23,17 @@ type RemoveDialogState =
   | { status: "closed" }
   | { status: "confirming"; projectId: string; projectName: string; agentCount: number }
   | { status: "deleting"; projectId: string; projectName: string; agentCount: number };
+
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof HTTPException) {
+    return error.detail;
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return fallback;
+};
 
 export const ReposSection = ({ setToast }: { setToast: (toast: ToastContent | null) => void }): ReactElement => {
   const projects = useProjects();
@@ -47,7 +58,7 @@ export const ReposSection = ({ setToast }: { setToast: (toast: ToastContent | nu
 
   const handleRemoveClick = useCallback(
     (project: Project) => {
-      const count = agentCounts[project.objectId] || 0;
+      const count = agentCounts[project.objectId] ?? 0;
       setRemoveDialogState({
         status: "confirming",
         projectId: project.objectId,
@@ -83,15 +94,9 @@ export const ReposSection = ({ setToast }: { setToast: (toast: ToastContent | nu
         title: "Repository removed successfully",
       });
     } catch (error) {
-      let errorMessage = "Failed to remove repository";
-      if (error instanceof HTTPException) {
-        errorMessage = error.detail;
-      } else if (error instanceof Error) {
-        errorMessage = error.message;
-      }
       setToast({
         type: ToastType.ERROR,
-        title: errorMessage,
+        title: getErrorMessage(error, "Failed to remove repository"),
       });
       setRemoveDialogState({ status: "confirming", projectId, projectName, agentCount });
     }
@@ -119,15 +124,9 @@ export const ReposSection = ({ setToast }: { setToast: (toast: ToastContent | nu
           });
         }
       } catch (error) {
-        let errorMessage = "Failed to save setup command";
-        if (error instanceof HTTPException) {
-          errorMessage = error.detail;
-        } else if (error instanceof Error) {
-          errorMessage = error.message;
-        }
         setToast({
           type: ToastType.ERROR,
-          title: errorMessage,
+          title: getErrorMessage(error, "Failed to save setup command"),
         });
       }
     },
@@ -149,15 +148,9 @@ export const ReposSection = ({ setToast }: { setToast: (toast: ToastContent | nu
           });
         }
       } catch (error) {
-        let errorMessage = "Failed to save naming pattern";
-        if (error instanceof HTTPException) {
-          errorMessage = error.detail;
-        } else if (error instanceof Error) {
-          errorMessage = error.message;
-        }
         setToast({
           type: ToastType.ERROR,
-          title: errorMessage,
+          title: getErrorMessage(error, "Failed to save naming pattern"),
         });
       }
     },
@@ -174,8 +167,8 @@ export const ReposSection = ({ setToast }: { setToast: (toast: ToastContent | nu
         ) : (
           <Box className={styles.reposList}>
             {projects.map((project) => {
-              const count = agentCounts[project.objectId] || 0;
-              const projectPath = project.userGitRepoUrl?.replace("file://", "") || "";
+              const count = agentCounts[project.objectId] ?? 0;
+              const projectPath = project.userGitRepoUrl?.replace("file://", "") ?? "";
               const shouldAutoFocusSetupCommand = focusRepoId === project.objectId;
               return (
                 <RepoRow

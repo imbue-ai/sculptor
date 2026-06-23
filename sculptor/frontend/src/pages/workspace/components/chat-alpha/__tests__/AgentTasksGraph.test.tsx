@@ -28,10 +28,10 @@ afterEach(() => {
   cleanup();
 });
 
-const linearChain = (count: number, inProgressIndex: number | null = null): Array<Task> =>
+const linearChain = (count: number, inProgressIndex?: number): Array<Task> =>
   Array.from({ length: count }, (_, i) => {
     const status =
-      inProgressIndex !== null && i === inProgressIndex
+      inProgressIndex !== undefined && i === inProgressIndex
         ? AgentTaskStatus.IN_PROGRESS
         : i < (inProgressIndex ?? -1)
           ? AgentTaskStatus.COMPLETED

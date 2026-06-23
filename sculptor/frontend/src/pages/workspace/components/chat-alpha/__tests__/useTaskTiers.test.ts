@@ -5,18 +5,17 @@ import { AgentTaskStatus, type Task } from "~/api";
 
 import { useTaskTiers } from "../useTaskTiers";
 
-const t = (id: string, blockedBy: Array<string> = [], status: AgentTaskStatus = AgentTaskStatus.PENDING): Task =>
-  ({
-    id,
-    subject: `Task ${id}`,
-    description: "",
-    activeForm: null,
-    status,
-    blocks: [],
-    blockedBy,
-    owner: null,
-    metadata: {},
-  }) as Task;
+const t = (id: string, blockedBy: Array<string> = [], status: AgentTaskStatus = AgentTaskStatus.PENDING): Task => ({
+  id,
+  subject: `Task ${id}`,
+  description: "",
+  activeForm: null,
+  status,
+  blocks: [],
+  blockedBy,
+  owner: null,
+  metadata: {},
+});
 
 describe("useTaskTiers", () => {
   afterEach(() => {

@@ -156,8 +156,8 @@ describe("useAlphaActivePromptIndex", () => {
       useAlphaActivePromptIndex(userPromptIndices, virtualizer, scrollContainerRef, true, isNavigatingRef),
     );
 
-    // Nav mode suppresses stick-to-bottom.  activeIndex defaults to 0 (compute()
-    // early-returns because isNavigatingRef is true, leaving the initial 0).
+    // Nav mode suppresses stick-to-bottom, so the index follows the explicit
+    // cursor instead of pinning to the last dot.  setIndex(1) forces it to 1.
     act(() => {
       result.current.setIndex(1);
     });

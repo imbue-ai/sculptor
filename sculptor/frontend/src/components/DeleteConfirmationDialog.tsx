@@ -5,7 +5,6 @@ import { useRef } from "react";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
 
 import { ElementIds } from "../api";
-import styles from "./DeleteConfirmationDialog.module.scss";
 import { POPOVER_FRIENDLY_MODAL_ATTRIBUTE } from "./popoverFriendlyModal.ts";
 
 type DeleteConfirmationDialogProps = {
@@ -44,7 +43,6 @@ export const DeleteConfirmationDialog = ({
     <AlertDialog.Root open={isOpen} onOpenChange={onOpenChange}>
       <AlertDialog.Content
         maxWidth="400px"
-        className={styles.dialogContent}
         data-testid={ElementIds.DELETE_CONFIRMATION_DIALOG}
         {...{ [POPOVER_FRIENDLY_MODAL_ATTRIBUTE]: "true" }}
         onOpenAutoFocus={handleOpenAutoFocus}

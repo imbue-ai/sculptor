@@ -17,13 +17,16 @@ export const selectProjectDirectory = async (): Promise<string | null> => {
   if (isElectron() && window.sculptor?.selectProjectDirectory) {
     return await window.sculptor.selectProjectDirectory();
   }
-  throw Error("selectProjectDirectory is only available in Electron environment");
+  throw new Error("selectProjectDirectory is only available in Electron environment");
 };
 
 // Titlebar constants
 export const TITLEBAR_HEIGHT = 40;
 const SIDEBAR_CLOSED_LEFT_PADDING = 80;
 const SIDEBAR_OPEN_LEFT_PADDING = 20;
+// On non-macOS platforms there are no left-side traffic-light buttons, so the
+// titlebar only needs a small uniform gutter.
+const NON_MAC_LEFT_PADDING = 12;
 // On macOS the traffic-light buttons are drawn by the OS at a fixed device-pixel
 // size and position, but the rest of the page is zoomed via CSS `zoom` on
 // document.body. To keep the reserved gutter width matching the native buttons
@@ -32,7 +35,7 @@ const macZoomPaddingCss = (px: number): string => `calc(${px}px / var(--app-zoom
 export const getTitleBarLeftPadding = (isSidebarOpen: boolean): string => {
   // On macOS, the titlebar traffic light buttons are on the left, so we need to add padding
   if (!isMac()) {
-    return "12px";
+    return `${NON_MAC_LEFT_PADDING}px`;
   }
   return macZoomPaddingCss(isSidebarOpen ? SIDEBAR_OPEN_LEFT_PADDING : SIDEBAR_CLOSED_LEFT_PADDING);
 };

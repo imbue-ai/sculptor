@@ -7,6 +7,10 @@ import { ElementIds } from "~/api";
 
 import styles from "./AlphaBlockquote.module.scss";
 
+// How long the copy button shows the "copied" checkmark before reverting.
+const COPY_FEEDBACK_DURATION_MS = 1500;
+const COPY_ICON_SIZE_PX = 14;
+
 type AlphaBlockquoteProps = {
   children: ReactNode;
 };
@@ -35,7 +39,7 @@ export const AlphaBlockquote = memo(({ children }: AlphaBlockquoteProps): ReactE
     navigator.clipboard.writeText(quoted);
     setIsCopied(true);
     clearTimeout(copyTimerRef.current);
-    copyTimerRef.current = setTimeout(() => setIsCopied(false), 1500);
+    copyTimerRef.current = setTimeout(() => setIsCopied(false), COPY_FEEDBACK_DURATION_MS);
   }, []);
 
   return (
@@ -52,7 +56,7 @@ export const AlphaBlockquote = memo(({ children }: AlphaBlockquoteProps): ReactE
           aria-label="Copy quote"
           data-testid={ElementIds.ALPHA_CHAT_BLOCKQUOTE_COPY}
         >
-          {isCopied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
+          {isCopied ? <CheckIcon size={COPY_ICON_SIZE_PX} /> : <CopyIcon size={COPY_ICON_SIZE_PX} />}
         </IconButton>
       </Tooltip>
     </div>

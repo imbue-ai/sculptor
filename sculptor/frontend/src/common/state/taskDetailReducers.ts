@@ -12,7 +12,7 @@ type ChatMessagesState = {
 };
 
 export const chatMessagesReducer = (currentState: ChatMessagesState, taskUpdate: TaskUpdate): ChatMessagesState => {
-  const newChatMessages = taskUpdate.chatMessages || [];
+  const newChatMessages = taskUpdate.chatMessages ?? [];
 
   const updatedCompletedMessages = mergeAndDeduplicateMessages(currentState.completedChatMessages, newChatMessages);
 
@@ -55,7 +55,8 @@ const mergeAndDeduplicateMessages = (
     messageById[msg.id] = { ...msg };
   }
 
-  // Deduplicate messages (we might not need this, but just in case)
+  // Collapse IDs that appear in both the current and incoming lists to a
+  // single entry while preserving first-seen insertion order.
   const allUniqueMessageIds: Array<string> = [];
   for (const msg of [...currentMessages, ...newMessages]) {
     if (!allUniqueMessageIds.includes(msg.id)) {

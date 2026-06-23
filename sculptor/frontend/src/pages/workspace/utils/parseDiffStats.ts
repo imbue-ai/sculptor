@@ -4,7 +4,7 @@ export type DiffStats = {
   filesChanged: number;
 };
 
-export function parseDiffStats(diffText: string | null | undefined): DiffStats {
+export const parseDiffStats = (diffText: string | null | undefined): DiffStats => {
   if (!diffText) {
     return { additions: 0, deletions: 0, filesChanged: 0 };
   }
@@ -25,4 +25,4 @@ export function parseDiffStats(diffText: string | null | undefined): DiffStats {
   }
 
   return { additions, deletions, filesChanged };
-}
+};

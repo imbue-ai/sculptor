@@ -22,40 +22,37 @@ export const InlineRenameInput = ({
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (isEditing && inputRef.current) {
-      // Defer focus to the next animation frame so it runs after Radix UI's
-      // ContextMenu restores focus to the trigger element on close.
-      requestAnimationFrame(() => {
-        inputRef.current?.focus();
-        inputRef.current?.select();
-      });
+    if (!isEditing || !inputRef.current) {
+      return;
     }
+    // Defer focus to the next animation frame so it runs after Radix UI's
+    // ContextMenu restores focus to the trigger element on close.
+    const focusHandle = requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    });
+    return (): void => cancelAnimationFrame(focusHandle);
   }, [isEditing]);
 
   if (!isEditing) {
     return null;
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): void => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      const trimmed = inputRef.current?.value.trim() ?? "";
-      if (trimmed && trimmed !== value) {
-        onCommit(trimmed);
-      } else {
-        onCancel();
-      }
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      onCancel();
-    }
-  };
-
-  const handleBlur = (): void => {
+  const commitOrCancel = (): void => {
     const trimmed = inputRef.current?.value.trim() ?? "";
     if (trimmed && trimmed !== value) {
       onCommit(trimmed);
     } else {
+      onCancel();
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): void => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commitOrCancel();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
       onCancel();
     }
   };
@@ -65,7 +62,7 @@ export const InlineRenameInput = ({
       ref={inputRef}
       defaultValue={value}
       onKeyDown={handleKeyDown}
-      onBlur={handleBlur}
+      onBlur={commitOrCancel}
       onClick={(e) => e.stopPropagation()}
       className={`${styles.renameInput} ${className ?? ""}`}
       data-testid={ElementIds.INLINE_RENAME_INPUT}

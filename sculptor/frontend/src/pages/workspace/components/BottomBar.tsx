@@ -78,7 +78,6 @@ const FocusModeButton = (): ReactElement => {
   const { toggleFocusMode } = useFocusMode();
   const keybindingsMap = useAtomValue(keybindingsMapAtom);
   const shortcut = formatShortcutForDisplay(keybindingsMap["focus_mode"].binding ?? undefined);
-  const Icon = ScanLine;
   const label = isFocusModeActive ? "Exit focus mode" : "Enter focus mode";
   const tooltipText = `${label}${shortcut ? ` (${shortcut})` : ""}`;
 
@@ -89,7 +88,7 @@ const FocusModeButton = (): ReactElement => {
       className={isFocusModeActive ? styles.toggleActive : styles.toggleInactive}
       data-testid={ElementIds.FOCUS_MODE_BUTTON}
     >
-      <Icon size={14} />
+      <ScanLine size={14} />
     </TooltipIconButton>
   );
 };

@@ -1,5 +1,4 @@
-import { Flex, IconButton, Popover, Spinner, Text, Tooltip } from "@radix-ui/themes";
-import { DropdownMenu } from "@radix-ui/themes";
+import { DropdownMenu, Flex, IconButton, Popover, Spinner, Text, Tooltip } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import { Check, ChevronDown, ChevronUp, CopyIcon, GitMergeIcon, Info, PlusIcon, TriangleAlert } from "lucide-react";
 import { posthog } from "posthog-js";
@@ -525,7 +524,7 @@ export const PrButton = ({
 
   const effectiveError: EffectiveError | null = prStatus?.errorCategory
     ? {
-        category: prStatus.errorCategory as PrErrorCategory,
+        category: prStatus.errorCategory,
         provider: prStatus.errorProvider ?? null,
         message: prStatus.errorMessage ?? null,
       }

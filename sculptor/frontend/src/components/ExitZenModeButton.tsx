@@ -10,12 +10,16 @@ import { useZenMode } from "~/components/panels/hooks.ts";
 
 import styles from "./ExitZenModeButton.module.scss";
 
+/** Delay before hiding the button on mouse-leave, giving the cursor time to travel
+ *  from the hot zone to the button without the button flickering away. */
+const HIDE_DELAY_MS = 150;
+
 /** Floating button near the macOS traffic lights that appears when the mouse enters the top-left hot zone. */
 export const ExitZenModeButton = (): ReactElement | null => {
   const isZenModeActive = useAtomValue(zenModeActiveAtom);
   const { toggleZenMode } = useZenMode();
   const zenModeShortcut = useKeybindingDisplayText("zen_mode");
-  const [isVisible, setIsVisible] = useState(false);
+  const [isVisible, setIsVisible] = useState<boolean>(false);
   const hideTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearHideTimeout = useCallback(() => {
@@ -36,8 +40,7 @@ export const ExitZenModeButton = (): ReactElement | null => {
 
   const handleMouseLeave = useCallback(() => {
     clearHideTimeout();
-    // Small delay so the cursor can travel from the hot zone to the button without flickering.
-    hideTimeout.current = setTimeout(() => setIsVisible(false), 150);
+    hideTimeout.current = setTimeout(() => setIsVisible(false), HIDE_DELAY_MS);
   }, [clearHideTimeout]);
 
   if (!isZenModeActive) return null;

@@ -131,8 +131,8 @@ export const CustomCodeBlockLowlight = CodeBlockLowlight.extend({
 
             const text = event.clipboardData.getData("text/plain");
             const vscode = event.clipboardData.getData("vscode-editor-data");
-            const vscodeData = vscode ? JSON.parse(vscode) : undefined;
-            const language = vscodeData?.mode as string | undefined;
+            const vscodeData = vscode ? (JSON.parse(vscode) as { mode?: string }) : undefined;
+            const language = vscodeData?.mode;
 
             if (!text || !language) {
               return false;

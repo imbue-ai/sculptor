@@ -12,6 +12,9 @@ type AlphaTableProps = {
   children: ReactNode;
 };
 
+const COPY_FEEDBACK_DURATION_MS = 1500;
+const CONTROL_ICON_SIZE = 14;
+
 /**
  * Wraps a markdown-rendered table in a horizontally scrollable container with
  * a copy button and a per-table wrap toggle. Wrap state is component-local
@@ -76,7 +79,7 @@ export const AlphaTable = memo(({ children }: AlphaTableProps): ReactElement => 
     navigator.clipboard.writeText(mdRows.join("\n"));
     setIsCopied(true);
     clearTimeout(copyTimerRef.current);
-    copyTimerRef.current = setTimeout(() => setIsCopied(false), 1500);
+    copyTimerRef.current = setTimeout(() => setIsCopied(false), COPY_FEEDBACK_DURATION_MS);
   }, []);
 
   const handleToggleWrap = useCallback((): void => {
@@ -118,7 +121,7 @@ export const AlphaTable = memo(({ children }: AlphaTableProps): ReactElement => 
             aria-label={isWrapping ? "Switch to scroll" : "Switch to wrap"}
             data-testid={ElementIds.ALPHA_CHAT_TABLE_WRAP_TOGGLE}
           >
-            <WrapText size={14} />
+            <WrapText size={CONTROL_ICON_SIZE} />
           </IconButton>
         </Tooltip>
         <Tooltip content="Copy table">
@@ -129,7 +132,7 @@ export const AlphaTable = memo(({ children }: AlphaTableProps): ReactElement => 
             onClick={handleCopy}
             aria-label="Copy table"
           >
-            {isCopied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
+            {isCopied ? <CheckIcon size={CONTROL_ICON_SIZE} /> : <CopyIcon size={CONTROL_ICON_SIZE} />}
           </IconButton>
         </Tooltip>
       </div>

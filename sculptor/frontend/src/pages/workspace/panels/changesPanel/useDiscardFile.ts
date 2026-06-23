@@ -9,7 +9,7 @@ type UseDiscardFileResult = {
 };
 
 export const useDiscardFile = (workspaceId: string): UseDiscardFileResult => {
-  const [isDiscarding, setIsDiscarding] = useState(false);
+  const [isDiscarding, setIsDiscarding] = useState<boolean>(false);
   const refreshDiff = useForceRefreshWorkspaceDiff(workspaceId);
 
   const discardFile = useCallback(

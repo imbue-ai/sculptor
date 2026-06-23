@@ -43,6 +43,10 @@ type PageLayoutProps = {
   showVersionIndicator?: boolean;
 };
 
+// Error toasts linger longer than the default so the user can read and act on
+// the failure before it auto-dismisses.
+const ERROR_TOAST_DURATION_MS = 10_000;
+
 export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): ReactElement => {
   const isZenModeActive = useAtomValue(zenModeActiveAtom);
   const pluginPanels = useAtomValue(pluginPanelsAtom);
@@ -61,6 +65,11 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
   const projectID = useActiveProjectID();
   const currentProject = useProject(projectID ?? "");
   const [isRepoPathDialogOpen, setIsRepoPathDialogOpen] = useState(false);
+
+  useUnifiedStream();
+  usePageLayoutKeyboardShortcuts();
+  useAutoUpdateListener();
+  useSyncActiveTabFromRoute();
 
   // Stable callbacks so the memoized <Toast> instances below bail out instead
   // of re-rendering on every unrelated commit while they sit closed. (SCU-1455)
@@ -94,11 +103,6 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
     },
     [setTerminalPromptRejectedToast],
   );
-
-  useUnifiedStream();
-  usePageLayoutKeyboardShortcuts();
-  useAutoUpdateListener();
-  useSyncActiveTabFromRoute();
 
   const hasBackendStopped = backendStatus.status === "unresponsive";
   const hasHealthWarningOnBackend = backendStatus.status === "warning";
@@ -168,7 +172,7 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
         description={deleteErrorToast?.description}
         type={deleteErrorToast?.type}
         action={deleteErrorToast?.action ?? undefined}
-        duration={10000}
+        duration={ERROR_TOAST_DURATION_MS}
       />
       <Toast
         open={workspaceDeleteErrorToast !== null}
@@ -177,7 +181,7 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
         description={workspaceDeleteErrorToast?.description}
         type={workspaceDeleteErrorToast?.type}
         action={workspaceDeleteErrorToast?.action ?? undefined}
-        duration={10000}
+        duration={ERROR_TOAST_DURATION_MS}
       />
       <Toast
         open={workspaceOpenCloseErrorToast !== null}
@@ -186,7 +190,7 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
         description={workspaceOpenCloseErrorToast?.description}
         type={workspaceOpenCloseErrorToast?.type}
         action={workspaceOpenCloseErrorToast?.action ?? undefined}
-        duration={10000}
+        duration={ERROR_TOAST_DURATION_MS}
       />
       <Toast
         open={mentionChipUnreachableToast !== null}

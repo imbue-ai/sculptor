@@ -155,17 +155,10 @@ const ExpandableFileDiff = ({
   // single-file DiffPanel view.  Falls back to the target branch (undefined →
   // getBaseRef) only when the merge-base is unknown.
   const baseRefOverride = scope === "vs-target-branch" ? mergeBaseRef : "HEAD";
-  const { oldLines, newLines } = useFileLines(
-    workspaceId,
-    filePath,
-    previousFilePath,
-    fileStatus,
-    diffString,
-    baseRefOverride,
-  );
+  const { oldLines, newLines } = useFileLines(workspaceId, filePath, previousFilePath, fileStatus, baseRefOverride);
   return (
     <LargeDiffGate diffString={diffString}>
-      {(visibleDiff, isTruncated) => (
+      {({ visibleDiff, isTruncated }) => (
         <PierreDiffView
           diffString={visibleDiff}
           viewType={viewType}

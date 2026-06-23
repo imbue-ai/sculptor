@@ -76,6 +76,12 @@ const TERMINAL_OUTPUT_DECODER = new TextDecoder();
 // response is unlikely to fall inside it.
 const SOLICITED_QUERY_RESPONSE_WINDOW_MS = 1000;
 
+// A fresh terminal WebSocket can close with this code when the backend has the
+// terminal URL but hasn't started the PTY yet (e.g. workspace just created,
+// first agent still starting). We retry the connection after a short delay.
+const TERMINAL_NOT_STARTED_CLOSE_CODE = 4404;
+const TERMINAL_RECONNECT_RETRY_DELAY_MS = 2000;
+
 /**
  * Detect a terminal QUERY in live PTY output that xterm.js will answer with a
  * response `isTerminalQueryResponse` would otherwise filter.
@@ -545,12 +551,12 @@ export const useTerminal = ({
       // (derived from environment ID) but the backend hasn't started the
       // PTY yet (e.g., workspace just created, first agent still starting).
       ws.onclose = (event: CloseEvent): void => {
-        if (!isCleanedUp && event.code === 4404) {
+        if (!isCleanedUp && event.code === TERMINAL_NOT_STARTED_CLOSE_CODE) {
           setTimeout(() => {
             if (!isCleanedUp) {
               connectWebSocket(wsUrl);
             }
-          }, 2000);
+          }, TERMINAL_RECONNECT_RETRY_DELAY_MS);
         }
       };
     };

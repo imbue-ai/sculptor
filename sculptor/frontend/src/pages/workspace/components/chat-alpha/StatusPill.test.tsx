@@ -563,7 +563,7 @@ describe("StatusPill", () => {
       );
 
       render(<StatusPill {...defaultProps} workingUserMessageId={null} />, { wrapper: Wrapper });
-      // hasFreshTodos branch wins (activeTurnId is non-null but matches
+      // hasFreshTasks branch wins (activeTurnId is non-null but matches
       // liveTaskTurnId, so the carryover is NOT stale).
       expect(screen.getByTestId(ElementIds.STATUS_PILL_LABEL).textContent).toBe("2 of 2 done");
     });

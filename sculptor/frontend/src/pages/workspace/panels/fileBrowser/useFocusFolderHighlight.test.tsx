@@ -18,7 +18,7 @@ const WORKSPACE_ID = "ws-1";
 
 const makeRow = (path: string, type: "file" | "directory"): FlatRowEntry => ({
   depth: 0,
-  node: { name: path.split("/").pop() ?? path, path, type, children: [] } as FlatRowEntry["node"],
+  node: { name: path.split("/").pop() ?? path, path, type, children: [] },
 });
 
 const makeVirtualizer = (): { scrollToIndex: ReturnType<typeof vi.fn> } => ({

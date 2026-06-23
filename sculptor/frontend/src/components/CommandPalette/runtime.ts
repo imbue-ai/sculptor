@@ -1,8 +1,7 @@
 import type { useStore } from "jotai/react";
 
+import type { UserConfigField } from "~/api";
 import type { AppearanceMode } from "~/common/theme/appearanceModes.ts";
-
-import type { UserConfigField } from "../../api";
 
 /**
  * The Jotai store used by the React tree. We pass it through the runtime

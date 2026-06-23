@@ -9,6 +9,11 @@ import styles from "./FileTree.module.scss";
 import type { TreeNode } from "./types.ts";
 import { STATUS_COLOR_STYLES, truncateMiddlePath } from "./utils.ts";
 
+/** Left padding (px) of a depth-0 row. */
+const TREE_ROW_BASE_PADDING_LEFT = 12;
+/** Extra left padding (px) added per nesting level. */
+const TREE_ROW_DEPTH_INDENT = 10;
+
 type TreeRowProps = {
   node: TreeNode;
   depth: number;
@@ -117,7 +122,7 @@ export const TreeRow = memo(function TreeRow({
   const isFolder = node.type === "directory";
   const isDeleted = node.status === "D";
   const { baseName, extension } = splitFileName(node.name);
-  const paddingLeft = 12 + depth * 10;
+  const paddingLeft = TREE_ROW_BASE_PADDING_LEFT + depth * TREE_ROW_DEPTH_INDENT;
 
   const handleClick = (): void => {
     if (isFolder) {

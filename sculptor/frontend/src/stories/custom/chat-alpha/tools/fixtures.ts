@@ -174,7 +174,6 @@ const chatMessage = (
   }) as unknown as ChatMessage;
 
 export const makeSubagentTreeNodes = (
-  parentToolUseId: string,
   toolBlocks: Array<{ use: ToolUseBlock; result?: ToolResultBlock }>,
 ): Array<SubagentTreeNode> =>
   toolBlocks.map(({ use, result }) => ({
@@ -196,7 +195,7 @@ const bashResult = toolResult("sub-003", "Bash", "Found 12 test files.");
 
 export const completedSubagent = {
   parentBlock,
-  childNodes: makeSubagentTreeNodes(parentBlock.id, [
+  childNodes: makeSubagentTreeNodes([
     { use: readBlock, result: readResult },
     { use: grepBlock, result: grepResult },
     { use: bashBlock, result: bashResult },
@@ -227,7 +226,7 @@ const thinkingParent = toolUse("agent-002", "Agent", {
 
 export const thinkingSubagent = {
   parentBlock: thinkingParent,
-  childNodes: makeSubagentTreeNodes(thinkingParent.id, [{ use: readBlock }]),
+  childNodes: makeSubagentTreeNodes([{ use: readBlock }]),
   toolResultMap: new Map<string, ToolResultBlock>(),
   metadata: new Map<string, SubagentMetadata>([
     [
@@ -274,7 +273,7 @@ const bgReadResult = toolResult("sub-bg-001", "Read", 'module.exports = { preset
 
 export const backgroundCompletedSubagent = {
   parentBlock: bgCompletedParent,
-  childNodes: makeSubagentTreeNodes(bgCompletedParent.id, [{ use: bgReadBlock, result: bgReadResult }]),
+  childNodes: makeSubagentTreeNodes([{ use: bgReadBlock, result: bgReadResult }]),
   toolResultMap: new Map<string, ToolResultBlock>([[bgReadBlock.id, bgReadResult]]),
   metadata: new Map<string, SubagentMetadata>([
     [
@@ -296,7 +295,7 @@ const bgThinkingParent = toolUse("agent-bg-002", "Agent", {
 
 export const backgroundThinkingSubagent = {
   parentBlock: bgThinkingParent,
-  childNodes: makeSubagentTreeNodes(bgThinkingParent.id, [{ use: bgReadBlock }]),
+  childNodes: makeSubagentTreeNodes([{ use: bgReadBlock }]),
   toolResultMap: new Map<string, ToolResultBlock>(),
   metadata: new Map<string, SubagentMetadata>([
     [

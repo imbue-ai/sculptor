@@ -81,12 +81,8 @@ export const ActionGroupSection = ({
     }
   };
 
-  const handleDeleteGroup = async (): Promise<void> => {
-    try {
-      await onDeleteGroup(group.id);
-    } catch (error) {
-      console.error("Failed to delete group:", error);
-    }
+  const handleDeleteGroup = (): void => {
+    onDeleteGroup(group.id);
   };
 
   const wrapperClassName = [
@@ -115,15 +111,20 @@ export const ActionGroupSection = ({
             onBlur={handleRenameSubmit}
             onKeyDown={handleRenameKeyDown}
             autoFocus
-            style={{ flex: 1 }}
+            className={styles.groupNameField}
           />
         ) : (
-          <Text weight="medium" size="3" style={{ flex: 1 }} data-testid={ElementIds.SETTINGS_ACTIONS_GROUP_HEADING}>
+          <Text
+            weight="medium"
+            size="3"
+            className={styles.groupNameField}
+            data-testid={ElementIds.SETTINGS_ACTIONS_GROUP_HEADING}
+          >
             {group.name}
           </Text>
         )}
 
-        <Flex gap="2" style={{ color: "var(--accent-9)" }}>
+        <Flex gap="2" className={styles.groupActions}>
           <IconButton variant="ghost" size="1" onClick={handleRenameClick}>
             <Pencil size={14} />
           </IconButton>
@@ -149,7 +150,7 @@ export const ActionGroupSection = ({
               .join(" ")}
             data-empty-group-drop={group.id}
           >
-            <Text size="1" style={{ color: "var(--gray-9)" }}>
+            <Text size="1" className={styles.dropHint}>
               Drop action here
             </Text>
           </div>

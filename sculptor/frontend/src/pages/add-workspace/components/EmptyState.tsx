@@ -2,7 +2,8 @@ import { Flex, Text } from "@radix-ui/themes";
 import { FolderIcon } from "lucide-react";
 import type { ReactElement } from "react";
 
-import { ElementIds } from "../../../api";
+import { ElementIds } from "~/api";
+
 import styles from "./EmptyState.module.scss";
 
 export const EmptyState = (): ReactElement => {

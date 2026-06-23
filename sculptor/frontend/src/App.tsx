@@ -4,9 +4,7 @@ import { Provider as JotaiProvider } from "jotai/react";
 import { posthog } from "posthog-js";
 import { PostHogProvider } from "posthog-js/react";
 import type { ReactElement } from "react";
-import { useEffect } from "react";
-import { useRef } from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { getTelemetryInfo } from "~/api";
 import { queryClient } from "~/common/queryClient.ts";
@@ -27,7 +25,7 @@ const isDebugRoute = (): boolean => window.location.hash.startsWith("#/debug/");
 
 export const App = (): ReactElement => {
   useAppZoom();
-  const [isBackendAPIReady, setIsBackendAPIReady] = useState(false);
+  const [isBackendAPIReady, setIsBackendAPIReady] = useState<boolean>(false);
   const isTelemetryInfoApplied = useRef<boolean>(false);
 
   // PostHog itself was initialized in `Main.tsx` so pre-handshake events (e.g.

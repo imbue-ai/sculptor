@@ -12,9 +12,8 @@
   font-size: var(--font-size-2);
   margin: 0 auto;
   overflow-wrap: break-word;
-  padding: var(--space-3) var(--space-3);
+  padding: var(--space-3);
   width: calc(min(80%, var(--main-content-width)));
-  word-wrap: break-word;
 
   &:hover .hoverActions {
     opacity: 100%;

@@ -98,9 +98,9 @@ const CATEGORY_ROWS: ReadonlyArray<{
 const buildCategoryRows = (query: string): Array<MentionPickerCategoryRow> => {
   const lower = query.toLowerCase();
   // Match on the visible label only. Including description / iconName text
-  // produced hits — e.g. "+work" matched "Files & folders" via
-  // its description "Search workspace files and folders" — when users
-  // expect the search to track the names they actually see.
+  // produced hits — e.g. "+work" matched "Files & folders" via its
+  // description "Reference files and folders from within this Workspace" —
+  // when users expect the search to track the names they actually see.
   return CATEGORY_ROWS.filter((row) => query === "" || row.label.toLowerCase().includes(lower)).map((row) => ({
     ...new SuggestionItem(row.id, row.label),
     isCategoryRow: true,

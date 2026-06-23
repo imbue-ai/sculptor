@@ -17,11 +17,11 @@ const PRODUCTION_MODELS = [
   LlmModel.CLAUDE_4_SONNET_200K,
   LlmModel.CLAUDE_4_SONNET,
   LlmModel.CLAUDE_4_HAIKU,
-];
+] as const satisfies ReadonlyArray<LlmModel>;
 
 // Fake Claude is a testing-only model that returns deterministic responses without making LLM calls.
 // Only shown when INTEGRATION_ENABLED is true.
-const TESTING_ONLY_MODELS = [LlmModel.FAKE_CLAUDE, LlmModel.FAKE_CLAUDE_2];
+const TESTING_ONLY_MODELS = [LlmModel.FAKE_CLAUDE, LlmModel.FAKE_CLAUDE_2] as const satisfies ReadonlyArray<LlmModel>;
 
 type ProviderGroup = {
   provider: string;

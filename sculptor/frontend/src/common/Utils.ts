@@ -34,19 +34,15 @@ export const useResolvedTheme = (): Theme => {
       setSystemTheme(mediaQuery.matches ? "dark" : "light");
     };
 
-    // Set initial system theme
     updateSystemTheme();
-
-    // Listen for system theme changes
     mediaQuery.addEventListener("change", updateSystemTheme);
 
     return (): void => mediaQuery.removeEventListener("change", updateSystemTheme);
   }, []);
 
-  // Resolve theme based on user preference
   if (configTheme === "system") {
     return systemTheme;
   }
 
-  return (configTheme as Theme) || "light";
+  return configTheme;
 };

@@ -35,6 +35,8 @@ export const SortableTab = ({
 
   const { attributes, listeners, setNodeRef, isDragging } = useSortable({ id: tab.id });
 
+  // Clear the hover state when a drag finishes: mouseLeave may not fire mid-drag,
+  // which would otherwise leave the tab stuck showing its hovered styling.
   useEffect((): void => {
     if (wasDragActiveRef.current && !isDragActive) {
       setIsHovered(false);

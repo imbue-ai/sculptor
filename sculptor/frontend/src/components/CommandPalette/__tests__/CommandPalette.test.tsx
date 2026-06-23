@@ -60,7 +60,7 @@ const setupOpenStore = (): ReturnType<typeof createStore> => {
 };
 
 const renderPalette = (store: ReturnType<typeof createStore>): ReturnType<typeof renderWithProviders> => {
-  return renderWithProviders(<CommandPalette />, store, undefined, ["/home"]);
+  return renderWithProviders(<CommandPalette />, { store, initialEntries: ["/home"] });
 };
 
 describe("CommandPalette", () => {
@@ -479,7 +479,7 @@ describe("CommandPalette", () => {
   });
 
   it("releases pending state after a 30s timeout when perform never resolves", async () => {
-    // Issue #14: a command whose `perform` never resolves used to leave
+    // A command whose `perform` never resolves used to leave
     // `commandPalettePendingAtom` set forever, which made `handleOpenChange`
     // refuse to close the palette. The runner now races perform against a
     // 30s timeout and clears pending so the user can recover.

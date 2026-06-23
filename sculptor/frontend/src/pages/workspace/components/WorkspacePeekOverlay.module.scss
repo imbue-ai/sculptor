@@ -13,5 +13,5 @@
 }
 
 .animated {
-  transition: transform var(--duration-fast) ease-out;
+  transition: transform var(--duration-fast) var(--ease-out);
 }

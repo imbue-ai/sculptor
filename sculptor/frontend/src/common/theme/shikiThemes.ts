@@ -1,3 +1,5 @@
+import type { BundledTheme } from "shiki/bundle/web";
+
 /**
  * Shiki syntax highlighting theme pairs.
  *
@@ -5,8 +7,9 @@
  * shiki theme IDs. These are used by the alpha chat code blocks and the
  * Pierre diff panel so syntax highlighting stays consistent across the app.
  *
- * When adding a new pair, make sure both theme IDs are included in the
- * `shiki/bundle/web` bundle (i.e. they appear in `bundledThemes`).
+ * Both theme IDs in a pair must be valid `BundledTheme` members of
+ * `shiki/bundle/web`; the `satisfies` check below enforces that at compile
+ * time, so an unbundled ID fails the build rather than failing at runtime.
  */
 export const SHIKI_THEME_PAIRS = {
   GitHub: { light: "github-light", dark: "github-dark" },
@@ -24,7 +27,7 @@ export const SHIKI_THEME_PAIRS = {
   Solarized: { light: "solarized-light", dark: "solarized-dark" },
   "Tokyo Night": { light: "tokyo-night", dark: "tokyo-night" },
   Vitesse: { light: "vitesse-light", dark: "vitesse-dark" },
-} as const;
+} as const satisfies Record<string, { light: BundledTheme; dark: BundledTheme }>;
 
 export type ShikiThemePairName = keyof typeof SHIKI_THEME_PAIRS;
 
@@ -33,6 +36,6 @@ export const SHIKI_THEME_PAIR_NAMES = Object.keys(SHIKI_THEME_PAIRS) as Readonly
 export const DEFAULT_SHIKI_THEME: ShikiThemePairName = "GitHub";
 
 /** Resolve the current theme pair from a pair name. */
-export const getShikiThemes = (name: ShikiThemePairName): { light: string; dark: string } => {
+export const getShikiThemes = (name: ShikiThemePairName): { light: BundledTheme; dark: BundledTheme } => {
   return SHIKI_THEME_PAIRS[name];
 };

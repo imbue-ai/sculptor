@@ -39,18 +39,9 @@ export const TokenPopoverContent = ({
 
   return (
     <div data-testid={ElementIds.TOKEN_POPOVER}>
-      {rows.map((row, i) => (
-        <Flex
-          key={row.label}
-          align="center"
-          justify="between"
-          gap="4"
-          className={styles.row}
-          style={{
-            borderBottom: i < rows.length - 1 ? "1px solid var(--gray-3)" : "none",
-          }}
-        >
-          <Text size="1" style={{ color: "var(--gray-9)" }}>
+      {rows.map((row) => (
+        <Flex key={row.label} align="center" justify="between" gap="4" className={styles.row}>
+          <Text size="1" className={styles.label}>
             {row.label}
           </Text>
           <Text size="1" weight="medium">

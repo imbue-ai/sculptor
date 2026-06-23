@@ -1,6 +1,7 @@
 import { getDefaultStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { CodingAgentTaskView, Workspace } from "../../../api";
 import { taskAtomFamily, taskIdsAtom } from "../../../common/state/atoms/tasks.ts";
 import { workspaceAtomFamily, workspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
 import { panelRegistryAtom } from "../../panels/atoms.ts";
@@ -62,8 +63,9 @@ const makeRuntime = (): CommandRuntime => {
 
 const seedWorkspace = (id: string, description: string): void => {
   const store = getDefaultStore();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  store.set(workspaceAtomFamily(id), { objectId: id, description, isOpen: true } as any);
+  // The provider only reads objectId/description/isOpen; cast the partial
+  // seed through `unknown` rather than constructing a full Workspace.
+  store.set(workspaceAtomFamily(id), { objectId: id, description, isOpen: true } as unknown as Workspace);
 };
 
 const setWorkspaceIds = (ids: Array<string>): void => {
@@ -79,15 +81,15 @@ const setTasks = (
   for (const t of tasks) {
     store.set(
       taskAtomFamily(t.id),
-
+      // The provider only reads these fields; cast the partial seed through
+      // `unknown` rather than constructing a full CodingAgentTaskView.
       {
         id: t.id,
         title: t.title ?? null,
         workspaceId: t.workspaceId,
         createdAt: t.createdAt,
         initialPrompt: t.initialPrompt ?? "",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any,
+      } as unknown as CodingAgentTaskView,
     );
   }
   store.set(

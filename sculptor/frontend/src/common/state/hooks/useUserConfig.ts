@@ -55,7 +55,6 @@ export const useUserConfig = (): UserConfigSyncActions => {
 
       // Optimistic update - show changes immediately
       setUserConfig(optimisticConfig);
-      console.log("optimistically updated user config:", optimisticConfig);
 
       try {
         // Send only the changed fields; the backend merges into the current
@@ -69,7 +68,6 @@ export const useUserConfig = (): UserConfigSyncActions => {
           meta: { skipWsAck: true },
         });
         // Server response overwrites optimistic update
-        console.log("successfully updated user config:", newConfig);
         setUserConfig(newConfig);
         return newConfig;
       } catch (error) {

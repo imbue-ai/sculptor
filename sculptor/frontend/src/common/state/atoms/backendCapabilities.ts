@@ -19,13 +19,13 @@ export type BackendCapabilities = {
   fileUploadMode: FileUploadMode;
 };
 
-const DEFAULT_CAPABILITIES: BackendCapabilities = {
+const DEFAULT_CAPABILITIES = {
   canOpenInOS: true,
   canSelectLocalDir: true,
   fileUploadMode: "electron-ipc",
 } as const satisfies BackendCapabilities;
 
-const REMOTE_CAPABILITIES: BackendCapabilities = {
+const REMOTE_CAPABILITIES = {
   canOpenInOS: false,
   canSelectLocalDir: false,
   fileUploadMode: "http",

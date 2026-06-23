@@ -15,8 +15,6 @@
 export const formatRepoUrl = (url: string | null | undefined): string => {
   if (url === null || url === undefined || url === "") return "";
 
-  const stripGitSuffix = (s: string): string => (s.endsWith(".git") ? s.slice(0, -4) : s);
-
   const sshMatch = url.match(/^git@[^:]+:(.+)$/);
   if (sshMatch !== null) {
     return stripGitSuffix(sshMatch[1]);
@@ -43,6 +41,8 @@ export const formatRepoUrl = (url: string | null | undefined): string => {
 
   return url;
 };
+
+const stripGitSuffix = (value: string): string => (value.endsWith(".git") ? value.slice(0, -4) : value);
 
 const lastTwoSegments = (path: string): string => {
   const segments = path.replace(/\/+$/, "").split("/").filter(Boolean);

@@ -184,7 +184,7 @@ export const FilePreviewList = ({
               displayMode={displayMode}
               allowCopyImage={allowCopyImage}
               onRemove={onRemoveFile ? (): void => onRemoveFile(filePath) : undefined}
-              onError={() => {
+              onError={(): void => {
                 setFailedFiles((prev) => new Set(prev).add(filePath));
               }}
               onClick={

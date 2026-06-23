@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { DiffToolContent, GenericToolContent, ToolResultBlock, ToolUseBlock } from "~/api";
+import type { ToolResultBlock, ToolUseBlock } from "~/api";
 
 import { buildChipData, disambiguateFileNames, getFilePathFromToolBlock, segmentToolBlocks } from "../chipRowUtils.ts";
 
@@ -17,7 +17,7 @@ const makeDiffResult = (toolUseId: string, filePath: string, diff: string, isErr
   toolUseId,
   toolName: "Edit",
   invocationString: filePath,
-  content: { contentType: "diff", diff, filePath } as DiffToolContent,
+  content: { contentType: "diff", diff, filePath },
   isError,
 });
 
@@ -27,7 +27,7 @@ const makeGenericResult = (toolUseId: string, text: string, isError = false): To
   toolUseId,
   toolName: "Edit",
   invocationString: "",
-  content: { contentType: "generic", text } as GenericToolContent,
+  content: { contentType: "generic", text },
   isError,
 });
 
@@ -485,7 +485,7 @@ describe("segmentToolBlocks", () => {
       toolUseId: "1",
       toolName: "Read",
       invocationString: "Read(…)",
-      content: { contentType: "generic", text: "file contents" } as GenericToolContent,
+      content: { contentType: "generic", text: "file contents" },
       isError: false,
     };
 
@@ -514,7 +514,7 @@ describe("segmentToolBlocks", () => {
       toolUseId: "2",
       toolName: "Read",
       invocationString: "Read(…)",
-      content: { contentType: "generic", text: "contents" } as GenericToolContent,
+      content: { contentType: "generic", text: "contents" },
       isError: false,
     };
     const bashBlock1 = makeToolUseBlock({ id: "3", name: "Bash", input: { command: "echo hi" } });
@@ -526,7 +526,7 @@ describe("segmentToolBlocks", () => {
       toolUseId: "6",
       toolName: "Grep",
       invocationString: "Grep(…)",
-      content: { contentType: "generic", text: "matches" } as GenericToolContent,
+      content: { contentType: "generic", text: "matches" },
       isError: false,
     };
 

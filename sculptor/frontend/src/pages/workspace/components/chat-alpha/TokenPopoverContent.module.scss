@@ -1,3 +1,11 @@
 .row {
   padding: 5px 10px;
+
+  &:not(:last-child) {
+    border-bottom: 1px solid var(--gray-3);
+  }
+}
+
+.label {
+  color: var(--gray-9);
 }

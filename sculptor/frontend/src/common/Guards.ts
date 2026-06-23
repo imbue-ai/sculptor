@@ -79,5 +79,5 @@ export const isDiffToolContent = (content: GenericToolContent | DiffToolContent)
 };
 
 export const isLlmModel = (value: string): value is LlmModel => {
-  return Object.values(LlmModel).includes(value as LlmModel);
+  return (Object.values(LlmModel) as ReadonlyArray<string>).includes(value);
 };

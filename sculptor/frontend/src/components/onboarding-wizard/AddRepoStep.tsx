@@ -19,8 +19,8 @@ type AddRepoStepProps = {
 };
 
 export const AddRepoStep = ({ onComplete, isLoading, error }: AddRepoStepProps): ReactElement => {
-  const dangerColor = useThemeDangerColor();
   const [path, setPath] = useState("");
+  const dangerColor = useThemeDangerColor();
   const { fetchDirectories } = useDirectoryListing();
 
   const { handleOpenNewRepo, handleBrowse, canBrowse, isValidating, validationDialogs } = useAddRepo({

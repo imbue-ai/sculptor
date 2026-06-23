@@ -10,8 +10,8 @@ export const prStatusAtomFamily = atomFamily<string, PrimitiveAtom<PrStatusInfo 
 
 export const updatePrStatusAtom = atom(
   null,
-  (getAtom, setAtom, update: { workspaceId: string; prStatus: PrStatusInfo | null }) => {
+  (get, set, update: { workspaceId: string; prStatus: PrStatusInfo | null }) => {
     const atomForWorkspace = prStatusAtomFamily(update.workspaceId);
-    setAtom(atomForWorkspace, update.prStatus);
+    set(atomForWorkspace, update.prStatus);
   },
 );

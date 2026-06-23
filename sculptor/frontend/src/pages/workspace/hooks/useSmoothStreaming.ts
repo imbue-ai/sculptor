@@ -39,6 +39,12 @@ const DELIVERY_INTERVAL_SMOOTHING = 0.3;
  */
 const MAX_ARRIVAL_GAP_MS = 3000;
 
+/** Characters of look-ahead when snapping a reveal offset to a word boundary. */
+const WORD_BOUNDARY_LOOKAHEAD_CHARS = 15;
+
+/** Characters treated as word boundaries for snapping (whitespace and punctuation). */
+const WORD_BOUNDARY_PATTERN = /[\s\n.,;:!?)}\]"']/;
+
 /**
  * Snap a target character offset forward to the nearest word boundary.
  * Returns the adjusted number of characters to reveal.
@@ -50,14 +56,13 @@ const snapToWordBoundary = (text: string, currentOffset: number, rawCharsToRevea
   }
 
   // Already at a boundary.
-  if (/[\s\n.,;:!?)}\]"']/.test(text[targetOffset])) {
+  if (WORD_BOUNDARY_PATTERN.test(text[targetOffset])) {
     return rawCharsToReveal;
   }
 
-  // Look ahead up to 15 characters for a word boundary.
-  const lookAhead = Math.min(targetOffset + 15, text.length);
+  const lookAhead = Math.min(targetOffset + WORD_BOUNDARY_LOOKAHEAD_CHARS, text.length);
   for (let i = targetOffset + 1; i < lookAhead; i += 1) {
-    if (/[\s\n.,;:!?)}\]"']/.test(text[i])) {
+    if (WORD_BOUNDARY_PATTERN.test(text[i])) {
       return i - currentOffset;
     }
   }
@@ -106,7 +111,7 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
    * period over which we should spread each batch's characters.
    */
   const lastBatchArrivalTimeRef = useRef<number>(0);
-  const [renderedMessage, setRenderedMessage] = useState<ChatMessage | null>(chatMessage ?? null);
+  const [renderedMessage, setRenderedMessage] = useState<ChatMessage | null>(chatMessage);
 
   const ensureEngine = useCallback((): StreamingEngine => {
     if (!engineRef.current) {
@@ -265,7 +270,9 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
     }
 
     handleSnapshot(engine, chatMessage);
-  }, [chatMessage, handleSnapshot, isSmoothStreamingEnabled, ensureEngine, stopAnimationLoop]);
+    // `isSmoothStreamingEnabled` is intentionally omitted: it's already captured
+    // by `handleSnapshot`, which re-creates whenever the flag changes.
+  }, [chatMessage, handleSnapshot, ensureEngine, stopAnimationLoop]);
 
   // When smooth streaming is disabled while the loop is running, flush.
   useEffect(() => {
@@ -281,6 +288,6 @@ export const useChatSmoothStreaming = (chatMessage: ChatMessage | null): ChatMes
     if (renderedMessage && activeTaskIdRef.current !== null && activeTaskIdRef.current !== taskID) {
       return null;
     }
-    return renderedMessage ?? null;
+    return renderedMessage;
   }, [renderedMessage, taskID]);
 };

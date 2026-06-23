@@ -9,8 +9,24 @@ import type { AccentColor } from "../../../common/state/atoms/themeBuilder";
 import { useWorkspaceBranch } from "../../../common/state/hooks/useWorkspaceBranch.ts";
 import type { Agent, AgentAction, ContextActionShared, WorkspaceAction } from "./types.ts";
 
-type RenderMenuProps<TAction extends ContextActionShared, TTarget> = {
-  actions: ReadonlyArray<TAction>;
+/** Pixel size shared by every icon rendered in these context menus. */
+const ICON_SIZE = 14;
+
+/**
+ * The slice of an action descriptor the right-click menu reads, narrowed to
+ * the menu's target entity. Both `WorkspaceAction` and `AgentAction` satisfy
+ * this for `Workspace` and `Agent` respectively, letting `renderMenuItems`
+ * stay generic over the target without per-field type assertions.
+ */
+type TargetedAction<TTarget> = ContextActionShared & {
+  visible?: (target: TTarget) => boolean;
+  disabled?: (target: TTarget) => boolean;
+  getTitle?: (target: TTarget) => string;
+  perform: (target: TTarget) => void | Promise<void>;
+};
+
+type RenderMenuProps<TTarget> = {
+  actions: ReadonlyArray<TargetedAction<TTarget>>;
   target: TTarget;
   /**
    * Radix accent color for destructive actions. Workspace tabs derive
@@ -18,16 +34,10 @@ type RenderMenuProps<TAction extends ContextActionShared, TTarget> = {
    */
   destructiveColor: AccentColor;
   /**
-   * Optional trailing content (e.g. the Diagnostics submenu) appended
-   * after the action list. The Diagnostics submenu has async data needs
-   * that the registry doesn't model.
-   */
-  trailing?: ReactElement;
-  /**
    * Returns the perform handler for a given action. Kept narrow so the
    * underlying action.perform signature stays typed against its target.
    */
-  performFor: (action: TAction) => () => void | Promise<void>;
+  performFor: (action: TargetedAction<TTarget>) => () => void | Promise<void>;
   /**
    * Optional content to splice into the rendered menu immediately after
    * the action with the given id. Used by `WorkspaceContextMenuContent`
@@ -40,22 +50,15 @@ type RenderMenuProps<TAction extends ContextActionShared, TTarget> = {
   injectAfter?: ReadonlyArray<{ actionId: string; content: ReactElement }>;
 };
 
-const renderMenuItems = <TAction extends ContextActionShared, TTarget>(
-  props: RenderMenuProps<TAction, TTarget>,
-): Array<ReactElement> => {
-  const visible = props.actions.filter((a) => {
-    const v = (a as { visible?: (t: TTarget) => boolean }).visible;
-    return v ? v(props.target) : true;
-  });
+const renderMenuItems = <TTarget,>(props: RenderMenuProps<TTarget>): Array<ReactElement> => {
+  const visible = props.actions.filter((action) => (action.visible ? action.visible(props.target) : true));
 
   const out: Array<ReactElement> = [];
   visible.forEach((action, index) => {
     const isFirst = index === 0;
     const isSeparatorVisible = !isFirst && action.separatorBefore === true;
-    const disabledFn = (action as { disabled?: (t: TTarget) => boolean }).disabled;
-    const isDisabled = disabledFn ? disabledFn(props.target) : false;
-    const getTitleFn = (action as { getTitle?: (t: TTarget) => string }).getTitle;
-    const title = getTitleFn ? getTitleFn(props.target) : action.title;
+    const isDisabled = action.disabled ? action.disabled(props.target) : false;
+    const title = action.getTitle ? action.getTitle(props.target) : action.title;
     out.push(
       <Fragment key={action.id}>
         {isSeparatorVisible ? <ContextMenu.Separator /> : null}
@@ -70,7 +73,7 @@ const renderMenuItems = <TAction extends ContextActionShared, TTarget>(
             void props.performFor(action)();
           }}
         >
-          {action.icon ? <action.icon size={14} /> : null} {title}
+          {action.icon ? <action.icon size={ICON_SIZE} /> : null} {title}
         </ContextMenu.Item>
       </Fragment>,
     );
@@ -123,12 +126,12 @@ export const WorkspaceContextMenuContent = ({
   const openInSub = isOpenInVisible ? (
     <ContextMenu.Sub>
       <ContextMenu.SubTrigger>
-        <FolderOpenIcon size={14} /> Open in...
+        <FolderOpenIcon size={ICON_SIZE} /> Open in...
       </ContextMenu.SubTrigger>
       <ContextMenu.SubContent>
         {getOpenWithItems().map((item) => (
           <ContextMenu.Item key={item.app} onSelect={(): void => openInRuntime.openInApp(workspace, item.app)}>
-            <img src={item.icon} alt="" width={14} height={14} /> {item.label}
+            <img src={item.icon} alt="" width={ICON_SIZE} height={ICON_SIZE} /> {item.label}
           </ContextMenu.Item>
         ))}
       </ContextMenu.SubContent>
@@ -181,7 +184,7 @@ export const WorkspaceContextMenuContent = ({
   );
   return (
     <ContextMenu.Content size="1" onCloseAutoFocus={(e): void => e.preventDefault()}>
-      {renderMenuItems<WorkspaceAction, Workspace>({
+      {renderMenuItems<Workspace>({
         actions,
         target: workspace,
         destructiveColor,
@@ -222,7 +225,7 @@ export const AgentContextMenuContent = ({
   );
   return (
     <ContextMenu.Content size="1" onCloseAutoFocus={(e): void => e.preventDefault()}>
-      {renderMenuItems<AgentAction, Agent>({
+      {renderMenuItems<Agent>({
         actions,
         target: agent,
         destructiveColor: "red",

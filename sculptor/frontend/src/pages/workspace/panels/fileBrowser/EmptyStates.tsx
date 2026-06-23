@@ -6,6 +6,8 @@ import { ElementIds } from "~/api";
 const SKELETON_ROW_WIDTHS = ["70%", "50%", "80%", "60%", "45%", "75%", "55%", "65%"];
 const SKELETON_ROW_INDENTS = [0, 16, 16, 32, 32, 16, 32, 16];
 const SKELETON_ROW_HEIGHT = 28;
+const SKELETON_BAR_HEIGHT = 14;
+const SKELETON_BAR_RADIUS = 4;
 
 export const EmptyState = (): ReactElement => {
   return (
@@ -26,7 +28,7 @@ export const SkeletonLoading = (): ReactElement => {
           align="center"
           style={{ height: SKELETON_ROW_HEIGHT, paddingLeft: SKELETON_ROW_INDENTS[index] }}
         >
-          <Skeleton style={{ width, height: 14, borderRadius: 4 }} />
+          <Skeleton style={{ width, height: SKELETON_BAR_HEIGHT, borderRadius: SKELETON_BAR_RADIUS }} />
         </Flex>
       ))}
     </Flex>

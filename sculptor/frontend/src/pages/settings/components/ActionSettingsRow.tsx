@@ -7,7 +7,7 @@ import type { CustomAction } from "../../../api";
 import { ElementIds } from "../../../api";
 import styles from "./ActionSettingsRow.module.scss";
 
-type DropPosition = "before" | "after" | undefined;
+type DropPosition = "before" | "after";
 
 type ActionSettingsRowProps = {
   action: CustomAction;
@@ -51,7 +51,7 @@ export const ActionSettingsRow = ({
           <GripVertical size={16} />
         </Box>
 
-        <Flex direction="column" className={styles.actionInfo} style={{ flex: 1, minWidth: 0 }}>
+        <Flex direction="column" className={styles.actionInfo}>
           <Text weight="bold" size="2">
             {action.name}
           </Text>
@@ -64,7 +64,7 @@ export const ActionSettingsRow = ({
           {action.autoSubmit ? "Auto-submit" : "Draft"}
         </Badge>
 
-        <Flex className={styles.actionButtons} gap="2">
+        <Flex className={styles.actionButtons} align="center" gap="2">
           <IconButton
             variant="ghost"
             size="1"

@@ -14,6 +14,17 @@ type TrackingConfig = {
 };
 
 /**
+ * Per-request meta options callers pass through the generated client's `meta`
+ * field. The client types `meta` as `Record<string, unknown>` and does not
+ * surface it on the interceptor's options type, so we narrow it here.
+ */
+type RequestMeta = {
+  timeout?: number;
+  skipWsAck?: boolean;
+  signal?: AbortSignal;
+};
+
+/**
  * Internal headers used as a transport mechanism for meta options
  * SKIP_WS_ACK is stripped before the request reaches the backend
  */
@@ -55,11 +66,10 @@ export const makeAPIRequest = async (input: RequestInfo | URL, init: RequestInit
   setupContentTypeHeader(headers, init.body);
 
   const urlString = extractUrlString(input);
-  const method = extractMethod(input, init);
 
   const tracker = trackingConfig.shouldSkipTracking
     ? createNoOpTracker()
-    : createRequestTracker(requestId, urlString, method, trackingConfig.customTimeoutMs);
+    : createRequestTracker(requestId, urlString, trackingConfig.customTimeoutMs);
 
   try {
     const response = await fetch(input, { ...init, headers });
@@ -141,9 +151,8 @@ export const configureClient = async (): Promise<void> => {
   });
 
   // Interceptor converts meta options to headers that our custom fetch can read
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  client.interceptors.request.use((request: Request, options: any) => {
-    const meta = options?.meta;
+  client.interceptors.request.use((request, options): Request => {
+    const meta = (options as { meta?: RequestMeta }).meta;
 
     if (!meta) {
       return request;
@@ -185,25 +194,12 @@ const extractUrlString = (input: RequestInfo | URL): string => {
   return String(input);
 };
 
-const extractMethod = (input: RequestInfo | URL, init?: RequestInit): string | undefined => {
-  if (init?.method) {
-    return init.method;
-  }
-
-  // Method from Request object if no init.method provided
-  if (typeof Request !== "undefined" && input instanceof Request) {
-    return input.method;
-  }
-
-  return undefined;
-};
-
 const extractTrackingConfig = (headers: Headers): TrackingConfig => {
   const timeoutHeader = headers.get(INTERNAL_HEADERS.REQUEST_TIMEOUT);
   const customTimeoutMs = timeoutHeader ? parseInt(timeoutHeader, 10) : undefined;
   const shouldSkipTracking = headers.get(INTERNAL_HEADERS.SKIP_WS_ACK) === "true";
 
-  // Clean up internal the header before request goes to backend
+  // Clean up the internal header before the request goes to the backend
   headers.delete(INTERNAL_HEADERS.SKIP_WS_ACK);
 
   return {

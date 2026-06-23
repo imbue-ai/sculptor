@@ -6,6 +6,7 @@ import { ElementIds } from "~/api";
 import { useDirectoryListing } from "~/components/path-autocomplete/useDirectoryListing.ts";
 import type { ToastContent } from "~/components/Toast.tsx";
 
+import styles from "./AddRepoDialog.module.scss";
 import { AddRepoForm } from "./AddRepoForm.tsx";
 import { useAddRepo } from "./useAddRepo.tsx";
 
@@ -16,7 +17,7 @@ type AddRepoDialogProps = {
 };
 
 export const AddRepoDialog = ({ open, onOpenChange, setToast }: AddRepoDialogProps): ReactElement => {
-  const [path, setPath] = useState("");
+  const [path, setPath] = useState<string>("");
 
   const handleClose = useCallback(() => onOpenChange(false), [onOpenChange]);
   const { handleOpenNewRepo, handleBrowse, canBrowse, isValidating, validationDialogs } = useAddRepo({
@@ -46,7 +47,7 @@ export const AddRepoDialog = ({ open, onOpenChange, setToast }: AddRepoDialogPro
   return (
     <>
       <Dialog.Root open={open} onOpenChange={handleOpenChange}>
-        <Dialog.Content maxWidth="480px" data-testid={ElementIds.ADD_REPO_DIALOG} style={{ overflow: "visible" }}>
+        <Dialog.Content maxWidth="480px" data-testid={ElementIds.ADD_REPO_DIALOG} className={styles.dialogContent}>
           <Dialog.Title>
             <Text size="5" weight="bold">
               Add new repository

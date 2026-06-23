@@ -47,7 +47,11 @@ export const getEmptyTaskDetailState = (): TaskDetailState => {
 
 export const updateTaskDetailAtom = atom(
   null,
-  (getAtom, setAtom, update: { taskId: string; updater: (prev: TaskDetailState | null) => TaskDetailState }) => {
+  (
+    getAtom,
+    setAtom,
+    update: { taskId: string; updater: (prev: TaskDetailState | null) => TaskDetailState | null },
+  ): void => {
     const currentState = getAtom(taskDetailAtomFamily(update.taskId));
     const newState = update.updater(currentState);
     if (!isEqual(currentState, newState)) {
@@ -62,7 +66,7 @@ export const taskUpdatedArtifactsAtomFamily = atomFamily<string, PrimitiveAtom<A
 
 export const updateTaskUpdatedArtifactsAtom = atom(
   null,
-  (getAtom, setAtom, update: { taskId: string; artifactTypes: Array<ArtifactType> }) => {
+  (getAtom, setAtom, update: { taskId: string; artifactTypes: Array<ArtifactType> }): void => {
     const existing = getAtom(taskUpdatedArtifactsAtomFamily(update.taskId));
     if (existing.length === 0) {
       setAtom(taskUpdatedArtifactsAtomFamily(update.taskId), Array.from(new Set(update.artifactTypes)));
@@ -104,7 +108,7 @@ export const draftQuestionStateAtomFamily = atomFamily<string, PrimitiveAtom<Dra
 
 export const clearTaskUpdatedArtifactsAtom = atom(
   null,
-  (getAtom, setAtom, update: { taskId: string; artifactTypes: Array<ArtifactType> }) => {
+  (getAtom, setAtom, update: { taskId: string; artifactTypes: Array<ArtifactType> }): void => {
     const existing = getAtom(taskUpdatedArtifactsAtomFamily(update.taskId));
     if (existing.length === 0) {
       return;

@@ -68,8 +68,8 @@ export const highlightCode = async (
     line.map(
       (token): DualThemedToken => ({
         content: token.content,
-        lightColor: token.htmlStyle?.["color"] as string | undefined,
-        darkColor: token.htmlStyle?.["--shiki-dark"] as string | undefined,
+        lightColor: token.htmlStyle?.["color"],
+        darkColor: token.htmlStyle?.["--shiki-dark"],
       }),
     ),
   );

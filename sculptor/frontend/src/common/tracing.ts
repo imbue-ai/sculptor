@@ -101,7 +101,7 @@ const droppedMarker = (count: number): ChromeEvent => ({
   args: { count },
 });
 
-const flush = (useBeacon: boolean = false): void => {
+const flush = (shouldUseBeacon: boolean = false): void => {
   if (pendingEvents.length === 0 && droppedEventCount === 0) return;
   const batch = pendingEvents;
   if (droppedEventCount > 0) {
@@ -114,7 +114,7 @@ const flush = (useBeacon: boolean = false): void => {
   // On beforeunload, sendBeacon survives the navigation; regular fetch is
   // cancelled. During normal flushes we prefer fetch because it can re-queue
   // events on failure (kept in-memory in pendingEvents).
-  if (useBeacon && navigator.sendBeacon) {
+  if (shouldUseBeacon && navigator.sendBeacon) {
     try {
       navigator.sendBeacon(url, new Blob([payload], { type: "application/json" }));
     } catch {

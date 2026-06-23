@@ -16,7 +16,6 @@ type RepoSegmentProps = {
   strategy: WorkspaceInitializationStrategy;
   shouldShowModeBadge: boolean;
   projectName: string;
-  "data-testid"?: string;
 };
 
 const MODE_BADGE_LABEL: Record<WorkspaceInitializationStrategy, string> = {

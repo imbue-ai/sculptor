@@ -6,13 +6,15 @@ import { ElementIds } from "~/api";
 
 import styles from "./HistoryPanel.module.scss";
 
+const SHORT_HASH_LENGTH = 11;
+
 type TerminusIndicatorProps = {
   forkPoint: string | null;
   hideTopLine: boolean;
 };
 
 export const TerminusIndicator = ({ forkPoint, hideTopLine }: TerminusIndicatorProps): ReactElement => {
-  const shortHash = forkPoint?.slice(0, 11) ?? null;
+  const shortHash = forkPoint?.slice(0, SHORT_HASH_LENGTH);
 
   return (
     <div className={styles.terminus} data-testid={ElementIds.HISTORY_TERMINUS}>

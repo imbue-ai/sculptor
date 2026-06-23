@@ -1,4 +1,3 @@
-import { compact } from "lodash";
 import type { HTMLProps, PropsWithChildren, ReactElement } from "react";
 
 import { mergeClasses, optional } from "../common/Utils.ts";
@@ -12,16 +11,16 @@ export const Code = (
   } & Omit<HTMLProps<HTMLDivElement>, "size">,
 ): ReactElement => {
   const { className, children, isUnderlined, isClickable, size: maybeSize, style, ...rest } = props;
-  const classNames = compact([
+  const combinedClassName = mergeClasses(
     className,
     styles.code,
     optional(!!isUnderlined, styles.underlined),
     optional(!!isClickable, styles.clickable),
-  ]);
+  );
   const size = maybeSize ?? "2";
 
   return (
-    <span className={mergeClasses(...classNames)} style={{ ...style, fontSize: `var(--font-size-${size})` }} {...rest}>
+    <span className={combinedClassName} style={{ ...style, fontSize: `var(--font-size-${size})` }} {...rest}>
       {children}
     </span>
   );
