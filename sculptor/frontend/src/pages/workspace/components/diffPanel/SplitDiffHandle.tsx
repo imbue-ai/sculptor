@@ -9,6 +9,7 @@ import styles from "./SplitDiffHandle.module.scss";
 
 const MIN_SPLIT_RATIO = 20;
 const MAX_SPLIT_RATIO = 80;
+const CENTER_SPLIT_RATIO = 50;
 
 type SplitDiffHandleProps = {
   /**
@@ -44,7 +45,7 @@ export const SplitDiffHandle = ({ containerRef }: SplitDiffHandleProps): ReactEl
     const shadowRoot = container.querySelector("diffs-container")?.shadowRoot;
     if (!shadowRoot) return;
 
-    const diffsEl = shadowRoot.querySelector("[data-diffs][data-type='split']") as HTMLElement | null;
+    const diffsEl = shadowRoot.querySelector<HTMLElement>("[data-diffs][data-type='split']");
     if (!diffsEl) return;
 
     const cols = getComputedStyle(diffsEl).gridTemplateColumns;
@@ -80,7 +81,7 @@ export const SplitDiffHandle = ({ containerRef }: SplitDiffHandleProps): ReactEl
 
     // Watch for Pierre's `diffs-container` elements appearing in the DOM.
     // In the combined "Review all" view these render asynchronously after
-    // the handle mounts, so the initial rAF may not find them yet.
+    // the handle mounts, so the initial sync may not find them yet.
     const mutationObserver = new MutationObserver(() => requestAnimationFrame(syncHandlePosition));
     mutationObserver.observe(container, { childList: true, subtree: true });
 
@@ -124,7 +125,7 @@ export const SplitDiffHandle = ({ containerRef }: SplitDiffHandleProps): ReactEl
   );
 
   const handleDoubleClick = useCallback((): void => {
-    setSplitRatio(50);
+    setSplitRatio(CENTER_SPLIT_RATIO);
   }, [setSplitRatio]);
 
   return (

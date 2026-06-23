@@ -8,7 +8,7 @@ const LARGE_DIFF_LINE_THRESHOLD = 500;
 
 type LargeDiffGateProps = {
   diffString: string;
-  children: (visibleDiff: string, isTruncated: boolean) => ReactElement;
+  children: (renderProps: { visibleDiff: string; isTruncated: boolean }) => ReactElement;
 };
 
 export const LargeDiffGate = ({ diffString, children }: LargeDiffGateProps): ReactElement => {
@@ -37,7 +37,7 @@ export const LargeDiffGate = ({ diffString, children }: LargeDiffGateProps): Rea
 
   return (
     <>
-      {children(truncatedDiff, isTruncated)}
+      {children({ visibleDiff: truncatedDiff, isTruncated })}
       {isTruncated && (
         <Flex align="center" justify="center" py="3">
           <Button variant="soft" size="1" onClick={handleShowFullDiff}>

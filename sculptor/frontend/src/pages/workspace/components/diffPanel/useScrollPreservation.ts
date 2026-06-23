@@ -43,24 +43,27 @@ export const useScrollPreservation = ({ containerRef, diffString, filePath }: Us
     }
   });
 
-  // Restore scroll position when diff changes for the same file
+  // Restore scroll position when the diff changes for the same file
   useLayoutEffect(() => {
     const isSameFile = filePath === prevFilePathRef.current;
     const hasDiffChanged = diffString !== prevDiffStringRef.current;
 
-    if (hasDiffChanged && isSameFile) {
-      const wrapper = containerRef.current;
-      if (wrapper && savedScrollTopRef.current > 0) {
-        requestAnimationFrame(() => {
-          const scrollable = findScrollableChild(wrapper);
-          if (scrollable) {
-            scrollable.scrollTop = savedScrollTopRef.current;
-          }
-        });
-      }
-    }
-
     prevDiffStringRef.current = diffString;
     prevFilePathRef.current = filePath;
+
+    const wrapper = containerRef.current;
+    if (!hasDiffChanged || !isSameFile || !wrapper || savedScrollTopRef.current <= 0) return;
+
+    // Pierre commits the re-rendered diff content after this layout effect runs, so the
+    // scrollable child hasn't reached its final height yet. Defer the restore by one frame
+    // so the new content is laid out before we set scrollTop, and cancel it on cleanup so a
+    // pending frame can't write to a detached element after unmount or another diff change.
+    const frameId = requestAnimationFrame(() => {
+      const scrollable = findScrollableChild(wrapper);
+      if (scrollable) {
+        scrollable.scrollTop = savedScrollTopRef.current;
+      }
+    });
+    return (): void => cancelAnimationFrame(frameId);
   }, [diffString, filePath, containerRef]);
 };
