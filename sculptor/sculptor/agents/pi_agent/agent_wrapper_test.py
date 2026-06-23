@@ -580,6 +580,57 @@ def test_interrupt_with_no_turn_in_flight_resolves_stuck_request() -> None:
     assert resolved[0].interrupted is True
 
 
+def test_idle_interrupt_does_not_poison_next_clear_context() -> None:
+    """An interrupt with no turn in flight must not leave interrupt state set.
+
+    A chat turn resets interrupt state at its start, but the between-turns
+    control paths (/clear, set_model) do not — they only read it via
+    `_handle_user_message`. So a lingering `_was_interrupted` from an idle
+    interrupt would wrongly mark the next /clear's RequestSuccess as interrupted.
+    """
+    env = _clear_env()
+    agent = _make_agent(env)
+    agent._session_id = "old-session"
+    agent._in_flight_request_id = AgentMessageID()
+    process = _make_process(
+        [
+            _event(
+                {
+                    "type": "response",
+                    "command": "new_session",
+                    "success": True,
+                    "id": "cmd-new",
+                    "data": {"cancelled": False},
+                }
+            ),
+            _event(
+                {
+                    "type": "response",
+                    "command": "get_state",
+                    "success": True,
+                    "id": "cmd-state",
+                    "data": {"sessionId": "new-session", "messageCount": 0},
+                }
+            ),
+        ]
+    )
+    agent._process = process
+
+    # Idle interrupt (no turn in flight): reconciles the orphaned request.
+    agent._request_interrupt()
+
+    clear = ClearContextUserMessage(message_id=AgentMessageID())
+    with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-new", "cmd-state"]):
+        agent._handle_clear_context(clear)
+
+    emitted = _drain(agent._output_messages)
+    clear_successes = [
+        m for m in emitted if isinstance(m, RequestSuccessAgentMessage) and m.request_id == clear.message_id
+    ]
+    assert len(clear_successes) == 1
+    assert clear_successes[0].interrupted is False
+
+
 def test_aborted_agent_end_with_interrupt_pending_finalizes_without_crash() -> None:
     """`stopReason:"aborted"` on agent_end is the expected boundary when interrupt-pending — finalize, don't raise."""
     agent = _make_agent()
