@@ -322,18 +322,46 @@ describe("activeIndex clamping on workspace deletion", () => {
     });
   });
 
-  it("optimisticDeleteWorkspaceAtom resets activeIndex to -1 when the active tab IS the deleted one", () => {
+  it("optimisticDeleteWorkspaceAtom clamps activeIndex to the tab filling the deleted slot when the active tab IS the deleted one", () => {
     const store = seedThreeWorkspacesWithActive(1);
 
     store.set(optimisticDeleteWorkspaceAtom, "ws-b");
 
+    // The active tab was removed; rather than leave activeIndex at the invalid
+    // sentinel (which makes a reload's rootLoader bounce to /ws/new), it is
+    // clamped to a surviving neighbor — the tab that shifts into the deleted
+    // slot (ws-c at index 1). The follow-up navigation refines this further.
     expect(store.get(tabsAtom)).toEqual({
       order: [
         { tabId: "ws-a", agentId: null },
         { tabId: "ws-c", agentId: null },
       ],
-      activeIndex: INVALID_ACTIVE_INDEX,
+      activeIndex: 1,
     });
+  });
+
+  it("optimisticDeleteWorkspaceAtom clamps to the new last tab when the active (and last) tab is deleted", () => {
+    const store = seedThreeWorkspacesWithActive(2);
+
+    store.set(optimisticDeleteWorkspaceAtom, "ws-c");
+
+    expect(store.get(tabsAtom)).toEqual({
+      order: [
+        { tabId: "ws-a", agentId: null },
+        { tabId: "ws-b", agentId: null },
+      ],
+      activeIndex: 1,
+    });
+  });
+
+  it("optimisticDeleteWorkspaceAtom leaves activeIndex invalid when the last remaining tab is deleted", () => {
+    const ws = [mockWorkspace({ objectId: "ws-only", isOpen: true })];
+    const store = seedHydratedStore(ws, ["ws-only"]);
+    store.set(tabsAtom, { order: [{ tabId: "ws-only", agentId: null }], activeIndex: 0 });
+
+    store.set(optimisticDeleteWorkspaceAtom, "ws-only");
+
+    expect(store.get(tabsAtom)).toEqual({ order: [], activeIndex: INVALID_ACTIVE_INDEX });
   });
 
   it("optimisticDeleteWorkspaceAtom decrements activeIndex when the active tab is AFTER the deleted one", () => {
@@ -352,6 +380,23 @@ describe("activeIndex clamping on workspace deletion", () => {
 
   it("updateWorkspacesAtom isDeleted branch removes the entry and clamps activeIndex", () => {
     const store = seedThreeWorkspacesWithActive(2);
+
+    store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "ws-b", isDeleted: true })]);
+
+    expect(store.get(tabsAtom)).toEqual({
+      order: [
+        { tabId: "ws-a", agentId: null },
+        { tabId: "ws-c", agentId: null },
+      ],
+      activeIndex: 1,
+    });
+  });
+
+  it("updateWorkspacesAtom isDeleted branch lands activeIndex on a neighbor when the ACTIVE tab is deleted", () => {
+    // A delete confirmed by the server (e.g. from another client) takes the
+    // same applyClose path as an optimistic delete, so deleting the active tab
+    // must not leave the persisted activeIndex at the invalid sentinel either.
+    const store = seedThreeWorkspacesWithActive(1);
 
     store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "ws-b", isDeleted: true })]);
 

@@ -153,7 +153,14 @@ const applyClose = (state: TabsState, tabId: string): TabsState => {
   const order = state.order.filter((_, i) => i !== removedIndex);
   let activeIndex = state.activeIndex;
   if (state.activeIndex === removedIndex) {
-    activeIndex = INVALID_ACTIVE_INDEX;
+    // The active tab was closed. Land on the neighbor that shifted into its
+    // slot (or the new last tab if we removed the end) so the persisted state
+    // never points past the end — order[INVALID_ACTIVE_INDEX] is undefined, and
+    // on reload rootLoader reads that as "no MRU pointer" and bounces to
+    // /ws/new even though tabs survive. A subsequent navigation may refine this
+    // to an MRU target; this only guarantees the pointer is always valid.
+    // Only when nothing survives do we fall back to the sentinel.
+    activeIndex = order.length > 0 ? Math.min(removedIndex, order.length - 1) : INVALID_ACTIVE_INDEX;
   } else if (state.activeIndex > removedIndex) {
     activeIndex = state.activeIndex - 1;
   }
@@ -623,7 +630,10 @@ export const optimisticDeleteWorkspaceAtom = atom(null, (get, set, workspaceId: 
   // arriving before the server confirms deletion doesn't treat it as
   // a "new" workspace and auto-open it as a tab. workspacesArrayAtom
   // filters out null atoms, so it won't appear in the UI.
-  // Remove from tab order so the tab disappears immediately
+  // Remove from tab order so the tab disappears immediately. When the deleted
+  // workspace was the active tab, applyClose lands activeIndex on a surviving
+  // neighbor so the persisted state never points past the end (which would make
+  // a reload bounce to /ws/new); a following navigation may refine it further.
   set(tabsAtom, applyClose(get(tabsAtom), workspaceId));
   // Track the deletion so components with their own workspace lists
   // (e.g. RecentWorkspaces) can filter it out without a page reload.
