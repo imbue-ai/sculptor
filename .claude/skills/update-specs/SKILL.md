@@ -135,6 +135,13 @@ truly left over, and batch those questions rather than interrupting per-feature.
 Edit each doc in place, **matching its established format, tone, and structure**. Read enough
 surrounding context in each doc to slot the change in where it belongs, not at the end.
 
+**Describe what the code does today — never what it used to do.** These are living descriptions of the
+current product, not a changelog. Don't leave a trace of the change: no "now …", "no longer …",
+"previously …", "used to …", "formerly …", "renamed from …", "instead of …", or any before/after
+phrasing. The commit history already records what changed; the doc records what *is*. When you revise a
+section, rewrite it so a reader with no knowledge of the old behavior gets an accurate, self-contained
+description — then delete any wording that only makes sense relative to the past.
+
 - **`SPEC.md`** — prose behavior. Add to or revise the relevant feature section; remove text for
   removed features. Keep the descriptive, present-tense product voice. Experimental/off-by-default
   features go in the experimental section, marked as such.

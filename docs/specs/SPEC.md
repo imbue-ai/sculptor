@@ -200,7 +200,7 @@ the agent is still usable). Several agents can run in one workspace; they share 
 state but each keeps its own conversation and history.
 
 **Task (internal, not a product concept).** An agent is internally backed by a general-purpose
-**task** primitive, now vestigial — the only remaining non-agent task types are test-only. A user
+**task** primitive, vestigial — the only non-agent task types are test-only. A user
 never sees or names a "task"; it survives only as a storage and scheduling detail behind an agent.
 Its internal status, and an agent's TODO-item statuses, are each distinct from the user-visible agent
 status above — don't conflate them.

@@ -683,7 +683,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **ADDWS-025 — Repo/branch/source-branch selections persist across tab switches**
   - Given: the user chose a repo, source branch, and branch name on the Add Workspace form, then switched tabs.
   - When: the user returns to the same draft.
-  - Then: the previously chosen repo, source branch, and branch name are all restored (not just the name).
+  - Then: the previously chosen repo, source branch, and branch name are all restored.
 
 - **ADDWS-006 — Repo selector dropdown**
   - Given: the repo selector is shown.
