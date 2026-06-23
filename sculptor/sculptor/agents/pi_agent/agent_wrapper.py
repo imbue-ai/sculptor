@@ -1429,7 +1429,7 @@ class PiAgent(DefaultAgentWrapper):
         while True:
             self._send_rpc(payload)
             try:
-                self._consume_until_turn_end(str(payload["id"]))
+                self._consume_until_turn_end(payload["id"])
                 return
             except _PiTransientTurnError as transient:
                 attempt += 1
