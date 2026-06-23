@@ -3,7 +3,6 @@ from contextlib import contextmanager
 from queue import Queue
 from threading import Thread
 from typing import Generator
-from typing import Iterator
 from typing import cast
 
 from loguru import logger
@@ -100,7 +99,7 @@ def title_prediction_context(
     settings: SculptorSettings,
     concurrency_group: ConcurrencyGroup,
     root_progress_handle: RootProgressHandle,
-) -> Iterator[tuple[list[TaskTitle], Thread | None]]:
+) -> Generator[tuple[list[TaskTitle], Thread | None], None, None]:
     """Start title prediction thread if needed."""
     title_result: list[TaskTitle] = []
     title_thread = None

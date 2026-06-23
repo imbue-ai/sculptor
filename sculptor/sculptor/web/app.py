@@ -25,6 +25,7 @@ from typing import TypeVar
 from uuid import uuid4
 
 import anyio
+import anyio.to_thread
 import psutil
 import typeid.errors
 from fastapi import Depends
@@ -2632,7 +2633,7 @@ def await_message_response(
     message_id: AgentMessageID,
     task_id: TaskID,
     services: CompleteServiceCollection,
-) -> Iterator[None]:
+) -> Generator[None, None, None]:
     with services.task_service.subscribe_to_task(task_id) as updates_queue:
         yield
         logger.debug("Waiting for response to message {} in task {}", message_id, task_id)
@@ -2652,7 +2653,7 @@ def await_request_outcome(
     message_id: AgentMessageID,
     task_id: TaskID,
     services: CompleteServiceCollection,
-) -> Iterator[list[PersistentRequestCompleteAgentMessage]]:
+) -> Generator[list[PersistentRequestCompleteAgentMessage], None, None]:
     """Like `await_message_response`, but captures the terminal request message.
 
     Yields a one-element list the caller reads after the block to inspect the
@@ -2739,7 +2740,7 @@ def get_config_status(
         has_email=bool(user_config.user_email) and check_is_user_email_field_valid(user_config),
         has_privacy_consent=user_config.is_privacy_policy_consented,
         has_project=has_project,
-        has_dependencies_passing=bool(deps_passing),
+        has_dependencies_passing=deps_passing,
     )
 
 
@@ -2760,9 +2761,9 @@ def save_user_email(
         user_config,
         {
             "user_email": email_config_request.user_email,
-            "user_id": create_user_id(str(email_config_request.user_email)),
+            "user_id": create_user_id(email_config_request.user_email),
             "user_full_name": email_config_request.full_name,
-            "organization_id": create_organization_id(str(email_config_request.user_email)),
+            "organization_id": create_organization_id(email_config_request.user_email),
             # Saving user email counts as consenting to the Policy email
             "is_privacy_policy_consented": True,
             # Telemetry choice comes from the welcome-step checkbox
@@ -4006,8 +4007,8 @@ def get_health_check(request: Request) -> HealthCheckResponse:
     dependencies_status = services.dependency_management_service.get_status()
 
     return HealthCheckResponse(
-        version=str(version.__version__),
-        git_sha=str(version.__git_sha__),
+        version=version.__version__,
+        git_sha=version.__git_sha__,
         python_version=sys.version.split()[0],
         platform=platform.system(),
         platform_version=platform.release(),

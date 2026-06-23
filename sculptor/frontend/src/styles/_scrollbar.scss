@@ -18,7 +18,7 @@
 // changes — the track width stays constant.
 
 @mixin thin-scrollbar($direction: vertical, $size: null, $autohide: true) {
-  $resolved-size: if($size, $size, var(--scrollbar-size));
+  $resolved-size: $size or var(--scrollbar-size);
 
   @if $direction == vertical {
     &::-webkit-scrollbar {
@@ -38,7 +38,11 @@
   }
 
   &::-webkit-scrollbar-thumb {
-    background-color: if($autohide, transparent, var(--scrollbar-thumb-color));
+    @if $autohide {
+      background-color: transparent;
+    } @else {
+      background-color: var(--scrollbar-thumb-color);
+    }
     border-radius: var(--scrollbar-thumb-radius);
     transition: background-color var(--duration-fast);
   }

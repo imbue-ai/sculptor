@@ -162,7 +162,7 @@ class _Evolver(Generic[_T]):
                 name: chill(child) for name, child in self._value.child_evolver_by_name.items()
             }
             assert attr.has(self._value.attr_value.__class__)
-            return cast(_T, attr.evolve(cast(Any, cast(_AttrValue, self._value).attr_value), **new_children))
+            return cast(_T, attr.evolve(cast(Any, self._value.attr_value), **new_children))
         elif isinstance(self._value, _PydanticModelValue):
             return cast(
                 _T,

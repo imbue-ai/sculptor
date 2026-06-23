@@ -46,7 +46,7 @@ from sculptor.state.messages import LLMModel
 def local_environment(
     test_root_concurrency_group: ConcurrencyGroup,
 ) -> Generator[AgentExecutionEnvironment, None, None]:
-    workspace_dir = LOCAL_WORKSPACE_DIR / str(uuid4().hex)
+    workspace_dir = LOCAL_WORKSPACE_DIR / uuid4().hex
     workspace_dir.mkdir(parents=True, exist_ok=True)
     repo_dir = workspace_dir / "repo"
     repo_dir.mkdir(parents=True, exist_ok=True)
