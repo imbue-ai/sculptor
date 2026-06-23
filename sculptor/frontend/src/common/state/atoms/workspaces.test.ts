@@ -392,6 +392,23 @@ describe("activeIndex clamping on workspace deletion", () => {
     });
   });
 
+  it("updateWorkspacesAtom isDeleted branch lands activeIndex on a neighbor when the ACTIVE tab is deleted", () => {
+    // A delete confirmed by the server (e.g. from another client) takes the
+    // same applyClose path as an optimistic delete, so deleting the active tab
+    // must not leave the persisted activeIndex at the invalid sentinel either.
+    const store = seedThreeWorkspacesWithActive(1);
+
+    store.set(updateWorkspacesAtom, [mockWorkspace({ objectId: "ws-b", isDeleted: true })]);
+
+    expect(store.get(tabsAtom)).toEqual({
+      order: [
+        { tabId: "ws-a", agentId: null },
+        { tabId: "ws-c", agentId: null },
+      ],
+      activeIndex: 1,
+    });
+  });
+
   it("closeWorkspaceTabAtom does NOT touch activeIndex for real workspace tabs (close is reversible)", () => {
     const store = seedThreeWorkspacesWithActive(1);
 
