@@ -98,6 +98,30 @@ def _run_sculpt_raw(instance: SculptorInstance, args: list[str]) -> tuple[int, s
     return result.returncode, result.stdout
 
 
+def _run_sculpt_capture(instance: SculptorInstance, args: list[str]) -> tuple[int, str, str]:
+    """Like _run_sculpt_raw but also returns stderr.
+
+    Use for error cases — cli_error writes the message to stderr (which the
+    other helpers discard), so asserting on it needs the captured stream.
+    """
+    project_id = _get_project_id(instance)
+
+    env = {
+        **os.environ,
+        "SCULPT_PROJECT_ID": project_id,
+    }
+
+    full_args = args + ["--base-url", instance.backend_api_url]
+    result = subprocess.run(
+        [sys.executable, "-m", "sculpt.main"] + full_args,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+    return result.returncode, result.stdout, result.stderr
+
+
 class _Matcher:
     """Base class for flexible value matchers used in _assert_matches."""
 
@@ -912,6 +936,99 @@ def test_run_command_creates_workspace_and_agent(sculptor_instance_: SculptorIns
     agents = json.loads(output)
     agent_match = next(a for a in agents if a["id"] == result["agent_id"])
     _assert_subset({"model": "CLAUDE-4-HAIKU"}, agent_match)
+
+
+# ---------------------------------------------------------------------------
+# Harness selection / most-recently-used (MRU) harness tests
+#
+# The CLI's JSON output has no explicit harness field, but the auto-assigned
+# agent title encodes the type ("Claude N" / "Terminal N" / "Pi N"), so these
+# tests verify the harness via the title. Terminal is used as the non-default
+# harness: it has no enable gate and creates a waiting agent whose title is
+# stable (no prompt, so no later prompt-derived rename).
+# ---------------------------------------------------------------------------
+
+
+@user_story("to create agents with --harness and have a bare create reuse the most-recently-used one")
+def test_agent_create_harness_records_and_reuses_mru_via_cli(sculptor_instance_: SculptorInstance) -> None:
+    """`sculpt agent create --harness X` records X as the default; a later bare create reuses it."""
+    exit_code, output = _run_sculpt(
+        sculptor_instance_, ["workspace", "create", "--name", "Harness MRU WS", "--strategy", "clone"]
+    )
+    assert exit_code == 0, f"workspace create failed: {output}"
+    ws_id = json.loads(output)["id"]
+
+    # With no --harness and no prior choice, the server defaults to Claude.
+    exit_code, output = _run_sculpt(sculptor_instance_, ["agent", "create", "--workspace", ws_id])
+    assert exit_code == 0, f"agent create failed: {output}"
+    assert json.loads(output)["title"].startswith("Claude"), output
+
+    # An explicit --harness creates that type and records it as the new default.
+    exit_code, output = _run_sculpt(
+        sculptor_instance_, ["agent", "create", "--workspace", ws_id, "--harness", "Terminal"]
+    )
+    assert exit_code == 0, f"agent create --harness Terminal failed: {output}"
+    assert json.loads(output)["title"].startswith("Terminal"), output
+
+    # A subsequent bare create reuses the recorded harness (Terminal), not Claude.
+    exit_code, output = _run_sculpt(sculptor_instance_, ["agent", "create", "--workspace", ws_id])
+    assert exit_code == 0, f"agent create failed: {output}"
+    assert json.loads(output)["title"].startswith("Terminal"), output
+
+
+@user_story("to be told that `sculpt run` cannot create a terminal agent, since it always sends a prompt")
+def test_run_rejects_explicit_terminal_harness_via_cli(sculptor_instance_: SculptorInstance) -> None:
+    """`sculpt run --harness Terminal` is rejected up front (a terminal agent can't take a prompt)."""
+    exit_code, _stdout, stderr = _run_sculpt_capture(
+        sculptor_instance_, ["run", "do something", "--strategy", "clone", "--harness", "Terminal"]
+    )
+    assert exit_code == 1, f"expected rejection, got exit {exit_code}; stderr={stderr!r}"
+    assert "sculpt run" in stderr, stderr
+
+
+@user_story("to pass an explicit chat harness to `sculpt run`")
+def test_run_accepts_explicit_chat_harness_via_cli(sculptor_instance_: SculptorInstance) -> None:
+    """`sculpt run --harness Claude` is accepted and creates the workspace + a chat agent."""
+    exit_code, output = _run_sculpt(
+        sculptor_instance_,
+        ["run", "do something", "--strategy", "clone", "--model", "haiku", "--harness", "Claude"],
+    )
+    assert exit_code == 0, f"run --harness Claude failed: {output}"
+    result = json.loads(output)
+    assert set(result.keys()) == RUN_KEYS
+
+    exit_code, output = _run_sculpt(sculptor_instance_, ["agent", "show", result["agent_id"]])
+    assert exit_code == 0, f"agent show failed: {output}"
+    assert not json.loads(output)["title"].startswith("Terminal"), output
+
+
+@user_story("to have `sculpt run` reuse the most-recently-used harness, falling back to Claude for a terminal default")
+def test_run_reuses_mru_and_falls_back_for_terminal_via_cli(sculptor_instance_: SculptorInstance) -> None:
+    """A bare `sculpt run` reads the shared default; a Terminal default falls back to Claude (it has a prompt)."""
+    # Record a Terminal default through `agent create` (shares the server-side MRU with run).
+    exit_code, output = _run_sculpt(
+        sculptor_instance_, ["workspace", "create", "--name", "Run MRU WS", "--strategy", "clone"]
+    )
+    assert exit_code == 0, f"workspace create failed: {output}"
+    ws_id = json.loads(output)["id"]
+    exit_code, output = _run_sculpt(
+        sculptor_instance_, ["agent", "create", "--workspace", ws_id, "--harness", "Terminal"]
+    )
+    assert exit_code == 0, f"agent create --harness Terminal failed: {output}"
+    assert json.loads(output)["title"].startswith("Terminal"), output
+
+    # A bare `run` always sends a prompt, so the Terminal default must fall back to a chat
+    # agent rather than failing — the run succeeds and the created agent is not a terminal one.
+    exit_code, output = _run_sculpt(
+        sculptor_instance_, ["run", "do something", "--strategy", "clone", "--model", "haiku"]
+    )
+    assert exit_code == 0, f"run with a Terminal MRU should fall back to Claude, not fail: {output}"
+    result = json.loads(output)
+    assert set(result.keys()) == RUN_KEYS
+
+    exit_code, output = _run_sculpt(sculptor_instance_, ["agent", "show", result["agent_id"]])
+    assert exit_code == 0, f"agent show failed: {output}"
+    assert not json.loads(output)["title"].startswith("Terminal"), output
 
 
 # ---------------------------------------------------------------------------

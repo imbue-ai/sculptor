@@ -30,7 +30,7 @@ import {
 } from "~/common/state/atoms/agentTabs.ts";
 import { debugViewAtomFamily } from "~/common/state/atoms/alphaScroll.ts";
 import { pendingAgentTitlesAtom, tasksArrayAtom, updateTasksAtom } from "~/common/state/atoms/tasks.ts";
-import { isPiAgentEnabledAtom } from "~/common/state/atoms/userConfig.ts";
+import { isPiAgentEnabledAtom, userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 import { useOptimisticTaskDelete } from "~/common/state/hooks/useOptimisticTaskDelete.ts";
 import { useTerminalAgentRegistrations } from "~/common/state/hooks/useTerminalAgentRegistrations.ts";
 import { useRegisterCommandAction } from "~/components/CommandPalette/commandActions.ts";
@@ -229,7 +229,18 @@ export const AgentTabs = (): ReactElement | null => {
     [workspaceID, updateTasks, setRenamingAgentId, setPendingTitles, clearPendingTitle],
   );
 
-  const [lastUsedAgentType, setLastUsedAgentType] = useAtom(lastUsedAgentTypeAtom);
+  const lastUsedAgentType = useAtomValue(lastUsedAgentTypeAtom);
+  const setUserConfig = useSetAtom(userConfigAtom);
+  // Optimistically reflect the chosen harness in the shared config so the menu
+  // label updates immediately. The backend persists it as the most-recently-used
+  // harness when the agent is actually created (record-on-create), keeping the
+  // app's "+" button and the sculpt CLI in sync.
+  const setLastUsedAgentType = useCallback(
+    (stored: StoredAgentType): void => {
+      setUserConfig((prev) => (prev ? { ...prev, lastUsedAgentType: stored } : prev));
+    },
+    [setUserConfig],
+  );
   const isPiAgentEnabled = useAtomValue(isPiAgentEnabledAtom);
   const { registrations, refetch: refreshRegistrations } = useTerminalAgentRegistrations();
   // A stored "pi" is unusable once pi-agent is turned off — fall back to Claude.

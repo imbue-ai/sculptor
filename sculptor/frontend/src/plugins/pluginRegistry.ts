@@ -43,10 +43,11 @@ export const pluginSourcesAtom = atomWithStorage<ReadonlyArray<string>>("sculpto
 
 /**
  * Sources the user has explicitly disabled, persisted to localStorage. A
- * disabled source stays on the list (built-in or user) but is not loaded:
- * its `activate()` never runs and it contributes no panels/overlays/settings.
- * This is what lets the user opt out of a built-in plugin, or silence a
- * remotely-pulled-in source, without deleting the reference entirely.
+ * disabled source stays on the list (built-in, local, or user) but is not
+ * loaded: its `activate()` never runs and it contributes no
+ * panels/overlays/settings. This is what lets the user opt out of a built-in
+ * plugin, or silence a remotely-pulled-in source, without deleting the
+ * reference entirely.
  *
  * `getOnInit: true` for the same reason as `pluginSourcesAtom`: the manager's
  * synchronous bootstrap (before any component mounts) must see the persisted
@@ -59,12 +60,48 @@ export const pluginDisabledSourcesAtom = atomWithStorage<ReadonlyArray<string>>(
   { getOnInit: true },
 );
 
-/** Per-source load status, keyed by the source string (built-in + user). */
+/**
+ * Sources the user has explicitly *enabled*, persisted to localStorage. Only
+ * meaningful for built-ins shipped `disabledByDefault`: those start off, and a
+ * source's presence here is what records the user opting *in* (so the choice
+ * survives a reload, distinct from "never touched it"). For ordinary sources
+ * — enabled-by-default built-ins, discovered local plugins, user URLs — this
+ * set is irrelevant: absence from `pluginDisabledSourcesAtom` already means
+ * enabled. `getOnInit: true` for the same bootstrap reason as the atoms above.
+ */
+export const pluginEnabledSourcesAtom = atomWithStorage<ReadonlyArray<string>>(
+  "sculptor-plugin-enabled-sources",
+  [],
+  undefined,
+  { getOnInit: true },
+);
+
+/**
+ * Where a source came from. `builtin` ships in the app bundle (served from
+ * `/plugins/<id>`); `local` was discovered in the Sculptor plugins directory
+ * (the data folder's `plugins/`) and is served by the backend; `url` is a
+ * source the user added by hand. Only `url`
+ * sources are user-removable and persisted in `pluginSourcesAtom`; `builtin`
+ * and `local` are re-derived on every boot.
+ */
+export type PluginSourceKind = "builtin" | "local" | "url";
+
+/** Per-source load status, keyed by the source string (built-in + local + user). */
 export type PluginSourceState =
-  | { status: "loading"; isBuiltin: boolean }
-  | { status: "loaded"; isBuiltin: boolean; manifest: PluginManifest }
-  | { status: "error"; isBuiltin: boolean; phase: string; message: string }
-  | { status: "disabled"; isBuiltin: boolean };
+  | { status: "loading"; kind: PluginSourceKind }
+  | { status: "loaded"; kind: PluginSourceKind; manifest: PluginManifest }
+  | { status: "error"; kind: PluginSourceKind; phase: string; message: string }
+  | { status: "disabled"; kind: PluginSourceKind }
+  // Another source provides the same plugin `id` and is the one that loaded;
+  // this one is shown but not active. `activeSource` is that winner, named in
+  // the conflict tooltip. Manifest is known (it fetched fine) so the row can
+  // still show the plugin's name/version.
+  | { status: "shadowed"; kind: PluginSourceKind; manifest: PluginManifest; activeSource: string }
+  // A discovered local source that a refresh found gone from disk, but whose
+  // on/off choice the user had persisted — kept as a dead-trace row so that
+  // choice is visible and re-applied if the plugin returns. (A source with no
+  // persisted choice is dropped outright instead.)
+  | { status: "missing"; kind: PluginSourceKind };
 
 /**
  * Runtime status for every source the manager has tried to load. Not

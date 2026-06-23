@@ -34,6 +34,11 @@ input. From it you can:
 Attached files appear as small pills above the input; click the **×** on a pill
 to remove it.
 
+Images shown in the chat — whether you attached them or an agent produced them —
+can be clicked to open at full size. To save one out, right-click the image
+(either the thumbnail in a message or the full-size view) and choose
+**Copy Image** to copy it to your clipboard.
+
 ![Plus-button menu in the chat input toolbar](images/attach_context.png)
 
 ---

@@ -55,11 +55,16 @@ class WorkspaceBranchInfo(SerializableModel):
     workspace_id: WorkspaceID
 
 
-class WorkspaceRemoteBranchesInfo(SerializableModel):
-    """Remote-tracking branches available in a workspace's working directory."""
+class WorkspaceTargetBranchesInfo(SerializableModel):
+    """Branches a workspace can target as its merge/diff base.
+
+    These are the repo's remote-tracking branches, or its local branches when
+    the repo has no remote, so the selector can still offer merge targets on a
+    repo with no remote.
+    """
 
     workspace_id: WorkspaceID
-    remote_branches: tuple[str, ...]
+    target_branches: tuple[str, ...]
 
 
 class PrApproval(SerializableModel):
@@ -133,8 +138,10 @@ class StartTaskRequest(RequestModel):
     fast_mode: bool = False
     effort: EffortLevel = EffortLevel.EXTRA_HIGH
     sent_via: str | None = None
-    # Prompt-ful creation is always a chat agent; terminal types are rejected (422).
-    agent_type: AgentTypeName = AgentTypeName.CLAUDE
+    # None means "use the user's most-recently-used harness" (the server
+    # resolves it). Prompt-ful creation is always a chat agent; terminal types
+    # are rejected (422).
+    agent_type: AgentTypeName | None = None
 
 
 class CreateWorkspaceRequestV2(RequestModel):
@@ -174,7 +181,9 @@ class CreateAgentRequest(RequestModel):
     fast_mode: bool = False
     effort: EffortLevel = EffortLevel.EXTRA_HIGH
     sent_via: str | None = None
-    agent_type: AgentTypeName = AgentTypeName.CLAUDE
+    # None means "use the user's most-recently-used harness" (the server
+    # resolves it, matching the app's "+" button default).
+    agent_type: AgentTypeName | None = None
     # Required iff agent_type is REGISTERED.
     registration_id: str | None = None
 
@@ -759,7 +768,7 @@ StreamingUpdateSourceTypes = (
     | TaskUpdateTypes
     | UserUpdateSourceTypes
     | WorkspaceBranchInfo
-    | WorkspaceRemoteBranchesInfo
+    | WorkspaceTargetBranchesInfo
     | DependenciesStatus
     | WorkspaceSetupStatus
     | WorkspaceSetupOutputChunk

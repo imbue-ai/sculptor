@@ -317,6 +317,16 @@ class UserConfig(SerializableModel):
         default="xhigh",
         description="Default thinking effort level for new agents (low, medium, high, xhigh, max)",
     )
+    last_used_agent_type: str | None = Field(
+        default=None,
+        description=(
+            "Most recently used agent type (harness) for new agents, stored as a"
+            + " StoredAgentType string: 'claude', 'pi', 'terminal', or"
+            + " 'registered:<registration_id>'. Shared by the app's '+' button and the"
+            + " sculpt CLI so both create the same harness by default. If None, new"
+            + " agents default to Claude."
+        ),
+    )
 
     @model_validator(mode="before")
     @classmethod

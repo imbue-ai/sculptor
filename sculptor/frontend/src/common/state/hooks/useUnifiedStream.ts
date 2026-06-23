@@ -14,10 +14,10 @@ import { sculptorSettingsAtom } from "../atoms/sculptorSettings";
 import { getEmptyTaskDetailState, updateTaskDetailAtom, updateTaskUpdatedArtifactsAtom } from "../atoms/taskDetails";
 import { updateTasksAtom } from "../atoms/tasks";
 import { updateWorkspaceBranchAtom } from "../atoms/workspaceBranch";
-import { updateWorkspaceRemoteBranchesAtom } from "../atoms/workspaceRemoteBranches";
 import { updateWorkspacesAtom } from "../atoms/workspaces";
 import { appendSetupOutputChunkAtom } from "../atoms/workspaceSetupOutput";
 import { updateWorkspaceSetupStatusAtom } from "../atoms/workspaceSetupStatus";
+import { updateWorkspaceTargetBranchesAtom } from "../atoms/workspaceTargetBranches";
 import { acknowledgeRequests, updateActiveWebsockets } from "../requestTracking";
 import { chatMessagesReducer } from "../taskDetailReducers.ts";
 import { useWebsocket } from "./useWebsocket";
@@ -45,7 +45,7 @@ export const useUnifiedStream = (): void => {
   const updateTaskUpdatedArtifacts = useSetAtom(updateTaskUpdatedArtifactsAtom);
   const updatePrStatus = useSetAtom(updatePrStatusAtom);
   const updateWorkspaceBranch = useSetAtom(updateWorkspaceBranchAtom);
-  const updateWorkspaceRemoteBranches = useSetAtom(updateWorkspaceRemoteBranchesAtom);
+  const updateWorkspaceTargetBranches = useSetAtom(updateWorkspaceTargetBranchesAtom);
   const updateWorkspaceSetupStatus = useSetAtom(updateWorkspaceSetupStatusAtom);
   const appendSetupOutputChunk = useSetAtom(appendSetupOutputChunkAtom);
   const setDependenciesStatus = useSetAtom(dependenciesStatusAtom);
@@ -139,13 +139,13 @@ export const useUnifiedStream = (): void => {
         });
       }
 
-      // Handle workspace remote-branches updates
+      // Handle workspace target-branches updates
       if (
-        data.workspaceRemoteBranchesByWorkspaceId &&
-        Object.keys(data.workspaceRemoteBranchesByWorkspaceId).length > 0
+        data.workspaceTargetBranchesByWorkspaceId &&
+        Object.keys(data.workspaceTargetBranchesByWorkspaceId).length > 0
       ) {
-        Object.entries(data.workspaceRemoteBranchesByWorkspaceId).forEach(([workspaceId, remoteBranchesInfo]) => {
-          updateWorkspaceRemoteBranches({ workspaceId, remoteBranchesInfo: remoteBranchesInfo ?? null });
+        Object.entries(data.workspaceTargetBranchesByWorkspaceId).forEach(([workspaceId, targetBranchesInfo]) => {
+          updateWorkspaceTargetBranches({ workspaceId, targetBranchesInfo: targetBranchesInfo ?? null });
         });
       }
 
@@ -220,7 +220,7 @@ export const useUnifiedStream = (): void => {
       updateTaskUpdatedArtifacts,
       updatePrStatus,
       updateWorkspaceBranch,
-      updateWorkspaceRemoteBranches,
+      updateWorkspaceTargetBranches,
       updateWorkspaceSetupStatus,
       appendSetupOutputChunk,
       setDependenciesStatus,

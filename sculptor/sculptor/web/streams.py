@@ -62,7 +62,7 @@ from sculptor.web.derived import PrStatusInfoCleared
 from sculptor.web.derived import TaskUpdate
 from sculptor.web.derived import UserUpdate
 from sculptor.web.derived import WorkspaceBranchInfo
-from sculptor.web.derived import WorkspaceRemoteBranchesInfo
+from sculptor.web.derived import WorkspaceTargetBranchesInfo
 from sculptor.web.derived import create_initial_task_view
 from sculptor.web.message_conversion import convert_agent_messages_to_task_update
 from sculptor.web.pr_polling_service import PrPollingService
@@ -323,7 +323,7 @@ class StreamingUpdate(SerializableModel):
     task_views_by_task_id: dict[TaskID, CodingAgentTaskView] = Field(default_factory=dict)
     user_update: UserUpdate = Field(default_factory=UserUpdate)
     workspace_branch_by_workspace_id: dict[WorkspaceID, WorkspaceBranchInfo | None] = Field(default_factory=dict)
-    workspace_remote_branches_by_workspace_id: dict[WorkspaceID, WorkspaceRemoteBranchesInfo | None] = Field(
+    workspace_target_branches_by_workspace_id: dict[WorkspaceID, WorkspaceTargetBranchesInfo | None] = Field(
         default_factory=dict
     )
     pr_status_by_workspace_id: dict[WorkspaceID, PrStatusInfo | None] = Field(default_factory=dict)
@@ -428,8 +428,8 @@ def project_for_scope(
         workspace_branch_by_workspace_id=_narrow_by_workspace_id(
             update.workspace_branch_by_workspace_id, proj.scoped_workspace_ids
         ),
-        workspace_remote_branches_by_workspace_id=_narrow_by_workspace_id(
-            update.workspace_remote_branches_by_workspace_id, proj.scoped_workspace_ids
+        workspace_target_branches_by_workspace_id=_narrow_by_workspace_id(
+            update.workspace_target_branches_by_workspace_id, proj.scoped_workspace_ids
         ),
         pr_status_by_workspace_id=_narrow_by_workspace_id(update.pr_status_by_workspace_id, proj.scoped_workspace_ids),
         finished_request_ids=(),
@@ -770,7 +770,7 @@ def _convert_to_streaming_update(
     finished_request_ids: list[RequestID] = []
     user_update_sources: list[UserUpdateSourceTypes] = []
     updated_workspace_branch_by_workspace_id: dict[WorkspaceID, WorkspaceBranchInfo | None] = {}
-    updated_workspace_remote_branches_by_workspace_id: dict[WorkspaceID, WorkspaceRemoteBranchesInfo | None] = {}
+    updated_workspace_target_branches_by_workspace_id: dict[WorkspaceID, WorkspaceTargetBranchesInfo | None] = {}
     latest_dependencies_status: DependenciesStatus | None = None
     updated_workspace_setup_status_by_workspace_id: dict[WorkspaceID, WorkspaceSetupStatus] = {}
     updated_workspace_setup_output_by_workspace_id: dict[WorkspaceID, list[WorkspaceSetupOutputChunk]] = {}
@@ -805,8 +805,8 @@ def _convert_to_streaming_update(
         elif isinstance(model, WorkspaceBranchInfo):
             updated_workspace_branch_by_workspace_id[model.workspace_id] = model
 
-        elif isinstance(model, WorkspaceRemoteBranchesInfo):
-            updated_workspace_remote_branches_by_workspace_id[model.workspace_id] = model
+        elif isinstance(model, WorkspaceTargetBranchesInfo):
+            updated_workspace_target_branches_by_workspace_id[model.workspace_id] = model
 
         elif isinstance(model, DependenciesStatus):
             latest_dependencies_status = model
@@ -857,7 +857,7 @@ def _convert_to_streaming_update(
         task_update_by_task_id=updated_task_update_by_task_id,
         user_update=user_update,
         workspace_branch_by_workspace_id=updated_workspace_branch_by_workspace_id,
-        workspace_remote_branches_by_workspace_id=updated_workspace_remote_branches_by_workspace_id,
+        workspace_target_branches_by_workspace_id=updated_workspace_target_branches_by_workspace_id,
         pr_status_by_workspace_id=updated_pr_status_by_workspace_id,
         finished_request_ids=tuple(finished_request_ids),
         dependencies_status=latest_dependencies_status,

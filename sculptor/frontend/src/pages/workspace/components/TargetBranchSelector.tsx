@@ -18,7 +18,7 @@ type MismatchInfo = {
 
 type TargetBranchSelectorProps = {
   currentTargetBranch: string;
-  remoteBranches: Array<string>;
+  targetBranches: Array<string>;
   onBranchChange: (branch: string) => void;
   onOpenChange?: (open: boolean) => void;
   variant?: "default" | "amber";
@@ -27,18 +27,18 @@ type TargetBranchSelectorProps = {
 
 export const TargetBranchSelector = ({
   currentTargetBranch,
-  remoteBranches,
+  targetBranches,
   onBranchChange,
   onOpenChange,
   variant = "default",
   mismatch,
 }: TargetBranchSelectorProps): ReactElement => {
   const branches: Array<BranchWithBadges> = useMemo(() => {
-    return remoteBranches.map((branch) => ({
+    return targetBranches.map((branch) => ({
       branch,
       badges: mismatch && branch === `origin/${mismatch.targetBranch}` ? [mismatch.badge] : [],
     }));
-  }, [remoteBranches, mismatch]);
+  }, [targetBranches, mismatch]);
 
   const isAmber = variant === "amber";
 

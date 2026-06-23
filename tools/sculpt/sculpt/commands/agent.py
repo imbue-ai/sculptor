@@ -20,12 +20,14 @@ from sculpt.client.api.default import interrupt_workspace_agent
 from sculpt.client.api.default import list_workspace_agents
 from sculpt.client.api.default import rename_workspace_agent
 from sculpt.client.api.default import send_workspace_agent_messages
+from sculpt.client.models.agent_type_name import AgentTypeName
 from sculpt.client.models.coding_agent_task_view import CodingAgentTaskView
 from sculpt.client.models.create_agent_request import CreateAgentRequest
 from sculpt.client.models.http_validation_error import HTTPValidationError
 from sculpt.client.models.rename_agent_request import RenameAgentRequest
 from sculpt.client.models.send_message_request import SendMessageRequest
 from sculpt.client.models.task_status import TaskStatus
+from sculpt.client.types import UNSET
 from sculpt.commands._follow_helpers import follow_and_stream_messages
 from sculpt.commands._follow_helpers import get_session_token_safe
 from sculpt.commands._follow_helpers import handle_exit_reason
@@ -38,6 +40,7 @@ from sculpt.commands._follow_helpers import on_reconnect_json
 from sculpt.commands._follow_helpers import on_reconnect_separator
 from sculpt.commands._follow_helpers import on_reconnect_text
 from sculpt.commands._follow_helpers import on_status_json
+from sculpt.commands._harness_helpers import resolve_harness_selection
 from sculpt.commands.data_types import AgentCreateOutput
 from sculpt.commands.data_types import AgentDeleteOutput
 from sculpt.commands.data_types import AgentInterruptOutput
@@ -122,6 +125,15 @@ def create(
         "opus", "--model", "-m", help="The model to use (haiku, sonnet, sonnet[1m], opus, opus[1m], fable)"
     ),
     name: str | None = typer.Option(None, "--name", help="Agent name"),
+    harness: str | None = typer.Option(
+        None,
+        "--harness",
+        help=(
+            "Harness to create: Claude, Pi, Terminal, or a registered terminal agent"
+            + " by name (e.g. 'Claude CLI'). If omitted, the server uses your"
+            + " most-recently-used harness from the Sculptor app."
+        ),
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
     base_url: str | None = typer.Option(None, "--base-url", "-u", help="The Sculptor server URL"),
 ) -> None:
@@ -141,12 +153,26 @@ def create(
 
     llm_model = MODEL_MAPPING[model_lower]
 
+    selection = resolve_harness_selection(harness, client, json_output)
+    if (
+        prompt
+        and selection is not None
+        and selection.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED)
+    ):
+        cli_error("Terminal agents do not take an initial prompt (--prompt)", json_output=json_output)
+
     request = CreateAgentRequest(
         prompt=prompt,
         model=llm_model if prompt else None,
         interface="API",
         name=name,
         sent_via="sculpt",
+        agent_type=selection.agent_type if selection is not None else UNSET,
+        registration_id=(
+            selection.registration_id
+            if selection is not None and selection.registration_id is not None
+            else UNSET
+        ),
     )
 
     try:

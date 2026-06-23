@@ -11,12 +11,7 @@ import { Code } from "~/components/Code.tsx";
 
 import { SettingRow } from "./SettingRow.tsx";
 import { SettingsSectionLayout } from "./SettingsSection.tsx";
-
-const inlineCodeStyle = {
-  backgroundColor: "var(--gray-4)",
-  borderRadius: "var(--radius-1)",
-  padding: "0.2em 0.4em",
-};
+import { inlineCodeStyle } from "./settingsStyles.ts";
 
 type EnvironmentVariablesSectionProps = {
   onSettingChange: (field: UserConfigField, value: unknown) => Promise<void>;

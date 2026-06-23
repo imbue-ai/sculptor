@@ -398,6 +398,87 @@ class TestRun:
         assert "SCULPT_PROJECT_ID" in result.output
 
 
+def _mock_registrations(*registrations: dict[str, Any]) -> None:
+    respx.get("http://localhost:5050/api/v1/terminal-agent-registrations").mock(
+        return_value=Response(200, json={"registrations": list(registrations)})
+    )
+
+
+_CLAUDE_CLI_REGISTRATION = {
+    "registrationId": "claude-code",
+    "displayName": "Claude CLI",
+    "launchCommand": "claude",
+}
+
+
+class TestRunHarness:
+    @respx.mock
+    def test_run_with_harness_pi_sends_pi_agent_type(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_initialize_project()
+        _mock_preview_branch_name()
+        respx.post("http://localhost:5050/api/v1/workspaces").mock(
+            return_value=Response(200, json=_workspace_response_dict())
+        )
+        agent_route = respx.post("http://localhost:5050/api/v1/workspaces/ws_newrun123/agents").mock(
+            return_value=Response(200, json=_task_response_dict())
+        )
+
+        result = runner.invoke(app, ["run", "Fix the bug", "--repo", "/tmp/test", "--harness", "Pi"])
+
+        assert result.exit_code == 0, result.output + (result.stderr or "")
+        body = json.loads(agent_route.calls.last.request.content)
+        assert body["agentType"] == "pi"
+
+    @respx.mock
+    def test_run_without_harness_omits_agent_type(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_initialize_project()
+        _mock_preview_branch_name()
+        respx.post("http://localhost:5050/api/v1/workspaces").mock(
+            return_value=Response(200, json=_workspace_response_dict())
+        )
+        agent_route = respx.post("http://localhost:5050/api/v1/workspaces/ws_newrun123/agents").mock(
+            return_value=Response(200, json=_task_response_dict())
+        )
+
+        result = runner.invoke(app, ["run", "Fix the bug", "--repo", "/tmp/test"])
+
+        assert result.exit_code == 0, result.output + (result.stderr or "")
+        # No --harness: the CLI sends no agent type, so the server applies the MRU.
+        body = json.loads(agent_route.calls.last.request.content)
+        assert "agentType" not in body
+
+    @respx.mock
+    def test_run_with_terminal_harness_is_rejected(self, runner: CliRunner) -> None:
+        _mock_session()
+
+        result = runner.invoke(app, ["run", "Fix the bug", "--repo", "/tmp/test", "--harness", "Terminal"])
+
+        assert result.exit_code == 1
+        assert "sculpt run" in result.stderr
+
+    @respx.mock
+    def test_run_with_registered_harness_is_rejected(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_registrations(_CLAUDE_CLI_REGISTRATION)
+
+        result = runner.invoke(app, ["run", "Fix the bug", "--repo", "/tmp/test", "--harness", "Claude CLI"])
+
+        assert result.exit_code == 1
+        assert "sculpt run" in result.stderr
+
+    @respx.mock
+    def test_run_with_invalid_harness_errors(self, runner: CliRunner) -> None:
+        _mock_session()
+        _mock_registrations()
+
+        result = runner.invoke(app, ["run", "Fix the bug", "--repo", "/tmp/test", "--harness", "Bogus"])
+
+        assert result.exit_code == 1
+        assert "Invalid harness" in result.stderr
+
+
 class TestWorkspaceCreateHelp:
     """SCU-1309: workspace create has the same --repo plumbing as run, and the same
     discoverability gap. Document SCULPT_PROJECT_ID there too."""
