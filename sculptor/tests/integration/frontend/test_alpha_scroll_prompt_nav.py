@@ -129,6 +129,22 @@ def _setup_three_prompt_chat(sculptor_instance_: SculptorInstance):
     # focuses input) without racing an extra scroll.
     page.keyboard.press("Escape")
     _wait_for_no_highlight(page)
+    # The dot-2 click issued an async scrollToIndex to the last user prompt;
+    # Escape clears the highlight synchronously but does NOT wait for that scroll
+    # to land. The prompt-nav keydown hook reads live scrollTop against a 20px
+    # tolerance (isScrolledPastActive), so a first ArrowUp fired before the
+    # scroll settles is misread as "scroll current turn to top" instead of "go to
+    # previous prompt", and the highlight lands on the wrong message. Wait until
+    # the last user prompt (message data-index 4) is pinned at the viewport top,
+    # well within that tolerance, before handing back to the test.
+    page.wait_for_function(
+        """() => {
+            const container = document.querySelector('[data-testid="ALPHA_CHAT_VIEW"]');
+            const item = container && container.querySelector('[data-index="4"]');
+            if (!container || !item) return false;
+            return Math.abs(item.getBoundingClientRect().top - container.getBoundingClientRect().top) < 10;
+        }"""
+    )
     return page, chat_panel
 
 

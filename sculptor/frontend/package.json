@@ -6,6 +6,7 @@
   "license": "MIT",
   "type": "module",
   "main": ".vite/build/main.cjs",
+  "packageManager": "pnpm@10.28.2",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --config vite.web.config.ts",
     "build": "vite build -l error --config vite.web.config.ts",
@@ -17,7 +18,7 @@
     "prettier-format": "prettier --write",
     "depcheck": "depcheck --ignores=typescript,eslint,prettier,tailwindcss,prettier-plugin-organize-imports",
     "rule-errors": "eslint-config-prettier src/Main.tsx",
-    "freeze": "npm list --depth=0",
+    "freeze": "pnpm list --depth=0",
     "generate-api-json-schema": "uv run python ../../sculptor/sculptor/scripts/generate_json_schema.py ./sculptor_schema.json",
     "fixup-js-types": "uv run python ../../sculptor/sculptor/scripts/fixup_js_types.py ./src/api/types.gen.ts",
     "generate-api": "./scripts/generate-api.sh",
@@ -179,11 +180,21 @@
   "config": {
     "forge": "./forge.config.ts"
   },
-  "overrides": {
-    "js-yaml": "^4.2.0",
-    "tar": "^7.5.7",
-    "tmp": ">=0.2.6",
-    "uuid": "$uuid",
-    "yauzl": "^3.3.1"
+  "pnpm": {
+    "overrides": {
+      "js-yaml": "^4.2.0",
+      "tar": "^7.5.7",
+      "tmp": ">=0.2.6",
+      "uuid": "14.0.0",
+      "yauzl": "^3.3.1"
+    },
+    "onlyBuiltDependencies": [
+      "@parcel/watcher",
+      "@swc/core",
+      "electron-winstaller",
+      "esbuild",
+      "fs-xattr",
+      "macos-alias"
+    ]
   }
 }

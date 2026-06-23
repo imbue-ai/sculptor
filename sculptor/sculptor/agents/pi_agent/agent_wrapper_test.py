@@ -609,8 +609,12 @@ def test_push_message_interrupt_is_handled_and_sends_abort() -> None:
     interrupt = InterruptProcessUserMessage()
     handled = agent._push_message(interrupt)
     assert handled is True
-    assert agent._was_interrupted.is_set()
-    assert agent._interrupt_pending.is_set()
+    # With no turn in flight, the interrupt has nothing to escalate against and
+    # emits its own terminal directly, so it disarms the interrupt flags rather
+    # than leaving them set to mislabel a later between-turns request — handled
+    # via `_handle_user_message`, which reads but does not reset them.
+    assert not agent._was_interrupted.is_set()
+    assert not agent._interrupt_pending.is_set()
     assert _abort_was_written(process)
     # The interrupt request itself must be completed (request_id == the interrupt
     # message id) — `await_message_response` blocks the /interrupt POST until then,
@@ -691,6 +695,88 @@ def test_interrupt_with_no_turn_in_flight_does_not_poison_next_turn() -> None:
     successes = [m for m in emitted if isinstance(m, RequestSuccessAgentMessage)]
     assert len(successes) == 1
     assert successes[0].interrupted is False
+
+
+def test_interrupt_with_no_turn_in_flight_resolves_stuck_request() -> None:
+    """SCU-1560: Stop on an idle-but-RUNNING agent must resolve the orphaned turn.
+
+    When a turn's RequestStarted was emitted but no terminal RequestSuccess ever
+    followed (e.g. the prior process died mid-turn), the task stays RUNNING with
+    no turn actively draining pi's stdout. Pressing Stop must NOT be a silent
+    no-op: it must emit RequestSuccess(interrupted=True) for the in-flight
+    request so the task settles to READY, instead of the status pill bouncing
+    "Stopping" -> "Thinking" with nothing changed.
+
+    Mirrors Claude's interrupt_current_message no-op branch
+    (process_manager.py:_resolve_in_flight_request_as_interrupted).
+    """
+    agent = _make_agent()
+    agent._process = MagicMock()
+    # A turn is in flight from the frontend's point of view (RequestStarted with
+    # no terminal completion) but no turn is actively draining pi's stdout.
+    in_flight_id = AgentMessageID()
+    agent._in_flight_request_id = in_flight_id
+    assert not agent._turn_in_flight.is_set()
+
+    handled = agent._push_message(InterruptProcessUserMessage())
+
+    assert handled is True
+    emitted = _drain(agent._output_messages)
+    # The orphaned chat request is resolved, so derived state moves RUNNING -> READY.
+    resolved = [m for m in emitted if isinstance(m, RequestSuccessAgentMessage) and m.request_id == in_flight_id]
+    assert len(resolved) == 1
+    assert resolved[0].interrupted is True
+
+
+def test_idle_interrupt_does_not_poison_next_clear_context() -> None:
+    """An interrupt with no turn in flight must not leave interrupt state set.
+
+    A chat turn resets interrupt state at its start, but the between-turns
+    control paths (/clear, set_model) do not — they only read it via
+    `_handle_user_message`. So a lingering `_was_interrupted` from an idle
+    interrupt would wrongly mark the next /clear's RequestSuccess as interrupted.
+    """
+    env = _clear_env()
+    agent = _make_agent(env)
+    agent._session_id = "old-session"
+    agent._in_flight_request_id = AgentMessageID()
+    process = _make_process(
+        [
+            _event(
+                {
+                    "type": "response",
+                    "command": "new_session",
+                    "success": True,
+                    "id": "cmd-new",
+                    "data": {"cancelled": False},
+                }
+            ),
+            _event(
+                {
+                    "type": "response",
+                    "command": "get_state",
+                    "success": True,
+                    "id": "cmd-state",
+                    "data": {"sessionId": "new-session", "messageCount": 0},
+                }
+            ),
+        ]
+    )
+    agent._process = process
+
+    # Idle interrupt (no turn in flight): reconciles the orphaned request.
+    agent._request_interrupt()
+
+    clear = ClearContextUserMessage(message_id=AgentMessageID())
+    with patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-new", "cmd-state"]):
+        agent._handle_clear_context(clear)
+
+    emitted = _drain(agent._output_messages)
+    clear_successes = [
+        m for m in emitted if isinstance(m, RequestSuccessAgentMessage) and m.request_id == clear.message_id
+    ]
+    assert len(clear_successes) == 1
+    assert clear_successes[0].interrupted is False
 
 
 def test_aborted_agent_end_with_interrupt_pending_finalizes_without_crash() -> None:

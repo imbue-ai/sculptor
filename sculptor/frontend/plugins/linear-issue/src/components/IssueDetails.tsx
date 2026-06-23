@@ -4,9 +4,18 @@ import { ExternalLink, GitPullRequest } from "lucide-react";
 import type { ReactElement } from "react";
 
 import { isPullRequestAttachment, type LinearIssue, prLabel } from "../linear/client.ts";
+import { SubIssues } from "./SubIssues.tsx";
 
 /** The expanded body of a ticket: metadata, markdown description, and links out. */
-export const IssueDetails = ({ issue }: { issue: LinearIssue }): ReactElement => {
+export const IssueDetails = ({
+  issue,
+  subIssuesOpen,
+  onToggleSubIssues,
+}: {
+  issue: LinearIssue;
+  subIssuesOpen: boolean;
+  onToggleSubIssues: () => void;
+}): ReactElement => {
   const prLinks = issue.attachments.filter(isPullRequestAttachment);
   return (
     <Flex direction="column" gap="3" pt="2">
@@ -28,6 +37,8 @@ export const IssueDetails = ({ issue }: { issue: LinearIssue }): ReactElement =>
           <Markdown content={issue.description} />
         </Box>
       )}
+
+      <SubIssues issue={issue} isOpen={subIssuesOpen} onToggle={onToggleSubIssues} />
 
       <Flex gap="2" wrap="wrap">
         <Button size="1" variant="soft" onClick={() => openExternal(issue.url)}>

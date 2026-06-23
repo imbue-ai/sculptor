@@ -10,6 +10,10 @@ import type { PanelDefinition } from "~/components/panels/types.ts";
 
 import { ExitZenModeButton } from "./ExitZenModeButton";
 
+vi.mock("~/common/keybindings/hooks.ts", () => ({
+  useKeybindingDisplayText: vi.fn(() => "MOCK_SHORTCUT"),
+}));
+
 const TEST_PANELS: ReadonlyArray<PanelDefinition> = [
   {
     id: "info",
@@ -144,5 +148,17 @@ describe("ExitZenModeButton", () => {
     fireEvent.click(button);
 
     expect(store.get(zenModeActiveAtom)).toBe(false);
+  });
+
+  // Regression: the shortcut shown in the button must come from the user's
+  // keybinding (useKeybindingDisplayText("zen_mode")), not a hardcoded literal.
+  // The mocked hook returns "MOCK_SHORTCUT"; a hardcoded literal would not.
+  it("renders the shortcut from the keybinding hook", () => {
+    renderInZenMode();
+    const hotZone = getButtonContainer().parentElement!;
+    fireEvent.mouseEnter(hotZone);
+
+    const button = screen.getByRole("button", { name: /exit zen mode/i });
+    expect(button.textContent).toContain("MOCK_SHORTCUT");
   });
 });

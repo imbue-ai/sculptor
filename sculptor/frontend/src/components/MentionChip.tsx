@@ -160,6 +160,10 @@ const FileMentionChip = ({
   const Icon = isDirectory ? Folder : getFileIcon(basename);
   const visibleLabel = displayLabel ?? basename;
   const displayPath = id.startsWith("@") ? id.slice(1) : id;
+  // Outside a workspace route there is nowhere to open the file/folder, so the
+  // chip renders inert rather than as a pointer-cursor control that silently
+  // drops the click (matches the EntityMentionChip pattern from SCU-1215).
+  const isClickable = Boolean(workspaceID);
 
   const handleClick = useCallback(
     (e: MouseEvent) => {
@@ -182,9 +186,10 @@ const FileMentionChip = ({
       trigger={
         <Wrapper
           {...wrapperProps}
-          className={styles.clickableMention}
+          className={isClickable ? styles.clickableMention : styles.mention}
           data-testid={ElementIds.MENTION_SPAN}
-          onClick={handleClick}
+          onClick={isClickable ? handleClick : undefined}
+          aria-disabled={isClickable ? undefined : true}
         >
           <Icon style={ICON_STYLE} />
           {/* `direction: rtl` on the label produces start-truncation when the

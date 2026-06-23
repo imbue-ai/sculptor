@@ -200,7 +200,7 @@ export const AlphaChatInterface = ({
   );
 
   // Viewport stability: compensate scrollTop when items above viewport change height
-  const { onHeightChange } = useViewportStability(scrollContainerRef, virtualizer, isProgrammaticScrollRef);
+  useViewportStability(scrollContainerRef, virtualizer, isProgrammaticScrollRef);
 
   // Scroll position persistence per task
   const filteredMessageRefs = useMemo(() => filteredNodes.map((n) => ({ id: n.message.id })), [filteredNodes]);
@@ -370,9 +370,7 @@ export const AlphaChatInterface = ({
   const setSearchVisible = useSetAtom(chatSearchVisibleAtom);
   useEffect(() => {
     setSearchVisible(false);
-    // Only run on taskID change
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskID]);
+  }, [taskID, setSearchVisible]);
 
   // Suppress auto-scroll while search is open so streaming doesn't fight with
   // search navigation. Exit prompt navigation when search opens (it has its own
@@ -387,18 +385,12 @@ export const AlphaChatInterface = ({
   }, [isSearchVisible, exitNavigation, setIsSuppressed]);
 
   // Jump-to-bottom button
-  const {
-    isVisible: isJumpVisible,
-    label: jumpLabel,
-    onReachBottom,
-  } = useJumpToBottom(isAtBottom, effectiveChatMessages, isStreaming, isJumpSuppressed);
-
-  // Reset "new activity" label when reaching bottom
-  useEffect(() => {
-    if (isAtBottom) {
-      onReachBottom();
-    }
-  }, [isAtBottom, onReachBottom]);
+  const { isVisible: isJumpVisible, label: jumpLabel } = useJumpToBottom(
+    isAtBottom,
+    effectiveChatMessages,
+    isStreaming,
+    isJumpSuppressed,
+  );
 
   // Global Cmd+Shift+Enter handler: interrupt and send the queued message
   const hasQueuedMessagesRef = useRef(effectiveQueuedMessages.length > 0);
@@ -569,7 +561,6 @@ export const AlphaChatInterface = ({
                         inProgressMessageId={inProgressMessageId}
                         toolResultMap={toolResultMap}
                         subagentMetadataMap={subagentMetadataMap}
-                        onHeightChange={(): void => onHeightChange(virtualItem.index)}
                         searchQuery={effectiveSearchQuery}
                         activeSearchBlockIndex={activeMatchMessageId === node.message.id ? activeBlockIndex : -1}
                         activeSearchOccurrence={activeMatchMessageId === node.message.id ? activeOccurrenceInBlock : -1}

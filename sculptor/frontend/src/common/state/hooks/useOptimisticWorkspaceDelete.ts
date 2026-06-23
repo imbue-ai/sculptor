@@ -1,6 +1,6 @@
 import { useSetAtom } from "jotai";
 import { posthog } from "posthog-js";
-import { useCallback, useRef } from "react";
+import { useCallback } from "react";
 
 import { deleteWorkspace } from "../../../api";
 import { ToastType } from "../../../components/Toast.tsx";
@@ -22,7 +22,6 @@ export const useOptimisticWorkspaceDelete = (
   const setOptimisticDelete = useSetAtom(optimisticDeleteWorkspaceAtom);
   const setRollbackDelete = useSetAtom(rollbackDeleteWorkspaceAtom);
   const setErrorToast = useSetAtom(workspaceDeleteErrorToastAtom);
-  const lastFailedRef = useRef<{ workspaceId: string; workspaceName: string } | null>(null);
 
   const execute = useCallback(
     (workspaceId: string, workspaceName: string): void => {
@@ -32,8 +31,6 @@ export const useOptimisticWorkspaceDelete = (
       }
 
       onNavigateAfterDelete(workspaceId);
-
-      lastFailedRef.current = { workspaceId, workspaceName };
 
       posthog.capture("workspace.deleted", {
         workspace_id: workspaceId,
@@ -51,11 +48,8 @@ export const useOptimisticWorkspaceDelete = (
           action: {
             label: "Retry",
             handleClick: (): void => {
-              const last = lastFailedRef.current;
-              if (last) {
-                setErrorToast(null);
-                execute(last.workspaceId, last.workspaceName);
-              }
+              setErrorToast(null);
+              execute(workspaceId, workspaceName);
             },
           },
         });

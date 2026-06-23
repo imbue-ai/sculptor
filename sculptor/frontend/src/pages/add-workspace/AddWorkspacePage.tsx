@@ -428,8 +428,9 @@ export const AddWorkspacePage = (): ReactElement => {
             repoInfo={repoInfo}
             isPending={isPending}
             isSubmitDisabled={
-              mode === WorkspaceInitializationStrategy.WORKTREE &&
-              (effectiveBranchName.trim() === "" || isBranchNamePreviewLoading)
+              selectedProjectId === null ||
+              (mode === WorkspaceInitializationStrategy.WORKTREE &&
+                (effectiveBranchName.trim() === "" || isBranchNamePreviewLoading))
             }
             onSubmit={handleSubmit}
             autoFocus

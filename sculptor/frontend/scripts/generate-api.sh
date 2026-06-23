@@ -19,7 +19,7 @@ compute_digest() {
   } | shasum | awk '{print $1}'
 }
 
-npm run generate-api-json-schema
+pnpm run generate-api-json-schema
 
 new_digest=$(compute_digest)
 
@@ -48,6 +48,6 @@ if [ -f "$digest_file" ] \
   exit 0
 fi
 
-npx @hey-api/openapi-ts
-npm run fixup-js-types
+pnpm exec openapi-ts
+pnpm run fixup-js-types
 echo "$new_digest" > "$digest_file"
