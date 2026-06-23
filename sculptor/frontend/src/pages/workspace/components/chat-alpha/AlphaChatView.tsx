@@ -23,7 +23,6 @@ type AlphaMessageNodeProps = {
   inProgressMessageId: string | null;
   toolResultMap: Map<string, ToolResultBlock>;
   subagentMetadataMap?: Map<string, SubagentMetadata>;
-  onHeightChange?: () => void;
   searchQuery?: string;
   /** The content block index (in message.content) that contains the active search match. -1 for none. */
   activeSearchBlockIndex?: number;
@@ -43,7 +42,6 @@ export const AlphaMessageNode = ({
   inProgressMessageId,
   toolResultMap,
   subagentMetadataMap,
-  onHeightChange: _onHeightChange,
   searchQuery,
   activeSearchBlockIndex = -1,
   activeSearchOccurrence = -1,
