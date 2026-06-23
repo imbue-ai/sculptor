@@ -55,6 +55,7 @@ from sculptor.interfaces.agents.agent import PersistentUserMessageUnion
 from sculptor.interfaces.agents.agent import RequestFailureAgentMessage
 from sculptor.interfaces.agents.agent import RequestStartedAgentMessage
 from sculptor.interfaces.agents.agent import RequestStoppedAgentMessage
+from sculptor.interfaces.agents.agent import RequestSuccessAgentMessage
 from sculptor.interfaces.agents.agent import ResumeAgentResponseRunnerMessage
 from sculptor.interfaces.agents.agent import StopAgentUserMessage
 from sculptor.interfaces.agents.agent import UnexpectedErrorRunnerMessage
@@ -381,6 +382,14 @@ def _run_agent_in_environment(
         # one of those things is to figure out what the last user chat message was that we *started* processing
         # this is in case we never *finished* processing it, so that the agent can resume from where it left off
         initial_in_flight_user_chat_message_id: AgentMessageID | None = None
+        # An orphaned answer: a UserQuestionAnswerMessage that was delivered to a
+        # now-dead agent process (its RequestStarted is in history) but whose turn
+        # never completed cleanly. On resume the agent has already recorded the
+        # answer (e.g. pi persists it as a toolResult) and has no open dialog, so
+        # re-delivering it raw is a stale dialog the harness skips — dropping the
+        # answer and leaving the request perpetually in-flight. Resuming it instead
+        # settles that dangling request (see _send_user_input_message).
+        initial_in_flight_user_question_answer_message_id: AgentMessageID | None = None
         # Track whether the agent emitted any visible response for the in-flight chat
         # message. If it didn't, there's nothing for Claude to "resume" from — we'd
         # rather just resend the original prompt than send a "continue where you left
@@ -395,6 +404,8 @@ def _run_agent_in_environment(
                         last_user_chat_message_id = message.request_id
                         initial_in_flight_user_chat_message_id = message.request_id
                         is_partial_agent_response = False
+                    elif isinstance(persistent_message, UserQuestionAnswerMessage):
+                        initial_in_flight_user_question_answer_message_id = message.request_id
                     # add the user message to the history as well
                     persistent_message_history.append(persistent_user_message_by_id[message.request_id])
             if isinstance(message, PersistentRequestCompleteAgentMessage):
@@ -403,6 +414,15 @@ def _run_agent_in_environment(
                     was_killed = _get_killed_exit_code(message)
                     if not was_killed:
                         initial_in_flight_user_chat_message_id = None
+                # Only a clean (non-interrupted) success means the answer's turn
+                # actually finished — clear it so it isn't resumed. An interrupted
+                # success, a failure, or a kill all leave the answer orphaned (its
+                # toolResult is recorded but nothing drove the follow-up turn), so
+                # keep it for resume.
+                if message.request_id == initial_in_flight_user_question_answer_message_id and (
+                    isinstance(message, RequestSuccessAgentMessage) and not message.interrupted
+                ):
+                    initial_in_flight_user_question_answer_message_id = None
             # used above so that we can figure out which user messages started being processed so far
             if isinstance(message, PersistentUserMessage):
                 persistent_user_message_by_id[message.message_id] = message
@@ -435,6 +455,7 @@ def _run_agent_in_environment(
             agent_wrapper,
             queued_user_input_messages.pop(0),
             initial_in_flight_user_chat_message_id,
+            initial_in_flight_user_question_answer_message_id,
         )
     while True:
         # if we have been trying to shut down for too long, it is time for more drastic measures.
@@ -568,6 +589,7 @@ def _run_agent_in_environment(
                         agent_wrapper,
                         queued_answer,
                         initial_in_flight_user_chat_message_id,
+                        initial_in_flight_user_question_answer_message_id,
                     )
                 else:
                     user_input_message_being_processed = None
@@ -578,6 +600,7 @@ def _run_agent_in_environment(
                     agent_wrapper,
                     queued_user_input_messages.pop(0),
                     initial_in_flight_user_chat_message_id,
+                    initial_in_flight_user_question_answer_message_id,
                 )
 
         # get any new user message(s)
@@ -611,6 +634,7 @@ def _run_agent_in_environment(
                         agent_wrapper,
                         message,
                         initial_in_flight_user_chat_message_id,
+                        initial_in_flight_user_question_answer_message_id,
                     )
                 else:
                     queued_user_input_messages.append(message)
@@ -641,6 +665,7 @@ def _send_user_input_message(
     agent_wrapper: Agent,
     message: InputMessageT,
     initial_in_flight_user_chat_message_id: AgentMessageID | None,
+    initial_in_flight_user_question_answer_message_id: AgentMessageID | None,
 ) -> InputMessageT:
     user_input_message_being_processed = message
     # if this message was one that we left off on last time,
@@ -648,6 +673,15 @@ def _send_user_input_message(
     # this allows the agent to use whatever in-flight response it had
     # (which prevents the user from losing a bunch of work if they shut down or sculptor crashed)
     # this is especially important as agents start to have much longer response times
+    #
+    # Do NOT re-persist a resumed message here. We only convert a message that is
+    # being resumed after a restart, which means it already has a RequestStarted in
+    # the log and was therefore already saved when it was first sent. Calling
+    # create_message again would write a second saved_agent_message row with the
+    # same object_id; replay then projects that id into both completed_chat_messages
+    # and queued_chat_messages, so it renders as a sent message AND a stuck queued
+    # message that never clears (and the duplicate React key corrupts the
+    # virtualized list).
     if user_input_message_being_processed.message_id == initial_in_flight_user_chat_message_id and isinstance(
         user_input_message_being_processed, ChatInputUserMessage
     ):
@@ -657,14 +691,21 @@ def _send_user_input_message(
             fast_mode=user_input_message_being_processed.fast_mode,
             effort=user_input_message_being_processed.effort,
         )
-        # Do NOT re-persist the message here. We only reach this branch for the
-        # in-flight message being resumed after a restart, which means it already
-        # has a RequestStarted in the log and was therefore already saved when it
-        # was first sent. Calling create_message again would write a second
-        # saved_agent_message row with the same object_id; replay then projects
-        # that id into both completed_chat_messages and queued_chat_messages, so
-        # it renders as a sent message AND a stuck queued message that never
-        # clears (and the duplicate React key corrupts the virtualized list).
+        agent_wrapper.push_message(resume_message)
+    elif (
+        user_input_message_being_processed.message_id == initial_in_flight_user_question_answer_message_id
+        and isinstance(user_input_message_being_processed, UserQuestionAnswerMessage)
+    ):
+        # An orphaned answer: it was delivered to a now-dead agent process and its
+        # turn never finished. Re-delivering it raw hits a fresh agent with no open
+        # dialog (the answer is already recorded in the resumed session), which the
+        # harness stale-skips — dropping the answer and leaving the request
+        # perpetually in-flight. Resume it instead so the dangling request settles.
+        # UserQuestionAnswerMessage carries no model/effort, so the resume defaults
+        # those (it only continues the turn, it does not start a fresh prompt).
+        resume_message = ResumeAgentResponseRunnerMessage(
+            for_user_message_id=user_input_message_being_processed.message_id,
+        )
         agent_wrapper.push_message(resume_message)
     else:
         agent_wrapper.push_message(user_input_message_being_processed)
