@@ -696,13 +696,10 @@ def _send_user_input_message(
         user_input_message_being_processed.message_id == initial_in_flight_user_question_answer_message_id
         and isinstance(user_input_message_being_processed, UserQuestionAnswerMessage)
     ):
-        # An orphaned answer: it was delivered to a now-dead agent process and its
-        # turn never finished. Re-delivering it raw hits a fresh agent with no open
-        # dialog (the answer is already recorded in the resumed session), which the
-        # harness stale-skips — dropping the answer and leaving the request
-        # perpetually in-flight. Resume it instead so the dangling request settles.
+        # Resume the orphaned answer (tracked during replay) instead of re-delivering
+        # it raw, which a fresh agent with no open dialog stale-skips.
         # UserQuestionAnswerMessage carries no model/effort, so the resume defaults
-        # those (it only continues the turn, it does not start a fresh prompt).
+        # those: it continues the turn, it does not start a fresh prompt.
         resume_message = ResumeAgentResponseRunnerMessage(
             for_user_message_id=user_input_message_being_processed.message_id,
         )
