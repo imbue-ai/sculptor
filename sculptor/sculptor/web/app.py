@@ -121,6 +121,7 @@ from sculptor.services.user_config.telemetry_info import get_telemetry_info as g
 from sculptor.services.user_config.user_config import get_config_path
 from sculptor.services.user_config.user_config import get_privacy_settings_for_telemetry
 from sculptor.services.user_config.user_config import get_user_config_instance
+from sculptor.services.user_config.user_config import get_user_config_instance_if_set
 from sculptor.services.user_config.user_config import save_config
 from sculptor.services.user_config.user_config import set_user_config_instance
 from sculptor.services.workspace_service.api import FileNotFoundAtRefError
@@ -549,10 +550,15 @@ def start_task(
                 logger.debug("Created workspace {} for task {}", workspace.object_id, task_id)
 
             # Prompt-ful creation is always a chat agent — terminal agents have
-            # no chat stream to deliver the prompt to.
+            # no chat stream to deliver the prompt to. Reject only an EXPLICIT
+            # terminal type; an omitted type resolves to the user's MRU, where a
+            # terminal default falls back to Claude.
             if task_request.agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED):
                 raise HTTPException(status_code=422, detail="terminal agents do not take an initial prompt")
-            agent_config = _agent_config_for_request(task_request.agent_type, None)
+            resolved_agent_type, _ = _resolve_requested_agent_type(task_request.agent_type, None, has_prompt=True)
+            agent_config = _agent_config_for_request(resolved_agent_type, None)
+            if task_request.agent_type is not None:
+                _record_most_recently_used_agent_type(resolved_agent_type, None)
 
             # Auto-assign a type-derived name ("Claude N" / "Pi N") when no
             # explicit name is provided.
@@ -1669,6 +1675,88 @@ def _get_workspace_or_404(
     return workspace
 
 
+# Encoding for a registered terminal agent in UserConfig.last_used_agent_type,
+# matching the frontend's ``registered:<id>`` StoredAgentType form.
+_REGISTERED_AGENT_TYPE_PREFIX = "registered:"
+
+
+def _encode_stored_agent_type(agent_type: AgentTypeName, registration_id: str | None) -> str:
+    """Encode an agent type as a StoredAgentType string for ``UserConfig``."""
+    if agent_type == AgentTypeName.REGISTERED and registration_id is not None:
+        return f"{_REGISTERED_AGENT_TYPE_PREFIX}{registration_id}"
+    return agent_type.value
+
+
+def _decode_stored_agent_type(value: str) -> tuple[AgentTypeName, str | None] | None:
+    """Decode a StoredAgentType string, or None if it is empty or unknown."""
+    if value.startswith(_REGISTERED_AGENT_TYPE_PREFIX):
+        registration_id = value[len(_REGISTERED_AGENT_TYPE_PREFIX) :]
+        return (AgentTypeName.REGISTERED, registration_id) if registration_id else None
+    try:
+        agent_type = AgentTypeName(value)
+    except ValueError:
+        return None
+    # A bare ``registered`` with no id is not actionable.
+    return (agent_type, None) if agent_type != AgentTypeName.REGISTERED else None
+
+
+def _resolve_most_recently_used_agent_type(*, has_prompt: bool) -> tuple[AgentTypeName, str | None]:
+    """Resolve the harness a create with no explicit ``agent_type`` should use.
+
+    Mirrors the app's "+" button default: decode ``UserConfig.last_used_agent_type``
+    and apply the same fallbacks so the app and the sculpt CLI agree — a stored
+    Pi is unusable once the pi agent is disabled, a stored registered agent may
+    have been unregistered, and a prompt-ful create is always a chat agent (so a
+    terminal harness falls back to Claude). Defaults to Claude when unset.
+    """
+    config = get_user_config_instance()
+    stored = config.last_used_agent_type
+    decoded = _decode_stored_agent_type(stored) if stored else None
+    if decoded is None:
+        return AgentTypeName.CLAUDE, None
+    agent_type, registration_id = decoded
+    if agent_type == AgentTypeName.PI and not config.enable_pi_agent:
+        return AgentTypeName.CLAUDE, None
+    if agent_type == AgentTypeName.REGISTERED and (
+        registration_id is None or get_registration(registration_id) is None
+    ):
+        return AgentTypeName.CLAUDE, None
+    if has_prompt and agent_type in (AgentTypeName.TERMINAL, AgentTypeName.REGISTERED):
+        return AgentTypeName.CLAUDE, None
+    return agent_type, registration_id
+
+
+def _resolve_requested_agent_type(
+    agent_type: AgentTypeName | None,
+    registration_id: str | None,
+    *,
+    has_prompt: bool,
+) -> tuple[AgentTypeName, str | None]:
+    """Resolve a create request's harness, falling back to the MRU when omitted."""
+    if agent_type is None:
+        return _resolve_most_recently_used_agent_type(has_prompt=has_prompt)
+    return agent_type, registration_id
+
+
+def _record_most_recently_used_agent_type(agent_type: AgentTypeName, registration_id: str | None) -> None:
+    """Persist an explicitly chosen harness as the shared most-recently-used default.
+
+    Updates ``UserConfig.last_used_agent_type`` so the app's "+" button and the
+    sculpt CLI default to the same harness next time. No-ops when no real config
+    is loaded (onboarding / tests) or when the value is unchanged, so it never
+    writes a placeholder config or churns the file on the create hot path.
+    """
+    config = get_user_config_instance_if_set()
+    if config is None:
+        return
+    encoded = _encode_stored_agent_type(agent_type, registration_id)
+    if config.last_used_agent_type == encoded:
+        return
+    updated = config.model_copy(update={"last_used_agent_type": encoded})
+    save_config(updated, get_config_path())
+    set_user_config_instance(updated)
+
+
 def _agent_config_for_request(
     agent_type: AgentTypeName,
     registration_id: str | None,
@@ -1841,7 +1929,15 @@ def create_workspace_agent(
         _prevent_action_if_out_of_free_space(services)
 
         workspace_tasks = _get_tasks_for_workspace(workspace, transaction)
-        agent_config = _agent_config_for_request(agent_request.agent_type, agent_request.registration_id)
+        # An omitted agent_type resolves to the user's most-recently-used harness
+        # (the same default the app's "+" button uses); an explicit one is used
+        # as-is and recorded as the new MRU once validated.
+        resolved_agent_type, resolved_registration_id = _resolve_requested_agent_type(
+            agent_request.agent_type, agent_request.registration_id, has_prompt=False
+        )
+        agent_config = _agent_config_for_request(resolved_agent_type, resolved_registration_id)
+        if agent_request.agent_type is not None:
+            _record_most_recently_used_agent_type(resolved_agent_type, resolved_registration_id)
         task_name = agent_request.name or _compute_next_agent_name(
             workspace_tasks, _default_agent_name_prefix(agent_config)
         )
