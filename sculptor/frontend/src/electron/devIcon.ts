@@ -205,7 +205,7 @@ export function createDevIcon(options: DevIconOptions): Electron.NativeImage | n
     // returns BGRA on some platforms, so we avoid that ambiguity).
     const pngData = PNG.sync.read(fs.readFileSync(iconPath));
     const { width, height } = pngData;
-    let bitmap = pngData.data as Buffer;
+    let bitmap = pngData.data;
 
     const hueShift = (hashString(process.cwd()) % 360) / 360;
     invertAndHueShift(bitmap, hueShift);
