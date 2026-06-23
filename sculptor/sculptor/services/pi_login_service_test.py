@@ -1,9 +1,9 @@
 """Unit tests for PiLoginService and broadcast_pi_models_refresh.
 
-The interactive /login round-trip (pi actually writing auth.json) is real_pi
-(Task 7.1); here we cover the service lifecycle (spawn registers a PTY, teardown
-stops it and broadcasts) with a stand-in terminal manager, and the broadcast's
-pi-only targeting.
+The interactive /login round-trip (pi actually writing auth.json) is covered by the
+real_pi conformance tests; here we cover the service lifecycle (spawn registers a
+PTY, teardown stops it and broadcasts) with a stand-in terminal manager, and the
+broadcast's pi-only targeting.
 """
 
 from unittest.mock import MagicMock

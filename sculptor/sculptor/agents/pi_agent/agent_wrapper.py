@@ -1736,10 +1736,10 @@ class PiAgent(DefaultAgentWrapper):
 
         Routed through the `_input_agent_messages` FIFO so it runs between turns,
         where `get_available_models` / `get_state` are safe. Reuses
-        `_fetch_models_into_state` so Task 5.1's authenticated-set filter (added
-        inside that shared path) applies here for free. Best-effort and
-        fire-and-forget: a re-fetch that finds nothing leaves the cached catalog
-        as-is rather than blanking it.
+        `_fetch_models_into_state` so the authenticated-set filter applied inside
+        that shared path applies here for free. Best-effort and fire-and-forget: a
+        re-fetch that finds nothing leaves the cached catalog as-is rather than
+        blanking it.
         """
         del message
         self._fetch_models_into_state()

@@ -244,7 +244,8 @@ const ProviderDetail = ({ provider }: { provider: AuthenticatedProviderEntry }):
       </Text>
 
       {/* Session-only providers carry no auth actions (their persistence is
-          deferred); the paste-key form (Task 4.2) mounts alongside these actions. */}
+          deferred); single-key providers get Authenticate/Disconnect and, inside
+          those actions, the collapsible paste-key form. */}
       {!isSessionOnly && <ProviderActions provider={provider} />}
     </Flex>
   );

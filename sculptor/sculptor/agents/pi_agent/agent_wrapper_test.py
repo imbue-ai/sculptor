@@ -3202,7 +3202,7 @@ def test_curate_models_filter_preserves_blacklist_and_sort() -> None:
         _options_from_raw(_RAW_PI_MODELS), current_model=None, authenticated_providers={"anthropic"}
     )
     # _RAW_PI_MODELS are all anthropic, so the filter is a no-op here and the curated
-    # list matches the unfiltered curation exactly (REQ-COMPAT-2).
+    # list matches the unfiltered curation exactly.
     assert [option.model_id for option in curated] == _CURATED_PI_MODEL_IDS
 
 

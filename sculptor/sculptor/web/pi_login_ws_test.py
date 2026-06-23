@@ -1,8 +1,8 @@
 """Tests for the pi login WebSocket route's 4404 close-frame contract.
 
-The live login round-trip is real_pi (Task 7.1); here we assert that attaching to
-an unknown login session closes with 4404 (the frontend's not-found signal),
-mirroring the agent-terminal WS validation tests.
+The live login round-trip is covered by the real_pi conformance tests; here we
+assert that attaching to an unknown login session closes with 4404 (the frontend's
+not-found signal), mirroring the agent-terminal WS validation tests.
 """
 
 import sys

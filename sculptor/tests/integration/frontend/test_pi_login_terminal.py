@@ -3,8 +3,9 @@
 Authenticate spawns an interactive pi PTY embedded in the detail pane; Done tears it
 down. The PTY hosts a real login shell regardless of the pi binary, so this verifies
 the inline-terminal wiring end-to-end without a real /login. The credential
-round-trip (pi writing auth.json) is real_pi (Task 7.1). auth.json is isolated via
-PI_CODING_AGENT_DIR so the developer's real credentials are untouched.
+round-trip (pi writing auth.json) is covered by the real_pi conformance tests.
+auth.json is isolated via PI_CODING_AGENT_DIR so the developer's real credentials
+are untouched.
 """
 
 import json

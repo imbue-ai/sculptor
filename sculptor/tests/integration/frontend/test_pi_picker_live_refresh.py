@@ -1,4 +1,4 @@
-"""End-to-end coverage for the live picker refresh without restart (REQ-FILTER-3).
+"""End-to-end coverage for the live picker refresh without restart.
 
 A running pi agent starts with only anthropic authenticated, so its picker hides the
 google-provider model. Adding google credentials (paste-key) fires the broadcast,
