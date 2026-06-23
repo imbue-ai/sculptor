@@ -147,7 +147,7 @@ index 0000000..abc1234
 +def downgrade() -> None:
 +    op.drop_column("workspaces", "created_at")`;
 
-/** Edit failed: old_string not found. */
+/** Fix CORS allowed origins: bare hosts to full origin URLs with ports. */
 export const DIFF_CORS_FIX = `diff --git a/sculptor/backend/middleware/cors.py b/sculptor/backend/middleware/cors.py
 index abc1234..def5678 100644
 --- a/sculptor/backend/middleware/cors.py
