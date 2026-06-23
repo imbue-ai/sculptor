@@ -13,6 +13,7 @@ import { useDevPanel } from "../../common/state/hooks/useDevPanel.ts";
 import { useHelpDialog } from "../../common/state/hooks/useHelpDialog.ts";
 import { useOpenSettings } from "../../common/state/hooks/useOpenSettings.ts";
 import { useUserConfig } from "../../common/state/hooks/useUserConfig.ts";
+import type { AppearanceMode } from "../../common/theme/appearanceModes.ts";
 import { useFocusMode, usePanelActions, useSideToggle, useZenMode } from "../panels/hooks.ts";
 import { type CommandActionId, commandActionsAtom } from "./commandActions.ts";
 import type { AppStore, CommandRuntime } from "./runtime.ts";
@@ -21,8 +22,8 @@ const isElectronAvailable = (): boolean =>
   typeof window !== "undefined" && Boolean((window as { sculptor?: unknown }).sculptor);
 
 const reloadElectronWindow = (): void => {
-  // The Electron preload exposes window.sculptor; when not present,
-  // fallback to the browser-side reload.
+  // `window.location.reload()` reloads the renderer in both Electron and
+  // a plain browser, so no Electron-specific reload path is needed.
   window.location.reload();
 };
 
@@ -118,7 +119,7 @@ export const useCommandRuntime = (): CommandRuntime => {
   const uiToggleBottomPanel = useEvent((): void => toggleBottomPanel());
   const uiToggleRightPanel = useEvent((): void => toggleRightPanel());
   const uiTogglePanel = useEvent((panelId: string): void => togglePanel(panelId));
-  const setTheme = useEvent((mode: "light" | "dark" | "system"): void => {
+  const setTheme = useEvent((mode: AppearanceMode): void => {
     setThemeSettings((prev) => ({ ...prev, appearance: mode }));
   });
   const uiFocusChatInput = useEvent((): void => focusChatInput());

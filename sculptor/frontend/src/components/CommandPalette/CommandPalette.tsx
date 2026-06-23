@@ -611,7 +611,7 @@ export const CommandPalette = (): ReactElement => {
                 hasCursorMovedRef.current = true;
                 return;
               }
-              const item = (e.target as HTMLElement | null)?.closest("[cmdk-item]");
+              const item = e.target instanceof HTMLElement ? e.target.closest("[cmdk-item]") : null;
               if (!item) return;
               if (item.getAttribute("aria-disabled") === "true") return;
               const value = item.getAttribute("data-value");
