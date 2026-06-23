@@ -1,0 +1,48 @@
+{
+  "name": "@sculptor/backend",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "main": "dist/backend.cjs",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/backend.cjs",
+    "test": "vitest run",
+    "lint": "eslint --max-warnings 0 src",
+    "format": "prettier --write src",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.726.1",
+    "@fastify/static": "8.0.4",
+    "@fastify/swagger": "9.4.0",
+    "@fastify/swagger-ui": "5.2.1",
+    "@fastify/websocket": "11.0.2",
+    "better-sqlite3": "11.8.1",
+    "drizzle-orm": "0.38.4",
+    "fastify": "5.2.1",
+    "fastify-type-provider-zod": "4.0.2",
+    "node-pty": "1.0.0",
+    "posthog-node": "4.4.1",
+    "typeid-js": "1.2.0",
+    "zod": "3.24.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.4",
+    "@types/better-sqlite3": "7.6.12",
+    "@types/node": "20.17.12",
+    "drizzle-kit": "0.30.1",
+    "esbuild": "0.24.2",
+    "eslint": "9.39.4",
+    "prettier": "3.8.4",
+    "tsx": "4.22.4",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.61.1",
+    "vitest": "4.1.9"
+  }
+}

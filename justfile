@@ -400,6 +400,7 @@ test-unit junitxml="":
       echo "log: $JUST_LOG_FILE"
     fi
     just test-unit-backend {{ if junitxml != "" { "sculptor/pytest_junit.xml" } else { "" } }}
+    just test-unit-backend-ts
     just test-unit-frontend
     just test-unit-foundation
     just test-unit-sculpt {{ if junitxml != "" { "sculpt_junit.xml" } else { "" } }}
@@ -802,6 +803,68 @@ install-frontend: && generate-api
 install-backend:
     # We don't actually have any pre-build installations for the backend now,
     # but leaving it as a no-op in case we need it in the future.
+
+# Installs the TypeScript backend dependencies (and builds native addons).
+# Distinct from the Python `install-backend`; both coexist until the Python
+# backend is deleted (Task 9.6).
+[group("install")]
+install-backend-ts:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{ _quiet_by_default_fn }}
+    _do_install_backend_ts() {
+      {{ nvm_use }}
+      cd "{{justfile_directory()}}/sculptor/backend"
+      stamp=node_modules/.package-lock.json
+      if [ -f "$stamp" ] \
+          && [ ! package.json -nt "$stamp" ] \
+          && [ ! package-lock.json -nt "$stamp" ]; then
+        echo "TypeScript backend dependencies up to date, skipping npm install."
+        return 0
+      fi
+      echo "Installing TypeScript backend dependencies..."
+      npm install
+    }
+    quiet_by_default install-backend-ts _do_install_backend_ts
+
+# Runs the TypeScript backend in dev mode (placeholder until the server lands).
+[group("dev")]
+backend-ts:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{ nvm_use }}
+    cd "{{justfile_directory()}}/sculptor/backend"
+    npm run dev
+
+# Bundles the TypeScript backend into a single Node-runnable file (dist/backend.cjs).
+[group("build")]
+build-backend-ts: install-backend-ts
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{ nvm_use }}
+    cd "{{justfile_directory()}}/sculptor/backend"
+    npm run build
+
+# Runs the TypeScript backend unit tests (Vitest).
+[group("test")]
+test-unit-backend-ts:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{ _quiet_by_default_fn }}
+    _do_test_unit_backend_ts() {
+      {{ nvm_use }}
+      cd "{{justfile_directory()}}/sculptor/backend"
+      stamp=node_modules/.package-lock.json
+      if [ ! -f "$stamp" ] \
+          || [ package.json -nt "$stamp" ] \
+          || [ package-lock.json -nt "$stamp" ]; then
+        npm install
+      else
+        echo "TypeScript backend dependencies up to date, skipping npm install."
+      fi
+      npm test
+    }
+    quiet_by_default test-unit-backend-ts _do_test_unit_backend_ts
 
 # Installs optional build dependencies for a Mac
 [group("install")]
