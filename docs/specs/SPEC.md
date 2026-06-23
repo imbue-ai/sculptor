@@ -253,7 +253,10 @@ Next, Sculptor checks the **dependencies** it needs — chiefly the Claude CLI a
 as a card: a green check with the detected path and version when it's ready, or a warning with an
 **Install** or **Sign in** button when it isn't. Sculptor can install and manage Claude for you
 (showing live install progress) or sign you in, and for anything you'd rather manage yourself you can
-expand a card to override the binary path or switch between a managed install and your system one. A
+expand a card to override the binary path or switch between a managed install and your system one. The
+sign-in flow also supports a **paste-a-code** path for headless or remote setups where a browser
+callback can't reach the app: Sculptor shows the sign-in URL, you approve access, and paste the
+returned authorization code back into the card to finish signing in. A
 **check again** link re-runs the checks. You can't move on until everything required is satisfied.
 
 Finally, you connect your first **repository** (→ §7.2 Workspaces). Point Sculptor at a repo by
@@ -276,11 +279,13 @@ mode and the unisolated **in-place** mode are experimental opt-ins that, once en
 add a mode picker to this form — see §7.12.) Each open workspace is a **tab**.
 
 Inside a workspace, a header **banner** shows where you are: the repo, the workspace's branch (which
-you can copy), and a one-glance **diff summary**. For a repo whose `origin` is on **GitHub or
-GitLab**, the banner also shows the workspace's **target branch** (what its changes are diffed
-against — with a selector to change it and a warning if a PR's target wouldn't match); for other
-repos there is no target-branch concept and the banner simply shows the source branch the workspace
-started from. A non-default mode (clone or in-place) is shown as a strategy badge, and the banner collapses
+you can copy), and a one-glance **diff summary**. The banner also shows the workspace's **target
+branch** — what its changes are diffed against — with a selector to change it and a warning if an
+open PR's target wouldn't match. The selector works for **every repo regardless of remote host**; a
+repo with a remote offers its remote-tracking branches as targets, while a repo with no remote falls
+back to offering the repo's own local branches. (Opening a pull request, by contrast, requires
+a GitHub or GitLab `origin` → §7.6 — the target-branch concept is independent of the PR surface.)
+A non-default mode (clone or in-place) is shown as a strategy badge, and the banner collapses
 progressively as space tightens.
 
 If the project defines a **setup command**, it runs when the workspace is created; its progress and
@@ -314,9 +319,14 @@ explains itself when it can't act — for example when the editor is empty. The 
 span several lines while still sending as one message.
 
 The input toolbar shapes how the agent handles your next message. A **model** picker chooses which
-model answers; an **effort** selector budgets how much thinking it spends per step (Low, Medium, High, Extra High,
-Max — Extra High by default);
-a **fast mode** toggle trades some depth for quicker output; and **plan mode** makes the agent
+model answers — present only for agents whose harness supports model selection (a Claude or Pi chat
+agent), and shown disabled with the current model for those that don't; the list it offers comes from
+the agent's own harness, so a **Claude** agent picks from the Claude models while a **Pi** agent
+surfaces Pi's live catalog grouped by provider, and changing a Pi agent's model takes effect in-session
+(a failed switch leaves the choice unchanged and raises an actionable error toast). An **effort**
+selector budgets how much thinking it spends per step (Low, Medium, High, Extra High, Max — Extra High
+by default); a **fast mode** toggle trades some depth for quicker output on the models that support it
+(the Opus family, including Opus 4.8) and is disabled for the rest; and **plan mode** makes the agent
 investigate and propose a plan for your approval before it changes anything. The **+** button opens a
 menu for adding context — point the agent at specific **files and folders**, attach **images** (you
 can also drag-and-drop or paste them), or start a **skill** (→ §7.8 Skills); with the **Entity
@@ -363,7 +373,8 @@ it (unless its workspace was deleted, in which case it can't be recovered).
 Beyond composing prompts, the chat offers a few conveniences for working in a long conversation:
 recall earlier prompts by pressing the up/down arrows in an empty input, search the transcript
 (Cmd/Ctrl+Shift+F), and switch tool calls between compact pills and expanded rows
-(Cmd/Ctrl+Shift+E).
+(Cmd/Ctrl+Shift+E). Right-clicking an image anywhere in the conversation (a message, the attachment
+preview, or the zoomed lightbox) offers **Copy Image** to put it on your clipboard.
 
 #### 7.3.2 Terminal agents
 
@@ -418,7 +429,8 @@ enabled → §7.12), a plain **Terminal**, and then each **registered terminal a
 name — out of the box that's **"Claude CLI"**, which runs the Claude Code TUI in the workspace (→ §7.3
 Chat). The menu marks your last-used type with a check, Sculptor remembers it, and a plain **+** click
 re-creates that type without opening the menu. **Double-click** a tab to rename it (Enter saves, Escape cancels), drag tabs to **reorder**
-them, and right-click for more: rename, **mark as unread**, delete, plus diagnostics. **Deleting** an
+them, and right-click for more: rename, **mark as unread**, **copy the agent's name**, delete, plus
+diagnostics. **Deleting** an
 agent (after confirming) moves you to the next one, or starts a fresh agent if it was the last.
 
 Because every agent in a workspace works on the same copy of your repo, **siblings share its files
@@ -462,7 +474,7 @@ your local filesystem, opening it in your OS's default app and revealing its con
 
 Clicking a file in the **Changes** tab opens it in the main **diff** view; clicking a file in
 **Browse** opens its read-only contents instead, since an unchanged file has no diff. A scope picker lets you look at only the
-**uncommitted** changes or, when the workspace has a target branch (GitHub/GitLab repos → §7.6),
+**uncommitted** changes or, when the workspace has a target branch (any repo → §7.2),
 **all** changes measured against that target branch, with a count on each option. The diff itself can be shown **side-by-side** or **unified** (inline), with line-wrapping, a
 find-in-file search that highlights matches and counts them ("X of Y") as you step through, and an
 expand control that widens the diff across the whole window. A binary file replaces the diff with an
@@ -493,8 +505,9 @@ shows where the workspace's history forks from its starting point.
 ### 7.6 Pull Requests
 
 The pull-request surface described here appears **only when the workspace's repo has a GitHub or
-GitLab `origin`**; for any other repo there is no target-branch selector and no PR/MR control, and you
-push the branch yourself. Given such a repo, once you've committed work on a workspace branch you can
+GitLab `origin`**; for any other repo there is no PR/MR control and you push the branch yourself. (The
+target-branch selector itself is *not* gated this way — it appears on every repo, → §7.2; only opening
+a PR/MR requires a detected provider.) Given such a repo, once you've committed work on a workspace branch you can
 open a **pull request** (on GitHub) or **merge request** (on GitLab) straight from the workspace's
 top bar — Sculptor stays provider-neutral, so the control reads "Create PR" or "Create MR" to match
 your repo. Clicking it pushes the branch and
@@ -509,7 +522,10 @@ failed," "Approved/Review pending," and so on). Clicking the number opens the re
 The chevron opens a **detail dropdown** with the title and link, checks/pipeline status, approvals and
 reviewer names, and any unresolved comments. If a **CI babysitter** is available, a switch in this
 dropdown lets you pause or resume it — when on, Sculptor keeps an eye on the request's CI for you —
-and the status text updates as you toggle it.
+and the status text updates as you toggle it. When the babysitter *can't* run — for example its
+configured agent type can't be resolved for this workspace — the dropdown surfaces a short
+**disabled reason** in place of the usual status, and for a persistent reason the switch itself is
+forced off and greyed out until the cause is fixed.
 
 When the request is **merged** or **closed**, the button switches to a merge icon reading "PR #N
 merged"/"closed," and clicking it still opens the request in the browser. If a request already exists
@@ -591,7 +607,9 @@ each open workspace. You switch tabs by clicking, cycle through them with keyboa
 keep working even in zen mode), drag to reorder them, and close them with the tab's minimize button, a middle-click,
 or a keyboard shortcut. Workspace tab labels truncate when long and carry a small **status dot**
 reflecting the agent's state; double-clicking a tab renames the workspace inline, and right-clicking
-opens a context menu to rename it, delete it, or close others/all. When too many tabs are open they overflow into a horizontal
+opens a context menu to rename it, delete it, copy its name / branch / workspace id, or close
+others/all. **Cmd+Shift+W** deletes the active workspace (after the same confirmation dialog as the
+menu and palette actions). When too many tabs are open they overflow into a horizontal
 scroller that keeps the active tab in view, and closed workspaces collect into a pill you can reopen
 from. Tabs persist across restarts.
 
@@ -639,8 +657,10 @@ repos with their paths and agent counts and lets you add or remove them and conf
 creation prompt, PR-status polling and its interval (plus a multiplier that throttles polling for
 closed workspaces), the default target branch, the global
 branch-naming pattern, and the branch-deletion policy. CI configures the **CI babysitter** that
-watches pipelines and asks an agent to fix failures — a toggle, a retry cap, and editable prompts for
-pipeline failures and merge conflicts.
+watches pipelines and asks an agent to fix failures — a toggle, a retry cap, a **babysitter-agent
+selector** (which agent type the babysitter drives: the workspace's most-recently-used agent by
+default, or a pinned Claude, Pi, or registered terminal agent that accepts automated prompts), and
+editable prompts for pipeline failures and merge conflicts.
 
 The remaining sections cover the environment and account. **Dependencies** manages the Claude CLI and
 git binaries Sculptor uses — switching between a managed install and a custom path, showing each one's
@@ -660,7 +680,9 @@ organized into **action groups** (the built-in "Sculptor" group — which ships 
 shortcuts — sits first, with any ungrouped actions at the bottom; collapsed group headers carry a count badge). Clicking an action either sends
 its prompt immediately (an auto-submit action, shown with a play icon) or appends it to the chat input
 for you to edit first (a draft action, shown with a text-cursor icon); a hover tooltip previews the
-prompt. While the agent is running, a right-click **Queue message** option on an action lets you queue
+prompt. For a **terminal agent** — which has no chat input — a draft action instead types its prompt
+into the agent's terminal (the PTY) *without* pressing Enter, so you can edit and run it yourself,
+while an auto-submit action types and submits it. While the agent is running, a right-click **Queue message** option on an action lets you queue
 its prompt to run after the current turn rather than sending it immediately. You create, edit, and delete actions through a dialog (Name, Prompt, Group, and an
 auto-submit toggle), manage groups inline (add, rename, delete), and drag actions and groups to
 reorder them or move an action between groups — built-in items can't be edited, deleted, or dragged.
@@ -703,6 +725,9 @@ product makes no finer distinction than that: a feature is either generally avai
   viewer, toggled by the eye icon in the diff toolbar.
 - **Pi agent** — offer the experimental **Pi** agent as a choice when creating an agent (→ §7.4); an
   already-running Pi agent keeps going regardless of the toggle.
+- **Frontend plugins** — enable the experimental plugin system that lets third-party plugins extend
+  Sculptor's own UI (the plugin system below). Off by default; turning it off only fully takes effect
+  after an app reload, since already-loaded plugins aren't torn down live.
 - **Custom backend command** — the entry point for the container / remote backend described below.
 
 The **CI babysitter** (→ §7.6, §7.10) is likewise experimental and off by default.
@@ -719,6 +744,21 @@ The **CI babysitter** (→ §7.6, §7.10) is likewise experimental and off by de
 notably the in-app **Browser** panel (desktop-only), which embeds a browser beside the chat with an
 address bar and back/forward/reload/screenshot controls; outside the desktop app it shows a
 placeholder.
+
+**Frontend plugin system.** With **Frontend plugins** enabled, Sculptor can load third-party
+**plugins** that extend the app's own UI from inside the renderer — contributing new **panels** (which
+show up in the Panels list with a "plugin" badge) and full-screen **overlays**, built against a small
+versioned Sculptor SDK that reuses the host's React, Radix theming, icons, and shared data client so
+they look and behave like native UI. A new **Plugins** section appears in Settings to manage plugin
+**sources**: you add a plugin by dropping its folder into the Sculptor folder's `plugins/` directory
+(picked up on the next launch or via a **Refresh** button) or by adding the **URL** of a plugin
+server (saved and re-fetched on every launch). Each row has an enable/disable switch (mute a plugin
+without removing it) and, while enabled, Settings and Reload controls; user-added URL sources can also
+be removed, while bundled and disk-discovered plugins can't. Sculptor ships a bundled **Linear** example
+plugin and two no-build example plugins (**Sculpty** and **Pomodoro**). Because a plugin runs with the
+**same privileges as Sculptor's own UI** — and a URL source serves whatever code it holds at load time
+— adding a plugin means running that code, so you should only add sources you trust (the plugin trust
+model is documented in `SECURITY.md`; outbound links a plugin opens are restricted to `http(s)`).
 
 **Container / remote execution backend.** Pointing the **custom backend command** at a launcher lets
 Sculptor run agents somewhere other than your host machine — inside a Docker container, on a remote
@@ -745,8 +785,8 @@ The CLI is organized into a handful of command groups, each mapping to a domain 
 |---|---|
 | `sculpt repo` | List and show the **Projects (Repos)** Sculptor knows about — their paths and whether they're accessible. |
 | `sculpt workspace` | Create, list, show, rename, and delete **Workspaces**. Pick the isolation **strategy** (`--strategy`: `worktree`, `clone`, `in-place`); choose the source branch (`--branch`), a name for the workspace's new branch (`--branch-name`), its target (`--target-branch`), and a description (`--name`) at create time; `list` can span all repos (`--all`) or one (`--repo`), and `delete` takes `--yes`/`-y` to skip the prompt. |
-| `sculpt agent` | Manage **Agents** in a workspace: `create` one (with an opening `--prompt`, a `--model`, and a `--name`), list (filter by status, scope with `--all` / `--repo` / `--workspace`), show, `send` a message (with `--model` and repeatable `--file` attachments), check `status`, read `messages` (`--limit`/`--tail`), `interrupt` a running one, rename, and delete. `send`, `status`, and `messages` all accept `--follow` to stream live. Choose the **model** (`haiku`, `sonnet`, `opus`, `fable`, plus the `sonnet[1m]` / `opus[1m]` 1M-context variants). |
-| `sculpt run` | One-shot convenience: from a single prompt, create a workspace **and** an agent in one step, optionally `--follow` its output live. Accepts the same workspace-creation flags as `sculpt workspace create` (`--strategy`, `--branch`, `--target-branch`, …) plus `--model` and `--file`. |
+| `sculpt agent` | Manage **Agents** in a workspace: `create` one (with an opening `--prompt`, a `--model`, a `--name`, and a `--harness`), list (filter by status, scope with `--all` / `--repo` / `--workspace`), show, `send` a message (with `--model` and repeatable `--file` attachments), check `status`, read `messages` (`--limit`/`--tail`), `interrupt` a running one, rename, and delete. `send`, `status`, and `messages` all accept `--follow` to stream live. Choose the **model** (`haiku`, `sonnet`, `opus`, `fable`, plus the `sonnet[1m]` / `opus[1m]` 1M-context variants) and the **harness** (`--harness`: `Claude`, `Pi`, `Terminal`, or a registered terminal agent by display name; omitting it uses your most-recently-used type — the same default the GUI's **+** button applies, and an explicit choice updates that MRU). |
+| `sculpt run` | One-shot convenience: from a single prompt, create a workspace **and** an agent in one step, optionally `--follow` its output live. Accepts the same workspace-creation flags as `sculpt workspace create` (`--strategy`, `--branch`, `--target-branch`, …) plus `--model`, `--file`, and `--harness`. Because `run` always sends a prompt, a terminal/registered harness is rejected here (use `sculpt agent create` for those). |
 | `sculpt signal` | Run from **inside an agent's environment** to report state back to Sculptor — `busy`, `idle`, `waiting`, `files-changed` (refreshes the diff), or `session-id <id>` (which takes the session identifier as an argument). Lets terminal-based agents light up the same status indicators the GUI shows. |
 | `sculpt ui` | Let an agent **drive the app's UI** for the user: `open-file` (open a file or diff tab, with `--mode auto`/`diff`/`file`) and `webview-navigate` / `webview-refresh` (point or reload the in-app Browser panel, e.g. at a generated HTML report). |
 | `sculpt schema` | Print machine-readable **JSON Schemas** for command output (run with no argument to list the available schema names, including a dedicated `error` schema for `--json` failures), so scripts can validate and parse results reliably. |
@@ -884,7 +924,7 @@ and `packaged_electron` (the last combined with `release`) — and by sandbox ne
 `custom_sculptor_folder`), so a test runs only in the environment it requires.
 
 #### 10.4 Scenarios-as-tests methodology
-This spec, the exhaustive **`scenarios.md`** (≈446 Given/When/Then behaviors), and
+This spec, the exhaustive **`scenarios.md`** (Given/When/Then behaviors), and
 **`scenario_coverage.md`** (which maps each scenario to the integration test covering it) together
 form the **English-level acceptance layer**: the spec is the source of truth, the scenarios are
 concrete acceptance checks against it, and the coverage report measures how well the product is

@@ -1,5 +1,5 @@
-e2300a81c86143c8437b3d332e059d17b5b44ec3
+c6d048e1acc65faaddddb1f44b8dc80e85cb1375
 # Commit the docs/specs/ set was last reconciled against.
 # Line 1 (the SHA) is read by the /update-specs skill; everything else is a comment.
-# Baseline: "docs: add product specification set under docs/specs/" (2026-06-18).
+# Baseline: "Fix Browser panel dropping the first navigation..." (#147, 2026-06-23).
 # Update this on each /update-specs run via: git rev-parse origin/main > docs/specs/.spec-baseline
