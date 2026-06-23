@@ -128,6 +128,21 @@ def _assistant_msg(text: str, stop_reason: str = "stop") -> dict[str, Any]:
     }
 
 
+def _assistant_error_msg(error_message: str, text: str = "") -> dict[str, Any]:
+    """An assistant message_end that ended in a turn-failure (stopReason "error").
+
+    `error_message` (wire `errorMessage`) carries pi's provider failure reason —
+    the only place a transient provider condition (overloaded/rate-limit/5xx/
+    timeout) is recorded for a turn that fails without an in-stream error event.
+    """
+    return {
+        "role": "assistant",
+        "content": [{"type": "text", "text": text}] if text else [],
+        "stopReason": "error",
+        "errorMessage": error_message,
+    }
+
+
 def _user_msg(text: str) -> dict[str, Any]:
     # A role="user" message carries no stopReason — pi only sets stopReason on
     # generated assistant messages. Mirrors the prompt-echo message pi emits at
@@ -415,6 +430,41 @@ def test_message_end_with_error_stop_reason_raises_pi_crash_error() -> None:
     )
     with pytest.raises(PiCrashError):
         agent._consume_until_turn_end(prompt_id=_PROMPT_ID)
+
+
+def test_transient_overloaded_message_end_is_retried_until_the_turn_recovers() -> None:
+    """A transient provider error at message_end is re-prompted, not fatal.
+
+    The first agent run ends with stopReason "error" carrying an Anthropic
+    `overloaded_error` (~HTTP 529). The harness must retry the turn (re-prompt
+    pi) instead of raising PiCrashError, and the retry's response finalizes the
+    turn normally — so a transient overload no longer tears down the agent.
+    """
+    agent = _make_agent()
+    overloaded = json.dumps({"type": "overloaded_error", "message": "Overloaded"})
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event({"type": "message_end", "message": _assistant_error_msg(overloaded)}),
+            # Retry: pi recovers and completes the turn on the re-prompt.
+            _event({"type": "agent_start"}),
+            _event(_text_delta_update("recovered", "recovered")),
+            _event({"type": "message_end", "message": _assistant_msg("recovered")}),
+            _event({"type": "agent_end", "messages": [_assistant_msg("recovered")], "willRetry": False}),
+        ]
+    )
+
+    agent._run_prompt_turn(ChatInputUserMessage(text="do the thing"))
+
+    emitted = _drain(agent._output_messages)
+    finals = [m for m in emitted if isinstance(m, ResponseBlockAgentMessage)]
+    texts = [block.text for f in finals for block in f.content if isinstance(block, TextBlock)]
+    # The turn completed after the retry instead of crashing.
+    assert "recovered" in texts
+    assert not any(isinstance(m, RequestFailureAgentMessage) for m in emitted)
+    successes = [m for m in emitted if isinstance(m, RequestSuccessAgentMessage)]
+    assert len(successes) == 1
+    assert successes[0].interrupted is False
 
 
 def test_agent_end_with_aborted_message_raises_pi_crash_error() -> None:
