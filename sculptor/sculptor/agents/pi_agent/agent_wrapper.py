@@ -1417,11 +1417,11 @@ class PiAgent(DefaultAgentWrapper):
         re-prompted with exponential backoff + jitter rather than crashing the
         agent, up to `_PI_TRANSIENT_MAX_RETRIES` times. The re-prompt carries the
         same content under a fresh prompt id (pi correlates a `prompt` response by
-        id). When the budget is exhausted — or the agent is shutting down — the
-        turn fails with the non-fatal, retryable `AgentTransientError` (surfaced as
-        a RequestFailure the user can re-run) instead of `PiCrashError`. A
-        non-transient error still raises `PiCrashError` from the dispatcher and is
-        not retried here.
+        id). When the budget is exhausted — or the agent is asked to stop (shutdown
+        or a user interrupt) — the turn fails with the non-fatal, retryable
+        `AgentTransientError` (surfaced as a RequestFailure the user can re-run)
+        instead of `PiCrashError`. A non-transient error still raises `PiCrashError`
+        from the dispatcher and is not retried here.
         """
         payload = self._build_prompt_payload(generate_id(), message)
         attempt = 0
@@ -1431,16 +1431,22 @@ class PiAgent(DefaultAgentWrapper):
                 self._consume_until_turn_end(str(payload["id"]))
                 return
             except _PiTransientTurnError as transient:
-                if attempt >= _PI_TRANSIENT_MAX_RETRIES or self._shutdown_event.is_set():
-                    raise AgentTransientError(transient.reason, exit_code=None, metadata=None) from transient
                 attempt += 1
-                logger.info(
-                    "PiAgent transient provider error on turn (retry {}/{}); backing off then re-prompting: {}",
-                    attempt,
-                    _PI_TRANSIENT_MAX_RETRIES,
-                    transient.reason,
-                )
-                self._sleep_before_transient_retry(attempt)
+                # Stop retrying when the budget is spent or we have been asked to
+                # stop — shutdown, or a user interrupt (`_is_abort_expected`).
+                should_give_up = attempt > _PI_TRANSIENT_MAX_RETRIES or self._is_abort_expected()
+                if not should_give_up:
+                    logger.info(
+                        "PiAgent transient provider error on turn (retry {}/{}); backing off then re-prompting: {}",
+                        attempt,
+                        _PI_TRANSIENT_MAX_RETRIES,
+                        transient.reason,
+                    )
+                    self._sleep_before_transient_retry(attempt)
+                    # A Stop or shutdown landed during the backoff: don't re-prompt.
+                    should_give_up = self._is_abort_expected()
+                if should_give_up:
+                    raise AgentTransientError(transient.reason, exit_code=None, metadata=None) from transient
                 payload = {**payload, "id": generate_id()}
 
     def _transient_retry_delay_seconds(self, attempt: int) -> float:
@@ -1457,13 +1463,21 @@ class PiAgent(DefaultAgentWrapper):
         return capped / 2 + random.uniform(0.0, capped / 2)
 
     def _sleep_before_transient_retry(self, attempt: int) -> None:
-        """Block for the backoff delay, interruptible by shutdown.
+        """Block for the backoff delay, woken early by shutdown or a user interrupt.
 
-        Waits on `_shutdown_event` so a stopping agent does not block on a long
-        backoff: a set shutdown returns immediately, and the retry loop then bails
-        to `AgentTransientError`.
+        Polls in short slices so a Stop pressed mid-backoff (which sets
+        `_interrupt_pending`, not `_shutdown_event`) is honored within a poll
+        interval instead of waiting out the full delay; the retry loop then bails
+        to `AgentTransientError`. Waiting on `_shutdown_event` makes a shutdown wake
+        the slice immediately.
         """
-        self._shutdown_event.wait(timeout=self._transient_retry_delay_seconds(attempt))
+        deadline = time.monotonic() + self._transient_retry_delay_seconds(attempt)
+        while not self._is_abort_expected():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0.0:
+                return
+            if self._shutdown_event.wait(timeout=min(remaining, _STDOUT_QUEUE_POLL_SECONDS)):
+                return
 
     def _update_plan_mode_from_message(self, message: ChatInputUserMessage) -> None:
         """Track plan mode across turns from the chat input's toggle flags.

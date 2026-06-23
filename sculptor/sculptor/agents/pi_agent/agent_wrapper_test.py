@@ -26,6 +26,8 @@ from sculptor.agents.pi_agent.agent_wrapper import PI_PROBE_SESSION_DIR_NAME
 from sculptor.agents.pi_agent.agent_wrapper import PI_SESSION_DIR_NAME
 from sculptor.agents.pi_agent.agent_wrapper import PI_SESSION_ID_STATE_FILE
 from sculptor.agents.pi_agent.agent_wrapper import PiAgent
+from sculptor.agents.pi_agent.agent_wrapper import _PI_TRANSIENT_RETRY_BASE_DELAY_SECONDS
+from sculptor.agents.pi_agent.agent_wrapper import _PI_TRANSIENT_RETRY_MAX_DELAY_SECONDS
 from sculptor.agents.pi_agent.agent_wrapper import _TurnState
 from sculptor.agents.pi_agent.agent_wrapper import _curate_models
 from sculptor.agents.pi_agent.agent_wrapper import _model_option_from_pi
@@ -500,6 +502,63 @@ def test_persistent_transient_error_surfaces_retryable_failure_not_crash() -> No
     assert not any(isinstance(m, RequestSuccessAgentMessage) for m in emitted)
     # The agent did not crash: no fatal exception was captured.
     assert agent._exception is None
+
+
+def test_interrupt_during_transient_backoff_stops_retrying() -> None:
+    """A Stop landing during the backoff bails to a retryable failure, with no re-prompt.
+
+    The first run hits a transient overloaded_error; while the harness is backing
+    off, the user interrupts (`_interrupt_pending` is set, simulated here as the
+    backoff's side effect). The loop must give up immediately with a
+    RequestFailure rather than re-prompting and spinning.
+    """
+    agent = _make_agent()
+    overloaded = json.dumps({"type": "overloaded_error", "message": "Overloaded"})
+    # Only one error round is queued: a re-prompt would find an empty/finished
+    # queue, so the assertions below also confirm the loop did not loop again.
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event({"type": "message_end", "message": _assistant_error_msg(overloaded)}),
+        ]
+    )
+
+    def _interrupt_during_backoff(attempt: int) -> None:
+        agent._interrupt_pending.set()
+
+    with patch.object(agent, "_sleep_before_transient_retry", side_effect=_interrupt_during_backoff):
+        agent._run_prompt_turn(ChatInputUserMessage(text="do the thing"))
+
+    emitted = _drain(agent._output_messages)
+    failures = [m for m in emitted if isinstance(m, RequestFailureAgentMessage)]
+    assert len(failures) == 1
+    assert "overloaded" in str(failures[0].error.args[0]).lower()
+    assert not any(isinstance(m, RequestSuccessAgentMessage) for m in emitted)
+
+
+def test_sleep_before_transient_retry_returns_immediately_when_interrupt_pending() -> None:
+    """The backoff is woken by a pending interrupt instead of waiting out the delay."""
+    agent = _make_agent()
+    agent._interrupt_pending.set()
+    with patch.object(agent, "_transient_retry_delay_seconds", return_value=100.0):
+        started = time.monotonic()
+        agent._sleep_before_transient_retry(attempt=1)
+        elapsed = time.monotonic() - started
+    assert elapsed < 1.0
+
+
+@pytest.mark.parametrize("attempt", [1, 2, 3, 4, 8])
+def test_transient_retry_delay_stays_within_equal_jitter_bounds(attempt: int) -> None:
+    """Backoff grows as base*2**(attempt-1), capped, with delay in [cap/2, cap]."""
+    agent = _make_agent()
+    cap = min(
+        _PI_TRANSIENT_RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1)),
+        _PI_TRANSIENT_RETRY_MAX_DELAY_SECONDS,
+    )
+    # Sample repeatedly so the jitter range is exercised, not a single draw.
+    for _ in range(20):
+        delay = agent._transient_retry_delay_seconds(attempt)
+        assert cap / 2 <= delay <= cap
 
 
 def test_agent_end_with_aborted_message_raises_pi_crash_error() -> None:
