@@ -130,6 +130,7 @@ export const AssistantMessageContent = ({
               key={`files-${groupIndex}`}
               files={group.blocks.map((b) => b.source)}
               displayMode="inline"
+              allowCopyImage
               listId={`${messageIndex}-files-${groupIndex}`}
               listOrder={messageIndex * 1000 + groupIndex}
             />
