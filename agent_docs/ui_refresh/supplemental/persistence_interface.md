@@ -31,7 +31,7 @@ type GlobalLayoutState = {
   sidebarWidthPx: number;
   sidebarCollapsed: boolean;
   // Panel-internal view prefs that are global (shared across workspaces):
-  masterDetailListWidthPx: number;          // shared across Files/Changes/Commits (goals.md)
+  explorerListWidthPx: number;              // shared across Files/Changes/Commits (goals.md)
   // (diff view mode, tree/flat, etc. may be added here as global panel prefs)
 };
 ```

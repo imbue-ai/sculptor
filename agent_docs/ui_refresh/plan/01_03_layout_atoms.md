@@ -82,7 +82,7 @@ exporting `layoutPersistenceAdapter`).
    - `activeSubSectionAtom: Atom<SubSectionId | null>`.
    - `isActiveSubSectionAtom(ss): Atom<boolean>`.
    - Global slices: `sectionSizesAtom: Atom<{left;right;bottom}>`,
-     `masterDetailListWidthAtom: WritableAtom<number,...>` (derived from
+     `explorerListWidthAtom: WritableAtom<number,...>` (derived from
      `globalLayoutAtom`).
    - (`activePanelComponentInSubSectionAtom` joins layout + registry and is defined
      in **Task 1.6**, not here.)

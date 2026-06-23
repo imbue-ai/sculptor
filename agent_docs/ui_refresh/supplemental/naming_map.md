@@ -48,6 +48,20 @@ The prototype's separate per-concern atomFamilies (`zoneAssignmentsFamily`,
 `workspaceLayoutFamily(workspaceId)` per `state_design.md` → "Consolidated
 snapshots". Read-side narrow slices are derived from it (see `state_atoms.md`).
 
+## Explorer scaffold renamed
+
+The shared file-list + diff-viewer scaffold the Files/Changes/Commits panels embed
+is renamed away from the prototype's generic "master-detail" pattern name. It is
+not itself a registry panel, so the `…Panel` suffix was misleading; the rewrite
+calls it `ExplorerLayout`.
+
+| Prototype | Rewrite |
+|---|---|
+| `MasterDetailPanel` | `ExplorerLayout` |
+| `MasterDetailTreeHeader` | `ExplorerTreeHeader` |
+| `masterDetailListWidthAtom` | `explorerListWidthAtom` |
+| `GlobalLayoutState.masterDetailListWidthPx` | `GlobalLayoutState.explorerListWidthPx` |
+
 ## Deleted (not carried forward)
 
 | Prototype | Reason |

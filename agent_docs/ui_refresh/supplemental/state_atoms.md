@@ -107,7 +107,7 @@ const globalLayoutAtom: WritableAtom<GlobalLayoutState, [Updater], void>;   // b
 const sectionSizesAtom: Atom<Record<"left" | "right" | "bottom", number>>;  // percentages
 const sidebarWidthAtom: WritableAtom<number, ...>;
 const sidebarCollapsedAtom: WritableAtom<boolean, ...>;
-const masterDetailListWidthAtom: WritableAtom<number, ...>;                 // shared across files/changes/commits
+const explorerListWidthAtom: WritableAtom<number, ...>;                     // shared across files/changes/commits
 ```
 
 `GlobalLayoutState` shape is in `persistence_interface.md`.

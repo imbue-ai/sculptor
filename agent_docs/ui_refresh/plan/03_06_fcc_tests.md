@@ -4,7 +4,7 @@
 
 Build the shared Files/Changes/Commits test POMs and the four FCC test files,
 migrating the proven diff/file/history assertions from today's suite into them via
-the shared `DiffViewer` / `MasterDetailPanel` POMs. The content assertions are
+the shared `DiffViewer` / `ExplorerLayout` POMs. The content assertions are
 **migrated, not rewritten**; the source files are removed once migrated.
 
 ## Stories addressed
@@ -28,7 +28,7 @@ POMs are factored:
   panel) — tabs, scopes, line numbers, and the toggles relocated under the
   triple-dot menu (`DIFF_FILE_HEADER_MENU_TRIGGER`); **`get_expand_toggle` is
   deleted** (fullscreen-expand deprecated).
-- **`MasterDetailPanel`** POM — resizable list, shared-width sidebar, sidebar
+- **`ExplorerLayout`** POM — resizable list, shared-width sidebar, sidebar
   toggle, empty state.
 - helper functions: `open_file_in_panel`, `toggle_view_option_via_menu`,
   `assert_diff_shows`.
@@ -56,7 +56,7 @@ This task depends on **Task 3.2** (the components) and **Task 3.3** (the panels)
 
 - `sculptor/sculptor/testing/elements/diff_viewer.py` — refactor of `diff_panel.py`
   (embeddable; toggles under the triple-dot menu; `get_expand_toggle` removed).
-- `sculptor/sculptor/testing/elements/master_detail_panel.py` — new shared POM +
+- `sculptor/sculptor/testing/elements/explorer_layout.py` — new shared POM +
   helper functions.
 - `sculptor/sculptor/testing/elements/files_panel.py` — refactor of
   `file_browser.py` (drop the `get_tab_all/changes/history` getters).
@@ -71,7 +71,7 @@ This task depends on **Task 3.2** (the components) and **Task 3.3** (the panels)
 
 ## Implementation details
 
-1. Build the `DiffViewer` + `MasterDetailPanel` POMs + helpers per
+1. Build the `DiffViewer` + `ExplorerLayout` POMs + helpers per
    `harness_migration.md` §1. Re-anchor the toggle getters under
    `DIFF_FILE_HEADER_MENU_TRIGGER`; remove the expand-toggle getter.
 2. `test_diff_viewer.py` (FCC-02/06/07): exercise the shared viewer once via whichever
@@ -112,7 +112,7 @@ This task depends on **Task 3.2** (the components) and **Task 3.3** (the panels)
 ## Verification checklist
 
 - [ ] `diff_viewer.py` (embeddable, menu-anchored toggles, no expand) +
-  `master_detail_panel.py` + helpers exist.
+  `explorer_layout.py` + helpers exist.
 - [ ] `test_files_panel.py` / `test_changes_panel.py` / `test_commits_panel.py` /
   `test_diff_viewer.py` pass via `/run-integration-test`.
 - [ ] Migrated source `test_*` files removed; no orphan asserting a removed surface.

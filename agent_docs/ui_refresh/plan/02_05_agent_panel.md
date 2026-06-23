@@ -3,9 +3,11 @@
 ## Goal
 
 Wrap the existing agent/chat interface in an `AgentPanel` and wire it into the
-registry as the dynamic `agent:<taskId>` panel. The chat surface is **reused
-unchanged**; the panel is a thin, shell-agnostic wrapper that takes its task id from
-the registry and its data from the existing data atoms.
+registry as the dynamic `agent:<taskId>` panel. The chat surface is **reused, not
+rewritten** — with one surgical change: `ChatPanelContent` is decoupled from the
+route so each panel can render a **specific** agent. The panel is a thin,
+shell-agnostic wrapper that takes its task id from the registry and passes it down;
+data still comes from the existing data atoms.
 
 ## Stories addressed
 
@@ -28,11 +30,23 @@ persistent thumb, bottom bar). Find the exact current entry component by greppin
 `AlphaChatInterface`, `ChatPanelContent`, and the component today's `WorkspacePage`
 renders for a task. **Do not rewrite it** — wrap it.
 
+**One required change — decouple the chat from the route.** Today `ChatPanelContent`
+reads its task id from the route (`useWorkspacePageParams()`), so it can only ever
+show the route's agent. To render a *specific* agent per panel — one agent in center
+and another in right at once (AGENT-03), two agents streaming concurrently
+(AGENT-05) — `ChatPanelContent` must take an **explicit, required `taskId` prop** and
+stop reading the route. This is a small, surgical move (lift the route read up one
+level), not a rewrite, and it is exactly principle 2: content components never read
+shell/route state. Concretely: delete the `useWorkspacePageParams()` read inside
+`ChatPanelContent`, and update its **one** current call site (`WorkspacePage`) to
+pass `useWorkspacePageParams().agentID` explicitly. `AgentPanel({ taskId })` is then
+just `<ChatPanelContent taskId={taskId} />`.
+
 **The wrapper must be shell-agnostic** (`component_hierarchy.md` → principle 2;
-`state_design.md` → "Mobile"): `AgentPanel` takes a `taskId` and reads task data
-from the existing data atoms; it must **not** read section/split/size layout state.
-This keeps it reusable and keeps the memo boundary at `SectionBody` (Task 2.4)
-valid.
+`state_design.md` → "Mobile"): `AgentPanel` takes a `taskId` and renders
+`<ChatPanelContent taskId={taskId} />`; neither it nor the chat reads
+section/split/size layout state (or, now, the route). This keeps them reusable and
+keeps the memo boundary at `SectionBody` (Task 2.4) valid.
 
 **Registry wiring** (Task 1.6): the agent panel is a **dynamic, multi-instance**
 panel. `dynamicPanels.tsx` derives one `agent:<taskId>` definition per task for the
@@ -47,16 +61,24 @@ component).
 
 - `sculptor/frontend/src/pages/workspace/panels/AgentPanel.tsx` — new. The thin
   wrapper around the existing chat surface, parameterized by `taskId`.
+- `sculptor/frontend/src/pages/workspace/components/ChatPanelContent.tsx` — modify:
+  add a **required `taskId` prop** and **delete** its internal
+  `useWorkspacePageParams()` route read.
+- `WorkspacePage` (the current `ChatPanelContent` call site) — modify: pass
+  `useWorkspacePageParams().agentID` to `ChatPanelContent` explicitly.
 - `sculptor/frontend/src/components/sections/registry/dynamicPanels.tsx` — modify
   (from Task 1.6): bind the agent component per `agent:<taskId>` in the identity
   cache; derive the display name with **lowest-available-number reuse** (AGENT-09).
-- (No change to the chat components themselves.)
 
 ## Implementation details
 
-1. `AgentPanel({ taskId })`: render the existing chat surface for that task, reading
-   the task from the existing data atoms (the same hooks today's `WorkspacePage`
-   uses). Pass through everything the chat needs; add nothing shell-related.
+1. **Decouple `ChatPanelContent` from the route, then wrap it:** give
+   `ChatPanelContent` a required `taskId` prop, delete the
+   `useWorkspacePageParams()` read inside it, and update its one current call site
+   (`WorkspacePage`) to pass `useWorkspacePageParams().agentID` explicitly.
+   `AgentPanel({ taskId })` is then just `<ChatPanelContent taskId={taskId} />`. The
+   chat still reads its task data from the existing data atoms — only the *source of
+   the task id* moves from the route to a prop. Add nothing shell-related.
 2. In `dynamicPanels.tsx`, for each task in the active workspace produce a
    `PanelDefinition` with `id = agent:<taskId>`, `kind: "agent"`, `defaultSection:
    "center"`, `displayName` = the agent's name/number, and a `component` that is the
@@ -83,20 +105,27 @@ component).
 
 ## Gotchas
 
-- **Reuse, don't rewrite** the chat — `goals.md` preserves all existing chat
-  functionality and the test plan keeps ~all chat-content tests as-is.
-- The wrapper must not read layout state (keep it shell-agnostic).
+- **Reuse, don't rewrite** the chat — the *only* change to chat code is making
+  `taskId` an explicit prop (the route read is lifted up to `WorkspacePage`).
+  `goals.md` preserves all existing chat functionality and the test plan keeps ~all
+  chat-content tests as-is.
+- **Don't keep the `useWorkspacePageParams()` read as a "fallback"** inside
+  `ChatPanelContent`. A route fallback re-couples it to the route and breaks AGENT-03
+  (every panel would render the route's agent instead of its own `taskId`).
+- The wrapper must not read layout or route state (keep it shell-agnostic).
 - The agent component **must be identity-cached per id** (Task 1.6) or the chat
   remounts on every task tick (violating SWITCH-02 and dropping streaming state).
 - Reuse the existing numbering logic for AGENT-09 rather than inventing a new scheme.
 
 ## Verification checklist
 
-- [ ] `AgentPanel({ taskId })` renders the existing chat surface and reads no layout
-  state.
+- [ ] `ChatPanelContent` takes a **required** `taskId` prop; its
+  `useWorkspacePageParams()` read is removed and `WorkspacePage` passes `agentID`
+  explicitly.
+- [ ] `AgentPanel({ taskId })` renders `<ChatPanelContent taskId={taskId} />` and
+  reads no layout or route state.
 - [ ] `dynamicPanels.tsx` derives `agent:<taskId>` defs with cached component
   identity and lowest-available-number display names.
 - [ ] Zero/one/multiple agents supported; an agent can live in center and right at
   once.
-- [ ] No changes to the chat components themselves.
 - [ ] `just check` passes.

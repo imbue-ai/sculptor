@@ -25,9 +25,12 @@ list, are in `supplemental/component_tree.md`.
    another `PanelSection`. There is no special-cased "chat area" or "terminal
    area" — chat and terminal are panels.
 2. **Content decoupled from shell.** A panel's content component (chat, terminal,
-   diff viewer) takes its data from data atoms and its identity from the registry.
-   It never reads section/split/size layout state. This is what lets the same
-   content components power the mobile shell (`state_design.md` → "Mobile").
+   diff viewer) takes its data from data atoms and its identity — *which* task or
+   terminal it is — as an explicit prop (e.g. the chat takes a required `taskId`
+   prop, not `useWorkspacePageParams()`). It never reads section/split/size layout
+   state or route params. This is what lets the same content components power the
+   mobile shell (`state_design.md` → "Mobile") and lets one agent live in center
+   while another lives in right (AGENT-03).
 3. **Memoization at every heavy boundary.** Shell components that re-render on
    resize/drag/switch sit *above* memoized children with primitive props, so the
    churn stops before it reaches panel content. The boundaries are enumerated
@@ -139,7 +142,7 @@ task/terminal data atoms; their component identities are cached by id so rebuild
 the registry (which happens on every task tick) never remounts a live panel. A
 panel's content component is decoupled from the shell (principle 2) — e.g. the
 agent panel wraps the existing chat interface, the terminal panel wraps the xterm
-container, and Files/Changes/Commits each wrap a master-detail (file list + diff
+container, and Files/Changes/Commits each wrap an explorer (file list + diff
 viewer). Registry details, panel kinds, and the add/close/rename/confirmation
 rules are in `supplemental/panel_registry.md`.
 
@@ -197,7 +200,7 @@ workspace-switch-profiler tooling.
 WorkspacePage
 └─ useIsMobile()  ─── true ──►  MobileWorkspaceShell
                                 ├─ MobileWorkspaceHeader (drawer toggle, agent/changes pills)
-                                ├─ ChatPanelContent (full-screen, reused)
+                                ├─ ChatPanelContent (full-screen, reused; explicit taskId prop)
                                 └─ overlays: review-all, terminal, agent sheet, workspace drawer
                    ─── false ─►  WorkspaceLayoutShell  (everything above)
 ```

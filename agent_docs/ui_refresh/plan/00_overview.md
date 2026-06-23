@@ -26,7 +26,7 @@ settings, and `/ws/new` are deleted.
 - **Phase 2: Desktop shell + agent panel + cutover** — the sidebar, section grid,
   uniform panel container, the agent panel wrapping existing chat, and the
   workspace-route cutover, plus the harness spine (signature-stable POMs).
-- **Phase 3: The rest of the panels** — terminal, the shared master-detail + diff
+- **Phase 3: The rest of the panels** — terminal, the shared explorer + diff
   viewer, Files/Changes/Commits, the other registered panels, the add-panel
   dropdown and empty-state launcher, with their POMs and tests.
 - **Phase 4: Interactions** — drag-and-drop (with keyboard sensor), splits,
@@ -77,11 +77,11 @@ CREATE tests; Phase 8 is only the *legacy* burn-down.
 | `02_06_layout_shell_cutover.md` | `WorkspaceLayoutShell` + `WorkspaceHeader` + route cutover | 2 | SEC-01, SIDE-13, AGENT-01 |
 | `02_07_harness_spine.md` | Rewrite `project_layout`/`task_page` POMs (shim) + first ElementIDs/POMs + smoke tests | 2 | SIDE-01/07, SEC-01 |
 | `03_01_terminal_panel.md` | `TerminalPanel` wrapping xterm + dynamic terminal wiring + close-confirm | 3 | TERM-01..04 |
-| `03_02_master_detail_diff_viewer.md` | Shared `MasterDetailPanel` + embeddable `DiffViewer` (triple-dot menu) | 3 | FCC-02/04/05/06/07 |
+| `03_02_explorer_layout_diff_viewer.md` | Shared `ExplorerLayout` + embeddable `DiffViewer` (triple-dot menu) | 3 | FCC-02/04/05/06/07 |
 | `03_03_files_changes_commits.md` | Files / Changes / Commits panels | 3 | FCC-01..07, REVIEW-* deps |
 | `03_04_static_panels.md` | Review-all / Actions / Skills / Browser / Notes panels (no enable/disable) | 3 | REVIEW-01/02, PANEL-05/15 |
 | `03_05_add_panel_dropdown_empty_state.md` | `AddPanelDropdown` + `EmptySectionState` quick actions | 3 | PANEL-01..05, PANEL-12, SEC-19 |
-| `03_06_fcc_tests.md` | FCC POMs (DiffViewer/MasterDetail) + FCC CREATE/migrate tests | 3 | FCC-01..07 |
+| `03_06_fcc_tests.md` | FCC POMs (DiffViewer/ExplorerLayout) + FCC CREATE/migrate tests | 3 | FCC-01..07 |
 | `03_07_agent_terminal_panel_tests.md` | PanelTab POM + agent/terminal panel CREATE/migrate tests | 3 | AGENT-01..09, TERM-01..05, PANEL-07/11/14 |
 | `04_01_dnd_provider.md` | `PanelDndProvider` + KeyboardSensor + drag handle + dropzones | 4 | PANEL-08..10, PANEL-16 |
 | `04_02_splits.md` | Split create/close, direction rules, self-heal | 4 | SPLIT-01..06 |

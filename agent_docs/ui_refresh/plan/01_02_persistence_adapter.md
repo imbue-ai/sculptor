@@ -35,7 +35,7 @@ the layout before paint); writes are debounced/coalesced.
   `splits` (per section; absent = unsplit; ratio rides here), `activeSubSection`
   (`SubSectionId | null`, null → defaults to center on load).
 - `GlobalLayoutState` (one total): `sectionSizes` ({left,right,bottom} percentages),
-  `sidebarWidthPx`, `sidebarCollapsed`, `masterDetailListWidthPx` (shared across
+  `sidebarWidthPx`, `sidebarCollapsed`, `explorerListWidthPx` (shared across
   Files/Changes/Commits).
 
 **No migration** (`goals.md` → "Persistence"; `persistence_interface.md` →

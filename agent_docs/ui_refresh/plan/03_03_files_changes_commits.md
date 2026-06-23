@@ -3,7 +3,7 @@
 ## Goal
 
 Build the three independent panels — Files, Changes, Commits — each embedding the
-shared `MasterDetailPanel` + `DiffViewer` from Task 3.2 with its own list sidebar
+shared `ExplorerLayout` + `DiffViewer` from Task 3.2 with its own list sidebar
 (file tree / changes browser / commit history). This replaces the old single
 file-browser panel + diff pseudo-panel.
 
@@ -36,15 +36,15 @@ rewritten**). Pull the current behavior from today's file-browser/history code o
 and the prototype shape.
 
 **Each panel is single-instance**, registered statically with `defaultSection:
-"left"` (Task 1.6). They share the global master-detail list width (Task 3.2).
+"left"` (Task 1.6). They share the global explorer list width (Task 3.2).
 
-This task depends on **Task 3.2** (`MasterDetailPanel` + `DiffViewer`) and **Task
+This task depends on **Task 3.2** (`ExplorerLayout` + `DiffViewer`) and **Task
 1.6** (`registerPanelComponent`).
 
 ## Files to modify/create
 
 - `sculptor/frontend/src/pages/workspace/panels/FilesPanel.tsx` (+ styles) — new:
-  `MasterDetailPanel` with the file tree as the list + `DiffViewer` as the detail.
+  `ExplorerLayout` with the file tree as the list + `DiffViewer` as the detail.
 - `sculptor/frontend/src/pages/workspace/panels/ChangesPanel.tsx` — new:
   changes browser + scope picker (All/Uncommitted) + discard + commit-from-changes +
   `DiffViewer`.
@@ -55,7 +55,7 @@ This task depends on **Task 3.2** (`MasterDetailPanel` + `DiffViewer`) and **Tas
 
 ## Implementation details
 
-1. **FilesPanel:** embed `MasterDetailPanel` with `FileTree` (flat + tree variants,
+1. **FilesPanel:** embed `ExplorerLayout` with `FileTree` (flat + tree variants,
    from the prototype shape, reusing today's tree data) as the list and `DiffViewer`
    as the detail. Preserve path/tilde display, symlink handling, open-from-chat, and
    the open-diff-mode behavior (migrate from `test_file_browser*`/`test_path_tilde_
@@ -75,7 +75,7 @@ This task depends on **Task 3.2** (`MasterDetailPanel` + `DiffViewer`) and **Tas
 ## Testing suggestions
 
 - All FCC e2e + the migrated content tests land in **Task 3.6** via the shared
-  `DiffViewer`/`MasterDetailPanel` POMs (`test_files_panel.py`,
+  `DiffViewer`/`ExplorerLayout` POMs (`test_files_panel.py`,
   `test_changes_panel.py`, `test_commits_panel.py`, `test_diff_viewer.py`). This task
   just builds the panels so those tests have something to drive.
 
@@ -89,7 +89,7 @@ This task depends on **Task 3.2** (`MasterDetailPanel` + `DiffViewer`) and **Tas
 
 ## Verification checklist
 
-- [ ] `FilesPanel`/`ChangesPanel`/`CommitsPanel` each embed `MasterDetailPanel` +
+- [ ] `FilesPanel`/`ChangesPanel`/`CommitsPanel` each embed `ExplorerLayout` +
   their own `DiffViewer` with the correct list (tree / changes / history).
 - [ ] Changes scope picker, discard, and commit-from-changes preserved; commit graph
   + popover preserved.
