@@ -3,9 +3,7 @@
  */
 import { useCallback } from "react";
 
-import { isModifierPressed } from "~/electron/utils.ts";
-
-import { isMac } from "../electron/utils.ts";
+import { isMac, isModifierPressed } from "~/electron/utils.ts";
 
 export type ShortcutParsed = {
   meta: boolean;

@@ -1,20 +1,24 @@
 import type { ReactElement } from "react";
 
+type HighlightMatchInputs = {
+  text: string;
+  query: string;
+  highlightClassName: string;
+  element?: "span" | "strong";
+};
+
 /**
  * Wrap the first case-insensitive substring match of `query` inside `text`
- * with a highlight span (or the caller-supplied element). Returns the raw
- * text if the query is empty or no match is found.
+ * with a highlight element (defaulting to a `<span>`). Returns the raw text
+ * if the query is empty or no match is found.
  *
  * The three mention-style pickers (file, skill, entity) share this call
  * shape — each supplies its own scss-module `highlight` class so the
  * visual treatment stays scoped to the caller.
  */
-export const highlightMatch = (
-  text: string,
-  query: string,
-  highlightClassName: string,
-  Element: "span" | "strong" = "span",
-): ReactElement | string => {
+export const highlightMatch = (inputs: HighlightMatchInputs): ReactElement | string => {
+  const { text, query, highlightClassName } = inputs;
+  const HighlightElement = inputs.element ?? "span";
   if (query === "") return text;
   const lowerText = text.toLowerCase();
   const lowerQuery = query.toLowerCase();
@@ -26,7 +30,7 @@ export const highlightMatch = (
   return (
     <>
       {before}
-      <Element className={highlightClassName}>{match}</Element>
+      <HighlightElement className={highlightClassName}>{match}</HighlightElement>
       {after}
     </>
   );
