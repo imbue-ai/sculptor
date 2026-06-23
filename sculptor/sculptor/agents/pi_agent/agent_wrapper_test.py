@@ -549,6 +549,37 @@ def test_interrupt_with_no_turn_in_flight_does_not_poison_next_turn() -> None:
     assert successes[0].interrupted is False
 
 
+def test_interrupt_with_no_turn_in_flight_resolves_stuck_request() -> None:
+    """SCU-1560: Stop on an idle-but-RUNNING agent must resolve the orphaned turn.
+
+    When a turn's RequestStarted was emitted but no terminal RequestSuccess ever
+    followed (e.g. the prior process died mid-turn), the task stays RUNNING with
+    no turn actively draining pi's stdout. Pressing Stop must NOT be a silent
+    no-op: it must emit RequestSuccess(interrupted=True) for the in-flight
+    request so the task settles to READY, instead of the status pill bouncing
+    "Stopping" -> "Thinking" with nothing changed.
+
+    Mirrors Claude's interrupt_current_message no-op branch
+    (process_manager.py:_resolve_in_flight_request_as_interrupted).
+    """
+    agent = _make_agent()
+    agent._process = MagicMock()
+    # A turn is in flight from the frontend's point of view (RequestStarted with
+    # no terminal completion) but no turn is actively draining pi's stdout.
+    in_flight_id = AgentMessageID()
+    agent._in_flight_request_id = in_flight_id
+    assert not agent._turn_in_flight.is_set()
+
+    handled = agent._push_message(InterruptProcessUserMessage())
+
+    assert handled is True
+    emitted = _drain(agent._output_messages)
+    # The orphaned chat request is resolved, so derived state moves RUNNING -> READY.
+    resolved = [m for m in emitted if isinstance(m, RequestSuccessAgentMessage) and m.request_id == in_flight_id]
+    assert len(resolved) == 1
+    assert resolved[0].interrupted is True
+
+
 def test_aborted_agent_end_with_interrupt_pending_finalizes_without_crash() -> None:
     """`stopReason:"aborted"` on agent_end is the expected boundary when interrupt-pending — finalize, don't raise."""
     agent = _make_agent()
