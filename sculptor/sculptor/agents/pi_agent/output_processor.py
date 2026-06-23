@@ -21,6 +21,7 @@ Reference: the pi RPC protocol notes (pi 0.78.0).
 
 from __future__ import annotations
 
+import re
 from typing import Annotated
 from typing import Any
 from typing import Literal
@@ -104,6 +105,68 @@ def humanize_pi_failure_reason(reason: str | None) -> str:
     if cleaned:
         return cleaned
     return _GENERIC_FAILURE_MESSAGE
+
+
+# Substrings (matched lowercased) marking a transient provider failure.
+_TRANSIENT_FAILURE_MARKERS = (
+    "overloaded_error",
+    "overloaded",
+    "rate_limit_error",
+    "rate limit",
+    "api_error",
+    "service unavailable",
+    "service_unavailable",
+    "internal server error",
+    "bad gateway",
+    "gateway timeout",
+    "timeout",
+    "timed out",
+)
+# Transient HTTP statuses, including Anthropic's non-standard 529 "Overloaded".
+_TRANSIENT_STATUS_CODES = frozenset({"408", "429", "500", "502", "503", "504", "529"})
+# Match a standalone 3-digit token so a status code is recognized without matching
+# three digits inside a longer number or id.
+_THREE_DIGIT_TOKEN_RE = re.compile(r"\b\d{3}\b")
+
+
+def is_transient_provider_error(error_message: str | None) -> bool:
+    """Whether pi's recorded turn-failure reason is a KNOWN-TRANSIENT provider condition.
+
+    Transient classes — Anthropic `overloaded_error` (~HTTP 529), `rate_limit_error`
+    (~429), 5xx `api_error`, and request timeouts — are worth retrying because the
+    provider usually recovers on its own. Recognized by the error-type / message
+    markers pi forwards from the provider, or an embedded transient HTTP status
+    code. A reason that matches nothing here — a provider-auth failure, an unknown
+    model, a validation error, or an empty reason — is treated as terminal, NOT
+    transient.
+    """
+    text = (error_message or "").lower()
+    if not text.strip():
+        return False
+    if any(marker in text for marker in _TRANSIENT_FAILURE_MARKERS):
+        return True
+    return any(token in _TRANSIENT_STATUS_CODES for token in _THREE_DIGIT_TOKEN_RE.findall(text))
+
+
+_TRANSIENT_FAILURE_MESSAGE = (
+    "The model provider is temporarily unavailable (overloaded, rate-limited, or timing out). "
+    + "Sculptor retried automatically — please try again in a moment."
+)
+
+
+def humanize_transient_failure_reason(reason: str | None) -> str:
+    """A friendly, retryable message for a known-transient provider failure.
+
+    Leads with actionable guidance and preserves pi's raw reason on a `Details:`
+    line (mirroring `humanize_pi_failure_reason`) so diagnosis isn't lost. Used
+    when a transient provider error (`is_transient_provider_error`) is surfaced to
+    the user after retries are exhausted, so they see guidance rather than a raw
+    provider JSON blob.
+    """
+    cleaned = (reason or "").strip()
+    if cleaned:
+        return f"{_TRANSIENT_FAILURE_MESSAGE}\n\nDetails: {cleaned}"
+    return _TRANSIENT_FAILURE_MESSAGE
 
 
 def extract_tool_call_blocks(message: AgentMessage) -> list[dict[str, Any]]:
