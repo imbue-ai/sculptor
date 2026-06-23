@@ -23,8 +23,8 @@ def wait_for_tiptap_ready(page: Page, *, timeout_ms: int = 10_000) -> None:
     giving it a head start before ``type_into_tiptap`` runs.
 
     This is non-fatal: if the editor isn't ready within ``timeout_ms``, we log
-    and return.  The ``type_into_tiptap`` function has its own 5 s retry loop
-    as a fallback.
+    and return.  ``type_into_tiptap`` re-resolves the chat input and retries on
+    its own (up to ``_TIPTAP_EDITOR_FIND_TIMEOUT_MS``) as a fallback.
     """
     chat_input = page.get_by_test_id(ElementIDs.CHAT_INPUT)
     if chat_input.count() == 0:
