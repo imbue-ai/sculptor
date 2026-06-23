@@ -236,8 +236,3 @@ def get_provider_catalog() -> tuple[ProviderCatalogEntry, ...]:
 def get_provider_entry(provider_id: str) -> ProviderCatalogEntry | None:
     """Return the catalog entry for ``provider_id``, or ``None`` if unknown."""
     return _PROVIDER_CATALOG_BY_ID.get(provider_id)
-
-
-def iter_single_key_env_var_names() -> set[str]:
-    """Return the union of every catalog entry's env var names (for env detection)."""
-    return {env_var_name for entry in _PROVIDER_CATALOG for env_var_name in entry.env_var_names}

@@ -7,7 +7,6 @@ from __future__ import annotations
 from sculptor.agents.pi_agent.provider_catalog import ProviderGroup
 from sculptor.agents.pi_agent.provider_catalog import get_provider_catalog
 from sculptor.agents.pi_agent.provider_catalog import get_provider_entry
-from sculptor.agents.pi_agent.provider_catalog import iter_single_key_env_var_names
 
 
 def test_single_key_providers_present_with_expected_env_vars() -> None:
@@ -47,11 +46,3 @@ def test_get_provider_entry_lookup() -> None:
 def test_provider_ids_are_unique() -> None:
     provider_ids = [entry.provider_id for entry in get_provider_catalog()]
     assert len(provider_ids) == len(set(provider_ids))
-
-
-def test_iter_single_key_env_var_names_is_union() -> None:
-    env_var_names = iter_single_key_env_var_names()
-    assert "ANTHROPIC_API_KEY" in env_var_names
-    assert "GEMINI_API_KEY" in env_var_names
-    # opencode and opencode-go both contribute the same env var; the set dedupes it.
-    assert "OPENCODE_API_KEY" in env_var_names
