@@ -12,6 +12,7 @@ const issue = (identifier: string): LinearIssue => ({
   state: null,
   assignee: null,
   attachments: [],
+  children: [],
 });
 
 describe("mergeTickets", () => {

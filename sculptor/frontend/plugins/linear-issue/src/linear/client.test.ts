@@ -1,8 +1,40 @@
 import { describe, expect, it } from "vitest";
 
-import { isPullRequestAttachment, type LinearAttachment, prLabel } from "./client.ts";
+import { isPullRequestAttachment, type LinearAttachment, normalizeIssue, prLabel } from "./client.ts";
 
 const attachment = (url: string): LinearAttachment => ({ url, sourceType: "github", title: null });
+
+// A raw issue as Linear returns it, with connections still wrapped in `{ nodes }`.
+// Typed loosely so a test can omit a connection to exercise the absent-field path.
+const rawIssue = (overrides: Record<string, unknown> = {}): Parameters<typeof normalizeIssue>[0] =>
+  ({
+    identifier: "SCU-1",
+    title: "Parent",
+    url: "https://linear.app/x/issue/SCU-1",
+    description: null,
+    priorityLabel: null,
+    state: null,
+    assignee: null,
+    attachments: { nodes: [] },
+    children: { nodes: [] },
+    ...overrides,
+  }) as Parameters<typeof normalizeIssue>[0];
+
+describe("normalizeIssue", () => {
+  it("flattens sub-issues out of the children connection", () => {
+    const child = {
+      identifier: "SCU-2",
+      title: "Child",
+      url: "https://linear.app/x/issue/SCU-2",
+      state: { name: "Todo", type: "unstarted", color: "#fff" },
+    };
+    expect(normalizeIssue(rawIssue({ children: { nodes: [child] } })).children).toEqual([child]);
+  });
+
+  it("defaults children to [] when the connection is absent", () => {
+    expect(normalizeIssue(rawIssue({ children: undefined })).children).toEqual([]);
+  });
+});
 
 describe("isPullRequestAttachment", () => {
   it("matches GitHub pull and GitLab merge-request URLs", () => {
