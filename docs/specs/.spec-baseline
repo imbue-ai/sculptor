@@ -1,0 +1,5 @@
+e2300a81c86143c8437b3d332e059d17b5b44ec3
+# Commit the docs/specs/ set was last reconciled against.
+# Line 1 (the SHA) is read by the /update-specs skill; everything else is a comment.
+# Baseline: "docs: add product specification set under docs/specs/" (2026-06-18).
+# Update this on each /update-specs run via: git rev-parse origin/main > docs/specs/.spec-baseline
