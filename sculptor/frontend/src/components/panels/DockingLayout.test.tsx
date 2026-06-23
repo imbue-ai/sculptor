@@ -75,7 +75,7 @@ const createDefaultTestStore = (): ReturnType<typeof createStore> =>
 
 /** Local helper that always passes TEST_PANELS through PanelRegistryProvider. */
 const renderTest = (ui: ReactNode, store: ReturnType<typeof createStore>): ReturnType<typeof renderWithProviders> =>
-  renderWithProviders(ui, store, TEST_PANELS);
+  renderWithProviders(ui, { store, panels: TEST_PANELS });
 
 /** Move keyboard focus into a zone's content container so the focus-then-toggle
  *  dispatch sees the panel as already focused on the next shortcut press. */
