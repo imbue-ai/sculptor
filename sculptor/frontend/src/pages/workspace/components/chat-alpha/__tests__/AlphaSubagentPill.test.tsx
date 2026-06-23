@@ -22,6 +22,8 @@ vi.mock("../AlphaSubagentPopover.tsx", () => ({
 
 const TOOL_USE_ID = "toolu_test_001";
 
+const EMPTY_CHILD_NODES: Array<SubagentTreeNode> = [];
+
 const makeParentBlock = (): ToolUseBlock => ({
   id: TOOL_USE_ID,
   name: "Agent",
@@ -67,7 +69,7 @@ const renderPill = ({
   return render(
     <AlphaSubagentPill
       parentBlock={makeParentBlock()}
-      childNodes={[] as Array<SubagentTreeNode>}
+      childNodes={EMPTY_CHILD_NODES}
       toolResultMap={toolResultMap}
       subagentMetadataMap={subagentMetadataMap}
     />,
@@ -191,7 +193,7 @@ describe("AlphaSubagentPill", () => {
       return render(
         <AlphaSubagentPill
           parentBlock={makeParentBlock()}
-          childNodes={[] as Array<SubagentTreeNode>}
+          childNodes={EMPTY_CHILD_NODES}
           toolResultMap={toolResultMap}
           subagentMetadataMap={subagentMetadataMap}
           rowIndex={rowIndex}
@@ -272,7 +274,7 @@ describe("AlphaSubagentPill", () => {
         <Theme>
           <AlphaSubagentPill
             parentBlock={makeParentBlock()}
-            childNodes={[] as Array<SubagentTreeNode>}
+            childNodes={EMPTY_CHILD_NODES}
             toolResultMap={new Map<string, ToolResultBlock>()}
             subagentMetadataMap={makeMetadataMap()}
           />
