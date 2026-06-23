@@ -6,6 +6,7 @@ import pytest
 
 from sculptor.agents.pi_agent.output_processor import AgentMessage
 from sculptor.agents.pi_agent.output_processor import humanize_pi_failure_reason
+from sculptor.agents.pi_agent.output_processor import humanize_transient_failure_reason
 from sculptor.agents.pi_agent.output_processor import is_transient_provider_error
 
 
@@ -79,3 +80,18 @@ def test_transient_provider_errors_are_recognized(error_message: str) -> None:
 def test_terminal_errors_are_not_classified_transient(error_message: str | None) -> None:
     """Auth / unknown-model / validation / empty reasons are terminal, not retryable."""
     assert not is_transient_provider_error(error_message)
+
+
+def test_humanize_transient_failure_leads_with_retry_guidance_and_keeps_detail() -> None:
+    raw = '{"type": "overloaded_error", "message": "Overloaded"}'
+    out = humanize_transient_failure_reason(raw)
+    assert "try again" in out.lower()
+    # The raw provider reason is preserved as detail so debugging isn't lost.
+    assert raw in out
+
+
+def test_humanize_transient_failure_empty_reason_is_clean() -> None:
+    out = humanize_transient_failure_reason("")
+    assert out
+    assert "try again" in out.lower()
+    assert humanize_transient_failure_reason(None) == out

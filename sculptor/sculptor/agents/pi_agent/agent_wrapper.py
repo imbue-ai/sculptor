@@ -96,6 +96,7 @@ from sculptor.agents.pi_agent.output_processor import ParsedUnknownEvent
 from sculptor.agents.pi_agent.output_processor import RpcResponse
 from sculptor.agents.pi_agent.output_processor import extract_assistant_text
 from sculptor.agents.pi_agent.output_processor import humanize_pi_failure_reason
+from sculptor.agents.pi_agent.output_processor import humanize_transient_failure_reason
 from sculptor.agents.pi_agent.output_processor import is_transient_provider_error
 from sculptor.agents.pi_agent.output_processor import parse_rpc_message
 from sculptor.agents.pi_agent.prompt_assembly import build_attachment_instructions
@@ -1856,10 +1857,11 @@ class PiAgent(DefaultAgentWrapper):
         it with backoff; any other error raises the terminal `PiCrashError`. A
         failed turn carries no text and no in-stream error event, so pi's real
         reason lives only on `error_message`; it is lifted (after any assistant
-        text / partial) into a clean, actionable message.
+        text / partial) into a clean, actionable message — the transient case gets
+        retry-oriented guidance so an exhausted-retry failure isn't a raw JSON blob.
         """
         if is_transient_provider_error(message.error_message):
-            raise _PiTransientTurnError(humanize_pi_failure_reason(message.error_message))
+            raise _PiTransientTurnError(humanize_transient_failure_reason(message.error_message))
         reason = extract_assistant_text(message) or message.error_message or state.accumulated_text
         raise PiCrashError(humanize_pi_failure_reason(reason), exit_code=None, metadata=None)
 

@@ -153,6 +153,27 @@ def is_transient_provider_error(error_message: str | None) -> bool:
     return any(token in _TRANSIENT_STATUS_CODES for token in _THREE_DIGIT_TOKEN_RE.findall(text))
 
 
+_TRANSIENT_FAILURE_MESSAGE = (
+    "The model provider is temporarily unavailable (overloaded, rate-limited, or timing out). "
+    + "Sculptor retried automatically — please try again in a moment."
+)
+
+
+def humanize_transient_failure_reason(reason: str | None) -> str:
+    """A friendly, retryable message for a known-transient provider failure.
+
+    Leads with actionable guidance and preserves pi's raw reason on a `Details:`
+    line (mirroring `humanize_pi_failure_reason`) so diagnosis isn't lost. Used
+    when a transient provider error (`is_transient_provider_error`) is surfaced to
+    the user after retries are exhausted, so they see guidance rather than a raw
+    provider JSON blob.
+    """
+    cleaned = (reason or "").strip()
+    if cleaned:
+        return f"{_TRANSIENT_FAILURE_MESSAGE}\n\nDetails: {cleaned}"
+    return _TRANSIENT_FAILURE_MESSAGE
+
+
 def extract_tool_call_blocks(message: AgentMessage) -> list[dict[str, Any]]:
     """Return the `{type:"toolCall",...}` content blocks on a message.
 
