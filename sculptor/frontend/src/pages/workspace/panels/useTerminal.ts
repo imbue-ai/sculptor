@@ -318,6 +318,12 @@ type UseTerminalArgs = {
    * customGlyphs rendering stretches box-drawing characters to the full
    * cell, so TUI borders stay seamless at line heights above 1. */
   lineHeight?: number;
+  /** When true, focus the terminal as soon as it is visible and ready —
+   * including the initial mount. Terminal *agents* set this: their pane is
+   * remounted on every tab switch and the terminal is the agent's only input
+   * surface, so it must take keyboard focus immediately. Workspace terminals
+   * leave it false so they don't steal focus from the chat input on load. */
+  focusOnVisible?: boolean;
 };
 
 type UseTerminalResult = {
@@ -330,6 +336,7 @@ export const useTerminal = ({
   onOutput,
   fontSize = 12,
   lineHeight = 1,
+  focusOnVisible = false,
 }: UseTerminalArgs): UseTerminalResult => {
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
@@ -678,6 +685,25 @@ export const useTerminal = ({
     };
   }, [isVisible, handleResize]);
 
+  // Focus the terminal as soon as it is visible and ready — including the
+  // initial mount — when the caller opts in via `focusOnVisible`. Terminal
+  // agents do: switching to a terminal agent's tab remounts this hook (the
+  // pane is keyed by agent id), so the `hasBeenVisibleRef` guard above always
+  // sees its first visible frame and never grants focus, leaving the user
+  // unable to type without first clicking into the pane (SCU-1578). The
+  // terminal is the agent's only input surface, so there is no chat input to
+  // steal focus from. Gating on `isXtermReady` avoids racing the async xterm
+  // creation (which defers until the container has dimensions).
+  useEffect(() => {
+    if (!focusOnVisible || !isVisible || !isXtermReady) return;
+    const handle = requestAnimationFrame(() => {
+      xtermRef.current?.focus();
+    });
+    return (): void => cancelAnimationFrame(handle);
+  }, [focusOnVisible, isVisible, isXtermReady]);
+
+  // ── Clear-terminal keybinding (focus-gated) ────────────────────────
+  //
   // Mirrors the `interrupt_agent` pattern in ChatInput.tsx — we read the
   // resolved binding from the keybindings registry and attach a window-level
   // keydown listener that only fires when this terminal instance has
