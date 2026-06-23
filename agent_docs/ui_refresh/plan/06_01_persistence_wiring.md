@@ -65,7 +65,7 @@ extension point), 1.4 (`removeWorkspaceLayoutAtom`), 1.6 (registry)**, and the p
    the active agent + the first-visit terminal seed.)
 2. `switchActiveWorkspaceAtom`: when the family entry is empty for `workspaceId`, seed
    the default and write it; otherwise leave the restored snapshot untouched.
-3. Confirm the **global** snapshot (sizes/sidebar/master-detail width) hydrates from
+3. Confirm the **global** snapshot (sizes/sidebar/explorer list width) hydrates from
    `adapter.read({kind:"global"})` and persists on change (PERSIST-02).
 4. Wire workspace delete → `removeWorkspaceLayoutAtom` → `adapter.remove`.
 5. Confirm the debounced flush + `beforeunload` flush actually persist (PERSIST-03);
@@ -86,7 +86,7 @@ extension point), 1.4 (`removeWorkspaceLayoutAtom`), 1.6 (registry)**, and the p
 - The default's dynamic ids (agent/terminal) must resolve to the workspace's actual
   active agent + a seeded terminal (Task 6.2 handles placement/seed timing) — don't
   hardcode ids.
-- Global sizes/sidebar/master-detail width are **global** — one snapshot shared across
+- Global sizes/sidebar/explorer list width are **global** — one snapshot shared across
   workspaces (PERSIST-02).
 - No migration — ignore legacy keys; stop writing them.
 

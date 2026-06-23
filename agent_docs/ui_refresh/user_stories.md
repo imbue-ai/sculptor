@@ -132,7 +132,7 @@ The old single file-browser panel split into three independent panels, each with
 - **FCC-01** `[e2e]` Files, Changes, and Commits are three separate panels (previously one file-browser panel plus a diff pseudo-panel).
 - **FCC-02** `[e2e]` Each panel renders its own diff/file viewer.
 - **FCC-03** `[e2e]` Each panel has a sidebar: the file browser, the changes file browser, or the commit history list, respectively.
-- **FCC-04** `[e2e]` The panel sidebar (the master-detail list) is resizable with a minimum size; its width is shared across all three panels and is global across workspaces.
+- **FCC-04** `[e2e]` The panel sidebar (the explorer list) is resizable with a minimum size; its width is shared across all three panels and is global across workspaces.
 - **FCC-05** `[e2e]` The sidebar visibility can be toggled via an icon in the file-viewer header.
 - **FCC-06** `[e2e]` The file viewer is always visible and shows an empty state when no file is selected.
 - **FCC-07** `[e2e]` All previous icons/options for configuring these panels are moved into the triple-dot menu in the file-viewer header.
@@ -170,7 +170,7 @@ What a user with no workspaces sees.
 Client-side (local storage); no backend persistence. No migration of pre-branch layouts.
 
 - **PERSIST-01** `[e2e]` The full per-workspace arrangement is stored per workspace and is independent between workspaces: section visibility (collapsed/expanded), panel placement, tab order, the active panel per sub-section, split state, and the active section/sub-section.
-- **PERSIST-02** `[perf]` The global layout is stored globally and shared across all workspaces: section sizes, sidebar width, sidebar collapsed state, and the shared master-detail list width (cross-references SEC-18, FCC-04).
+- **PERSIST-02** `[perf]` The global layout is stored globally and shared across all workspaces: section sizes, sidebar width, sidebar collapsed state, and the shared explorer list width (cross-references SEC-18, FCC-04).
 - **PERSIST-03** `[e2e]` A layout arranged on this branch persists across app restarts (same arrangement after restart).
 - **PERSIST-04** `[e2e]` Round-trip stability: with the right section expanded and a terminal panel added, navigating to Home and back to the workspace leaves the agent panel intact — no panel/agent disappears.
 - **PERSIST-05** `[e2e]` Opening a section or switching the active panel in one workspace does not affect another workspace.

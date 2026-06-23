@@ -48,7 +48,7 @@ pages/
       AgentPanel.tsx · TerminalPanel.tsx
       FilesPanel.tsx · ChangesPanel.tsx · CommitsPanel.tsx · ReviewAllPanel.tsx
       ActionsPanel.tsx · SkillsPanel.tsx · BrowserPanel.tsx · NotesPanel.tsx
-      MasterDetailPanel.tsx         shared file-list + diff viewer scaffold
+      ExplorerLayout.tsx            ← prototype MasterDetailPanel; shared file-list + diff viewer scaffold
 common/
   hooks/useLayoutMode.ts            useIsMobile / useLayoutMode (from bryden/mobile-frontend)
   state/hooks/usePerWorkspacePanelLayout.ts   keeps active scope in sync with the route

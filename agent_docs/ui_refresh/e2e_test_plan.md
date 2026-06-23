@@ -80,13 +80,13 @@ behavior must be controlled or the default response suffices.
 | `test_seamless_switch.py` | SWITCH-03, SWITCH-04 | controlled | The e2e-observable parts of switching: no spinner (skeleton/stale-then-update), last-view preserved. The `[perf]` bars (SWITCH-01/02/05) are verified via tooling, not here. |
 
 **Files / Changes / Commits — separate files + shared helpers.** The three panels
-embed the *same* master-detail shape (a list sidebar + a diff/file viewer), so the
+embed the *same* explorer shape (a list sidebar + a diff/file viewer), so the
 four files above must **not** duplicate selectors. They share, from
 `sculptor/sculptor/testing/elements/` (see `harness_migration.md` §1):
 - a **`DiffViewer`** POM (refactor of today's `diff_panel.py`, now embeddable per
   panel) — tabs, scopes, line numbers, and the toggles relocated into the
   triple-dot menu;
-- a **`MasterDetailPanel`** POM — resizable list, shared-width sidebar, sidebar
+- an **`ExplorerLayout`** POM — resizable list, shared-width sidebar, sidebar
   toggle, empty state;
 - helper functions for the common flows (`open_file_in_panel`,
   `toggle_view_option_via_menu`, `assert_diff_shows`).
@@ -202,7 +202,7 @@ with its own embedded viewer. The diff/content assertions in these files are
 **unchanged**, but rather than editing each file in place we **migrate** their
 assertions into the four §1 files (`test_files_panel.py`, `test_changes_panel.py`,
 `test_commits_panel.py`, `test_diff_viewer.py`) via the shared `DiffViewer` /
-`MasterDetailPanel` POMs, then remove the source files. The migration sources:
+`ExplorerLayout` POMs, then remove the source files. The migration sources:
 `test_file_browser.py`, `test_file_browser_tabs.py`,
 `test_file_browser_uncommitted.py`, `test_file_browser_symlink_replaces_directory.py`,
 `test_file_open_diff_modes.py`, `test_history_panel.py`, `test_history_panel_diffs.py`,

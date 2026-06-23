@@ -56,7 +56,7 @@ Requirements are traced by **story ID** (e.g. `SEC-13`), not `REQ-*`.
 ## Prototype branches (verified present, local + origin)
 
 - `bryden/scu-1474-compact-workspace-layout` — layout redesign (sidebar, sections,
-  panels, DnD, master-detail, diff viewer, history). Source of shape/styling.
+  panels, DnD, explorer, diff viewer, history). Source of shape/styling.
 - `bryden/scu-1494-rewrite-new-workspace-modal` — the new-workspace modal.
 - `bryden/mobile-frontend` — mobile shell (OUT OF SCOPE here; constraint only).
 
@@ -94,7 +94,7 @@ New code uses `goals.md` vocabulary; do not carry prototype names forward.
   `selectAtom` + custom equality; per-`SubSectionId`/`SectionId` slice atoms
   memoized into a module-load `Map` (a new atom per render causes re-render loops).
 - Three scope buckets: **Global** (section sizes, sidebar width/collapsed,
-  master-detail list width — persisted, shared), **Per-workspace** (expanded set,
+  explorer list width — persisted, shared), **Per-workspace** (expanded set,
   placement, order, active panel, splits, active sub-section — persisted, isolated),
   **Transient** (maximized, drag preview, ring — never persisted).
 - Flat keyspace: `SectionId = left|center|right|bottom`;
@@ -135,8 +135,8 @@ New code uses `goals.md` vocabulary; do not carry prototype names forward.
   from task/terminal data atoms for the active workspace; **component identities
   cached by id** (no remount on registry rebuild). Multi-instance panels are
   renamable; single-instance are not.
-- Files/Changes/Commits share a global master-detail list width
-  (`GlobalLayoutState.masterDetailListWidthPx`).
+- Files/Changes/Commits share a global explorer list width
+  (`GlobalLayoutState.explorerListWidthPx`).
 
 ## Component tree essentials (`component_hierarchy.md` + `supplemental/component_tree.md`)
 
@@ -155,7 +155,7 @@ Intended final layout under `sculptor/frontend/src`:
   `WorkspaceLayoutShell.tsx`, `WorkspaceHeader.tsx` (← `WorkspaceBanner`),
   `panels/` (AgentPanel, TerminalPanel, FilesPanel, ChangesPanel, CommitsPanel,
   ReviewAllPanel, ActionsPanel, SkillsPanel, BrowserPanel, NotesPanel,
-  MasterDetailPanel).
+  ExplorerLayout).
 - `common/hooks/useLayoutMode.ts`;
   `common/state/hooks/usePerWorkspacePanelLayout.ts`.
 
@@ -181,7 +181,7 @@ slice. Full subscription list in `supplemental/component_tree.md`.
 - **New POMs:** `workspace_sidebar.py`, `workspace_section.py` (+ `PanelTab`),
   `section_split.py`, `add_panel_dropdown.py` (shared), `panel_empty_state.py`,
   `new_workspace_dialog.py`, `empty_first_run.py`, plus refactored
-  `diff_viewer.py` + `master_detail_panel.py` + `files_panel.py`/`changes_panel.py`
+  `diff_viewer.py` + `explorer_layout.py` + `files_panel.py`/`changes_panel.py`
   /`commits_panel.py`.
 - **Delete POMs:** `panel_zones.py`, `zen_mode.py`, `btw_popup.py`,
   `settings_panels.py`, `pages/add_workspace_page.py`.

@@ -40,8 +40,8 @@ Paths below are relative to `sculptor/frontend/src` on the prototype branches (`
 - Agent-type picker: the `ChooseAgentPage` rows in `AddPanelPalette.tsx`.
 
 ## Files / Changes / Commits & diff viewer (scu-1474)
-- `pages/workspace/panels/MasterDetailPanel.(tsx|module.scss)` — resizable master-detail (200px min list, 280px min detail) + the empty `EmptyDetail`.
-- `pages/workspace/panels/MasterDetailTreeHeader.(tsx|module.scss)` — 41px header with search box + tree-options menu.
+- `pages/workspace/panels/MasterDetailPanel.(tsx|module.scss)` (→ `ExplorerLayout` in the rewrite) — resizable explorer (200px min list, 280px min detail) + the empty `EmptyDetail`.
+- `pages/workspace/panels/MasterDetailTreeHeader.(tsx|module.scss)` (→ `ExplorerTreeHeader` in the rewrite) — 41px header with search box + tree-options menu.
 - `pages/workspace/panels/fileBrowser/FileTree.(tsx|module.scss)`, `TreeRow.tsx` — 28px pill rows (hover `--gray-a3`, active `--accent-a3`, deleted line-through, green/red mono line stats), flat + tree variants.
 - `pages/workspace/components/diffPanel/DiffPanel.(tsx|module.scss)`, `DiffFileHeader.(tsx|module.scss)`, `DiffSkeleton.(tsx|module.scss)`, `InFileSearchBar.(tsx|module.scss)`, `DiffScopePicker.(tsx|module.scss)` — diff viewer, breadcrumb header, the static (no-shimmer) skeleton, search bar, scope toggle. The **three-dot menu** is assembled from `DiffViewMenuItems` (split/unified, wrap, find, markdown) + the tree options (flat/tree, collapse) — this is where the relocated icons now live.
 - `pages/workspace/panels/historyPanel/HistoryTabContent.(tsx|module.scss)`, `CommitEntry.tsx` — commit graph (dots: gray / green = HEAD / amber-ring = uncommitted) + rows + popover; `ChangesTabContent.module.scss` commit footer.

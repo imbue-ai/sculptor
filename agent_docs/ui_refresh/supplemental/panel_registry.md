@@ -33,7 +33,7 @@ From `goals.md` → "Files, Changes and Commits" / "Review all" / "Panels":
 
 | id | Display | Default | Notes |
 |---|---|---|---|
-| `files` | Files | left | master-detail: file tree + diff viewer |
+| `files` | Files | left | explorer: file tree + diff viewer |
 | `changes` | Changes | left | uncommitted/branch changes + diff viewer |
 | `commits` | Commits | left | commit history + diff viewer |
 | `review-all` | Review All | (none) | not open by default; combined multi-file diff |
@@ -43,9 +43,9 @@ From `goals.md` → "Files, Changes and Commits" / "Review all" / "Panels":
 | `notes` | Notes | right | |
 
 Files/Changes/Commits are now **separate panels**, each with its own
-master-detail (a file-list/changes/commit-history sidebar + its own diff/file
+explorer (a file-list/changes/commit-history sidebar + its own diff/file
 viewer). The file-list sidebar width is **shared** across the three (global —
-`persistence_interface.md` → `GlobalLayoutState.masterDetailListWidthPx`). Each is
+`persistence_interface.md` → `GlobalLayoutState.explorerListWidthPx`). Each is
 single-instance.
 
 ## Dynamic panels (multi-instance)
@@ -55,7 +55,9 @@ Agents and terminals are the **only** multi-instance panels (`goals.md` →
 then merged into the registry for the *active* workspace:
 
 - **Agent panel** — id `agent:<taskId>`, kind `"agent"`, default section `center`.
-  Wraps the existing chat interface. A workspace may have zero, one, or many
+  Wraps the existing chat interface — renders `<ChatPanelContent taskId={taskId}/>`
+  (the chat takes an explicit `taskId` prop, decoupled from the route). A workspace
+  may have zero, one, or many
   agents (`goals.md` → "Agent Panel"; the zero-agent case is the empty center
   section). Closing an agent panel deletes the agent → shows the existing delete
   confirmation.

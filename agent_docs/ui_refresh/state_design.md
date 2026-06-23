@@ -139,7 +139,7 @@ height, expressed as percentages of the workspace content area; the center fills
 the remainder. At render time these resolve to pixels with the floors from
 `goals.md` / `design_extraction.md` (center keeps a minimum width; sides have a
 floor; sides give way before the center shrinks). The sidebar width and the
-shared file-tree (master-detail) width are likewise global. See
+shared file-tree (explorer) width are likewise global. See
 `design_extraction.md` for the concrete pixel floors and `supplemental/persistence_interface.md`
 for the stored shape.
 

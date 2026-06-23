@@ -1,12 +1,12 @@
-# Task 3.2: Shared MasterDetailPanel + embeddable DiffViewer (triple-dot menu)
+# Task 3.2: Shared ExplorerLayout + embeddable DiffViewer (triple-dot menu)
 
 ## Goal
 
 Build the two shared building blocks the Files/Changes/Commits panels embed: a
-resizable `MasterDetailPanel` (list sidebar + viewer + empty state, with a
+resizable `ExplorerLayout` (list sidebar + viewer + empty state, with a
 globally-shared list width) and an embeddable `DiffViewer` whose configuration
 options now live under a triple-dot menu. Building these once avoids triplicating
-the master-detail shape across three panels.
+the explorer shape across three panels.
 
 ## Stories addressed
 
@@ -27,9 +27,9 @@ sidebar (file tree / changes browser / commit history). The list-sidebar width i
 
 **What to copy** (`design_extraction.md` → "Files / Changes / Commits & diff
 viewer"):
-- `pages/workspace/panels/MasterDetailPanel.(tsx|module.scss)` — resizable
-  master-detail (200px min list, 280px min detail) + the empty `EmptyDetail`.
-- `pages/workspace/panels/MasterDetailTreeHeader.(tsx|module.scss)` — 41px header
+- `pages/workspace/panels/MasterDetailPanel.(tsx|module.scss)` (→ `ExplorerLayout`) — resizable
+  explorer (200px min list, 280px min detail) + the empty `EmptyDetail`.
+- `pages/workspace/panels/MasterDetailTreeHeader.(tsx|module.scss)` (→ `ExplorerTreeHeader`) — 41px header
   with search box + tree-options menu.
 - `pages/workspace/components/diffPanel/` set: `DiffPanel.(tsx|module.scss)`,
   `DiffFileHeader.(tsx|module.scss)`, `DiffSkeleton.(tsx|module.scss)` (static, no
@@ -38,9 +38,9 @@ viewer"):
   find, markdown) + the tree options (flat/tree, collapse) — this is where the
   relocated icons live (FCC-07).
 
-**State:** the shared list width is `masterDetailListWidthAtom`
+**State:** the shared list width is `explorerListWidthAtom`
 (`supplemental/state_atoms.md` / `persistence_interface.md` →
-`GlobalLayoutState.masterDetailListWidthPx`) — a writable **global** slice (Task
+`GlobalLayoutState.explorerListWidthPx`) — a writable **global** slice (Task
 1.3). Sidebar-visibility toggle can be a per-panel UI atom or global pref
 (`design_extraction.md` lists diff view-mode/tree-flat as candidate global prefs).
 
@@ -53,13 +53,13 @@ the triple-dot menu. The per-diff **expand/fullscreen toggle is deprecated** —
 **not** carry it forward (`get_expand_toggle`/`DIFF_EXPAND_TOGGLE`/`expandedPanelIdAtom`
 are deleted; users maximize the section instead).
 
-This task depends on **Task 1.3** (`masterDetailListWidthAtom`) and **Task 2.1**
+This task depends on **Task 1.3** (`explorerListWidthAtom`) and **Task 2.1**
 (tokens). The three panels that embed these are **Task 3.3**; the POMs + tests are
 **Task 3.6**.
 
 ## Files to modify/create
 
-- `sculptor/frontend/src/pages/workspace/panels/MasterDetailPanel.tsx` +
+- `sculptor/frontend/src/pages/workspace/panels/ExplorerLayout.tsx` +
   `.module.scss` — new (shared scaffold: list + viewer + empty + resizable shared
   width + sidebar toggle).
 - `sculptor/frontend/src/pages/workspace/components/diffViewer/` — new embeddable
@@ -70,8 +70,8 @@ This task depends on **Task 1.3** (`masterDetailListWidthAtom`) and **Task 2.1**
 
 ## Implementation details
 
-1. `MasterDetailPanel`: a generic scaffold taking a `list` slot and a `detail`
-   (viewer) slot. Resizable splitter writing `masterDetailListWidthAtom` (shared
+1. `ExplorerLayout`: a generic scaffold taking a `list` slot and a `detail`
+   (viewer) slot. Resizable splitter writing `explorerListWidthAtom` (shared
    global), min list 200px / min detail 280px; a sidebar-visibility toggle rendered
    in the **viewer header** (FCC-05); the viewer is always visible and shows the
    `EmptyDetail` empty state when nothing is selected (FCC-06).
@@ -89,10 +89,10 @@ This task depends on **Task 1.3** (`masterDetailListWidthAtom`) and **Task 2.1**
 
 ## Testing suggestions
 
-- The shared viewer is exercised once in `test_diff_viewer.py` and the master-detail
+- The shared viewer is exercised once in `test_diff_viewer.py` and the explorer
   shape in the three panel tests — all in **Task 3.6**, which migrates the proven
   assertions from today's `test_file_browser*`/`test_history_panel*`/`test_diff_*`/
-  `test_markdown_*` via the shared `DiffViewer`/`MasterDetailPanel` POMs.
+  `test_markdown_*` via the shared `DiffViewer`/`ExplorerLayout` POMs.
 - Visual aspects (skeleton, empty state) are screenshot-verified, not asserted.
 
 ## Gotchas
@@ -107,7 +107,7 @@ This task depends on **Task 1.3** (`masterDetailListWidthAtom`) and **Task 2.1**
 
 ## Verification checklist
 
-- [ ] `MasterDetailPanel`: resizable list (min 200px) + always-visible viewer (min
+- [ ] `ExplorerLayout`: resizable list (min 200px) + always-visible viewer (min
   280px) + empty state + sidebar toggle in the viewer header; width is the global
   shared atom.
 - [ ] `DiffViewer` embeddable; config options under the triple-dot menu (FCC-07).

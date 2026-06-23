@@ -108,7 +108,8 @@ foundation (tokens, scrollbar mixin, Radix overrides), then build the
 `WorkspaceSidebar` (with the net-new resize handle, version row, and report-a-bug
 entry), the `SectionGrid` + `ResizeHandle` geometry, and the uniform
 `SplittableSection` / `PanelSection` / `SectionHeader` / `SectionBody` with their
-memoization boundaries. Wrap the existing chat surface as the `AgentPanel`, then
+memoization boundaries. Wrap the existing chat surface as the `AgentPanel` (giving
+`ChatPanelContent` an explicit `taskId` prop so it no longer reads the route), then
 **cut the workspace route over** to the new `WorkspaceLayoutShell` +
 `WorkspaceHeader` with a minimal default layout (center agent visible; other
 sections present but empty for now). This phase also rewrites the harness spine
@@ -118,7 +119,7 @@ content-only tests survives the cutover — and adds the first sidebar/section
 ElementIDs and POMs.
 
 **Phase 3 — The rest of the panels.** Wrap the terminal as `TerminalPanel`; build
-the shared `MasterDetailPanel` + embeddable `DiffViewer` (with the configuration
+the shared `ExplorerLayout` + embeddable `DiffViewer` (with the configuration
 icons relocated into the triple-dot menu) and the three independent
 Files/Changes/Commits panels on top of it; build the remaining registered panels
 (Review-all, Actions, Skills, Browser, Notes) with no enable/disable machinery;
@@ -197,7 +198,7 @@ styling/shape only**, and rename to `goals.md` vocabulary:
   CSS) but rebuilding the brittle ring timing.
 - **Workspace header:** `WorkspaceBanner` — re-homing the PR button and diff
   summary.
-- **Panels & viewer:** `MasterDetailPanel`, `MasterDetailTreeHeader`, the
+- **Panels & viewer:** `MasterDetailPanel`/`MasterDetailTreeHeader` (→ `ExplorerLayout`/`ExplorerTreeHeader`), the
   `fileBrowser` tree, the `diffPanel` set (assembling the triple-dot menu from
   `DiffViewMenuItems` + tree options), and the `historyPanel` commit graph; the
   `AgentPanel`/`TerminalPanel` wrappers around the existing chat/xterm surfaces;

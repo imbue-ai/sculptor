@@ -60,7 +60,7 @@ methods. Panel POMs target the registry ids from `supplemental/panel_registry.md
 
 ### Refactor — Files / Changes / Commits panels + a shared viewer
 
-The three panels embed the same master-detail shape, so the POMs are factored to
+The three panels embed the same explorer shape, so the POMs are factored to
 avoid triplication (the four `test_*` files in `e2e_test_plan.md` §1 consume
 these):
 - `elements/files_panel.py` — refactor of `file_browser.py`; **drop** the
@@ -75,7 +75,7 @@ these):
   `get_find_in_file_button`) re-anchor **under the triple-dot menu**
   (`DIFF_FILE_HEADER_MENU_TRIGGER`) per FCC-07; `get_expand_toggle` is **deleted**
   (fullscreen-expand deprecated).
-- **`elements/master_detail_panel.py`** — new shared POM for the resizable list +
+- **`elements/explorer_layout.py`** — new shared POM for the resizable list +
   shared-width sidebar + toggle + empty state, plus helper functions
   (`open_file_in_panel`, `toggle_view_option_via_menu`, `assert_diff_shows`).
 
@@ -119,7 +119,7 @@ these):
 
 Agents and terminals become panel tabs created from the **same** section `+`
 dropdown, so `agent_tab.py` and the tab half of `terminal.py` collapse into **two
-shared POMs** (the agent/terminal analog of FCC's shared `DiffViewer`/`MasterDetailPanel`):
+shared POMs** (the agent/terminal analog of FCC's shared `DiffViewer`/`ExplorerLayout`):
 
 - **`PanelTab`** (on `workspace_section.py`, or `elements/panel_tab.py`) — the tab
   affordances pulled out of **both** `agent_tab.py` and `terminal.py`:
