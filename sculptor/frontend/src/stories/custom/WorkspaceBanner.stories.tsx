@@ -94,7 +94,7 @@ const BannerShell = ({
           <span>
             <TargetBranchSelector
               currentTargetBranch={targetBranch}
-              remoteBranches={REMOTE_BRANCHES}
+              targetBranches={REMOTE_BRANCHES}
               onBranchChange={handleBranchChange}
               variant={isMismatch ? "amber" : "default"}
               mismatch={

@@ -76,7 +76,7 @@ from sculptor.web.data_types import PrStatusInfo  # noqa: F401 — re-exported f
 from sculptor.web.data_types import PrStatusInfoCleared  # noqa: F401 — re-exported for existing import sites
 from sculptor.web.data_types import TaskInterface
 from sculptor.web.data_types import WorkspaceBranchInfo  # noqa: F401 — re-exported for existing import sites
-from sculptor.web.data_types import WorkspaceRemoteBranchesInfo  # noqa: F401 — re-exported for existing import sites
+from sculptor.web.data_types import WorkspaceTargetBranchesInfo  # noqa: F401 — re-exported for existing import sites
 
 
 class TaskStatus(StrEnum):
