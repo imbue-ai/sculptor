@@ -234,7 +234,7 @@ export const BackendStatusBoundary = (props: PropsWithChildren<BackendStatusBoun
 
   if (backendStatus.status === "loading") {
     return (
-      <Flex height="100vh" width="100wh" className={styles.background}>
+      <Flex height="100vh" width="100vw" className={styles.background}>
         <TitleBar />
         <Flex m="auto" gap="4" align="center" direction="column">
           <Flex align="center" gap="1">
@@ -261,7 +261,7 @@ export const BackendStatusBoundary = (props: PropsWithChildren<BackendStatusBoun
       return (
         <Flex
           height="100vh"
-          width="100wh"
+          width="100vw"
           className={styles.background}
           data-testid={ElementIds.BACKEND_SHUTDOWN_STALLED}
         >
@@ -286,7 +286,7 @@ export const BackendStatusBoundary = (props: PropsWithChildren<BackendStatusBoun
     return (
       <Flex
         height="100vh"
-        width="100wh"
+        width="100vw"
         className={styles.background}
         data-testid={ElementIds.BACKEND_SHUTDOWN_SPINNER}
       >

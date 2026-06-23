@@ -4,7 +4,7 @@ import type { ReactElement } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
-import { formatShortcutForDisplay } from "~/common/ShortcutUtils.ts";
+import { useKeybindingDisplayText } from "~/common/keybindings/hooks.ts";
 import { zenModeActiveAtom } from "~/components/panels/atoms.ts";
 import { useZenMode } from "~/components/panels/hooks.ts";
 
@@ -14,6 +14,7 @@ import styles from "./ExitZenModeButton.module.scss";
 export const ExitZenModeButton = (): ReactElement | null => {
   const isZenModeActive = useAtomValue(zenModeActiveAtom);
   const { toggleZenMode } = useZenMode();
+  const zenModeShortcut = useKeybindingDisplayText("zen_mode");
   const [isVisible, setIsVisible] = useState(false);
   const hideTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -48,7 +49,7 @@ export const ExitZenModeButton = (): ReactElement | null => {
         data-testid={ElementIds.EXIT_ZEN_MODE_BUTTON}
       >
         <Button variant="soft" color="gray" size="1" className={styles.button} onClick={toggleZenMode}>
-          Exit zen mode <kbd className={styles.kbd}>{formatShortcutForDisplay("Meta+Shift+\\")}</kbd>
+          Exit zen mode <kbd className={styles.kbd}>{zenModeShortcut}</kbd>
         </Button>
       </div>
     </div>

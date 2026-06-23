@@ -121,7 +121,10 @@ export const VersionPopover = (): ReactElement => {
             Diagnostics
           </Text>
           <Flex direction="column" gap="2" className={styles.details}>
-            <InfoRow label="Platform" value={`${healthCheckData?.platform} ${healthCheckData?.platformVersion}`} />
+            <InfoRow
+              label="Platform"
+              value={healthCheckData ? `${healthCheckData.platform} ${healthCheckData.platformVersion}` : undefined}
+            />
             <InfoRow label="Uptime" value={formatUptime(healthCheckData?.uptimeSeconds)} />
             <InfoRow label="Active Agents" value={healthCheckData?.activeTaskCount?.toString()} />
             <InfoRow label="Free Disk" value={formatDiskSpace(healthCheckData?.freeDiskGb)} />

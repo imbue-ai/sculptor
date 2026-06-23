@@ -23,7 +23,9 @@ type ClosedWorkspaceRowProps = {
 };
 
 const formatInitStrategy = (strategy: string): string => {
-  return strategy === "IN_PLACE" ? "in-place" : "clone";
+  if (strategy === "IN_PLACE") return "in-place";
+  if (strategy === "WORKTREE") return "worktree";
+  return "clone";
 };
 
 const StatusDot = ({ workspaceId }: { workspaceId: string }): ReactElement => {

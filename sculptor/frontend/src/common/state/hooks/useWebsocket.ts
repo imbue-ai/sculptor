@@ -70,7 +70,9 @@ export function useWebsocket<T>({
         }
 
         const wsUrl = urlObj.toString();
-        console.log(`[WebSocket] Connecting to ${wsUrl}`);
+        // Strip the query string before logging: the URL may carry a session
+        // token in a query parameter, which must not be written to the console.
+        console.log(`[WebSocket] Connecting to ${wsUrl.split("?")[0]}`);
 
         try {
           ws = new WebSocket(wsUrl);

@@ -144,6 +144,17 @@ describe("findMatches", () => {
     expect(matches).toHaveLength(3);
   });
 
+  it("advances cursor by query length, not by 1, for self-overlapping queries", () => {
+    // Regression: the cursor advanced by 1 instead of the query length, so a
+    // self-overlapping query produced overlapping matches. "aa" in "aaaa" must
+    // yield non-overlapping matches at offsets 0 and 2 (two matches); the bug
+    // produced three overlapping matches at offsets 0, 1, and 2.
+    const messages = [makeMessage("1", [makeTextBlock("aaaa")])];
+    const matches = findMatches(messages, "aa");
+    expect(matches).toHaveLength(2);
+    expect(matches.map((m) => m.startOffset)).toEqual([0, 2]);
+  });
+
   it("finds matches across multiple messages", () => {
     const messages = [makeMessage("1", [makeTextBlock("Hello")]), makeMessage("2", [makeTextBlock("hello again")])];
     const matches = findMatches(messages, "hello");

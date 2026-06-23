@@ -48,9 +48,17 @@ export const AlphaTable = memo(({ children }: AlphaTableProps): ReactElement => 
     observer.observe(el);
     return (): void => {
       observer.disconnect();
-      clearTimeout(copyTimerRef.current);
     };
   }, [updateScrollState]);
+
+  // Clear the pending copy-feedback timer only on unmount. Keeping this
+  // separate from the ResizeObserver effect above avoids cancelling an
+  // in-flight timer whenever `updateScrollState` changes (e.g. on wrap toggle).
+  useEffect(() => {
+    return (): void => {
+      clearTimeout(copyTimerRef.current);
+    };
+  }, []);
 
   const handleCopy = useCallback((): void => {
     if (!tableRef.current) return;

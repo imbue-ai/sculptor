@@ -32,12 +32,12 @@ export const AddRepoForm = ({
   autoFocus = false,
 }: AddRepoFormProps): ReactElement => {
   const handleBrowseClick = useCallback(async (): Promise<void> => {
-    if (!onBrowse) return;
+    if (disabled || !onBrowse) return;
     const selectedPath = await onBrowse();
     if (selectedPath) {
       onPathChange(selectedPath);
     }
-  }, [onBrowse, onPathChange]);
+  }, [disabled, onBrowse, onPathChange]);
 
   return (
     <Flex direction="column" gap="3">
@@ -59,7 +59,12 @@ export const AddRepoForm = ({
       {canBrowse && onBrowse && (
         <Text size="2" className={styles.browseHint}>
           Or{" "}
-          <span className={styles.browseLink} onClick={handleBrowseClick} data-testid={ElementIds.ADD_REPO_BROWSE_LINK}>
+          <span
+            className={styles.browseLink}
+            onClick={handleBrowseClick}
+            aria-disabled={disabled}
+            data-testid={ElementIds.ADD_REPO_BROWSE_LINK}
+          >
             browse
           </span>{" "}
           for a folder

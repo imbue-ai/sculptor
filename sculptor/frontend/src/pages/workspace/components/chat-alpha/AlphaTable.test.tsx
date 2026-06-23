@@ -419,6 +419,30 @@ describe("AlphaTable", () => {
       expect(button.querySelector("svg")!.innerHTML).toBe(iconBefore);
     });
 
+    // Regression: the revert timer cleanup used to live in the ResizeObserver/wrap
+    // effect, so toggling wrap re-ran that effect's cleanup and cancelled the pending
+    // revert — leaving the CheckIcon ("copied") stuck. The cleanup is now in its own
+    // unmount-only effect, so a wrap toggle no longer cancels the revert.
+    it("still reverts to CopyIcon after a wrap toggle (wrap does not cancel the revert timer)", () => {
+      const { container } = render(twoColumnTable());
+      const copyButton = container.querySelector('button[aria-label="Copy table"]')!;
+      const iconBefore = copyButton.querySelector("svg")!.innerHTML;
+
+      fireEvent.click(copyButton);
+      expect(copyButton.querySelector("svg")!.innerHTML).not.toBe(iconBefore);
+
+      // Toggle wrap while the revert timer is pending. In the old code this re-ran
+      // the ResizeObserver effect cleanup, clearing the timer so it never fired.
+      const wrapButton = container.querySelector('button[aria-label="Switch to wrap"]')!;
+      fireEvent.click(wrapButton);
+
+      act(() => vi.advanceTimersByTime(1500));
+
+      // The icon must revert — proving the timer survived the wrap toggle.
+      const copyButtonAfter = container.querySelector('button[aria-label="Copy table"]')!;
+      expect(copyButtonAfter.querySelector("svg")!.innerHTML).toBe(iconBefore);
+    });
+
     it("does not leak timers on unmount", () => {
       const { container, unmount } = render(twoColumnTable());
       clickCopyButton(container);

@@ -105,7 +105,7 @@ export const findMatches = (messages: ReadonlyArray<ChatMessage>, query: string)
           length: query.length,
         });
 
-        startPos = idx + 1;
+        startPos = idx + lowerQuery.length;
       }
     }
   });

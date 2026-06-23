@@ -69,9 +69,14 @@ export const NewWorkspaceForm = ({
     [onSubmit, handleKeyPress],
   );
 
-  // Allow Cmd+Enter to submit from anywhere on the page, not just the input
+  // Allow Cmd+Enter to submit from anywhere on the page. The name input handles
+  // its own Cmd+Enter (see handleNameInputKeyDown), so skip events originating
+  // there — otherwise the keystroke would call onSubmit twice.
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent): void => {
+      // The name input handles its own Cmd+Enter (see handleNameInputKeyDown),
+      // so skip events originating there — otherwise onSubmit would fire twice.
+      if (e.target === nameInputRef.current) return;
       if (e.key !== "Enter" || !isModifierPressed(e)) return;
       // An overlay open over the page (e.g. the Add Repository dialog) owns
       // Cmd+Enter for its own action; don't also create the workspace.
@@ -82,7 +87,7 @@ export const NewWorkspaceForm = ({
 
     document.addEventListener("keydown", handleGlobalKeyDown);
     return (): void => document.removeEventListener("keydown", handleGlobalKeyDown);
-  }, [onSubmit]);
+  }, [onSubmit, nameInputRef]);
 
   return (
     <Flex direction="column" width="100%" gap="2">
