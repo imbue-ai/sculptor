@@ -1,6 +1,6 @@
 import { IconButton } from "@radix-ui/themes";
 import { Search, X } from "lucide-react";
-import type { ReactElement } from "react";
+import type { ChangeEvent, KeyboardEvent, ReactElement } from "react";
 import { useCallback, useEffect, useRef } from "react";
 
 import { ElementIds } from "~/api";
@@ -35,7 +35,7 @@ export const SkillsSearch = ({
   }, []);
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>): void => {
+    (e: KeyboardEvent<HTMLInputElement>): void => {
       if (e.key === "Escape") {
         onClose();
         return;
@@ -64,7 +64,7 @@ export const SkillsSearch = ({
   );
 
   const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>): void => {
+    (e: ChangeEvent<HTMLInputElement>): void => {
       onQueryChange(e.target.value);
     },
     [onQueryChange],

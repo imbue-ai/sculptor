@@ -158,6 +158,9 @@ export const SkillsPanel = (): ReactElement => {
       setPopoverSkill(target);
       isPopoverVisibleRef.current = true;
       setIsPopoverVisible(true);
+      // Enable the position transition only after the popover has been
+      // committed at its initial anchor, so the first appearance lands in
+      // place instead of sliding in, while later chip-to-chip swaps animate.
       requestAnimationFrame(() => setHasAnimated(true));
     }, delay);
   }, []);
