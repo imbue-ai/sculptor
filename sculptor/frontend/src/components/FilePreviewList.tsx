@@ -45,6 +45,12 @@ const getFileName = (filePath: string): string => {
 const isLegacyAbsolutePath = (filePath: string): boolean =>
   filePath.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(filePath);
 
+// Resolved object/data URLs keyed by attachment reference, shared across all
+// FilePreviewList instances. When an attachment that was already loaded (e.g.
+// in the chat-input draft) re-mounts in the sent message, it renders instantly
+// from the cache instead of re-fetching and flashing a loading placeholder.
+const previewUrlCache = new Map<string, string>();
+
 export const FilePreviewList = ({
   files,
   onRemoveFile,
@@ -54,7 +60,17 @@ export const FilePreviewList = ({
   allowCopyImage = false,
 }: FilePreviewListProps): ReactElement | undefined => {
   const agentLightbox = useAgentLightbox();
-  const [filesUrls, setFilesUrls] = useState<Record<string, string>>({});
+  // Seed from the shared cache so already-loaded attachments paint on the first
+  // render (no loading-placeholder flash when a sent message re-mounts them).
+  const [filesUrls, setFilesUrls] = useState<Record<string, string>>(() => {
+    const seeded: Record<string, string> = {};
+    for (const filePath of files) {
+      if (filePath == null) continue;
+      const cached = previewUrlCache.get(filePath);
+      if (cached != null) seeded[filePath] = cached;
+    }
+    return seeded;
+  });
   const [failedFiles, setFailedFiles] = useState<Set<string>>(new Set());
   const [localLightboxIndex, setLocalLightboxIndex] = useState<number | null>(null);
   const prevFilesRef = useRef<Array<string>>([]);
@@ -111,20 +127,28 @@ export const FilePreviewList = ({
 
     const loadNewFiles = async (): Promise<void> => {
       const urlPromises = newFiles.map(async (filePath): Promise<{ url: string; filePath: string } | undefined> => {
+        const cached = previewUrlCache.get(filePath);
+        if (cached != null) {
+          return { url: cached, filePath };
+        }
+
         try {
+          let url: string;
           if (isLegacyAbsolutePath(filePath)) {
             // Legacy desktop attachment saved to disk; read it back over IPC.
             if (!window.sculptor?.getFileData) return undefined;
-            const base64Data = await window.sculptor.getFileData(filePath);
-            return { url: base64Data, filePath };
+            url = await window.sculptor.getFileData(filePath);
+          } else {
+            // Uploaded to the backend: fetch via the API download endpoint by id.
+            const headers = new Headers();
+            setupAuthHeaders(headers);
+            const resp = await fetch(`${baseUrl}/api/v1/uploaded-file/${encodeURIComponent(filePath)}`, { headers });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const blob = await resp.blob();
+            url = URL.createObjectURL(blob);
           }
-          // Uploaded to the backend: fetch via the API download endpoint by id.
-          const headers = new Headers();
-          setupAuthHeaders(headers);
-          const resp = await fetch(`${baseUrl}/api/v1/uploaded-file/${encodeURIComponent(filePath)}`, { headers });
-          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-          const blob = await resp.blob();
-          return { url: URL.createObjectURL(blob), filePath };
+          previewUrlCache.set(filePath, url);
+          return { url, filePath };
         } catch (error) {
           console.error("Failed to load file:", filePath, error);
           if (!isCancelled) {

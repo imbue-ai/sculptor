@@ -159,7 +159,7 @@ export const FilePreview = ({
   };
 
   const renderCompactContent = (): ReactElement => {
-    if (isFailed || !fileUrl) {
+    if (isFailed) {
       return (
         <Tooltip content="Failed to load file. The file may be corrupted or inaccessible.">
           <Flex align="center" justify="center" className={styles.previewError}>
@@ -169,6 +169,10 @@ export const FilePreview = ({
           </Flex>
         </Tooltip>
       );
+    }
+
+    if (!fileUrl) {
+      return <Skeleton className={styles.previewSkeleton} />;
     }
 
     if (isPdf) {

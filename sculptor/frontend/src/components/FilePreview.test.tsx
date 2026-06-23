@@ -59,14 +59,19 @@ describe("FilePreview", () => {
     });
   });
 
+  describe("loading state", () => {
+    it("renders a loading skeleton (not the error icon) in compact mode while fileUrl is undefined", () => {
+      const { container } = renderPreview({ fileUrl: undefined, isFailed: false });
+      expect(container.querySelector(".previewSkeleton")).toBeInTheDocument();
+      // The failed/error placeholder must NOT appear while still loading.
+      expect(container.querySelector(".previewError")).not.toBeInTheDocument();
+      expect(screen.queryByAltText("Attachment: photo.png")).not.toBeInTheDocument();
+    });
+  });
+
   describe("error state", () => {
     it("renders error icon when isFailed is true", () => {
       renderPreview({ isFailed: true });
-      expect(screen.queryByAltText("Attachment: photo.png")).not.toBeInTheDocument();
-    });
-
-    it("renders error icon when fileUrl is undefined", () => {
-      renderPreview({ fileUrl: undefined });
       expect(screen.queryByAltText("Attachment: photo.png")).not.toBeInTheDocument();
     });
 
