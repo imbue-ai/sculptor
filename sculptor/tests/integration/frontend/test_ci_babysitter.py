@@ -182,6 +182,29 @@ def _transition_to_failed_after_baseline(page, state_file: Path) -> None:
     state_file.write_text("failed")
 
 
+def _arm_failed_transition_with_observed_running_baseline(instance: SculptorInstance, state_file: Path) -> None:
+    """Flip checks running → failed, confirming the poller actually observed the
+    non-failed baseline (via the PR popover "Running" badge) before the flip.
+
+    A fixed wall-clock window (`_transition_to_failed_after_baseline`) is only
+    safe while polling is already running. After a backend restart the
+    coordinator's in-memory prev_status resets to None and PR polling resumes
+    lazily, so the window can elapse before any non-failed poll lands — the
+    coordinator then records "failed" as its suppressed first-poll baseline and
+    never sees a non-failed → failed transition, so no prompt is dispatched.
+    Waiting on the badge — driven by the same poll result the coordinator
+    consumes — guarantees prev_status is non-failed before we write "failed".
+    """
+    state_file.write_text("running")
+    pr_popover = PlaywrightPrPopoverElement(instance.page)
+    chevron = pr_popover.get_chevron()
+    expect(chevron).to_be_visible(timeout=60_000)
+    chevron.click()
+    expect(pr_popover.get_pipeline_status_badge()).to_have_text("Running", timeout=60_000)
+    instance.page.keyboard.press("Escape")
+    state_file.write_text("failed")
+
+
 @user_story("to have Sculptor's CI Babysitter automatically investigate a failed pipeline")
 def test_scenario_1_failed_pipeline_creates_babysitter(sculptor_instance_: SculptorInstance, tmp_path: Path) -> None:
     """When CI fails on a PR opened from a workspace, the coordinator spawns
@@ -442,13 +465,13 @@ def test_restart_reuses_existing_babysitter_tab(
         pipeline_prompts = alpha_chat.get_messages().filter(has_text=_PIPELINE_PROMPT_FRAGMENT)
         expect(pipeline_prompts).to_have_count(1)
 
-        # Re-establish a non-failed post-restart baseline poll, then flip back to
-        # failed so a fresh PIPELINE_FAILED transition fires. With the fix this is
-        # delivered to the existing babysitter tab (its prompt count goes to 2)
-        # and there is still exactly one tab. With the bug a duplicate
-        # 'CI Babysitter' tab is created instead.
-        state_file.write_text("running")
-        _transition_to_failed_after_baseline(instance.page, state_file)
+        # Re-establish a non-failed post-restart baseline, confirm the poller
+        # observed it, then flip back to failed so a fresh PIPELINE_FAILED
+        # transition fires. With the fix this is delivered to the existing
+        # babysitter tab (its prompt count goes to 2) and there is still exactly
+        # one tab. With the bug a duplicate 'CI Babysitter' tab is created
+        # instead.
+        _arm_failed_transition_with_observed_running_baseline(instance, state_file)
 
         expect(pipeline_prompts).to_have_count(2, timeout=60_000)
         expect(agent_tabs.get_agent_tab_by_name("CI Babysitter")).to_have_count(1)
