@@ -4272,7 +4272,6 @@ def get_pi_authenticated_providers(
                 in_auth_json=status.in_auth_json,
                 env_detected=status.env_detected,
                 env_var_names=status.env_var_names,
-                is_subscription=status.is_subscription,
             )
             for status in get_provider_auth_statuses()
         )

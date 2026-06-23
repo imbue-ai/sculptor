@@ -276,7 +276,6 @@ class AuthenticatedProviderEntry(SerializableModel):
     in_auth_json: bool
     env_detected: bool
     env_var_names: tuple[str, ...]
-    is_subscription: bool
 
 
 class AuthenticatedProvidersResponse(SerializableModel):

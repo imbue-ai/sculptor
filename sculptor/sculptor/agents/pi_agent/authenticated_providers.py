@@ -18,7 +18,6 @@ class ProviderAuthStatus(FrozenModel):
     provider_id: str
     display_name: str
     group: ProviderGroup
-    is_subscription: bool
     in_auth_json: bool
     env_detected: bool
     env_var_names: tuple[str, ...]
@@ -126,7 +125,6 @@ def get_provider_auth_statuses() -> tuple[ProviderAuthStatus, ...]:
             provider_id=entry.provider_id,
             display_name=entry.display_name,
             group=entry.group,
-            is_subscription=entry.is_subscription,
             in_auth_json=entry.provider_id in auth_json_provider_ids,
             env_detected=entry.provider_id in env_detected_provider_ids,
             env_var_names=entry.env_var_names,
