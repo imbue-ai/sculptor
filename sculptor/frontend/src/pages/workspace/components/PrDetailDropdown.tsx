@@ -20,24 +20,30 @@ type PrDetailDropdownProps = {
   gitProvider: GitProvider;
 };
 
+const MS_PER_MINUTE = 60_000;
+const MS_PER_HOUR = 3_600_000;
+const MS_PER_DAY = 86_400_000;
+const MINUTES_PER_HOUR = 60;
+const HOURS_PER_DAY = 24;
+
 const formatRelativeTime = (isoTimestamp: string | null | undefined): string => {
   if (!isoTimestamp) return "";
 
   const now = Date.now();
   const then = new Date(isoTimestamp).getTime();
   const diffMs = now - then;
-  const diffMinutes = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
+  const diffMinutes = Math.floor(diffMs / MS_PER_MINUTE);
+  const diffHours = Math.floor(diffMs / MS_PER_HOUR);
+  const diffDays = Math.floor(diffMs / MS_PER_DAY);
 
   if (diffMinutes < 1) return "just now";
-  if (diffMinutes < 60) return `${diffMinutes} minute${diffMinutes === 1 ? "" : "s"} ago`;
-  if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
+  if (diffMinutes < MINUTES_PER_HOUR) return `${diffMinutes} minute${diffMinutes === 1 ? "" : "s"} ago`;
+  if (diffHours < HOURS_PER_DAY) return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
 
   return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
 };
 
-const getPipelineBadge = (status: string | null | undefined): ReactElement | null => {
+const getPipelineBadge = (status: PrStatusInfo["pipelineStatus"]): ReactElement | undefined => {
   switch (status) {
     case "passed":
       return <span className={`${styles.badge} ${styles.badgePassed}`}>Passed</span>;
@@ -47,8 +53,7 @@ const getPipelineBadge = (status: string | null | undefined): ReactElement | nul
       return <span className={`${styles.badge} ${styles.badgeFailed}`}>Failed</span>;
     case null:
     case undefined:
-    default:
-      return null;
+      return undefined;
   }
 };
 

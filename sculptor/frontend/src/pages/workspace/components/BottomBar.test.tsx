@@ -49,7 +49,7 @@ afterEach(cleanup);
 describe("BottomBar", () => {
   it("renders three side toggle buttons", () => {
     const store = createDefaultStore();
-    renderWithProviders(<BottomBar />, store, TEST_PANELS);
+    renderWithProviders(<BottomBar />, { store, panels: TEST_PANELS });
 
     expect(screen.getByTestId(ElementIds.SIDE_TOGGLE_LEFT)).toBeInTheDocument();
     expect(screen.getByTestId(ElementIds.SIDE_TOGGLE_BOTTOM)).toBeInTheDocument();
@@ -58,7 +58,7 @@ describe("BottomBar", () => {
 
   it("toggle button has active styling when side is visible", () => {
     const store = createDefaultStore();
-    renderWithProviders(<BottomBar />, store, TEST_PANELS);
+    renderWithProviders(<BottomBar />, { store, panels: TEST_PANELS });
 
     const rightBtn = screen.getByTestId(ElementIds.SIDE_TOGGLE_RIGHT);
     // The right side is visible by default (changes panel in top-right)
@@ -72,7 +72,7 @@ describe("BottomBar", () => {
       "top-right": false,
       "bottom-right": false,
     }));
-    renderWithProviders(<BottomBar />, store, TEST_PANELS);
+    renderWithProviders(<BottomBar />, { store, panels: TEST_PANELS });
 
     const rightBtn = screen.getByTestId(ElementIds.SIDE_TOGGLE_RIGHT);
     expect(rightBtn.className).toContain("toggleInactive");
@@ -80,7 +80,7 @@ describe("BottomBar", () => {
 
   it("clicking a toggle button hides the corresponding side", () => {
     const store = createDefaultStore();
-    renderWithProviders(<BottomBar />, store, TEST_PANELS);
+    renderWithProviders(<BottomBar />, { store, panels: TEST_PANELS });
 
     const rightBtn = screen.getByTestId(ElementIds.SIDE_TOGGLE_RIGHT);
     act(() => fireEvent.click(rightBtn));
@@ -91,7 +91,7 @@ describe("BottomBar", () => {
 
   it("clicking a toggle button twice restores visibility", () => {
     const store = createDefaultStore();
-    renderWithProviders(<BottomBar />, store, TEST_PANELS);
+    renderWithProviders(<BottomBar />, { store, panels: TEST_PANELS });
 
     const rightBtn = screen.getByTestId(ElementIds.SIDE_TOGGLE_RIGHT);
     act(() => fireEvent.click(rightBtn)); // hide
@@ -106,7 +106,7 @@ describe("BottomBar", () => {
     // left side is empty while bottom and right still have panels.
     const sidePanels = TEST_PANELS.slice(1);
     const store = createPanelStore(sidePanels, { useDefaultLayout: true });
-    renderWithProviders(<BottomBar />, store, sidePanels);
+    renderWithProviders(<BottomBar />, { store, panels: sidePanels });
 
     // An empty side is disabled in the DOM, not just styled.
     expect(screen.getByTestId(ElementIds.SIDE_TOGGLE_LEFT).getAttribute("aria-disabled")).toBe("true");

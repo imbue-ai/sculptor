@@ -44,7 +44,8 @@ export const ChatSearchBar = ({
     return (): void => clearTimeout(debounceTimerRef.current);
   }, [localQuery, setGlobalQuery]);
 
-  // Reset local state when unmounted and remounted
+  // Clear the global search query when the search bar closes (unmounts) so
+  // highlights are removed and a fresh mount starts with an empty query.
   useEffect(() => {
     return (): void => {
       setGlobalQuery("");
@@ -95,7 +96,7 @@ export const ChatSearchBar = ({
     }
   };
 
-  const counterText = hasQuery ? (totalMatchCount > 0 ? `${activeIndex + 1}/${totalMatchCount}` : `0/0`) : "0/0";
+  const counterText = hasQuery && totalMatchCount > 0 ? `${activeIndex + 1}/${totalMatchCount}` : "0/0";
 
   return (
     <div
