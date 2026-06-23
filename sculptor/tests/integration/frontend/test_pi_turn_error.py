@@ -13,7 +13,6 @@ import re
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.fake_pi import install_fake_pi_binary
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -57,7 +56,7 @@ def test_failed_pi_turn_shows_clean_actionable_error(
 
     # The auth-shaped failure also offers a one-click route to authenticate a
     # provider, deep-linking into Settings -> Pi.
-    login_cta = clean_block.get_by_test_id(ElementIDs.PI_ERROR_LOGIN_CTA)
+    login_cta = chat_panel.get_error_block_login_cta(clean_block)
     expect(login_cta).to_be_visible()
     login_cta.click()
     expect(page).to_have_url(re.compile("section=PI"))
