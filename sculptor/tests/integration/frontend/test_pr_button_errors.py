@@ -123,11 +123,6 @@ def _assert_error_button_with_popover(
     _expand_details_and_verify(task_page, details_text)
 
 
-# ---------------------------------------------------------------------------
-# Group 1: CLI missing (no gh on PATH)
-# ---------------------------------------------------------------------------
-
-
 @user_story("to see an error when gh CLI is not installed")
 def test_cli_missing_shows_error_for_github(
     sculptor_instance_factory_: SculptorInstanceFactory, tmp_path: Path

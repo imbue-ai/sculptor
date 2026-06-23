@@ -9,10 +9,10 @@ retired on merge, and pause prevents prompts.
 The classifier's first-poll baseline behavior (architecture's "Risks
 and Mitigations" section) requires PIPELINE_FAILED to fire only on a
 *change* into the failed state, not on the very first poll. Tests
-therefore start with a non-failed check state (the baseline), wait for
-that baseline poll to land, and then flip the checks to failed to
-trigger an actionable transition. The flip-after-wait pattern is
-encapsulated in `_transition_to_failed_after_baseline`.
+therefore start with a non-failed check state (the baseline), confirm
+the poller actually observed it, and then flip the checks to failed to
+trigger an actionable transition. That arming sequence is encapsulated
+in `_arm_failed_transition`.
 """
 
 import stat
@@ -170,30 +170,19 @@ _PIPELINE_PROMPT_FRAGMENT = "Investigate the failing pipeline for this PR"
 _MERGE_CONFLICT_PROMPT_FRAGMENT = "merge conflict with its base branch"
 
 
-def _transition_to_failed_after_baseline(page, state_file: Path) -> None:
-    """Wait for the baseline poll to land, then flip the checks to failed.
-
-    The classifier suppresses PIPELINE_FAILED on the first poll (prev is None)
-    so a Sculptor restart against an already-red PR doesn't burn a retry. Tests
-    must let a non-failed baseline poll happen before flipping to failed, or the
-    failed state is itself the baseline and no transition is observed.
-    """
-    page.wait_for_timeout(_BASELINE_POLL_SETTLE_MS)
-    state_file.write_text("failed")
-
-
-def _arm_failed_transition_with_observed_running_baseline(instance: SculptorInstance, state_file: Path) -> None:
+def _arm_failed_transition(instance: SculptorInstance, state_file: Path) -> None:
     """Flip checks running → failed, confirming the poller actually observed the
     non-failed baseline (via the PR popover "Running" badge) before the flip.
 
-    A fixed wall-clock window (`_transition_to_failed_after_baseline`) is only
-    safe while polling is already running. After a backend restart the
-    coordinator's in-memory prev_status resets to None and PR polling resumes
-    lazily, so the window can elapse before any non-failed poll lands — the
-    coordinator then records "failed" as its suppressed first-poll baseline and
-    never sees a non-failed → failed transition, so no prompt is dispatched.
-    Waiting on the badge — driven by the same poll result the coordinator
-    consumes — guarantees prev_status is non-failed before we write "failed".
+    The classifier suppresses PIPELINE_FAILED on the first poll (prev is None) so
+    a Sculptor restart against an already-red PR doesn't burn a retry. A
+    non-failed → failed transition therefore only fires if a non-failed poll
+    landed first. A fixed wall-clock window can't guarantee that under CI load —
+    and after a backend restart the coordinator's in-memory prev_status resets to
+    None and polling resumes lazily, so the window can elapse before any
+    non-failed poll lands. Waiting on the badge — driven by the same poll result
+    the coordinator consumes — guarantees prev_status is non-failed before we
+    write "failed", regardless of timing or restart state.
     """
     state_file.write_text("running")
     pr_popover = PlaywrightPrPopoverElement(instance.page)
@@ -218,7 +207,7 @@ def test_scenario_1_failed_pipeline_creates_babysitter(sculptor_instance_: Sculp
     _set_remote(sculptor_instance_, _FAKE_GITHUB_REMOTE)
 
     start_task_and_wait_for_ready(sculptor_instance_.page, "say hello")
-    _transition_to_failed_after_baseline(sculptor_instance_.page, state_file)
+    _arm_failed_transition(sculptor_instance_, state_file)
 
     agent_tabs = PlaywrightAgentTabBarElement(sculptor_instance_.page)
     babysitter_tab = agent_tabs.get_agent_tab_by_name("CI Babysitter")
@@ -243,7 +232,7 @@ def test_scenario_7_merged_pr_retires_babysitter(sculptor_instance_: SculptorIns
     _enable_babysitter(sculptor_instance_)
 
     start_task_and_wait_for_ready(sculptor_instance_.page, "say hello")
-    _transition_to_failed_after_baseline(sculptor_instance_.page, state_file)
+    _arm_failed_transition(sculptor_instance_, state_file)
 
     agent_tabs = PlaywrightAgentTabBarElement(sculptor_instance_.page)
     babysitter_tab = agent_tabs.get_agent_tab_by_name("CI Babysitter")
@@ -275,7 +264,7 @@ def test_scenario_4_pause_toggle_prevents_prompt(sculptor_instance_: SculptorIns
     _enable_babysitter(sculptor_instance_)
 
     start_task_and_wait_for_ready(sculptor_instance_.page, "say hello")
-    _transition_to_failed_after_baseline(sculptor_instance_.page, state_file)
+    _arm_failed_transition(sculptor_instance_, state_file)
 
     agent_tabs = PlaywrightAgentTabBarElement(sculptor_instance_.page)
     babysitter_tab = agent_tabs.get_agent_tab_by_name("CI Babysitter")
@@ -297,10 +286,10 @@ def test_scenario_4_pause_toggle_prevents_prompt(sculptor_instance_: SculptorIns
     expect(pipeline_prompts).to_have_count(1)
 
     # Re-arm the failed edge (running → failed again) while paused; the pause
-    # must suppress a second prompt.
-    state_file.write_text("running")
-    sculptor_instance_.page.wait_for_timeout(_BASELINE_POLL_SETTLE_MS)
-    state_file.write_text("failed")
+    # must suppress a second prompt. The badge-confirmed arm guarantees the
+    # non-failed baseline is observed, so a missed prompt here means pause
+    # worked, not that the transition never armed.
+    _arm_failed_transition(sculptor_instance_, state_file)
     sculptor_instance_.page.wait_for_timeout(_MERGED_MODE_STABLE_WAIT_MS)
     expect(pipeline_prompts).to_have_count(1)
 
@@ -336,7 +325,7 @@ def test_babysitter_drives_registered_terminal_agent(sculptor_instance_: Sculpto
         expect(get_agent_terminal_panel(page)).to_be_visible()
         wait_for_xterm_substring(page, "IDLE-DONE")  # the program is at its prompt
 
-        _transition_to_failed_after_baseline(page, state_file)
+        _arm_failed_transition(sculptor_instance_, state_file)
 
         # The babysitter spawns its own "CI Babysitter" terminal task (distinct
         # from the user's tab) and writes the fix-CI prompt to its PTY.
@@ -437,7 +426,7 @@ def test_restart_reuses_existing_babysitter_tab(
         _set_remote(instance, _FAKE_GITHUB_REMOTE)
 
         start_task_and_wait_for_ready(instance.page, "say hello")
-        _transition_to_failed_after_baseline(instance.page, state_file)
+        _arm_failed_transition(instance, state_file)
 
         agent_tabs = PlaywrightAgentTabBarElement(instance.page)
         babysitter_tab = agent_tabs.get_agent_tab_by_name("CI Babysitter")
@@ -471,7 +460,7 @@ def test_restart_reuses_existing_babysitter_tab(
         # babysitter tab (its prompt count goes to 2) and there is still exactly
         # one tab. With the bug a duplicate 'CI Babysitter' tab is created
         # instead.
-        _arm_failed_transition_with_observed_running_baseline(instance, state_file)
+        _arm_failed_transition(instance, state_file)
 
         expect(pipeline_prompts).to_have_count(2, timeout=60_000)
         expect(agent_tabs.get_agent_tab_by_name("CI Babysitter")).to_have_count(1)

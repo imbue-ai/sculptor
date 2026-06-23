@@ -109,23 +109,17 @@ export const PrDetailDropdown = ({ prStatus }: PrDetailDropdownProps): ReactElem
     void setPaused({ workspaceId, paused: !nextActive });
   };
 
-  const prefix = "#";
-  const ciLabel = "Checks";
-  const noCiLabel = "No checks";
-  const reviewLabel = "Reviews";
-  const noReviewerLabel = "No reviews";
-
   return (
     <div className={styles.dropdown} data-testid={ElementIds.PR_DROPDOWN}>
       <Flex align="center" gap="2" mb="3">
         {prStatus.prWebUrl ? (
           <Link size="2" weight="medium" href={prStatus.prWebUrl} target="_blank" style={{ flex: 1 }} truncate>
-            {prStatus.prTitle ?? `${prefix}${prStatus.prIid}`}
+            {prStatus.prTitle ?? `#${prStatus.prIid}`}
             <ExternalLinkIcon size={12} style={{ marginLeft: "var(--space-1)", verticalAlign: "middle" }} />
           </Link>
         ) : (
           <Text size="2" weight="medium" style={{ flex: 1 }} truncate>
-            {prStatus.prTitle ?? `${prefix}${prStatus.prIid}`}
+            {prStatus.prTitle ?? `#${prStatus.prIid}`}
           </Text>
         )}
       </Flex>
@@ -133,7 +127,7 @@ export const PrDetailDropdown = ({ prStatus }: PrDetailDropdownProps): ReactElem
       <Separator size="4" mb="3" />
 
       <Flex direction="column" gap="1" mb="3">
-        <Text className={styles.sectionTitle}>{ciLabel}</Text>
+        <Text className={styles.sectionTitle}>Checks</Text>
         {prStatus.pipelineStatus ? (
           <Flex align="center" gap="2">
             {getPipelineBadge(prStatus.pipelineStatus)}
@@ -155,7 +149,7 @@ export const PrDetailDropdown = ({ prStatus }: PrDetailDropdownProps): ReactElem
           </Flex>
         ) : (
           <Text size="1" color="gray">
-            {noCiLabel}
+            No checks
           </Text>
         )}
       </Flex>
@@ -185,7 +179,7 @@ export const PrDetailDropdown = ({ prStatus }: PrDetailDropdownProps): ReactElem
 
       <Flex direction="column" gap="1" mb="3">
         <Text className={styles.sectionTitle}>
-          {reviewLabel} {totalApprovals > 0 && `(${approvedCount}/${totalApprovals})`}
+          Reviews {totalApprovals > 0 && `(${approvedCount}/${totalApprovals})`}
         </Text>
         {totalApprovals > 0 ? (
           prStatus.approvals?.map((approval) => (
@@ -203,7 +197,7 @@ export const PrDetailDropdown = ({ prStatus }: PrDetailDropdownProps): ReactElem
           ))
         ) : (
           <Text size="1" color="gray">
-            {noReviewerLabel}
+            No reviews
           </Text>
         )}
       </Flex>
