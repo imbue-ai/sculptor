@@ -16,7 +16,8 @@ from tenacity import stop_after_delay
 from tenacity import wait_fixed
 
 from sculptor.constants import ElementIDs
-from sculptor.testing.elements.base import clear_tiptap
+from sculptor.testing.elements.base import get_tiptap_doc
+from sculptor.testing.elements.base import set_tiptap_doc
 
 # Per-attempt budget for one open-and-drill try. Short on purpose: combined with
 # the _DRILL_TOTAL_TIMEOUT retry budget below it replaces a single 30s expect()
@@ -60,6 +61,7 @@ class PlaywrightEntityPickerElement:
 )
 def _attempt_open_workspace_drill(
     chat_input: Locator,
+    snapshot: list[object],
     mention_list: Locator,
     category_items: Locator,
     entity_list: Locator,
@@ -67,10 +69,16 @@ def _attempt_open_workspace_drill(
     """One open-and-drill try: type ``+wor`` and Enter into the workspace list.
 
     Retried as a unit by the decorator so either race below recovers on a later
-    attempt. Start from an empty editor: a prior attempt may have left ``+wor``
-    behind when its picker closed without drilling.
+    attempt. ``snapshot`` is a one-element box: the first attempt that can read
+    the editor records its pre-drill document into it; later attempts restore
+    that document, dropping a failed attempt's leftover ``+wor`` *without* wiping
+    content a caller already inserted (e.g. an earlier mention chip — a blanket
+    ``clearContent`` would erase it, which broke two-mention drafts).
     """
-    clear_tiptap(chat_input)
+    if snapshot:
+        set_tiptap_doc(chat_input, snapshot[0])
+    else:
+        snapshot.append(get_tiptap_doc(chat_input))
     chat_input.press_sequentially("+wor")
     expect(mention_list).to_be_visible(timeout=_DRILL_ATTEMPT_TIMEOUT_MS)
     # Wait for "+wor" to narrow the category list to the single
@@ -102,14 +110,17 @@ def open_workspace_entity_drill(page: Page, chat_input: Locator) -> Locator:
        picker instead — the suggestion plugin's keydown handler races the
        filtered render — so the entity sub-list never appears.
 
-    Re-issuing the whole sequence (clear the input, retype, re-press Enter)
-    recovers from either: a later attempt types into the now-ready editor and
-    its Enter lands the drill. Each attempt is short; the retry budget supplies
-    the overall wait.
+    Re-issuing the whole sequence (restore the pre-drill content, retype,
+    re-press Enter) recovers from either: a later attempt types into the
+    now-ready editor and its Enter lands the drill. Each attempt is short; the
+    retry budget supplies the overall wait.
     """
     entity_list = page.get_by_test_id(ElementIDs.ENTITY_MENTION_LIST)
     _attempt_open_workspace_drill(
         chat_input=chat_input,
+        # One-element box: the pre-drill editor doc is captured into it on the
+        # first attempt and restored on retries (see _attempt_open_workspace_drill).
+        snapshot=[],
         mention_list=page.get_by_test_id(ElementIDs.MENTION_LIST),
         category_items=page.get_by_test_id(ElementIDs.MENTION_PICKER_CATEGORY_ITEM),
         entity_list=entity_list,

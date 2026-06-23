@@ -179,6 +179,32 @@ def clear_tiptap(locator: Locator) -> None:
     )
 
 
+def get_tiptap_doc(locator: Locator) -> Any:
+    """Return the editor's document as a ProseMirror JSON node tree.
+
+    Pairs with ``set_tiptap_doc`` to snapshot and restore editor content
+    losslessly — including entity-mention chips, which a markdown round-trip
+    would flatten back to ``+[…]`` tokens.
+    """
+    return locator.evaluate(
+        f"""(el) => {{
+            const findEditor = (el) => {{ {_FIND_TIPTAP_EDITOR_JS} }};
+            return findEditor(el).getJSON();
+        }}""",
+    )
+
+
+def set_tiptap_doc(locator: Locator, doc: Any) -> None:
+    """Replace the editor content with a ProseMirror JSON doc from ``get_tiptap_doc``."""
+    locator.evaluate(
+        f"""(el, doc) => {{
+            const findEditor = (el) => {{ {_FIND_TIPTAP_EDITOR_JS} }};
+            findEditor(el).commands.setContent(doc);
+        }}""",
+        doc,
+    )
+
+
 def set_tiptap_markdown(locator: Locator, markdown: str) -> None:
     """Replace the editor content with markdown source.
 
