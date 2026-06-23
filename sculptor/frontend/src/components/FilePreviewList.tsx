@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ElementIds } from "~/api";
 import { baseUrl } from "~/apiClient.ts";
 import { setupAuthHeaders } from "~/common/Auth.ts";
-import { getBackendCapabilities } from "~/common/state/atoms/backendCapabilities.ts";
 
 import { useAgentLightbox } from "./AgentLightboxContext.tsx";
 import { FilePreview } from "./FilePreview.tsx";
@@ -38,6 +37,13 @@ const getFileName = (filePath: string): string => {
   const parts = filePath.split(/[/\\]/);
   return parts[parts.length - 1] || filePath;
 };
+
+// New uploads are referenced by a bare upload id (served over HTTP). Legacy
+// desktop attachments were saved by the (now-removed) Electron `saveFile` IPC
+// handler and are referenced by an absolute path — Unix (`/…`) or Windows
+// (`C:\…`). Those are read via the retained `getFileData` IPC handler.
+const isLegacyAbsolutePath = (filePath: string): boolean =>
+  filePath.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(filePath);
 
 export const FilePreviewList = ({
   files,
@@ -106,19 +112,19 @@ export const FilePreviewList = ({
     const loadNewFiles = async (): Promise<void> => {
       const urlPromises = newFiles.map(async (filePath): Promise<{ url: string; filePath: string } | undefined> => {
         try {
-          if (getBackendCapabilities().fileUploadMode === "http") {
-            // Remote backend: files are stored on the backend.
-            // Fetch via the API download endpoint using the file_id.
-            const headers = new Headers();
-            setupAuthHeaders(headers);
-            const resp = await fetch(`${baseUrl}/api/v1/uploaded-file/${encodeURIComponent(filePath)}`, { headers });
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const blob = await resp.blob();
-            return { url: URL.createObjectURL(blob), filePath };
+          if (isLegacyAbsolutePath(filePath)) {
+            // Legacy desktop attachment saved to disk; read it back over IPC.
+            if (!window.sculptor?.getFileData) return undefined;
+            const base64Data = await window.sculptor.getFileData(filePath);
+            return { url: base64Data, filePath };
           }
-          if (!window.sculptor?.getFileData) return undefined;
-          const base64Data = await window.sculptor.getFileData(filePath);
-          return { url: base64Data, filePath };
+          // Uploaded to the backend: fetch via the API download endpoint by id.
+          const headers = new Headers();
+          setupAuthHeaders(headers);
+          const resp = await fetch(`${baseUrl}/api/v1/uploaded-file/${encodeURIComponent(filePath)}`, { headers });
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          const blob = await resp.blob();
+          return { url: URL.createObjectURL(blob), filePath };
         } catch (error) {
           console.error("Failed to load file:", filePath, error);
           if (!isCancelled) {

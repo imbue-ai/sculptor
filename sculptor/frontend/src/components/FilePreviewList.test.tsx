@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ElementIds } from "~/api";
 import type * as ApiClientModule from "~/apiClient.ts";
-import { initBackendCapabilities } from "~/common/state/atoms/backendCapabilities.ts";
 
 import { FilePreviewList } from "./FilePreviewList";
 
@@ -43,9 +42,6 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
-  // Reset back to the default (electron-ipc) capabilities; the http-mode tests
-  // below flip this to REMOTE.
-  initBackendCapabilities(false);
   delete (window as unknown as Record<string, unknown>).sculptor;
 });
 
@@ -408,15 +404,13 @@ describe("FilePreviewList", () => {
     });
   });
 
-  describe("http mode (remote backend)", () => {
-    // In the web/OpenHost build there is no window.sculptor; capabilities are
-    // REMOTE so previews are fetched over HTTP from the backend instead of
-    // through Electron IPC.
+  describe("upload-id previews (HTTP)", () => {
+    // A bare upload id (no leading slash) is a backend upload, fetched over HTTP.
+    // (The absolute-path tests above exercise the legacy getFileData fallback.)
     beforeEach(() => {
-      initBackendCapabilities(true);
       // The shared mockGetFileData accumulates calls across this file's tests
       // (vitest does not auto-clear vi.fn() call history), so clear it here to
-      // keep "the Electron IPC path must not be used in http mode" accurate.
+      // keep "the Electron IPC path must not be used for upload ids" accurate.
       mockGetFileData.mockClear();
       // jsdom does not implement URL.createObjectURL; stub it so the http path
       // can turn the fetched blob into an <img> src.
@@ -444,7 +438,7 @@ describe("FilePreviewList", () => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
       const [url] = fetchMock.mock.calls[0] as [string];
       expect(url).toBe(`${TEST_BASE_URL}/api/v1/uploaded-file/abc123.png`);
-      // The Electron IPC path must not be used in http mode.
+      // The Electron IPC path must not be used for upload-id references.
       expect(mockGetFileData).not.toHaveBeenCalled();
     });
 

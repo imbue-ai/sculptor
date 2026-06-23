@@ -1,7 +1,6 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type * as ApiClientModule from "~/apiClient.ts";
-import { initBackendCapabilities } from "~/common/state/atoms/backendCapabilities.ts";
 
 import {
   ALLOWED_EXTENSIONS,
@@ -247,57 +246,6 @@ describe("processAndValidateFiles", () => {
 });
 
 describe("saveFiles", () => {
-  it("saves files using window.sculptor.saveFile", async () => {
-    const mockSaveFile = vi.fn().mockResolvedValue("/path/to/saved.png");
-    window.sculptor = { saveFile: mockSaveFile } as unknown as typeof window.sculptor;
-
-    const file = createFileWithContent("photo.png", PNG_HEADER, "image/png");
-    const result = await saveFiles([file]);
-
-    expect(result).toEqual(["/path/to/saved.png"]);
-    expect(mockSaveFile).toHaveBeenCalledTimes(1);
-  });
-
-  it("filters out failed saves", async () => {
-    const mockSaveFile = vi
-      .fn()
-      .mockResolvedValueOnce("/path/to/first.png")
-      .mockRejectedValueOnce(new Error("save failed"))
-      .mockResolvedValueOnce("/path/to/third.png");
-    window.sculptor = { saveFile: mockSaveFile } as unknown as typeof window.sculptor;
-
-    const files = [
-      createFileWithContent("first.png", PNG_HEADER, "image/png"),
-      createFileWithContent("second.png", PNG_HEADER, "image/png"),
-      createFileWithContent("third.png", PNG_HEADER, "image/png"),
-    ];
-    const result = await saveFiles(files);
-
-    expect(result).toEqual(["/path/to/first.png", "/path/to/third.png"]);
-  });
-
-  it("returns empty array when window.sculptor is not available", async () => {
-    delete (window as unknown as Record<string, unknown>).sculptor;
-
-    const file = createFileWithContent("photo.png", PNG_HEADER, "image/png");
-    const result = await saveFiles([file]);
-
-    expect(result).toEqual([]);
-  });
-});
-
-describe("saveFiles (http mode)", () => {
-  // In the web/OpenHost build there is no window.sculptor; capabilities are
-  // REMOTE so uploads go over HTTP to the backend instead of Electron IPC.
-  beforeEach(() => {
-    initBackendCapabilities(true);
-  });
-
-  afterEach(() => {
-    // Restore the default (electron-ipc) capabilities for the rest of the suite.
-    initBackendCapabilities(false);
-  });
-
   it("uploads files over HTTP and returns the backend file ids", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -314,22 +262,6 @@ describe("saveFiles (http mode)", () => {
     expect(url).toBe(`${TEST_BASE_URL}/api/v1/upload-file`);
     expect(init.method).toBe("POST");
     expect(init.body).toBeInstanceOf(FormData);
-  });
-
-  it("does not call window.sculptor.saveFile in http mode", async () => {
-    const mockSaveFile = vi.fn();
-    window.sculptor = { saveFile: mockSaveFile } as unknown as typeof window.sculptor;
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async (): Promise<{ fileId: string }> => ({ fileId: "abc123.png" }),
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    const file = createFileWithContent("photo.png", PNG_HEADER, "image/png");
-    await saveFiles([file]);
-
-    expect(mockSaveFile).not.toHaveBeenCalled();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("filters out uploads that the backend rejects", async () => {
