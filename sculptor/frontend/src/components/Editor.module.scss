@@ -48,12 +48,6 @@
   padding-block: var(--space-3) var(--space-1);
   padding-inline: var(--space-4);
 
-  &.viewer {
-    min-height: inherit; // Inherit height from parent container
-    padding-block: var(--space-2);
-    padding-inline: inherit; // Inherit padding from parent container
-  }
-
   &:focus {
     outline: none;
   }
@@ -129,10 +123,6 @@
     margin-block: 2px;
     margin-inline: 0;
     padding-left: var(--space-3);
-  }
-
-  .tightList li p {
-    margin: 0;
   }
 }
 

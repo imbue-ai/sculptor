@@ -9,6 +9,12 @@ import { Toast, ToastType } from "./Toast.tsx";
 
 type OpenToast = "download" | "ready" | "error" | null;
 
+// Keep the download and ready toasts open until the user acts on them, rather
+// than auto-dismissing on Radix's default timeout.
+const PERSISTENT_TOAST_DURATION_MS = 999_999_999;
+// Error toasts auto-dismiss after a few seconds so they don't linger.
+const ERROR_TOAST_DURATION_MS = 5_000;
+
 export const AutoUpdateToasts = (): ReactElement => {
   const status = useAtomValue(autoUpdateStatusAtom);
   const [openToast, setOpenToast] = useState<OpenToast>(null);
@@ -66,21 +72,21 @@ export const AutoUpdateToasts = (): ReactElement => {
         open={openToast === "download"}
         onOpenChange={handleDownloadOpenChange}
         title={downloadTitle}
-        duration={999999999}
+        duration={PERSISTENT_TOAST_DURATION_MS}
       />
       <Toast
         open={openToast === "ready"}
         onOpenChange={handleDismiss}
         title={status?.type === "ready" ? `Update ready (v${status.version})` : "Update ready"}
         action={readyAction}
-        duration={999999999}
+        duration={PERSISTENT_TOAST_DURATION_MS}
       />
       <Toast
         open={openToast === "error"}
         onOpenChange={handleDismiss}
         title={status?.type === "error" ? status.message : ""}
         type={ToastType.ERROR}
-        duration={5000}
+        duration={ERROR_TOAST_DURATION_MS}
       />
     </>
   );

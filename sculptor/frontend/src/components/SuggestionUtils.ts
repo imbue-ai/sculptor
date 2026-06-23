@@ -451,7 +451,7 @@ export const renderSuggestion =
           editor: props.editor,
         });
 
-        if (reactRenderer.element instanceof HTMLElement === false) {
+        if (!(reactRenderer.element instanceof HTMLElement)) {
           return;
         }
 

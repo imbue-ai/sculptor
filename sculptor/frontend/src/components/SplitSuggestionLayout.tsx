@@ -2,16 +2,8 @@ import type { SuggestionProps } from "@tiptap/suggestion";
 import type { ReactElement, ReactNode } from "react";
 import { forwardRef } from "react";
 
-import type { SuggestionListRef } from "./SuggestionListContainer";
+import type { SuggestionItemShape, SuggestionListRef } from "./SuggestionListContainer";
 import { SuggestionListContainer } from "./SuggestionListContainer";
-
-type SuggestionItemShape = {
-  id: string;
-  label: string;
-  isSectionHeader?: boolean;
-  isFirstInList?: boolean;
-  [key: string]: unknown;
-};
 
 export type SplitSuggestionLayoutProps = {
   props: SuggestionProps;

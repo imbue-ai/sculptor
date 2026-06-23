@@ -35,7 +35,9 @@ const SkillDetailPane = ({ item, query }: { item: SkillRowShape; query: string }
         {badgeLabelForType(item.skillType)}
       </Badge>
     )}
-    <span className={styles.detailTitle}>/{highlightMatch(item.label, query, styles.highlight)}</span>
+    <span className={styles.detailTitle}>
+      /{highlightMatch({ text: item.label, query, highlightClassName: styles.highlight })}
+    </span>
     {item.description && <div className={styles.detailDescription}>{item.description}</div>}
   </div>
 );
@@ -54,14 +56,16 @@ export const SkillList = forwardRef<SuggestionListRef, SkillListProps>((props, r
   const onExitToParent = props.onExitToParent;
   const renderSkillItem = useCallback(
     (item: SkillRowShape): ReactNode => (
-      <span className={styles.name}>/{highlightMatch(item.label, props.query, styles.highlight)}</span>
+      <span className={styles.name}>
+        /{highlightMatch({ text: item.label, query: props.query, highlightClassName: styles.highlight })}
+      </span>
     ),
     [props.query],
   );
 
   const renderSideContent = useCallback(
     (activeItem: { id: string; label: string; [key: string]: unknown } | undefined): ReactNode => {
-      if (!activeItem) return null;
+      if (!activeItem) return undefined;
       const skillItem = activeItem as SkillRowShape;
       return <SkillDetailPane item={skillItem} query={props.query} />;
     },

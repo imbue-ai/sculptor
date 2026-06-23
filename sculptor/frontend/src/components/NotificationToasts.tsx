@@ -8,10 +8,10 @@ import { useImbueParams } from "../common/NavigateUtils";
 import { notificationsAtom } from "../common/state/atoms/notifications";
 import { Toast, ToastType } from "./Toast";
 
-type NotificationToastState = {
-  notification: Notification;
-  isOpen: boolean;
-};
+// How long a toast stays on screen before auto-dismissing, keyed by importance.
+const CRITICAL_TOAST_DURATION_MS = 10_000;
+const TIME_SENSITIVE_TOAST_DURATION_MS = 5_000;
+const DEFAULT_TOAST_DURATION_MS = 3_000;
 
 const getToastType = (importance?: NotificationImportance): ToastType => {
   switch (importance) {
@@ -28,23 +28,22 @@ const getToastType = (importance?: NotificationImportance): ToastType => {
   }
 };
 
-const getToastDurationMiliseconds = (importance?: NotificationImportance): number => {
+const getToastDurationMilliseconds = (importance?: NotificationImportance): number => {
   switch (importance) {
     case NotificationImportance.CRITICAL:
-      return 10000;
+      return CRITICAL_TOAST_DURATION_MS;
     case NotificationImportance.TIME_SENSITIVE:
-      return 5000;
+      return TIME_SENSITIVE_TOAST_DURATION_MS;
     case NotificationImportance.ACTIVE:
     case NotificationImportance.PASSIVE:
     case undefined:
     default:
-      return 3000;
+      return DEFAULT_TOAST_DURATION_MS;
   }
 };
 
 type NotificationToastItemProps = {
   notification: Notification;
-  isOpen: boolean;
   onClose: (objectId: string) => void;
 };
 
@@ -54,7 +53,6 @@ type NotificationToastItemProps = {
 // inline lambda on every parent render. (SCU-1455)
 const NotificationToastItem = memo(function NotificationToastItem({
   notification,
-  isOpen,
   onClose,
 }: NotificationToastItemProps): ReactElement {
   const handleOpenChange = useCallback(
@@ -65,11 +63,11 @@ const NotificationToastItem = memo(function NotificationToastItem({
   );
   return (
     <Toast
-      open={isOpen}
+      open
       onOpenChange={handleOpenChange}
       title={notification.message}
       type={getToastType(notification.importance)}
-      duration={getToastDurationMiliseconds(notification.importance)}
+      duration={getToastDurationMilliseconds(notification.importance)}
     />
   );
 });
@@ -81,7 +79,7 @@ const NotificationToastItem = memo(function NotificationToastItem({
 export const NotificationToasts = (): ReactElement => {
   const notifications = useAtomValue(notificationsAtom);
   const { projectID, taskID } = useImbueParams();
-  const [toastStates, setToastStates] = useState<Array<NotificationToastState>>([]);
+  const [toasts, setToasts] = useState<Array<Notification>>([]);
   const notificationIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -91,20 +89,15 @@ export const NotificationToasts = (): ReactElement => {
     );
 
     if (newNotifications.length > 0) {
-      const newToastStates = newNotifications
-        .filter((notification) => {
-          // Discard notifications not relevant to the current project/task.
-          return (
-            (!notification.projectId || notification.projectId === projectID) &&
-            (!notification.taskId || notification.taskId === taskID)
-          );
-        })
-        .map((notification) => ({
-          notification,
-          isOpen: true,
-        }));
+      const relevantNotifications = newNotifications.filter((notification) => {
+        // Discard notifications not relevant to the current project/task.
+        return (
+          (!notification.projectId || notification.projectId === projectID) &&
+          (!notification.taskId || notification.taskId === taskID)
+        );
+      });
 
-      setToastStates((prev) => [...prev, ...newToastStates]);
+      setToasts((prev) => [...prev, ...relevantNotifications]);
 
       newNotifications.forEach((n) => processedNotificationIds.add(n.objectId));
     }
@@ -113,18 +106,13 @@ export const NotificationToasts = (): ReactElement => {
   // Remove by objectId (the stable identity) rather than list index so the
   // callback stays referentially stable across renders.
   const handleClose = useCallback((objectId: string) => {
-    setToastStates((prev) => prev.filter((toastState) => toastState.notification.objectId !== objectId));
+    setToasts((prev) => prev.filter((notification) => notification.objectId !== objectId));
   }, []);
 
   return (
     <>
-      {toastStates.map((toastState) => (
-        <NotificationToastItem
-          key={toastState.notification.objectId}
-          notification={toastState.notification}
-          isOpen={toastState.isOpen}
-          onClose={handleClose}
-        />
+      {toasts.map((notification) => (
+        <NotificationToastItem key={notification.objectId} notification={notification} onClose={handleClose} />
       ))}
     </>
   );

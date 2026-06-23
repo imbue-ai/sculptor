@@ -1,4 +1,4 @@
-import type { ReactElement, Ref } from "react";
+import type { ChangeEvent, ReactElement, Ref } from "react";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
@@ -49,7 +49,7 @@ export const FileUpload = forwardRef<FileUploadHandle, FileUploadProps>(function
     [disabled, isUploading],
   );
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
+  const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
     const filesToUpload = event.target.files;
     if (!filesToUpload || filesToUpload.length === 0) return;
 
@@ -96,7 +96,7 @@ export const FileUpload = forwardRef<FileUploadHandle, FileUploadProps>(function
       accept={ALLOWED_EXTENSIONS.join(",")}
       multiple
       onChange={handleFileUpload}
-      style={{ display: "none" }}
+      hidden
       data-testid={ElementIds.FILE_UPLOAD}
     />
   );
