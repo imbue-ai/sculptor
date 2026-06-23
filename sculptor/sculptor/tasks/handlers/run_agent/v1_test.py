@@ -55,6 +55,7 @@ from sculptor.tasks.handlers.run_agent.v1 import AgentPaused
 from sculptor.tasks.handlers.run_agent.v1 import _build_agent_path
 from sculptor.tasks.handlers.run_agent.v1 import _run_agent_in_environment
 from sculptor.tasks.handlers.run_agent.v1 import _save_messages
+from sculptor.tasks.handlers.run_agent.v1 import _send_user_input_message
 from sculptor.tasks.handlers.run_agent.v1 import _update_task_state
 
 
@@ -1096,6 +1097,50 @@ def test_orphaned_question_answer_is_resumed_not_stale_skipped(
         f"orphaned answer must be resumed, not re-delivered raw (which is stale-skipped); got {type(first_push).__name__}"
     )
     assert first_push.for_user_message_id == answer.message_id
+
+
+def test_send_user_input_message_resumes_only_the_orphaned_answer() -> None:
+    """Only the answer tracked as orphaned converts to a resume; any other is raw.
+
+    Guards the boundary of the SCU-1558 fix: a live answer (one not left in flight
+    by a previous, crashed run) must still reach the harness as a raw
+    UserQuestionAnswerMessage so it is delivered to the open dialog. Converting it
+    to a resume would silently drop the user's actual answer.
+    """
+    orphaned = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"q": "a"},
+        question_data=AskUserQuestionData(questions=[], tool_use_id="t1"),
+        tool_use_id="t1",
+    )
+    live = UserQuestionAnswerMessage(
+        message_id=AgentMessageID(),
+        answers={"q": "b"},
+        question_data=AskUserQuestionData(questions=[], tool_use_id="t2"),
+        tool_use_id="t2",
+    )
+
+    orphaned_agent = MagicMock()
+    _send_user_input_message(
+        orphaned_agent,
+        orphaned,
+        None,
+        orphaned.message_id,
+    )
+    (orphaned_call,) = orphaned_agent.push_message.call_args_list
+    sent_for_orphaned = orphaned_call.args[0]
+    assert isinstance(sent_for_orphaned, ResumeAgentResponseRunnerMessage)
+    assert sent_for_orphaned.for_user_message_id == orphaned.message_id
+
+    live_agent = MagicMock()
+    _send_user_input_message(
+        live_agent,
+        live,
+        None,
+        orphaned.message_id,
+    )
+    (live_call,) = live_agent.push_message.call_args_list
+    assert live_call.args[0] is live, "a live answer must be delivered raw, not converted to a resume"
 
 
 class _CompletingResumeAgent(DefaultAgentWrapper):
