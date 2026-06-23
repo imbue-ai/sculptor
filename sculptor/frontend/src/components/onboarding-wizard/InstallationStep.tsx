@@ -21,6 +21,9 @@ import { DependencyCard } from "./DependencyCard.tsx";
 import type { DependencyStatus } from "./dependencyTypes.ts";
 import styles from "./OnboardingWizard.module.scss";
 
+// Normal cadence for re-checking dependency status while not actively installing.
+const NORMAL_POLL_INTERVAL_MS = 30_000;
+
 const deriveClaudeStatus = (
   info: DependencyInfo | undefined,
   isInstalling: boolean,
@@ -66,7 +69,7 @@ type InstallationStepProps = {
 /** The InstallationStep is the second step of the OnboardingWizard where we verify that users have
  * the necessary dependencies installed.
  *
- * It is a key requirement of this page to track the appropriate PostHog events granurlaly as users complete the verious
+ * It is a key requirement of this page to track the appropriate PostHog events granularly as users complete the various
  * steps so that we can identify where users are dropping off in the onboarding process.
  */
 export const InstallationStep = ({ onComplete, isLoading, error }: InstallationStepProps): ReactElement => {
@@ -232,7 +235,7 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
     if (!isDependenciesLoading && !isInstalling) {
       loadDependencies(true);
     }
-  }, 30_000);
+  }, NORMAL_POLL_INTERVAL_MS);
 
   // Dismiss the sign-in prompt once Claude reports authenticated — e.g. when a
   // local loopback login completed in the background and the poll picked it up.

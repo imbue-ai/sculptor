@@ -19,21 +19,10 @@
   width: 100%;
 }
 
-.logo {
-  height: 25px;
-  width: 30px;
-}
-
 .titleText {
   color: var(--accent-11);
   font-size: var(--font-size-6);
   font-weight: var(--font-weight-bold);
-}
-
-.primaryText {
-  color: var(--accent-11);
-  font-size: var(--font-size-5);
-  font-weight: var(--font-weight-medium);
 }
 
 .secondaryText {
@@ -43,12 +32,6 @@
   line-height: 24px;
 }
 
-.circleIcon {
-  color: var(--accent-11);
-  height: 24px;
-  width: 24px;
-}
-
 .termsText {
   color: var(--accent-11);
   font-size: var(--font-size-2);
@@ -56,20 +39,9 @@
   text-decoration: underline;
 }
 
-.linkText {
-  color: var(--accent-10);
-  font-size: var(--font-size-3);
-  font-weight: var(--font-weight-regular);
-  text-decoration: underline;
-}
-
 .tosAndPrivacy {
     gap: var(--space-2);
     padding-top: var(--space-3);
-}
-
-.researchPreviewClassic {
-    bottom: var(--space-7);
 }
 
 .emailInput {
@@ -121,26 +93,4 @@
 
 .error {
   margin-top: var(--space-1);
-}
-
-.completeDependencyCard {
-  background-color: var(--green-3);
-  border: 2px solid var(--green-6);
-  border-radius: var(--radius-5);
-}
-
-
-.telemetryCheck {
-  align-items: center;
-  display: flex;
-  height: 22px;
-  justify-content: center;
-  width: 22px;
-}
-
-.telemetrySettings {
-  > * {
-    font-size: var(--font-size-3);
-    min-width: 280px;
-  }
 }
