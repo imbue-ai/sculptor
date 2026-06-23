@@ -147,9 +147,9 @@ class PlaywrightBrowserPanelElement(PlaywrightIntegrationTestElement):
         ``_WEBVIEW_EXECUTE_RETRY_SECONDS``, re-reading the current
         ``webContentsId`` each attempt so a guest re-created by a workspace
         switch or panel reopen is picked up rather than executed into while it
-        is still attaching. A non-transient error (a real bug, or the bridge
-        being absent because the test runs in browser-launch mode) is re-raised
-        immediately; a transient one is re-raised only once the budget is spent.
+        is still attaching. A non-transient execute error is re-raised immediately; a transient one
+        is re-raised only once the budget is spent. If the webview never attaches,
+        ``_wait_for_webview_attached`` will time out.
         """
         deadline = time.monotonic() + _WEBVIEW_EXECUTE_RETRY_SECONDS
         while True:
