@@ -4,7 +4,9 @@
  *
  * Returns the detected prefix, or undefined if detection isn't possible.
  */
-export const detectHomeDirPrefix = (inputPath: string, firstResultPath: string): string | undefined => {
+export const detectHomeDirPrefix = (inputs: { inputPath: string; firstResultPath: string }): string | undefined => {
+  const { inputPath, firstResultPath } = inputs;
+
   if (!inputPath.startsWith("~")) return undefined;
 
   const tildeRest = inputPath.slice(1); // e.g. "/foo" or "/foo/bar"
