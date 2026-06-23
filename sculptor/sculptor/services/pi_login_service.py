@@ -149,12 +149,16 @@ class PiLoginService(Service):
         """Stop the login PTY and broadcast a model refresh (credentials may have changed).
 
         Idempotent: safe to call on Done, on WebSocket close, and again afterwards.
+        Done and WebSocket-close both fire for a single session, so only the call
+        that actually unregisters the PTY broadcasts — later no-op teardowns skip it,
+        keeping the credential change to one refresh fan-out.
         """
         with self._lock:
             self._login_ids.discard(login_id)
         manager = unregister_terminal_manager(pi_login_terminal_id(login_id))
-        if manager is not None:
-            manager.stop()
+        if manager is None:
+            return
+        manager.stop()
         with self.data_model_service.open_transaction(RequestID()) as transaction:
             broadcast_pi_models_refresh(self.task_service, transaction)
 

@@ -120,3 +120,6 @@ def test_teardown_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
     service.teardown(login_id)  # second call must not raise or re-stop
 
     fake_manager.stop.assert_called_once()
+    # Done and WebSocket-close both tear the same session down; only the call that
+    # actually unregisters the PTY broadcasts, so the credential change fans out once.
+    broadcast_mock.assert_called_once()
