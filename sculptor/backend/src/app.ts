@@ -2,7 +2,9 @@ import fastifySwagger from "@fastify/swagger";
 import Fastify, { type FastifyInstance } from "fastify";
 import { jsonSchemaTransform, serializerCompiler, validatorCompiler } from "fastify-type-provider-zod";
 
+import { registerAuthGuard } from "~/auth/guard";
 import { registerHealthRoutes } from "~/routes/health";
+import { registerSessionTokenRoutes } from "~/routes/session_token";
 
 // Builds the Fastify application. This MUST stay free of side effects (no DB
 // open, no service start) so unit tests can build it cheaply and --emit-openapi
@@ -24,6 +26,11 @@ export function buildApp(): FastifyInstance {
     transform: jsonSchemaTransform,
   });
 
+  // The auth guard is a root-level onRequest hook, so it runs for every route
+  // (including those registered by later plugins) regardless of order.
+  registerAuthGuard(app);
+
+  void app.register(registerSessionTokenRoutes);
   void app.register(registerHealthRoutes);
 
   return app;
