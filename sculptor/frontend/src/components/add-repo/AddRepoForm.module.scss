@@ -14,4 +14,9 @@
   &:hover {
     text-decoration: none;
   }
+
+  &[aria-disabled="true"] {
+    color: var(--gray-8);
+    cursor: not-allowed;
+  }
 }
