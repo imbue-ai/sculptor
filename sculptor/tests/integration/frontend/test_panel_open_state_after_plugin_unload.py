@@ -17,7 +17,6 @@ from pathlib import Path
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.services.user_config.user_config import load_config
 from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.elements.panel_zones import PlaywrightPanelZonesElement
@@ -52,8 +51,8 @@ def test_unloading_active_plugin_panel_falls_back_to_an_enabled_panel(
 
         task_page = start_task_and_wait_for_ready(page, prompt="panel persistence", workspace_name="Panels WS")
         zones = PlaywrightPanelZonesElement(page)
-        browser_panel = page.get_by_test_id(ElementIDs.BROWSER_PANEL)
-        skills_panel = page.get_by_test_id(ElementIDs.SKILLS_PANEL)
+        browser_panel = task_page.get_browser_panel_root()
+        skills_panel = task_page.get_skills_panel()
 
         # The bundled Linear plugin auto-loads and docks a panel in top-right.
         settings_page = navigate_to_settings_page(page=page)
