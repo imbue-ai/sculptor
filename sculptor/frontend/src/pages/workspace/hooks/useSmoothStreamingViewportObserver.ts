@@ -13,7 +13,7 @@ import { isSmoothStreamingViewportVisibleAtom } from "~/common/state/atoms/smoot
  */
 export const useSmoothStreamingViewportObserver = (): MutableRefObject<HTMLDivElement | null> => {
   const sentinelRef = useRef<HTMLDivElement | null>(null);
-  const setSmoothStreamingEnabled = useSetAtom(isSmoothStreamingViewportVisibleAtom);
+  const setIsViewportVisible = useSetAtom(isSmoothStreamingViewportVisibleAtom);
 
   useEffect(() => {
     const node = sentinelRef.current;
@@ -22,16 +22,16 @@ export const useSmoothStreamingViewportObserver = (): MutableRefObject<HTMLDivEl
     }
 
     const observer = new IntersectionObserver(([entry]) => {
-      setSmoothStreamingEnabled(entry.isIntersecting);
+      setIsViewportVisible(entry.isIntersecting);
     });
 
     observer.observe(node);
 
     return (): void => {
       observer.disconnect();
-      setSmoothStreamingEnabled(true);
+      setIsViewportVisible(true);
     };
-  }, [setSmoothStreamingEnabled]);
+  }, [setIsViewportVisible]);
 
   return sentinelRef;
 };
@@ -46,7 +46,7 @@ export const useSmoothStreamingViewportObserver = (): MutableRefObject<HTMLDivEl
  * @param sentinelRef - Ref to the bottom sentinel element
  */
 export const useSmoothStreamingOnTaskSwitch = (taskID: string, sentinelRef: RefObject<HTMLDivElement | null>): void => {
-  const setSmoothStreamingEnabled = useSetAtom(isSmoothStreamingViewportVisibleAtom);
+  const setIsViewportVisible = useSetAtom(isSmoothStreamingViewportVisibleAtom);
 
   useEffect(() => {
     const node = sentinelRef.current;
@@ -54,10 +54,10 @@ export const useSmoothStreamingOnTaskSwitch = (taskID: string, sentinelRef: RefO
       return;
     }
 
-    // Check if the sentinel is currently in the viewport and set smooth streaming accordingly
+    // Check if the sentinel is currently in the viewport and set visibility accordingly
     const isInView = isElementInViewport(node);
-    setSmoothStreamingEnabled(isInView);
-  }, [taskID, sentinelRef, setSmoothStreamingEnabled]);
+    setIsViewportVisible(isInView);
+  }, [taskID, sentinelRef, setIsViewportVisible]);
 };
 
 const isElementInViewport = (element: HTMLElement): boolean => {

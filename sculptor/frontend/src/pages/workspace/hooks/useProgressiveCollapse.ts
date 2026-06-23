@@ -125,6 +125,9 @@ export function useProgressiveCollapse(containerRef: RefObject<HTMLElement | nul
       });
     };
 
+    // Coalesce bursts of resize/mutation callbacks into a single measurement
+    // per frame, and defer the getBoundingClientRect reads in computeCollapse
+    // until after the browser has laid out any newly mounted children.
     const scheduleCompute = (): void => {
       if (rafIdRef.current) {
         cancelAnimationFrame(rafIdRef.current);

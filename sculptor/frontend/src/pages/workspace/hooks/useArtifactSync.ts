@@ -57,7 +57,7 @@ export const useArtifactSync = (workspaceId: string, taskId: string): void => {
             if (!currentState) {
               // If no state exists, skip artifact update (shouldn't happen in practice)
               console.warn(`No task detail state found for task ${taskId}, skipping artifact update`);
-              return currentState!;
+              return currentState;
             }
             return {
               ...currentState,
