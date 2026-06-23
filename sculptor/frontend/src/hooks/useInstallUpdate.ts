@@ -22,12 +22,19 @@ export const useInstallUpdate = (): UseInstallUpdate => {
       update_channel: status && "channel" in status ? status.channel : null,
     });
 
-    window.sculptor?.installUpdate().then((accepted) => {
-      if (!accepted) {
+    window.sculptor
+      ?.installUpdate()
+      .then((accepted) => {
+        if (!accepted) {
+          setIsInstalling(false);
+        }
+        // If accepted, the app is shutting down — leave the loading state on.
+      })
+      .catch((error: unknown) => {
+        // The install request failed; clear the loading state so the user can retry.
+        console.error(error);
         setIsInstalling(false);
-      }
-      // If accepted, the app is shutting down — leave the loading state on.
-    });
+      });
   }, [isInstalling, setIsInstalling, status]);
 
   return { install, isInstalling };
