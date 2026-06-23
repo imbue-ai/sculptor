@@ -3,7 +3,13 @@ import { redirect } from "react-router-dom";
 import { createHashRouter, RouterProvider } from "react-router-dom";
 
 import type { TabEntry, TabsState } from "./common/state/atoms/workspaces.ts";
-import { INVALID_ACTIVE_INDEX, parseDraftIdFromTabId } from "./common/state/atoms/workspaces.ts";
+import {
+  INVALID_ACTIVE_INDEX,
+  isValidTabsState,
+  parseDraftIdFromTabId,
+  SCULPTOR_TABS_STORAGE_KEY,
+  WORKSPACE_TAB_ID_PREFIX,
+} from "./common/state/atoms/workspaces.ts";
 import { COMPONENT_GALLERY_TAB_ID, HOME_TAB_ID, SETTINGS_TAB_ID } from "./components/workspaceTabIds.ts";
 import { PageLayout } from "./layouts/PageLayout";
 import { AddWorkspacePage } from "./pages/add-workspace/AddWorkspacePage.tsx";
@@ -16,19 +22,6 @@ import { WorkspacePage } from "./pages/workspace/WorkspacePage";
 
 const DEFAULT_TABS_STATE: TabsState = { order: [], activeIndex: INVALID_ACTIVE_INDEX };
 
-const isValidTabsState = (value: unknown): value is TabsState => {
-  if (value === null || typeof value !== "object") return false;
-  const v = value as { order?: unknown; activeIndex?: unknown };
-  if (!Array.isArray(v.order) || typeof v.activeIndex !== "number") return false;
-  for (const entry of v.order) {
-    if (entry === null || typeof entry !== "object") return false;
-    const e = entry as { tabId?: unknown; agentId?: unknown };
-    if (typeof e.tabId !== "string") return false;
-    if (e.agentId !== null && typeof e.agentId !== "string") return false;
-  }
-  return true;
-};
-
 /**
  * Read `sculptor-tabs` synchronously from localStorage. Returns the empty
  * default on any parse / shape error so the loader always has something to
@@ -37,7 +30,7 @@ const isValidTabsState = (value: unknown): value is TabsState => {
  */
 const readSculptorTabs = (): TabsState => {
   try {
-    const raw = localStorage.getItem("sculptor-tabs");
+    const raw = localStorage.getItem(SCULPTOR_TABS_STORAGE_KEY);
     if (raw === null) return DEFAULT_TABS_STATE;
     const parsed: unknown = JSON.parse(raw);
     return isValidTabsState(parsed) ? parsed : DEFAULT_TABS_STATE;
@@ -52,7 +45,7 @@ const entryToUrl = (entry: TabEntry): string | null => {
   if (entry.tabId === COMPONENT_GALLERY_TAB_ID) return "/component-gallery";
   const draftId = parseDraftIdFromTabId(entry.tabId);
   if (draftId !== null) return `/ws/new/${draftId}`;
-  if (entry.tabId.startsWith("ws_")) {
+  if (entry.tabId.startsWith(WORKSPACE_TAB_ID_PREFIX)) {
     return entry.agentId !== null ? `/ws/${entry.tabId}/agent/${entry.agentId}` : `/ws/${entry.tabId}`;
   }
   return null;

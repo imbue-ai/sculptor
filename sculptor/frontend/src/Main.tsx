@@ -23,7 +23,7 @@ import { initializeSentry } from "./instrument.ts";
     initializeTracing(baseUrl);
     await initializeSessionToken();
   } catch (e) {
-    console.log("Initialization failed", e);
+    console.error("Initialization failed", e);
   }
 
   // React 19's default root error handlers already reach Sentry: uncaught
