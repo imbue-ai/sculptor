@@ -11,7 +11,7 @@ class FakeClipboardItem {
 
 const installClipboardStub = (): ReturnType<typeof vi.fn> => {
   // Mirror real clipboard.write semantics: resolve the per-type blob promises
-  // so a rejected fetch/convert propagates to the caller.
+  // so a rejected decode/encode propagates to the caller.
   const write = vi.fn(async (items: Array<FakeClipboardItem>): Promise<void> => {
     for (const item of items) {
       await Promise.all(Object.values(item.items));
@@ -25,31 +25,38 @@ const installClipboardStub = (): ReturnType<typeof vi.fn> => {
   return write;
 };
 
+// jsdom doesn't load <img> sources, so fake Image: setting `src` resolves
+// onload (or onerror) on the next microtask with the given intrinsic size.
+const stubImage = (options: { width: number; height: number; fail?: boolean }): void => {
+  class FakeImage {
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    naturalWidth = 0;
+    naturalHeight = 0;
+    set src(_value: string) {
+      queueMicrotask(() => {
+        if (options.fail) {
+          this.onerror?.();
+          return;
+        }
+        this.naturalWidth = options.width;
+        this.naturalHeight = options.height;
+        this.onload?.();
+      });
+    }
+  }
+  vi.stubGlobal("Image", FakeImage);
+};
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
 describe("copyImageToClipboard", () => {
-  it("writes the original blob as image/png when the source is already a PNG", async () => {
+  it("rasterizes the source image to PNG at full resolution and writes it to the clipboard", async () => {
     const pngBlob = new Blob(["png-bytes"], { type: "image/png" });
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, blob: () => Promise.resolve(pngBlob) } as Response));
-    const write = installClipboardStub();
-
-    await copyImageToClipboard("blob:fake-url");
-
-    expect(write).toHaveBeenCalledTimes(1);
-    const [items] = write.mock.calls[0] as [Array<FakeClipboardItem>];
-    expect(items).toHaveLength(1);
-    expect(Object.keys(items[0].items)).toEqual(["image/png"]);
-    await expect(items[0].items["image/png"]).resolves.toBe(pngBlob);
-  });
-
-  it("rasterizes a non-PNG source to PNG before writing", async () => {
-    const jpegBlob = new Blob(["jpeg-bytes"], { type: "image/jpeg" });
-    const pngBlob = new Blob(["png-bytes"], { type: "image/png" });
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, blob: () => Promise.resolve(jpegBlob) } as Response));
-    vi.stubGlobal("createImageBitmap", vi.fn().mockResolvedValue({ width: 2, height: 3, close: vi.fn() }));
+    stubImage({ width: 4, height: 6 });
     const drawImage = vi.fn();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
       drawImage,
@@ -68,20 +75,23 @@ describe("copyImageToClipboard", () => {
     });
     const write = installClipboardStub();
 
-    await copyImageToClipboard("blob:jpeg-url");
+    await copyImageToClipboard("blob:some-image");
 
-    // The source bitmap's own dimensions drive the canvas, and the PNG export is what lands on the clipboard.
-    expect(canvasWidth).toBe(2);
-    expect(canvasHeight).toBe(3);
+    // The image's intrinsic dimensions drive the canvas (full resolution),
+    // and the PNG export is what lands on the clipboard.
+    expect(canvasWidth).toBe(4);
+    expect(canvasHeight).toBe(6);
     expect(drawImage).toHaveBeenCalledOnce();
+    expect(write).toHaveBeenCalledTimes(1);
     const [items] = write.mock.calls[0] as [Array<FakeClipboardItem>];
+    expect(Object.keys(items[0].items)).toEqual(["image/png"]);
     await expect(items[0].items["image/png"]).resolves.toBe(pngBlob);
   });
 
-  it("throws when the fetch fails", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 } as Response));
+  it("rejects when the source image cannot be loaded", async () => {
+    stubImage({ width: 0, height: 0, fail: true });
     installClipboardStub();
 
-    await expect(copyImageToClipboard("blob:missing")).rejects.toThrow(/404/);
+    await expect(copyImageToClipboard("blob:broken")).rejects.toThrow(/could not be loaded/);
   });
 });

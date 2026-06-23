@@ -1,46 +1,48 @@
-// Chromium's async clipboard reliably accepts only `image/png` for image
-// data, so any non-PNG source is rasterized to PNG before writing.
-const convertBlobToPng = async (blob: Blob): Promise<Blob> => {
-  const bitmap = await createImageBitmap(blob);
-  try {
-    const canvas = document.createElement("canvas");
-    canvas.width = bitmap.width;
-    canvas.height = bitmap.height;
-    const context = canvas.getContext("2d");
-    if (!context) {
-      throw new Error("Failed to acquire 2D canvas context for PNG conversion");
-    }
-    context.drawImage(bitmap, 0, 0);
-    return await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob((result) => {
-        if (result) {
-          resolve(result);
-        } else {
-          reject(new Error("Canvas toBlob produced no image data"));
-        }
-      }, "image/png");
-    });
-  } finally {
-    bitmap.close();
-  }
-};
+// Load the image the same way the browser renders it in an <img>, then
+// rasterize to PNG. Chromium's async clipboard only reliably accepts image/png,
+// and an <img>-backed decode handles every format the UI can display (jpeg,
+// webp, gif, svg, …). `createImageBitmap` is stricter and rejects some of those
+// with "the source image could not be decoded", even when the thumbnail shows.
+const loadImageElement = (url: string): Promise<HTMLImageElement> =>
+  new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = (): void => resolve(image);
+    image.onerror = (): void => reject(new Error("The source image could not be loaded for copying"));
+    image.src = url;
+  });
 
-const fetchImageAsPng = async (url: string): Promise<Blob> => {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch image for copy: HTTP ${response.status}`);
+const rasterizeToPng = async (url: string): Promise<Blob> => {
+  const image = await loadImageElement(url);
+  if (image.naturalWidth === 0 || image.naturalHeight === 0) {
+    throw new Error("The source image has no intrinsic dimensions to rasterize");
   }
-  const blob = await response.blob();
-  return blob.type === "image/png" ? blob : convertBlobToPng(blob);
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Failed to acquire 2D canvas context for PNG conversion");
+  }
+  context.drawImage(image, 0, 0);
+  return await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((result) => {
+      if (result) {
+        resolve(result);
+      } else {
+        reject(new Error("Canvas toBlob produced no image data"));
+      }
+    }, "image/png");
+  });
 };
 
 /**
  * Copy the full-size image at `url` to the system clipboard as a PNG.
  *
- * `url` is expected to be a blob: or data: URL pointing at the original image
- * (not a downscaled thumbnail). A `Promise<Blob>` is handed to `ClipboardItem`
- * so the async fetch/convert work does not break the user-gesture requirement.
+ * `url` is the same blob:/data: URL the chat renders in its <img>, so the copy
+ * is full resolution (the image's intrinsic size, not the scaled thumbnail). A
+ * `Promise<Blob>` is handed to `ClipboardItem` so the async decode/encode does
+ * not break the user-gesture requirement.
  */
 export const copyImageToClipboard = async (url: string): Promise<void> => {
-  await navigator.clipboard.write([new ClipboardItem({ "image/png": fetchImageAsPng(url) })]);
+  await navigator.clipboard.write([new ClipboardItem({ "image/png": rasterizeToPng(url) })]);
 };
