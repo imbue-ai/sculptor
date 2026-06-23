@@ -76,7 +76,7 @@ def test_terminal_agent_tab_switch_focuses_terminal(sculptor_instance_: Sculptor
     # The terminal pane must auto-focus on tab switch (SCU-1578). Without the
     # fix the freshly-mounted panel never grabs focus, so the user has to click
     # into it before typing.
-    expect(agent_terminal_textarea).to_be_focused(timeout=10_000)
+    expect(agent_terminal_textarea).to_be_focused()
 
     # Prove the user-facing guarantee, not just the focus snapshot: type a probe
     # with the GLOBAL keyboard (routes to document.activeElement) and confirm it

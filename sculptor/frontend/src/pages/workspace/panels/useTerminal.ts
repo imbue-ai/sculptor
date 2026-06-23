@@ -692,14 +692,12 @@ export const useTerminal = ({
   // sees its first visible frame and never grants focus, leaving the user
   // unable to type without first clicking into the pane (SCU-1578). The
   // terminal is the agent's only input surface, so there is no chat input to
-  // steal focus from. Gating on `isXtermReady` avoids racing the async xterm
-  // creation (which defers until the container has dimensions).
+  // steal focus from. `isXtermReady` is the readiness signal: it flips true
+  // only after `xterm.open()` has created the helper textarea, so the focus
+  // target exists in the DOM and we can focus synchronously.
   useEffect(() => {
     if (!focusOnVisible || !isVisible || !isXtermReady) return;
-    const handle = requestAnimationFrame(() => {
-      xtermRef.current?.focus();
-    });
-    return (): void => cancelAnimationFrame(handle);
+    xtermRef.current?.focus();
   }, [focusOnVisible, isVisible, isXtermReady]);
 
   // ── Clear-terminal keybinding (focus-gated) ────────────────────────
