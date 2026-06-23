@@ -90,8 +90,9 @@ export const RepoValidationDialog = ({
   useEffect(() => {
     const el = contentRef.current;
     if (!el) return;
-    // Walk siblings to find the overlay — more resilient than assuming it's the
-    // immediate previous sibling, in case Radix changes the portal structure.
+    // Find the overlay by class among the portal's direct children — more
+    // resilient than assuming it's content's immediate previous sibling, in case
+    // Radix changes the portal structure.
     const parent = el.parentElement;
     if (!parent) return;
     const overlay = parent.querySelector<HTMLElement>(":scope > .rt-DialogOverlay");
