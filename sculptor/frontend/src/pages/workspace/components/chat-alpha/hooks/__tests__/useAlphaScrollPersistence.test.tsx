@@ -53,7 +53,7 @@ describe("useAlphaScrollPersistence", () => {
       <Provider store={store}>{children}</Provider>
     );
 
-    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, false), { wrapper });
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages), { wrapper });
 
     // Initial mount triggers restore
     act(() => {
@@ -79,7 +79,7 @@ describe("useAlphaScrollPersistence", () => {
       <Provider store={store}>{children}</Provider>
     );
 
-    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, false), { wrapper });
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages), { wrapper });
 
     // Wait for restore to complete (double rAF)
     act(() => {
@@ -118,7 +118,7 @@ describe("useAlphaScrollPersistence", () => {
       <Provider store={store}>{children}</Provider>
     );
 
-    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, false), { wrapper });
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages), { wrapper });
 
     act(() => {
       vi.advanceTimersByTime(16);
@@ -146,7 +146,7 @@ describe("useAlphaScrollPersistence", () => {
       <Provider store={store}>{children}</Provider>
     );
 
-    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages, false), { wrapper });
+    renderHook(() => useAlphaScrollPersistence(ref, virtualizer, "task-1", messages), { wrapper });
 
     act(() => {
       vi.advanceTimersByTime(16);

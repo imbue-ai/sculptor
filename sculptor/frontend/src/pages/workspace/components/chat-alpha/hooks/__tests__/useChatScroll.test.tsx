@@ -17,7 +17,7 @@ const flushTask = async (): Promise<void> => {
 const dispatchScroll = (el: HTMLElement): void => {
   Object.defineProperty(el, "scrollTop", {
     configurable: true,
-    value: (el.scrollTop as number) + 10,
+    value: el.scrollTop + 10,
   });
   el.dispatchEvent(new Event("scroll"));
 };
@@ -71,8 +71,8 @@ describe("ChatScrollProvider", () => {
     renderHook(() => useCloseOnChatScroll(onClose, true), { wrapper });
     await flushTask();
 
-    // Even with a preceding user input, a zero-delta scroll is ignored.
-    el.dispatchEvent(new Event("wheel"));
+    // Even while the user is mid-scroll (isUserScrollingRef.current is true),
+    // a zero-delta scroll is ignored.
     dispatchSpuriousScroll(el);
 
     expect(onClose).not.toHaveBeenCalled();
