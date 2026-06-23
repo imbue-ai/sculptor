@@ -38,11 +38,16 @@ export const OverlayScrollbar = ({ scrollRef, className }: OverlayScrollbarProps
 
   const [metrics, setMetrics] = useState<ScrollMetrics>({ scrollLeft: 0, scrollWidth: 0, clientWidth: 0 });
   const metricsRef = useRef(metrics);
-  metricsRef.current = metrics;
 
   const [trackWidth, setTrackWidth] = useState(0);
   const trackWidthRef = useRef(trackWidth);
-  trackWidthRef.current = trackWidth;
+
+  // Mirror the latest metrics/trackWidth into refs so the pointer-move drag
+  // handler (which runs outside React's render) reads current values.
+  useEffect(() => {
+    metricsRef.current = metrics;
+    trackWidthRef.current = trackWidth;
+  });
 
   // Sync scroll metrics from the container.
   useEffect((): (() => void) | void => {

@@ -138,10 +138,11 @@ export const AlphaSubagentPill = ({
   const handleCloseOnScroll = useCallback((): void => setOpen(false), [setOpen]);
   useCloseOnChatScroll(handleCloseOnScroll, isOpen);
 
-  const animationIndexRef = useRef<number | null>(null);
-  if (animationIndexRef.current === null) {
-    animationIndexRef.current = pickAnimationIndex();
-  }
+  // Pick a stable animation index once per mount. Lazy useState keeps the
+  // choice constant across re-renders while remaining safe to read in render;
+  // the value never changes after mount, so there is no setter.
+  // eslint-disable-next-line react/hook-use-state
+  const [animationIndex] = useState(pickAnimationIndex);
 
   const metadata = subagentMetadataMap?.get(parentBlock.id);
   const result = toolResultMap.get(parentBlock.id);
@@ -161,7 +162,7 @@ export const AlphaSubagentPill = ({
     : (result?.durationSeconds ?? elapsedSeconds);
   const duration = formatDuration(isThinking ? elapsedSeconds : completedDuration);
 
-  const ThinkingAnimation = ANIMATION_POOL[animationIndexRef.current];
+  const ThinkingAnimation = ANIMATION_POOL[animationIndex];
 
   const pillClassName = `${styles.pill}${isOpen ? ` ${styles.pillOpen}` : ""}`;
 

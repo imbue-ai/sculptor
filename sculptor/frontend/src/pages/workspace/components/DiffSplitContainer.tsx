@@ -113,9 +113,11 @@ export const DiffSplitContainer = ({ workspaceId, chatContent }: DiffSplitContai
   // Keep layout-relevant values in refs so handleLayout stays stable across
   // isInExpandMode / isDiffFirst changes, avoiding PanelGroup callback churn.
   const isInExpandModeRef = useRef(isInExpandMode);
-  isInExpandModeRef.current = isInExpandMode;
   const isDiffFirstRef = useRef(isDiffFirst);
-  isDiffFirstRef.current = isDiffFirst;
+  useEffect(() => {
+    isInExpandModeRef.current = isInExpandMode;
+    isDiffFirstRef.current = isDiffFirst;
+  });
 
   const handleLayout = useCallback(
     (sizes: Array<number>): void => {

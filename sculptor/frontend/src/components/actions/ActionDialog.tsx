@@ -1,7 +1,7 @@
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Button, Dialog, Flex, Select, Switch, Text, TextField } from "@radix-ui/themes";
 import type { KeyboardEvent, ReactElement } from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 import type { CustomAction, CustomActionGroup } from "~/api";
 import { ElementIds } from "~/api";
@@ -36,24 +36,23 @@ export const ActionDialog = ({ open, onOpenChange, action, groups, onSave }: Act
   const [groupId, setGroupId] = useState<string | null>(null);
   const [newGroupName, setNewGroupName] = useState("");
 
-  // Reset form when dialog opens
-  useEffect(() => {
-    if (open) {
-      if (action) {
-        setName(action.name);
-        setPrompt(action.prompt);
-        setShouldAutoSubmit(action.autoSubmit ?? true);
-        setGroupId(action.groupId ?? null);
-        setNewGroupName("");
-      } else {
-        setName("");
-        setPrompt("");
-        setShouldAutoSubmit(true);
-        setGroupId(null);
-        setNewGroupName("");
-      }
-    }
-  }, [open, action]);
+  // Reset the form during render when the dialog opens, and re-seed it if the
+  // action being edited changes while open. Tracking the previous open/action
+  // lets us reset directly during render instead of in an effect. Start as
+  // "not open" so an initial mount with open=true still seeds from the action.
+  const [isPreviouslyOpen, setIsPreviouslyOpen] = useState(false);
+  const [lastAction, setLastAction] = useState(action);
+  if (open && (!isPreviouslyOpen || action !== lastAction)) {
+    setIsPreviouslyOpen(true);
+    setLastAction(action);
+    setName(action?.name ?? "");
+    setPrompt(action?.prompt ?? "");
+    setShouldAutoSubmit(action?.autoSubmit ?? true);
+    setGroupId(action?.groupId ?? null);
+    setNewGroupName("");
+  } else if (!open && isPreviouslyOpen) {
+    setIsPreviouslyOpen(false);
+  }
 
   const handleSave = useCallback((): void => {
     onSave({

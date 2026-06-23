@@ -214,6 +214,19 @@ export const BackendStatusBoundary = (props: PropsWithChildren<BackendStatusBoun
     }
   }, HEALTH_CHECK_INTERVAL_MS);
 
+  // Clear the stalled flag as soon as we leave ``shutting_down``. Adjusting
+  // state during render (with a previous-value guard) keeps the reset on the
+  // same render that observes the status change, instead of the extra render
+  // an effect would add. See docs/development/review/react.md
+  // (`no_effect_for_state_reset`).
+  const [prevBackendStatusForStall, setPrevBackendStatusForStall] = useState(backendStatus.status);
+  if (prevBackendStatusForStall !== backendStatus.status) {
+    setPrevBackendStatusForStall(backendStatus.status);
+    if (backendStatus.status !== "shutting_down" && isShutdownStalled) {
+      setIsShutdownStalled(false);
+    }
+  }
+
   // SCU-403: ``autoUpdater.quitAndInstall()`` can fail silently (e.g. when
   // Squirrel's cached download has been purged). The boundary locks into
   // ``shutting_down`` once entered, so without this safety net the user
@@ -221,7 +234,6 @@ export const BackendStatusBoundary = (props: PropsWithChildren<BackendStatusBoun
   // recovery message instead.
   useEffect(() => {
     if (backendStatus.status !== "shutting_down") {
-      setIsShutdownStalled(false);
       return;
     }
     const timeoutId = setTimeout(() => {

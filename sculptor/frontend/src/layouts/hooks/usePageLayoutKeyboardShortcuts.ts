@@ -43,7 +43,9 @@ export const usePageLayoutKeyboardShortcuts = (): void => {
 
   const isChatSearchVisible = useAtomValue(chatSearchVisibleAtom);
   const isChatSearchVisibleRef = useRef(isChatSearchVisible);
-  isChatSearchVisibleRef.current = isChatSearchVisible;
+  useEffect(() => {
+    isChatSearchVisibleRef.current = isChatSearchVisible;
+  });
 
   const keybindingsMap = useAtomValue(keybindingsMapAtom);
 

@@ -1,7 +1,7 @@
 import { Button, Dialog, Flex, TextArea } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { ElementIds, UserConfigField } from "../../../api";
 import { prCreationPromptAtom } from "../../../common/state/atoms/userConfig.ts";
@@ -19,11 +19,24 @@ export const PrPromptDialog = ({ open, onOpenChange, gitProvider }: PrPromptDial
   const { updateField } = useUserConfig();
   const [promptValue, setPromptValue] = useState(prCreationPrompt);
 
-  useEffect(() => {
-    if (open) {
-      setPromptValue(prCreationPrompt);
-    }
-  }, [open, prCreationPrompt]);
+  // While the dialog is open, keep the editor seeded with the saved prompt:
+  // re-sync on open and whenever the saved value changes underneath us.
+  // Adjusting state during render (with previous-value guards) avoids the
+  // stale frame an effect would produce. See docs/development/review/react.md
+  // (`no_effect_for_state_adjustment`).
+  const [isOpenOnPrevRender, setIsOpenOnPrevRender] = useState(open);
+  const [prevPrompt, setPrevPrompt] = useState(prCreationPrompt);
+  if (open && (open !== isOpenOnPrevRender || prCreationPrompt !== prevPrompt)) {
+    setPromptValue(prCreationPrompt);
+  }
+
+  if (open !== isOpenOnPrevRender) {
+    setIsOpenOnPrevRender(open);
+  }
+
+  if (prCreationPrompt !== prevPrompt) {
+    setPrevPrompt(prCreationPrompt);
+  }
 
   const handleSave = async (): Promise<void> => {
     await updateField(UserConfigField.PR_CREATION_PROMPT, promptValue);

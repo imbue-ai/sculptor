@@ -340,8 +340,14 @@ export const useTerminal = ({
   // reconnect) are dropped. See containsTerminalQuery / shouldForwardQueryResponse.
   const lastLiveQueryAtRef = useRef<number>(Number.NEGATIVE_INFINITY);
   const hasReceivedReplayRef = useRef<boolean>(false);
+  // Mirror onOutput into a ref so the WebSocket message handler always calls
+  // the latest callback without re-establishing the connection. The ref is
+  // read only inside that handler, never during render, so syncing it in an
+  // effect keeps render pure without changing behavior.
   const onOutputRef = useRef(onOutput);
-  onOutputRef.current = onOutput;
+  useEffect(() => {
+    onOutputRef.current = onOutput;
+  });
   const appTheme = useResolvedTheme();
   const grayColor = useThemeGrayColor();
   const accentColor = useThemeAccentColor();

@@ -60,10 +60,21 @@ export const ChatSearchBar = ({
   const hasQuery = localQuery !== "";
   const hasStaleNoResults = hasQuery && totalMatchCount === 0;
 
+  // Clear the indicator the instant the no-results condition lifts (results
+  // appear or the query clears). Adjusting during render with a prev-value
+  // guard keeps the reset out of the effect, and re-arms the debounce so the
+  // red state must be earned again next time the condition recurs.
+  const [prevStaleNoResults, setPrevStaleNoResults] = useState({ value: hasStaleNoResults });
+  if (hasStaleNoResults !== prevStaleNoResults.value) {
+    setPrevStaleNoResults({ value: hasStaleNoResults });
+    if (!hasStaleNoResults) {
+      setIsNoResultsVisible(false);
+    }
+  }
+
   useEffect(() => {
     clearTimeout(noResultsTimerRef.current);
     if (!hasStaleNoResults) {
-      setIsNoResultsVisible(false);
       return;
     }
     // Wait longer than the search debounce so the highlight rebuild has time

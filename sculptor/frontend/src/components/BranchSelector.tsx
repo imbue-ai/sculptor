@@ -1,7 +1,7 @@
 import { Flex, Text } from "@radix-ui/themes";
 import { GitBranchIcon } from "lucide-react";
 import type { ReactElement } from "react";
-import { memo, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 
 import type { RepoInfo } from "~/api";
 import { ElementIds } from "~/api";
@@ -27,7 +27,11 @@ const BranchSelectorComponent = ({
   triggerVariant = "soft",
 }: BranchSelectorProps): ReactElement => {
   const [isFetchingBranches, setIsFetchingBranches] = useState(false);
+  // Track the in-flight fetch and whether another was requested while it ran,
+  // so a trigger during a fetch refreshes exactly once more on completion
+  // (matching the previous flag-watching effect) without stacking requests.
   const isFetchingRef = useRef(false);
+  const isRefetchQueuedRef = useRef(false);
 
   const selectedBranchName = sourceBranch || "";
   const areBranchesLoaded = (repoInfo?.recentBranches?.length ?? 0) > 0;
@@ -50,26 +54,41 @@ const BranchSelectorComponent = ({
     });
   }, [repoInfo]);
 
-  // Refresh the branch list when the user opens the dropdown or picks a branch.
-  // Single-flight via a ref so an overlapping trigger is dropped, not stacked.
-  const refreshBranches = (): void => {
+  const displayBranchName = selectedBranchName;
+
+  // Refresh the branch list in response to a user interaction (selecting a
+  // branch or opening the dropdown). Triggered directly from the handlers
+  // rather than via a watched flag + effect. A trigger that arrives while a
+  // fetch is in flight queues exactly one more refresh on completion (matching
+  // the previous flag-watching effect) without stacking concurrent requests.
+  // See docs/development/review/react.md (`no_effect_for_event_handling`).
+  const triggerFetch = useCallback((): void => {
     if (isFetchingRef.current) {
+      isRefetchQueuedRef.current = true;
       return;
     }
     isFetchingRef.current = true;
     setIsFetchingBranches(true);
-    fetchRepoInfo().finally(() => {
-      isFetchingRef.current = false;
-      setIsFetchingBranches(false);
-    });
-  };
+    const runFetch = (): void => {
+      void fetchRepoInfo().finally(() => {
+        if (isRefetchQueuedRef.current) {
+          isRefetchQueuedRef.current = false;
+          runFetch();
+          return;
+        }
+        isFetchingRef.current = false;
+        setIsFetchingBranches(false);
+      });
+    };
+    runFetch();
+  }, [fetchRepoInfo]);
 
   return (
     <BranchSelectorCore
       selectedBranch={selectedBranchName}
       onBranchSelected={(branch) => {
         setUserSelectedBranch(branch);
-        refreshBranches();
+        triggerFetch();
       }}
       branches={branches}
       isLoadingBranches={!areBranchesLoaded && isFetchingBranches}
@@ -79,14 +98,16 @@ const BranchSelectorComponent = ({
           <GitBranchIcon size={12} />
           <Text className={styles.selectorLabel}>source</Text>
           <Text className={styles.branchName} truncate={true}>
-            {selectedBranchName}
+            {displayBranchName}
           </Text>
         </Flex>
       }
       triggerVariant={triggerVariant}
       testId={ElementIds.BRANCH_SELECTOR}
       className={styles.dropdownButton}
-      onOpenChange={(open) => open && refreshBranches()}
+      onOpenChange={(open) => {
+        if (open) triggerFetch();
+      }}
     />
   );
 };
