@@ -1,5 +1,4 @@
 import { useAtomValue } from "jotai";
-import { useMemo } from "react";
 
 import type { WorkspaceBranchInfo } from "../../../api";
 import { workspaceBranchAtomFamily } from "../atoms/workspaceBranch.ts";
@@ -14,8 +13,9 @@ import { workspaceBranchAtomFamily } from "../atoms/workspaceBranch.ts";
  * @returns The current branch info, or null if not available
  */
 export const useWorkspaceBranch = (workspaceId: string | null | undefined): WorkspaceBranchInfo | null => {
-  const branchAtom = useMemo(() => workspaceBranchAtomFamily(workspaceId ?? ""), [workspaceId]);
-  const branchInfo = useAtomValue(branchAtom);
-  if (!workspaceId) return null;
+  const branchInfo = useAtomValue(workspaceBranchAtomFamily(workspaceId ?? ""));
+  if (!workspaceId) {
+    return null;
+  }
   return branchInfo;
 };
