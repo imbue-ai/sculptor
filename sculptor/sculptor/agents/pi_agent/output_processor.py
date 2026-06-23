@@ -107,11 +107,7 @@ def humanize_pi_failure_reason(reason: str | None) -> str:
     return _GENERIC_FAILURE_MESSAGE
 
 
-# Provider error-type / message markers (matched case-insensitively in pi's raw
-# failure reason) for transient conditions worth retrying — the provider
-# typically recovers on its own. Anthropic surfaces these as distinct error
-# `type`s: `overloaded_error` (~HTTP 529), `rate_limit_error` (~429), and
-# `api_error` (5xx server errors); request timeouts surface as timeout text.
+# Substrings (matched lowercased) marking a transient provider failure.
 _TRANSIENT_FAILURE_MARKERS = (
     "overloaded_error",
     "overloaded",
@@ -126,11 +122,10 @@ _TRANSIENT_FAILURE_MARKERS = (
     "timeout",
     "timed out",
 )
-# HTTP status codes for the same transient classes: request timeout (408), rate
-# limit (429), 5xx server errors, and Anthropic's "Overloaded" (529).
+# Transient HTTP statuses, including Anthropic's non-standard 529 "Overloaded".
 _TRANSIENT_STATUS_CODES = frozenset({"408", "429", "500", "502", "503", "504", "529"})
-# A standalone 3-digit token, so an embedded status code (e.g. `"status": 529`) is
-# recognized without matching a 3-digit run inside a longer number (model ids, ids).
+# Match a standalone 3-digit token so a status code is recognized without matching
+# three digits inside a longer number or id.
 _THREE_DIGIT_TOKEN_RE = re.compile(r"\b\d{3}\b")
 
 

@@ -1433,8 +1433,6 @@ class PiAgent(DefaultAgentWrapper):
                 return
             except _PiTransientTurnError as transient:
                 attempt += 1
-                # Stop retrying when the budget is spent or we have been asked to
-                # stop — shutdown, or a user interrupt (`_is_abort_expected`).
                 should_give_up = attempt > _PI_TRANSIENT_MAX_RETRIES or self._is_abort_expected()
                 if not should_give_up:
                     logger.info(
@@ -1904,8 +1902,6 @@ class PiAgent(DefaultAgentWrapper):
             logger.info("PiAgent turn produced by model={}", parsed.message.model)
         stop_reason = parsed.message.stop_reason
         if stop_reason == "error":
-            # Transient provider failures retry (see _consume_turn_with_transient_retry);
-            # any other error is terminal.
             self._raise_for_error_stop_reason(parsed.message, state)
         if stop_reason == "aborted" and not self._is_abort_expected():
             # An unexpected abort (no interrupt / shutdown pending) is a pi failure.
@@ -2411,7 +2407,6 @@ class PiAgent(DefaultAgentWrapper):
                     continue
                 reason = extract_assistant_text(message) or message.error_message or state.accumulated_text
                 raise PiCrashError(humanize_pi_failure_reason(reason), exit_code=None, metadata=None)
-            # stopReason "error": transient provider failures retry, others crash.
             self._raise_for_error_stop_reason(message, state)
         if state.accumulated_text:
             self._output_messages.put(
