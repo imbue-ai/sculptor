@@ -5,6 +5,17 @@ const LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql";
 /** A link Linear holds against an issue (a PR, a design, a doc, …). */
 export type LinearAttachment = { url: string; sourceType: string | null; title: string | null };
 
+/** A Linear workflow state (e.g. "In Progress"), with its display color. */
+export type LinearState = { name: string; type: string; color: string };
+
+/** A sub-issue, narrowed to what a ticket badge renders (id, title, status). */
+export type LinearChild = {
+  identifier: string;
+  title: string;
+  url: string;
+  state: LinearState | null;
+};
+
 /** A Linear issue, narrowed to the fields the panel renders. */
 export type LinearIssue = {
   identifier: string;
@@ -12,9 +23,11 @@ export type LinearIssue = {
   url: string;
   description: string | null;
   priorityLabel: string | null;
-  state: { name: string; type: string; color: string } | null;
+  state: LinearState | null;
   assignee: { displayName: string } | null;
   attachments: ReadonlyArray<LinearAttachment>;
+  /** Direct sub-issues, capped by the `children` selection in ISSUE_FIELDS. */
+  children: ReadonlyArray<LinearChild>;
 };
 
 /** Lightweight issue shape for quick-search results. */
@@ -25,7 +38,10 @@ export type LinearIssueSummary = {
 };
 
 // Shared selection for a fully-rendered issue, so every fetch path (branch,
-// identifier, PR-linked) returns the same shape.
+// identifier, PR-linked) returns the same shape. Sub-issues are fetched with a
+// generous cap so the panel can show an accurate "+N more" beyond the first
+// few it renders; a ticket with more children than this would undercount.
+const CHILDREN_FETCH_LIMIT = 50;
 const ISSUE_FIELDS = `
   identifier
   title
@@ -35,11 +51,16 @@ const ISSUE_FIELDS = `
   state { name type color }
   assignee { displayName }
   attachments { nodes { url sourceType title } }
+  children(first: ${CHILDREN_FETCH_LIMIT}) { nodes { identifier title url state { name type color } } }
 `;
 
-type RawIssue = Omit<LinearIssue, "attachments"> & { attachments: { nodes: Array<LinearAttachment> } };
+type RawIssue = Omit<LinearIssue, "attachments" | "children"> & {
+  attachments: { nodes: Array<LinearAttachment> };
+  children: { nodes: Array<LinearChild> };
+};
 
-const normalizeIssue = (raw: RawIssue): LinearIssue => ({
+/** Flatten Linear's nested connections (`{ nodes }`) into the panel's flat shape. */
+export const normalizeIssue = (raw: RawIssue): LinearIssue => ({
   identifier: raw.identifier,
   title: raw.title,
   url: raw.url,
@@ -48,6 +69,7 @@ const normalizeIssue = (raw: RawIssue): LinearIssue => ({
   state: raw.state,
   assignee: raw.assignee,
   attachments: raw.attachments?.nodes ?? [],
+  children: raw.children?.nodes ?? [],
 });
 
 // Single POST helper with shared auth + error handling. `signal` is the

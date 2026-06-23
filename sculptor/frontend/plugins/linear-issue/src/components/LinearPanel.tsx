@@ -3,6 +3,7 @@ import { PanelHeader, useCurrentWorkspace, usePluginSetting } from "@sculptor/pl
 import { RefreshCw } from "lucide-react";
 import type { ReactElement } from "react";
 
+import { useExpandedIds } from "../linear/useExpandedIds.ts";
 import { useLinearTickets } from "../linear/useLinearTickets.ts";
 import { usePinnedIds } from "../linear/usePinnedIds.ts";
 import { EmptyState } from "./EmptyState.tsx";
@@ -19,6 +20,10 @@ export const LinearPanel = (): ReactElement => {
   const workspaceId = useCurrentWorkspace((workspace) => workspace?.id ?? null);
   const [apiKey] = usePluginSetting("apiKey");
   const { pinnedIds, pin, unpin } = usePinnedIds(workspaceId);
+  const { overrides, setExpanded } = useExpandedIds(workspaceId);
+  // A separate map for each ticket's sub-issue disclosure, keyed by the same
+  // ticket identifier but namespaced so it can't collide with the section map.
+  const { overrides: subOverrides, setExpanded: setSubExpanded } = useExpandedIds(workspaceId, "subissues");
   const { tickets, isFetching, isError, error, refetch } = useLinearTickets({ apiKey, branch, pinnedIds });
 
   const refreshAction = apiKey ? (
@@ -31,15 +36,27 @@ export const LinearPanel = (): ReactElement => {
     if (tickets.length > 0) {
       return (
         <Flex direction="column" gap="2">
-          {tickets.map((ticket) => (
-            <TicketSection
-              // Include isPrimary so a ticket that becomes (or stops being) the
-              // workspace's primary remounts and re-derives its default open state.
-              key={`${ticket.issue.identifier}:${ticket.isPrimary}`}
-              ticket={ticket}
-              onUnpin={unpin}
-            />
-          ))}
+          {tickets.map((ticket) => {
+            const id = ticket.issue.identifier;
+            // A user toggle wins; otherwise open the primary, and open a lone
+            // ticket of any source so a single result is never left collapsed.
+            const defaultOpen = ticket.isPrimary || tickets.length === 1;
+            const isOpen = overrides[id] ?? defaultOpen;
+            // Sub-issues stay collapsed until asked for, keeping the body compact.
+            const subIssuesDefaultOpen = false;
+            const subIssuesOpen = subOverrides[id] ?? subIssuesDefaultOpen;
+            return (
+              <TicketSection
+                key={id}
+                ticket={ticket}
+                isOpen={isOpen}
+                onToggle={() => setExpanded(id, !isOpen, defaultOpen)}
+                subIssuesOpen={subIssuesOpen}
+                onToggleSubIssues={() => setSubExpanded(id, !subIssuesOpen, subIssuesDefaultOpen)}
+                onUnpin={unpin}
+              />
+            );
+          })}
         </Flex>
       );
     }

@@ -1,6 +1,6 @@
 import { Box, Flex, IconButton, Text } from "@radix-ui/themes";
 import { ChevronDown, ChevronRight, X } from "lucide-react";
-import { type ReactElement, useState } from "react";
+import type { ReactElement } from "react";
 
 import type { PanelTicket } from "../linear/sources.ts";
 import { IssueDetails } from "./IssueDetails.tsx";
@@ -9,17 +9,24 @@ import { StateDot } from "./StateDot.tsx";
 
 /**
  * A collapsible issue: a header (id, state, title, source badges) that toggles
- * the details. The primary (workspace) ticket is accented and expanded by
- * default; pinned tickets get an unpin control.
+ * the details. Open/closed is controlled by the panel, which derives the
+ * default and persists user toggles; pinned tickets get an unpin control.
  */
 export const TicketSection = ({
   ticket,
+  isOpen,
+  onToggle,
+  subIssuesOpen,
+  onToggleSubIssues,
   onUnpin,
 }: {
   ticket: PanelTicket;
+  isOpen: boolean;
+  onToggle: () => void;
+  subIssuesOpen: boolean;
+  onToggleSubIssues: () => void;
   onUnpin: (identifier: string) => void;
 }): ReactElement => {
-  const [isOpen, setIsOpen] = useState<boolean>(ticket.isPrimary);
   const { issue } = ticket;
   const canUnpin = ticket.sources.includes("pinned");
 
@@ -31,7 +38,7 @@ export const TicketSection = ({
         borderRadius: "var(--radius-3)",
       }}
     >
-      <Flex align="center" gap="2" p="2" onClick={() => setIsOpen((open) => !open)} style={{ cursor: "pointer" }}>
+      <Flex align="center" gap="2" p="2" onClick={() => onToggle()} style={{ cursor: "pointer" }}>
         {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         <Text size="1" color="gray" style={{ fontFamily: "var(--code-font-family)", flexShrink: 0 }}>
           {issue.identifier}
@@ -62,7 +69,7 @@ export const TicketSection = ({
       </Flex>
       {isOpen && (
         <Box px="2" pb="2">
-          <IssueDetails issue={issue} />
+          <IssueDetails issue={issue} subIssuesOpen={subIssuesOpen} onToggleSubIssues={onToggleSubIssues} />
         </Box>
       )}
     </Box>
