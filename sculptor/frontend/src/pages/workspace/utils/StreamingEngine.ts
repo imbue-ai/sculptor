@@ -61,7 +61,7 @@ export class StreamingEngine {
       const block = this.latestSnapshot.content[this.cursor.blockIndex];
 
       if (this.cursor.offset !== null && isTextBlock(block)) {
-        const textBlock = block as TextBlock;
+        const textBlock = block;
         const available = textBlock.text.length - this.cursor.offset;
         const advance = Math.min(remaining, available);
         this.cursor.offset += advance;
@@ -75,7 +75,7 @@ export class StreamingEngine {
             // When isTailFullyRendered was true, materialize() already showed
             // subsequent text blocks in full.  Start the cursor at their current
             // length so that already-visible content is never regressed.
-            this.cursor.offset = isTextBlock(nextBlock) ? (nextBlock as TextBlock).text.length : null;
+            this.cursor.offset = isTextBlock(nextBlock) ? nextBlock.text.length : null;
           } else {
             break; // Last block fully consumed — nothing more to reveal.
           }
@@ -87,7 +87,7 @@ export class StreamingEngine {
           const nextBlock = this.latestSnapshot.content[this.cursor.blockIndex];
           // Same rationale: the non-text cursor had isTailFullyRendered = true,
           // so any following text block was already fully visible.
-          this.cursor.offset = isTextBlock(nextBlock) ? (nextBlock as TextBlock).text.length : null;
+          this.cursor.offset = isTextBlock(nextBlock) ? nextBlock.text.length : null;
         } else {
           break;
         }
@@ -120,7 +120,7 @@ export class StreamingEngine {
     for (let i = this.cursor.blockIndex; i < this.latestSnapshot.content.length; i += 1) {
       const block = this.latestSnapshot.content[i];
       if (isTextBlock(block)) {
-        const text = (block as TextBlock).text;
+        const text = block.text;
         if (i === this.cursor.blockIndex && this.cursor.offset !== null) {
           total += Math.max(0, text.length - this.cursor.offset);
         } else {
@@ -238,8 +238,8 @@ export class StreamingEngine {
       // realign for that case, so nothing extra to do here.
       return false;
     }
-    const alreadyRevealed = (previousBlock as TextBlock).text.slice(0, offset);
-    return !(nextBlock as TextBlock).text.startsWith(alreadyRevealed);
+    const alreadyRevealed = previousBlock.text.slice(0, offset);
+    return !nextBlock.text.startsWith(alreadyRevealed);
   }
 
   private isCursorValid(): boolean {

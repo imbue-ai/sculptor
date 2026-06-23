@@ -1,5 +1,6 @@
-import type { ChatMessage, ToolResultBlock, ToolUseBlock } from "../../../api";
+import type { ChatMessage } from "../../../api";
 import type { BlockUnion } from "../../../common/Guards.ts";
+import { isToolResultBlock, isToolUseBlock } from "../../../common/Guards.ts";
 
 /**
  * A node in the subagent tree. Each node wraps a ChatMessage and contains
@@ -19,12 +20,12 @@ export type SubagentTreeNode = {
  * Extract the tool_use_id from a content block, if it is a tool_use or tool_result block.
  */
 export const getToolUseId = (block: ChatMessage["content"][number]): string | undefined => {
-  if (block.type === "tool_use") {
-    return (block as ToolUseBlock).id;
+  if (isToolUseBlock(block)) {
+    return block.id;
   }
 
-  if (block.type === "tool_result") {
-    return (block as ToolResultBlock).toolUseId;
+  if (isToolResultBlock(block)) {
+    return block.toolUseId;
   }
   return undefined;
 };
@@ -276,19 +277,18 @@ export const hasVisibleToolContent = (
   for (const block of contentBlocks) {
     if (block.type === "text") {
       hasText = true;
-    } else if (block.type === "tool_use") {
-      const children = block.id ? subagentChildren?.get((block as ToolUseBlock).id) : undefined;
+    } else if (isToolUseBlock(block)) {
+      const children = block.id ? subagentChildren?.get(block.id) : undefined;
       if (children && children.length > 0) {
         hasSubagentTool = true;
       } else {
         hasNonSubagentContent = true;
       }
-    } else if (block.type === "tool_result") {
-      const resultBlock = block as ToolResultBlock;
+    } else if (isToolResultBlock(block)) {
       // Subagent tool_result blocks are phantom content (filtered during rendering).
       // Check both tool name and tree children to catch all cases.
-      const isSubagentByName = SUBAGENT_TOOL_NAMES.has(resultBlock.toolName);
-      const toolUseId = resultBlock.toolUseId;
+      const isSubagentByName = SUBAGENT_TOOL_NAMES.has(block.toolName);
+      const toolUseId = block.toolUseId;
       const children = toolUseId ? subagentChildren?.get(toolUseId) : undefined;
       if (!isSubagentByName && (!children || children.length === 0)) {
         hasNonSubagentContent = true;
