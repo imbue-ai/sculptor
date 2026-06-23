@@ -1,12 +1,10 @@
 import { Box, Button, Checkbox, Flex, Link, Spinner, Text, TextField } from "@radix-ui/themes";
-import { useAtomValue } from "jotai";
 import type { ReactElement, Ref } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { DependenciesStatus } from "~/api";
 import { ElementIds } from "~/api";
-import { defaultClonesDirAtom, getBackendCapabilities } from "~/common/state/atoms/backendCapabilities.ts";
-import { defaultCloneTargetDirAtom } from "~/common/state/atoms/userConfig.ts";
+import { getBackendCapabilities } from "~/common/state/atoms/backendCapabilities.ts";
 import { PathAutocomplete } from "~/components/path-autocomplete/PathAutocomplete.tsx";
 import { useDirectoryListing } from "~/components/path-autocomplete/useDirectoryListing.ts";
 import { isElectron, selectProjectDirectory } from "~/electron/utils.ts";
@@ -24,6 +22,7 @@ import {
   stripGitSuffix,
 } from "./remoteRepoFormHelpers.ts";
 import type { RemoteProvider } from "./SourceRadioCards.tsx";
+import { useCloneDefaults } from "./useCloneDefaults.ts";
 
 export type RemoteCloneSubmit = {
   provider: RemoteProvider;
@@ -71,26 +70,22 @@ export const RemoteRepoForm = ({
 }: RemoteRepoFormProps): ReactElement => {
   const capabilities = getBackendCapabilities();
   const canBrowse = isElectron() && capabilities.canSelectLocalDir;
-  const userDefaultCloneTargetDir = useAtomValue(defaultCloneTargetDirAtom);
-  const hostDefaultClonesDir = useAtomValue(defaultClonesDirAtom);
-  // Always append `/<provider>` so two same-name repos from different
-  // providers don't collide on disk, regardless of whether the base path
-  // comes from the user's Settings or the renderer-resolved default.
-  // Null while the IPC hasn't resolved (or in non-Electron environments)
-  // — the form treats that as "no default, user must type one".
+  // The backend's default clones parent dir, fetched once (cached). Append
+  // `/<provider>` so two same-name repos from different providers don't collide
+  // on disk. Null until the fetch resolves — the form treats that as "no
+  // default yet, user can type one".
+  const { defaultClonesDir } = useCloneDefaults();
   const defaultTargetDir = useMemo<string | null>(() => {
-    const base = userDefaultCloneTargetDir.trim() || hostDefaultClonesDir;
-    return base ? `${base}/${provider}` : null;
-  }, [hostDefaultClonesDir, provider, userDefaultCloneTargetDir]);
+    return defaultClonesDir ? `${defaultClonesDir}/${provider}` : null;
+  }, [defaultClonesDir, provider]);
 
   // internal state
   const [selectedRepo, setSelectedRepo] = useState<RemoteRepo | undefined>(undefined);
   const [urlInput, setUrlInput] = useState<string>("");
   const [name, setName] = useState<string>("");
   // `userTargetDir` is undefined until the user explicitly edits or picks a
-  // folder; while undefined we render `defaultTargetDir` so a late-arriving
-  // backend value (e.g. /api/v1/config/backend-capabilities resolving after
-  // first paint) flows through automatically.
+  // folder; while undefined we render `defaultTargetDir` so the clone-defaults
+  // value (resolving after first paint) flows through automatically.
   const [userTargetDir, setUserTargetDir] = useState<string | undefined>(undefined);
   const [isUsingCustomTarget, setIsUsingCustomTarget] = useState<boolean>(false);
 
@@ -139,11 +134,11 @@ export const RemoteRepoForm = ({
   pushSubmittableRef.current = pushSubmittable;
 
   // Re-push when `effectiveTargetDir` changes on its own — i.e. the resolved
-  // default target folder arrives asynchronously (the backend-capabilities and
-  // user-config atoms settle after first paint). Without this, the displayed
-  // value updates but the parent's cached submittable keeps the stale
-  // targetDir, so a fast click would clone into the wrong folder. User edits
-  // already push via their handlers; this only catches the late default.
+  // default target folder arrives asynchronously (the clone-defaults fetch
+  // settles after first paint). Without this, the displayed value updates but
+  // the parent's cached submittable keeps the stale targetDir, so a fast click
+  // would clone into the wrong folder. User edits already push via their
+  // handlers; this only catches the late default.
   useEffect(() => {
     pushSubmittableRef.current({});
   }, [effectiveTargetDir]);

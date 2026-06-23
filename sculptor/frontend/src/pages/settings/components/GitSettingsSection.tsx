@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 
 import { ElementIds, UserConfigField } from "../../../api";
 import {
-  defaultCloneTargetDirAtom,
   isPrPollingEnabledAtom,
   prCreationPromptAtom,
   prDefaultTargetBranchAtom,
@@ -35,17 +34,14 @@ export const GitSettingsSection = ({ onSettingChange }: GitSettingsSectionProps)
   const prPollInterval = useAtomValue(prPollIntervalAtom);
   const prPollClosedMultiplier = useAtomValue(prPollClosedMultiplierAtom);
   const prDefaultTargetBranch = useAtomValue(prDefaultTargetBranchAtom);
-  const defaultCloneTargetDir = useAtomValue(defaultCloneTargetDirAtom);
 
   const [pollIntervalValue, setPollIntervalValue] = useState(String(prPollInterval));
   const [closedMultiplierValue, setClosedMultiplierValue] = useState(String(prPollClosedMultiplier));
   const [targetBranchValue, setTargetBranchValue] = useState(prDefaultTargetBranch);
-  const [cloneTargetDirValue, setCloneTargetDirValue] = useState(defaultCloneTargetDir);
 
   useEffect(() => setPollIntervalValue(String(prPollInterval)), [prPollInterval]);
   useEffect(() => setClosedMultiplierValue(String(prPollClosedMultiplier)), [prPollClosedMultiplier]);
   useEffect(() => setTargetBranchValue(prDefaultTargetBranch), [prDefaultTargetBranch]);
-  useEffect(() => setCloneTargetDirValue(defaultCloneTargetDir), [defaultCloneTargetDir]);
 
   const handlePollIntervalBlur = (): void => {
     const parsed = parseInt(pollIntervalValue, 10);
@@ -81,14 +77,6 @@ export const GitSettingsSection = ({ onSettingChange }: GitSettingsSectionProps)
     if (trimmed !== prDefaultTargetBranch) {
       void onSettingChange(UserConfigField.PR_DEFAULT_TARGET_BRANCH, trimmed);
     }
-  };
-
-  const handleCloneTargetDirBlur = (): void => {
-    const trimmed = cloneTargetDirValue.trim();
-    if (trimmed !== defaultCloneTargetDir) {
-      onSettingChange("defaultCloneTargetDir" as UserConfigField, trimmed);
-    }
-    setCloneTargetDirValue(trimmed);
   };
 
   return (
@@ -168,20 +156,6 @@ export const GitSettingsSection = ({ onSettingChange }: GitSettingsSectionProps)
           onBlur={handleTargetBranchBlur}
           data-testid={ElementIds.SETTINGS_DEFAULT_TARGET_BRANCH_INPUT}
           style={{ width: 200 }}
-        />
-      </SettingRow>
-
-      <SettingRow
-        title="Default Target Folder"
-        description="Pre-fills the Target Folder field when cloning a repo from GitHub. Leave empty to default to ~/.sculptor/repos/github."
-      >
-        <TextField.Root
-          placeholder="~/.sculptor/repos"
-          value={cloneTargetDirValue}
-          onChange={(e) => setCloneTargetDirValue(e.target.value)}
-          onBlur={handleCloneTargetDirBlur}
-          data-testid={ElementIds.SETTINGS_DEFAULT_CLONE_TARGET_DIR_INPUT}
-          style={{ width: 240 }}
         />
       </SettingRow>
 

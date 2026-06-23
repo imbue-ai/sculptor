@@ -728,12 +728,13 @@ class RemoteCloneResponse(SerializableModel):
     project_path: str
 
 
-class BackendCapabilities(SerializableModel):
-    """Backend-reported capabilities surfaced to the frontend.
+class CloneDefaults(SerializableModel):
+    """Backend-owned defaults for the Add Repository → GitHub clone flow.
 
-    The frontend keeps its own ``BackendCapabilities`` for client-side flags
-    (e.g. whether Electron is available); this model carries values the
-    backend is the authoritative source for.
+    ``default_clones_dir`` is the absolute parent dir (``<sculptor_folder>/repos``)
+    the dialog pre-fills the Target Folder with. Only the backend knows the real
+    sculptor folder, which varies by deployment (dev ``.dev_sculptor``, packaged
+    ``~/.sculptor``, hosted ``$SCULPTOR_FOLDER``).
     """
 
     default_clones_dir: str

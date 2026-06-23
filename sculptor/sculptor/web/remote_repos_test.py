@@ -1044,23 +1044,20 @@ def test_resolve_provider_cli_treats_none_auth_probe_as_authenticated() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Route: GET /api/v1/config/backend-capabilities
+# Route: GET /api/v1/config/clone-defaults
 # ---------------------------------------------------------------------------
 
 
-def test_backend_capabilities_returns_default_clones_dir_as_repos_under_sculptor_folder(
+def test_clone_defaults_returns_repos_under_sculptor_folder(
     client: TestClient,
     test_services: CompleteServiceCollection,
 ) -> None:
-    """The frontend expects the absolute path of ``<sculptor_folder>/repos``
-    so it can append ``/{provider}`` for the dialog's per-provider default.
-    Pin the shape — anything else and the dialog would clone into the wrong
-    parent directory."""
-    response = client.get("/api/v1/config/backend-capabilities")
+    """The dialog appends ``/{provider}`` to ``default_clones_dir``, so it must
+    be ``<sculptor_folder>/repos``. Pin the shape — anything else and clones
+    would land in the wrong parent directory."""
+    response = client.get("/api/v1/config/clone-defaults")
     assert response.status_code == 200, response.text
-    body = response.json()
-    expected = str(get_sculptor_folder() / "repos")
-    assert body["defaultClonesDir"] == expected
+    assert response.json()["defaultClonesDir"] == str(get_sculptor_folder() / "repos")
 
 
 # ---------------------------------------------------------------------------

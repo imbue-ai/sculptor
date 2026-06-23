@@ -2,9 +2,11 @@
 
 Three FastAPI routes live here:
 
-  * ``GET /api/v1/config/backend-capabilities`` — returns the absolute path
-    of the default clones parent dir so the dialog's per-provider default
-    can be built without hardcoding ``~/.sculptor/repos``.
+  * ``GET /api/v1/config/clone-defaults`` — returns ``default_clones_dir``
+    (``<sculptor_folder>/repos``) so the dialog can pre-fill its Target
+    Folder. Session-constant; the frontend fetches it once and caches it.
+    Lives here because only the backend knows the real sculptor folder
+    (dev / packaged / hosted all differ).
   * ``GET /api/v1/remotes/{provider}/repos`` — searches the user's
     accessible repos on GitHub via ``gh``. A non-empty query paginates
     through ``/user/repos`` so older repos beyond the top-100 are still
@@ -40,7 +42,7 @@ from sculptor.service_collections.service_collection import CompleteServiceColle
 from sculptor.services.dependency_management_service import Dependency
 from sculptor.utils.build import get_sculptor_folder
 from sculptor.web.auth import UserSession
-from sculptor.web.data_types import BackendCapabilities
+from sculptor.web.data_types import CloneDefaults
 from sculptor.web.data_types import RemoteCloneRequest
 from sculptor.web.data_types import RemoteCloneResponse
 from sculptor.web.data_types import RemoteRepo
@@ -79,17 +81,16 @@ _REPO_SLUG_RE = re.compile(r"^[A-Za-z0-9][\w.-]*/[\w./-]+$")
 _URL_CREDENTIALS_RE = re.compile(r"(://)[^/@\s]+@")
 
 
-@remote_repos_router.get("/api/v1/config/backend-capabilities")
-def get_backend_capabilities(
+@remote_repos_router.get("/api/v1/config/clone-defaults")
+def get_clone_defaults(
     user_session: UserSession = Depends(get_user_session),
-) -> BackendCapabilities:
-    """Return backend-owned capability values for the frontend.
+) -> CloneDefaults:
+    """Return the backend's default clones parent dir for the Add Repository dialog.
 
-    Today this only carries ``default_clones_dir`` (the parent of per-provider
-    clone directories used by the Add Repository → GitHub flow). Other
-    capability flags remain frontend-resolved.
+    Session-constant — the frontend fetches it once and caches it. The dialog
+    appends ``/{provider}`` to build its per-provider default Target Folder.
     """
-    return BackendCapabilities(default_clones_dir=str(get_sculptor_folder() / "repos"))
+    return CloneDefaults(default_clones_dir=str(get_sculptor_folder() / "repos"))
 
 
 def _resolve_provider_cli(request: Request, provider: str) -> tuple[str, Dependency]:
