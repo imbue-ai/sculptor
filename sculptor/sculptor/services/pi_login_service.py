@@ -57,7 +57,7 @@ def broadcast_pi_models_refresh(task_service: TaskService, transaction: DataMode
     """
     messaged_count = 0
     # get_active_tasks lives on the concrete task transaction; narrow from the
-    # web-layer DataModelTransaction (mirrors the upsert_task call sites in app.py).
+    # web-layer DataModelTransaction.
     assert isinstance(transaction, TaskAndDataModelTransaction)
     for task in transaction.get_active_tasks((AgentTaskInputsV2,)):
         if not isinstance(task.input_data, AgentTaskInputsV2):
@@ -129,8 +129,7 @@ class PiLoginService(Service):
         manager.start()
         registered = register_terminal_manager(terminal_id, manager)
         if registered is not manager:
-            # Lost a race (same login_id is nonce-unique, so this is vanishingly
-            # unlikely) — drop our duplicate and reuse the winner.
+            # Lost a registration race — drop our duplicate and reuse the winner.
             manager.stop()
         with self._lock:
             self._login_ids.add(login_id)

@@ -466,7 +466,7 @@ class ElementIDs(StrEnum):
     PI_PROVIDER_DETAIL = "pi-provider-detail"
     PI_PROVIDER_DETAIL_STATUS = "pi-provider-detail-status"
     # Mount point for the Authenticate/Disconnect actions, inline login terminal, and
-    # paste-key form added in later tasks.
+    # paste-key form.
     PI_PROVIDER_ACTIONS = "pi-provider-actions"
     PI_PROVIDER_AUTHENTICATE_BUTTON = "pi-provider-authenticate-button"
     PI_PROVIDER_DISCONNECT_BUTTON = "pi-provider-disconnect-button"
