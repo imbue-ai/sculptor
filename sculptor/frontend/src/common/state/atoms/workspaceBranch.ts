@@ -10,8 +10,8 @@ export const workspaceBranchAtomFamily = atomFamily<string, PrimitiveAtom<Worksp
 
 export const updateWorkspaceBranchAtom = atom(
   null,
-  (getAtom, setAtom, update: { workspaceId: string; branchInfo: WorkspaceBranchInfo | null }) => {
+  (get, set, update: { workspaceId: string; branchInfo: WorkspaceBranchInfo | null }) => {
     const atomForWorkspace = workspaceBranchAtomFamily(update.workspaceId);
-    setAtom(atomForWorkspace, update.branchInfo);
+    set(atomForWorkspace, update.branchInfo);
   },
 );

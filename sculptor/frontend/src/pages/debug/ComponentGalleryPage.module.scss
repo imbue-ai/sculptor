@@ -47,15 +47,6 @@
   margin-bottom: var(--space-3);
 }
 
-.navGroupLabel {
-  color: var(--gray-a9);
-  font-size: var(--font-size-1);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: 0.05em;
-  margin-bottom: var(--space-1);
-  text-transform: uppercase;
-}
-
 .navLink {
   border-radius: var(--radius-2);
   color: var(--gray-a11);
@@ -145,27 +136,10 @@
   padding: var(--space-4);
 }
 
-.componentPreviewDark {
-  background: var(--gray-2);
-}
-
-.themeToggle {
-  position: fixed;
-  right: var(--space-3);
-  top: var(--space-3);
-  z-index: var(--z-sticky);
-}
-
 .variantRow {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
-}
-
-.variantColumn {
-  display: flex;
-  flex-direction: column;
   gap: var(--space-3);
 }
 
@@ -176,10 +150,4 @@
   letter-spacing: 0.05em;
   margin-bottom: var(--space-1);
   text-transform: uppercase;
-}
-
-.gridPreview {
-  display: grid;
-  gap: var(--space-3);
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
 }

@@ -10,7 +10,7 @@ import { useTaskSupportsChatInterface } from "~/common/state/hooks/useTaskHelper
 import { chatPanelMountedAtom } from "~/components/panels/atoms.ts";
 
 import { AgentTerminalPanel } from "./AgentTerminalPanel.tsx";
-import { BtwPopup } from "./BtwPopup";
+import { BtwPopup } from "./BtwPopup.tsx";
 import { AlphaChatInterface } from "./chat-alpha/AlphaChatInterface.tsx";
 import { DebugChatView } from "./chat-alpha/DebugChatView.tsx";
 import { useChatData } from "./useChatData.ts";

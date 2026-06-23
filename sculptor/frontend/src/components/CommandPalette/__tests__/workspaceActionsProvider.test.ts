@@ -1,7 +1,7 @@
 import { getDefaultStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ExternalApp } from "../../../api";
+import type { ExternalApp, Workspace } from "../../../api";
 import { workspaceAtomFamily, workspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
 import type { WorkspaceActionRuntime } from "../contextActions/types.ts";
 import type { CommandRuntime } from "../runtime.ts";
@@ -46,8 +46,7 @@ const wsCtx = (id: string): PaletteContext => ({
 
 const seedWorkspace = (id: string, description: string): void => {
   const store = getDefaultStore();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  store.set(workspaceAtomFamily(id), { objectId: id, description, isOpen: true } as any);
+  store.set(workspaceAtomFamily(id), { objectId: id, description, isOpen: true } as unknown as Workspace);
 };
 
 const setWorkspaceIds = (ids: Array<string>): void => {

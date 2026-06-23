@@ -11,8 +11,14 @@ type SettingRowProps = {
   "data-testid"?: string;
 };
 
-export const SettingRow = ({ title, description, children, footer, ...props }: SettingRowProps): ReactElement => (
-  <Flex direction="column" width="100%" py="4" className={styles.settingRow} data-testid={props["data-testid"]}>
+export const SettingRow = ({
+  title,
+  description,
+  children,
+  footer,
+  "data-testid": dataTestId,
+}: SettingRowProps): ReactElement => (
+  <Flex direction="column" width="100%" py="4" className={styles.settingRow} data-testid={dataTestId}>
     <Flex justify="between" align="center" gapX="7" gapY="3" className={styles.controlRow}>
       <Flex direction="column" className={styles.labelGroup}>
         <Text weight="medium">{title}</Text>

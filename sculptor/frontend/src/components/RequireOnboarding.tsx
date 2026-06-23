@@ -16,11 +16,16 @@ export const RequireOnboarding = ({ children }: RequireOnboardingProps): ReactEl
 
   // Check config status to determine if onboarding is needed
   useEffect(() => {
+    let isIgnored = false;
     const checkConfigStatus = async (): Promise<void> => {
       try {
         const { data: configStatus } = await getConfigStatus({
           meta: { skipWsAck: true },
         });
+
+        if (isIgnored) {
+          return;
+        }
 
         // Privacy consent marks the welcome step as completed — an email is
         // optional (the user can continue without an account and stay
@@ -46,6 +51,9 @@ export const RequireOnboarding = ({ children }: RequireOnboardingProps): ReactEl
           setIsOnboardingComplete(false);
         }
       } catch (error) {
+        if (isIgnored) {
+          return;
+        }
         console.error("Failed to check config status:", error);
         // If config check fails, assume onboarding is needed
         setIsOnboardingComplete(false);
@@ -55,6 +63,9 @@ export const RequireOnboarding = ({ children }: RequireOnboardingProps): ReactEl
     };
 
     checkConfigStatus();
+    return (): void => {
+      isIgnored = true;
+    };
   }, []);
 
   const handleOnboardingComplete = (): void => {

@@ -3,7 +3,7 @@ import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 
-import type { UserConfigField } from "~/api";
+import { UserConfigField } from "~/api";
 import { commitPromptAtom } from "~/common/state/atoms/userConfig.ts";
 import { useUserConfig } from "~/common/state/hooks/useUserConfig.ts";
 
@@ -24,13 +24,13 @@ export const CommitPromptDialog = ({ open, onOpenChange }: CommitPromptDialogPro
   }, [open, commitPrompt]);
 
   const handleSave = async (): Promise<void> => {
-    await updateField("commitPrompt" as UserConfigField, promptValue);
+    await updateField(UserConfigField.COMMIT_PROMPT, promptValue);
     onOpenChange(false);
   };
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content style={{ maxWidth: 500 }}>
+      <Dialog.Content maxWidth="500px">
         <Dialog.Title>Edit Commit Prompt</Dialog.Title>
         <Dialog.Description size="2" mb="4">
           This prompt is sent to the agent when you click Commit. The agent will commit your changes with an appropriate

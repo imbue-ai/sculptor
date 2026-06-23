@@ -153,7 +153,7 @@ export const useAlphaPromptNav = (
 
   const focusChatInput = useCallback((): void => {
     const inputContainer = document.getElementById(CHAT_INPUT_ELEMENT_ID);
-    const editable = inputContainer?.querySelector("[contenteditable]") as HTMLElement | null;
+    const editable = inputContainer?.querySelector<HTMLElement>("[contenteditable]");
     editable?.focus();
   }, []);
 
@@ -220,7 +220,7 @@ export const useAlphaPromptNav = (
         // position of the editor so we don't hijack normal cursor movement
         // inside a multi-line input.
         if (!isNavigating && isInputFocused) {
-          const editable = inputContainer?.querySelector("[contenteditable]") as HTMLElement | null;
+          const editable = inputContainer?.querySelector<HTMLElement>("[contenteditable]");
           if (!editable || !isCaretAtVeryStart(editable)) return;
         }
 

@@ -23,8 +23,8 @@ export class CommandRegistry {
   private erroredWhenIds = new Set<CommandId>();
   private warnedCollisionIds = new Set<CommandId>();
   /**
-   * Tracks `(shortcutId -> Set<commandId>)` so we can warn about two
-   * commands claiming the same keybinding hint. Populated lazily during
+   * Shortcut ids we have already emitted a collision warning for, so each
+   * clashing keybinding hint warns at most once. Populated lazily during
    * `list()` because that's where dynamic-provider commands appear.
    */
   private warnedShortcutIds = new Set<string>();

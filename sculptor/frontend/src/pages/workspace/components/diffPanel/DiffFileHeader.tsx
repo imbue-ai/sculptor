@@ -16,7 +16,7 @@ type DiffFileHeaderProps = {
   tabFilePath?: string;
   addedLines: number;
   removedLines: number;
-  fileStatus: FileStatus | null;
+  fileStatus?: FileStatus;
   isBinary: boolean;
 };
 
@@ -38,7 +38,7 @@ export const DiffFileHeader = ({
     () => ({
       filePath,
       isFolder: false,
-      fileStatus: fileStatus ?? undefined,
+      fileStatus,
       isBinary: isBinaryProp || isBinaryFile(filePath.split("/").pop() ?? ""),
       source: "diff-header" as const,
       tabFilePath,
@@ -60,7 +60,7 @@ export const DiffFileHeader = ({
           <>
             <span className={styles.dirPath}>
               {dirParts.map((part, index) => (
-                <span key={index}>
+                <span key={dirParts.slice(0, index + 1).join("/")}>
                   {index > 0 && <span className={styles.separator}>/</span>}
                   <span className={styles.segment}>{part}</span>
                 </span>

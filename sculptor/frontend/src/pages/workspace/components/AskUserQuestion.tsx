@@ -210,11 +210,6 @@ export const AskUserQuestion = ({ taskId, questionData, onSubmit, onDismiss }: A
 
   const isOtherCurrentlySelected = otherSelected.get(questionKey) ?? false;
 
-  const isAllAnswered = questions.every((q) => {
-    const answer = answers.get(q.question);
-    return answer !== undefined && answer !== "";
-  });
-
   const hasAnswer = useCallback(
     (q: (typeof questions)[number]) => {
       const answer = answers.get(q.question);
@@ -222,6 +217,8 @@ export const AskUserQuestion = ({ taskId, questionData, onSubmit, onDismiss }: A
     },
     [answers],
   );
+
+  const isAllAnswered = questions.every(hasAnswer);
 
   const hasUnansweredElsewhere = questions.some((q, i) => i !== currentIndex && !hasAnswer(q));
 
@@ -294,7 +291,7 @@ export const AskUserQuestion = ({ taskId, questionData, onSubmit, onDismiss }: A
           return;
         }
 
-        if (handleModifiedEnter(e.nativeEvent as unknown as KeyboardEvent)) {
+        if (handleModifiedEnter(e.nativeEvent)) {
           e.preventDefault();
         }
         return;
@@ -341,7 +338,7 @@ export const AskUserQuestion = ({ taskId, questionData, onSubmit, onDismiss }: A
 
         default:
           // Check for submit shortcut (cmd-enter)
-          if (handleModifiedEnter(e.nativeEvent as unknown as KeyboardEvent)) {
+          if (handleModifiedEnter(e.nativeEvent)) {
             e.preventDefault();
           }
           break;

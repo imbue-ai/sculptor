@@ -212,9 +212,6 @@ describe("buildWorkspaceActionCommands", () => {
     for (const cmd of cmds) {
       expect(cmd.when).toBeUndefined();
     }
-    void WORKSPACE_CTX;
-    void ADD_WORKSPACE_CTX;
-    void SETTINGS_CTX;
   });
 
   it("each command's shortcut field matches its keybinding id", () => {
@@ -481,7 +478,7 @@ describe("buildChatCommands", () => {
     );
   });
 
-  it("chat.focus_input.when requires hasChatPanel (not surfaced on AddWorkspace, see review M10)", () => {
+  it("chat.focus_input.when requires hasChatPanel (not surfaced on AddWorkspace)", () => {
     // Title says "Focus chat input" — must not surface anywhere a chat
     // input doesn't exist. The `focus_input` keybinding handler in
     // usePageLayoutKeyboardShortcuts handles AddWorkspace's name input

@@ -5,7 +5,7 @@ import type { ReactElement } from "react";
 import { useMemo } from "react";
 
 import type { RecentWorkspaceResponse } from "~/api";
-import { ElementIds } from "~/api";
+import { ElementIds, WorkspaceInitializationStrategy } from "~/api";
 import { formatRelativeTime } from "~/common/formatRelativeTime.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { prDefaultTargetBranchAtom } from "~/common/state/atoms/userConfig.ts";
@@ -22,10 +22,10 @@ type ClosedWorkspaceRowProps = {
   onDelete: (workspace: RecentWorkspaceResponse) => void;
 };
 
-const formatInitStrategy = (strategy: string): string => {
-  if (strategy === "IN_PLACE") return "in-place";
-  if (strategy === "WORKTREE") return "worktree";
-  return "clone";
+const INIT_STRATEGY_LABEL: Record<WorkspaceInitializationStrategy, string> = {
+  [WorkspaceInitializationStrategy.IN_PLACE]: "in-place",
+  [WorkspaceInitializationStrategy.CLONE]: "clone",
+  [WorkspaceInitializationStrategy.WORKTREE]: "worktree",
 };
 
 const StatusDot = ({ workspaceId }: { workspaceId: string }): ReactElement => {
@@ -69,7 +69,7 @@ export const ClosedWorkspaceRow = ({ workspace, onReopen, onDelete }: ClosedWork
       <div className={styles.bottomLine}>
         <span className={styles.meta}>
           {workspace.projectName} · {workspace.agentCount} {workspace.agentCount === 1 ? "agent" : "agents"},{" "}
-          {formatInitStrategy(workspace.initializationStrategy)}
+          {INIT_STRATEGY_LABEL[workspace.initializationStrategy]}
         </span>
         {displayBranch && (
           <div className={styles.prButton} onClick={(e) => e.stopPropagation()}>

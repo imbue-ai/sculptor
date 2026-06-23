@@ -1,9 +1,10 @@
-import type { ChatMessage } from "../../../api";
-import { ChatMessageRole } from "../../../api";
+import { type ChatMessage, ChatMessageRole } from "~/api";
 
 export const extractUserMessageIds = (chatMessages?: Array<ChatMessage>): Array<string> => {
   if (!chatMessages) return [];
 
+  // A Set preserves insertion order, so iterating chatMessages in order yields
+  // the user message ids deduplicated and already in document order.
   const userMessageIds = new Set<string>();
   chatMessages
     .filter((message) => message.role === ChatMessageRole.USER)
@@ -11,11 +12,5 @@ export const extractUserMessageIds = (chatMessages?: Array<ChatMessage>): Array<
       userMessageIds.add(message.id);
     });
 
-  const sortedUserMessageIds = Array.from(userMessageIds).sort((a, b) => {
-    const indexA = chatMessages.findIndex((msg) => msg.id === a);
-    const indexB = chatMessages.findIndex((msg) => msg.id === b);
-    return indexA - indexB;
-  });
-
-  return sortedUserMessageIds;
+  return Array.from(userMessageIds);
 };

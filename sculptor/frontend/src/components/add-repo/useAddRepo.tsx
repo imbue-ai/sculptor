@@ -20,6 +20,17 @@ type UseAddRepoResult = {
   validationDialogs: ReactElement;
 };
 
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof HTTPException) {
+    return error.detail;
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return fallback;
+};
+
 export const useAddRepo = ({
   setToast,
   onSuccess,
@@ -28,7 +39,7 @@ export const useAddRepo = ({
   onSuccess?: () => void;
 }): UseAddRepoResult => {
   const [validationState, setValidationState] = useState<RepoValidationState | undefined>(undefined);
-  const [isAdding, setIsAdding] = useState(false);
+  const [isAdding, setIsAdding] = useState<boolean>(false);
   const updateProjects = useSetAtom(updateProjectsAtom);
 
   const finalizeProject = useCallback(
@@ -58,13 +69,11 @@ export const useAddRepo = ({
         } else if (error instanceof HTTPException && error.status === 409 && error.detail.includes("initial commit")) {
           setValidationState({ status: "empty-repo", repoPath: path });
         } else {
-          let errorMessage = "Failed to open repo";
-          if (error instanceof HTTPException) {
-            errorMessage = error.detail;
-          } else if (error instanceof Error) {
-            errorMessage = error.message;
-          }
-          setValidationState({ status: "error", repoPath: path, errorMessage });
+          setValidationState({
+            status: "error",
+            repoPath: path,
+            errorMessage: getErrorMessage(error, "Failed to open repo"),
+          });
         }
       }
     },
@@ -83,13 +92,11 @@ export const useAddRepo = ({
       });
       await finalizeProject(path);
     } catch (error) {
-      let errorMessage = "Failed to initialize git repository";
-      if (error instanceof HTTPException) {
-        errorMessage = error.detail;
-      } else if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      setValidationState({ status: "error", repoPath: path, errorMessage });
+      setValidationState({
+        status: "error",
+        repoPath: path,
+        errorMessage: getErrorMessage(error, "Failed to initialize git repository"),
+      });
     }
   }, [validationState, finalizeProject]);
 
@@ -105,13 +112,11 @@ export const useAddRepo = ({
       });
       await finalizeProject(path);
     } catch (error) {
-      let errorMessage = "Failed to create initial commit";
-      if (error instanceof HTTPException) {
-        errorMessage = error.detail;
-      } else if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      setValidationState({ status: "error", repoPath: path, errorMessage });
+      setValidationState({
+        status: "error",
+        repoPath: path,
+        errorMessage: getErrorMessage(error, "Failed to create initial commit"),
+      });
     }
   }, [validationState, finalizeProject]);
 

@@ -74,7 +74,7 @@ export const WelcomeStep = ({
           placeholder="Full name"
           size="3"
           autoFocus
-          value={fullName || ""}
+          value={fullName ?? ""}
           onChange={(e) => setFullName(e.target.value)}
           onKeyDown={handleKeyPress}
           className={styles.nameInput}

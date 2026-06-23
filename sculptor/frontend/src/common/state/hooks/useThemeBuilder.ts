@@ -1,5 +1,7 @@
 import { useAtomValue } from "jotai";
 
+import type { AppearanceMode } from "~/common/theme/appearanceModes.ts";
+
 import type { AccentColor, GrayColor, ThemeBuilderSettings } from "../atoms/themeBuilder";
 import {
   themeAccentColorAtom,
@@ -31,7 +33,7 @@ export const useThemeGrayColor = (): GrayColor => {
   return useAtomValue(themeGrayColorAtom);
 };
 
-export const useThemeAppearance = (): "light" | "dark" | "system" => {
+export const useThemeAppearance = (): AppearanceMode => {
   return useAtomValue(themeAppearanceAtom);
 };
 

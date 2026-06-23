@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import { useInterval } from "../../../common/useInterval.ts";
 
@@ -7,7 +7,6 @@ type RelativeTimeResult = {
   absoluteTime: string;
 };
 
-const EMPTY_RESULT: RelativeTimeResult = { relativeTime: "", absoluteTime: "" };
 const UPDATE_INTERVAL_MS = 60_000;
 
 function computeRelativeTime(isoTimestamp: string): string {
@@ -50,41 +49,31 @@ function computeAbsoluteTime(isoTimestamp: string): string {
 }
 
 export function useRelativeTime(isoTimestamp: string | null | undefined): RelativeTimeResult {
-  const [result, setResult] = useState<RelativeTimeResult>(() => {
-    if (!isoTimestamp) {
-      return EMPTY_RESULT;
-    }
-    return {
-      relativeTime: computeRelativeTime(isoTimestamp),
-      absoluteTime: computeAbsoluteTime(isoTimestamp),
-    };
-  });
+  // `relativeTime` depends on the current wall-clock time, so it is held in
+  // state and refreshed by the interval below. `absoluteTime` depends only on
+  // the timestamp, so it is derived during render rather than stored.
+  const [relativeTime, setRelativeTime] = useState<string>(() =>
+    isoTimestamp ? computeRelativeTime(isoTimestamp) : "",
+  );
 
-  const previousRelativeTimeRef = useRef(result.relativeTime);
-
-  useEffect(() => {
-    if (!isoTimestamp) {
-      setResult(EMPTY_RESULT);
-      previousRelativeTimeRef.current = "";
-      return;
-    }
-
-    const absoluteTime = computeAbsoluteTime(isoTimestamp);
-    const relativeTime = computeRelativeTime(isoTimestamp);
-    previousRelativeTimeRef.current = relativeTime;
-    setResult({ relativeTime, absoluteTime });
-  }, [isoTimestamp]);
+  // Recompute immediately when the timestamp changes instead of waiting for the
+  // next interval tick. Adjusting state during render avoids the stale
+  // intermediate render a prop-syncing useEffect would produce.
+  const previousTimestampRef = useRef(isoTimestamp);
+  if (previousTimestampRef.current !== isoTimestamp) {
+    previousTimestampRef.current = isoTimestamp;
+    setRelativeTime(isoTimestamp ? computeRelativeTime(isoTimestamp) : "");
+  }
 
   useInterval(() => {
-    if (!isoTimestamp) return;
-
-    const absoluteTime = computeAbsoluteTime(isoTimestamp);
-    const newRelativeTime = computeRelativeTime(isoTimestamp);
-    if (newRelativeTime !== previousRelativeTimeRef.current) {
-      previousRelativeTimeRef.current = newRelativeTime;
-      setResult({ relativeTime: newRelativeTime, absoluteTime });
+    if (!isoTimestamp) {
+      return;
     }
+    // Setting an unchanged string is a no-op render thanks to React's bail-out,
+    // so this only re-renders when the displayed value actually advances.
+    setRelativeTime(computeRelativeTime(isoTimestamp));
   }, UPDATE_INTERVAL_MS);
 
-  return result;
+  const absoluteTime = isoTimestamp ? computeAbsoluteTime(isoTimestamp) : "";
+  return { relativeTime, absoluteTime };
 }

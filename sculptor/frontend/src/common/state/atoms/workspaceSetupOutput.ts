@@ -14,7 +14,7 @@ export const workspaceSetupOutputAtomFamily = atomFamily<string, PrimitiveAtom<S
   atom<SetupOutputBuffer | null>(null),
 );
 
-function decodeChunkData(data: string): string {
+const decodeChunkData = (data: string): string => {
   if (typeof atob === "function") {
     try {
       const binary = atob(data);
@@ -28,7 +28,7 @@ function decodeChunkData(data: string): string {
     }
   }
   return data;
-}
+};
 
 export const appendSetupOutputChunkAtom = atom(
   null,

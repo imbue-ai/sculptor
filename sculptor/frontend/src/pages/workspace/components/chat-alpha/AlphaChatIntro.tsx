@@ -12,6 +12,8 @@ import { useWorkspace } from "~/common/state/hooks/useWorkspace";
 import styles from "./AlphaChatIntro.module.scss";
 import { SetupStatusCard } from "./SetupStatusCard";
 
+const DETAIL_ICON_SIZE_PX = 14;
+
 function formatTimestamp(isoString: string): string {
   const date = new Date(isoString);
   return date.toLocaleString(undefined, {
@@ -42,7 +44,7 @@ export const AlphaChatIntro = (): ReactElement => {
   return (
     <div className={styles.wrapper} data-testid={ElementIds.ALPHA_CHAT_INTRO}>
       <div className={styles.detailRow}>
-        <GitBranchIcon size={14} className={styles.detailIcon} />
+        <GitBranchIcon size={DETAIL_ICON_SIZE_PX} className={styles.detailIcon} />
         <span>
           {isInPlace ? "Working directly in" : isWorktree ? "Branched off" : "Cloned"}
           {!isInPlace && sourceBranch && (
@@ -62,21 +64,21 @@ export const AlphaChatIntro = (): ReactElement => {
         </span>
       </div>
       <div className={styles.detailRow}>
-        <SparklesIcon size={14} className={styles.detailIcon} />
+        <SparklesIcon size={DETAIL_ICON_SIZE_PX} className={styles.detailIcon} />
         <span>
           This is agent <span className={styles.highlight}>{agentName}</span> in workspace{" "}
           <span className={styles.highlight}>{workspaceName}</span>
         </span>
       </div>
       <div className={styles.detailRow}>
-        <UsersIcon size={14} className={styles.detailIcon} />
+        <UsersIcon size={DETAIL_ICON_SIZE_PX} className={styles.detailIcon} />
         <span>
           All agents in this workspace share the same code and can see each other&apos;s changes, but are isolated from
           other workspaces
         </span>
       </div>
       <div className={styles.detailRow}>
-        <CircleHelpIcon size={14} className={styles.detailIcon} />
+        <CircleHelpIcon size={DETAIL_ICON_SIZE_PX} className={styles.detailIcon} />
         <span>
           Type <span className={styles.highlight}>/sculptor:help</span> to ask a question
         </span>

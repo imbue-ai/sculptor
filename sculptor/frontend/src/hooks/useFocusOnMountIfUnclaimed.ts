@@ -11,12 +11,12 @@ import { useEffect } from "react";
  * nothing did" and we can take it. Anything else means another component
  * (terminal, file browser, sidebar) holds focus and we must not disturb it.
  */
-export function useFocusOnMountIfUnclaimed(ref: RefObject<HTMLElement | null>): void {
+export const useFocusOnMountIfUnclaimed = (ref: RefObject<HTMLElement | null>): void => {
   useEffect(() => {
     const active = document.activeElement;
     if (active === null || active === document.body) {
       ref.current?.focus();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-}
+    // `ref` is a stable RefObject, so this runs once on mount.
+  }, [ref]);
+};

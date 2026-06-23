@@ -56,7 +56,7 @@ const TEST_PANELS: ReadonlyArray<PanelDefinition> = [
 const renderInZenMode = (): ReturnType<typeof renderWithProviders> => {
   const store = createPanelStore(TEST_PANELS, { useDefaultLayout: true });
   act(() => store.set(zenModeActiveAtom, true));
-  return renderWithProviders(<ExitZenModeButton />, store, TEST_PANELS);
+  return renderWithProviders(<ExitZenModeButton />, { store, panels: TEST_PANELS });
 };
 
 const getHotZone = (): HTMLElement => {
@@ -80,7 +80,7 @@ afterEach(() => {
 describe("ExitZenModeButton", () => {
   it("returns null when zen mode is inactive", () => {
     const store = createPanelStore(TEST_PANELS, { useDefaultLayout: true });
-    renderWithProviders(<ExitZenModeButton />, store, TEST_PANELS);
+    renderWithProviders(<ExitZenModeButton />, { store, panels: TEST_PANELS });
 
     expect(screen.queryByTestId(ElementIds.EXIT_ZEN_MODE_BUTTON)).not.toBeInTheDocument();
   });

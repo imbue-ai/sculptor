@@ -18,15 +18,16 @@ import type { ChatMessage } from "~/api";
 import { ChatMessageRole } from "~/api";
 
 const BASE_TIME = new Date("2026-03-09T14:30:00.000Z");
+const TIMESTAMP_STEP_MS = 1_500;
 let offsetCounter = 0;
 
 /** Return an ISO timestamp offset from BASE_TIME by `ms` milliseconds. */
 export const ts = (ms: number): string => new Date(BASE_TIME.getTime() + ms).toISOString();
 
-/** Return the next auto-incrementing timestamp (advances by 1.5 s each call). */
+/** Return the next auto-incrementing timestamp, advancing by TIMESTAMP_STEP_MS each call. */
 const nextTs = (): string => {
   const t = ts(offsetCounter);
-  offsetCounter += 1500;
+  offsetCounter += TIMESTAMP_STEP_MS;
   return t;
 };
 

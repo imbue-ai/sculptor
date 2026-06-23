@@ -41,6 +41,10 @@
   z-index: var(--z-dropdown);
 }
 
+.scrollArea {
+  max-height: 240px;
+}
+
 .item {
   align-items: center;
   border-radius: var(--radius-1);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { ChatMessage } from "~/api";
 
@@ -9,7 +9,6 @@ type JumpToBottomLabel = "jump" | "new";
 type UseJumpToBottomReturn = {
   isVisible: boolean;
   label: JumpToBottomLabel;
-  onReachBottom: () => void;
 };
 
 export const useJumpToBottom = (
@@ -48,7 +47,5 @@ export const useJumpToBottom = (
   // stops the label reverts to "Jump" (a neutral scroll-to-bottom action).
   const label: JumpToBottomLabel = isStreaming ? "new" : "jump";
 
-  const onReachBottom = useCallback((): void => {}, []);
-
-  return { isVisible, label, onReachBottom };
+  return { isVisible, label };
 };

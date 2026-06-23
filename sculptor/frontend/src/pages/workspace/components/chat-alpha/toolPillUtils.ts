@@ -30,13 +30,13 @@ export const makeRelative = (filePath: string, workspaceCodePath: string | null)
   return { display: filePath, isOutsideWorkspace: false };
 };
 
-const getPillStateFromResult = (
-  hasResult: boolean,
-  isError: boolean,
-  inProgressMessageId: string | null,
-): PillState => {
-  if (!hasResult && inProgressMessageId !== null) return "initializing";
-  if (isError) return "error";
+const getPillStateFromResult = (inputs: {
+  hasResult: boolean;
+  isError: boolean;
+  inProgressMessageId: string | null;
+}): PillState => {
+  if (!inputs.hasResult && inputs.inProgressMessageId !== null) return "initializing";
+  if (inputs.isError) return "error";
   return "completed";
 };
 
@@ -67,7 +67,11 @@ export const buildPillData = (
     if (block.type === "tool_use") {
       const result = toolResultMap.get(block.id);
       const results = result ? [result] : [];
-      const state = getPillStateFromResult(result !== undefined, result?.isError ?? false, inProgressMessageId);
+      const state = getPillStateFromResult({
+        hasResult: result !== undefined,
+        isError: result?.isError ?? false,
+        inProgressMessageId,
+      });
       pills.push({
         id: block.id,
         label: block.name,

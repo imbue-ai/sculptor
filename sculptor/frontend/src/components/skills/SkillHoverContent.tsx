@@ -2,6 +2,7 @@ import { Badge, Flex, Text } from "@radix-ui/themes";
 import type { ReactElement } from "react";
 
 import { badgeColorForType, badgeLabelForType, type SkillType } from "../skillBadge";
+import styles from "./SkillHoverContent.module.scss";
 
 type SkillHoverContentProps = {
   id: string;
@@ -10,29 +11,17 @@ type SkillHoverContentProps = {
 };
 
 export const SkillHoverContent = ({ id, skillDescription, skillType }: SkillHoverContentProps): ReactElement => (
-  <Flex direction="column" gap="2" style={{ padding: "var(--space-2) var(--space-3)", maxWidth: 300 }}>
+  <Flex direction="column" gap="2" px="3" py="2" maxWidth="300px">
     {skillType && (
-      <Badge variant="soft" color={badgeColorForType(skillType)} style={{ alignSelf: "flex-start" }}>
+      <Badge variant="soft" color={badgeColorForType(skillType)} className={styles.badge}>
         {badgeLabelForType(skillType)}
       </Badge>
     )}
-    <Text
-      size="2"
-      weight="medium"
-      truncate
-      style={{ color: "var(--gray-12)", fontFamily: "var(--default-font-family)" }}
-    >
+    <Text size="2" weight="medium" truncate className={styles.title}>
       {id}
     </Text>
     {skillDescription && (
-      <Text
-        as="div"
-        style={{
-          color: "var(--gray-12)",
-          fontFamily: "var(--default-font-family)",
-          fontSize: "var(--font-size-1-5)",
-        }}
-      >
+      <Text as="div" className={styles.description}>
         {skillDescription}
       </Text>
     )}

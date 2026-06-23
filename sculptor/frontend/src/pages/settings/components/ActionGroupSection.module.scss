@@ -33,6 +33,18 @@
   }
 }
 
+.groupNameField {
+  flex: 1;
+}
+
+.groupActions {
+  color: var(--accent-9);
+}
+
+.dropHint {
+  color: var(--gray-9);
+}
+
 .emptyGroupDrop {
   align-items: center;
   border: 2px dashed var(--gray-6);

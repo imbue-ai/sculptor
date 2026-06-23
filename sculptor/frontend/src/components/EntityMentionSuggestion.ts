@@ -99,6 +99,20 @@ const makeTypeRow = (entityType: EntityType): TypeRowItem => ({
   description: TYPE_DESCRIPTIONS[entityType],
 });
 
+// Maximum number of characters of an agent's goal to show as its display name
+// when the agent has no explicit title; longer goals are truncated to keep the
+// picker row scannable.
+const AGENT_GOAL_PREVIEW_LENGTH = 60;
+
+const formatAgentCount = (count: number): string => {
+  if (count === 0) return "no agents";
+  if (count === 1) return "1 agent";
+  return `${count} agents`;
+};
+
+const getAgentDisplayName = (task: CodingAgentTaskView): string =>
+  task.title ?? (task.goal ? task.goal.slice(0, AGENT_GOAL_PREVIEW_LENGTH) : "Untitled");
+
 export const createEntitySuggestion = (entityDataRef: EntityDataRef): Omit<SuggestionOptions, "editor"> => ({
   pluginKey: new PluginKey("entityMention"),
   char: "+",
@@ -147,11 +161,6 @@ export const createEntitySuggestion = (entityDataRef: EntityDataRef): Omit<Sugge
     // agent count (folder-style "size hint"), then the parent repo. Search
     // still matches against name + repo only so a query for "agent" doesn't
     // light up every workspace row.
-    const formatAgentCount = (count: number): string => {
-      if (count === 0) return "no agents";
-      if (count === 1) return "1 agent";
-      return `${count} agents`;
-    };
     const workspaceItems: Array<EntityMentionItem> = [...workspaces]
       .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
       .filter((workspace) => {
@@ -181,20 +190,16 @@ export const createEntitySuggestion = (entityDataRef: EntityDataRef): Omit<Sugge
     // surfacing it on every row would be redundant noise.
     const agentItems: Array<EntityMentionItem> = [...agents]
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .filter((task) => {
-        const displayName = task.title ?? (task.goal ? task.goal.slice(0, 60) : "Untitled");
-        return matchesQuery(displayName, "");
-      })
-      .map((task) => {
-        const displayName = task.title ?? (task.goal ? task.goal.slice(0, 60) : "Untitled");
-        return makeEntityItem({
+      .filter((task) => matchesQuery(getAgentDisplayName(task), ""))
+      .map((task) =>
+        makeEntityItem({
           entityType: "agent",
           entityId: task.id,
-          entityDisplayName: displayName,
+          entityDisplayName: getAgentDisplayName(task),
           subtitle: formatRelativeTime(task.createdAt),
           parentId: task.workspaceId ?? undefined,
-        });
-      });
+        }),
+      );
 
     // Type rows pinned at the top, fuzzy-matched against their labels so the
     // user can type "work" and land on "Workspaces". The List post-hoc

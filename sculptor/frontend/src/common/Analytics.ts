@@ -28,7 +28,7 @@ export const SCULPTOR_ANALYTICS_NAMESPACE = uuidv5("sculptor.imbue.com", uuidv5.
  * Email is normalized (trimmed + lowercased) before hashing so trivial
  * variations don't fragment identity.
  */
-export function computeAnalyticsUserId(email: string): string {
+export const computeAnalyticsUserId = (email: string): string => {
   const normalized = email.trim().toLowerCase();
   return uuidv5(normalized, SCULPTOR_ANALYTICS_NAMESPACE);
-}
+};

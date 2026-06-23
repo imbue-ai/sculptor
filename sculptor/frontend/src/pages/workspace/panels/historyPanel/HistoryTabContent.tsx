@@ -6,7 +6,7 @@ import { useCallback, useMemo } from "react";
 import { ElementIds } from "~/api";
 import { useWorkspaceCommits } from "~/common/state/hooks/useWorkspaceCommits.ts";
 import { openCommitDiffTabAtom } from "~/pages/workspace/components/diffPanel/atoms.ts";
-import type { FileStatus, ViewMode } from "~/pages/workspace/panels/fileBrowser/types.ts";
+import type { ViewMode } from "~/pages/workspace/panels/fileBrowser/types.ts";
 
 import { expandedCommitsAtomFamily, toggleCommitExpandedAtom } from "./atoms.ts";
 import { CommitEntry } from "./CommitEntry.tsx";
@@ -27,7 +27,7 @@ export const HistoryTabContent = ({ workspaceId, viewMode = "flat" }: HistoryTab
   const graph = useMemo(() => buildCommitGraph(data?.commits ?? []), [data?.commits]);
 
   const handleFileClick = useCallback(
-    (commitHash: string, filePath: string, _status: FileStatus): void => {
+    (commitHash: string, filePath: string): void => {
       openCommitDiffTab({ workspaceId, commitHash, filePath });
     },
     [workspaceId, openCommitDiffTab],
@@ -62,7 +62,7 @@ export const HistoryTabContent = ({ workspaceId, viewMode = "flat" }: HistoryTab
               isExpanded={expandedCommits.has(commit.hash)}
               viewMode={viewMode}
               onToggle={() => toggleExpanded({ workspaceId, commitHash: commit.hash })}
-              onFileClick={(filePath, status) => handleFileClick(commit.hash, filePath, status)}
+              onFileClick={(filePath) => handleFileClick(commit.hash, filePath)}
               sideBranch={graph.sideBranches.get(commit.hash)}
             />
           ))}

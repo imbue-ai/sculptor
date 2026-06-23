@@ -1,7 +1,7 @@
 import { Flex, Select, Text } from "@radix-ui/themes";
 import { FolderOpenIcon, PlusIcon } from "lucide-react";
 import type { ReactElement } from "react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import type { Project } from "../api";
 import { ElementIds } from "../api";
@@ -10,16 +10,18 @@ import styles from "./RepoSelector.module.scss";
 import type { ToastContent } from "./Toast.tsx";
 import { Toast } from "./Toast.tsx";
 
+const PATH_ELLIPSIS = ".../";
+
 const truncatePath = (path: string, maxLength: number = 50): string => {
   if (path.length <= maxLength) {
     return path;
   }
-  const truncated = path.slice(-(maxLength - 4));
+  const truncated = path.slice(-(maxLength - PATH_ELLIPSIS.length));
   const firstSlash = truncated.indexOf("/");
   if (firstSlash !== -1) {
-    return ".../" + truncated.slice(firstSlash + 1);
+    return PATH_ELLIPSIS + truncated.slice(firstSlash + 1);
   }
-  return ".../" + truncated;
+  return PATH_ELLIPSIS + truncated;
 };
 
 const _NEW_REPO_SELECT_VALUE = "_NEW_REPO_SELECT_VALUE";
@@ -47,6 +49,12 @@ export const RepoSelector = ({
     }
     onProjectChange(value);
   };
+
+  const handleToastOpenChange = useCallback((open: boolean): void => {
+    if (!open) {
+      setToast(null);
+    }
+  }, []);
 
   const currentProject = projects.find((p) => p.objectId === selectedProjectId);
   const displayName = currentProject?.name ?? "Select repo";
@@ -105,7 +113,7 @@ export const RepoSelector = ({
 
       <AddRepoDialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen} setToast={setToast} />
 
-      <Toast open={!!toast} onOpenChange={(open) => !open && setToast(null)} title={toast?.title} type={toast?.type} />
+      <Toast open={!!toast} onOpenChange={handleToastOpenChange} title={toast?.title} type={toast?.type} />
     </>
   );
 };

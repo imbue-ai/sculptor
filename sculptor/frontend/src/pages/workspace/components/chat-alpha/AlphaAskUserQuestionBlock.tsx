@@ -77,11 +77,9 @@ export const AlphaAskUserQuestionBlock = ({ toolBlock }: { toolBlock: ToolUseBlo
 
   const matchingAnswers: SubmittedQuestionAnswers | undefined = submittedQuestionAnswers[toolBlock.id];
 
-  const isDismissed = matchingAnswers
-    ? Object.values(matchingAnswers.answers).every((a) => a === DISMISSED_ANSWER)
-    : false;
-
   if (!matchingAnswers) return <div data-testid={ElementIds.ASK_USER_QUESTION_TOOL_BLOCK} />;
+
+  const isDismissed = Object.values(matchingAnswers.answers).every((a) => a === DISMISSED_ANSWER);
 
   return (
     <div className={styles.inlineContent} data-testid={ElementIds.ASK_USER_QUESTION_TOOL_BLOCK}>
@@ -93,6 +91,7 @@ export const AlphaAskUserQuestionBlock = ({ toolBlock }: { toolBlock: ToolUseBlo
       {matchingAnswers.questionData.questions.map((question, index) => {
         const answerText = matchingAnswers.answers[question.question] ?? "";
         const isDismissedAnswer = answerText === DISMISSED_ANSWER;
+        const { selectedOptions, customText } = splitAnswerIntoParts(answerText, question.options);
         return (
           <div key={question.question}>
             {index > 0 && <hr className={styles.divider} />}
@@ -103,11 +102,7 @@ export const AlphaAskUserQuestionBlock = ({ toolBlock }: { toolBlock: ToolUseBlo
                 </span>
               </div>
               {!isDismissedAnswer && question.options.length > 0 && (
-                <AnsweredOptionsList
-                  question={question}
-                  selectedOptions={splitAnswerIntoParts(answerText, question.options).selectedOptions}
-                  customText={splitAnswerIntoParts(answerText, question.options).customText}
-                />
+                <AnsweredOptionsList question={question} selectedOptions={selectedOptions} customText={customText} />
               )}
               {!isDismissedAnswer && question.options.length === 0 && answerText && (
                 <pre className={styles.entryBody} data-testid={ElementIds.ASK_USER_QUESTION_ANSWER_TEXT}>

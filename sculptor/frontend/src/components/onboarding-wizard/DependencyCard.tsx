@@ -226,7 +226,7 @@ export const DependencyCard = ({
       : null;
 
   const shouldShowInstallAction = status.state === "not-installed" || status.state === "wrong-version";
-  const showBrew = brewPackage && isMac();
+  const shouldShowBrew = Boolean(brewPackage) && isMac();
 
   const hasPathAndVersion =
     status.state === "installed" ||
@@ -289,40 +289,38 @@ export const DependencyCard = ({
           )}
 
           {shouldShowInstallAction && (
-            <>
-              <Popover.Root>
-                <Popover.Trigger>
-                  <Button
-                    size="1"
-                    variant="soft"
-                    data-role="install-button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                    }}
-                  >
-                    Install
-                  </Button>
-                </Popover.Trigger>
-                <Popover.Content side="bottom" align="end" sideOffset={4}>
-                  <Flex direction="column" gap="2" style={{ minWidth: 220 }}>
-                    <Text size="2" weight="medium">
-                      Install {name}
-                    </Text>
-                    {showBrew && (
-                      <Code size="1" className={styles.brewCommand}>
-                        brew install {brewPackage}
-                      </Code>
-                    )}
-                    <Link href={installUrl} target="_blank" size="2" className={styles.installLink}>
-                      <Flex align="center" gap="1">
-                        Details
-                        <ExternalLinkIcon size={12} />
-                      </Flex>
-                    </Link>
-                  </Flex>
-                </Popover.Content>
-              </Popover.Root>
-            </>
+            <Popover.Root>
+              <Popover.Trigger>
+                <Button
+                  size="1"
+                  variant="soft"
+                  data-role="install-button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                >
+                  Install
+                </Button>
+              </Popover.Trigger>
+              <Popover.Content side="bottom" align="end" sideOffset={4}>
+                <Flex direction="column" gap="2" style={{ minWidth: 220 }}>
+                  <Text size="2" weight="medium">
+                    Install {name}
+                  </Text>
+                  {shouldShowBrew && (
+                    <Code size="1" className={styles.brewCommand}>
+                      brew install {brewPackage}
+                    </Code>
+                  )}
+                  <Link href={installUrl} target="_blank" size="2" className={styles.installLink}>
+                    <Flex align="center" gap="1">
+                      Details
+                      <ExternalLinkIcon size={12} />
+                    </Flex>
+                  </Link>
+                </Flex>
+              </Popover.Content>
+            </Popover.Root>
           )}
 
           {status.state === "needs-auth" && onAuthenticate && !authUrl && (

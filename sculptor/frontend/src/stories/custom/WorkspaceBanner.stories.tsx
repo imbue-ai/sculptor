@@ -106,7 +106,7 @@ const BannerShell = ({
                         tooltip: `Open ${label} targets this branch`,
                       },
                     }
-                  : null
+                  : undefined
               }
             />
           </span>

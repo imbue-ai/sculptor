@@ -43,8 +43,9 @@ export function useInterruptAgent(
     } catch (error) {
       console.error("Failed to interrupt agent:", error);
       setToast({ title: "Failed to stop agent", type: ToastType.ERROR });
+    } finally {
+      store.set(interruptingAtom, false);
     }
-    store.set(interruptingAtom, false);
   }, [store, workspaceID, taskID]);
 
   return { isInterrupting, interrupt, toast, setToast };

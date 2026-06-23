@@ -57,7 +57,7 @@ const scoreAgainstString = (query: string, lowerStr: string, originalStr: string
     if (firstMatch === -1) firstMatch = found;
     lastMatch = found;
 
-    // Consecutive match bonus (exponential per run)
+    // Consecutive match bonus: longer unbroken runs score progressively higher
     if (found === strIdx) {
       consecutiveCount++;
       score += CONSECUTIVE_BONUS * consecutiveCount;

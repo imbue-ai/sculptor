@@ -53,7 +53,7 @@ export const AlphaMessageNode = ({
   messageIndex = 0,
 }: AlphaMessageNodeProps): ReactElement => {
   const message = node.message;
-  const turnSummaryData = useTurnSummaryData(message, node);
+  const turnSummaryData = useTurnSummaryData(node);
   const isUser = message.role === ChatMessageRole.USER;
   const isNewCycle = isUser && (prevNode === undefined || prevNode.message.role === ChatMessageRole.ASSISTANT);
   const isAfterUser = !isUser && prevNode !== undefined && prevNode.message.role === ChatMessageRole.USER;

@@ -7,13 +7,15 @@ import { ToastType } from "~/components/Toast.tsx";
 
 import { SettingRow } from "./SettingRow.tsx";
 
+const DEFAULT_BACKEND_READINESS_TIMEOUT_SECONDS = 60;
+
 type CustomBackendSectionProps = {
   setToast: (toast: ToastContent | null) => void;
 };
 
 export const CustomBackendSection = ({ setToast }: CustomBackendSectionProps): ReactElement | null => {
   const [customBackendCommand, setCustomBackendCommand] = useState("");
-  const [backendReadinessTimeout, setBackendReadinessTimeout] = useState(60);
+  const [backendReadinessTimeout, setBackendReadinessTimeout] = useState(DEFAULT_BACKEND_READINESS_TIMEOUT_SECONDS);
 
   useEffect(() => {
     let isIgnored = false;

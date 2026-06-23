@@ -163,7 +163,7 @@ export const FilePreview = ({
       return (
         <Tooltip content="Failed to load file. The file may be corrupted or inaccessible.">
           <Flex align="center" justify="center" className={styles.previewError}>
-            <Text size="1" color={dangerColor} style={{ textAlign: "center", padding: "4px" }}>
+            <Text size="1" color={dangerColor} className={styles.previewErrorIcon}>
               <FileWarningIcon />
             </Text>
           </Flex>

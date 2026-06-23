@@ -181,7 +181,7 @@ const DraggableGroupHeader = ({
           }}
           onClick={(e) => e.stopPropagation()}
           autoFocus
-          style={{ flex: 1 }}
+          className={styles.renameField}
         />
       ) : (
         <Text size="1" className={styles.groupName} weight="medium" color="gray">
@@ -524,7 +524,8 @@ export const ActionsPanel = (): ReactElement => {
 
   const isGroupDrag = activeDragId?.startsWith("group:") ?? false;
   const activeDragAction = !isGroupDrag && activeDragId ? actions.find((a) => a.id === activeDragId) : null;
-  const activeDragGroup = isGroupDrag ? groups.find((g) => g.id === activeDragId!.replace(/^group:/, "")) : null;
+  const activeDragGroup =
+    isGroupDrag && activeDragId ? groups.find((g) => g.id === activeDragId.replace(/^group:/, "")) : null;
   const isActionDrag = activeDragAction != null;
 
   const renderChip = (action: CustomAction): ReactElement => {
@@ -575,7 +576,7 @@ export const ActionsPanel = (): ReactElement => {
               />
 
               <div className={styles.scrollArea}>
-                <Flex direction="column" p="4" gap="2" style={{ minHeight: "100%" }}>
+                <Flex direction="column" p="4" gap="2" className={styles.scrollContent}>
                   {sortedGroups.map((group) => {
                     const groupActions = getDisplayActionsInGroup(group.id);
                     const isCollapsed = collapsedGroups[group.id] ?? false;
@@ -615,7 +616,7 @@ export const ActionsPanel = (): ReactElement => {
                               .join(" ")}
                             data-empty-group-drop={group.id}
                           >
-                            <Text size="1" style={{ color: "var(--gray-9)" }}>
+                            <Text size="1" className={styles.dropHintText}>
                               Drop action here
                             </Text>
                           </div>

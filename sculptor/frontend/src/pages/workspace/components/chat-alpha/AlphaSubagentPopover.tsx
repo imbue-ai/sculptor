@@ -32,9 +32,7 @@ export const AlphaSubagentPopover = ({
 
   return (
     <div className={styles.popover}>
-      {/* Body: scrollable */}
       <div className={styles.body}>
-        {/* Prompt */}
         {metadata?.prompt && (
           <div className={styles.section}>
             <div className={styles.sectionLabel}>{typeLabel} prompt</div>
@@ -65,7 +63,6 @@ export const AlphaSubagentPopover = ({
           </div>
         )}
 
-        {/* Response */}
         {metadata?.responseText && (
           <div className={styles.section}>
             <div className={styles.sectionLabel}>Response</div>

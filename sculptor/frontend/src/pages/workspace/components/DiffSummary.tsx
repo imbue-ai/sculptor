@@ -6,8 +6,12 @@ import { useMemo } from "react";
 import { ElementIds } from "~/api";
 import { useTimedLatch } from "~/common/Hooks.ts";
 import { useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff";
-import { activePanelPerZoneAtom, filesZoneAtom, zoneVisibilityAtom } from "~/components/panels/atoms";
-import { activeFileBrowserTabAtomFamily } from "~/components/panels/atoms";
+import {
+  activeFileBrowserTabAtomFamily,
+  activePanelPerZoneAtom,
+  filesZoneAtom,
+  zoneVisibilityAtom,
+} from "~/components/panels/atoms";
 
 import { changesScopeAtomFamily } from "../panels/fileBrowser/atoms";
 import { parseDiffStats } from "../utils/parseDiffStats";

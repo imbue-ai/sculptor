@@ -1,7 +1,6 @@
 import type { PageId } from "./types.ts";
 
 export type PageDefinition = {
-  id: PageId;
   title: string;
   placeholder: string;
   /**
@@ -18,49 +17,40 @@ export const isValidPageId = (id: string): id is PageId => Object.prototype.hasO
 
 export const PAGE_DEFINITIONS: Record<PageId, PageDefinition> = {
   "theme.appearance": {
-    id: "theme.appearance",
     title: "Switch theme",
     placeholder: "Pick an appearance...",
   },
   "settings.section": {
-    id: "settings.section",
     title: "Go to settings",
     placeholder: "Jump to a settings section...",
   },
   "workspaces.switch": {
-    id: "workspaces.switch",
     title: "Go to workspace",
     placeholder: "Find a workspace...",
     hideFromRootSearch: true,
   },
   "agents.switch": {
-    id: "agents.switch",
     title: "Go to agent",
     placeholder: "Find an agent in this workspace...",
     hideFromRootSearch: true,
   },
   "workspace.actions": {
-    id: "workspace.actions",
     title: "Workspace actions",
     placeholder: "Pick an action...",
   },
   "workspace.open_in": {
-    id: "workspace.open_in",
     title: "Open in...",
     placeholder: "Pick an application...",
   },
   "agent.actions": {
-    id: "agent.actions",
     title: "Agent actions",
     placeholder: "Pick an action...",
   },
   "view.layout": {
-    id: "view.layout",
     title: "Toggle layout",
     placeholder: "Pick a layout option...",
   },
   "view.panels": {
-    id: "view.panels",
     title: "Toggle panel visibility",
     placeholder: "Pick a panel to toggle...",
   },

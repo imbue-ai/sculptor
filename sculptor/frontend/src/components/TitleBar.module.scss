@@ -4,7 +4,3 @@
   // traffic-light row at zoom < 1.
   min-height: calc(40px / var(--app-zoom));
 }
-
-.nonDraggable {
-  app-region: no-drag;
-}

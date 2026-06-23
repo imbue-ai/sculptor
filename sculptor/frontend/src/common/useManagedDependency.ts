@@ -8,6 +8,10 @@ import { usePollingInterval } from "~/common/usePollingInterval";
 
 type ManagedDependencyTool = "CLAUDE" | "PI";
 
+// Clear an optimistic pending mode after this long so the settling spinner cannot
+// get stuck if the WebSocket update that would confirm the new mode never arrives.
+const MODE_SETTLE_TIMEOUT_MS = 10_000;
+
 // The per-tool mode/path live in a named field of dependency_paths, so a config
 // write keys off the lower-case field name while the install/status API keys off
 // the upper-case tool.
@@ -78,11 +82,11 @@ export const useManagedDependency = ({
     }
   }, [pendingMode, mode]);
 
-  // Safety timeout: clear pendingMode after 10s so the spinner cannot get stuck if
-  // the WebSocket update never arrives.
+  // Safety timeout: clear pendingMode so the spinner cannot get stuck if the
+  // WebSocket update never arrives.
   useEffect(() => {
     if (!isModeSettling) return;
-    const timeout = setTimeout(() => setPendingMode(null), 10_000);
+    const timeout = setTimeout(() => setPendingMode(null), MODE_SETTLE_TIMEOUT_MS);
     return (): void => clearTimeout(timeout);
   }, [isModeSettling]);
 
@@ -91,7 +95,7 @@ export const useManagedDependency = ({
       setPendingMode(newMode);
       onSettingChange(UserConfigField.DEPENDENCY_PATHS, { [configKey]: newMode });
     },
-    [onSettingChange, configKey, mode], // eslint-disable-line react-hooks/exhaustive-deps -- mode forces recreation to avoid a stale onSettingChange closure
+    [onSettingChange, configKey],
   );
 
   const [isInstalling, setIsInstalling] = useState(false);

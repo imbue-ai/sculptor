@@ -55,7 +55,7 @@ export const buildPanelTogglesProvider = (runtime: CommandRuntime): DynamicProvi
   id: "dynamic.panel_toggles",
   produce: (ctx): Array<Command> => {
     if (!ctx.route.isWorkspace) return [];
-    const registry = runtime.store.get(panelRegistryAtom) ?? [];
+    const registry = runtime.store.get(panelRegistryAtom);
     return registry.map((panel: PanelDefinition): Command => {
       const aliases = PANEL_SEARCH_ALIASES[panel.id] ?? [];
       return {

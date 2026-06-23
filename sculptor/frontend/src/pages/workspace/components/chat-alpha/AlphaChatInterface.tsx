@@ -204,7 +204,7 @@ export const AlphaChatInterface = ({
 
   // Scroll position persistence per task
   const filteredMessageRefs = useMemo(() => filteredNodes.map((n) => ({ id: n.message.id })), [filteredNodes]);
-  useAlphaScrollPersistence(scrollContainerRef, virtualizer, taskID ?? "", filteredMessageRefs, isAtBottom);
+  useAlphaScrollPersistence(scrollContainerRef, virtualizer, taskID ?? "", filteredMessageRefs);
 
   // Prompt navigation: ArrowUp/Down to cycle through user prompts
   const filteredChatMessages = useMemo(() => filteredNodes.map((n) => n.message), [filteredNodes]);

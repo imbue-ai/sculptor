@@ -70,7 +70,7 @@ export const useRepoInfo = (projectId: ProjectID): RepoInfoHookReturn => {
 
       const newRepoInfo: RepoInfo = {
         currentBranch: currentBranchInfo.currentBranch,
-        projectId: projectId,
+        projectId,
         recentBranches: existingRepoInfo.recentBranches,
         repoPath: existingRepoInfo.repoPath,
       };

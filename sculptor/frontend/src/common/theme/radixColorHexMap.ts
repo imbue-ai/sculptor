@@ -11,6 +11,13 @@ type ColorModeScales = {
   dark: ColorScale;
 };
 
+/** Number of steps in a Radix color scale. */
+const COLOR_SCALE_LENGTH = 12;
+/** Index of step 9 (the "solid background" step) within a 12-step scale. */
+const STEP_9_INDEX = 8;
+/** Returned when a color name or scale can't be resolved. */
+const FALLBACK_HEX = "#000000";
+
 const RADIX_COLOR_HEX_MAP: Record<string, ColorModeScales> = {
   gray: {
     light: [
@@ -983,9 +990,9 @@ const AUTO_GRAY_MAP: Record<AccentColor, string> = {
 export const getColorHex9 = (colorName: string, mode: "light" | "dark"): string => {
   const scales = RADIX_COLOR_HEX_MAP[colorName];
   if (scales === undefined) {
-    return "#000000";
+    return FALLBACK_HEX;
   }
-  return scales[mode][8];
+  return scales[mode][STEP_9_INDEX];
 };
 
 /**
@@ -994,7 +1001,7 @@ export const getColorHex9 = (colorName: string, mode: "light" | "dark"): string 
 export const getColorScale = (colorName: string, mode: "light" | "dark"): ReadonlyArray<string> => {
   const scales = RADIX_COLOR_HEX_MAP[colorName];
   if (scales === undefined) {
-    return Array.from({ length: 12 }, () => "#000000");
+    return Array.from({ length: COLOR_SCALE_LENGTH }, () => FALLBACK_HEX);
   }
   return scales[mode];
 };

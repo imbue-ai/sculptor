@@ -18,7 +18,7 @@ export const FastModeToggle = ({ isActive, onToggle }: FastModeToggleProps): Rea
       aria-label="Toggle fast mode"
       data-testid={ElementIds.FAST_MODE_TOGGLE}
       data-active={isActive}
-      style={isActive ? { color: "var(--button-primary-bg)", margin: 0 } : { margin: 0 }}
+      style={{ margin: 0, color: isActive ? "var(--button-primary-bg)" : undefined }}
     >
       <Zap size={16} />
     </IconButton>

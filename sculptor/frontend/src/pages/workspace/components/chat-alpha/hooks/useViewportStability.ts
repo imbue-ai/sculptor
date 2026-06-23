@@ -1,5 +1,5 @@
 import type { Virtualizer } from "@tanstack/react-virtual";
-import type { RefObject } from "react";
+import type { MutableRefObject, RefObject } from "react";
 import { useCallback } from "react";
 
 type UseViewportStabilityReturn = {
@@ -9,7 +9,7 @@ type UseViewportStabilityReturn = {
 export const useViewportStability = (
   scrollContainerRef: RefObject<HTMLDivElement | null>,
   virtualizer: Virtualizer<HTMLDivElement, Element>,
-  isProgrammaticScrollRef: React.MutableRefObject<boolean>,
+  isProgrammaticScrollRef: MutableRefObject<boolean>,
 ): UseViewportStabilityReturn => {
   const onHeightChange = useCallback(
     (messageIndex: number): void => {

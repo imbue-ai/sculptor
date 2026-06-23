@@ -2,10 +2,10 @@ import type { CustomAction, CustomActionGroup } from "~/api";
 
 export const SCULPTOR_BUILTIN_GROUP_ID = "__sculptor__";
 
-const SCULPTOR_BUILTIN_ACTION_IDS = [
-  `${SCULPTOR_BUILTIN_GROUP_ID}__fix_bug`,
-  `${SCULPTOR_BUILTIN_GROUP_ID}__help`,
-] as const;
+const FIX_BUG_ACTION_ID = `${SCULPTOR_BUILTIN_GROUP_ID}__fix_bug`;
+const HELP_ACTION_ID = `${SCULPTOR_BUILTIN_GROUP_ID}__help`;
+
+const SCULPTOR_BUILTIN_ACTION_IDS = [FIX_BUG_ACTION_ID, HELP_ACTION_ID] as const;
 
 export const BUILTIN_SCULPTOR_GROUP: CustomActionGroup = {
   id: SCULPTOR_BUILTIN_GROUP_ID,
@@ -15,7 +15,7 @@ export const BUILTIN_SCULPTOR_GROUP: CustomActionGroup = {
 
 export const BUILTIN_SCULPTOR_ACTIONS: ReadonlyArray<CustomAction> = [
   {
-    id: SCULPTOR_BUILTIN_ACTION_IDS[1],
+    id: HELP_ACTION_ID,
     name: "/help",
     prompt: "/sculptor:help",
     autoSubmit: false,
@@ -23,7 +23,7 @@ export const BUILTIN_SCULPTOR_ACTIONS: ReadonlyArray<CustomAction> = [
     order: 0,
   },
   {
-    id: SCULPTOR_BUILTIN_ACTION_IDS[0],
+    id: FIX_BUG_ACTION_ID,
     name: "/fix-bug",
     prompt: "/sculptor-workflow:fix-bug",
     autoSubmit: false,

@@ -3,7 +3,7 @@ import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 
-import { ElementIds, type UserConfigField } from "../../../api";
+import { ElementIds, UserConfigField } from "../../../api";
 import {
   isPrPollingEnabledAtom,
   prCreationPromptAtom,
@@ -18,6 +18,11 @@ import { TextAreaSettingRow } from "./TextAreaSettingRow.tsx";
 
 const DEFAULT_PR_CREATION_PROMPT =
   "Push my changes to origin and create a pull request. Check whether the repo uses GitHub (gh) or GitLab (glab) and use the appropriate tool. Write a clear description summarizing the changes.";
+
+const MIN_POLL_INTERVAL_SECONDS = 10;
+const MAX_POLL_INTERVAL_SECONDS = 300;
+const MIN_CLOSED_MULTIPLIER = 1;
+const MAX_CLOSED_MULTIPLIER = 120;
 
 type GitSettingsSectionProps = {
   onSettingChange: (field: UserConfigField, value: unknown) => Promise<void>;
@@ -40,25 +45,25 @@ export const GitSettingsSection = ({ onSettingChange }: GitSettingsSectionProps)
 
   const handlePollIntervalBlur = (): void => {
     const parsed = parseInt(pollIntervalValue, 10);
-    if (isNaN(parsed) || parsed < 10 || parsed > 300) {
+    if (isNaN(parsed) || parsed < MIN_POLL_INTERVAL_SECONDS || parsed > MAX_POLL_INTERVAL_SECONDS) {
       setPollIntervalValue(String(prPollInterval));
       return;
     }
 
     if (parsed !== prPollInterval) {
-      onSettingChange("prPollIntervalSeconds" as UserConfigField, parsed);
+      void onSettingChange(UserConfigField.PR_POLL_INTERVAL_SECONDS, parsed);
     }
   };
 
   const handleClosedMultiplierBlur = (): void => {
     const parsed = parseInt(closedMultiplierValue, 10);
-    if (isNaN(parsed) || parsed < 1 || parsed > 120) {
+    if (isNaN(parsed) || parsed < MIN_CLOSED_MULTIPLIER || parsed > MAX_CLOSED_MULTIPLIER) {
       setClosedMultiplierValue(String(prPollClosedMultiplier));
       return;
     }
 
     if (parsed !== prPollClosedMultiplier) {
-      onSettingChange("prPollClosedMultiplier" as UserConfigField, parsed);
+      void onSettingChange(UserConfigField.PR_POLL_CLOSED_MULTIPLIER, parsed);
     }
   };
 
@@ -70,7 +75,7 @@ export const GitSettingsSection = ({ onSettingChange }: GitSettingsSectionProps)
     }
 
     if (trimmed !== prDefaultTargetBranch) {
-      onSettingChange("prDefaultTargetBranch" as UserConfigField, trimmed);
+      void onSettingChange(UserConfigField.PR_DEFAULT_TARGET_BRANCH, trimmed);
     }
   };
 
@@ -81,7 +86,7 @@ export const GitSettingsSection = ({ onSettingChange }: GitSettingsSectionProps)
         description="The prompt sent to the agent when you click Create PR."
         value={prCreationPrompt}
         defaultValue={DEFAULT_PR_CREATION_PROMPT}
-        onSave={(value) => onSettingChange("prCreationPrompt" as UserConfigField, value)}
+        onSave={(value) => onSettingChange(UserConfigField.PR_CREATION_PROMPT, value)}
       />
 
       <SettingRow
@@ -90,7 +95,7 @@ export const GitSettingsSection = ({ onSettingChange }: GitSettingsSectionProps)
       >
         <Switch
           checked={isPrPollingEnabled}
-          onCheckedChange={(checked) => onSettingChange("prPollingEnabled" as UserConfigField, checked)}
+          onCheckedChange={(checked) => onSettingChange(UserConfigField.PR_POLLING_ENABLED, checked)}
           data-testid={ElementIds.SETTINGS_POLLING_ENABLED_TOGGLE}
         />
       </SettingRow>
@@ -101,8 +106,8 @@ export const GitSettingsSection = ({ onSettingChange }: GitSettingsSectionProps)
       >
         <TextField.Root
           type="number"
-          min={10}
-          max={300}
+          min={MIN_POLL_INTERVAL_SECONDS}
+          max={MAX_POLL_INTERVAL_SECONDS}
           value={pollIntervalValue}
           onChange={(e) => setPollIntervalValue(e.target.value)}
           onBlur={handlePollIntervalBlur}
@@ -124,8 +129,8 @@ export const GitSettingsSection = ({ onSettingChange }: GitSettingsSectionProps)
       >
         <TextField.Root
           type="number"
-          min={1}
-          max={120}
+          min={MIN_CLOSED_MULTIPLIER}
+          max={MAX_CLOSED_MULTIPLIER}
           value={closedMultiplierValue}
           onChange={(e) => setClosedMultiplierValue(e.target.value)}
           onBlur={handleClosedMultiplierBlur}

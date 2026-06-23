@@ -126,36 +126,26 @@ export const Editor = ({
   const routeWorkspaceID = useParams<{ workspaceID?: string }>().workspaceID;
   const projectID = projectIDProp ?? routeProjectID;
   const workspaceID = workspaceIDProp ?? routeWorkspaceID;
+  // Keep "latest ref" copies of the callback props so the editor's long-lived
+  // Tiptap callbacks always invoke the current handler. These refs are read
+  // only inside user-triggered Tiptap callbacks, never during render, so the
+  // sync is a direct assignment during render rather than an effect — an
+  // effect runs after commit, leaving a brief window where the ref is stale.
   const onKeyDownRef = useRef<((event: KeyboardEvent) => boolean | void) | undefined>(onKeyDown);
+  onKeyDownRef.current = onKeyDown;
   const onFilesChangeRef = useRef(onFilesChange);
+  onFilesChangeRef.current = onFilesChange;
   const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
   const onTriggerImageUploadRef = useRef(onTriggerImageUpload);
+  onTriggerImageUploadRef.current = onTriggerImageUpload;
   // The editor is recreated only when `extensions` changes (see useEditor deps
   // below), so the `onUpdate` callback closes over whichever `onChange` was in
   // scope at editor creation. Route subsequent updates through a ref so a
   // parent that swaps in a new closure (e.g. one that captures other state)
   // doesn't end up calling a stale handler.
   const onChangeRef = useRef(onChange);
-
-  useEffect(() => {
-    onKeyDownRef.current = onKeyDown;
-  }, [onKeyDown]);
-
-  useEffect(() => {
-    onFilesChangeRef.current = onFilesChange;
-  }, [onFilesChange]);
-
-  useEffect(() => {
-    onErrorRef.current = onError;
-  }, [onError]);
-
-  useEffect(() => {
-    onTriggerImageUploadRef.current = onTriggerImageUpload;
-  }, [onTriggerImageUpload]);
-
-  useEffect(() => {
-    onChangeRef.current = onChange;
-  }, [onChange]);
+  onChangeRef.current = onChange;
 
   const isEntityMentionsEnabled = useAtomValue(isEntityMentionsEnabledAtom);
   const projects = useAtomValue(projectsArrayAtom);

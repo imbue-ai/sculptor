@@ -1,13 +1,13 @@
 import { atom } from "jotai";
 
-export const devPanelOpenAtom = atom(false);
+export const devPanelOpenAtom = atom<boolean>(false);
 
-export const reactGrabEnabledAtom = atom(false);
+export const reactGrabEnabledAtom = atom<boolean>(false);
 
-export const tanstackDevtoolsEnabledAtom = atom(false);
+export const tanstackDevtoolsEnabledAtom = atom<boolean>(false);
 
 export type TanstackDevtoolsMode = "floating" | "docked-bottom";
 
 export const tanstackDevtoolsModeAtom = atom<TanstackDevtoolsMode>("floating");
 
-export const tanstackEventLogEnabledAtom = atom(false);
+export const tanstackEventLogEnabledAtom = atom<boolean>(false);

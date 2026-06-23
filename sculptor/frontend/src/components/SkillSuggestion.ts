@@ -7,16 +7,16 @@ import { fetchFreshProjectSkills } from "~/common/state/hooks/useProjectSkills";
 import { fetchFreshWorkspaceSkills } from "~/common/state/hooks/useWorkspaceSkills";
 
 import { scoreFilePath } from "./fuzzyFileScorer";
-import { badgeLabelForType } from "./skillBadge";
+import { badgeLabelForType, type SkillType } from "./skillBadge";
 import { SkillList } from "./SkillList";
 import { isPositionDismissed } from "./SuggestionDismissalPlugin";
 import { renderSuggestion, showSuggestionOnlyWhenTyping, SuggestionItem } from "./SuggestionUtils";
 
 export class SkillItem extends SuggestionItem {
   description: string;
-  skillType: "builtin" | "custom" | "sculptor";
+  skillType: SkillType;
 
-  constructor(id: string, label: string, description: string, skillType: "builtin" | "custom" | "sculptor") {
+  constructor(id: string, label: string, description: string, skillType: SkillType) {
     super(id, label);
     this.description = description;
     this.skillType = skillType;

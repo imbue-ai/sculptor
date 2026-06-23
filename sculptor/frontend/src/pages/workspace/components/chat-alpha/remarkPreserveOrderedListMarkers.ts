@@ -27,9 +27,11 @@
 import type { List, Root } from "mdast";
 import { visit } from "unist-util-visit";
 
+// Cap the marker scan so a pathologically long line can't blow up the regex.
+const MAX_MARKER_SCAN_LENGTH = 24;
+
 export const remarkPreserveOrderedListMarkers =
-  () =>
-  (tree: Root, file: { value?: string | Uint8Array }): void => {
+  (): ((tree: Root, file: { value?: string | Uint8Array }) => void) => (tree, file) => {
     const source = typeof file.value === "string" ? file.value : "";
     if (!source) return;
 
@@ -41,8 +43,7 @@ export const remarkPreserveOrderedListMarkers =
 
         // The marker is the leading run of digits at the item's start position.
         // CommonMark also allows the ``)`` form (``1) foo``) — accept either.
-        // Cap the scan length so a pathologically long line can't blow up.
-        const marker = source.slice(offset, offset + 24).match(/^[ \t]*(\d+)[.)]/);
+        const marker = source.slice(offset, offset + MAX_MARKER_SCAN_LENGTH).match(/^[ \t]*(\d+)[.)]/);
         if (!marker) continue;
 
         const value = Number(marker[1]);

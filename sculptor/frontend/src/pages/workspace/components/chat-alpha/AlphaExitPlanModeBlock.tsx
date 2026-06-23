@@ -31,10 +31,7 @@ export const AlphaExitPlanModeBlock = ({ toolBlock }: { toolBlock: ToolUseBlock 
   // output processor when ExitPlanMode fires). Auto-open is event-driven via
   // openFileFromUiEventAtom; this lookup powers click-to-reopen across the
   // pending → answered → historical states.
-  const planFilePath =
-    pendingUserQuestion?.planFilePath ??
-    submittedQuestionAnswers[toolBlock.id]?.questionData?.planFilePath ??
-    undefined;
+  const planFilePath = pendingUserQuestion?.planFilePath ?? matchingAnswers?.questionData?.planFilePath;
 
   useEffect(() => {
     if (matchingAnswers) setIsExpanded(true);
@@ -60,9 +57,8 @@ export const AlphaExitPlanModeBlock = ({ toolBlock }: { toolBlock: ToolUseBlock 
     return (
       <div className={styles.planBlock} data-testid={ElementIds.EXIT_PLAN_MODE_TOOL_BLOCK}>
         <div
-          className={styles.toolHeader}
+          className={planFilePath ? `${styles.toolHeader} ${styles.planHeaderClickable}` : styles.toolHeader}
           onClick={planFilePath ? handleOpenPlanFile : undefined}
-          style={{ cursor: planFilePath ? "pointer" : undefined }}
         >
           <PulsingDot />
           <span className={styles.toolName}>Plan ready for review</span>
@@ -84,9 +80,8 @@ export const AlphaExitPlanModeBlock = ({ toolBlock }: { toolBlock: ToolUseBlock 
       return (
         <div className={styles.planBlock} data-testid={ElementIds.EXIT_PLAN_MODE_TOOL_BLOCK}>
           <div
-            className={styles.toolHeader}
+            className={planFilePath ? `${styles.toolHeader} ${styles.planHeaderClickable}` : styles.toolHeader}
             onClick={planFilePath ? handleOpenPlanFile : undefined}
-            style={{ cursor: planFilePath ? "pointer" : undefined }}
           >
             <span className={styles.toolName}>Plan approved</span>
             <Badge size="1" variant="soft" color="green">
@@ -130,7 +125,7 @@ export const AlphaExitPlanModeBlock = ({ toolBlock }: { toolBlock: ToolUseBlock 
           </Badge>
         </div>
         {isExpanded && (
-          <div style={{ paddingLeft: "var(--space-4)", paddingTop: "var(--space-1)" }}>
+          <div className={styles.planRevisionDetail}>
             <span>{answerValue}</span>
           </div>
         )}
@@ -142,9 +137,8 @@ export const AlphaExitPlanModeBlock = ({ toolBlock }: { toolBlock: ToolUseBlock 
   return (
     <div className={styles.planBlock} data-testid={ElementIds.EXIT_PLAN_MODE_TOOL_BLOCK}>
       <div
-        className={styles.toolHeader}
+        className={planFilePath ? `${styles.toolHeader} ${styles.planHeaderClickable}` : styles.toolHeader}
         onClick={planFilePath ? handleOpenPlanFile : undefined}
-        style={{ cursor: planFilePath ? "pointer" : undefined }}
       >
         <span className={styles.toolName}>Plan reviewed</span>
       </div>

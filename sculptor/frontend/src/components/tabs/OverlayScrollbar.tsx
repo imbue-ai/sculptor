@@ -30,7 +30,7 @@ const computeThumbWidth = (trackWidth: number, metrics: ScrollMetrics): number =
  * positioning, without reserving any layout space. Syncs with the scroll
  * position of the referenced container.
  */
-export const OverlayScrollbar = ({ scrollRef, className }: OverlayScrollbarProps): ReactElement | null => {
+export const OverlayScrollbar = ({ scrollRef, className }: OverlayScrollbarProps): ReactElement | undefined => {
   const trackRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
   const dragStartXRef = useRef(0);
@@ -155,7 +155,7 @@ export const OverlayScrollbar = ({ scrollRef, className }: OverlayScrollbarProps
     isDraggingRef.current = false;
   }, []);
 
-  if (!hasOverflow) return null;
+  if (!hasOverflow) return undefined;
 
   const thumbW = computeThumbWidth(trackWidth, metrics);
   const maxScroll = metrics.scrollWidth - metrics.clientWidth;

@@ -172,11 +172,11 @@ export const DiffSplitContainer = ({ workspaceId, chatContent }: DiffSplitContai
     </Panel>
   );
 
+  const isResizeDisabled = !isOpen || isInExpandMode;
   const resizeHandle = (
     <PanelResizeHandle
-      disabled={!isOpen || isInExpandMode}
-      className={styles.horizontalResizeHandle}
-      style={!isOpen || isInExpandMode ? { display: "none" } : undefined}
+      disabled={isResizeDisabled}
+      className={`${styles.horizontalResizeHandle} ${isResizeDisabled ? styles.hidden : ""}`}
     />
   );
 

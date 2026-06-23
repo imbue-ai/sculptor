@@ -37,7 +37,7 @@ export const FileContextMenu = ({
       <ContextMenu.Trigger>{children}</ContextMenu.Trigger>
       <ContextMenu.Content size="1" className={contentClassName}>
         {menuGroups.map((group, groupIndex) => (
-          <span key={groupIndex}>
+          <span key={group[0].key}>
             {groupIndex > 0 && <ContextMenu.Separator />}
             {group.map((item) => (
               <ContextMenu.Item

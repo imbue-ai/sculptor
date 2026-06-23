@@ -398,7 +398,9 @@ describe("AlphaPromptNavigator", () => {
       expect(dots[0]).toHaveAttribute("data-is-active", "false");
       expect(dots[2]).toHaveAttribute("data-is-active", "true");
     });
+  });
 
+  describe("prompt sanitization", () => {
     it("renders HTML markup in prompts as plain text (stripHtml)", () => {
       vi.useFakeTimers();
       const messages = [

@@ -83,41 +83,16 @@ export const usePerWorkspacePanelLayout = (workspaceId: string): void => {
     }
 
     const prevId = prevWorkspaceIdRef.current;
+    const isInitial = isInitialRef.current;
 
-    if (isInitialRef.current) {
-      // First mount with per-workspace enabled: load this workspace's saved state if it exists
+    // After the first mount, re-runs for the same workspace have nothing to do.
+    if (!isInitial && prevId === workspaceId) return;
+
+    if (isInitial) {
       isInitialRef.current = false;
-      prevWorkspaceIdRef.current = workspaceId;
-
-      const savedVisibility = loadFromLocalStorage<Partial<Record<ZoneId, boolean>>>(
-        VISIBILITY_KEY_PREFIX + workspaceId,
-      );
-      const savedSizes = loadFromLocalStorage<Partial<Record<ZoneId, number>>>(SIZES_KEY_PREFIX + workspaceId);
-      const isSavedDiffPanelOpen = loadFromLocalStorage<boolean>(DIFF_PANEL_OPEN_KEY_PREFIX + workspaceId);
-      const savedDiffSplitRatio = loadFromLocalStorage<number>(DIFF_PANEL_SPLIT_RATIO_KEY_PREFIX + workspaceId);
-
-      if (savedVisibility !== undefined) {
-        setZoneVisibility(savedVisibility);
-      }
-
-      if (savedSizes !== undefined) {
-        setZoneSizes(savedSizes);
-      }
-
-      if (isSavedDiffPanelOpen !== undefined) {
-        setDiffPanelOpen(isSavedDiffPanelOpen);
-      }
-
-      if (savedDiffSplitRatio !== undefined) {
-        setDiffPanelSplitRatio(savedDiffSplitRatio);
-      }
-      return;
-    }
-
-    if (prevId === workspaceId) return;
-
-    // Switching workspaces: save old (from refs to avoid stale closure), load new
-    if (prevId !== null) {
+    } else if (prevId !== null) {
+      // Switching workspaces: save the outgoing workspace's current state
+      // (read from refs to avoid a stale closure) before loading the new one.
       saveToLocalStorage(VISIBILITY_KEY_PREFIX + prevId, zoneVisibilityRef.current);
       saveToLocalStorage(SIZES_KEY_PREFIX + prevId, zoneSizesRef.current);
       saveToLocalStorage(DIFF_PANEL_OPEN_KEY_PREFIX + prevId, isDiffPanelOpenRef.current);
@@ -126,6 +101,8 @@ export const usePerWorkspacePanelLayout = (workspaceId: string): void => {
 
     prevWorkspaceIdRef.current = workspaceId;
 
+    // Load and apply this workspace's saved state, if any. Shared by both the
+    // first mount and subsequent workspace switches.
     const savedVisibility = loadFromLocalStorage<Partial<Record<ZoneId, boolean>>>(VISIBILITY_KEY_PREFIX + workspaceId);
     const savedSizes = loadFromLocalStorage<Partial<Record<ZoneId, number>>>(SIZES_KEY_PREFIX + workspaceId);
     const isSavedDiffPanelOpen = loadFromLocalStorage<boolean>(DIFF_PANEL_OPEN_KEY_PREFIX + workspaceId);

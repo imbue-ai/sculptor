@@ -9,8 +9,8 @@ let sessionToken: string | undefined = undefined;
  */
 export const initializeSessionToken = async (): Promise<void> => {
   if (!window.sculptor) {
-    // As a backup, outside of the electron context, initialize the session token using through the samesite cookie.
-    const sessionTokenInitializationURL = new URL(SESSION_TOKEN_ENDPOINT, API_URL_BASE || window.location.origin);
+    // As a backup, outside of the electron context, initialize the session token through the samesite cookie.
+    const sessionTokenInitializationURL = new URL(SESSION_TOKEN_ENDPOINT, API_URL_BASE ?? window.location.origin);
     // This sets the session token cookie.
     await fetch(sessionTokenInitializationURL.toString(), { method: "GET" });
   } else {
@@ -22,9 +22,9 @@ export const getSessionToken = (): string | undefined => {
   return sessionToken;
 };
 
-export const setupAuthHeaders = (headers: Headers): undefined => {
-  const sessionToken = getSessionToken();
-  if (sessionToken) {
-    headers.set(SESSION_TOKEN_HEADER_NAME, sessionToken);
+export const setupAuthHeaders = (headers: Headers): void => {
+  const token = getSessionToken();
+  if (token) {
+    headers.set(SESSION_TOKEN_HEADER_NAME, token);
   }
 };

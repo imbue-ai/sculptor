@@ -9,6 +9,10 @@ import { Editor } from "~/components/Editor";
 
 import styles from "./ActionDialog.module.scss";
 
+// Sentinel Select values that don't map to a real group id.
+const NO_GROUP_OPTION = "none";
+const NEW_GROUP_OPTION = "new";
+
 export type ActionFormData = {
   name: string;
   prompt: string;
@@ -56,15 +60,16 @@ export const ActionDialog = ({ open, onOpenChange, action, groups, onSave }: Act
       name,
       prompt,
       autoSubmit: shouldAutoSubmit,
-      groupId: groupId === "new" ? null : groupId,
-      newGroupName: groupId === "new" ? newGroupName : undefined,
+      groupId: groupId === NEW_GROUP_OPTION ? null : groupId,
+      newGroupName: groupId === NEW_GROUP_OPTION ? newGroupName : undefined,
     });
   }, [onSave, name, prompt, shouldAutoSubmit, groupId, newGroupName]);
 
-  const isValid = name.trim() !== "" && prompt.trim() !== "" && (groupId !== "new" || newGroupName.trim() !== "");
+  const isValid =
+    name.trim() !== "" && prompt.trim() !== "" && (groupId !== NEW_GROUP_OPTION || newGroupName.trim() !== "");
 
   const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
+    (e: KeyboardEvent): void => {
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && isValid) {
         e.preventDefault();
         handleSave();
@@ -117,23 +122,23 @@ export const ActionDialog = ({ open, onOpenChange, action, groups, onSave }: Act
               Group
             </Text>
             <Select.Root
-              value={groupId === null ? "none" : groupId}
-              onValueChange={(value) => setGroupId(value === "none" ? null : value)}
+              value={groupId === null ? NO_GROUP_OPTION : groupId}
+              onValueChange={(value) => setGroupId(value === NO_GROUP_OPTION ? null : value)}
             >
               <Select.Trigger placeholder="Select group" data-testid={ElementIds.ACTION_DIALOG_GROUP_SELECT} />
               <Select.Content>
-                <Select.Item value="none">No group</Select.Item>
+                <Select.Item value={NO_GROUP_OPTION}>No group</Select.Item>
                 {groups.map((group) => (
                   <Select.Item key={group.id} value={group.id}>
                     {group.name}
                   </Select.Item>
                 ))}
-                <Select.Item value="new">+ Create new group...</Select.Item>
+                <Select.Item value={NEW_GROUP_OPTION}>+ Create new group...</Select.Item>
               </Select.Content>
             </Select.Root>
           </Flex>
 
-          {groupId === "new" && (
+          {groupId === NEW_GROUP_OPTION && (
             <Flex direction="column" gap="2">
               <Text size="2" weight="medium">
                 New Group Name

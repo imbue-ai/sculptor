@@ -8,8 +8,7 @@ import { Markdown } from "@tiptap/markdown";
 import { common, createLowlight } from "lowlight";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { CustomCodeBlockLowlight } from "./CodeBlockExtension";
-import { dedentText } from "./CodeBlockExtension";
+import { CustomCodeBlockLowlight, dedentText } from "./CodeBlockExtension";
 import { createTestEditor, simulatePaste, typeText } from "./CodeBlockExtension.testUtils";
 import styles from "./Editor.module.scss";
 

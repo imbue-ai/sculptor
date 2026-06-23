@@ -1,6 +1,6 @@
 import { Button, Flex, TextArea, Tooltip } from "@radix-ui/themes";
 import type { ReactElement } from "react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { SettingRow } from "./SettingRow.tsx";
 import styles from "./TextAreaSettingRow.module.scss";
@@ -26,7 +26,14 @@ export const TextAreaSettingRow = ({
 }: TextAreaSettingRowProps): ReactElement => {
   const [localValue, setLocalValue] = useState(value);
 
-  useEffect(() => setLocalValue(value), [value]);
+  // Re-sync the buffered edit when the saved value changes externally. Adjusting
+  // state during render (instead of in an effect) avoids the extra post-commit
+  // render cycle that would briefly show the stale value.
+  const [syncedValue, setSyncedValue] = useState(value);
+  if (syncedValue !== value) {
+    setSyncedValue(value);
+    setLocalValue(value);
+  }
 
   const handleBlur = (): void => {
     if (localValue !== value) {

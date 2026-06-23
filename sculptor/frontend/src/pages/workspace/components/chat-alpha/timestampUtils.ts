@@ -1,5 +1,8 @@
 import type { ChatMessage } from "~/api";
 
+const MS_PER_SECOND = 1000;
+const MS_PER_DAY = MS_PER_SECOND * 60 * 60 * 24;
+
 export type TimestampFormat = "relative" | "absolute";
 
 /**
@@ -10,7 +13,7 @@ export const formatRelativeTimestamp = (timestamp: string, baseTimestamp: string
   const messageTime = new Date(timestamp).getTime();
   const baseTime = new Date(baseTimestamp).getTime();
   const relativeMs = messageTime - baseTime;
-  const relativeSeconds = (relativeMs / 1000).toFixed(1);
+  const relativeSeconds = (relativeMs / MS_PER_SECOND).toFixed(1);
   return `T+${relativeSeconds}s`;
 };
 
@@ -74,7 +77,8 @@ export const formatHumanTimestamp = (timestamp: string, now?: Date): string => {
   // Compare calendar dates in local time
   const dateDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const refDay = new Date(reference.getFullYear(), reference.getMonth(), reference.getDate());
-  const dayDiff = Math.round((refDay.getTime() - dateDay.getTime()) / (1000 * 60 * 60 * 24));
+  // Round to absorb the 23h/25h day around DST transitions between two local midnights.
+  const dayDiff = Math.round((refDay.getTime() - dateDay.getTime()) / MS_PER_DAY);
 
   if (dayDiff === 0) {
     return timeStr;
