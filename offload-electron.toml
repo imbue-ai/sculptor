@@ -22,8 +22,8 @@ sandbox_repo_root = "/app"
 sandbox_init_cmd = "bash /app/scripts/finalize-base-image.sh"
 # Electron dev mode (electron-forge start) serves the renderer from the Vite
 # dev server, so it needs the generated API client + sculpt client but not a
-# production renderer bundle (no `npm run build`).
-post_patch_cmd = "export PATH=/root/.nvm/versions/node/v${NODE_VERSION}/bin:$PATH && cd /app/sculptor/frontend && npm run generate-api && cd /app && just generate-sculpt-client"
+# production renderer bundle (no `pnpm run build`).
+post_patch_cmd = "export PATH=/root/.nvm/versions/node/v${NODE_VERSION}/bin:$PATH && cd /app/sculptor/frontend && pnpm run generate-api && cd /app && just generate-sculpt-client"
 
 [provider]
 type = "modal"
@@ -60,6 +60,7 @@ build_inputs = [
     "pyproject.toml",
     "sculptor/pyproject.toml",
     "sculptor/frontend/package.json",
+    "sculptor/frontend/pnpm-lock.yaml",
     "uv.lock",
 ]
 

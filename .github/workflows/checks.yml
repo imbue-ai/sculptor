@@ -71,12 +71,21 @@ jobs:
         with:
           enable-cache: true
 
+      # Install pnpm before setup-node so its `cache: pnpm` can locate the store.
+      # Version is pinned here to match `packageManager` in
+      # sculptor/frontend/package.json (action-setup can't auto-detect it, since
+      # that field lives in the frontend package, not a root package.json).
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 24.17.0
-          cache: npm
-          cache-dependency-path: sculptor/frontend/package-lock.json
+          cache: pnpm
+          cache-dependency-path: sculptor/frontend/pnpm-lock.yaml
 
       - name: Setup just
         uses: extractions/setup-just@v2
@@ -112,7 +121,7 @@ jobs:
         run: uv sync --frozen
 
       - name: Verify toolchain
-        run: just --version && uv --version && node --version && npm --version
+        run: just --version && uv --version && node --version && npm --version && pnpm --version
 
       - name: Run checks + unit tests
         run: |

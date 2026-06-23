@@ -21,10 +21,15 @@ RUN apt-get update && \
         git curl ca-certificates xz-utils libnss-wrapper && \
     rm -rf /var/lib/apt/lists/*
 
-# Node.js 22 — for the frontend build and the API-client codegen.
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+# Node.js 24 — for the frontend build and the API-client codegen. Matches the
+# version the rest of the repo pins (24.17.0 via nvm / .nvmrc).
+RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
     apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
+
+# pnpm via Corepack (ships with Node). The pinned version comes from the
+# `packageManager` field in sculptor/frontend/package.json.
+RUN corepack enable pnpm
 
 # uv — Python package/venv manager; it provisions the right Python for the project.
 RUN curl -fsSL https://astral.sh/uv/install.sh | sh
@@ -49,9 +54,9 @@ RUN cd /app/sculptor && uv sync
 # leaves the production build right at the limit, so it intermittently aborts
 # with "JavaScript heap out of memory" (exit 134). 4 GB gives reliable headroom.
 RUN cd /app/sculptor/frontend && \
-    npm install --force && \
-    npm run generate-api && \
-    NODE_OPTIONS=--max-old-space-size=4096 npm run build
+    pnpm install --no-frozen-lockfile && \
+    pnpm run generate-api && \
+    NODE_OPTIONS=--max-old-space-size=4096 pnpm run build
 
 # --- Runtime setup ---------------------------------------------------------
 

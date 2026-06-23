@@ -128,9 +128,7 @@ packaging = [
 ]
 
 [project.scripts]
-sculptor_npm_run = "sculptor.scripts.npm_run:app"
 sculptor = "sculptor.cli.main:main"
-sculptor_eslint_preprocess = "sculptor.scripts.eslint_preprocess:main"
 builder = "builder.cli:app"  # Utilities for building and releasing Sculptor
 
 
