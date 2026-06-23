@@ -18,9 +18,11 @@ def wait_for_tiptap_ready(page: Page, *, timeout_ms: int = 10_000) -> None:
     """Best-effort wait for the Tiptap editor to initialize on the chat input.
 
     After page reloads (e.g. ``_reset_browser_state``), the contenteditable DOM
-    element can be visible and clickable before the React fiber tree has the
-    Tiptap editor prop attached.  This function polls for the editor to appear,
-    giving it a head start before ``type_into_tiptap`` runs.
+    element can be visible and clickable before TipTap has mounted the editor.
+    Editor.tsx stamps ``data-editor-ready="true"`` on the contenteditable once
+    the editor instance exists, so we wait on that deterministic attribute rather
+    than polling React internals.  This gives the editor a head start before
+    ``type_into_tiptap`` runs.
 
     This is non-fatal: if the editor isn't ready within ``timeout_ms``, we log
     and return.  ``type_into_tiptap`` re-resolves the chat input and retries on
@@ -30,25 +32,7 @@ def wait_for_tiptap_ready(page: Page, *, timeout_ms: int = 10_000) -> None:
     if chat_input.count() == 0:
         return
     try:
-        chat_input.evaluate(
-            f"""(el) => new Promise((resolve, reject) => {{
-                const deadline = Date.now() + {timeout_ms};
-                const findEditor = (el) => {{ {_FIND_TIPTAP_EDITOR_JS} }};
-                const poll = () => {{
-                    try {{
-                        findEditor(el);
-                        resolve();
-                    }} catch (e) {{
-                        if (Date.now() < deadline) {{
-                            requestAnimationFrame(poll);
-                        }} else {{
-                            reject(e);
-                        }}
-                    }}
-                }};
-                poll();
-            }})"""
-        )
+        expect(chat_input).to_have_attribute("data-editor-ready", "true", timeout=timeout_ms)
     except Exception as exc:
         logger.debug("wait_for_tiptap_ready timed out after {}ms: {}", timeout_ms, exc)
 
@@ -69,10 +53,22 @@ class PlaywrightIntegrationTestElement(Locator):
         return getattr(self._locator, attr)
 
 
-# The JS snippet shared by type_into_tiptap and clear_tiptap that walks the
-# React fiber tree to find the TipTap editor instance on a contenteditable element.
+# The JS snippet shared by type_into_tiptap, clear_tiptap, etc. to find the
+# TipTap editor instance for a contenteditable element. Prefers the
+# ``__tiptapEditor`` handle that Editor.tsx stashes on the editor's own DOM node
+# (stable, per-node), and falls back to walking the React fiber tree for any
+# editor that predates the handle. The fiber walk reads private ``__reactFiber$``
+# fields whose names can change across React/TipTap upgrades, so the handle is
+# the preferred path.
 _FIND_TIPTAP_EDITOR_JS = """
     let node = el;
+    while (node) {
+        if (node.__tiptapEditor?.commands) {
+            return node.__tiptapEditor;
+        }
+        node = node.parentElement;
+    }
+    node = el;
     while (node) {
         const key = Object.keys(node).find(k => k.startsWith('__reactFiber$'));
         if (key) {

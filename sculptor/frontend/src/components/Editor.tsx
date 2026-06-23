@@ -209,6 +209,10 @@ export const Editor = ({
         attributes: {
           class: styles.editor,
           ["data-testid"]: tagName,
+          // Present only once TipTap has mounted the contenteditable, so tests
+          // can gate on a stable DOM signal (`expect(...).to_have_attribute`)
+          // instead of polling React fiber internals for the editor instance.
+          ["data-editor-ready"]: "true",
           spellcheck: "true",
         },
         handleKeyDown: (_, event) => {
@@ -276,14 +280,24 @@ export const Editor = ({
     [extensions],
   );
 
-  // Expose the TipTap editor instance to parent components via ref. Null the
-  // ref on unmount so a parent that outlives this component doesn't keep a
-  // handle to a destroyed TipTap editor.
+  // Expose the TipTap editor instance to parent components via ref, and stash it
+  // on its own contenteditable DOM node as `__tiptapEditor`. The DOM handle lets
+  // integration tests reach the live editor without walking React fiber
+  // internals (whose private field names break across React/TipTap upgrades).
+  // It is attached per-node — never a global — so multiple editors (e.g. several
+  // agents on screen) each carry their own handle. Both are nulled/removed on
+  // teardown so a detaching editor (after an agent/workspace switch) stops
+  // advertising a destroyed instance.
   useEffect(() => {
-    if (!editorRef) return;
-    editorRef.current = editor;
+    if (editorRef) editorRef.current = editor;
+    if (!editor) {
+      return undefined;
+    }
+    const dom = editor.view.dom as HTMLElement & { __tiptapEditor?: unknown };
+    dom.__tiptapEditor = editor;
     return (): void => {
-      editorRef.current = null;
+      if (editorRef) editorRef.current = null;
+      delete dom.__tiptapEditor;
     };
   }, [editor, editorRef]);
 
