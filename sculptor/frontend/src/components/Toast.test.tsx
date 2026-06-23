@@ -1,10 +1,11 @@
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { useCallback } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ElementIds } from "../api";
 import * as Utils from "../common/Utils.ts";
-import { Toast, ToastProvider } from "./Toast";
+import { Toast, ToastProvider, ToastType } from "./Toast";
 
 afterEach(() => {
   cleanup();
@@ -46,5 +47,23 @@ describe("Toast", () => {
 
     // A memoized Toast bails out, so its render function never runs again.
     expect(mergeSpy.mock.calls.length).toBe(callsAfterMount);
+  });
+
+  // Regression: ToastType enum values must match the lowercase SCSS variant
+  // class names so `styles[type]` resolves to a real class. With the old
+  // uppercase enum values (e.g. "SUCCESS"), styles[type] was undefined and the
+  // colored variant styling was silently dropped.
+  // (`classNameStrategy: "non-scoped"` makes styles.success === "success".)
+  it.each([ToastType.SUCCESS, ToastType.ERROR])("applies the %s variant class to the toast root", (type) => {
+    render(
+      <ToastProvider>
+        <Toast open={true} type={type} title="hello" />
+      </ToastProvider>,
+    );
+
+    const toast = screen.getByTestId(ElementIds.TOAST);
+    // The variant class equals the (lowercase) type value; an uppercase enum
+    // value would resolve to undefined and never appear on the element.
+    expect(toast.className).toContain(type);
   });
 });
