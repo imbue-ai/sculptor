@@ -1,5 +1,5 @@
 import { Box, Flex, IconButton, Text } from "@radix-ui/themes";
-import { ChevronDown, ChevronRight, X } from "lucide-react";
+import { Bookmark, ChevronDown, ChevronRight, X } from "lucide-react";
 import type { ReactElement } from "react";
 
 import type { PanelTicket } from "../linear/sources.ts";
@@ -10,7 +10,9 @@ import { StateDot } from "./StateDot.tsx";
 /**
  * A collapsible issue: a header (id, state, title, source badges) that toggles
  * the details. Open/closed is controlled by the panel, which derives the
- * default and persists user toggles; pinned tickets get an unpin control.
+ * default and persists user toggles; pinned tickets get an unpin control. A
+ * bookmark control assigns the ticket as the workspace shortcut shown in the
+ * banner widget — filled on the ticket that is currently the shortcut.
  */
 export const TicketSection = ({
   ticket,
@@ -19,6 +21,8 @@ export const TicketSection = ({
   subIssuesOpen,
   onToggleSubIssues,
   onUnpin,
+  isShortcut,
+  onToggleShortcut,
 }: {
   ticket: PanelTicket;
   isOpen: boolean;
@@ -26,6 +30,10 @@ export const TicketSection = ({
   subIssuesOpen: boolean;
   onToggleSubIssues: () => void;
   onUnpin: (identifier: string) => void;
+  /** Whether this ticket is the workspace's current (effective) shortcut. */
+  isShortcut: boolean;
+  /** Assign this ticket as the shortcut, or clear it if it already is one. */
+  onToggleShortcut: () => void;
 }): ReactElement => {
   const { issue } = ticket;
   const canUnpin = ticket.sources.includes("pinned");
@@ -51,6 +59,19 @@ export const TicketSection = ({
           {ticket.sources.map((source) => (
             <SourceBadge key={source} source={source} primary={ticket.isPrimary && source === "branch"} />
           ))}
+          <IconButton
+            size="1"
+            variant="ghost"
+            color={isShortcut ? undefined : "gray"}
+            title={isShortcut ? "Clear workspace shortcut" : "Use as workspace shortcut"}
+            aria-pressed={isShortcut}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleShortcut();
+            }}
+          >
+            <Bookmark size={12} fill={isShortcut ? "currentColor" : "none"} />
+          </IconButton>
           {canUnpin && (
             <IconButton
               size="1"
