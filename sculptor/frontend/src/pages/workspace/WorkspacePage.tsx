@@ -17,7 +17,6 @@ import { useMarkRead } from "../../common/state/hooks/useMarkRead";
 import { usePanelLayoutSync } from "../../common/state/hooks/usePanelLayoutSync.ts";
 import { usePerWorkspacePanelLayout } from "../../common/state/hooks/usePerWorkspacePanelLayout.ts";
 import { useWorkspaceFiles } from "../../common/state/hooks/useWorkspaceFiles.ts";
-import { zenModeActiveAtom } from "../../components/panels/atoms.ts";
 import { DockingLayout } from "../../components/panels/DockingLayout";
 import { AgentTabs } from "./components/AgentTabs.tsx";
 import { BottomBar } from "./components/BottomBar";
@@ -26,12 +25,6 @@ import { DiffSplitContainer } from "./components/DiffSplitContainer.tsx";
 import { WorkspaceBanner } from "./components/WorkspaceBanner.tsx";
 import { useArtifactSync } from "./hooks/useArtifactSync";
 import styles from "./WorkspacePage.module.scss";
-
-const ZenTopGradient = (): ReactElement | null => {
-  const isZenMode = useAtomValue(zenModeActiveAtom);
-  if (!isZenMode) return null;
-  return <div className={styles.zenGradient} />;
-};
 
 const WorkspacePageContent = ({ taskID }: { taskID: string }): ReactElement => {
   const { workspaceID } = useWorkspacePageParams();
@@ -56,7 +49,6 @@ const WorkspacePageContent = ({ taskID }: { taskID: string }): ReactElement => {
   const centerContent = useMemo(
     () => (
       <Flex direction="column" className={styles.centerPanel}>
-        <ZenTopGradient />
         <WorkspaceBanner />
         <DiffSplitContainer
           workspaceId={workspaceID}
@@ -106,8 +98,7 @@ export const WorkspacePage = (): ReactElement | null => {
     if (tasks === undefined) return; // tasks haven't loaded; can't validate yet
 
     const workspaceTasks = tasks.filter((task) => task.workspaceId === workspaceID);
-    const hasSavedTask = savedAgentId !== null && workspaceTasks.some((task) => task.id === savedAgentId);
-    if (hasSavedTask && savedAgentId !== null) {
+    if (savedAgentId !== null && workspaceTasks.some((task) => task.id === savedAgentId)) {
       navigateToAgent(workspaceID, savedAgentId);
       return;
     }
