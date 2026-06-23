@@ -136,7 +136,7 @@ export const ToolBlockGroup = ({
       {topLevelBlocks.map((block) => {
         if (isToolUseBlock(block as BlockUnion)) {
           const toolBlock = block as ToolUseBlock;
-          const isExecuting = inProgressMessageId !== null && !toolResultMap.has(toolBlock.id);
+          const isExecuting = inProgressMessageId != null && !toolResultMap.has(toolBlock.id);
           return (
             <ToolLine
               key={toolBlock.id}
