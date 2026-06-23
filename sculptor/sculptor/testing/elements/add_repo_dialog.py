@@ -35,17 +35,16 @@ class PlaywrightAddRepoDialogElement(PlaywrightIntegrationTestElement):
 
     def get_remote_url_toggle(self) -> Locator:
         # The "I'll paste a URL instead" / "Search my repositories instead"
-        # button. AddRepoDialog keeps every provider's form mounted (with
-        # display:none on the hidden providers) so each form preserves its
-        # state on radio-card switches. That means multiple buttons share
-        # this testid in the DOM at once; filter to the visible one so we
-        # resolve to the toggle inside the currently shown provider's form.
+        # button. AddRepoDialog keeps each source's form mounted (display:none
+        # on the hidden ones) so it preserves state across radio-card switches.
+        # Filter to the visible match so we resolve the toggle inside the
+        # currently shown form.
         return self._locator.locator(f'[data-testid="{ElementIDs.ADD_REPO_REMOTE_URL_TOGGLE.value}"]:visible')
 
     def get_remote_url_input(self) -> Locator:
-        # Mirrors the toggle: the URL TextField is mounted inside the URL
-        # view of every provider's form. Filter to the visible one so we
-        # resolve to the input in the currently active provider.
+        # Mirrors the toggle: the URL TextField lives in the GitHub form, which
+        # stays mounted (display:none while another source is selected). Filter
+        # to the visible one so we resolve it only while the form is shown.
         return self._locator.locator(f'[data-testid="{ElementIDs.ADD_REPO_REMOTE_URL_INPUT.value}"]:visible')
 
     def get_clone_progress_title(self) -> Locator:
@@ -60,9 +59,9 @@ class PlaywrightAddRepoDialogElement(PlaywrightIntegrationTestElement):
         return self._page.get_by_test_id(ElementIDs.ADD_REPO_CLONE_PROGRESS_LINK)
 
     def get_not_configured_section(self) -> Locator:
-        """The "X CLI not configured" panel mounted inside the active provider's
-        form. Multiple providers can mount this concurrently because all three
-        forms stay mounted, so filter to the visible one."""
+        """The "X CLI not configured" panel inside the GitHub form, which stays
+        mounted (display:none when another source is selected), so filter to the
+        visible one."""
         return self._locator.locator(f'[data-testid="{ElementIDs.ADD_REPO_NOT_CONFIGURED.value}"]:visible')
 
     def get_configure_cta_button(self) -> Locator:
@@ -92,8 +91,8 @@ class PlaywrightAddRepoDialogElement(PlaywrightIntegrationTestElement):
         return self._page.get_by_test_id(ElementIDs.ADD_REPO_CLONE_FAILED_CLOSE)
 
     def get_remote_name_input(self) -> Locator:
-        """The Name TextField inside the active provider's RemoteRepoForm.
-        All three forms stay mounted, so filter to the visible input."""
+        """The Name TextField inside the GitHub RemoteRepoForm, which stays
+        mounted via display:none, so filter to the visible input."""
         return self._locator.locator(f'[data-testid="{ElementIDs.ADD_REPO_REMOTE_NAME_INPUT.value}"]:visible')
 
     def get_repo_combobox_input(self) -> Locator:

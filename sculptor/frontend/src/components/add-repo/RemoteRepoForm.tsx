@@ -263,7 +263,7 @@ export const RemoteRepoForm = ({
           />
           <Text size="2" className={styles.browseHint}>
             Or{" "}
-            <button type="button" className={styles.browseLink} onClick={handleBrowseClick}>
+            <button type="button" className={styles.browseLink} onClick={handleBrowseClick} disabled={disabled}>
               browse
             </button>{" "}
             for a folder
@@ -351,6 +351,7 @@ export const RemoteRepoForm = ({
                   type="button"
                   className={styles.toggleLink}
                   onClick={() => handleViewChange("url")}
+                  disabled={disabled}
                   data-testid={ElementIds.ADD_REPO_REMOTE_URL_TOGGLE}
                 >
                   I&apos;ll paste a URL instead
@@ -365,6 +366,7 @@ export const RemoteRepoForm = ({
                   type="button"
                   className={styles.toggleLink}
                   onClick={() => handleViewChange("url")}
+                  disabled={disabled}
                   data-testid={ElementIds.ADD_REPO_REMOTE_URL_TOGGLE}
                 >
                   I&apos;ll paste a URL instead
@@ -390,6 +392,7 @@ export const RemoteRepoForm = ({
               type="button"
               className={styles.toggleLink}
               onClick={() => handleViewChange("search")}
+              disabled={disabled}
               data-testid={ElementIds.ADD_REPO_REMOTE_URL_TOGGLE}
             >
               Search my repositories instead

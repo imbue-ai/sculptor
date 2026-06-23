@@ -27,7 +27,11 @@ export const normalizeQuery = (q: string): string => q.trim().toLowerCase();
 
 // Keys live under the host's reserved `SCULPTOR_QUERY_KEY_PREFIX` namespace so
 // runtime-loaded plugins keyed on the same root can't collide with this cache.
-export const remoteReposQueryKey = (provider: RemoteProvider, q: string, limit: number) =>
+export const remoteReposQueryKey = (
+  provider: RemoteProvider,
+  q: string,
+  limit: number,
+): readonly [typeof SCULPTOR_QUERY_KEY_PREFIX, "remoteRepos", RemoteProvider, string, number] =>
   [SCULPTOR_QUERY_KEY_PREFIX, "remoteRepos", provider, normalizeQuery(q), limit] as const;
 
 const isNotConfiguredError = (error: unknown): boolean => error instanceof HTTPException && error.status === 412;

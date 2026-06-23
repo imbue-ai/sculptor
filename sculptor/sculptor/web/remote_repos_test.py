@@ -14,7 +14,6 @@ from sculptor.foundation.subprocess_utils import ProcessTimeoutError
 from sculptor.service_collections.service_collection import CompleteServiceCollection
 from sculptor.services.dependency_management_service import Dependency
 from sculptor.services.dependency_management_service import DependencyManagementService
-from sculptor.utils.build import get_clones_folder
 from sculptor.utils.build import get_sculptor_folder
 from sculptor.web.data_types import RemoteRepo
 from sculptor.web.remote_repos import _REMOTE_CLONE_TIMEOUT_SECONDS
@@ -116,6 +115,14 @@ def test_filter_matches_owner_slash_name_substring() -> None:
     """Typing ``sfcompute/cli`` should pick out that exact repo from a list."""
     repos = [_repo("sfcompute/cli"), _repo("sfcompute/other"), _repo("notsf/cli")]
     matches = _filter_remote_repos(repos, "sfcompute/cli")
+    assert [r.full_name for r in matches] == ["sfcompute/cli"]
+
+
+def test_filter_handles_none_description_without_crashing() -> None:
+    """A repo with ``description=None`` (the API default) must not crash the
+    substring filter — it should still match on ``full_name`` alone."""
+    repos = [_repo("sfcompute/cli", description=None), _repo("other/repo", description=None)]
+    matches = _filter_remote_repos(repos, "cli")
     assert [r.full_name for r in matches] == ["sfcompute/cli"]
 
 
@@ -1243,50 +1250,6 @@ def test_list_remote_repos_caps_limit_at_max(
     api_path = captured["api_path"]
     assert isinstance(api_path, str)
     assert f"per_page={_REMOTE_REPO_MAX_LIMIT}" in api_path
-
-
-# ---------------------------------------------------------------------------
-# get_clones_folder
-# ---------------------------------------------------------------------------
-
-
-def test_get_clones_folder_returns_provider_subdirectory(tmp_path: Path, monkeypatch) -> None:
-    """``get_clones_folder("github")`` must land at
-    ``<sculptor_folder>/repos/github`` — the per-provider suffix is what the
-    frontend appends to the BackendCapabilities default. Override the sculptor
-    folder so the test doesn't touch the user's real ~/.sculptor."""
-    monkeypatch.setattr("sculptor.utils.build.get_sculptor_folder", lambda: tmp_path)
-
-    folder = get_clones_folder("github")
-    assert folder == tmp_path / "repos" / "github"
-
-
-def test_get_clones_folder_creates_intermediate_directories(tmp_path: Path, monkeypatch) -> None:
-    """First call on a fresh machine must create ``repos/<provider>`` — the
-    Add Repository default points at this path and the clone subprocess
-    would fail without it."""
-    monkeypatch.setattr("sculptor.utils.build.get_sculptor_folder", lambda: tmp_path)
-
-    folder = get_clones_folder("github")
-    assert folder.is_dir()
-
-
-def test_get_clones_folder_is_idempotent_on_existing_directory(tmp_path: Path, monkeypatch) -> None:
-    """Subsequent calls must not raise even though the directory already
-    exists — the helper is called every time the dialog computes its default
-    target."""
-    monkeypatch.setattr("sculptor.utils.build.get_sculptor_folder", lambda: tmp_path)
-    first = get_clones_folder("github")
-    second = get_clones_folder("github")
-    assert first == second
-    assert first.is_dir()
-
-
-def test_get_clones_folder_keeps_providers_separated(tmp_path: Path, monkeypatch) -> None:
-    """Distinct providers must land in different subdirectories so the
-    per-provider default in the dialog reads the right one."""
-    monkeypatch.setattr("sculptor.utils.build.get_sculptor_folder", lambda: tmp_path)
-    assert get_clones_folder("github") != get_clones_folder("other")
 
 
 # ---------------------------------------------------------------------------

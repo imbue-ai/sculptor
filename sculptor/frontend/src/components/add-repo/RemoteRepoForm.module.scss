@@ -20,6 +20,12 @@
     outline: 2px solid var(--accent-9);
     outline-offset: 2px;
   }
+
+  &:disabled {
+    color: var(--gray-8);
+    cursor: not-allowed;
+    text-decoration: none;
+  }
 }
 
 .selectedCard {
@@ -57,5 +63,11 @@
   &:focus-visible {
     outline: 2px solid var(--accent-9);
     outline-offset: 2px;
+  }
+
+  &:disabled {
+    color: var(--gray-8);
+    cursor: not-allowed;
+    text-decoration: none;
   }
 }
