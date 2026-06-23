@@ -79,9 +79,7 @@ export const PathAutocomplete = ({
   const fetchIdRef = useRef(0);
   const rootRef = useRef<HTMLDivElement>(null);
   const isOpenRef = useRef(isOpen);
-  useEffect(() => {
-    isOpenRef.current = isOpen;
-  }, [isOpen]);
+  isOpenRef.current = isOpen;
 
   const closeDropdown = useCallback((): void => {
     if (debounceRef.current) {
