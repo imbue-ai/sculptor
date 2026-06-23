@@ -36,12 +36,7 @@ type TrackerState = {
  * 4. Resolves when the stream confirms completion
  * 5. Provides a cancel function for early cleanup
  */
-export const createRequestTracker = (
-  requestId: RequestID,
-  url: string,
-  _method: string = "GET",
-  customTimeoutMs?: number,
-): TrackedRequest => {
+export const createRequestTracker = (requestId: RequestID, url: string, customTimeoutMs?: number): TrackedRequest => {
   const state: TrackerState = {
     unsubscribeFromStore: null,
     timeoutHandle: null,
@@ -85,12 +80,7 @@ export const createRequestTracker = (
     finalizeTracker(false, new RequestTimeoutError(errorMessage));
   }, timeoutDuration);
 
-  const acknowledgment = createAcknowledgmentEntry(
-    requestId,
-    doesRequireAcknowledgement,
-    state.resolvePromise,
-    state.rejectPromise,
-  );
+  const acknowledgment = createAcknowledgmentEntry(requestId, doesRequireAcknowledgement);
   registerAcknowledgment(acknowledgment);
 
   state.unsubscribeFromStore = requestStore.sub(requestAcknowledgmentsAtom, () => {
@@ -156,18 +146,10 @@ const cleanupRequest = (requestId: RequestID): void => {
   requestStore.set(requestAcknowledgmentsAtom, updatedAcknowledgments);
 };
 
-const createAcknowledgmentEntry = (
-  requestId: RequestID,
-  requiresAcknowledgment: boolean,
-  resolvePromise: () => void,
-  rejectPromise: (error: Error) => void,
-): RequestAcknowledgment => {
+const createAcknowledgmentEntry = (requestId: RequestID, requiresAcknowledgment: boolean): RequestAcknowledgment => {
   return {
     requestId,
     isAcknowledged: !requiresAcknowledgment,
-    resolver: resolvePromise,
-    rejecter: rejectPromise,
-    timestamp: Date.now(),
   };
 };
 
