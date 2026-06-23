@@ -1,4 +1,4 @@
-import { useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useRef } from "react";
 
@@ -19,7 +19,7 @@ export const AlphaSearchBar = ({
 }: AlphaSearchBarProps): ReactElement => {
   const setSearchVisible = useSetAtom(chatSearchVisibleAtom);
   const inputRef = useRef<HTMLInputElement>(null);
-  const focusRequest = useSetAtom(chatSearchFocusRequestAtom);
+  const focusRequest = useAtomValue(chatSearchFocusRequestAtom);
 
   const handleClose = useCallback((): void => {
     setSearchVisible(false);
