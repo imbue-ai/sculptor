@@ -20,7 +20,6 @@ export const useAlphaScrollPersistence = (
   virtualizer: Virtualizer<HTMLDivElement, Element>,
   taskId: string,
   filteredMessages: ReadonlyArray<MessageRef>,
-  _isAtBottom: boolean,
 ): void => {
   const [scrollPosition, setScrollPosition] = useAtom(alphaScrollPositionAtomFamily(taskId));
   const isRestoringRef = useRef(false);

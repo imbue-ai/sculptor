@@ -18,6 +18,10 @@ const FILLING_OVERFLOW_BUFFER = 100;
 const SCROLL_ANIMATION_MS = 250;
 const SCROLL_ANIMATION_EASING = "cubic-bezier(0.33, 1, 0.68, 1)"; // ease-out
 
+// How long after a wheel/touch/keydown the user is still considered to be
+// actively scrolling, before the user-scroll flag is debounced back off.
+const USER_SCROLL_DEBOUNCE_MS = 150;
+
 /** Cancel any in-progress scroll-to-top transform animation and restore
  *  the virtualizer's scroll-position adjustment callback. */
 const clearScrollAnimation = (
@@ -92,8 +96,7 @@ export const useAlphaAutoScroll = (
   // Suppress the jump-to-bottom button between message send and response arrival.
   const [isJumpSuppressed, setIsJumpSuppressed] = useState(false);
 
-  // Track previous message count and last user message index to detect new user messages.
-  const prevMessageCountRef = useRef(messageCount);
+  // Track the last user message index to detect new user messages.
   const prevLastUserMessageIndexRef = useRef(lastUserMessageIndex);
 
   // Track scroll direction so REENGAGE_THRESHOLD only fires when the user
@@ -122,7 +125,6 @@ export const useAlphaAutoScroll = (
   // but never `wheel`/`touch`/`keydown`, so they are ignored.
   const isUserScrollingRef = useRef(false);
   const userScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const USER_SCROLL_DEBOUNCE_MS = 150;
 
   // Timer handle for clearing the transform animation styles.
   const scrollAnimationRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -264,7 +266,6 @@ export const useAlphaAutoScroll = (
   useLayoutEffect(() => {
     if (prevAutoScrollTaskRef.current !== taskId) {
       prevAutoScrollTaskRef.current = taskId;
-      prevMessageCountRef.current = messageCount;
       prevLastUserMessageIndexRef.current = lastUserMessageIndex;
       isAtBottomRef.current = false;
       isEngagedRef.current = false;
@@ -286,7 +287,6 @@ export const useAlphaAutoScroll = (
   // to be skipped.
   useLayoutEffect(() => {
     const isNewUserMessage = lastUserMessageIndex > prevLastUserMessageIndexRef.current;
-    prevMessageCountRef.current = messageCount;
     prevLastUserMessageIndexRef.current = lastUserMessageIndex;
 
     if (!isNewUserMessage || messageCount === 0 || isSuppressed) return;

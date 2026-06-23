@@ -61,12 +61,12 @@ export const useAlphaActivePromptIndex = (
   isAtBottom: boolean,
   isNavigatingRef: MutableRefObject<boolean>,
 ): ActivePromptIndex => {
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [activeIndex, setActiveIndex] = useState<number>(0);
 
   // Timestamp (ms, Date.now) until which the scroll-spy should skip updates
   // so programmatic scrolls from `setIndex` / `scrollToIndex` can't clobber
   // the just-set cursor.  Reset to 0 on any user-initiated scroll input.
-  const programmaticScrollUntilRef = useRef(0);
+  const programmaticScrollUntilRef = useRef<number>(0);
 
   // Keep a ref so the throttled handler always reads the latest value without
   // being recreated on every render.
