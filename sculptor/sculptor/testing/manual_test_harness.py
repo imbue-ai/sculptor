@@ -263,8 +263,11 @@ class ManualTestHarness:
             "SCULPTOR_FRONTEND_PORT": str(self._vite_port),
         }
         logger.info("Starting Vite dev server on port {} (proxying to backend port {})", self._vite_port, self._port)
+        # Invoke pnpm through Corepack (which ships with Node) so this works on a
+        # fresh checkout without a globally installed pnpm, using the version
+        # pinned in the frontend's package.json `packageManager` field.
         self._vite_process = subprocess.Popen(
-            ["pnpm", "run", "dev"],
+            ["corepack", "pnpm", "run", "dev"],
             cwd=str(frontend_dir),
             env=vite_env,
             stdout=subprocess.PIPE,
