@@ -1975,7 +1975,8 @@ def create_workspace_agent(
                 agent_config=agent_config,
                 git_hash=initial_commit_hash,
                 system_prompt=project.default_system_prompt,
-                default_model=agent_request.model,
+                # Terminal agents don't carry a model — Sculptor doesn't control it (SCU-1580).
+                default_model=None if is_terminal_agent_config(agent_config) else agent_request.model,
             ),
             current_state=initial_task_state,
         )

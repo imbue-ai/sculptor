@@ -40,7 +40,8 @@ class AgentSnapshot(pydantic.BaseModel):
     error_detail: str | None
     updated_at: str
     title: str | None
-    model: str
+    # Terminal agents carry no model (Sculptor doesn't control it), so this is None for them.
+    model: str | None
     interface: str
     project_id: str
     workspace_id: str
@@ -124,7 +125,7 @@ def _snapshot_from_view(
         error_detail=view.get("errorDetail"),
         updated_at=view.get("updatedAt", ""),
         title=view.get("title"),
-        model=view.get("model", ""),
+        model=view.get("model"),
         interface=view.get("interface", ""),
         project_id=view.get("projectId", ""),
         workspace_id=view.get("workspaceId", ""),
