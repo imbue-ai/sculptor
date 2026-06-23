@@ -618,9 +618,11 @@ class DependencyManagementService(Service):
         binary = self.resolve_binary_path(tool)
         if binary is None:
             return None
-        # 3s is more than enough — `gh`/`claude auth status` read a local
-        # credentials file. Keeping the timeout tight matters because this is
-        # called from `_get_status`, which runs on every status snapshot.
+        # `<tool> auth status` may contact the host to validate the stored token
+        # (not just read the local credentials file), so keep the timeout tight:
+        # this runs from `_get_status` on every status snapshot, and a slow or
+        # unreachable host shouldn't stall a status read. A timed-out probe maps
+        # to None (unknown) below rather than a misleading "unauthenticated".
         try:
             self.concurrency_group.run_process_to_completion(
                 [binary, "auth", "status"],

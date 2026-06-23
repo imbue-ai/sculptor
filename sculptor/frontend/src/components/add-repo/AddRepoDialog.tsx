@@ -81,7 +81,12 @@ export const AddRepoDialog = ({ open, onOpenChange, setToast }: AddRepoDialogPro
   // opened before the WS stream / dropdown prefetch populated the atom.
   const [isRefreshingDeps, setIsRefreshingDeps] = useState(false);
 
-  // Re-fetch dependency status into the shared atom.
+  // Prime the WS-pushed dependenciesStatus atom via a one-shot HTTP GET. This
+  // deliberately departs from the usual "HTTP → TanStack, WS → atom" split:
+  // the dialog opens during onboarding and before the unified stream is
+  // connected, so there's no WS frame yet to populate the atom. We GET-then-
+  // write so the real CLI state shows on first paint; the WS reconciles the
+  // authoritative value once the stream is live.
   // skipWsAck: the dependencies endpoint doesn't open a data-model
   // transaction, so it never produces the WS acknowledgment the SDK
   // waits on by default. Without this the call times out at 10s and
@@ -163,9 +168,9 @@ export const AddRepoDialog = ({ open, onOpenChange, setToast }: AddRepoDialogPro
 
   // Rendering
   // `validating` keeps the form mounted with disabled inputs + a spinner on the
-  // submit button (matches the pre-refactor in-flight UX). The dialog only
-  // swaps to RepoValidationView once we reach an interactive error state or
-  // initializing (the post-confirm git init / initial-commit run).
+  // submit button. The dialog only swaps to RepoValidationView once we reach an
+  // interactive error state or initializing (the post-confirm git init /
+  // initial-commit run).
   const isSubmitting = phase.type === "validating";
   const isFormPhase = phase.type === "form" || phase.type === "validating";
   const isSubmitDisabled = isSubmitting || (mode === "local" ? !path.trim() : !currentRemoteSubmit.ready);

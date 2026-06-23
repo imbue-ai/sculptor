@@ -284,6 +284,19 @@ def _is_safe_repo_slug(full_name: str) -> bool:
     return bool(_REPO_SLUG_RE.match(full_name.strip()))
 
 
+def _is_safe_clone_name(name: str) -> bool:
+    """True when *name* is a single safe path component for the clone directory.
+
+    The destination is ``target_dir / name``, so a ``name`` containing a path
+    separator or ``..`` could redirect the clone outside the chosen parent.
+    Require a plain directory name (no separators, not ``.``/``..``, non-empty).
+    """
+    candidate = name.strip()
+    if not candidate or candidate in (".", ".."):
+        return False
+    return "/" not in candidate and "\\" not in candidate
+
+
 def _is_safe_target_path(target_path: Path) -> bool:
     """True when *target_path* renders to a clone destination safe to pass positionally.
 
@@ -366,6 +379,10 @@ def clone_remote_repo(
         raise HTTPException(status_code=400, detail="Unsupported or unsafe clone URL.")
     if clone_request.full_name is not None and not _is_safe_repo_slug(clone_request.full_name):
         raise HTTPException(status_code=400, detail="Unsupported repository name.")
+    # The clone lands in ``target_dir / name``; reject a name that could escape
+    # the chosen parent (path separators, ``..``) before it shapes the path.
+    if not _is_safe_clone_name(clone_request.name):
+        raise HTTPException(status_code=400, detail="Unsupported clone directory name.")
 
     target_dir = Path(clone_request.target_dir).expanduser()
     target_path = target_dir / clone_request.name
@@ -389,12 +406,8 @@ def clone_remote_repo(
             detail=f"{target_path} already exists.",
         )
 
-    # Always create the parent. The user typed or accepted this path in the
-    # Add Repository dialog, so creating it on their behalf is the expected
-    # outcome — and the previous "must sit under ~/.sculptor/repos" guard
-    # rejected legitimate paths in dev mode, where get_sculptor_folder()
-    # returns the repo-local .dev_sculptor/ rather than the frontend's
-    # ~/.sculptor/repos literal.
+    # Create the parent. The user typed or accepted this path in the Add
+    # Repository dialog, so creating it on their behalf is the expected outcome.
     try:
         target_dir.mkdir(parents=True, exist_ok=True)
     except OSError as e:

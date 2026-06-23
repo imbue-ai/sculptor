@@ -243,59 +243,56 @@ export const RemoteRepoForm = ({
     isLoadingDependencies,
   );
 
-  const renderTargetFolderInput = (): ReactElement => {
-    if (canBrowse) {
-      return (
-        <Flex direction="column" gap="2">
-          <Text size="2" weight="medium">
-            Target Folder
-          </Text>
-          <PathAutocomplete
-            placeholder="~/code"
-            value={targetDirInputValue}
-            onValueChange={handleTargetDirChange}
-            onSubmit={handleTargetDirChange}
-            fetchDirectories={fetchDirectories}
+  // Electron can open a native folder picker, so it gets an always-visible
+  // editable path + "browse"; the web build instead hides the editor behind a
+  // "use a custom target folder" checkbox and otherwise clones to the default.
+  const targetFolderInput: ReactElement = canBrowse ? (
+    <Flex direction="column" gap="2">
+      <Text size="2" weight="medium">
+        Target Folder
+      </Text>
+      <PathAutocomplete
+        placeholder="~/code"
+        value={targetDirInputValue}
+        onValueChange={handleTargetDirChange}
+        onSubmit={handleTargetDirChange}
+        fetchDirectories={fetchDirectories}
+        disabled={disabled}
+        suffix={targetSuffix}
+      />
+      <Text size="2" className={styles.browseHint}>
+        Or{" "}
+        <button type="button" className={styles.browseLink} onClick={handleBrowseClick} disabled={disabled}>
+          browse
+        </button>{" "}
+        for a folder
+      </Text>
+    </Flex>
+  ) : (
+    <Flex direction="column" gap="2">
+      <Flex align="center" gap="2" asChild>
+        <label>
+          <Checkbox
+            checked={isUsingCustomTarget}
+            onCheckedChange={(checked) => handleCustomTargetToggle(checked === true)}
             disabled={disabled}
-            suffix={targetSuffix}
           />
-          <Text size="2" className={styles.browseHint}>
-            Or{" "}
-            <button type="button" className={styles.browseLink} onClick={handleBrowseClick} disabled={disabled}>
-              browse
-            </button>{" "}
-            for a folder
-          </Text>
-        </Flex>
-      );
-    }
-
-    return (
-      <Flex direction="column" gap="2">
-        <Flex align="center" gap="2" asChild>
-          <label>
-            <Checkbox
-              checked={isUsingCustomTarget}
-              onCheckedChange={(checked) => handleCustomTargetToggle(checked === true)}
-              disabled={disabled}
-            />
-            <Text size="2">Use a custom target folder</Text>
-          </label>
-        </Flex>
-        {isUsingCustomTarget && (
-          <PathAutocomplete
-            placeholder={defaultTargetDir ?? "~/code"}
-            value={targetDirInputValue}
-            onValueChange={handleTargetDirChange}
-            onSubmit={handleTargetDirChange}
-            fetchDirectories={fetchDirectories}
-            disabled={disabled}
-            suffix={targetSuffix}
-          />
-        )}
+          <Text size="2">Use a custom target folder</Text>
+        </label>
       </Flex>
-    );
-  };
+      {isUsingCustomTarget && (
+        <PathAutocomplete
+          placeholder={defaultTargetDir ?? "~/code"}
+          value={targetDirInputValue}
+          onValueChange={handleTargetDirChange}
+          onSubmit={handleTargetDirChange}
+          fetchDirectories={fetchDirectories}
+          disabled={disabled}
+          suffix={targetSuffix}
+        />
+      )}
+    </Flex>
+  );
 
   return (
     <Flex direction="column" gap="3">
@@ -414,7 +411,7 @@ export const RemoteRepoForm = ({
             />
           </Flex>
 
-          {renderTargetFolderInput()}
+          {targetFolderInput}
         </>
       )}
     </Flex>

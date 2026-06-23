@@ -222,11 +222,10 @@ export const useAddRepo = ({
             errorMessage: "This folder already exists. Add it as a local folder instead?",
             localPathSuggestion: repoPath,
           });
-        } else if (error instanceof HTTPException && error.status === 412) {
-          // 412 = gh not installed or not signed in. The local-folder
-          // hint isn't relevant — the path probably doesn't exist yet.
-          dispatch({ type: "CLONE_FAILED", repoPath, errorMessage: error.detail });
         } else if (error instanceof HTTPException) {
+          // Any other backend status (412 not signed in, 504 timeout, 400 bad
+          // input) surfaces its detail. The "Add as local folder" hint is
+          // intentionally omitted — only a 409 path conflict offers that CTA.
           dispatch({ type: "CLONE_FAILED", repoPath, errorMessage: error.detail });
         } else {
           // Network failures (the browser's "Failed to fetch" TypeError),

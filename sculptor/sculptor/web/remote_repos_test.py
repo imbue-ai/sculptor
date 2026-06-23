@@ -22,6 +22,7 @@ from sculptor.web.remote_repos import _REMOTE_REPO_MAX_SEARCH_PAGES
 from sculptor.web.remote_repos import _build_remote_repos_api_path
 from sculptor.web.remote_repos import _filter_remote_repos
 from sculptor.web.remote_repos import _github_user_repos_page_path
+from sculptor.web.remote_repos import _is_safe_clone_name
 from sculptor.web.remote_repos import _is_safe_clone_url
 from sculptor.web.remote_repos import _is_safe_repo_slug
 from sculptor.web.remote_repos import _is_safe_target_path
@@ -333,6 +334,18 @@ def test_is_safe_repo_slug_accepts_owner_repo() -> None:
 def test_is_safe_repo_slug_rejects_dashes_and_non_slugs() -> None:
     for slug in ("-owner/repo", "owner", "--flag", "owner repo", ""):
         assert _is_safe_repo_slug(slug) is False
+
+
+def test_is_safe_clone_name_accepts_plain_directory_names() -> None:
+    for name in ("repo", "Hello-World", "my.repo", "sub_repo", "repo.js"):
+        assert _is_safe_clone_name(name) is True
+
+
+def test_is_safe_clone_name_rejects_separators_and_traversal() -> None:
+    """A name with a path separator or ``..`` could redirect the clone outside
+    ``target_dir`` (``target_dir / name``), so it must be rejected."""
+    for name in ("../escape", "a/b", "a\\b", "..", ".", "", "   "):
+        assert _is_safe_clone_name(name) is False
 
 
 def test_is_safe_target_path_accepts_normal_destinations() -> None:
@@ -696,6 +709,22 @@ def test_clone_returns_400_when_target_dir_cannot_be_created(
     detail = response.json()["detail"]
     assert "Could not create target directory" in detail
     assert str(target_dir) in detail
+
+
+def test_clone_rejects_name_with_path_traversal(
+    client: TestClient,
+    test_services: CompleteServiceCollection,
+    tmp_path: Path,
+) -> None:
+    """A ``name`` containing ``..``/separators would redirect the clone outside
+    ``target_dir``. The handler rejects it with 400 before spawning any
+    subprocess, so no binary mocking is needed."""
+    payload = _clone_payload(tmp_path / "clones", name="../escape")
+
+    response = client.post("/api/v1/remotes/clone", json=payload)
+
+    assert response.status_code == 400, response.text
+    assert "clone directory name" in response.json()["detail"].lower()
 
 
 def test_clone_falls_back_to_git_when_gh_unauthenticated(

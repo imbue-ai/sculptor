@@ -23,6 +23,56 @@ const stopEventPropagation = (event: SyntheticEvent): void => {
   event.stopPropagation();
 };
 
+type RemoteRepoRowProps = {
+  repo: RemoteRepo;
+  isSelected: boolean;
+  onSelect: (repo: RemoteRepo) => void;
+};
+
+const RemoteRepoRow = ({ repo, isSelected, onSelect }: RemoteRepoRowProps): ReactElement => (
+  <Command.Item
+    value={repo.fullName}
+    onSelect={() => onSelect(repo)}
+    className={`${styles.row} ${isSelected ? styles.rowSelected : ""}`}
+    data-testid={ElementIds.ADD_REPO_REPO_COMBOBOX_ITEM}
+    data-repo-full-name={repo.fullName}
+  >
+    <Flex align="center" gap="2" className={styles.rowInfo}>
+      <Link
+        href={repo.cloneUrl.replace(/\.git$/, "")}
+        target="_blank"
+        rel="noreferrer"
+        size="2"
+        weight="medium"
+        color="gray"
+        highContrast
+        underline="hover"
+        className={styles.name}
+        // Without this, cmdk's Item click handler fires before the Link
+        // navigates, selecting the repo instead of opening it.
+        onPointerDown={stopEventPropagation}
+        onClick={stopEventPropagation}
+      >
+        {repo.fullName}
+      </Link>
+      {repo.isPrivate && <LockIcon size={12} className={styles.lockIcon} />}
+      {repo.pushedAt && (
+        <>
+          <Text size="2" color="gray" className={styles.dot} aria-hidden>
+            ·
+          </Text>
+          <Text size="2" color="gray" className={styles.date}>
+            {formatRelativeTime(repo.pushedAt)}
+          </Text>
+        </>
+      )}
+    </Flex>
+    <Button size="1" variant="surface" tabIndex={-1}>
+      Select
+    </Button>
+  </Command.Item>
+);
+
 type RemoteRepoComboboxProps = {
   provider: RemoteProvider;
   onSelect: (repo: RemoteRepo) => void;
@@ -112,85 +162,44 @@ export const RemoteRepoCombobox = ({
     };
   }, []);
 
-  const renderBody = (): ReactElement => {
-    // First fetch (no data yet): reserve the placeholder area. The input
-    // slot shows the spinner; the results area stays empty so we don't
-    // double-up on loading affordances.
-    if (isPending) {
-      return <Flex align="center" justify="center" className={styles.placeholder} />;
-    }
-
-    if (isError) {
-      const message =
-        error instanceof HTTPException ? error.detail : error instanceof Error ? error.message : "Failed to load repos";
-      return (
-        <Flex className={styles.placeholder}>
-          <Text size="2" color="red">
-            {message}
-          </Text>
-        </Flex>
-      );
-    }
-
-    if (visibleRepos.length === 0) {
-      return (
-        <Flex className={styles.placeholder}>
-          <Text size="2" color="gray">
-            No repos found
-          </Text>
-        </Flex>
-      );
-    }
-
-    return (
+  // First fetch (no data yet): reserve the placeholder area. The input slot
+  // shows the spinner; the results area stays empty so we don't double up on
+  // loading affordances.
+  let comboboxBody: ReactElement;
+  if (isPending) {
+    comboboxBody = <Flex align="center" justify="center" className={styles.placeholder} />;
+  } else if (isError) {
+    const message =
+      error instanceof HTTPException ? error.detail : error instanceof Error ? error.message : "Failed to load repos";
+    comboboxBody = (
+      <Flex className={styles.placeholder}>
+        <Text size="2" color="red">
+          {message}
+        </Text>
+      </Flex>
+    );
+  } else if (visibleRepos.length === 0) {
+    comboboxBody = (
+      <Flex className={styles.placeholder}>
+        <Text size="2" color="gray">
+          No repos found
+        </Text>
+      </Flex>
+    );
+  } else {
+    comboboxBody = (
       <>
         {visibleRepos.map((repo) => (
-          <Command.Item
+          <RemoteRepoRow
             key={repo.fullName}
-            value={repo.fullName}
-            onSelect={() => onSelect(repo)}
-            className={`${styles.row} ${selectedValue === repo.fullName ? styles.rowSelected : ""}`}
-            data-testid={ElementIds.ADD_REPO_REPO_COMBOBOX_ITEM}
-            data-repo-full-name={repo.fullName}
-          >
-            <Flex align="center" gap="2" className={styles.rowInfo}>
-              <Link
-                href={repo.cloneUrl.replace(/\.git$/, "")}
-                target="_blank"
-                rel="noreferrer"
-                size="2"
-                weight="medium"
-                color="gray"
-                highContrast
-                underline="hover"
-                className={styles.name}
-                // Without this, cmdk's Item click handler fires before the
-                // Link navigates, selecting the repo instead of opening it.
-                onPointerDown={stopEventPropagation}
-                onClick={stopEventPropagation}
-              >
-                {repo.fullName}
-              </Link>
-              {repo.isPrivate && <LockIcon size={12} className={styles.lockIcon} />}
-              {repo.pushedAt && (
-                <>
-                  <Text size="2" color="gray" className={styles.dot} aria-hidden>
-                    ·
-                  </Text>
-                  <Text size="2" color="gray" className={styles.date}>
-                    {formatRelativeTime(repo.pushedAt)}
-                  </Text>
-                </>
-              )}
-            </Flex>
-            <Button size="1" variant="surface" tabIndex={-1}>
-              Select
-            </Button>
-          </Command.Item>
+            repo={repo}
+            isSelected={selectedValue === repo.fullName}
+            onSelect={onSelect}
+          />
         ))}
       </>
     );
-  };
+  }
 
   return (
     <Command
@@ -222,7 +231,7 @@ export const RemoteRepoCombobox = ({
           </span>
         )}
       </div>
-      <Command.List className={styles.results}>{renderBody()}</Command.List>
+      <Command.List className={styles.results}>{comboboxBody}</Command.List>
     </Command>
   );
 };
