@@ -1,11 +1,10 @@
 import { Badge, Box, Button, Flex, Spinner, Text } from "@radix-ui/themes";
-import { useAtomValue, useSetAtom } from "jotai";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
 
 import type { AuthenticatedProviderEntry } from "~/api";
 import { ElementIds, finishPiLogin, ProviderGroup, startPiLogin } from "~/api";
 import { getProviderDisplayName } from "~/common/modelConstants";
-import { piAuthenticatedProvidersAtom, refreshPiProvidersAtom } from "~/common/state/atoms/piAuthenticatedProviders";
+import { usePiAuthenticatedProviders } from "~/common/state/hooks/usePiAuthenticatedProviders";
 
 import { PiLoginTerminal } from "./PiLoginTerminal.tsx";
 import { PiPasteKeyForm } from "./PiPasteKeyForm.tsx";
@@ -115,8 +114,13 @@ const ConnectedSource = ({ provider }: { provider: AuthenticatedProviderEntry })
   );
 };
 
-const ProviderActions = ({ provider }: { provider: AuthenticatedProviderEntry }): ReactElement => {
-  const refreshProviders = useSetAtom(refreshPiProvidersAtom);
+const ProviderActions = ({
+  provider,
+  onRefresh,
+}: {
+  provider: AuthenticatedProviderEntry;
+  onRefresh: () => void;
+}): ReactElement => {
   const [activeLogin, setActiveLogin] = useState<ActiveLogin | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -150,8 +154,8 @@ const ProviderActions = ({ provider }: { provider: AuthenticatedProviderEntry })
     }
     // Refetch the Settings list so the provider moves Connected<->Available; the
     // picker is refreshed separately by the backend's login-teardown broadcast.
-    refreshProviders((count) => count + 1);
-  }, [activeLogin, refreshProviders]);
+    onRefresh();
+  }, [activeLogin, onRefresh]);
 
   if (activeLogin !== null) {
     const verb = activeLogin.mode === "login" ? "authenticate" : "log out";
@@ -198,12 +202,18 @@ const ProviderActions = ({ provider }: { provider: AuthenticatedProviderEntry })
           {errorMessage}
         </Text>
       )}
-      <PiPasteKeyForm providerId={provider.providerId} onSaved={() => refreshProviders((count) => count + 1)} />
+      <PiPasteKeyForm providerId={provider.providerId} onSaved={onRefresh} />
     </Flex>
   );
 };
 
-const ProviderDetail = ({ provider }: { provider: AuthenticatedProviderEntry }): ReactElement => {
+const ProviderDetail = ({
+  provider,
+  onRefresh,
+}: {
+  provider: AuthenticatedProviderEntry;
+  onRefresh: () => void;
+}): ReactElement => {
   const isSessionOnly = provider.group === ProviderGroup.SESSION_ONLY;
   const isConnected = isAuthenticated(provider);
   return (
@@ -246,19 +256,15 @@ const ProviderDetail = ({ provider }: { provider: AuthenticatedProviderEntry }):
       {/* Session-only providers carry no auth actions (their persistence is
           deferred); single-key providers get Authenticate/Disconnect and, inside
           those actions, the collapsible paste-key form. */}
-      {!isSessionOnly && <ProviderActions provider={provider} />}
+      {!isSessionOnly && <ProviderActions provider={provider} onRefresh={onRefresh} />}
     </Flex>
   );
 };
 
 export const PiProvidersArea = (): ReactElement => {
-  const providersLoadable = useAtomValue(piAuthenticatedProvidersAtom);
+  const { providers, isPending, refetch } = usePiAuthenticatedProviders();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const providers = useMemo(
-    () => (providersLoadable.state === "hasData" ? providersLoadable.data : []),
-    [providersLoadable],
-  );
   const grouping = useMemo(() => groupProviders(providers), [providers]);
   const orderedProviders = useMemo(
     () => [...grouping.connected, ...grouping.available, ...grouping.sessionOnly],
@@ -278,7 +284,7 @@ export const PiProvidersArea = (): ReactElement => {
         credentials.
       </Text>
 
-      {providersLoadable.state === "loading" ? (
+      {isPending ? (
         <Spinner size="1" />
       ) : providers.length === 0 ? (
         <Text size="2" color="gray">
@@ -310,7 +316,9 @@ export const PiProvidersArea = (): ReactElement => {
             />
           </Box>
           <Box flexGrow="1">
-            {selected !== null && <ProviderDetail key={selected.providerId} provider={selected} />}
+            {selected !== null && (
+              <ProviderDetail key={selected.providerId} provider={selected} onRefresh={() => void refetch()} />
+            )}
           </Box>
         </Flex>
       )}
