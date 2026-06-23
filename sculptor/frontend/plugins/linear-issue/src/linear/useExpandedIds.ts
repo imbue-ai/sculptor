@@ -13,14 +13,17 @@ export type ExpandedState = {
 };
 
 /**
- * Per-workspace ticket open/closed overrides, persisted via the plugin-settings
- * SDK as a JSON object under a per-workspace key. Persisting (rather than React
- * state) is what lets a manually-toggled section survive the panel remounting.
+ * Per-workspace open/closed overrides, persisted via the plugin-settings SDK as
+ * a JSON object under a per-workspace key. Persisting (rather than React state)
+ * is what lets a manually-toggled section survive the panel remounting.
+ * `namespace` separates independent collapsible groups (e.g. the ticket
+ * sections vs. each ticket's sub-issue disclosure) so their keys can't collide
+ * — both are keyed by a Linear identifier, but they live in different maps.
  * `workspaceId` may be null in contexts without a workspace, where overrides
  * share a single fallback bucket.
  */
-export const useExpandedIds = (workspaceId: string | null): ExpandedState => {
-  const [raw, setRaw] = usePluginSetting(`expanded:${workspaceId ?? "none"}`);
+export const useExpandedIds = (workspaceId: string | null, namespace = "expanded"): ExpandedState => {
+  const [raw, setRaw] = usePluginSetting(`${namespace}:${workspaceId ?? "none"}`);
 
   const overrides = useMemo<Readonly<Record<string, boolean>>>(() => {
     if (!raw) return {};

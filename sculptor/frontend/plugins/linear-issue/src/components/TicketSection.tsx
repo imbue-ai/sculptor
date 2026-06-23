@@ -16,11 +16,15 @@ export const TicketSection = ({
   ticket,
   isOpen,
   onToggle,
+  subIssuesOpen,
+  onToggleSubIssues,
   onUnpin,
 }: {
   ticket: PanelTicket;
   isOpen: boolean;
   onToggle: () => void;
+  subIssuesOpen: boolean;
+  onToggleSubIssues: () => void;
   onUnpin: (identifier: string) => void;
 }): ReactElement => {
   const { issue } = ticket;
@@ -65,7 +69,7 @@ export const TicketSection = ({
       </Flex>
       {isOpen && (
         <Box px="2" pb="2">
-          <IssueDetails issue={issue} />
+          <IssueDetails issue={issue} subIssuesOpen={subIssuesOpen} onToggleSubIssues={onToggleSubIssues} />
         </Box>
       )}
     </Box>

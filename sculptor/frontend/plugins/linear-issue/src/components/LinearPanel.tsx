@@ -21,6 +21,9 @@ export const LinearPanel = (): ReactElement => {
   const [apiKey] = usePluginSetting("apiKey");
   const { pinnedIds, pin, unpin } = usePinnedIds(workspaceId);
   const { overrides, setExpanded } = useExpandedIds(workspaceId);
+  // A separate map for each ticket's sub-issue disclosure, keyed by the same
+  // ticket identifier but namespaced so it can't collide with the section map.
+  const { overrides: subOverrides, setExpanded: setSubExpanded } = useExpandedIds(workspaceId, "subissues");
   const { tickets, isFetching, isError, error, refetch } = useLinearTickets({ apiKey, branch, pinnedIds });
 
   const refreshAction = apiKey ? (
@@ -38,12 +41,16 @@ export const LinearPanel = (): ReactElement => {
             // A user toggle wins; otherwise open the primary, and open a lone
             // ticket of any source so a single result is never left collapsed.
             const isOpen = overrides[id] ?? (ticket.isPrimary || tickets.length === 1);
+            // Sub-issues stay collapsed until asked for, keeping the body compact.
+            const subIssuesOpen = subOverrides[id] ?? false;
             return (
               <TicketSection
                 key={id}
                 ticket={ticket}
                 isOpen={isOpen}
                 onToggle={() => setExpanded(id, !isOpen)}
+                subIssuesOpen={subIssuesOpen}
+                onToggleSubIssues={() => setSubExpanded(id, !subIssuesOpen)}
                 onUnpin={unpin}
               />
             );
