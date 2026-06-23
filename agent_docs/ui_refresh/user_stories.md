@@ -195,7 +195,7 @@ The redesign removes these; they have no user stories. Their tests are deleted �
 - The Panels settings page (and the per-panel enable/disable machinery).
 - The `/btw` popup.
 - The per-diff "expand"/fullscreen toggle — there is no diff-specific fullscreen; users maximize the section instead (SEC-13/15).
-- The open/closed-workspace distinction (the closed-workspaces pill and dropdown). All workspaces simply appear in the sidebar; "archived workspaces" may be revisited later as a separate design. *(Pending a matching update to `goals.md`.)*
+- The open/closed-workspace distinction (the closed-workspaces pill and dropdown). All workspaces simply appear in the sidebar; "archived workspaces" may be revisited later as a separate design. (`goals.md` → "Features to deprecate" records the same removal.)
 
 ## Out of scope (future follow-up)
 

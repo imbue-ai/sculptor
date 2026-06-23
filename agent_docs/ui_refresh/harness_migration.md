@@ -179,7 +179,7 @@ are removed; there are **no** panel enable/disable ids (the machinery is deleted
 ### Remove (surface gone)
 `TOP_BAR`, `BOTTOM_BAR`, `HOME_TAB`, `SETTINGS_TAB`, `WORKSPACE_TAB`,
 `ADD_WORKSPACE_TAB`, `ADD_WORKSPACE_BUTTON`, `ADD_WORKSPACE_EMPTY_STATE`,
-`COMPONENT_GALLERY_TAB`* (pending its new home), `AGENT_TAB` (→ panel-tab),
+`COMPONENT_GALLERY_TAB` (Component Gallery removed), `AGENT_TAB` (→ panel-tab),
 `ADD_AGENT_BUTTON`/`ADD_AGENT_CHEVRON_BUTTON` (→ add-panel dropdown),
 `PANEL_TOP_RIGHT`, `PANEL_BOTTOM_RIGHT`, `PANEL_RIGHT_AREA`,
 `PANEL_RIGHT_RESIZE_HANDLE`, `SIDE_TOGGLE_LEFT`/`SIDE_TOGGLE_RIGHT`/`SIDE_TOGGLE_BOTTOM`,
@@ -189,7 +189,9 @@ are removed; there are **no** panel enable/disable ids (the machinery is deleted
 `FILE_BROWSER_TAB_ALL`/`FILE_BROWSER_TAB_CHANGES`/`FILE_BROWSER_TAB_HISTORY`
 (tabs → separate panels), `PANEL_ICON_*` (the zone sidebar-icon set).
 
-\* Keep if Component Gallery survives in some form — see Open questions.
+The **TanStack devtools panel is kept** (no one relies on the Component Gallery, but
+the devtools panel stays) — leave its ids and `test_tanstack_devtools_panel.py` in
+place.
 
 ### Add (new surfaces)
 - Sidebar: `WORKSPACE_SIDEBAR`, `SIDEBAR_HOME_LINK`, `SIDEBAR_CMDK_LINK`,

@@ -137,7 +137,7 @@ tabs) is replaced by the sidebar + dialog model.
 | `test_add_workspace_agent_type.py` → folded into `test_new_workspace_dialog.py` | WSC-05 | First-agent type picker now lives in the dialog. The bare "Terminal" agent type is **dropped** (raw shell = "New terminal" panel; terminal agents = registered programs), so the picker asserts Claude / pi (gated) / registered only. |
 | `test_home_page_tab.py` → covered by `test_workspace_sidebar.py` | SIDE-01 | Home is a sidebar link, not a tab. The "Home tab replace / close" stories are removed. |
 | `test_settings_tab.py` → `test_settings_navigation.py` | SIDE-10 | Settings is a sidebar destination. "Only one Settings tab / close tab" stories tied to the tab bar are removed; "open Settings, return to workspace" survives as route nav. |
-| `test_component_gallery_tab.py` → **DELETE** | — | The Component Gallery and in-app devtools are dev-only surfaces slated for removal; just drop/ignore their tab tests (`test_tanstack_devtools_panel.py` too, and the gallery assertion in `test_theme_builder.py`). |
+| `test_component_gallery_tab.py` → **DELETE** | — | The Component Gallery is a dev-only surface slated for removal; drop its tab test and the gallery assertion in `test_theme_builder.py`. The **TanStack devtools panel stays** — `test_tanstack_devtools_panel.py` is **KEPT** (UPDATE only if its nav reach changes). |
 | `test_workspace_tab_enhancements.py` → split into sidebar + dialog tests | SIDE-07..09, WSC-02 | "Open Add Workspace page via keyboard" → open dialog; workspace-tab close/keyboard → sidebar-row semantics. |
 | `test_workspace_tab_context_menu_icons.py` → `test_workspace_row_context_menu.py` | SIDE-08 | Workspace **tab** context menu → workspace **row** context menu (rename, etc.). |
 | `test_workspace_diagnostics_context_menu.py` → REWRITE | SIDE-08 | Same menu, now anchored on the sidebar row. |
@@ -317,7 +317,8 @@ is REWRITE (enable/opt-in removed, §3), and `test_custom_actions.py` /
   panel-tab files the area audits added, and the section/panel/persistence files.
 - **DELETE:** the deprecated-feature files + several sub-tests (§2) — incl.
   `test_expand_escape.py` (fullscreen-expand deprecated), the closed-workspaces and
-  Component-Gallery/devtools tests, and the tab-strip/old-chrome sub-tests.
+  Component-Gallery tests, and the tab-strip/old-chrome sub-tests. (The **TanStack
+  devtools panel stays** — `test_tanstack_devtools_panel.py` is KEPT.)
 - **REWRITE (+rename):** Browser (enable removed, §3) + the sidebar/row rebuilds.
 - **UPDATE (harness-path, in place):** the route-to-feature long tail (§4) + the
   Skills panel + the CONTENT-preserving terminal-agent files.
