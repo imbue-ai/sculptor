@@ -1,3 +1,5 @@
+import semver from "semver";
+
 import type { AutoUpdateStatus, UpdateChannel } from "~/shared/types.ts";
 
 const UPDATE_CHANNEL_DISPLAY_NAMES: Record<UpdateChannel, string> = {
@@ -33,7 +35,13 @@ export function getUpdateStatusText(
     case "error":
       return `Update error: ${status.message}`;
     case "idle":
-      if (status.latestChannelVersion && currentVersion && status.latestChannelVersion < currentVersion) {
+      if (
+        status.latestChannelVersion &&
+        currentVersion &&
+        semver.valid(status.latestChannelVersion) &&
+        semver.valid(currentVersion) &&
+        semver.lt(status.latestChannelVersion, currentVersion)
+      ) {
         return `You're on v${currentVersion}, ahead of latest ${channelLabel} release (v${status.latestChannelVersion}).`;
       }
 
