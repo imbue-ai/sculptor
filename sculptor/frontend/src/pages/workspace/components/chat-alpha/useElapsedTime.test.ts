@@ -7,32 +7,10 @@ let testKeyCounter = 0;
 /** Generate a unique persist key per test to avoid cross-test interference. */
 const nextKey = (): string => `test-${++testKeyCounter}`;
 
-// Mock requestAnimationFrame/cancelAnimationFrame to be timer-based
-// so we can control ticking with vi.advanceTimersByTime
-let rafCallbacks: Map<number, FrameRequestCallback>;
-let nextRafId: number;
-
+// The hook ticks via setInterval and reads performance.now(); fake timers let us
+// drive both deterministically with vi.advanceTimersByTime.
 beforeEach(() => {
   vi.useFakeTimers();
-  rafCallbacks = new Map();
-  nextRafId = 1;
-
-  vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback): number => {
-    const id = nextRafId++;
-    rafCallbacks.set(id, cb);
-    // Schedule the callback to run after a short delay (simulating ~60fps frame)
-    setTimeout(() => {
-      if (rafCallbacks.has(id)) {
-        rafCallbacks.delete(id);
-        cb(performance.now());
-      }
-    }, 16);
-    return id;
-  });
-
-  vi.spyOn(globalThis, "cancelAnimationFrame").mockImplementation((id: number): void => {
-    rafCallbacks.delete(id);
-  });
 });
 
 afterEach(() => {
@@ -63,7 +41,7 @@ describe("useElapsedTime", () => {
         vi.advanceTimersByTime(1000);
       });
 
-      // Should show approximately 1.0s (may vary slightly due to rAF timing)
+      // Should show approximately 1.0s (may vary slightly due to interval timing)
       const seconds = parseFloat(result.current.elapsed);
       expect(seconds).toBeGreaterThanOrEqual(0.9);
       expect(seconds).toBeLessThanOrEqual(1.5);

@@ -86,6 +86,16 @@ const SCULPTOR_NODE_SPAN_RE = /<span\s+data-sculptor-node(?:\s+[^>]*?)?>([\s\S]*
 const ENTITY_MENTION_PATTERN = String.raw`\+\[([^:]+):([^|]+)\|([^\]]+)\]`;
 const SCULPTOR_TOKEN_PATTERN = String.raw`\+\[sculptorChip:(\d+)\|x\]`;
 
+// Combined regex: alternation between the sculptor sentinel and the generic
+// entity token. Match groups:
+//   [1]      sculptor index (when sculptor token matched)
+//   [2/3/4]  entity type / id / display name (when entity matched)
+// The patterns are mutually exclusive in practice — the sculptor type marker
+// `sculptorChip` is reserved. Hoisted to module scope so it isn't rebuilt for
+// every string child on every streaming tick; `matchAll` clones the regex, so
+// sharing one global instance across calls is safe.
+const CHIP_TOKEN_RE = new RegExp(`(?:${SCULPTOR_TOKEN_PATTERN})|(?:${ENTITY_MENTION_PATTERN})`, "g");
+
 type ParsedSculptorSpan = {
   id: string;
   skillDescription: string | null;
@@ -124,17 +134,9 @@ const renderChips = (children: ReactNode, spans: ReadonlyArray<ParsedSculptorSpa
     if (typeof child !== "string") return child;
     if (!child.includes("+[")) return child;
 
-    // Combined regex: alternation between the sculptor sentinel and the
-    // generic entity token. Match groups:
-    //   [1]      sculptor index (when sculptor token matched)
-    //   [2/3/4]  entity type / id / display name (when entity matched)
-    // The patterns are mutually exclusive in practice — the sculptor type
-    // marker `sculptorChip` is reserved.
-    const combinedRe = new RegExp(`(?:${SCULPTOR_TOKEN_PATTERN})|(?:${ENTITY_MENTION_PATTERN})`, "g");
-
     const parts: Array<string | ReactElement> = [];
     let lastIndex = 0;
-    for (const match of child.matchAll(combinedRe)) {
+    for (const match of child.matchAll(CHIP_TOKEN_RE)) {
       const matchIndex = match.index ?? 0;
       if (matchIndex > lastIndex) {
         parts.push(child.slice(lastIndex, matchIndex));

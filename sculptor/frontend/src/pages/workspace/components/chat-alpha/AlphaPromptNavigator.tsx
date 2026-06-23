@@ -25,6 +25,9 @@ const OPEN_DELAY_MS = 420;
 const CLOSE_DELAY_MS = 80;
 const REOPEN_GRACE_PERIOD_MS = 300;
 
+// How long the copy button shows its "copied" checkmark before reverting.
+const COPY_FEEDBACK_DURATION_MS = 1500;
+
 const getMessageText = (message: ChatMessage): string =>
   message.content
     .filter((block: BlockUnion): block is TextBlock => isTextBlock(block))
@@ -218,10 +221,10 @@ export const AlphaPromptNavigator = ({
     if (popoverIndex == null) return;
     const message = userMessages[popoverIndex];
     if (!message) return;
-    navigator.clipboard.writeText(getMessageText(message));
+    void navigator.clipboard.writeText(getMessageText(message));
     setIsCopied(true);
     clearTimeout(copyTimerRef.current);
-    copyTimerRef.current = setTimeout(() => setIsCopied(false), 1500);
+    copyTimerRef.current = setTimeout(() => setIsCopied(false), COPY_FEEDBACK_DURATION_MS);
   }, [popoverIndex, userMessages]);
 
   // Reset copied state when switching dots.

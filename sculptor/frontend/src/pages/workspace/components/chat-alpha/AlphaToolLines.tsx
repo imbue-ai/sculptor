@@ -28,8 +28,8 @@ const formatToolInput = (input: Record<string, unknown>): string => {
     const [, value] = entries[0];
     if (typeof value === "string") return value;
   }
-  const firstString = entries.find(([, v]) => typeof v === "string");
-  if (firstString) return firstString[1] as string;
+  const firstStringEntry = entries.find((entry): entry is [string, string] => typeof entry[1] === "string");
+  if (firstStringEntry) return firstStringEntry[1];
   return "";
 };
 
@@ -41,7 +41,7 @@ const DiffResult = ({ content }: { content: DiffToolContent }): ReactElement => 
     <div className={styles.diffResultContainer} onClick={(e): void => e.stopPropagation()} role="presentation">
       {diffData.diffStrings.map((diffString: string, i: number) => (
         <LargeDiffGate key={i} diffString={diffString}>
-          {(visibleDiff): ReactElement => (
+          {({ visibleDiff }): ReactElement => (
             <PierreDiffView
               diffString={visibleDiff}
               viewType="unified"
@@ -117,8 +117,8 @@ export const ToolLine = ({
   const inputSummary = block.input && Object.keys(block.input).length > 0 ? formatToolInput(block.input) : undefined;
 
   const isError = result?.isError ?? false;
-  const hasDiffResult = result && isDiffToolContent(result.content) && !isError;
-  const resultText = result && !hasDiffResult ? getToolResultText(result.content) : undefined;
+  const diffContent = result && !isError && isDiffToolContent(result.content) ? result.content : undefined;
+  const resultText = result && diffContent === undefined ? getToolResultText(result.content) : undefined;
   const errorClass = isError ? ` ${styles.toolResultError}` : "";
   const diffFilePath = result && isDiffToolContent(result.content) ? result.content.filePath : undefined;
 
@@ -146,7 +146,7 @@ export const ToolLine = ({
         {inputSummary && <span className={styles.toolInput}>{inputSummary}</span>}
         {diffFilePath && <DiffPanelButton filePath={diffFilePath} onOpenDiffPanel={onOpenDiffPanel} />}
       </div>
-      {isOpen && hasDiffResult && <DiffResult content={result.content as DiffToolContent} />}
+      {isOpen && diffContent && <DiffResult content={diffContent} />}
       {isOpen && resultText && <pre className={`${styles.toolResult}${errorClass}`}>{resultText}</pre>}
     </div>
   );
@@ -163,8 +163,8 @@ export const CompletedToolLine = ({
   const invocationSummary = block.invocationString ?? block.toolName ?? "tool";
 
   const isError = block.isError ?? false;
-  const hasDiffResult = isDiffToolContent(block.content) && !isError;
-  const resultText = !hasDiffResult ? getToolResultText(block.content) : undefined;
+  const diffContent = !isError && isDiffToolContent(block.content) ? block.content : undefined;
+  const resultText = diffContent === undefined ? getToolResultText(block.content) : undefined;
   const errorClass = isError ? ` ${styles.toolResultError}` : "";
   const diffFilePath = isDiffToolContent(block.content) ? block.content.filePath : undefined;
 
@@ -188,7 +188,7 @@ export const CompletedToolLine = ({
         <span className={styles.toolInput}>{invocationSummary}</span>
         {diffFilePath && <DiffPanelButton filePath={diffFilePath} onOpenDiffPanel={onOpenDiffPanel} />}
       </div>
-      {isOpen && hasDiffResult && <DiffResult content={block.content as DiffToolContent} />}
+      {isOpen && diffContent && <DiffResult content={diffContent} />}
       {isOpen && resultText && <pre className={`${styles.toolResult}${errorClass}`}>{resultText}</pre>}
     </div>
   );

@@ -76,14 +76,14 @@ const makeTurnMetrics = (overrides: Partial<TurnMetrics> = {}): TurnMetrics =>
 describe("useTurnSummaryData", () => {
   it("returns undefined when message has no tool uses or results", () => {
     const message = makeMessage([{ type: "text", text: "Hello" }]);
-    const { result } = renderHook(() => useTurnSummaryData(message, makeNode(message)));
+    const { result } = renderHook(() => useTurnSummaryData(makeNode(message)));
     expect(result.current).toBeUndefined();
   });
 
   it("returns undefined when all tool results are errors", () => {
     const errorResult = makeDiffResult("tu-1", DIFF_PAGINATION_FIX, "utils/pagination.py", true);
     const message = makeMessage([errorResult]);
-    const { result } = renderHook(() => useTurnSummaryData(message, makeNode(message)));
+    const { result } = renderHook(() => useTurnSummaryData(makeNode(message)));
     expect(result.current).toBeUndefined();
   });
 
@@ -91,7 +91,7 @@ describe("useTurnSummaryData", () => {
     const toolUse = { type: "tool_use", id: "tu-1", name: "Bash", input: { command: "echo hi" } };
     const genericResult = makeGenericResult("tu-1", "Bash");
     const message = makeMessage([toolUse, genericResult]);
-    const { result } = renderHook(() => useTurnSummaryData(message, makeNode(message)));
+    const { result } = renderHook(() => useTurnSummaryData(makeNode(message)));
     expect(result.current).toBeUndefined();
   });
 
@@ -99,7 +99,7 @@ describe("useTurnSummaryData", () => {
     const toolUse = makeToolUse("tu-1", "Edit", "utils/pagination.py");
     const genericResult = makeGenericResult("tu-1", "Edit");
     const message = makeMessage([toolUse, genericResult]);
-    const { result } = renderHook(() => useTurnSummaryData(message, makeNode(message)));
+    const { result } = renderHook(() => useTurnSummaryData(makeNode(message)));
 
     expect(result.current).toBeDefined();
     const files = result.current as ReadonlyArray<TurnFile>;
@@ -112,7 +112,7 @@ describe("useTurnSummaryData", () => {
     const toolUse = makeToolUse("tu-1", "Write", "utils/validators.py");
     const genericResult = makeGenericResult("tu-1", "Write");
     const message = makeMessage([toolUse, genericResult]);
-    const { result } = renderHook(() => useTurnSummaryData(message, makeNode(message)));
+    const { result } = renderHook(() => useTurnSummaryData(makeNode(message)));
 
     expect(result.current).toBeDefined();
     const files = result.current as ReadonlyArray<TurnFile>;
@@ -124,14 +124,14 @@ describe("useTurnSummaryData", () => {
     const toolUse = makeToolUse("tu-1", "Edit", "utils/pagination.py");
     const errorResult = makeGenericResult("tu-1", "Edit", true);
     const message = makeMessage([toolUse, errorResult]);
-    const { result } = renderHook(() => useTurnSummaryData(message, makeNode(message)));
+    const { result } = renderHook(() => useTurnSummaryData(makeNode(message)));
     expect(result.current).toBeUndefined();
   });
 
   it("extracts file path from DiffToolContent after persistence", () => {
     const diffResult = makeDiffResult("tu-1", DIFF_PAGINATION_FIX, "utils/pagination.py");
     const message = makeMessage([diffResult]);
-    const { result } = renderHook(() => useTurnSummaryData(message, makeNode(message)));
+    const { result } = renderHook(() => useTurnSummaryData(makeNode(message)));
 
     expect(result.current).toBeDefined();
     const files = result.current as ReadonlyArray<TurnFile>;
@@ -143,7 +143,7 @@ describe("useTurnSummaryData", () => {
   it("extracts file path from new-file DiffToolContent", () => {
     const diffResult = makeDiffResult("tu-1", DIFF_VALIDATORS_NEW, "utils/validators.py");
     const message = makeMessage([diffResult]);
-    const { result } = renderHook(() => useTurnSummaryData(message, makeNode(message)));
+    const { result } = renderHook(() => useTurnSummaryData(makeNode(message)));
 
     expect(result.current).toBeDefined();
     const files = result.current as ReadonlyArray<TurnFile>;
@@ -155,7 +155,7 @@ describe("useTurnSummaryData", () => {
   it("skips DiffToolContent when result is an error", () => {
     const errorResult = makeDiffResult("tu-1", DIFF_PAGINATION_FIX, "utils/pagination.py", true);
     const message = makeMessage([errorResult]);
-    const { result } = renderHook(() => useTurnSummaryData(message, makeNode(message)));
+    const { result } = renderHook(() => useTurnSummaryData(makeNode(message)));
     expect(result.current).toBeUndefined();
   });
 
@@ -163,7 +163,7 @@ describe("useTurnSummaryData", () => {
     const toolUse = makeToolUse("tu-1", "Edit", "utils/pagination.py");
     const diffResult = makeDiffResult("tu-1", DIFF_PAGINATION_FIX, "utils/pagination.py");
     const message = makeMessage([toolUse, diffResult]);
-    const { result } = renderHook(() => useTurnSummaryData(message, makeNode(message)));
+    const { result } = renderHook(() => useTurnSummaryData(makeNode(message)));
 
     expect(result.current).toBeDefined();
     const files = result.current as ReadonlyArray<TurnFile>;
@@ -175,7 +175,7 @@ describe("useTurnSummaryData", () => {
     const result1 = makeDiffResult("tu-1", DIFF_PAGINATION_FIX, "utils/pagination.py");
     const result2 = makeDiffResult("tu-2", DIFF_PAGINATION_FIX, "utils/pagination.py");
     const message = makeMessage([result1, result2]);
-    const { result } = renderHook(() => useTurnSummaryData(message, makeNode(message)));
+    const { result } = renderHook(() => useTurnSummaryData(makeNode(message)));
 
     expect(result.current).toBeDefined();
     const files = result.current as ReadonlyArray<TurnFile>;
@@ -186,7 +186,7 @@ describe("useTurnSummaryData", () => {
     const result1 = makeDiffResult("tu-1", DIFF_PAGINATION_FIX, "utils/pagination.py");
     const result2 = makeDiffResult("tu-2", DIFF_VALIDATORS_NEW, "utils/validators.py");
     const message = makeMessage([result1, result2]);
-    const { result } = renderHook(() => useTurnSummaryData(message, makeNode(message)));
+    const { result } = renderHook(() => useTurnSummaryData(makeNode(message)));
 
     expect(result.current).toBeDefined();
     const files = result.current as ReadonlyArray<TurnFile>;
@@ -202,7 +202,7 @@ describe("useTurnSummaryData", () => {
     });
     const node = makeNode(parentMessage, [childMessage]);
 
-    const { result } = renderHook(() => useTurnSummaryData(parentMessage, node));
+    const { result } = renderHook(() => useTurnSummaryData(node));
 
     expect(result.current).toBeDefined();
     const files = result.current as ReadonlyArray<TurnFile>;
@@ -219,7 +219,7 @@ describe("useTurnSummaryData", () => {
     });
     const node = makeNode(parentMessage, [childMessage]);
 
-    const { result } = renderHook(() => useTurnSummaryData(parentMessage, node));
+    const { result } = renderHook(() => useTurnSummaryData(node));
 
     expect(result.current).toBeDefined();
     const files = result.current as ReadonlyArray<TurnFile>;
@@ -236,7 +236,7 @@ describe("useTurnSummaryData", () => {
     });
     const node = makeNode(parentMessage, [childMessage]);
 
-    const { result } = renderHook(() => useTurnSummaryData(parentMessage, node));
+    const { result } = renderHook(() => useTurnSummaryData(node));
 
     expect(result.current).toBeDefined();
     const files = result.current as ReadonlyArray<TurnFile>;
@@ -248,7 +248,7 @@ describe("useTurnSummaryData", () => {
     const toolUse = makeToolUse("tu-1", "MultiEdit", "utils/pagination.py");
     const genericResult = makeGenericResult("tu-1", "MultiEdit");
     const message = makeMessage([toolUse, genericResult]);
-    const { result } = renderHook(() => useTurnSummaryData(message, makeNode(message)));
+    const { result } = renderHook(() => useTurnSummaryData(makeNode(message)));
 
     expect(result.current).toBeDefined();
     const files = result.current as ReadonlyArray<TurnFile>;
@@ -265,7 +265,7 @@ describe("useTurnSummaryData", () => {
     } as unknown as ToolUseBlock;
     const genericResult = makeGenericResult("tu-1", "Edit");
     const message = makeMessage([toolUse, genericResult]);
-    const { result } = renderHook(() => useTurnSummaryData(message, makeNode(message)));
+    const { result } = renderHook(() => useTurnSummaryData(makeNode(message)));
     expect(result.current).toBeUndefined();
   });
 
@@ -278,7 +278,7 @@ describe("useTurnSummaryData", () => {
     } as unknown as ToolUseBlock;
     const genericResult = makeGenericResult("tu-1", "Edit");
     const message = makeMessage([toolUse, genericResult]);
-    const { result } = renderHook(() => useTurnSummaryData(message, makeNode(message)));
+    const { result } = renderHook(() => useTurnSummaryData(makeNode(message)));
     expect(result.current).toBeUndefined();
   });
 
@@ -294,7 +294,7 @@ describe("useTurnSummaryData", () => {
       globTool,
       makeGenericResult("tu-3", "Glob"),
     ]);
-    const { result } = renderHook(() => useTurnSummaryData(message, makeNode(message)));
+    const { result } = renderHook(() => useTurnSummaryData(makeNode(message)));
     expect(result.current).toBeUndefined();
   });
 
@@ -303,7 +303,7 @@ describe("useTurnSummaryData", () => {
       { type: "text", text: "First paragraph." },
       { type: "text", text: "Second paragraph." },
     ]);
-    const { result } = renderHook(() => useTurnSummaryData(message, makeNode(message)));
+    const { result } = renderHook(() => useTurnSummaryData(makeNode(message)));
     expect(result.current).toBeUndefined();
   });
 
@@ -313,7 +313,7 @@ describe("useTurnSummaryData", () => {
     const successResult = makeGenericResult("tu-1", "Edit", false);
     const errorResult = makeGenericResult("tu-2", "Edit", true);
     const message = makeMessage([successToolUse, errorToolUse, successResult, errorResult]);
-    const { result } = renderHook(() => useTurnSummaryData(message, makeNode(message)));
+    const { result } = renderHook(() => useTurnSummaryData(makeNode(message)));
 
     expect(result.current).toBeDefined();
     const files = result.current as ReadonlyArray<TurnFile>;
@@ -325,7 +325,7 @@ describe("useTurnSummaryData", () => {
     const message = makeMessage([{ type: "text", text: "Done" }], {
       turnMetrics: makeTurnMetrics({ changedFiles: ["config.yaml", "README.md"] }),
     });
-    const { result } = renderHook(() => useTurnSummaryData(message, makeNode(message)));
+    const { result } = renderHook(() => useTurnSummaryData(makeNode(message)));
 
     expect(result.current).toBeDefined();
     const files = result.current as ReadonlyArray<TurnFile>;
@@ -341,7 +341,7 @@ describe("useTurnSummaryData", () => {
     const message = makeMessage([toolUse, genericResult], {
       turnMetrics: makeTurnMetrics({ changedFiles: ["new.txt"] }),
     });
-    const { result } = renderHook(() => useTurnSummaryData(message, makeNode(message)));
+    const { result } = renderHook(() => useTurnSummaryData(makeNode(message)));
 
     expect(result.current).toBeDefined();
     const files = result.current as ReadonlyArray<TurnFile>;
@@ -355,7 +355,7 @@ describe("useTurnSummaryData", () => {
     const message = makeMessage([toolUse, genericResult], {
       turnMetrics: makeTurnMetrics({ changedFiles: [] }),
     });
-    const { result } = renderHook(() => useTurnSummaryData(message, makeNode(message)));
+    const { result } = renderHook(() => useTurnSummaryData(makeNode(message)));
 
     expect(result.current).toBeDefined();
     const files = result.current as ReadonlyArray<TurnFile>;
@@ -366,7 +366,7 @@ describe("useTurnSummaryData", () => {
   it("falls back to streaming sources when turnMetrics is absent", () => {
     const diffResult = makeDiffResult("tu-1", DIFF_PAGINATION_FIX, "utils/pagination.py");
     const message = makeMessage([diffResult]);
-    const { result } = renderHook(() => useTurnSummaryData(message, makeNode(message)));
+    const { result } = renderHook(() => useTurnSummaryData(makeNode(message)));
 
     expect(result.current).toBeDefined();
     const files = result.current as ReadonlyArray<TurnFile>;
@@ -388,7 +388,7 @@ describe("useTurnSummaryData", () => {
     const childNode = makeNodeWithChildNodes(childMessage, [grandchildNode]);
     const parentNode = makeNodeWithChildNodes(parentMessage, [childNode]);
 
-    const { result } = renderHook(() => useTurnSummaryData(parentMessage, parentNode));
+    const { result } = renderHook(() => useTurnSummaryData(parentNode));
 
     expect(result.current).toBeDefined();
     const files = result.current as ReadonlyArray<TurnFile>;
@@ -408,7 +408,7 @@ describe("useTurnSummaryData", () => {
     });
     const node = makeNode(parentMessage, [childMessage]);
 
-    const { result } = renderHook(() => useTurnSummaryData(parentMessage, node));
+    const { result } = renderHook(() => useTurnSummaryData(node));
 
     expect(result.current).toBeDefined();
     const files = result.current as ReadonlyArray<TurnFile>;

@@ -38,8 +38,21 @@
   transition: background-color var(--duration-fast) ease;
 }
 
+.popoverFileRow:not(:last-child) {
+  border-bottom: 1px solid var(--gray-3);
+}
+
 .popoverFileRow:hover {
   background-color: var(--gray-3);
+}
+
+.fileRowText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 // File path display in popover

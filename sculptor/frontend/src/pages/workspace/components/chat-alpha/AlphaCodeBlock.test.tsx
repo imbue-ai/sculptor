@@ -71,12 +71,10 @@ describe("AlphaCodeBlock", () => {
   it("renders plain text for unsupported languages", async () => {
     const { container } = render(<AlphaCodeBlock content="some code\n" language="not-a-real-language" />);
 
-    // Give the async highlighter time to attempt and fail
-    await new Promise((resolve) => {
-      setTimeout(resolve, 50);
+    // The highlighter rejects/returns null for this language, leaving plain text.
+    await waitFor(() => {
+      expect(container.querySelector("code")!.textContent).toContain("some code");
     });
-
-    expect(container.querySelector("code")!.textContent).toContain("some code");
   });
 
   it("renders plain text when no language is provided", () => {

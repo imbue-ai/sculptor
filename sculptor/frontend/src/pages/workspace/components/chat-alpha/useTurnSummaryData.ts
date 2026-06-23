@@ -110,18 +110,16 @@ const collectAllPaths = (node: SubagentTreeNode): Array<string> => {
 };
 
 /**
- * Compute turn summary data from an assistant message and its subagent children.
- * Returns undefined if the turn has no successful file edits.
+ * Compute turn summary data from a subagent tree node (the assistant message
+ * and its subagent children). Returns undefined if the turn has no successful
+ * file edits.
  *
  * Uses three sources of file change information:
  * 1. turnMetrics.changedFiles (authoritative, post-turn, covers all tools)
  * 2. ToolUseBlock.input.file_path (streaming fallback, Edit/Write/MultiEdit only)
  * 3. DiffToolContent.filePath (post-persistence fallback, Edit/Write/MultiEdit only)
  */
-export const useTurnSummaryData = (
-  message: ChatMessage,
-  node: SubagentTreeNode,
-): ReadonlyArray<TurnFile> | undefined => {
+export const useTurnSummaryData = (node: SubagentTreeNode): ReadonlyArray<TurnFile> | undefined => {
   return useMemo(() => {
     const allPaths = collectAllPaths(node);
 

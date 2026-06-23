@@ -59,12 +59,12 @@ export const buildRenderGroups = (
   for (const block of content) {
     if (isTextBlock(block)) {
       if (currentToolBlocks.length > 0) flushTools();
-      currentTextBlocks.push(block as { text: string });
+      currentTextBlocks.push(block);
     } else if (isToolUseBlock(block) || isToolResultBlock(block)) {
       if (currentTextBlocks.length > 0) flushText();
 
       // Isolate AskUserQuestion and ExitPlanMode tool_use blocks
-      const isIsolated = isToolUseBlock(block) && isSpecialToolUse(block as ToolUseBlock);
+      const isIsolated = isToolUseBlock(block) && isSpecialToolUse(block);
 
       // Skip subagent tool_result blocks — their content is rendered
       // inside the AlphaSubagentPill via subagentMetadataMap.
@@ -73,9 +73,8 @@ export const buildRenderGroups = (
       // in a different message from the original ToolUseBlock.
       const isSubagentResult =
         isToolResultBlock(block) &&
-        (SUBAGENT_TOOL_NAMES.has((block as ToolResultBlock).toolName) ||
-          (nodeChildren.has((block as ToolResultBlock).toolUseId) &&
-            (nodeChildren.get((block as ToolResultBlock).toolUseId)?.length ?? 0) > 0));
+        (SUBAGENT_TOOL_NAMES.has(block.toolName) ||
+          (nodeChildren.has(block.toolUseId) && (nodeChildren.get(block.toolUseId)?.length ?? 0) > 0));
 
       if (isSubagentResult) continue;
 
@@ -89,22 +88,22 @@ export const buildRenderGroups = (
       if (isIsolated && currentToolBlocks.length > 0) {
         flushTools();
       }
-      currentToolBlocks.push(block as ToolUseBlock | ToolResultBlock);
+      currentToolBlocks.push(block);
       if (isIsolated) {
         flushTools();
       }
     } else if (isErrorBlock(block)) {
       flush();
-      groups.push({ type: "error", block: block as ErrorBlock });
+      groups.push({ type: "error", block });
     } else if (isWarningBlock(block)) {
       flush();
-      groups.push({ type: "warning", block: block as WarningBlock });
+      groups.push({ type: "warning", block });
     } else if (isContextSummaryBlock(block)) {
       flush();
-      groups.push({ type: "context_summary", text: (block as { text: string }).text });
+      groups.push({ type: "context_summary", text: block.text });
     } else if (isContextClearedBlock(block)) {
       flush();
-      groups.push({ type: "context_cleared", text: (block as { text?: string }).text ?? "Cleared successfully" });
+      groups.push({ type: "context_cleared", text: block.text ?? "Cleared successfully" });
     } else if (isResumeResponseBlock(block)) {
       flush();
       groups.push({ type: "resume_response" });
@@ -112,9 +111,9 @@ export const buildRenderGroups = (
       flush();
       const lastGroup = groups[groups.length - 1];
       if (lastGroup?.type === "files") {
-        lastGroup.blocks.push(block as FileBlock);
+        lastGroup.blocks.push(block);
       } else {
-        groups.push({ type: "files", blocks: [block as FileBlock] });
+        groups.push({ type: "files", blocks: [block] });
       }
     }
   }

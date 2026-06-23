@@ -36,7 +36,7 @@ export const renderToolSegments = (
             <AlphaChipRow
               key={key}
               rowIndex={offset + index}
-              blocks={segment.blocks as ReadonlyArray<ToolUseBlock>}
+              blocks={segment.blocks}
               toolResultMap={toolResultMap}
               inProgressMessageId={opts.inProgressMessageId}
             />
