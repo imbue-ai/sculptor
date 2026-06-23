@@ -86,6 +86,10 @@ class PlaywrightTaskPage(PlaywrightProjectLayoutPage):
         """Get the target branch selector locator."""
         return self._page.get_by_test_id(ElementIDs.TARGET_BRANCH_SELECTOR)
 
+    def get_target_branch_options(self) -> Locator:
+        """Get the branch option items inside the open target-branch selector."""
+        return self._page.get_by_test_id(ElementIDs.BRANCH_OPTION)
+
     def get_task_id(self) -> str:
         """Extract the task ID from the current URL.
 

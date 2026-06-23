@@ -37,11 +37,20 @@
 
 .filePathDir {
   color: var(--gray-a9);
+  // `direction: rtl` left-truncates long paths (ellipsis on the leading dirs,
+  // keeping the segment nearest the file visible). On its own it makes the bidi
+  // algorithm treat an absolute path's leading "/" as a neutral at the start of
+  // an RTL run and reorder it to the visual end — so "/Users/x" renders as
+  // "Users/x/" and collides with the separator slash ("Users/x//file").
+  // `unicode-bidi: plaintext` pins the base direction to the first strong
+  // character (a letter), keeping the slash in place. Mirrors `.itemPathDim` in
+  // path-autocomplete/PathAutocomplete.module.scss.
   direction: rtl;
   flex-shrink: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  unicode-bidi: plaintext;
   white-space: nowrap;
 }
 

@@ -76,6 +76,20 @@ const buildCompiledPlugin = async (frontendRoot: string, id: string): Promise<vo
       process.env.NODE_ENV = priorNodeEnv;
     }
   }
+
+  // Fail loudly if the production pin above ever regresses: a dev JSX transform
+  // emits `jsxDEV` / imports `react/jsx-dev-runtime`, which the host import map
+  // doesn't provide, so the plugin would crash at render with
+  // `s.jsxDEV is not a function`. Cheaper than waiting for the integration test.
+  const bundle = fs.readFileSync(path.join(outDir, "main.js"), "utf8");
+  if (bundle.includes("jsxDEV")) {
+    throw new Error(
+      `Plugin "${id}" was built with React's dev JSX transform (found "jsxDEV"). ` +
+        `The host provides only the production "react/jsx-runtime", so this would crash at render. ` +
+        `The production pin in bundled-plugins.ts is not taking effect — check NODE_ENV handling.`,
+    );
+  }
+
   // The manifest is served alongside the bundle; the host fetches it first.
   fs.copyFileSync(path.join(sourceDir, "manifest.json"), path.join(outDir, "manifest.json"));
 };

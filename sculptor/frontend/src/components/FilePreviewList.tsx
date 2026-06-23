@@ -19,6 +19,8 @@ type FilePreviewListProps = {
   listId?: string;
   /** Numeric order used to sort this list's images in the shared lightbox. Lower values appear first. */
   listOrder?: number;
+  /** When true, image previews get a right-click "Copy Image" context menu. */
+  allowCopyImage?: boolean;
 };
 
 const isPdfFile = (filePath: string): boolean => {
@@ -43,6 +45,7 @@ export const FilePreviewList = ({
   displayMode = "compact",
   listId,
   listOrder = 0,
+  allowCopyImage = false,
 }: FilePreviewListProps): ReactElement | undefined => {
   const agentLightbox = useAgentLightbox();
   const [filesUrls, setFilesUrls] = useState<Record<string, string>>({});
@@ -179,6 +182,7 @@ export const FilePreviewList = ({
               isVideo={isVideo}
               fileName={fileName}
               displayMode={displayMode}
+              allowCopyImage={allowCopyImage}
               onRemove={onRemoveFile ? (): void => onRemoveFile(filePath) : undefined}
               onError={() => {
                 setFailedFiles((prev) => new Set(prev).add(filePath));

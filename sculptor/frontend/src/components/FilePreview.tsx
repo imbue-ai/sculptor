@@ -6,6 +6,7 @@ import { ElementIds } from "~/api";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
 import { mergeClasses, optional } from "~/common/Utils.ts";
 
+import { CopyImageContextMenu } from "./CopyImageContextMenu.tsx";
 import styles from "./FilePreview.module.scss";
 
 type FilePreviewProps = {
@@ -19,6 +20,8 @@ type FilePreviewProps = {
   onError: () => void;
   onClick?: () => void;
   displayMode?: "compact" | "inline" | "full";
+  /** When true, image content gets a right-click "Copy Image" context menu. */
+  allowCopyImage?: boolean;
 };
 
 export const FilePreview = ({
@@ -32,10 +35,15 @@ export const FilePreview = ({
   onError,
   onClick,
   displayMode = "compact",
+  allowCopyImage = false,
 }: FilePreviewProps): ReactElement => {
   const dangerColor = useThemeDangerColor();
   const isInline = displayMode === "inline";
   const isFull = displayMode === "full";
+
+  // Wrap a loaded image element in the Copy Image context menu when enabled.
+  const withCopyImageMenu = (element: ReactElement): ReactElement =>
+    allowCopyImage && fileUrl ? <CopyImageContextMenu url={fileUrl}>{element}</CopyImageContextMenu> : element;
 
   const renderFullContent = (): ReactElement => {
     if (isFailed) {
@@ -80,7 +88,7 @@ export const FilePreview = ({
       );
     }
 
-    return (
+    return withCopyImageMenu(
       <img
         src={fileUrl}
         alt={`Attachment: ${fileName}`}
@@ -89,7 +97,7 @@ export const FilePreview = ({
         data-testid={ElementIds.FILE_PREVIEW}
         data-path={filePath}
         onClick={onClick}
-      />
+      />,
     );
   };
 
@@ -137,7 +145,7 @@ export const FilePreview = ({
       );
     }
 
-    return (
+    return withCopyImageMenu(
       <img
         src={fileUrl}
         alt={`Attachment: ${fileName}`}
@@ -146,7 +154,7 @@ export const FilePreview = ({
         data-testid={ElementIds.FILE_PREVIEW}
         data-path={filePath}
         onClick={onClick}
-      />
+      />,
     );
   };
 

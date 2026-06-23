@@ -54,14 +54,12 @@ def _expose_real_claude_credentials(request: pytest.FixtureRequest) -> None:
         database_url: str,
         sculptor_folder: Path,
         tmp_path: Path,
-        static_files_path: Path,
         hide_keys: bool = True,
     ) -> dict[str, str | None]:
         return _original_get_testing_environment(
             database_url=database_url,
             sculptor_folder=sculptor_folder,
             tmp_path=tmp_path,
-            static_files_path=static_files_path,
             hide_keys=False,
         )
 

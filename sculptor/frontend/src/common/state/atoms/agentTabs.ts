@@ -1,6 +1,9 @@
+import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 
 import type { AgentTypeName } from "~/api";
+
+import { userConfigAtom } from "./userConfig";
 
 export const agentTabOrderAtom = atomWithStorage<Record<string, Array<string>>>(
   "sculptor-agent-tab-order",
@@ -39,6 +42,13 @@ export const parseStoredAgentType = (
     ? { agentType: "registered", registrationId: value.slice(REGISTERED_AGENT_TYPE_PREFIX.length) }
     : { agentType: value as AgentTypeName, registrationId: undefined };
 
-export const lastUsedAgentTypeAtom = atomWithStorage<StoredAgentType>("lastUsedAgentType", "claude", undefined, {
-  getOnInit: true,
-});
+/** The most-recently-used agent type, the default a plain `+` click (or a
+ * bare `sculpt agent create`) creates.
+ *
+ * Read-only and backed by the server-side `UserConfig.lastUsedAgentType`, so
+ * the app's "+" button and the sculpt CLI share one default. Defaults to
+ * Claude when unset. Write through `useUserConfig().updateConfig({
+ * lastUsedAgentType })`, which optimistically updates `userConfigAtom`. */
+export const lastUsedAgentTypeAtom = atom<StoredAgentType>(
+  (get) => (get(userConfigAtom)?.lastUsedAgentType as StoredAgentType | null) ?? "claude",
+);

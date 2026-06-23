@@ -4,6 +4,8 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ElementIds } from "~/api";
+
 import { ImageLightbox } from "./ImageLightbox";
 
 const Wrapper = ({ children }: { children: ReactNode }): ReactElement => <Theme>{children}</Theme>;
@@ -229,6 +231,20 @@ describe("ImageLightbox", () => {
     it("renders with correct aria-label for videos", () => {
       renderLightbox({ media: videoMedia, initialIndex: 0 });
       expect(screen.getByLabelText("Video preview: recording.mp4")).toBeInTheDocument();
+    });
+  });
+
+  describe("copy image context menu", () => {
+    it("shows Copy Image on right-click when allowCopyImage is set", async () => {
+      renderLightbox({ allowCopyImage: true });
+      fireEvent.contextMenu(screen.getByAltText("Full size: photo.png"));
+      expect(await screen.findByTestId(ElementIds.FILE_PREVIEW_COPY_IMAGE)).toBeInTheDocument();
+    });
+
+    it("does not show Copy Image when allowCopyImage is not set", () => {
+      renderLightbox();
+      fireEvent.contextMenu(screen.getByAltText("Full size: photo.png"));
+      expect(screen.queryByTestId(ElementIds.FILE_PREVIEW_COPY_IMAGE)).not.toBeInTheDocument();
     });
   });
 

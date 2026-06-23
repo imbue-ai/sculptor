@@ -25,7 +25,7 @@ from sculptor.services.git_repo_service.error_types import GitRepoError
 from sculptor.services.git_repo_service.error_types import GitRepoNotFoundError
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import WorkspaceBranchInfo
-from sculptor.web.derived import WorkspaceRemoteBranchesInfo
+from sculptor.web.derived import WorkspaceTargetBranchesInfo
 
 
 def _is_missing_repo_error(exc: BaseException) -> bool:
@@ -68,7 +68,7 @@ def _get_branch_unless_repo_missing(repo: ReadOnlyGitRepo) -> str | None:
 
 
 _WORKSPACE_BRANCH_POLL_SECONDS = 3.0
-_WORKSPACE_REMOTE_BRANCHES_POLL_SECONDS = 3.0
+_WORKSPACE_TARGET_BRANCHES_POLL_SECONDS = 3.0
 
 
 class _WorkspaceBranchPollingManager:
@@ -92,7 +92,7 @@ class _WorkspaceBranchPollingManager:
         self._workspace_filter = workspace_filter
         self._project_filter = None if workspace_filter is not None else project_filter
         self._sources_by_workspace_id: dict[WorkspaceID, StopGapBackgroundPollingStreamSource] = {}
-        self._remote_branches_sources_by_workspace_id: dict[WorkspaceID, StopGapBackgroundPollingStreamSource] = {}
+        self._target_branches_sources_by_workspace_id: dict[WorkspaceID, StopGapBackgroundPollingStreamSource] = {}
         # Tracks the working dir each poller was started against, so we can
         # avoid restarting the polling thread on unrelated workspace updates
         # (e.g. diff_status transitions). Restarting on every upsert resets
@@ -160,27 +160,27 @@ class _WorkspaceBranchPollingManager:
         self._sources_by_workspace_id[workspace.object_id] = source
         self._working_dirs_by_workspace_id[workspace.object_id] = working_dir
 
-        remote_branches_callback = _WorkspaceRemoteBranchesPollingCallback(
+        target_branches_callback = _WorkspaceTargetBranchesPollingCallback(
             workspace_id=workspace.object_id,
             workspace_working_dir=working_dir,
             concurrency_group=self._concurrency_group,
         )
-        remote_branches_source: StopGapBackgroundPollingStreamSource = StopGapBackgroundPollingStreamSource(
-            polling_callback=remote_branches_callback,
+        target_branches_source: StopGapBackgroundPollingStreamSource = StopGapBackgroundPollingStreamSource(
+            polling_callback=target_branches_callback,
             output_queue=self._queue,
-            check_interval_in_seconds=_WORKSPACE_REMOTE_BRANCHES_POLL_SECONDS,
+            check_interval_in_seconds=_WORKSPACE_TARGET_BRANCHES_POLL_SECONDS,
             concurrency_group=self._concurrency_group,
         )
-        remote_branches_source.start()
-        self._remote_branches_sources_by_workspace_id[workspace.object_id] = remote_branches_source
+        target_branches_source.start()
+        self._target_branches_sources_by_workspace_id[workspace.object_id] = target_branches_source
 
     def _stop_polling_for_workspace(self, workspace_id: WorkspaceID) -> None:
         source = self._sources_by_workspace_id.pop(workspace_id, None)
         if source is not None:
             source.stop()
-        remote_branches_source = self._remote_branches_sources_by_workspace_id.pop(workspace_id, None)
-        if remote_branches_source is not None:
-            remote_branches_source.stop()
+        target_branches_source = self._target_branches_sources_by_workspace_id.pop(workspace_id, None)
+        if target_branches_source is not None:
+            target_branches_source.stop()
         self._working_dirs_by_workspace_id.pop(workspace_id, None)
 
     def shutdown(self) -> None:
@@ -275,8 +275,13 @@ class _WorkspaceBranchPollingCallback:
             return None
 
 
-class _WorkspaceRemoteBranchesPollingCallback:
-    """Polls the remote-tracking branches available in a workspace's working directory."""
+class _WorkspaceTargetBranchesPollingCallback:
+    """Polls the branches a workspace can target as its merge/diff base.
+
+    These are the repo's remote-tracking branches, or — when the repo has no
+    remote — its local branches, so the selector can still offer merge targets
+    on a repo with no remote.
+    """
 
     def __init__(
         self,
@@ -289,7 +294,7 @@ class _WorkspaceRemoteBranchesPollingCallback:
         self._concurrency_group = concurrency_group
         self._first_failure_since_last_success: tuple[datetime.datetime, Exception] | None = None
 
-    def __call__(self) -> WorkspaceRemoteBranchesInfo | None:
+    def __call__(self) -> WorkspaceTargetBranchesInfo | None:
         try:
             repo = LocalReadOnlyGitRepo(
                 repo_path=self._workspace_working_dir,
@@ -297,10 +302,19 @@ class _WorkspaceRemoteBranchesPollingCallback:
                 log_command=False,
             )
             branches = repo.get_remote_branches()
+            if not branches:
+                # A repo with no remote (e.g. a local-only project) has no
+                # remote-tracking branches, which would leave the target-branch
+                # selector empty and the merge target stuck. Fall back to the
+                # repo's local branches so the user can still pick a target,
+                # excluding the workspace's own branch (diffing a branch against
+                # itself is a no-op).
+                current_branch = repo.get_current_git_branch()
+                branches = [branch for branch in repo.get_all_branches() if branch != current_branch]
             self._first_failure_since_last_success = None
-            return WorkspaceRemoteBranchesInfo(
+            return WorkspaceTargetBranchesInfo(
                 workspace_id=self._workspace_id,
-                remote_branches=tuple(branches),
+                target_branches=tuple(branches),
             )
         except Exception as e:
             if _is_missing_repo_error(e):
@@ -310,12 +324,12 @@ class _WorkspaceRemoteBranchesPollingCallback:
             if self._first_failure_since_last_success is None:
                 self._first_failure_since_last_success = (datetime.datetime.now(), e)
                 log_exception(
-                    e, message="Failed to list workspace remote branches", priority=ExceptionPriority.LOW_PRIORITY
+                    e, message="Failed to list workspace target branches", priority=ExceptionPriority.LOW_PRIORITY
                 )
                 return None
             original_time, original_exc = self._first_failure_since_last_success
             logger.info(
-                "Still failing to list workspace remote branches: {} (original was {} @ {})",
+                "Still failing to list workspace target branches: {} (original was {} @ {})",
                 e,
                 type(original_exc),
                 original_time.isoformat(),

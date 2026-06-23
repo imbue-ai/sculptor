@@ -176,12 +176,9 @@ def get_testing_environment(
     database_url: str,
     sculptor_folder: Path,
     tmp_path: Path,
-    static_files_path: Path,
     hide_keys: bool = True,
 ) -> dict[str, str | None]:
     environment: dict[str, str | None] = {}
-
-    environment["STATIC_FILES_PATH"] = str(static_files_path.absolute())
 
     environment[SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG] = str(sculptor_folder)
     environment["DATABASE_URL"] = database_url

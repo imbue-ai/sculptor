@@ -24,6 +24,23 @@ class PlaywrightPluginsSettingsElement(PlaywrightIntegrationTestElement):
     def get_empty_state(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.SETTINGS_PLUGINS_EMPTY)
 
+    def get_refresh_button(self) -> Locator:
+        """The manual 're-scan the plugins directory' control next to Add."""
+        return self._page.get_by_test_id(ElementIDs.SETTINGS_PLUGINS_REFRESH_BUTTON)
+
+    def get_directory_label(self) -> Locator:
+        """The code chip in the description showing where drop-in plugins load from.
+
+        Reflects the backend's display-formatted directory (home collapsed to
+        ``~``), not a hardcoded path."""
+        return self._page.get_by_test_id(ElementIDs.SETTINGS_PLUGINS_DIRECTORY)
+
+    def refresh(self) -> None:
+        """Click the refresh control to re-scan local plugins on demand."""
+        button = self.get_refresh_button()
+        expect(button).to_be_enabled()
+        button.click()
+
     def get_rows(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.SETTINGS_PLUGINS_SOURCE_ROW)
 
@@ -32,6 +49,33 @@ class PlaywrightPluginsSettingsElement(PlaywrightIntegrationTestElement):
         return self._page.locator(
             f'[data-testid="{ElementIDs.SETTINGS_PLUGINS_SOURCE_ROW.value}"][data-source="{source}"]'
         )
+
+    def get_rows_by_kind(self, kind: str) -> Locator:
+        """Locate rows by origin: ``builtin`` (bundled), ``local``
+        (``~/.sculptor/plugins/``), or ``url`` (user-added). Useful when the
+        exact ``data-source`` isn't known up front — a local plugin's source is
+        an absolute backend URL whose port varies per instance."""
+        return self._page.locator(
+            f'[data-testid="{ElementIDs.SETTINGS_PLUGINS_SOURCE_ROW.value}"][data-kind="{kind}"]'
+        )
+
+    def get_rows_by_kind_and_status(self, *, kind: str, status: str) -> Locator:
+        """Locate rows by both origin (``kind``) and load ``status`` (e.g.
+        ``loaded`` vs ``shadowed``) — used to assert which of two competing
+        same-id sources won without knowing their exact ``data-source`` URLs."""
+        return self._page.locator(
+            f'[data-testid="{ElementIDs.SETTINGS_PLUGINS_SOURCE_ROW.value}"][data-kind="{kind}"][data-status="{status}"]'
+        )
+
+    def get_remove_button_in(self, row: Locator) -> Locator:
+        """The remove (trash) control within a given source row — present only on
+        user-removable (``url``) rows."""
+        return row.get_by_test_id(ElementIDs.SETTINGS_PLUGINS_SOURCE_REMOVE)
+
+    def get_toggle_in(self, row: Locator) -> Locator:
+        """The enable/disable switch within a given source row (use when the row
+        was located by kind/status rather than by source)."""
+        return row.get_by_test_id(ElementIDs.SETTINGS_PLUGINS_SOURCE_TOGGLE)
 
     def add_source(self, source: str) -> None:
         """Type a source into the input, click Add, and wait for its row to appear.
