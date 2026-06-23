@@ -25,6 +25,7 @@ from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.entity_picker import PlaywrightEntityPickerElement
+from sculptor.testing.elements.entity_picker import open_workspace_entity_drill
 from sculptor.testing.elements.user_config import enable_entity_mentions
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -53,18 +54,13 @@ def _open_workspace_drill_state(page: Page, chat_input: Locator, workspace_name:
     matching ``workspace_name`` so the next Tab unambiguously drills into
     that one workspace.
     """
-    entity_picker = PlaywrightEntityPickerElement(page)
+    entity_items = open_workspace_entity_drill(page, chat_input)
 
-    chat_input.press_sequentially("+wor")
-    expect(entity_picker.get_mention_list()).to_be_visible()
-
-    chat_input.press("Enter")
-
-    expect(entity_picker.get_entity_list()).to_be_visible()
-    entity_items = entity_picker.get_entity_items()
-    expect(entity_items.first).to_be_visible()
-
-    chat_input.press_sequentially(workspace_name)
+    # Type slowly (matching ``insert_workspace_entity_mention``) so each
+    # keystroke gets a full transaction + items() refresh before the next, and
+    # wait for the filter to settle to the single matching row before the
+    # caller drills further.
+    chat_input.press_sequentially(workspace_name, delay=30)
     expect(entity_items).to_have_count(1)
 
 
