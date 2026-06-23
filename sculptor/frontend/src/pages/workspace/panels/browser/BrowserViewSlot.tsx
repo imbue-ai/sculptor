@@ -1,5 +1,5 @@
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import type { ReactElement } from "react";
+import type { CSSProperties, ReactElement } from "react";
 import { useCallback, useEffect, useRef } from "react";
 
 import { ElementIds } from "~/api";
@@ -95,7 +95,7 @@ export const BrowserViewSlot = ({ workspaceId }: { workspaceId: string }): React
   const partition = `persist:sculptor-browser-${workspaceId}`;
   const initialSrc = initialUrl === "" ? "about:blank" : initialUrl;
 
-  const style: React.CSSProperties =
+  const style: CSSProperties =
     placement.visible && placement.bounds !== null
       ? {
           position: "fixed",
