@@ -6,6 +6,7 @@ import { ElementIds } from "~/api";
 
 import styles from "./AlphaFileChip.module.scss";
 import type { ChipData } from "./chipRow.types.ts";
+import { getExecutingLabel } from "./chipRowUtils.ts";
 
 type AlphaFileChipProps = {
   chipData: ChipData;
@@ -13,11 +14,6 @@ type AlphaFileChipProps = {
   onToggle: () => void;
   onFocus: () => void;
   tabIndex: 0 | -1;
-};
-
-const getExecutingLabel = (chipData: ChipData): string => {
-  const firstName = chipData.blocks[0]?.name;
-  return firstName === "Write" ? "Writing…" : "Editing…";
 };
 
 export const AlphaFileChip = forwardRef<HTMLButtonElement, AlphaFileChipProps>(

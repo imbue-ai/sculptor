@@ -1,6 +1,7 @@
 import { Theme } from "@radix-ui/themes";
 import type { RenderResult } from "@testing-library/react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactElement, ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -133,41 +134,71 @@ describe("ActionContextMenu", () => {
   });
 
   describe("move to group submenu", () => {
-    it("shows No group option that calls onMoveToGroup with null", () => {
+    // Open the root context menu, then hover the "Move to group..." sub-trigger
+    // to open the submenu. Resolves once the submenu content has rendered.
+    const openMoveToGroupSubmenu = async (user: ReturnType<typeof userEvent.setup>): Promise<void> => {
+      fireEvent.contextMenu(screen.getByTestId("trigger"));
+      await user.hover(screen.getByText("Move to group..."));
+      await screen.findByRole("menuitem", { name: "No group" });
+    };
+
+    it("calls onMoveToGroup with null when No group is selected", async () => {
+      const user = userEvent.setup();
       const onMoveToGroup = vi.fn();
       const action = createAction({ groupId: "g1" });
       renderContextMenu({ action, onMoveToGroup });
 
-      fireEvent.contextMenu(screen.getByTestId("trigger"));
-      // Hover over the submenu trigger to open it
-      fireEvent.pointerMove(screen.getByText("Move to group..."));
-      fireEvent.click(screen.getByText("Move to group..."));
+      await openMoveToGroupSubmenu(user);
+      const noGroup = screen.getByRole("menuitem", { name: "No group" });
+      noGroup.focus();
+      await user.keyboard("{Enter}");
 
-      // The submenu content should render with "No group" option
-      // Note: Radix submenus may need pointer events to open
+      expect(onMoveToGroup).toHaveBeenCalledWith(action, null);
     });
 
-    it("shows available groups in the submenu", () => {
-      const groups = [createGroup({ id: "g1", name: "Group Alpha" }), createGroup({ id: "g2", name: "Group Beta" })];
-      renderContextMenu({ groups });
-
-      fireEvent.contextMenu(screen.getByTestId("trigger"));
-      expect(screen.getByText("Move to group...")).toBeInTheDocument();
-    });
-
-    it("disables No group option when action is already ungrouped", () => {
+    it("calls onMoveToGroup with the group id when a group is selected", async () => {
+      const user = userEvent.setup();
+      const onMoveToGroup = vi.fn();
       const action = createAction({ groupId: null });
-      renderContextMenu({ action });
+      const groups = [createGroup({ id: "g1", name: "Group Alpha" }), createGroup({ id: "g2", name: "Group Beta" })];
+      renderContextMenu({ action, groups, onMoveToGroup });
 
-      fireEvent.contextMenu(screen.getByTestId("trigger"));
+      await openMoveToGroupSubmenu(user);
+      expect(screen.getByRole("menuitem", { name: "Group Alpha" })).toBeInTheDocument();
+      const groupBeta = screen.getByRole("menuitem", { name: "Group Beta" });
+      groupBeta.focus();
+      await user.keyboard("{Enter}");
+
+      expect(onMoveToGroup).toHaveBeenCalledWith(action, "g2");
     });
 
-    it("disables current group option in the submenu", () => {
+    it("disables the No group option when the action is already ungrouped", async () => {
+      const user = userEvent.setup();
+      const onMoveToGroup = vi.fn();
+      const action = createAction({ groupId: null });
+      renderContextMenu({ action, onMoveToGroup });
+
+      await openMoveToGroupSubmenu(user);
+      const noGroup = screen.getByRole("menuitem", { name: "No group" });
+      expect(noGroup).toHaveAttribute("data-disabled");
+
+      await user.click(noGroup);
+      expect(onMoveToGroup).not.toHaveBeenCalled();
+    });
+
+    it("disables the current group option in the submenu", async () => {
+      const user = userEvent.setup();
+      const onMoveToGroup = vi.fn();
       const action = createAction({ groupId: "g1" });
       const groups = [createGroup({ id: "g1", name: "Current Group" })];
-      renderContextMenu({ action, groups });
+      renderContextMenu({ action, groups, onMoveToGroup });
 
-      fireEvent.contextMenu(screen.getByTestId("trigger"));
+      await openMoveToGroupSubmenu(user);
+      const currentGroup = screen.getByRole("menuitem", { name: "Current Group" });
+      expect(currentGroup).toHaveAttribute("data-disabled");
+
+      await user.click(currentGroup);
+      expect(onMoveToGroup).not.toHaveBeenCalled();
     });
   });
 

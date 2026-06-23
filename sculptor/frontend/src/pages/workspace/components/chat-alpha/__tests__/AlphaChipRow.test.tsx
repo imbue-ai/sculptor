@@ -72,12 +72,11 @@ afterEach(() => {
 describe("AlphaChipRow", () => {
   describe("chip rendering", () => {
     it("renders nothing when no blocks produce chips", () => {
-      const { container } = renderChipRow({
-        blocks: [createToolUseBlock({ name: "Bash" })],
+      // A block with no derivable file path yields no chip data, so the row renders null.
+      renderChipRow({
+        blocks: [createToolUseBlock({ input: {} })],
       });
-      // Bash blocks don't produce chips in buildChipData
-      // But depending on buildChipData logic, this might render null
-      expect(container).toBeTruthy();
+      expect(screen.queryByRole("toolbar")).not.toBeInTheDocument();
     });
 
     it("renders a toolbar with file modifications label", () => {

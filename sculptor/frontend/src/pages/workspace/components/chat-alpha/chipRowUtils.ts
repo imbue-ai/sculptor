@@ -12,6 +12,12 @@ type BlockInfo = {
   state: ChipState;
 };
 
+/** Present-tense label shown while a file chip's tool is still executing. */
+export const getExecutingLabel = (chipData: ChipData): string => {
+  const firstName = chipData.blocks[0]?.name;
+  return firstName === "Write" ? "Writing…" : "Editing…";
+};
+
 /**
  * Extract the file path from a tool block.
  * Prefers the result's filePath (from DiffToolContent) when available,
