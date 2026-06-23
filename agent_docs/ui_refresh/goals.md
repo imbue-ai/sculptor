@@ -150,6 +150,7 @@ The dropdown has recent agent creation pinned to the top with its default keyboa
 The new-agent keyboard binding (and adding an agent via Cmd+K) always creates the agent in the center section — and in the center’s original sub-section when the center is split — regardless of which section is active.
 There is a sub-dropdown menu to create an agent of a different type.
 A new terminal option is directly beneath these two options.
+There is no bare “Terminal” agent type: a raw shell is the “New terminal” panel, and terminal-running agents come from registered programs (e.g. the Claude Code CLI).
 Every single instance panel that is not already open is listed below.
 
 Panels can also be added via Cmd+K.
@@ -238,6 +239,7 @@ This redesign reuses the existing styling and components where possible and focu
 	- Experimental settings for sharing panel sizes between workspaces
     - Panels setting page
 - The /btw popup
+- The open/closed-workspace distinction (the closed-workspaces pill and dropdown). All workspaces appear in the sidebar; "archived workspaces" may be revisited later as a separate design.
 
 ## Relationship to the prototype
 
