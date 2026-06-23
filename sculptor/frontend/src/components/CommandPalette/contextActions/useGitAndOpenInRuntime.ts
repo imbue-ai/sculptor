@@ -63,10 +63,8 @@ export const useGitAndOpenInRuntime = (): GitAndOpenInRuntime => {
       createMergeRequest: (ws): void => {
         const chatActions = store.get(chatActionsAtom);
         const prompt = store.get(prCreationPromptAtom);
-        const term = ((): "merge request" | "pull request" => {
-          const repoInfo = store.get(repoInfoAtomFamily(ws.projectId));
-          return repoInfo?.isGitlabOrigin ? "merge request" : "pull request";
-        })();
+        const repoInfo = store.get(repoInfoAtomFamily(ws.projectId));
+        const term = repoInfo?.isGitlabOrigin ? "merge request" : "pull request";
         const targetBranch = ws.targetBranch;
         const message = targetBranch ? `${prompt}\n\nTarget the ${term} against \`${targetBranch}\`.` : prompt;
         void chatActions.sendMessage?.(message);

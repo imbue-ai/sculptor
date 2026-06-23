@@ -7,18 +7,19 @@ import type { CommandIcon } from "../types.ts";
 export type Agent = CodingAgentTaskView;
 
 /**
+ * Icons reuse the palette's `CommandIcon` shape so lucide-react components
+ * fit without a separate adapter.
+ */
+type ActionIcon = CommandIcon;
+
+/**
  * Action descriptor — pure data describing one row in a context menu and
  * (transitively) one command in the palette's per-entity sub-page. The
  * single source of truth for "the things you can do to this entity."
  *
  * Adding a new entry here means it shows up in the right-click menu AND
  * in Cmd+K → Workspace/Agent actions… → <entity> automatically.
- *
- * Icons reuse the palette's `CommandIcon` shape so lucide-react components
- * fit without a separate adapter.
  */
-type ActionIcon = CommandIcon;
-
 export type ContextActionShared = {
   /** Stable id for telemetry / data-testid / palette command id. */
   id: string;
