@@ -4,6 +4,9 @@ import { ElementIds } from "~/api";
 
 import styles from "./HistoryPanel.module.scss";
 
+/** Number of leading characters shown for a commit hash in the spur label. */
+const SHORT_HASH_LENGTH = 11;
+
 type MergeSpurRowProps = {
   parentHash: string;
   /** When true, the spur connects to nested child commits instead of showing an ellipsis + hash. */
@@ -18,7 +21,7 @@ type MergeSpurRowProps = {
  * In connected mode: the curve targets the nested branch graph column.
  */
 export const MergeSpurRow = ({ parentHash, connected }: MergeSpurRowProps): ReactElement => {
-  const shortHash = parentHash.slice(0, 11);
+  const shortHash = parentHash.slice(0, SHORT_HASH_LENGTH);
 
   return (
     <div className={styles.mergeSpurRow} data-testid={ElementIds.HISTORY_MERGE_SPUR}>

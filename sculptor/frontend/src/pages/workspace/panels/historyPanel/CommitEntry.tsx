@@ -16,6 +16,9 @@ import { TerminusIndicator } from "./TerminusIndicator.tsx";
 
 const HOVER_CARD_OPEN_DELAY_MS = 400;
 const HOVER_CARD_CLOSE_DELAY_MS = 300;
+// Extra margin beyond the open delay before re-enabling hover after a click,
+// so a click that collapses the row can't immediately re-trigger the hover card.
+const CLICK_SUPPRESS_BUFFER_MS = 100;
 
 const useDiffStats = (
   files: CommitInfo["files"],
@@ -214,7 +217,7 @@ export const CommitEntry = ({
     () =>
       commit.files.map((f) => ({
         path: f.path,
-        status: f.status as FileStatus,
+        status: f.status,
         additions: f.additions,
         deletions: f.deletions,
       })),
@@ -228,7 +231,7 @@ export const CommitEntry = ({
     clearTimeout(suppressTimerRef.current);
     suppressTimerRef.current = setTimeout(() => {
       clickSuppressRef.current = false;
-    }, HOVER_CARD_OPEN_DELAY_MS + 100);
+    }, HOVER_CARD_OPEN_DELAY_MS + CLICK_SUPPRESS_BUFFER_MS);
   }, [onToggle]);
 
   const handleHoverChange = useCallback((open: boolean): void => {
