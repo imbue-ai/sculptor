@@ -955,8 +955,9 @@ class _RecordAnswerOrResumeAgent(DefaultAgentWrapper):
     ``ResumeAgentResponseRunnerMessage`` so a test can assert which one the loop
     sent for an orphaned answer. On the ``StopAgentUserMessage`` the v1 loop pushes
     when it observes ``shutdown_event``, it emits a ``RequestStoppedAgentMessage``
-    for the most recent dispatched request and sets ``_exit_code = SIGTERM`` so the
-    next iteration early-exits into ``_handle_completed_agent``.
+    for the most recent dispatched request and sets ``_exit_code =
+    AGENT_EXIT_CODE_FROM_SIGTERM`` so the next iteration early-exits into
+    ``_handle_completed_agent``.
     """
 
     _pushed_answer_or_resume: list[UserQuestionAnswerMessage | ResumeAgentResponseRunnerMessage] = PrivateAttr(
