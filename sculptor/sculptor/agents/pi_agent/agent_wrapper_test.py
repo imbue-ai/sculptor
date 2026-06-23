@@ -465,8 +465,12 @@ def test_push_message_interrupt_is_handled_and_sends_abort() -> None:
     interrupt = InterruptProcessUserMessage()
     handled = agent._push_message(interrupt)
     assert handled is True
-    assert agent._was_interrupted.is_set()
-    assert agent._interrupt_pending.is_set()
+    # With no turn in flight, the interrupt has nothing to escalate against and
+    # emits its own terminal directly, so it disarms the interrupt flags rather
+    # than leaving them set to mislabel a later between-turns request — handled
+    # via `_handle_user_message`, which reads but does not reset them.
+    assert not agent._was_interrupted.is_set()
+    assert not agent._interrupt_pending.is_set()
     assert _abort_was_written(process)
     # The interrupt request itself must be completed (request_id == the interrupt
     # message id) — `await_message_response` blocks the /interrupt POST until then,

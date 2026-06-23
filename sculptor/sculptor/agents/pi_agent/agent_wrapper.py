@@ -1276,6 +1276,14 @@ class PiAgent(DefaultAgentWrapper):
             # The abort above is a no-op with pi idle, and no turn-end will
             # arrive to resolve the request, so reconcile any orphaned turn here.
             self._resolve_in_flight_request_as_interrupted()
+            # The reconciliation emits its own terminal RequestSuccess directly,
+            # so no in-flight turn will consume these flags. A chat turn resets
+            # interrupt state at its start, but the between-turns control paths
+            # read it via `_handle_user_message` without resetting it — so clear
+            # it here, or a lingering flag mislabels the next such request as
+            # interrupted.
+            self._was_interrupted.clear()
+            self._interrupt_pending.clear()
 
     def _resolve_in_flight_request_as_interrupted(self) -> None:
         """Emit a terminal RequestSuccess(interrupted=True) for the in-flight
