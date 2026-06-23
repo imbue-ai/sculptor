@@ -98,7 +98,10 @@ export const RemoteRepoForm = ({
   const { fetchDirectories } = useDirectoryListing();
 
   const dependencyInfo = getRemoteCliDependencyInfo(dependenciesStatus);
-  const isConfigured = Boolean(dependencyInfo?.installed && dependencyInfo.isAuthenticated);
+  // `isAuthenticated === null` means the auth probe couldn't determine state;
+  // the backend treats that as usable (it only blocks on `false`), so only a
+  // hard `false` (or not installed) counts as not-configured here.
+  const isConfigured = dependencyInfo?.installed === true && dependencyInfo.isAuthenticated !== false;
   // Suppress the configured/not-configured branches until the first poll
   // resolves; otherwise dialogs opened without a pre-populated atom flash
   // NotConfiguredSection before the real status arrives.

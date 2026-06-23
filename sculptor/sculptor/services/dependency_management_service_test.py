@@ -1088,12 +1088,17 @@ class TestCheckAuthenticated:
 
         assert result is None
 
-    def test_unsupported_tool(self) -> None:
-        with ConcurrencyGroup(name="test") as cg:
-            service = DependencyManagementService(concurrency_group=cg)
-            result = service.check_authenticated(Dependency.GIT)
+    def test_unsupported_tools_return_none_without_probing(self) -> None:
+        """Tools with no ``auth status`` subcommand (git, pi) must return None
+        without ever shelling out — otherwise a missing subcommand would be
+        misread as "not authenticated"."""
+        mock_cg = MagicMock()
+        service = DependencyManagementService.model_construct(concurrency_group=mock_cg)
 
-        assert result is None
+        assert service.check_authenticated(Dependency.GIT) is None
+        assert service.check_authenticated(Dependency.PI) is None
+        # The allowlist short-circuit must run before any subprocess.
+        mock_cg.run_process_to_completion.assert_not_called()
 
     @patch("sculptor.services.dependency_management_service.get_user_config_instance")
     @patch("shutil.which", return_value="/usr/bin/claude")

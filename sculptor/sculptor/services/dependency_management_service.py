@@ -606,13 +606,14 @@ class DependencyManagementService(Service):
     def check_authenticated(self, tool: Dependency) -> bool | None:
         """Check whether a dependency is authenticated.
 
-        Returns None when the tool has no auth concept (git), is not
-        installed, or the probe itself times out (so callers don't get
-        a misleading "unauthenticated" reading from a hung subprocess).
-        Otherwise runs ``<binary> auth status`` and returns ``True`` on
-        success, ``False`` on a non-zero exit.
+        Returns None for tools with no auth concept (git, pi — neither has an
+        ``auth status`` subcommand), when the tool is not installed, or when the
+        probe itself times out (so callers don't get a misleading
+        "unauthenticated" reading from a hung subprocess). For tools that do
+        support it (claude, gh) it runs ``<binary> auth status`` and returns
+        ``True`` on success, ``False`` on a non-zero exit.
         """
-        if tool == Dependency.GIT:
+        if tool not in (Dependency.CLAUDE, Dependency.GH):
             return None
         binary = self.resolve_binary_path(tool)
         if binary is None:

@@ -30,7 +30,11 @@ export const isRemoteFormShowingNotConfigured = (
 ): boolean => {
   if (view !== "search") return false;
   const info = getRemoteCliDependencyInfo(status);
-  const isConfigured = Boolean(info?.installed && info.isAuthenticated);
+  // `isAuthenticated === null` means the auth probe timed out / couldn't tell.
+  // The backend clone route treats that as usable (it only blocks on `false`),
+  // so mirror that here: only `installed === false` or `isAuthenticated === false`
+  // count as not-configured — never an unknown (`null`) auth state.
+  const isConfigured = info?.installed === true && info.isAuthenticated !== false;
   // Suppress the not-configured branch until the first poll resolves; otherwise
   // a dialog opened without a pre-populated atom flashes it before the real
   // status arrives.
