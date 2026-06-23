@@ -33,7 +33,10 @@ export const WorkspaceShortcutWidget = (): ReactElement | null => {
     <Tooltip content={tooltip}>
       <Button
         size="1"
-        variant="soft"
+        // Ghost (not soft) so the chip is content-height, matching the diff
+        // summary and PR button beside it — Radix's soft/solid variants force a
+        // taller fixed control height that would stand proud of the banner row.
+        variant="ghost"
         color="gray"
         onClick={() => openExternal(issue.url)}
         data-testid="linear-workspace-shortcut"
