@@ -205,23 +205,25 @@ class CIBabysitterCoordinator(Service):
         self._pr_polling_service.remove_observer(self._queue)
 
     def set_paused(self, workspace_id: WorkspaceID, paused: bool) -> None:
+        state = self._ensure_state(workspace_id)
+        if state is None:
+            logger.debug("set_paused: workspace {} not found", workspace_id)
+            return
         with self._lock:
-            state = self._state.get(workspace_id)
-            if state is None:
-                project_id = self._lookup_workspace_project_id(workspace_id)
-                if project_id is None:
-                    logger.debug("set_paused: workspace {} not found", workspace_id)
-                    return
-                state = CIBabysitterState(workspace_id=workspace_id, project_id=project_id)
-                self._state[workspace_id] = state
             state.paused = paused
+        # Persist so the flag survives a restart. The in-memory update above keeps
+        # the running coordinator authoritative; this write makes it durable.
+        self._persist_paused(workspace_id, paused)
 
     def get_state_snapshot(self, workspace_id: WorkspaceID) -> CIBabysitterWorkspaceStateView | None:
         config = get_user_config_instance()
+        # Hydrate from the persisted Workspace row on first touch so the paused
+        # flag is reported correctly after a restart, before any poll has rebuilt
+        # the in-memory state. Returns None only when the workspace is missing.
+        state = self._ensure_state(workspace_id)
+        if state is None:
+            return None
         with self._lock:
-            state = self._state.get(workspace_id)
-            if state is None:
-                return None
             paused = state.paused
             retry_count = state.retry_count
             retired = state.retired
@@ -266,14 +268,10 @@ class CIBabysitterCoordinator(Service):
                 logger.exception("CIBabysitterCoordinator: error handling PrStatusInfo for {}", item.workspace_id)
 
     def _handle_status(self, new: PrStatusInfo) -> None:
+        state = self._ensure_state(new.workspace_id)
+        if state is None:
+            return
         with self._lock:
-            state = self._state.get(new.workspace_id)
-            if state is None:
-                project_id = self._lookup_workspace_project_id(new.workspace_id)
-                if project_id is None:
-                    return
-                state = CIBabysitterState(workspace_id=new.workspace_id, project_id=project_id)
-                self._state[new.workspace_id] = state
             prev = state.prev_status
             # Transient "lost PR" gap: when the workspace's branch flips
             # (e.g. detached HEAD during a babysitter-driven rebase), the
@@ -750,9 +748,55 @@ class CIBabysitterCoordinator(Service):
                 return message.model_name
         return None
 
-    def _lookup_workspace_project_id(self, workspace_id: WorkspaceID) -> ProjectID | None:
+    def _ensure_state(self, workspace_id: WorkspaceID) -> CIBabysitterState | None:
+        """Return the live in-memory state for a workspace, hydrating it from the
+        persisted Workspace row on first touch (e.g. after a restart).
+
+        The ``paused`` flag is the one piece of coordinator state that must
+        survive a restart; it is read back from the workspace here so the very
+        first read or poll after startup reflects the user's last choice rather
+        than the default. DB I/O runs outside the lock, and a double-check guards
+        against two threads hydrating the same workspace concurrently. Returns
+        None when the workspace is missing.
+        """
+        with self._lock:
+            existing = self._state.get(workspace_id)
+            if existing is not None:
+                return existing
+        hydrated = self._load_persisted_state(workspace_id)
+        if hydrated is None:
+            return None
+        with self._lock:
+            existing = self._state.get(workspace_id)
+            if existing is not None:
+                return existing
+            self._state[workspace_id] = hydrated
+            return hydrated
+
+    def _load_persisted_state(self, workspace_id: WorkspaceID) -> CIBabysitterState | None:
+        """Build a fresh per-workspace state seeded from the persisted Workspace
+        row, or None if the workspace is missing.
+
+        Only ``paused`` is durable; every other field (retry_count, prev_status,
+        ...) is genuinely per-session and starts at its default.
+        """
         with self._data_model_service.open_transaction(RequestID()) as transaction:
             workspace = transaction.get_workspace(workspace_id)
             if workspace is None:
                 return None
-            return workspace.project_id
+            return CIBabysitterState(
+                workspace_id=workspace_id,
+                project_id=workspace.project_id,
+                paused=workspace.ci_babysitter_paused,
+            )
+
+    def _persist_paused(self, workspace_id: WorkspaceID, paused: bool) -> None:
+        """Persist the per-workspace paused flag so it survives a restart.
+
+        Uses a targeted field update so it can't clobber concurrent writes to
+        other workspace columns (e.g. diff status).
+        """
+        with self._data_model_service.open_transaction(RequestID()) as transaction:
+            updated = transaction.update_workspace_fields(workspace_id, ci_babysitter_paused=paused)
+        if updated is None:
+            logger.debug("set_paused: workspace {} not found; paused flag not persisted", workspace_id)
