@@ -355,7 +355,7 @@ export const AddWorkspacePage = (): ReactElement => {
             <div>
               <b>Failed to create workspace</b>
               <br />
-              <pre>{"" + error}</pre>
+              <pre>{String(error)}</pre>
             </div>
           ),
           type: ToastType.ERROR,
