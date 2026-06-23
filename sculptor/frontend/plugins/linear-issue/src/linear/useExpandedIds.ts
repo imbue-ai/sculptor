@@ -9,7 +9,14 @@ export type ExpandedState = {
    * being frozen into persisted state.
    */
   overrides: Readonly<Record<string, boolean>>;
-  setExpanded: (identifier: string, open: boolean) => void;
+  /**
+   * Record the user's open/closed choice. `defaultOpen` is the panel's derived
+   * default for this id: when the choice matches it, the override is *deleted*
+   * rather than written, so only true deviations persist and a later change to
+   * the default rule isn't frozen out by a stored value that merely echoed the
+   * old default.
+   */
+  setExpanded: (identifier: string, open: boolean, defaultOpen: boolean) => void;
 };
 
 /**
@@ -41,8 +48,14 @@ export const useExpandedIds = (workspaceId: string | null, namespace = "expanded
   }, [raw]);
 
   const setExpanded = useCallback(
-    (identifier: string, open: boolean): void => {
-      setRaw(JSON.stringify({ ...overrides, [identifier]: open }));
+    (identifier: string, open: boolean, defaultOpen: boolean): void => {
+      const next = { ...overrides };
+      if (open === defaultOpen) {
+        delete next[identifier];
+      } else {
+        next[identifier] = open;
+      }
+      setRaw(JSON.stringify(next));
     },
     [overrides, setRaw],
   );

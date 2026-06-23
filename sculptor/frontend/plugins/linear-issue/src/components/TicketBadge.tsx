@@ -23,17 +23,31 @@ export const TicketBadge = ({
   title: string;
   url: string;
   state: LinearState | null;
-}): ReactElement => (
-  <Badge
-    size="2"
-    variant="soft"
-    color="gray"
-    onClick={() => openExternal(url)}
-    title={state ? `${identifier} · ${state.name}` : identifier}
-    style={{ cursor: "pointer", maxWidth: "100%" }}
-  >
-    {state && <StateDot color={state.color} />}
-    <Text style={{ fontFamily: "var(--code-font-family)", flexShrink: 0 }}>{identifier}</Text>
-    <Text truncate>{title}</Text>
-  </Badge>
-);
+}): ReactElement => {
+  const open = (): void => openExternal(url);
+  return (
+    // Radix `Badge` renders a <span>, so it carries no button semantics on its
+    // own; this is an interactive link, so add the role, focusability, and
+    // keyboard activation a real button would have.
+    <Badge
+      size="2"
+      variant="soft"
+      color="gray"
+      role="button"
+      tabIndex={0}
+      onClick={open}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          open();
+        }
+      }}
+      title={state ? `${identifier} · ${state.name}` : identifier}
+      style={{ cursor: "pointer", maxWidth: "100%" }}
+    >
+      {state && <StateDot color={state.color} />}
+      <Text style={{ fontFamily: "var(--code-font-family)", flexShrink: 0 }}>{identifier}</Text>
+      <Text truncate>{title}</Text>
+    </Badge>
+  );
+};

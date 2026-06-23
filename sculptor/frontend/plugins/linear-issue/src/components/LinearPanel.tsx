@@ -40,17 +40,19 @@ export const LinearPanel = (): ReactElement => {
             const id = ticket.issue.identifier;
             // A user toggle wins; otherwise open the primary, and open a lone
             // ticket of any source so a single result is never left collapsed.
-            const isOpen = overrides[id] ?? (ticket.isPrimary || tickets.length === 1);
+            const defaultOpen = ticket.isPrimary || tickets.length === 1;
+            const isOpen = overrides[id] ?? defaultOpen;
             // Sub-issues stay collapsed until asked for, keeping the body compact.
-            const subIssuesOpen = subOverrides[id] ?? false;
+            const subIssuesDefaultOpen = false;
+            const subIssuesOpen = subOverrides[id] ?? subIssuesDefaultOpen;
             return (
               <TicketSection
                 key={id}
                 ticket={ticket}
                 isOpen={isOpen}
-                onToggle={() => setExpanded(id, !isOpen)}
+                onToggle={() => setExpanded(id, !isOpen, defaultOpen)}
                 subIssuesOpen={subIssuesOpen}
-                onToggleSubIssues={() => setSubExpanded(id, !subIssuesOpen)}
+                onToggleSubIssues={() => setSubExpanded(id, !subIssuesOpen, subIssuesDefaultOpen)}
                 onUnpin={unpin}
               />
             );
