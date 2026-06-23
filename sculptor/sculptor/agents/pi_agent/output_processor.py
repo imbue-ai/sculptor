@@ -21,6 +21,7 @@ Reference: the pi RPC protocol notes (pi 0.78.0).
 
 from __future__ import annotations
 
+import re
 from typing import Annotated
 from typing import Any
 from typing import Literal
@@ -104,6 +105,52 @@ def humanize_pi_failure_reason(reason: str | None) -> str:
     if cleaned:
         return cleaned
     return _GENERIC_FAILURE_MESSAGE
+
+
+# Provider error-type / message markers (matched case-insensitively in pi's raw
+# failure reason) for transient conditions worth retrying — the provider
+# typically recovers on its own. Anthropic surfaces these as distinct error
+# `type`s: `overloaded_error` (~HTTP 529), `rate_limit_error` (~429), and
+# `api_error` (5xx server errors); request timeouts surface as timeout text.
+_TRANSIENT_FAILURE_MARKERS = (
+    "overloaded_error",
+    "overloaded",
+    "rate_limit_error",
+    "rate limit",
+    "api_error",
+    "service unavailable",
+    "service_unavailable",
+    "internal server error",
+    "bad gateway",
+    "gateway timeout",
+    "timeout",
+    "timed out",
+)
+# HTTP status codes for the same transient classes: request timeout (408), rate
+# limit (429), 5xx server errors, and Anthropic's "Overloaded" (529).
+_TRANSIENT_STATUS_CODES = frozenset({"408", "429", "500", "502", "503", "504", "529"})
+# A standalone 3-digit token, so an embedded status code (e.g. `"status": 529`) is
+# recognized without matching a 3-digit run inside a longer number (model ids, ids).
+_THREE_DIGIT_TOKEN_RE = re.compile(r"\b\d{3}\b")
+
+
+def is_transient_provider_error(error_message: str | None) -> bool:
+    """Whether pi's recorded turn-failure reason is a KNOWN-TRANSIENT provider condition.
+
+    Transient classes — Anthropic `overloaded_error` (~HTTP 529), `rate_limit_error`
+    (~429), 5xx `api_error`, and request timeouts — are worth retrying because the
+    provider usually recovers on its own. Recognized by the error-type / message
+    markers pi forwards from the provider, or an embedded transient HTTP status
+    code. A reason that matches nothing here — a provider-auth failure, an unknown
+    model, a validation error, or an empty reason — is treated as terminal, NOT
+    transient.
+    """
+    text = (error_message or "").lower()
+    if not text.strip():
+        return False
+    if any(marker in text for marker in _TRANSIENT_FAILURE_MARKERS):
+        return True
+    return any(token in _TRANSIENT_STATUS_CODES for token in _THREE_DIGIT_TOKEN_RE.findall(text))
 
 
 def extract_tool_call_blocks(message: AgentMessage) -> list[dict[str, Any]]:

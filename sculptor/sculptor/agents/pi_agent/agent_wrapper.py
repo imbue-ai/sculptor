@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import re
 import time
 from collections.abc import Sequence
@@ -95,6 +96,7 @@ from sculptor.agents.pi_agent.output_processor import ParsedUnknownEvent
 from sculptor.agents.pi_agent.output_processor import RpcResponse
 from sculptor.agents.pi_agent.output_processor import extract_assistant_text
 from sculptor.agents.pi_agent.output_processor import humanize_pi_failure_reason
+from sculptor.agents.pi_agent.output_processor import is_transient_provider_error
 from sculptor.agents.pi_agent.output_processor import parse_rpc_message
 from sculptor.agents.pi_agent.prompt_assembly import build_attachment_instructions
 from sculptor.agents.pi_agent.prompt_assembly import build_image_block
@@ -136,6 +138,7 @@ from sculptor.interfaces.agents.agent import StopAgentUserMessage
 from sculptor.interfaces.agents.agent import UserQuestionAnswerMessage
 from sculptor.interfaces.agents.constants import AGENT_EXIT_CODE_SHUTDOWN_DUE_TO_EXCEPTION
 from sculptor.interfaces.agents.errors import AgentCrashed
+from sculptor.interfaces.agents.errors import AgentTransientError
 from sculptor.interfaces.agents.errors import PiBinaryNotFoundError
 from sculptor.interfaces.agents.errors import PiContextResetError
 from sculptor.interfaces.agents.errors import PiCrashError
@@ -256,6 +259,17 @@ _IDLE_WAIT_SECONDS: float = 1.0
 # How long the start-time model fetch waits for pi's get_available_models /
 # get_state responses before giving up (see _fetch_models_into_state).
 _MODEL_FETCH_TIMEOUT_SECONDS: float = 10.0
+
+# Transient-provider-error retry policy. A turn that ends with a known-transient
+# provider failure (overloaded / rate-limit / 5xx / timeout — see
+# `is_transient_provider_error`) is re-prompted up to this many times with
+# exponential backoff + jitter before the turn surfaces a non-fatal, retryable
+# AgentTransientError instead of crashing the agent. Backoff for retry N is
+# base*2**(N-1) seconds, capped at the max, with equal jitter so concurrent
+# agents that hit the same provider surge do not retry in lockstep.
+_PI_TRANSIENT_MAX_RETRIES: int = 4
+_PI_TRANSIENT_RETRY_BASE_DELAY_SECONDS: float = 1.0
+_PI_TRANSIENT_RETRY_MAX_DELAY_SECONDS: float = 30.0
 
 # Obsolete model ids pi's get_available_models returns that the switcher must not
 # offer — the whole pre-4 `claude-3-*` family (the live Anthropic catalog still
@@ -498,6 +512,23 @@ def _format_subagent_completion(completion: SubagentCompletion) -> str:
     total = len(completion.children)
     verb = "completed" if completion.status == "completed" else completion.status
     return f"Sub-agents {verb}: {done} done, {failed} failed (of {total})."
+
+
+class _PiTransientTurnError(Exception):
+    """Internal signal that the current turn hit a KNOWN-TRANSIENT provider error.
+
+    Raised from the dispatcher's stopReason-"error" handling when the failure is a
+    retryable provider condition (overloaded / rate-limit / 5xx / timeout), and
+    caught by `_consume_turn_with_transient_retry`, which re-prompts pi with
+    backoff. It never escapes the agent: a successful retry completes the turn
+    normally, and an exhausted retry budget is re-surfaced as the non-fatal,
+    retryable `AgentTransientError`. NOT an `AgentClientError`, so
+    `_handle_user_message` does not intercept it before the retry loop runs.
+    """
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
 
 
 class PiAgent(DefaultAgentWrapper):
@@ -1358,12 +1389,10 @@ class PiAgent(DefaultAgentWrapper):
             self._was_interrupted.clear()
             self._interrupt_pending.clear()
             self._cancel_interrupt_escalation()
-            prompt_id = generate_id()
             self._turn_in_flight.set()
             turn_failed = False
-            self._send_rpc(self._build_prompt_payload(prompt_id, message))
             try:
-                self._consume_until_turn_end(prompt_id)
+                self._consume_turn_with_transient_retry(message)
             except BaseException:
                 turn_failed = True
                 raise
@@ -1379,6 +1408,62 @@ class PiAgent(DefaultAgentWrapper):
                 # answer's request resolves instead of pinning the frontend
                 # "thinking" (mirrors Claude).
                 self._finalize_pending_answers(interrupted=turn_failed)
+
+    def _consume_turn_with_transient_retry(self, message: ChatInputUserMessage) -> None:
+        """Drive one user turn, retrying KNOWN-TRANSIENT provider failures with backoff.
+
+        A turn whose assistant run ends in a transient provider error
+        (`_PiTransientTurnError` — overloaded / rate-limit / 5xx / timeout) is
+        re-prompted with exponential backoff + jitter rather than crashing the
+        agent, up to `_PI_TRANSIENT_MAX_RETRIES` times. The re-prompt carries the
+        same content under a fresh prompt id (pi correlates a `prompt` response by
+        id). When the budget is exhausted — or the agent is shutting down — the
+        turn fails with the non-fatal, retryable `AgentTransientError` (surfaced as
+        a RequestFailure the user can re-run) instead of `PiCrashError`. A
+        non-transient error still raises `PiCrashError` from the dispatcher and is
+        not retried here.
+        """
+        payload = self._build_prompt_payload(generate_id(), message)
+        attempt = 0
+        while True:
+            self._send_rpc(payload)
+            try:
+                self._consume_until_turn_end(str(payload["id"]))
+                return
+            except _PiTransientTurnError as transient:
+                if attempt >= _PI_TRANSIENT_MAX_RETRIES or self._shutdown_event.is_set():
+                    raise AgentTransientError(transient.reason, exit_code=None, metadata=None) from transient
+                attempt += 1
+                logger.info(
+                    "PiAgent transient provider error on turn (retry {}/{}); backing off then re-prompting: {}",
+                    attempt,
+                    _PI_TRANSIENT_MAX_RETRIES,
+                    transient.reason,
+                )
+                self._sleep_before_transient_retry(attempt)
+                payload = {**payload, "id": generate_id()}
+
+    def _transient_retry_delay_seconds(self, attempt: int) -> float:
+        """Exponential-backoff-with-equal-jitter delay before transient retry `attempt`.
+
+        Grows as base*2**(attempt-1), capped at the max; equal jitter spreads the
+        delay across [half, full] of that cap so concurrent agents hitting the same
+        provider surge do not retry in lockstep.
+        """
+        capped = min(
+            _PI_TRANSIENT_RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1)),
+            _PI_TRANSIENT_RETRY_MAX_DELAY_SECONDS,
+        )
+        return capped / 2 + random.uniform(0.0, capped / 2)
+
+    def _sleep_before_transient_retry(self, attempt: int) -> None:
+        """Block for the backoff delay, interruptible by shutdown.
+
+        Waits on `_shutdown_event` so a stopping agent does not block on a long
+        backoff: a set shutdown returns immediately, and the retry loop then bails
+        to `AgentTransientError`.
+        """
+        self._shutdown_event.wait(timeout=self._transient_retry_delay_seconds(attempt))
 
     def _update_plan_mode_from_message(self, message: ChatInputUserMessage) -> None:
         """Track plan mode across turns from the chat input's toggle flags.
@@ -1749,6 +1834,21 @@ class PiAgent(DefaultAgentWrapper):
         # toolcall_* / start / done) are deliberately discarded.
         logger.debug("PiAgent ignoring assistantMessageEvent variant: {}", inner_type)
 
+    def _raise_for_error_stop_reason(self, message: AgentMessage, state: _TurnState) -> None:
+        """Raise the right failure for an assistant message that ended with stopReason "error".
+
+        A KNOWN-TRANSIENT provider condition (`is_transient_provider_error` on
+        `error_message`) raises `_PiTransientTurnError` so the turn runner retries
+        it with backoff; any other error raises the terminal `PiCrashError`. A
+        failed turn carries no text and no in-stream error event, so pi's real
+        reason lives only on `error_message`; it is lifted (after any assistant
+        text / partial) into a clean, actionable message.
+        """
+        if is_transient_provider_error(message.error_message):
+            raise _PiTransientTurnError(humanize_pi_failure_reason(message.error_message))
+        reason = extract_assistant_text(message) or message.error_message or state.accumulated_text
+        raise PiCrashError(humanize_pi_failure_reason(reason), exit_code=None, metadata=None)
+
     def _handle_message_end(self, parsed: ParsedMessageEnd, state: _TurnState) -> None:
         """Per-message boundary — finalize this assistant message; not a turn boundary.
 
@@ -1766,12 +1866,13 @@ class PiAgent(DefaultAgentWrapper):
         advertised, so the UI collapses partials into a stable final block.
         The accumulator is then reset for the next message; the tool-call
         registry persists (the lane's result events arrive after this reset).
-        A terminal-error `stopReason` raises `PiCrashError`;
-        `stopReason:"aborted"` does too UNLESS an abort is expected (an
-        interrupt is pending, or shutdown) — then it is the interrupted
-        boundary and the partial content is finalized normally. Non-assistant
-        `message_end`s (notably the role="user" prompt echo pi emits at
-        agent-run start) are dropped.
+        A `stopReason:"error"` carrying a known-transient provider failure is
+        retried (see `_raise_for_error_stop_reason`); any other error raises
+        `PiCrashError`, as does an unexpected `stopReason:"aborted"` UNLESS an
+        abort is expected (an interrupt is pending, or shutdown) — then it is the
+        interrupted boundary and the partial content is finalized normally.
+        Non-assistant `message_end`s (notably the role="user" prompt echo pi emits
+        at agent-run start) are dropped.
         """
         # WHY: pi records every message in the session as a message_end — the
         # user's own prompt (echoed at agent-run start), tool results, and
@@ -1786,10 +1887,12 @@ class PiAgent(DefaultAgentWrapper):
         if parsed.message.model:
             logger.info("PiAgent turn produced by model={}", parsed.message.model)
         stop_reason = parsed.message.stop_reason
-        if stop_reason == "error" or (stop_reason == "aborted" and not self._is_abort_expected()):
-            # A failed turn carries no text and no in-stream error event; pi's
-            # real reason lives only on `error_message`. Lift it (after any
-            # assistant text / partial) into a clean, actionable message.
+        if stop_reason == "error":
+            # Transient provider failures retry (see _consume_turn_with_transient_retry);
+            # any other error is terminal.
+            self._raise_for_error_stop_reason(parsed.message, state)
+        if stop_reason == "aborted" and not self._is_abort_expected():
+            # An unexpected abort (no interrupt / shutdown pending) is a pi failure.
             reason = extract_assistant_text(parsed.message) or parsed.message.error_message or state.accumulated_text
             raise PiCrashError(humanize_pi_failure_reason(reason), exit_code=None, metadata=None)
         content = self._build_interleaved_content(parsed.message, state)
@@ -2271,9 +2374,11 @@ class PiAgent(DefaultAgentWrapper):
         command. If `message_end` never fired for the current
         accumulating message (an edge case — e.g. abort mid-stream), the
         accumulated text is finalized here using the partials' IDs so
-        the UI still settles on a stable block. A terminal `stopReason`
-        on any assistant message in the final transcript raises
-        `PiCrashError` — EXCEPT `stopReason:"aborted"` when an abort is
+        the UI still settles on a stable block. A `stopReason:"error"`
+        on any assistant message in the final transcript is retried when it
+        carries a known-transient provider failure (see
+        `_raise_for_error_stop_reason`) and otherwise raises `PiCrashError`; an
+        unexpected `stopReason:"aborted"` raises too, EXCEPT when an abort is
         expected (interrupt pending, or shutdown), which is the interrupted
         boundary and finalizes the partial text instead.
         `willRetry: true` means pi will start another agent run, typically
@@ -2284,11 +2389,14 @@ class PiAgent(DefaultAgentWrapper):
         for message in parsed.messages:
             if message.role != "assistant" or message.stop_reason not in ("error", "aborted"):
                 continue
-            if message.stop_reason == "aborted" and abort_expected:
-                # Expected interrupted boundary: finalize the partial below, don't raise.
-                continue
-            reason = extract_assistant_text(message) or message.error_message or state.accumulated_text
-            raise PiCrashError(humanize_pi_failure_reason(reason), exit_code=None, metadata=None)
+            if message.stop_reason == "aborted":
+                if abort_expected:
+                    # Expected interrupted boundary: finalize the partial below, don't raise.
+                    continue
+                reason = extract_assistant_text(message) or message.error_message or state.accumulated_text
+                raise PiCrashError(humanize_pi_failure_reason(reason), exit_code=None, metadata=None)
+            # stopReason "error": transient provider failures retry, others crash.
+            self._raise_for_error_stop_reason(message, state)
         if state.accumulated_text:
             self._output_messages.put(
                 ResponseBlockAgentMessage(

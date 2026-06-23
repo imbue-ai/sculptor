@@ -467,6 +467,41 @@ def test_transient_overloaded_message_end_is_retried_until_the_turn_recovers() -
     assert successes[0].interrupted is False
 
 
+def test_persistent_transient_error_surfaces_retryable_failure_not_crash() -> None:
+    """When transient retries are exhausted, the turn fails non-fatally (retryable), not crash.
+
+    Every re-prompt hits the same overloaded_error, so the bounded retry budget is
+    exhausted. The turn must surface a RequestFailureAgentMessage (the retryable
+    AgentTransientError path the frontend lets the user re-run) rather than tearing
+    down the agent with PiCrashError.
+    """
+    agent = _make_agent()
+    overloaded = json.dumps({"type": "overloaded_error", "message": "Overloaded"})
+    # Each attempt consumes agent_start + an errored message_end. With the retry
+    # budget patched to 2, the runner makes 3 attempts (initial + 2 retries).
+    error_round = [
+        _event({"type": "agent_start"}),
+        _event({"type": "message_end", "message": _assistant_error_msg(overloaded)}),
+    ]
+    agent._process = _make_process(error_round * 3)
+
+    with (
+        patch("sculptor.agents.pi_agent.agent_wrapper._PI_TRANSIENT_MAX_RETRIES", 2),
+        patch.object(agent, "_transient_retry_delay_seconds", return_value=0.0),
+    ):
+        # Must NOT raise: the exhausted-retry path reports a failed request and the agent keeps running.
+        agent._run_prompt_turn(ChatInputUserMessage(text="do the thing"))
+
+    emitted = _drain(agent._output_messages)
+    failures = [m for m in emitted if isinstance(m, RequestFailureAgentMessage)]
+    assert len(failures) == 1
+    # The failure carries pi's transient reason so the frontend can surface it.
+    assert "overloaded" in str(failures[0].error.args[0]).lower()
+    assert not any(isinstance(m, RequestSuccessAgentMessage) for m in emitted)
+    # The agent did not crash: no fatal exception was captured.
+    assert agent._exception is None
+
+
 def test_agent_end_with_aborted_message_raises_pi_crash_error() -> None:
     agent = _make_agent()
     agent._process = _make_process(
