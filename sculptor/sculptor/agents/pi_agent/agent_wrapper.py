@@ -61,6 +61,7 @@ from pydantic import ValidationError
 
 from sculptor.agents.default.agent_wrapper import DefaultAgentWrapper
 from sculptor.agents.default.utils import get_state_file_contents
+from sculptor.agents.default.utils import get_turn_request_id
 from sculptor.agents.pi_agent.backchannel import PLAN_APPROVAL_DIALOG_TITLE
 from sculptor.agents.pi_agent.backchannel import build_ask_user_question_data
 from sculptor.agents.pi_agent.backchannel import extension_ui_response_body
@@ -555,6 +556,13 @@ class PiAgent(DefaultAgentWrapper):
     # escalation so an interrupt that races in between turns never SIGTERMs an
     # idle (but healthy) pi.
     _turn_in_flight: Event = PrivateAttr(default_factory=Event)
+    # The request id of the chat turn currently being processed (its
+    # RequestStarted was emitted; the matching terminal RequestSuccess may not
+    # have been). The interrupt path keys its reconciling RequestSuccess on this
+    # when no turn is in flight, so an idle-but-RUNNING agent — a turn orphaned
+    # without a terminal completion (e.g. a prior process death) — still settles
+    # on Stop. Mirrors ClaudeProcessManager._in_flight_request_id.
+    _in_flight_request_id: AgentMessageID | None = PrivateAttr(default=None)
     # Set when an interrupt has been requested and we are waiting for pi's
     # abort-induced boundary. The dispatcher consults it so `stopReason:"aborted"`
     # finalizes the partial response instead of raising `PiCrashError`.
@@ -1279,6 +1287,10 @@ class PiAgent(DefaultAgentWrapper):
         turn keeps draining inside `_handle_user_message` until pi's `agent_end`;
         if that never arrives, the escalation ladder SIGTERMs pi so the
         process-exit fallback in `_consume_until_turn_end` still resolves the turn.
+
+        When no turn is in flight the abort is a no-op (pi is idle) and no
+        turn-end will arrive, so Stop instead reconciles any orphaned in-flight
+        request directly — the idle-but-RUNNING escape hatch.
         """
         self._was_interrupted.set()
         self._interrupt_pending.set()
@@ -1291,6 +1303,40 @@ class PiAgent(DefaultAgentWrapper):
             self.concurrency_group.start_new_thread(
                 target=self._await_interrupt_escalation,
                 args=(cancel,),
+            )
+        else:
+            # The abort above is a no-op with pi idle, and no turn-end will
+            # arrive to resolve the request, so reconcile any orphaned turn here.
+            self._resolve_in_flight_request_as_interrupted()
+            # The reconciliation emits its own terminal RequestSuccess directly,
+            # so no in-flight turn will consume these flags. A chat turn resets
+            # interrupt state at its start, but the between-turns control paths
+            # read it via `_handle_user_message` without resetting it — so clear
+            # it here, or a lingering flag mislabels the next such request as
+            # interrupted.
+            self._was_interrupted.clear()
+            self._interrupt_pending.clear()
+
+    def _resolve_in_flight_request_as_interrupted(self) -> None:
+        """Emit a terminal RequestSuccess(interrupted=True) for the in-flight
+        request, if any, so the frontend's in-progress chat message resolves
+        instead of staying stuck "thinking".
+
+        Used by the interrupt path when no turn is draining pi's stdout: the
+        turn's own terminal message can no longer be relied upon (it was never
+        emitted, or its process is gone). No-ops when no request is being
+        tracked (`_in_flight_request_id is None`). Mirrors
+        ClaudeProcessManager._resolve_in_flight_request_as_interrupted.
+        """
+        in_flight_request_id = self._in_flight_request_id
+        if in_flight_request_id is not None:
+            self._output_messages.put(
+                RequestSuccessAgentMessage(
+                    message_id=AgentMessageID(),
+                    request_id=in_flight_request_id,
+                    error=None,
+                    interrupted=True,
+                )
             )
 
     def _await_interrupt_escalation(self, cancel: Event) -> None:
@@ -1382,6 +1428,11 @@ class PiAgent(DefaultAgentWrapper):
         self._awaiting_reaction_deadline = time.monotonic() + _REACTION_WINDOW_SECONDS
 
     def _run_prompt_turn(self, message: ChatInputUserMessage) -> None:
+        # Track this turn's request id so an interrupt arriving with no turn in
+        # flight can reconcile it (see _resolve_in_flight_request_as_interrupted).
+        # Never cleared on turn end: a turn orphaned without a terminal completion
+        # leaves this set so Stop can still settle it.
+        self._in_flight_request_id = get_turn_request_id(message)
         self._update_plan_mode_from_message(message)
         with self._handle_user_message(message):
             # A fresh turn starts un-interrupted: clear interrupt state left by an
