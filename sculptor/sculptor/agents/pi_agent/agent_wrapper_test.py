@@ -3238,6 +3238,10 @@ def _state_response_with_model(model: dict[str, Any] | None) -> str:
     )
 
 
+def _set_model_response(model: dict[str, Any]) -> str:
+    return _event({"type": "response", "command": "set_model", "success": True, "id": "cmd-setmodel", "data": model})
+
+
 def test_fetch_models_into_state_emits_curated_catalog_and_current_model() -> None:
     """At start the agent fetches + curates pi's catalog and emits it with the current model."""
     agent = _make_agent()
@@ -3255,6 +3259,62 @@ def test_fetch_models_into_state_emits_curated_catalog_and_current_model() -> No
     assert [option.model_id for option in message.available_models] == _CURATED_PI_MODEL_IDS
     assert message.current_model is not None
     assert message.current_model.model_id == "claude-opus-4-8"
+
+
+def test_fetch_models_into_state_switches_off_deauthenticated_current_model() -> None:
+    """A refresh after a provider disconnect switches the agent off the now-unauthorized
+    current model onto an authenticated one, so the user is not stranded on a model
+    they can no longer run."""
+    agent = _make_agent()
+    raw = [
+        {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic"},
+        {"id": "openai/gpt-4o", "name": "GPT-4o", "provider": "openrouter"},
+    ]
+    current_openrouter = {"id": "openai/gpt-4o", "name": "GPT-4o", "provider": "openrouter"}
+    anthropic_replacement = {"id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic"}
+    agent._process = _make_process(
+        [
+            _models_response(raw),
+            _state_response_with_model(current_openrouter),
+            _set_model_response(anthropic_replacement),
+        ]
+    )
+    with (
+        patch(
+            "sculptor.agents.pi_agent.agent_wrapper.generate_id",
+            side_effect=["cmd-models", "cmd-state", "cmd-setmodel"],
+        ),
+        patch("sculptor.agents.pi_agent.agent_wrapper.compute_authenticated_provider_ids", return_value={"anthropic"}),
+    ):
+        agent._fetch_models_into_state()
+
+    emitted = [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+    assert len(emitted) == 1
+    message = emitted[0]
+    assert message.current_model is not None
+    assert message.current_model.provider == "anthropic"
+    assert message.current_model.model_id == "claude-opus-4-8"
+    # The unusable openrouter model is no longer offered in the switcher.
+    assert "openai/gpt-4o" not in {option.model_id for option in message.available_models}
+
+
+def test_fetch_models_into_state_keeps_unauthenticated_current_when_no_alternative() -> None:
+    """When the disconnected provider was the only one, the current model is retained
+    (nothing to switch to) rather than blanking the switcher — and no set_model is sent."""
+    agent = _make_agent()
+    raw = [{"id": "openai/gpt-4o", "name": "GPT-4o", "provider": "openrouter"}]
+    current_openrouter = {"id": "openai/gpt-4o", "name": "GPT-4o", "provider": "openrouter"}
+    agent._process = _make_process([_models_response(raw), _state_response_with_model(current_openrouter)])
+    with (
+        patch("sculptor.agents.pi_agent.agent_wrapper.generate_id", side_effect=["cmd-models", "cmd-state"]),
+        patch("sculptor.agents.pi_agent.agent_wrapper.compute_authenticated_provider_ids", return_value=set()),
+    ):
+        agent._fetch_models_into_state()
+
+    emitted = [m for m in _drain(agent._output_messages) if isinstance(m, ModelsAvailableAgentMessage)]
+    assert len(emitted) == 1
+    assert emitted[0].current_model is not None
+    assert emitted[0].current_model.model_id == "openai/gpt-4o"
 
 
 def test_fetch_models_into_state_emits_nothing_when_pi_lists_no_models() -> None:

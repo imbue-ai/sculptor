@@ -1133,6 +1133,60 @@ class PiAgent(DefaultAgentWrapper):
             return []
         return [m for m in models if isinstance(m, dict)]
 
+    def _request_set_model_blocking(
+        self, provider: str, model_id: str, timeout: float = _MODEL_FETCH_TIMEOUT_SECONDS
+    ) -> ModelOption | None:
+        """Send `set_model` and return pi's new current model, or None on failure.
+
+        The non-raising counterpart to `_handle_set_model`'s RPC core, used by the
+        internal auto-reselect (`_reselect_unauthenticated_current_model`). Shares
+        the sole-reader constraint of `_consume_until_command_response`, so it is
+        only safe between turns.
+        """
+        if self._process is None:
+            return None
+        command_id = generate_id()
+        self._send_rpc({"type": "set_model", "id": command_id, "provider": provider, "modelId": model_id})
+        response = self._consume_until_command_response("set_model", command_id, timeout)
+        if response is None or not response.success:
+            return None
+        new_model = _model_option_from_pi(response.data) if isinstance(response.data, dict) else None
+        return new_model or ModelOption(provider=provider, model_id=model_id, display_name=model_id)
+
+    def _reselect_unauthenticated_current_model(
+        self, current_model: ModelOption, curated: list[ModelOption], authenticated: set[str]
+    ) -> ModelOption:
+        """Switch off a current model whose provider is no longer authenticated.
+
+        pi's catalog gates on credential presence, so disconnecting a provider can
+        leave the agent pointed at a model it can no longer run — and because the
+        current model is retained in `curated`, the switcher otherwise stays stuck on
+        it. If an authenticated model is available, switch to the first (newest-first)
+        one so the user is not stranded. Best-effort: a failed switch leaves the
+        current model unchanged. Only call when `current_model.provider` is already
+        known to be unauthenticated, and only after a successful catalog fetch (so pi
+        is proven responsive and the `set_model` write will not block).
+        """
+        replacement = next((option for option in curated if option.provider in authenticated), None)
+        if replacement is None:
+            logger.info(
+                "PiAgent current model {} is no longer authenticated and no authenticated model is available to switch to",
+                current_model.model_id,
+            )
+            return current_model
+        new_model = self._request_set_model_blocking(replacement.provider, replacement.model_id)
+        if new_model is None:
+            logger.info(
+                "PiAgent could not switch off deauthenticated model {}; leaving it selected", current_model.model_id
+            )
+            return current_model
+        logger.info(
+            "PiAgent switched off deauthenticated model {} to authenticated {}",
+            current_model.model_id,
+            new_model.model_id,
+        )
+        return new_model
+
     def _fetch_models_into_state(self) -> None:
         """Fetch pi's model catalog + current model and surface them onto task state.
 
@@ -1152,7 +1206,15 @@ class PiAgent(DefaultAgentWrapper):
             option = _model_option_from_pi(raw)
             if option is not None:
                 options.append(option)
-        curated = _curate_models(options, current_model, compute_authenticated_provider_ids())
+        authenticated = compute_authenticated_provider_ids()
+        curated = _curate_models(options, current_model, authenticated)
+        # Don't strand the agent on a model whose provider was just deauthorized
+        # (e.g. the user disconnected it): switch to an authenticated model and
+        # re-curate so the now-unusable model drops out of the switcher. Safe here
+        # because the fetch above already proved pi responsive.
+        if current_model is not None and current_model.provider not in authenticated:
+            current_model = self._reselect_unauthenticated_current_model(current_model, curated, authenticated)
+            curated = _curate_models(options, current_model, authenticated)
         if not curated and current_model is None:
             logger.info("PiAgent get_available_models returned no usable models; switcher will fall back to defaults")
             return
