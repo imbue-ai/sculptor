@@ -194,6 +194,8 @@ All other modes open the new workspace dialog. When opened from a repo section�
 #### New workspace dialog
 The new workspace page is removed and replaced by the new workspace form and dialog.
 
+The dialog collects a workspace title, a prompt, the repo, the source branch, a new branch name, the agent type, and the initialization strategy (worktree by default; clone and in-place opt-in). Creating the workspace also creates its first agent of the chosen type, seeded with the prompt — today’s creation form has no prompt, so the dialog adds one. A “keep open” option keeps the dialog open after creation for rapid multi-create: the form resets, but the repo and agent type are retained.
+
 The styling comes from the `scu-1494` prototype’s `sculptor/frontend/src/components/NewWorkspaceModal` (see “Relationship to the prototype”); the rest of that branch can be ignored.
 
 #### Empty workspace state

@@ -4,10 +4,12 @@ Companion to `../component_hierarchy.md`. The intended final component names and
 locations for the rewrite, plus the exact narrow subscription each memoized
 component holds. Names use `goals.md` vocabulary (see `naming_map.md`).
 
-> The rewrite recreates `sculptor/frontend/src` (the future `plan.md` moves the
-> current tree to `sculptor/frontend_old`). Paths below are the intended *final*
-> locations under `sculptor/frontend/src`. The prototype counterpart (for the
-> shape to copy) is noted where useful; do not carry its names forward.
+> The rewrite builds the new shell **in place** in `sculptor/frontend/src`, alongside
+> the reused content/creation components, and deletes the old shell once unreferenced
+> (Decision A1 — strangler; **no `frontend_old` move**). Paths below are the intended
+> *final* locations. A prototype counterpart (shape to copy) or an existing
+> this-branch component (reused as-is) is noted where useful; do not carry prototype
+> names forward.
 
 ## Intended file layout
 
@@ -37,6 +39,13 @@ components/
     registry/
       panelRegistry.ts              static defs + registry atom
       dynamicPanels.tsx             agent/terminal derived defs (id helpers, component cache)
+  newWorkspace/
+    NewWorkspaceModal.tsx           ← prototype PaletteDialog styling; shell host, opened via newWorkspaceModalAtom
+    NewWorkspaceForm.tsx            rewrite form: title + prompt textarea + context pills + footer
+    BranchNameField.tsx             ← prototype styling; pairs with this branch's branch-name-preview hook
+    AgentTypeSelect.tsx             extracted from today's AddWorkspacePage inline agent picker
+    ModeSelect.tsx                  extracted from today's AddWorkspacePage inline mode picker
+    newWorkspaceAtoms.ts            modal open/context · keep-open · MRU creation settings (state_atoms.md)
 pages/
   workspace/
     WorkspacePage.tsx               useIsMobile branch → shell
@@ -52,7 +61,16 @@ pages/
 common/
   hooks/useLayoutMode.ts            useIsMobile / useLayoutMode (from bryden/mobile-frontend)
   state/hooks/usePerWorkspacePanelLayout.ts   keeps active scope in sync with the route
+  state/hooks/useCreateWorkspace.ts           create-workspace → create-first-agent; no draft-tab coupling
 ```
+
+**Reused as-is from the current branch** (not recreated; A1 strangler builds in
+place): `components/RepoSelector.tsx`, `components/BranchSelector.tsx` (+
+`BranchSelectorCore`), today's branch-name-preview hook, the repo-info hook, and the
+projects / agent-type atoms. The new `isWorkspaceListEmptyAtom` is a derived atom added
+to the existing workspace atoms (it does not exist today). The new-workspace modal
+copies only the `scu-1494` *styling/shape* — not the prototype's divergent form
+component.
 
 ## Tree with subscriptions
 

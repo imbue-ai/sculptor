@@ -28,7 +28,7 @@ global shortcuts off) to keep it simple; the first prompt defaults to
 
 **What to copy** (`design_extraction.md` → "Inline first-run"):
 `pages/home/RecentWorkspaces.(tsx|module.scss)` `.inlineForm` (card-wrapped form on
-empty home) + `components/NewWorkspaceModal/homePromptPrefill.ts` (the
+empty home) + `components/newWorkspace/homePromptPrefill.ts` (the
 `/sculptor:help` prefill). The inline form reuses the `NewWorkspaceForm` from Task
 5.1.
 
@@ -44,7 +44,7 @@ area), and **Task 4.5** (the disabled-shortcuts flag the shortcuts hook respects
 
 - `sculptor/frontend/src/pages/workspace/EmptyFirstRunPage.tsx` (+ styles) — new: the
   no-workspaces special page rendering `NewWorkspaceForm` inline (card-wrapped).
-- `sculptor/frontend/src/components/NewWorkspaceModal/homePromptPrefill.ts` — copy the
+- `sculptor/frontend/src/components/newWorkspace/homePromptPrefill.ts` — copy the
   `/sculptor:help` prefill if not present.
 - `sculptor/frontend/src/components/nav/WorkspaceSidebar.tsx` — modify: render the
   repo-area states ("Add a repo" / "No workspaces yet") when empty (FIRST-02), and the
@@ -56,8 +56,10 @@ area), and **Task 4.5** (the disabled-shortcuts flag the shortcuts hook respects
 
 ## Implementation details
 
-1. Detect the no-workspaces state (reuse the existing workspace-list data atoms) and
-   render `EmptyFirstRunPage` with the sidebar open.
+1. Detect the no-workspaces state via `isWorkspaceListEmptyAtom` (`state_atoms.md` →
+   "Workspace creation" — a new derived atom over the live workspace list; today the
+   empty check is computed locally in `RecentWorkspaces`) and render `EmptyFirstRunPage`
+   with the sidebar open.
 2. The page renders `NewWorkspaceForm` inline (card-wrapped, from Task 5.1) with the
    prompt defaulting to `/sculptor:help` (FIRST-04).
 3. Sidebar repo area (FIRST-02): "Add a repo" button when no repos; "No workspaces

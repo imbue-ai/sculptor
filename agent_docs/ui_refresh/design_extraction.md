@@ -47,6 +47,13 @@ Paths below are relative to `sculptor/frontend/src` on the prototype branches (`
 - `pages/workspace/panels/historyPanel/HistoryTabContent.(tsx|module.scss)`, `CommitEntry.tsx` — commit graph (dots: gray / green = HEAD / amber-ring = uncommitted) + rows + popover; `ChangesTabContent.module.scss` commit footer.
 
 ## New workspace modal & empty first-run (scu-1494)
+> ⚠️ **Styling/shape only — do not copy the prototype's `NewWorkspaceForm` code.** It is
+> coupled to APIs that diverged from this branch (`isWorkspaceListEmptyAtom` /
+> `AgentSettingsControls` don't exist here; `RepoSelector`/`BranchSelector` prop shapes
+> differ). The rewrite form is **rebuilt** wrapping *this branch's* existing field
+> components + a factored create hook (`component_hierarchy.md` → "Workspace creation
+> modal"); copy the `PaletteDialog`/`BranchNameField` styling + the form's visual layout
+> only.
 - `components/NewWorkspaceModal/NewWorkspaceModal.(tsx|module.scss)` + `components/PaletteDialog/PaletteDialog.(tsx|module.scss)` — opaque Raycast-style dialog (720px, centered at 14%, `--shadow-xl`).
 - `components/NewWorkspaceModal/NewWorkspaceForm.tsx` — borderless title (heading scale) + auto-growing prompt textarea, breadcrumb context row of pills (repo / agent type / mode / branch), footer (“keep open” switch + Cmd+Enter hint + Create).
 - `components/NewWorkspaceModal/BranchNameField.(tsx|module.scss)` — monospace branch pill with sanitization, shuffle button, stable error slot.

@@ -144,3 +144,35 @@ const panelShortcutsAtom: Atom<Record<PanelId, string>>;               // from t
 
 See `panel_registry.md` for `PanelDefinition` and how dynamic agent/terminal
 panels are derived and merged.
+
+## Workspace creation atoms
+
+The new-workspace modal (`../component_hierarchy.md` → "Workspace creation modal")
+replaces the `/ws/new` page and its per-draft persisted state. The form fields are
+**local component state** (the modal is ephemeral); only these app-level atoms are
+needed:
+
+```ts
+// open/close + optional pre-selected repo (from a repo group's "+"); transient.
+const newWorkspaceModalAtom: PrimitiveAtom<{ open: boolean; presetProjectId?: string }>;
+
+// "keep open" switch — keeps the dialog open after Create for rapid multi-create.
+const keepNewWorkspaceModalOpenAtom: PrimitiveAtom<boolean>;
+
+// MRU of the last successful create — seeds the modal's defaults and powers the
+// sidebar "+" direct-create (WSC-01). Persisted; extends today's MRU project +
+// last-used agent type into the full set the direct-create reuses.
+const lastWorkspaceCreationSettingsAtom:
+  WritableAtom<{ projectId; sourceBranch?; agentType; initStrategy }, [Updater], void>;
+
+// Derived over the live workspace list; gates the empty first-run page (FIRST-01)
+// and the sidebar empty-workspace special case. NEW — today the empty check is
+// computed locally inside RecentWorkspaces, not via an atom.
+const isWorkspaceListEmptyAtom: Atom<boolean>;
+```
+
+Creation itself is a **`useCreateWorkspace` hook** (not an atom): the two-step
+create-workspace → create-first-agent flow factored out of today's add-workspace page
+submit handler, decoupled from the draft pseudo-tab atoms (which are deleted with the
+page). The persisted-draft atoms and the new-workspace-tab plumbing are **not** carried
+forward.
