@@ -367,11 +367,14 @@ def test_plain_terminal_mru_shows_disabled_reason(sculptor_instance_: SculptorIn
     page = sculptor_instance_.page
     start_task_and_wait_for_ready(page, "say hello")
 
-    # Make the workspace's most-recent agent a plain terminal (never driveable).
+    # Make the workspace's most-recent agent a non-driveable terminal agent
+    # (a registered agent without the automated-prompt opt-in; the bare terminal
+    # type was removed per Decision B2).
+    _write_registration(sculptor_instance_, "plain-term", "Plain Term", accepts_automated_prompts=False)
     agent_tabs = PlaywrightAgentTabBarElement(page)
     agent_tabs.open_agent_type_menu()
-    agent_tabs.get_agent_type_menu_item_terminal().click()
-    terminal_tab = agent_tabs.get_agent_tab_by_name("Terminal 1").first
+    agent_tabs.get_agent_type_menu_item_registered("plain-term").click()
+    terminal_tab = agent_tabs.get_agent_tab_by_name("Plain Term 1").first
     expect(terminal_tab).to_be_visible()
 
     # Let the polling create per-workspace state so the proactive reason is

@@ -33,10 +33,16 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
+# A registered terminal agent whose launch command announces readiness then
+# falls through to an idle login shell. The bare "terminal" agent type was
+# removed (Decision B2); a registered agent — the model the bundled Claude CLI
+# agent uses — exercises the same idle-terminal rename path.
+_IDLE_TERM_LAUNCH = "echo idle-term-ready"
+
 
 def _create_terminal_agent(agent_tab_bar: PlaywrightAgentTabBarElement) -> None:
     agent_tab_bar.open_agent_type_menu()
-    agent_tab_bar.get_agent_type_menu_item_terminal().click()
+    agent_tab_bar.get_agent_type_menu_item_registered("idle-term").click()
 
 
 def _drive_terminal_to_idle(page: Page) -> None:
@@ -74,13 +80,19 @@ def test_terminal_agent_external_rename_updates_tab_live(
     agent_tabs = agent_tab_bar.get_agent_tabs()
     expect(agent_tabs).to_have_count(1)
 
-    # Step 1: Add a terminal agent. It is created second, so it is the tab at
-    # index 1 and is labeled "Terminal 1". Drive it to idle so its startup
-    # task message can't mask the rename broadcast.
+    registrations_dir = sculptor_instance_.sculptor_folder / "terminal_agents"
+    registrations_dir.mkdir(parents=True, exist_ok=True)
+    (registrations_dir / "idle-term.toml").write_text(
+        f'display_name = "Idle Term"\nlaunch_command = "{_IDLE_TERM_LAUNCH}"\n'
+    )
+
+    # Step 1: Add a registered terminal agent. It is created second, so it is the
+    # tab at index 1 and is labeled "Idle Term 1". Drive it to idle so its
+    # startup task message can't mask the rename broadcast.
     _create_terminal_agent(agent_tab_bar)
     expect(agent_tabs).to_have_count(2)
     terminal_tab = agent_tabs.nth(1)
-    expect(terminal_tab).to_have_text("Terminal 1")
+    expect(terminal_tab).to_have_text("Idle Term 1")
     _drive_terminal_to_idle(page)
 
     # Step 2: Resolve the workspace and terminal-agent IDs via the backend API,
@@ -89,7 +101,7 @@ def test_terminal_agent_external_rename_updates_tab_live(
     workspaces = page.request.get(f"{base_url}/api/v1/workspaces/recent").json()["workspaces"]
     workspace_id = only(ws["objectId"] for ws in workspaces if not ws.get("isDeleted"))
     agents = page.request.get(f"{base_url}/api/v1/workspaces/{workspace_id}/agents").json()
-    terminal_agent_id = only(agent["id"] for agent in agents if agent["title"] == "Terminal 1")
+    terminal_agent_id = only(agent["id"] for agent in agents if agent["title"] == "Idle Term 1")
 
     # Step 3: Rename the terminal agent with the same PATCH `sculpt agent
     # rename` issues. We deliberately do NOT switch tabs afterward: the only way

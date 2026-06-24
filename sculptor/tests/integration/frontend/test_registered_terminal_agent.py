@@ -14,7 +14,6 @@ from playwright.sync_api import expect
 from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
 from sculptor.testing.elements.terminal import get_agent_terminal_panel
 from sculptor.testing.elements.terminal import get_agent_terminal_textarea
-from sculptor.testing.elements.terminal import get_xterm_buffer_text
 from sculptor.testing.elements.terminal import run_command_in_agent_terminal
 from sculptor.testing.elements.terminal import wait_for_xterm_substring
 from sculptor.testing.playwright_utils import navigate_to_workspace
@@ -132,39 +131,3 @@ def test_registered_terminal_agent_resumes_after_restart(
 
         # The relaunch used the rendered resume command with the quoted id.
         wait_for_xterm_substring(page, "RESUMED-WITH fake-session-42")
-
-
-@user_story("to get a fresh shell in a plain terminal agent after a restart")
-def test_plain_terminal_agent_gets_fresh_shell_after_restart(
-    sculptor_instance_factory_: SculptorInstanceFactory,
-) -> None:
-    """Plain terminals relaunch as a bare fresh shell — no command replayed,
-    pre-restart scrollback gone (expected per spec)."""
-    with sculptor_instance_factory_.spawn_instance() as instance:
-        page = instance.page
-        start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Fresh Shell WS")
-        agent_tab_bar = PlaywrightAgentTabBarElement(page)
-        agent_tab_bar.open_agent_type_menu()
-        agent_tab_bar.get_agent_type_menu_item_terminal().click()
-        expect(get_agent_terminal_panel(page)).to_be_visible()
-        expect(get_agent_terminal_textarea(page)).to_be_attached()
-        page.wait_for_timeout(3_000)
-        run_command_in_agent_terminal(page, "echo marker-before-restart")
-        wait_for_xterm_substring(page, "marker-before-restart")
-
-    with sculptor_instance_factory_.spawn_instance() as instance:
-        page = instance.page
-        navigate_to_workspace(page)
-
-        agent_tab_bar = PlaywrightAgentTabBarElement(page)
-        terminal_tab = agent_tab_bar.get_agent_tab_by_name("Terminal 1").first
-        expect(terminal_tab).to_be_visible()
-        terminal_tab.click()
-        expect(get_agent_terminal_panel(page)).to_be_visible()
-        expect(get_agent_terminal_textarea(page)).to_be_attached()
-        page.wait_for_timeout(3_000)
-
-        # Fresh, usable shell; pre-restart scrollback is gone.
-        run_command_in_agent_terminal(page, "echo fresh-shell-marker")
-        wait_for_xterm_substring(page, "fresh-shell-marker")
-        assert "marker-before-restart" not in get_xterm_buffer_text(page)

@@ -102,14 +102,6 @@ def test_prompt_features_route_to_capable_terminal_agent(sculptor_instance_: Scu
         expect(no_opt_in_tab).to_have_attribute("data-dot-status", _NEUTRAL_DOT)
         expect(commit_button).to_be_disabled()
 
-        # A plain terminal: disabled (phase-1 regression check).
-        agent_tab_bar.open_agent_type_menu()
-        agent_tab_bar.get_agent_type_menu_item_terminal().click()
-        terminal_tab = agent_tab_bar.get_agent_tab_by_name("Terminal 1").first
-        expect(terminal_tab).to_be_visible()
-        expect(get_agent_terminal_panel(page)).to_be_visible()
-        expect(commit_button).to_be_disabled()
-
         # Back on the chat agent the button sends a chat message as before.
         chat_tab = agent_tab_bar.get_agent_tab_by_name("Claude 1").first
         expect(chat_tab).to_be_visible()
