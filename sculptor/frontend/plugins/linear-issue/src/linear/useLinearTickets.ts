@@ -37,16 +37,19 @@ export type LinearTickets = {
 export const useLinearTickets = (inputs: {
   apiKey: string;
   branch: string | null;
+  pullRequestUrl: string | null;
   pinnedIds: ReadonlyArray<string>;
 }): LinearTickets => {
-  const { apiKey, branch, pinnedIds } = inputs;
+  const { apiKey, branch, pullRequestUrl, pinnedIds } = inputs;
 
-  // Primary: the branch's issue (authoritative branch link, regex fallback).
+  // Primary: the branch's issue (authoritative branch link, then regex fallback,
+  // then the workspace's PR — see fetchPrimaryIssue). The PR URL is part of the
+  // key so the primary re-resolves once the workspace opens (or closes) a PR.
   const primaryQuery = useQuery({
-    queryKey: [PLUGIN_ID, "primary", branch],
+    queryKey: [PLUGIN_ID, "primary", branch, pullRequestUrl],
     queryFn: ({ signal }) => {
       if (!branch) throw new Error("No workspace branch");
-      return fetchPrimaryIssue({ apiKey, branch, ticketFallback: parseTicket(branch), signal });
+      return fetchPrimaryIssue({ apiKey, branch, ticketFallback: parseTicket(branch), pullRequestUrl, signal });
     },
     enabled: Boolean(apiKey && branch),
     staleTime: STALE_TIME,
