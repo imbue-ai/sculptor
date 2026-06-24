@@ -1,0 +1,72 @@
+.row {
+  // The section tab strip above is intentionally borderless, so this top border
+  // delineates the panel content (list header + viewer header) from the strip.
+  border-top: 1px solid var(--gray-a5);
+  display: flex;
+  flex-direction: row;
+  flex-grow: 1;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.list {
+  // Fixed pixel width (set inline); the viewer flexes to fill the rest. A right
+  // border delineates the list from the viewer (the ResizeHandle overlays it).
+  border-right: 1px solid var(--gray-a5);
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.detail {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.emptyHeader {
+  border-bottom: 1px solid var(--gray-a5);
+  box-sizing: border-box;
+  flex-shrink: 0;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- matches the viewer header height
+  height: 41px;
+  // Match the viewer header's `px="3"` so the toggle's left padding lines up
+  // between the file-open and empty states.
+  padding-inline: var(--space-3);
+}
+
+.emptyHeaderLabel {
+  // Muted placeholder sitting where the breadcrumb would be, so the header does
+  // not read as empty with nothing selected.
+  color: var(--gray-9);
+  user-select: none;
+}
+
+.emptyHeaderSpacer {
+  flex: 1;
+}
+
+.emptyDetail {
+  // Muted icon (inherits currentColor); the label sets its own gray.
+  color: var(--gray-8);
+  flex: 1;
+  text-align: center;
+  width: 100%;
+}
+
+// The sidebar toggle's two states: solid (high-contrast) while the sidebar is
+// visible, muted while collapsed. Set on the icon so it overrides the button's
+// inherited color.
+.toggleOn {
+  color: var(--gray-12);
+}
+
+.toggleOff {
+  color: var(--gray-9);
+}

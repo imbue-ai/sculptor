@@ -195,6 +195,10 @@ class ElementIDs(StrEnum):
     FILE_BROWSER_SEARCH_INPUT = "FILE_BROWSER_SEARCH_INPUT"
     FILE_BROWSER_SEARCH_CLOSE = "FILE_BROWSER_SEARCH_CLOSE"
     FILE_BROWSER_CHANGES_TREE = "FILE_BROWSER_CHANGES_TREE"
+    # ExplorerLayout sidebar-visibility toggle (rendered in the viewer header):
+    # "hide" while the sidebar is shown, "show" while it is collapsed (FCC-05).
+    FILE_BROWSER_HIDE_TREE_BTN = "FILE_BROWSER_HIDE_TREE_BTN"
+    DIFF_HEADER_SHOW_TREE_BTN = "DIFF_HEADER_SHOW_TREE_BTN"
     # Diff Panel
     DIFF_PANEL = "DIFF_PANEL"
     DIFF_TAB = "DIFF_TAB"
@@ -203,7 +207,13 @@ class ElementIDs(StrEnum):
     # tab without a CSS-attribute locator on the tab id prefix.
     FILE_VIEW_TAB_MARKER = "FILE_VIEW_TAB_MARKER"
     DIFF_FILE_HEADER = "DIFF_FILE_HEADER"
+    # The single triple-dot options menu in the viewer header (FCC-07); the
+    # relocated view toggles + tree options re-anchor under this trigger.
     DIFF_FILE_HEADER_MENU_TRIGGER = "DIFF_FILE_HEADER_MENU_TRIGGER"
+    # The list flat/tree toggle item inside the triple-dot menu (FCC-07).
+    DIFF_MENU_TREE_VIEW_MODE = "DIFF_MENU_TREE_VIEW_MODE"
+    # Static, no-shimmer diff placeholder.
+    DIFF_SKELETON = "DIFF_SKELETON"
     COMBINED_DIFF_FILE_SECTION = "COMBINED_DIFF_FILE_SECTION"
     DIFF_VIEW_UNIFIED = "DIFF_VIEW_UNIFIED"
     DIFF_VIEW_SPLIT = "DIFF_VIEW_SPLIT"
