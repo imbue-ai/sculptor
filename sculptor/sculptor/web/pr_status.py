@@ -1,5 +1,6 @@
 import json
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -223,6 +224,201 @@ def _fetch_prs_with_details(working_dir: Path, source_branch: str) -> list[dict]
     if repository is None:
         return []
     return (repository.get("pullRequests") or {}).get("nodes") or []
+
+
+# Page size for the token-wide search query. One page covers every open PR for
+# a user with up to this many open PRs (the overwhelmingly common case); the
+# fetch only paginates beyond it (and logs when it does).
+_SEARCH_PAGE_SIZE = 100
+
+# The GitHub search filter. ``author:@me`` scopes the search to the token
+# owner's own PRs (every PR a Sculptor workspace opens is authored by the token
+# owner), so a single token-global query spans every repo with no repo
+# enumeration. ``sort:updated`` is required, not cosmetic: ``_first_matching_target``
+# returns the *first* PR matching a base branch and relies on most-recently-updated
+# ordering, but ``search`` otherwise defaults to relevance order.
+_SEARCH_QUERY_STRING = "is:pr state:open author:@me archived:false sort:updated"
+
+# Token-wide search query that replaces one ``_GRAPHQL_PR_QUERY`` per workspace
+# with one query per (host, token) per round. ``author:@me`` returns all of the
+# user's open PRs across every repo at once, each node carrying the same
+# check/review/comment/``mergeable`` detail the per-workspace query does, plus
+# ``repository { nameWithOwner }`` and ``headRefName`` so the poller can index a
+# node back to the workspace(s) it belongs to. The sibling ``rateLimit`` block
+# rides in the same response so the governor can read the token's budget with no
+# extra call. ``reviewThreads`` is trimmed to 10 (Change-1b) and
+# ``latestReviews`` left at 20 (cost-free — it nests no connection).
+_SEARCH_PR_QUERY = """
+query($q: String!, $prCount: Int!, $after: String) {
+  search(query: $q, type: ISSUE, first: $prCount, after: $after) {
+    pageInfo { hasNextPage endCursor }
+    nodes {
+      ... on PullRequest {
+        number
+        title
+        url
+        state
+        baseRefName
+        repository { nameWithOwner }
+        headRefName
+        mergeable
+        commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+        latestReviews(first: 20) { nodes { state author { login } } }
+        reviewThreads(first: 10) {
+          nodes { isResolved comments(first: 1) { nodes { author { login } path line body } } }
+        }
+      }
+    }
+  }
+  rateLimit { cost remaining limit resetAt }
+}
+"""
+
+
+@dataclass(frozen=True)
+class GithubRateLimit:
+    """GitHub API rate-budget snapshot parsed from a query's ``rateLimit`` block.
+
+    ``cost`` is the points the query consumed; ``remaining`` / ``limit`` and the
+    ISO-8601 ``reset_at`` describe the token's hourly budget. Consumed by the
+    rate-budget governor to back off proactively before the wall.
+    """
+
+    cost: int
+    remaining: int
+    limit: int
+    reset_at: str
+
+
+@dataclass(frozen=True)
+class OpenPrSearchResult:
+    """All of a token owner's open-PR nodes plus the round's rate-budget snapshot.
+
+    ``nodes`` are raw ``... on PullRequest`` dicts (open state only — terminal
+    PRs are not in a ``state:open`` search); ``rate_limit`` is the response's
+    ``rateLimit`` block, or ``None`` when it is absent from a malformed response.
+    """
+
+    nodes: list[dict]
+    rate_limit: GithubRateLimit | None
+
+
+def fetch_open_prs_for_token(working_dir: Path) -> OpenPrSearchResult:
+    """Fetch every open PR authored by the token owner in one search query.
+
+    Issues a single ``gh api graphql`` ``search`` request (``author:@me``,
+    token-global — not repo-scoped) returning all of the user's open PRs across
+    every repo, each with the per-PR check/review/comment detail the
+    per-workspace query carries. Paginates only when the user has more than
+    ``_SEARCH_PAGE_SIZE`` open PRs (rare), logging a warning when it does so
+    silent truncation can't masquerade as full coverage. Returns the
+    accumulated nodes plus the token's ``rateLimit`` snapshot (``None`` if the
+    block is absent) for the governor.
+
+    Raises CliStatusError on any CLI failure (classified via
+    ``classify_cli_error``) or invalid JSON, so the poller can surface it and
+    back off.
+    """
+    nodes: list[dict] = []
+    rate_limit: GithubRateLimit | None = None
+    after: str | None = None
+    page = 1
+    while True:
+        payload = _run_search_query(working_dir, after)
+        search = (payload.get("data") or {}).get("search") or {}
+        nodes.extend(search.get("nodes") or [])
+        rate_limit = _parse_rate_limit(payload)
+        page_info = search.get("pageInfo") or {}
+        if not (page_info.get("hasNextPage") and page_info.get("endCursor")):
+            break
+        after = page_info["endCursor"]
+        page += 1
+        logger.warning(
+            "PR search returned more than {} open PRs; following pagination to page {}",
+            _SEARCH_PAGE_SIZE,
+            page,
+        )
+    return OpenPrSearchResult(nodes=nodes, rate_limit=rate_limit)
+
+
+def _run_search_query(working_dir: Path, after: str | None) -> dict:
+    """Run one page of the token-wide search query and return its parsed payload.
+
+    Unlike ``_fetch_prs_with_details`` there is no ``owner``/``name`` arg —
+    search is token-global, not repo-scoped — but ``gh`` still needs a directory
+    to resolve the token/host. Raises CliStatusError on CLI failure or invalid
+    JSON, mirroring ``_fetch_prs_with_details``.
+    """
+    cmd = [
+        "gh",
+        "api",
+        "graphql",
+        "-f",
+        f"query={_SEARCH_PR_QUERY}",
+        "-f",
+        f"q={_SEARCH_QUERY_STRING}",
+        "-F",
+        f"prCount={_SEARCH_PAGE_SIZE}",
+    ]
+    if after is not None:
+        cmd += ["-f", f"after={after}"]
+    result = run_cli_with_retry(cmd, working_dir)
+    if result.returncode != 0:
+        raise CliStatusError(classify_cli_error(result.stderr), result.stderr)
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        raise CliStatusError("transient", f"Invalid JSON from gh api graphql: {result.stdout[:200]}") from e
+
+
+def _parse_rate_limit(payload: dict) -> GithubRateLimit | None:
+    """Parse a response's ``rateLimit`` block, or ``None`` if it is absent.
+
+    Kept tolerant of a missing or partial block so a malformed response degrades
+    (governor falls back to its default budget) instead of crashing the round.
+    """
+    block = (payload.get("data") or {}).get("rateLimit")
+    if not isinstance(block, dict):
+        return None
+    cost = block.get("cost")
+    remaining = block.get("remaining")
+    limit = block.get("limit")
+    reset_at = block.get("resetAt")
+    if cost is None or remaining is None or limit is None or reset_at is None:
+        return None
+    return GithubRateLimit(cost=cost, remaining=remaining, limit=limit, reset_at=reset_at)
+
+
+def build_status_from_open_nodes(
+    workspace_id: WorkspaceID,
+    open_nodes: Sequence[dict],
+    target_branch: str,
+) -> PrStatusInfo:
+    """Derive one workspace's open-PR status from the token-wide search nodes.
+
+    Pure (no I/O): given the open-PR nodes already filtered to this workspace's
+    ``(repo, head branch)``, pick the PR whose base matches its target and reuse
+    the per-node parsers. Handles only the open and no-open-PR cases — terminal
+    (merged/closed) PRs are absent from a ``state:open`` search and are recovered
+    by the per-workspace fallback. Mirrors ``_fetch_pr_status_inner``'s open and
+    mismatch branches so behavior matches today for the open case.
+    """
+    stripped_target = strip_remote_prefix(target_branch)
+    open_match = _first_matching_target(open_nodes, stripped_target)
+    if open_match is not None:
+        return _build_open_pr_status(workspace_id, open_match)
+    # No open PR targets this branch — if one exists against a different target,
+    # surface it so the frontend can offer to switch targets.
+    if open_nodes:
+        mismatched_pr = open_nodes[0]
+        return PrStatusInfo(
+            workspace_id=workspace_id,
+            pr_state="none",
+            mismatched_pr_iid=mismatched_pr["number"],
+            mismatched_pr_target_branch=mismatched_pr.get("baseRefName"),
+            mismatched_pr_web_url=mismatched_pr.get("url"),
+        )
+    return PrStatusInfo(workspace_id=workspace_id, pr_state="none")
 
 
 def _parse_conflict_status(pr_node: dict) -> bool | None:

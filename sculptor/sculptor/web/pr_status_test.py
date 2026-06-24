@@ -9,8 +9,11 @@ import pytest
 from sculptor.foundation.processes.local_process import run_blocking
 from sculptor.foundation.subprocess_utils import FinishedProcess
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.web.cli_status_utils import CliStatusError
 from sculptor.web.pr_status import _GRAPHQL_PR_QUERY
 from sculptor.web.pr_status import _PR_QUERY_LIMIT
+from sculptor.web.pr_status import build_status_from_open_nodes
+from sculptor.web.pr_status import fetch_open_prs_for_token
 from sculptor.web.pr_status import fetch_pr_status
 
 
@@ -453,3 +456,196 @@ def test_graphql_query_is_valid_against_live_github() -> None:
     payload = json.loads(result.stdout)
     nodes = payload["data"]["repository"]["pullRequests"]["nodes"]
     assert isinstance(nodes, list)
+
+
+# ---------------------------------------------------------------------------
+# Token-wide `search` fetch + per-workspace derivation (Change-1 building blocks).
+# ---------------------------------------------------------------------------
+
+
+_DEFAULT_RATE_LIMIT = {"cost": 1, "remaining": 4999, "limit": 5000, "resetAt": "2026-01-01T00:00:00Z"}
+
+
+def _search_node(
+    number: int,
+    base_ref: str = "main",
+    head_ref: str = "feat-1",
+    repo: str = "org/repo",
+    **kwargs,  # noqa: ANN003
+) -> dict:
+    """Build one search ``... on PullRequest`` node (always OPEN — search is state:open).
+
+    Extends the per-workspace ``_pr_node`` shape with the two fields only the
+    search query carries: ``repository.nameWithOwner`` and ``headRefName``.
+    """
+    node = _pr_node(number, "OPEN", base_ref, **kwargs)
+    node["repository"] = {"nameWithOwner": repo}
+    node["headRefName"] = head_ref
+    return node
+
+
+def _search_stdout(
+    nodes: list[dict],
+    *,
+    has_next: bool = False,
+    end_cursor: str | None = None,
+    rate_limit: dict | None = _DEFAULT_RATE_LIMIT,
+) -> str:
+    """Wrap search nodes in the envelope gh emits for the token-wide search query."""
+    return json.dumps(
+        {
+            "data": {
+                "search": {
+                    "nodes": nodes,
+                    "pageInfo": {"hasNextPage": has_next, "endCursor": end_cursor},
+                },
+                "rateLimit": rate_limit,
+            }
+        }
+    )
+
+
+def _captured_search_string(cmd: list[str]) -> str:
+    """Return the `-f q=...` search filter passed in a gh command (not `query=`)."""
+    for arg in cmd:
+        if arg.startswith("q="):
+            return arg[len("q=") :]
+    raise AssertionError(f"no q= argument found in command: {cmd}")
+
+
+def test_fetch_open_prs_for_token_single_page() -> None:
+    captured: list[list] = []
+
+    def handler(cmd, _working_dir):  # noqa: ANN001
+        captured.append(cmd)
+        return _make_finished(_search_stdout([_search_node(100), _search_node(101)]))
+
+    with _patch_cli(handler):
+        result = fetch_open_prs_for_token(WORKING_DIR)
+
+    assert [n["number"] for n in result.nodes] == [100, 101]
+    assert result.rate_limit is not None
+    assert result.rate_limit.cost == 1
+    assert result.rate_limit.remaining == 4999
+    assert result.rate_limit.limit == 5000
+    assert result.rate_limit.reset_at == "2026-01-01T00:00:00Z"
+
+    assert len(captured) == 1
+    cmd = captured[0]
+    assert cmd[:3] == ["gh", "api", "graphql"]
+    # The search is token-global, not repo-scoped — no owner/name args.
+    assert not any(arg.startswith("owner=") or arg.startswith("name=") for arg in cmd)
+    search_string = _captured_search_string(cmd)
+    assert "author:@me" in search_string
+    assert "state:open" in search_string
+    assert "sort:updated" in search_string
+    query = _captured_query(cmd)
+    for field in ("mergeable", "nameWithOwner", "headRefName", "reviewThreads(first: 10)", "rateLimit"):
+        assert field in query, f"search query is missing {field!r}"
+
+
+def test_fetch_open_prs_for_token_paginates() -> None:
+    captured: list[list] = []
+
+    def handler(cmd, _working_dir):  # noqa: ANN001
+        captured.append(cmd)
+        if len(captured) == 1:
+            return _make_finished(_search_stdout([_search_node(1)], has_next=True, end_cursor="CURSOR_1"))
+        return _make_finished(_search_stdout([_search_node(2)], has_next=False))
+
+    with patch("sculptor.web.pr_status.logger") as mock_logger:
+        with _patch_cli(handler):
+            result = fetch_open_prs_for_token(WORKING_DIR)
+
+    assert [n["number"] for n in result.nodes] == [1, 2]
+    assert len(captured) == 2
+    assert any(arg == "after=CURSOR_1" for arg in captured[1]), "second page must pass after=<cursor>"
+    # Pagination must be logged so silent truncation can't masquerade as full coverage.
+    assert mock_logger.warning.called
+    assert "pagination" in mock_logger.warning.call_args[0][0]
+
+
+def test_fetch_open_prs_for_token_missing_rate_limit_is_tolerated() -> None:
+    def handler(cmd, _working_dir):  # noqa: ANN001
+        return _make_finished(_search_stdout([_search_node(1)], rate_limit=None))
+
+    with _patch_cli(handler):
+        result = fetch_open_prs_for_token(WORKING_DIR)
+
+    assert [n["number"] for n in result.nodes] == [1]
+    assert result.rate_limit is None
+
+
+def test_fetch_open_prs_for_token_cli_failure_raises_classified() -> None:
+    def handler(cmd, _working_dir):  # noqa: ANN001
+        return _make_finished("", returncode=1, stderr="HTTP 403: API rate limit exceeded for user")
+
+    with _patch_cli(handler):
+        with pytest.raises(CliStatusError) as exc_info:
+            fetch_open_prs_for_token(WORKING_DIR)
+
+    assert exc_info.value.category == "rate_limited"
+
+
+def test_build_status_from_open_nodes_open_match() -> None:
+    node = _search_node(
+        100,
+        base_ref="main",
+        check_state="SUCCESS",
+        reviews=[{"state": "APPROVED", "author": {"login": "alice"}}],
+        threads=[
+            {
+                "isResolved": False,
+                "comments": {"nodes": [{"author": {"login": "bob"}, "path": "a.py", "line": 3, "body": "fix"}]},
+            }
+        ],
+        mergeable="MERGEABLE",
+    )
+
+    result = build_status_from_open_nodes(WORKSPACE_ID, [node], "origin/main")
+
+    assert result.pr_state == "open"
+    assert result.pr_iid == 100
+    assert result.pipeline_status == "passed"
+    assert [a.name for a in result.approvals] == ["alice"]
+    assert [c.author for c in result.unresolved_comments] == ["bob"]
+    assert result.has_conflicts is False
+
+
+def test_build_status_from_open_nodes_mismatched_target() -> None:
+    node = _search_node(200, base_ref="develop")
+
+    result = build_status_from_open_nodes(WORKSPACE_ID, [node], "origin/main")
+
+    assert result.pr_state == "none"
+    assert result.mismatched_pr_iid == 200
+    assert result.mismatched_pr_target_branch == "develop"
+    assert result.mismatched_pr_web_url == "https://github.com/org/repo/pull/200"
+
+
+def test_build_status_from_open_nodes_empty() -> None:
+    result = build_status_from_open_nodes(WORKSPACE_ID, [], "origin/main")
+
+    assert result.pr_state == "none"
+    assert result.mismatched_pr_iid is None
+
+
+def test_build_status_from_open_nodes_picks_matching_among_two() -> None:
+    # Two open PRs on the same source branch targeting different bases; only the
+    # one matching the workspace's target should be returned (uses
+    # _first_matching_target, which relies on sort:updated ordering).
+    nodes = [_search_node(300, base_ref="develop"), _search_node(301, base_ref="main")]
+
+    result = build_status_from_open_nodes(WORKSPACE_ID, nodes, "origin/main")
+
+    assert result.pr_state == "open"
+    assert result.pr_iid == 301
+
+
+def test_build_status_from_open_nodes_conflicting_sets_has_conflicts() -> None:
+    node = _search_node(400, base_ref="main", mergeable="CONFLICTING")
+
+    result = build_status_from_open_nodes(WORKSPACE_ID, [node], "origin/main")
+
+    assert result.pr_state == "open"
+    assert result.has_conflicts is True
