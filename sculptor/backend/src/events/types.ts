@@ -45,6 +45,9 @@ export interface WorkspaceBranchEvent {
   kind: "workspace_branch";
   workspaceId: string;
   projectId?: string;
+  // WorkspaceBranchInfo (snake_case) or null to clear. Camelized at the WS
+  // boundary (projection/to_wire.ts). Filled by repo polling (Task 7.2).
+  status?: Record<string, unknown> | null;
 }
 
 // Drives workspace_remote_branches_by_workspace_id.
@@ -52,6 +55,8 @@ export interface WorkspaceRemoteBranchesEvent {
   kind: "workspace_remote_branches";
   workspaceId: string;
   projectId?: string;
+  // WorkspaceRemoteBranchesInfo (snake_case) or null to clear.
+  status?: Record<string, unknown> | null;
 }
 
 // Drives pr_status_by_workspace_id.

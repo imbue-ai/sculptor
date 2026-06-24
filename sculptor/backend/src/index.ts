@@ -9,6 +9,7 @@ import { setupLogging } from "~/logging/logger";
 import { emitOpenApiToFile } from "~/openapi";
 import { getAgentRunner } from "~/runner/instance";
 import { getPrPollingService } from "~/services/pr_polling/service";
+import { getRepoPollingManager } from "~/services/repo_polling/manager";
 
 // The integration harness scrapes stdout for this exact string to decide the
 // backend is ready (READY_MESSAGE_V1 in sculptor/sculptor/testing/server_utils.py).
@@ -77,6 +78,10 @@ export async function main(
   // Start PR/CI status polling (Task 7.1) — bounded pool + global spacing,
   // gated by pr_polling_enabled. Stopped on shutdown.
   getPrPollingService().start();
+
+  // Start repo polling (Task 7.2) — 3 s branch + remote-branch refresh per open
+  // workspace, stopping a workspace whose checkout is torn down.
+  getRepoPollingManager().start();
 
   const port = resolvePort(argv);
   const host = resolveBindHost();

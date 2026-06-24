@@ -190,15 +190,15 @@ export class DeltaBuilder {
       }
       case "workspace_branch": {
         const delta = emptyStreamingUpdate();
-        // The branch info is produced by the repo-polling service (Phase 7);
-        // until then the event only carries the workspace id, so the delta is an
-        // empty keyed entry. Phase 7 fills the value.
-        delta.workspace_branch_by_workspace_id[event.workspaceId] = null;
+        delta.workspace_branch_by_workspace_id[event.workspaceId] =
+          (event.status as StreamingUpdate["workspace_branch_by_workspace_id"][string]) ??
+          null;
         return delta;
       }
       case "workspace_remote_branches": {
         const delta = emptyStreamingUpdate();
         delta.workspace_remote_branches_by_workspace_id[event.workspaceId] =
+          (event.status as StreamingUpdate["workspace_remote_branches_by_workspace_id"][string]) ??
           null;
         return delta;
       }
