@@ -615,6 +615,13 @@ class ElementIDs(StrEnum):
     SIDEBAR_RESIZE_HANDLE = "SIDEBAR_RESIZE_HANDLE"
     SIDEBAR_EXPAND_ICON = "SIDEBAR_EXPAND_ICON"
 
+    # Workspace header (the simplified top bar above the section grid): branch
+    # pill + section collapse/expand toggles + re-homed PR button / diff summary.
+    WORKSPACE_HEADER = "WORKSPACE_HEADER"
+    HEADER_SECTION_TOGGLE_LEFT = "HEADER_SECTION_TOGGLE_LEFT"
+    HEADER_SECTION_TOGGLE_RIGHT = "HEADER_SECTION_TOGGLE_RIGHT"
+    HEADER_SECTION_TOGGLE_BOTTOM = "HEADER_SECTION_TOGGLE_BOTTOM"
+
     # Workspace section grid (left/center/right/bottom)
     SECTION_LEFT = "SECTION_LEFT"
     SECTION_CENTER = "SECTION_CENTER"

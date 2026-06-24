@@ -19,6 +19,7 @@ import { RouteErrorPage } from "./pages/error/RouteErrorPage.tsx";
 import { HomePage } from "./pages/home/HomePage.tsx";
 import { SettingsPage } from "./pages/settings/SettingsPage.tsx";
 import { WorkspacePage } from "./pages/workspace/WorkspacePage";
+import { WorkspaceShellLayout } from "./pages/workspace/WorkspaceShellLayout";
 
 const DEFAULT_TABS_STATE: TabsState = { order: [], activeIndex: INVALID_ACTIVE_INDEX };
 
@@ -94,7 +95,7 @@ const router = createHashRouter([
   },
   {
     path: "/ws/:workspaceID",
-    element: <PageLayout showVersionIndicator={false} />,
+    element: <WorkspaceShellLayout />,
     errorElement: <RouteErrorPage />,
     children: [
       {
