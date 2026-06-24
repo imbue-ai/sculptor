@@ -12,6 +12,8 @@ import type { SkillEntry } from "~/common/state/hooks/useSkills";
 import { useSkills } from "~/common/state/hooks/useSkills";
 import { useTaskSupportsSkills } from "~/common/state/hooks/useTaskHelpers";
 import { PanelHeader } from "~/components/panels/PanelHeader";
+import { registerPanelComponent } from "~/components/sections/registry/panelRegistry.ts";
+import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 import type { SkillType } from "~/components/skillBadge";
 import { SkillChip } from "~/components/skills/SkillChip";
 import { SkillHoverContent } from "~/components/skills/SkillHoverContent";
@@ -602,3 +604,17 @@ export const SkillsPanel = (): ReactElement => {
     </Flex>
   );
 };
+
+// The single-instance Skills panel for the section/panel shell: a thin, no-prop
+// wrapper that gates on the active workspace and renders the existing skills
+// content. Keyed on the workspace id so switching workspaces resets the panel's
+// local search/filter state.
+const SkillsPanelForShell = (): ReactElement | null => {
+  const workspaceId = useAtomValue(activeWorkspaceIdAtom);
+  if (workspaceId === null) {
+    return null;
+  }
+  return <SkillsPanel key={workspaceId} />;
+};
+
+registerPanelComponent("skills", SkillsPanelForShell);

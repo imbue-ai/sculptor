@@ -25,6 +25,8 @@ import { DeleteActionDialog } from "~/components/actions/DeleteActionDialog";
 import { DeleteGroupDialog } from "~/components/actions/DeleteGroupDialog";
 import { GroupContextMenu } from "~/components/actions/GroupContextMenu";
 import { PanelHeader } from "~/components/panels/PanelHeader";
+import { registerPanelComponent } from "~/components/sections/registry/panelRegistry.ts";
+import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 
 import styles from "./ActionsPanel.module.scss";
 import { useWorkspacePanelData } from "./useWorkspacePanelData";
@@ -711,3 +713,16 @@ export const ActionsPanel = (): ReactElement => {
     </>
   );
 };
+
+// The single-instance Actions panel for the section/panel shell: a thin, no-prop
+// wrapper that gates on the active workspace and renders the existing actions
+// content. Keyed on the workspace id so switching workspaces resets local state.
+const ActionsPanelForShell = (): ReactElement | null => {
+  const workspaceId = useAtomValue(activeWorkspaceIdAtom);
+  if (workspaceId === null) {
+    return null;
+  }
+  return <ActionsPanel key={workspaceId} />;
+};
+
+registerPanelComponent("actions", ActionsPanelForShell);

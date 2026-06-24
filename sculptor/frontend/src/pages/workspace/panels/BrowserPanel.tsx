@@ -6,6 +6,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { useWorkspacePageParams } from "~/common/NavigateUtils";
+import { registerPanelComponent } from "~/components/sections/registry/panelRegistry.ts";
+import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 import { isElectron } from "~/electron/utils";
 
 import { browserPanelStateAtomFamily } from "./browser/atoms";
@@ -219,3 +221,18 @@ const BrowserPanelElectron = (): ReactElement => {
     </div>
   );
 };
+
+// The single-instance Browser panel for the section/panel shell: a thin, no-prop
+// wrapper that gates on the active workspace and renders the existing browser
+// surface. There is no opt-in/enable concept — it is just a registered panel; the
+// webview's isolation and in-page-state persistence are owned by BrowserViewHost and
+// the browser registry, which survive panel mount/unmount.
+const BrowserPanelForShell = (): ReactElement | null => {
+  const workspaceId = useAtomValue(activeWorkspaceIdAtom);
+  if (workspaceId === null) {
+    return null;
+  }
+  return <BrowserPanel key={workspaceId} />;
+};
+
+registerPanelComponent("browser", BrowserPanelForShell);

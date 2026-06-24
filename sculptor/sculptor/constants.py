@@ -215,6 +215,8 @@ class ElementIDs(StrEnum):
     # Static, no-shimmer diff placeholder.
     DIFF_SKELETON = "DIFF_SKELETON"
     COMBINED_DIFF_FILE_SECTION = "COMBINED_DIFF_FILE_SECTION"
+    # Root of the Review All panel, which wraps the combined multi-file diff.
+    REVIEW_ALL_PANEL = "REVIEW_ALL_PANEL"
     DIFF_VIEW_UNIFIED = "DIFF_VIEW_UNIFIED"
     DIFF_VIEW_SPLIT = "DIFF_VIEW_SPLIT"
     DIFF_SPLIT_VIEW_TOGGLE = "DIFF_SPLIT_VIEW_TOGGLE"
