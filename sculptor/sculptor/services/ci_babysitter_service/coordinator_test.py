@@ -317,6 +317,15 @@ class _FakeTransaction(_StubTransaction):
     def get_workspace(self, workspace_id: WorkspaceID) -> Workspace | None:
         return self._env.workspace if workspace_id == self._env.workspace.object_id else None
 
+    def update_workspace_fields(self, workspace_id: WorkspaceID, **fields: Any) -> Workspace | None:
+        # Model real persistence: apply the targeted field update to the env's
+        # workspace so a later get_workspace reflects it (e.g. the persisted
+        # ci_babysitter_paused flag).
+        if workspace_id != self._env.workspace.object_id:
+            return None
+        self._env.workspace = self._env.workspace.model_copy(update=fields)
+        return self._env.workspace
+
     def get_tasks_for_project(self, project_id: ProjectID, input_data_classes: Any = None) -> list[Task]:
         del project_id, input_data_classes
         return list(self._env.tasks)
@@ -639,6 +648,27 @@ def test_scenario_4_pause_prevents_prompt(
     assert task_service.create_task_calls == []
     state = coordinator._state[env.workspace_id]
     assert state.retry_count == 0
+
+
+def test_pause_persists_across_coordinator_restart(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    """A restart rebuilds the coordinator with empty in-memory state; the paused
+    flag must be restored from the persisted Workspace row (SCU-1579).
+    """
+    coordinator, _ = _build_coordinator(env, test_root_concurrency_group)
+    coordinator.set_paused(env.workspace_id, True)
+    # The flag is persisted onto the workspace row, not just held in memory.
+    assert env.workspace.ci_babysitter_paused is True
+
+    # Simulate a restart: a brand-new coordinator over the same persisted env,
+    # carrying none of the previous in-memory state.
+    restarted, _ = _build_coordinator(env, test_root_concurrency_group)
+    assert env.workspace_id not in restarted._state
+
+    snapshot = restarted.get_state_snapshot(env.workspace_id)
+    assert snapshot is not None
+    assert snapshot.paused is True
 
 
 def test_scenario_5_mid_turn_queueing_reuses_task(

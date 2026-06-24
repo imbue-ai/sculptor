@@ -294,6 +294,65 @@ def test_scenario_4_pause_toggle_prevents_prompt(sculptor_instance_: SculptorIns
     expect(pipeline_prompts).to_have_count(1)
 
 
+@user_story("to keep the CI Babysitter paused for a workspace across a backend restart")
+def test_pause_state_persists_across_restart(
+    sculptor_instance_factory_: SculptorInstanceFactory, tmp_path: Path
+) -> None:
+    """Pausing the CI Babysitter for a workspace must survive a backend restart.
+
+    The per-workspace paused flag is set from the PR popover. Before the fix it
+    lived only in ``CIBabysitterCoordinator._state`` (in-memory), so a restart
+    dropped it and the workspace reverted to "Active". This test pauses in one
+    backend, restarts onto the same database, and asserts the popover still
+    reports "Paused".
+    """
+    state_file = tmp_path / "gh_state"
+    state_file.write_text("failed")
+
+    # First backend: pause the babysitter for the workspace via the PR popover.
+    with sculptor_instance_factory_.spawn_instance() as instance:
+        _install_state_driven_gh(instance, state_file)
+        _set_remote(instance, _FAKE_GITHUB_REMOTE)
+        _enable_babysitter(instance)
+
+        start_task_and_wait_for_ready(instance.page, "say hello")
+
+        pr_popover = PlaywrightPrPopoverElement(instance.page)
+        pr_chevron = pr_popover.get_chevron()
+        expect(pr_chevron).to_be_visible(timeout=60_000)
+        pr_chevron.click()
+
+        pause_toggle = pr_popover.get_babysitter_pause_toggle()
+        expect(pause_toggle).to_be_visible()
+        babysitter_status = pr_popover.get_babysitter_status()
+        # Starts Active (not paused); flip it to Paused.
+        expect(babysitter_status).to_have_text("Active")
+        pause_toggle.click()
+        expect(babysitter_status).to_have_text("Paused")
+        instance.page.keyboard.press("Escape")
+
+    # Second backend on the same database: the paused flag must be restored.
+    with sculptor_instance_factory_.spawn_instance() as instance:
+        _install_state_driven_gh(instance, state_file)
+        _set_remote(instance, _FAKE_GITHUB_REMOTE)
+        _enable_babysitter(instance)
+
+        layout = PlaywrightProjectLayoutPage(page=instance.page)
+        workspace_tab = layout.get_workspace_tabs().first
+        expect(workspace_tab).to_be_visible()
+        workspace_tab.click()
+
+        pr_popover = PlaywrightPrPopoverElement(instance.page)
+        pr_chevron = pr_popover.get_chevron()
+        expect(pr_chevron).to_be_visible(timeout=60_000)
+        pr_chevron.click()
+
+        babysitter_status = pr_popover.get_babysitter_status()
+        # Before the fix this read "Active" — the paused flag was lost on restart.
+        expect(babysitter_status).to_have_text("Paused")
+        expect(pr_popover.get_babysitter_pause_toggle()).not_to_be_checked()
+
+
 @user_story("to have the CI Babysitter drive my terminal agent to fix a failed pipeline")
 def test_babysitter_drives_registered_terminal_agent(sculptor_instance_: SculptorInstance, tmp_path: Path) -> None:
     """When the workspace's most-recent agent is a registered, opt-in terminal
