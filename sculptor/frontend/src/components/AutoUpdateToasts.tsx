@@ -36,8 +36,7 @@ export const AutoUpdateToasts = (): ReactElement => {
   // dismisses it (tracked in state) so it doesn't re-appear on every status
   // poll while a download is in progress. We adjust state during render on a
   // status change (with a previous-value guard) rather than in an effect, so
-  // there's no extra render between a status change and the toast update. See
-  // docs/development/review/react.md (`no_effect_for_state_adjustment`).
+  // there's no extra render between a status change and the toast update.
   const [prevStatus, setPrevStatus] = useState(status);
   if (prevStatus !== status) {
     setPrevStatus(status);

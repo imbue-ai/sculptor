@@ -268,8 +268,7 @@ export const CommandPalette = (): ReactElement => {
   // first row. Resetting on close means the very first paint of the next open
   // sees an empty value and cmdk picks the top row — no flicker. Adjusting
   // state during render (with a previous-value guard) avoids the extra render
-  // an effect would add. See docs/development/review/react.md
-  // (`no_effect_for_state_adjustment`).
+  // an effect would add.
   const [isOpenOnPrevRender, setIsOpenOnPrevRender] = useState(isOpen);
   if (isOpenOnPrevRender !== isOpen) {
     setIsOpenOnPrevRender(isOpen);

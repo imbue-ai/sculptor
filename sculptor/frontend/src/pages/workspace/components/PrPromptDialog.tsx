@@ -22,8 +22,7 @@ export const PrPromptDialog = ({ open, onOpenChange, gitProvider }: PrPromptDial
   // While the dialog is open, keep the editor seeded with the saved prompt:
   // re-sync on open and whenever the saved value changes underneath us.
   // Adjusting state during render (with previous-value guards) avoids the
-  // stale frame an effect would produce. See docs/development/review/react.md
-  // (`no_effect_for_state_adjustment`).
+  // stale frame an effect would produce.
   const [isOpenOnPrevRender, setIsOpenOnPrevRender] = useState(open);
   const [prevPrompt, setPrevPrompt] = useState(prCreationPrompt);
   if (open && (open !== isOpenOnPrevRender || prCreationPrompt !== prevPrompt)) {

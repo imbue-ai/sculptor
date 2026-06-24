@@ -91,7 +91,9 @@ export const TabBar = ({
     return (): void => {
       observer.disconnect();
     };
-  }, [isCompact, children]);
+    // The ResizeObserver handles content-driven width changes, so this only
+    // needs to re-run when the measured/compact mode flips.
+  }, [isCompact]);
 
   // Auto-scroll active tab into view
   useEffect((): void => {

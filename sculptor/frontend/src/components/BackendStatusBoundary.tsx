@@ -217,8 +217,7 @@ export const BackendStatusBoundary = (props: PropsWithChildren<BackendStatusBoun
   // Clear the stalled flag as soon as we leave ``shutting_down``. Adjusting
   // state during render (with a previous-value guard) keeps the reset on the
   // same render that observes the status change, instead of the extra render
-  // an effect would add. See docs/development/review/react.md
-  // (`no_effect_for_state_reset`).
+  // an effect would add.
   const [prevBackendStatusForStall, setPrevBackendStatusForStall] = useState(backendStatus.status);
   if (prevBackendStatusForStall !== backendStatus.status) {
     setPrevBackendStatusForStall(backendStatus.status);

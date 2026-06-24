@@ -50,8 +50,7 @@ export const AskUserQuestion = ({ taskId, questionData, onSubmit, onDismiss }: A
   const [focusedOptionIndex, setFocusedOptionIndex] = useState(0);
   // Reset the focused option whenever the active question changes. Adjusting
   // state during render (with a previous-value guard) avoids the stale frame
-  // an effect would produce. See docs/development/review/react.md
-  // (`no_effect_for_state_adjustment`).
+  // an effect would produce.
   const [prevIndexForFocus, setPrevIndexForFocus] = useState(currentIndex);
   if (prevIndexForFocus !== currentIndex) {
     setPrevIndexForFocus(currentIndex);

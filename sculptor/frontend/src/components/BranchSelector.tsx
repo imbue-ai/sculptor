@@ -27,11 +27,9 @@ const BranchSelectorComponent = ({
   triggerVariant = "soft",
 }: BranchSelectorProps): ReactElement => {
   const [isFetchingBranches, setIsFetchingBranches] = useState(false);
-  // Track the in-flight fetch and whether another was requested while it ran,
-  // so a trigger during a fetch refreshes exactly once more on completion
-  // (matching the previous flag-watching effect) without stacking requests.
+  // Drop refresh requests that arrive while one is already in flight, so they
+  // don't stack into concurrent fetches.
   const isFetchingRef = useRef(false);
-  const isRefetchQueuedRef = useRef(false);
 
   const selectedBranchName = sourceBranch || "";
   const areBranchesLoaded = (repoInfo?.recentBranches?.length ?? 0) > 0;
@@ -57,30 +55,16 @@ const BranchSelectorComponent = ({
   const displayBranchName = selectedBranchName;
 
   // Refresh the branch list in response to a user interaction (selecting a
-  // branch or opening the dropdown). Triggered directly from the handlers
-  // rather than via a watched flag + effect. A trigger that arrives while a
-  // fetch is in flight queues exactly one more refresh on completion (matching
-  // the previous flag-watching effect) without stacking concurrent requests.
-  // See docs/development/review/react.md (`no_effect_for_event_handling`).
+  // branch or opening the dropdown), straight from the handler. A request that
+  // arrives while a refresh is in flight is dropped.
   const triggerFetch = useCallback((): void => {
-    if (isFetchingRef.current) {
-      isRefetchQueuedRef.current = true;
-      return;
-    }
+    if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     setIsFetchingBranches(true);
-    const runFetch = (): void => {
-      void fetchRepoInfo().finally(() => {
-        if (isRefetchQueuedRef.current) {
-          isRefetchQueuedRef.current = false;
-          runFetch();
-          return;
-        }
-        isFetchingRef.current = false;
-        setIsFetchingBranches(false);
-      });
-    };
-    runFetch();
+    void fetchRepoInfo().finally(() => {
+      isFetchingRef.current = false;
+      setIsFetchingBranches(false);
+    });
   }, [fetchRepoInfo]);
 
   return (
