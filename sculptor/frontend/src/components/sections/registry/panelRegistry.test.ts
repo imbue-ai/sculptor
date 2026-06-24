@@ -2,9 +2,21 @@ import { createStore } from "jotai";
 import type { ComponentType } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { TaskStatus } from "~/api";
+
 import { EMPTY_WORKSPACE_LAYOUT } from "../persistence/types.ts";
 import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "../sectionAtoms.ts";
+import type { DynamicAgentInput } from "./dynamicPanels.tsx";
 import { deriveDynamicPanels } from "./dynamicPanels.tsx";
+
+// A minimal agent input with the fields the status dot + diagnostics derivation reads.
+const makeAgent = (overrides: Partial<DynamicAgentInput> & Pick<DynamicAgentInput, "taskId">): DynamicAgentInput => ({
+  displayName: "Agent 1",
+  status: TaskStatus.READY,
+  lastReadAt: "2024-01-01T00:00:00Z",
+  updatedAt: "2024-01-01T00:00:00Z",
+  ...overrides,
+});
 import {
   activePanelComponentInSubSectionAtom,
   buildStaticPanelDefinitions,
@@ -59,7 +71,7 @@ describe("static panel registry", () => {
 describe("dynamic panel derivation", () => {
   it("derives agent/terminal definitions with the right ids and defaults", () => {
     const defs = deriveDynamicPanels(
-      [{ taskId: "t1", displayName: "Agent 1" }],
+      [makeAgent({ taskId: "t1", displayName: "Agent 1" })],
       [{ workspaceId: "ws1", index: 0, displayName: "Terminal 1" }],
     );
     expect(defs.map((d) => d.id)).toEqual(["agent:t1", "terminal:ws1:0"]);
@@ -69,16 +81,40 @@ describe("dynamic panel derivation", () => {
     expect(defs[1].defaultSection).toBe("bottom");
   });
 
+  it("gives an agent a status-dot tab icon and diagnostics context actions", () => {
+    const [agentDef] = deriveDynamicPanels(
+      [makeAgent({ taskId: "t1", displayName: "Agent 1", diagnostics: { sessionId: null } })],
+      [],
+    );
+    expect(agentDef.tabIcon).toBeDefined();
+    const actionLabels = (agentDef.contextMenuActions ?? []).map((a) => a.label);
+    expect(actionLabels).toContain("Copy agent id");
+    expect(actionLabels).toContain("Copy claude session id");
+    // Session id action is disabled until a session exists.
+    const copySession = agentDef.contextMenuActions?.find((a) => a.label === "Copy claude session id");
+    expect(copySession?.disabled).toBe(true);
+  });
+
+  it("wires the agent close button to the supplied delete callback", () => {
+    let didRequestClose = false;
+    const [agentDef] = deriveDynamicPanels(
+      [makeAgent({ taskId: "t1", onRequestClose: () => (didRequestClose = true) })],
+      [],
+    );
+    agentDef.onRequestClose?.();
+    expect(didRequestClose).toBe(true);
+  });
+
   it("caches the component reference per id across registry rebuilds", () => {
-    const first = deriveDynamicPanels([{ taskId: "stable", displayName: "x" }], []);
-    const second = deriveDynamicPanels([{ taskId: "stable", displayName: "x renamed" }], []);
+    const first = deriveDynamicPanels([makeAgent({ taskId: "stable", displayName: "x" })], []);
+    const second = deriveDynamicPanels([makeAgent({ taskId: "stable", displayName: "x renamed" })], []);
     expect(first[0].component).toBe(second[0].component);
   });
 
   it("evicts the cached component when its task disappears", () => {
-    const first = deriveDynamicPanels([{ taskId: "evict-me", displayName: "x" }], []);
-    deriveDynamicPanels([{ taskId: "other", displayName: "y" }], []);
-    const recreated = deriveDynamicPanels([{ taskId: "evict-me", displayName: "x" }], []);
+    const first = deriveDynamicPanels([makeAgent({ taskId: "evict-me", displayName: "x" })], []);
+    deriveDynamicPanels([makeAgent({ taskId: "other", displayName: "y" })], []);
+    const recreated = deriveDynamicPanels([makeAgent({ taskId: "evict-me", displayName: "x" })], []);
     expect(first[0].component).not.toBe(recreated[0].component);
   });
 });

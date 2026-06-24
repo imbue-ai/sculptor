@@ -2,10 +2,10 @@ import type { Editor as TipTapEditor } from "@tiptap/react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { type ReactElement, useEffect } from "react";
 
-import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
 import { debugViewAtomFamily } from "~/common/state/atoms/alphaScroll.ts";
 import { closeBtwPopupIfNotForAgentAtom, isBtwPopupOpenAtom } from "~/common/state/atoms/btwPopup.ts";
 import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
+import { taskAtomFamily } from "~/common/state/atoms/tasks.ts";
 import { useTaskSupportsChatInterface } from "~/common/state/hooks/useTaskHelpers.ts";
 import { chatPanelMountedAtom } from "~/components/panels/atoms.ts";
 
@@ -16,6 +16,10 @@ import { DebugChatView } from "./chat-alpha/DebugChatView.tsx";
 import { useChatData } from "./useChatData.ts";
 
 type ChatPanelContentProps = {
+  // The task this panel renders. Supplied as a prop (not read from the route) so each
+  // agent panel renders its OWN agent — one in center and another in right at once
+  // (AGENT-03), two streaming concurrently (AGENT-05).
+  taskId: string;
   appendTextRef?: React.MutableRefObject<((text: string) => void) | null>;
   insertSkillRef?: React.MutableRefObject<((skill: InsertSkillArg) => void) | null>;
   editorRef?: React.MutableRefObject<TipTapEditor | null>;
@@ -32,12 +36,12 @@ type ChatPanelContentProps = {
  * them (the load-bearing gate).
  */
 export const ChatPanelContent = ({
+  taskId,
   appendTextRef,
   insertSkillRef,
   editorRef,
 }: ChatPanelContentProps): ReactElement | null => {
-  const { agentID: taskID } = useWorkspacePageParams();
-  const isChatInterfaceSupported = useTaskSupportsChatInterface(taskID ?? "");
+  const isChatInterfaceSupported = useTaskSupportsChatInterface(taskId);
 
   if (isChatInterfaceSupported === false) {
     // Keyed by task id: a direct terminal->terminal tab switch must remount
@@ -45,7 +49,7 @@ export const ChatPanelContent = ({
     // React reuses the component and the previous agent's scrollback stays
     // in the (single) xterm buffer when the WebSocket reconnects to the new
     // agent's PTY — leaking one tab's content into another.
-    return <AgentTerminalPanel key={taskID} taskId={taskID ?? ""} />;
+    return <AgentTerminalPanel key={taskId} taskId={taskId} />;
   }
 
   // While capabilities are loading, render nothing rather than the chat —
@@ -55,25 +59,34 @@ export const ChatPanelContent = ({
   if (isChatInterfaceSupported === undefined) {
     return null;
   }
-  return <ChatPanelInner appendTextRef={appendTextRef} insertSkillRef={insertSkillRef} editorRef={editorRef} />;
+  return (
+    <ChatPanelInner
+      taskId={taskId}
+      appendTextRef={appendTextRef}
+      insertSkillRef={insertSkillRef}
+      editorRef={editorRef}
+    />
+  );
 };
 
-const ChatPanelInner = ({ appendTextRef, insertSkillRef, editorRef }: ChatPanelContentProps): ReactElement => {
-  const { workspaceID, agentID: taskID } = useWorkspacePageParams();
-  const isDebugView = useAtomValue(debugViewAtomFamily(taskID ?? ""));
+const ChatPanelInner = ({ taskId, appendTextRef, insertSkillRef, editorRef }: ChatPanelContentProps): ReactElement => {
+  // The chat data hook needs the task's workspace id; derive it from the task atom
+  // rather than the route so the panel stays shell-agnostic (principle 2).
+  const workspaceID = useAtomValue(taskAtomFamily(taskId))?.workspaceId ?? "";
+  const isDebugView = useAtomValue(debugViewAtomFamily(taskId));
   const closeBtwPopupIfNotForAgent = useSetAtom(closeBtwPopupIfNotForAgentAtom);
   const isBtwPopupOpen = useAtomValue(isBtwPopupOpenAtom);
   const setChatPanelMounted = useSetAtom(chatPanelMountedAtom);
 
-  const chatData = useChatData({ taskID: taskID ?? "", workspaceID, appendTextRef, insertSkillRef });
+  const chatData = useChatData({ taskID: taskId, workspaceID, appendTextRef, insertSkillRef });
 
   // /btw popups are scoped to the agent that opened them. Whenever the
   // active agent changes (tab switch, workspace switch, navigation), the
   // popup atom may still hold the previous agent's question/answer; close
   // it so it doesn't float above an unrelated chat pane.
   useEffect(() => {
-    closeBtwPopupIfNotForAgent(taskID ?? null);
-  }, [taskID, closeBtwPopupIfNotForAgent]);
+    closeBtwPopupIfNotForAgent(taskId);
+  }, [taskId, closeBtwPopupIfNotForAgent]);
 
   // Reactive signal for "is the chat panel currently rendered?" — read by the
   // command palette (via `chatPanelMountedAtom`) instead of poking the DOM.

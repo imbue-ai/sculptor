@@ -18,7 +18,7 @@ import type { PanelId, SubSectionId } from "../sectionTypes.ts";
 
 export type PanelKind = "static" | "agent" | "terminal";
 
-export type PanelContextMenuItem = { label: string; action: () => void };
+export type PanelContextMenuItem = { label: string; action: () => void; disabled?: boolean };
 
 export type PanelDefinition = {
   id: PanelId;
@@ -30,6 +30,11 @@ export type PanelDefinition = {
   component: ComponentType;
   tabIcon?: ReactNode;
   contextMenuActions?: ReadonlyArray<PanelContextMenuItem>;
+  // When set, the tab's close button runs this instead of removing the panel from the
+  // layout. Multi-instance panels use it so closing an agent/terminal tab deletes the
+  // underlying agent/terminal (with its confirmation dialog) rather than just hiding it
+  // (AGENT-04/08). Static panels leave it unset and fall back to closePanelAtom.
+  onRequestClose?: () => void;
 };
 
 // Agent and terminal are the only multi-instance (renamable) panels.

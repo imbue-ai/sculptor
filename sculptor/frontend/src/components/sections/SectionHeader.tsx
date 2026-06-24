@@ -62,7 +62,14 @@ const PanelTabComponent = ({ panelId, subSection, isActive, isGhost }: PanelTabP
 
   const handleClose = (event: React.MouseEvent): void => {
     event.stopPropagation();
-    closePanel({ panelId });
+    // Multi-instance panels (agent/terminal) delete the underlying entity — with its
+    // confirmation dialog — instead of just removing the tab from the layout
+    // (AGENT-04/08). Static panels have no onRequestClose and just close.
+    if (definition.onRequestClose !== undefined) {
+      definition.onRequestClose();
+    } else {
+      closePanel({ panelId });
+    }
   };
 
   const handleRenameCommit = (newName: string): void => {
@@ -83,7 +90,10 @@ const PanelTabComponent = ({ panelId, subSection, isActive, isGhost }: PanelTabP
       onClick={handleActivate}
     >
       <span className={styles.icon}>
-        <Icon size={14} />
+        {/* Multi-instance panels carry a per-instance tabIcon (the agent status dot —
+            read/unread + running/waiting, AGENT-07); static panels fall back to their
+            lucide kind icon. */}
+        {definition.tabIcon ?? <Icon size={14} />}
       </span>
       {isRenaming && canRename ? (
         <InlineRenameInput
@@ -127,7 +137,7 @@ const PanelTabComponent = ({ panelId, subSection, isActive, isGhost }: PanelTabP
         )}
         {canRename && contextActions.length > 0 && <ContextMenu.Separator />}
         {contextActions.map((action) => (
-          <ContextMenu.Item key={action.label} onSelect={() => action.action()}>
+          <ContextMenu.Item key={action.label} disabled={action.disabled} onSelect={() => action.action()}>
             {action.label}
           </ContextMenu.Item>
         ))}

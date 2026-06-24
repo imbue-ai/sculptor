@@ -54,14 +54,19 @@ const WorkspacePageContent = ({ taskID }: { taskID: string }): ReactElement => {
           workspaceId={workspaceID}
           chatContent={
             <Flex direction="column" className={styles.centerPanel}>
-              <ChatPanelContent appendTextRef={appendTextRef} insertSkillRef={insertSkillRef} editorRef={editorRef} />
+              <ChatPanelContent
+                taskId={taskID}
+                appendTextRef={appendTextRef}
+                insertSkillRef={insertSkillRef}
+                editorRef={editorRef}
+              />
               <AgentTabs />
             </Flex>
           }
         />
       </Flex>
     ),
-    [workspaceID],
+    [workspaceID, taskID],
   );
 
   return (
