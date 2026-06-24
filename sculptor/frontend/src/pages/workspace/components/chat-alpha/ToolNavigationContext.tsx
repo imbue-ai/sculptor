@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import type { ReactElement, ReactNode } from "react";
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 type RowRegistration = {
   itemIds: ReadonlyArray<string>;
@@ -42,8 +42,12 @@ export const ToolNavigationProvider = ({ children }: { children: ReactNode }): R
   const itemRefsRef = useRef(new Map<string, HTMLElement | null>());
 
   // Use a ref so navigate() doesn't recreate on every openItemId change.
+  // The ref is read only inside navigate() (a callback), never during render,
+  // so syncing it in an effect keeps render pure without changing behavior.
   const openItemIdRef = useRef(openItemId);
-  openItemIdRef.current = openItemId;
+  useEffect(() => {
+    openItemIdRef.current = openItemId;
+  });
 
   const setOpenItemId = useCallback((id: string | null, pinned: boolean = true): void => {
     isPinnedRef.current = id !== null && pinned;

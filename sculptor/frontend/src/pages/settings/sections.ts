@@ -140,7 +140,7 @@ export const SETTINGS_SECTIONS: ReadonlyArray<SettingsSectionDescriptor> = [
     id: SettingsSection.GIT,
     displayName: "Git",
     paletteSubtitle: "Git provider configuration",
-    paletteKeywords: ["github", "gitlab"],
+    paletteKeywords: ["github", "pr", "pull request"],
     icon: GitBranchIcon,
     testId: ElementIds.SETTINGS_NAV_GIT,
   },

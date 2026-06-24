@@ -15,12 +15,12 @@ describe("formatRepoUrl", () => {
   });
 
   it("trims http URLs to path", () => {
-    expect(formatRepoUrl("http://gitlab.example.com/team/project.git")).toBe("team/project");
+    expect(formatRepoUrl("http://git.example.com/team/project.git")).toBe("team/project");
   });
 
   it("trims SSH-style git URLs to org/repo", () => {
     expect(formatRepoUrl("git@github.com:imbue-ai/sculptor.git")).toBe("imbue-ai/sculptor");
-    expect(formatRepoUrl("git@gitlab.com:team/project")).toBe("team/project");
+    expect(formatRepoUrl("git@git.example.com:team/project")).toBe("team/project");
   });
 
   it("trims ssh:// URLs to path", () => {

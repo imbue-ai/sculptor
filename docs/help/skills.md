@@ -128,7 +128,7 @@ a failing test, fix the code, verify. It has two modes:
 - **Autonomous** — prefix the input with `--autonomous` to run end-to-end with
   no questions. It explores the codebase, classifies the bug (reproduced, stale,
   already-fixed, or unreproducible), fixes proven bugs, and — if the repo's
-  config allows it — opens a pull/merge request.
+  config allows it — opens a pull request.
 
 Input: a bug description or a bug ticket ID.
 
@@ -164,7 +164,7 @@ inferred from the recent conversation.
 
 Stack a new workspace **on top of** the current branch — a handoff into a new
 workspace whose branch is both *based off* and *targets* the current branch. That
-scopes the new workspace's diff and any pull/merge request to just the changes
+scopes the new workspace's diff and any pull request to just the changes
 made on top of your current work, rather than against the repo's default target
 (e.g. `main`). Use it to spin off a dependent follow-up while keeping the current
 agent focused.

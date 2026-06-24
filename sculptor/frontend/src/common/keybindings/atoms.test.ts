@@ -85,7 +85,7 @@ describe("keybindings resolution", () => {
     expect(map.command_palette.isDefault).toBe(false);
   });
 
-  it("does NOT inherit a legacy search_agents override (migration removed in MR !1021)", () => {
+  it("does NOT inherit a legacy search_agents override (migration since removed)", () => {
     // search_agents and command_palette are not the
     // same feature, so customizations of the old binding should NOT
     // silently transfer. Users with a customized 'Search agents' fall

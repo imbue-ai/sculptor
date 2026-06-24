@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { UserConfig } from "~/api";
 import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 import {
+  activePanelInZoneAtom,
+  activePanelPerZoneAtom,
   createPanelStore,
   didZenImplyFocusModeAtom,
   focusModeActiveAtom,
@@ -18,6 +20,7 @@ import {
   savedSideVisibilityAtom,
   zenModeActiveAtom,
   zoneAssignmentsAtom,
+  zoneOrderAtom,
   zoneVisibilityAtom,
 } from "~/components/panels/atoms.ts";
 import type { PanelDefinition } from "~/components/panels/types.ts";
@@ -54,6 +57,58 @@ const TEST_PANELS: ReadonlyArray<PanelDefinition> = [
 
 beforeEach(() => localStorage.clear());
 afterEach(() => localStorage.clear());
+
+describe("activePanelInZoneAtom", () => {
+  const ENABLED_PANEL: PanelDefinition = {
+    id: "enabled",
+    displayName: "Enabled",
+    description: "Test panel",
+    icon: Circle,
+    defaultZone: "top-right",
+    defaultShortcut: "",
+    component: () => createElement("div"),
+  };
+  const DISABLED_PANEL: PanelDefinition = {
+    id: "disabled",
+    displayName: "Disabled",
+    description: "Test panel",
+    icon: Circle,
+    defaultZone: "top-right",
+    defaultShortcut: "",
+    component: () => createElement("div"),
+    defaultEnabled: false,
+  };
+
+  it("resolves the active panel when it is enabled", () => {
+    const store = createPanelStore([ENABLED_PANEL, DISABLED_PANEL]);
+    store.set(zoneAssignmentsAtom, { enabled: "top-right", disabled: "top-right" });
+    store.set(zoneOrderAtom, { "top-right": ["disabled", "enabled"] });
+    store.set(activePanelPerZoneAtom, { "top-right": "enabled" });
+
+    expect(store.get(activePanelInZoneAtom("top-right"))?.id).toBe("enabled");
+  });
+
+  it("never resolves to a disabled panel, even when it is the persisted active one", () => {
+    // Stale localStorage can name a panel the user has since toggled off.
+    // Rendering it would show a panel that is off; fall back to the first
+    // enabled panel in the zone instead.
+    const store = createPanelStore([ENABLED_PANEL, DISABLED_PANEL]);
+    store.set(zoneAssignmentsAtom, { enabled: "top-right", disabled: "top-right" });
+    store.set(zoneOrderAtom, { "top-right": ["disabled", "enabled"] });
+    store.set(activePanelPerZoneAtom, { "top-right": "disabled" });
+
+    expect(store.get(activePanelInZoneAtom("top-right"))?.id).toBe("enabled");
+  });
+
+  it("returns undefined when the zone has no enabled panels", () => {
+    const store = createPanelStore([DISABLED_PANEL]);
+    store.set(zoneAssignmentsAtom, { disabled: "top-right" });
+    store.set(zoneOrderAtom, { "top-right": ["disabled"] });
+    store.set(activePanelPerZoneAtom, { "top-right": "disabled" });
+
+    expect(store.get(activePanelInZoneAtom("top-right"))).toBeUndefined();
+  });
+});
 
 describe("isSideVisibleAtom", () => {
   it("returns true when any zone in the side is visible", () => {

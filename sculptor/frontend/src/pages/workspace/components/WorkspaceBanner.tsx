@@ -81,7 +81,7 @@ export const WorkspaceBanner = (): ReactElement | null => {
 
   const handleSwitchTarget = useCallback(
     async (newTarget: string) => {
-      // MRs live on the origin remote, so prefer "origin/{bare}".
+      // PRs live on the origin remote, so prefer "origin/{bare}".
       const fullBranch =
         targetBranches.find((b) => b === `origin/${newTarget}`) ??
         targetBranches.find((b) => b.endsWith(`/${newTarget}`)) ??
@@ -98,15 +98,10 @@ export const WorkspaceBanner = (): ReactElement | null => {
     [workspaceID, targetBranches],
   );
 
-  const gitProvider: "gitlab" | "github" | null = repoInfo?.isGitlabOrigin
-    ? "gitlab"
-    : repoInfo?.isGithubOrigin
-      ? "github"
-      : null;
-  const isGitLab = gitProvider === "gitlab";
+  const gitProvider: "github" | null = repoInfo?.isGithubOrigin ? "github" : null;
   const currentTargetBranch = workspace?.targetBranch ?? prDefaultTargetBranch;
 
-  // Only show mismatch when the MR's target branch differs from the current
+  // Only show mismatch when the PR's target branch differs from the current
   // workspace target. Compare bare names (strip remote prefix like "origin/")
   // to handle repos that use non-origin remotes.
   const currentTargetBare = currentTargetBranch.replace(/^[^/]+\//, "");
@@ -123,12 +118,12 @@ export const WorkspaceBanner = (): ReactElement | null => {
         ? {
             targetBranch: prStatus.mismatchedPrTargetBranch!,
             badge: {
-              text: `${isGitLab ? "MR" : "PR"} ${isGitLab ? "!" : "#"}${prStatus.mismatchedPrIid}`,
-              tooltip: `Open ${isGitLab ? "MR" : "PR"} targets this branch`,
+              text: `PR #${prStatus.mismatchedPrIid}`,
+              tooltip: `Open PR targets this branch`,
             },
           }
         : null,
-    [hasMismatch, prStatus?.mismatchedPrTargetBranch, prStatus?.mismatchedPrIid, isGitLab],
+    [hasMismatch, prStatus?.mismatchedPrTargetBranch, prStatus?.mismatchedPrIid],
   );
 
   if (isZenModeActive || !workspace) {
@@ -143,8 +138,8 @@ export const WorkspaceBanner = (): ReactElement | null => {
   const shouldShowModeBadge = strategy !== WorkspaceInitializationStrategy.WORKTREE;
   // The target-branch selector is host-agnostic — it just edits the
   // workspace's merge target — so it is shown for every repo regardless of
-  // remote host (SCU-1526). PR/MR creation, on the other hand, requires the
-  // GitHub or GitLab CLI, so the PR button stays gated on the git provider.
+  // remote host (SCU-1526). PR creation, on the other hand, requires the
+  // GitHub CLI, so the PR button stays gated on the git provider.
   const canCreatePr = gitProvider !== null;
 
   // Resolve the full remote branch name for the mismatch target (e.g. "upstream/main")
@@ -200,7 +195,7 @@ export const WorkspaceBanner = (): ReactElement | null => {
       <Tooltip
         content={
           isMismatched
-            ? `${isGitLab ? "MR" : "PR"} ${isGitLab ? "!" : "#"}${mismatchInfo.mismatchedPrIid} targets ${mismatchInfo.fullBranch} — retarget?`
+            ? `PR #${mismatchInfo.mismatchedPrIid} targets ${mismatchInfo.fullBranch} — retarget?`
             : "Target branch"
         }
         side="bottom"

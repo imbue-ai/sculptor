@@ -40,8 +40,8 @@ def _collect_server_diagnostics(
     free_gb = (_get_disk_bytes_free() or _ASSUMED_FREE_BYTES_WHEN_UNKNOWN) / _BYTES_PER_GIBIBYTE
 
     result: dict[str, str | float | int | None] = {
-        "version": str(version.__version__),
-        "git_sha": str(version.__git_sha__),
+        "version": version.__version__,
+        "git_sha": version.__git_sha__,
         "python_version": sys.version.split()[0],
         "platform": platform.system(),
         "platform_version": platform.release(),

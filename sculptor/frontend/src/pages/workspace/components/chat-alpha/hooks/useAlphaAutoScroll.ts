@@ -1,3 +1,9 @@
+/* eslint-disable react-hooks/immutability -- This hook imperatively controls
+   scrolling: it deliberately mutates the TanStack virtualizer's internals
+   (shouldAdjustScrollPositionOnItemSizeChange, options.paddingEnd) and shared
+   programmatic-scroll refs to coordinate pin-to-bottom behavior. These
+   mutations are intentional and cannot be expressed within the compiler's
+   immutability model. */
 import type { Virtualizer } from "@tanstack/react-virtual";
 import type { MutableRefObject, RefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -114,9 +120,15 @@ export const useAlphaAutoScroll = (
   // by the scroll handler and effects so they can make decisions without stale closures.
   const isEngagedRef = useRef(false);
   const isStreamingRef = useRef(isStreaming);
-  isStreamingRef.current = isStreaming;
   const isSuppressedRef = useRef(isSuppressed);
-  isSuppressedRef.current = isSuppressed;
+  // Mirror the latest isStreaming/isSuppressed into refs in a layout effect so
+  // the write happens after commit (never during render).  Declared before the
+  // other layout effects below so the mirrors are current before any of them
+  // read these refs in the same commit.
+  useLayoutEffect(() => {
+    isStreamingRef.current = isStreaming;
+    isSuppressedRef.current = isSuppressed;
+  });
 
   // Track whether the user is actively scrolling via input devices (wheel,
   // touch, keyboard).  Only user-initiated scrolls can engage or disengage
@@ -300,6 +312,7 @@ export const useAlphaAutoScroll = (
     // transitions to pin-to-bottom exactly as it does for later messages.
     if (lastUserMessageIndex === 0) {
       isAtBottomRef.current = false;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- genuine scroll sync: these flags must flip atomically with the imperative filling-phase entry (ref mutations) in response to a new-user-message transition; they are not derivable during render.
       setIsAtBottom(false);
       isFillingRef.current = true;
       fillingAnchorIndexRef.current = 0;
@@ -451,6 +464,7 @@ export const useAlphaAutoScroll = (
         }
       }
       isEngagedRef.current = false;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- genuine scroll sync: disengaging must flip atomically with the imperative final scrollToIndex above on the streaming-stop transition; not derivable during render.
       setIsEngaged(false);
       // Clear filling phase when streaming ends (short response — never overflowed).
       // If the response had overflowed, the ResizeObserver would have already

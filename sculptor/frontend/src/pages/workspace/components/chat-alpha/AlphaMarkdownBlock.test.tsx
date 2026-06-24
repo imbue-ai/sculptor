@@ -777,7 +777,7 @@ describe("AlphaMarkdownBlock", () => {
       const content = [
         fileSpan("@.claude/"),
         fileSpan("@README.md"),
-        skillSpan("/address-comments", "Apply MR review comments", "custom"),
+        skillSpan("/address-comments", "Apply PR review comments", "custom"),
       ].join(" ");
 
       const { container } = render(<AlphaMarkdownBlock content={content} enableFileLinks={false} />);

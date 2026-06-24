@@ -175,10 +175,9 @@ def test_closed_not_merged_pr_shows_closed_state(sculptor_instance_: SculptorIns
     """When the only PR on this branch was closed without being merged, the PR
     button reflects the closed state instead of falling back to "Create PR".
 
-    Mirrors the GitLab ``closed-not-merged`` MR handling. The fake ``gh`` CLI
-    returns a single PR node tagged ``state: CLOSED``, so a backend that ignores
-    closed PRs (the bug) would render "Create PR" and the assertion below would
-    fail.
+    The fake ``gh`` CLI returns a single PR node tagged ``state: CLOSED``, so a
+    backend that ignores closed PRs (the bug) would render "Create PR" and the
+    assertion below would fail.
     """
     _install_fake_gh(sculptor_instance_.fake_bin_dir, _FAKE_GH_CLOSED_PR_SCRIPT)
     _set_remote(sculptor_instance_, _FAKE_GITHUB_REMOTE)

@@ -7,7 +7,7 @@ import { KEYBINDING_DEFINITIONS } from "./definitions.ts";
  *
  * This list is the source of truth enforced by the test below.
  *
- * To allow a blocked shortcut, remove it from this array. The MR diff
+ * To allow a blocked shortcut, remove it from this array. The PR diff
  * makes the decision visible and reviewable.
  *
  * Shortcut format uses the same notation as definitions.ts:

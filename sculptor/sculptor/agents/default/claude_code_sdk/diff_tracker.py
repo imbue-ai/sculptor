@@ -324,7 +324,7 @@ def create_unified_diff(
             # --no-index: compare files outside of git repo
             # --binary: handle binary files
             result = concurrency_group.run_process_to_completion(
-                command=["git", "diff", "--no-index", "--binary", str(old_dir), str(new_dir)],
+                command=["git", "diff", "--no-index", "--binary", old_dir, new_dir],
                 is_checked_after=False,
                 timeout=10.0,
             )
@@ -333,7 +333,7 @@ def create_unified_diff(
             if result.returncode not in (0, 1):
                 raise GitCommandFailure(
                     f"git diff returned unexpected code {result.returncode}: stdout={result.stdout}, stderr={result.stderr}",
-                    command=["git", "diff", "--no-index", "--binary", str(old_dir), str(new_dir)],
+                    command=["git", "diff", "--no-index", "--binary", old_dir, new_dir],
                     returncode=result.returncode,
                     stdout=result.stdout,
                     stderr=result.stderr,
