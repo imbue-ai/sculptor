@@ -668,18 +668,20 @@ class PrPollingService(Service):
             nodes = (
                 index.get((candidate.name_with_owner, candidate.current_branch)) if candidate.name_with_owner else None
             )
-            status = (
-                build_status_from_open_nodes(candidate.workspace_id, nodes, candidate.target_branch) if nodes else None
-            )
-            if status is not None and status.pr_state == "open":
-                # Matched: the workspace's open PR rides the batch. Mark it so its
-                # per-workspace fallback stops rescheduling.
+            if nodes:
+                # The branch carries at least one of the user's open PRs — derive
+                # this workspace's status directly from them (open if one targets
+                # its base, else a "switch target" mismatch). Either way the round
+                # resolves it for free; mark it so its per-workspace fallback
+                # stops rescheduling.
                 self._matched_workspaces.add(candidate.workspace_id)
+                status = build_status_from_open_nodes(candidate.workspace_id, nodes, candidate.target_branch)
                 self._emit_status(candidate.workspace_id, status)
             else:
-                # Unmatched (no open PR satisfies its target — terminal, no-PR,
-                # mismatch, or a one-round index drop-out): resolve it via the
-                # per-workspace fallback at its own cadence.
+                # No open authored PR on this branch — terminal (merged/closed),
+                # no-PR-yet, or a one-round index drop-out. Resolve it via the
+                # per-workspace fallback at its own cadence (the search can't tell
+                # these apart, so a targeted all-states fetch is required).
                 self._matched_workspaces.discard(candidate.workspace_id)
                 unmatched_count += 1
                 self._enqueue(candidate.workspace_id, delay=0.0)

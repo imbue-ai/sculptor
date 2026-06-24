@@ -1,6 +1,7 @@
 import queue
 import threading
 import time
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
@@ -9,6 +10,7 @@ import pytest
 
 from sculptor.config.user_config import UserConfig
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.web.cli_status_utils import CliStatusError
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import PrStatusInfo
 from sculptor.web.derived import WorkspaceBranchInfo
@@ -20,6 +22,7 @@ from sculptor.web.pr_polling_service import _HostThrottle
 from sculptor.web.pr_polling_service import _MIN_POLL_INTERVAL_SECONDS
 from sculptor.web.pr_polling_service import _PollJob
 from sculptor.web.pr_polling_service import _RATE_LIMIT_COOLDOWN_SECONDS
+from sculptor.web.pr_polling_service import _RoundCandidate
 from sculptor.web.pr_polling_service import _TERMINAL_STATE_MULTIPLIER
 from sculptor.web.pr_polling_service import _WorkspacePollState
 from sculptor.web.pr_polling_service import _build_pr_index
@@ -27,6 +30,8 @@ from sculptor.web.pr_polling_service import _compute_poll_delay
 from sculptor.web.pr_polling_service import _compute_round_interval
 from sculptor.web.pr_polling_service import _parse_origin
 from sculptor.web.pr_polling_service import _parse_origin_owner_repo
+from sculptor.web.pr_status import GithubRateLimit
+from sculptor.web.pr_status import OpenPrSearchResult
 from sculptor.web.streams import _notify_pr_polling_service
 
 # ---------------------------------------------------------------------------
@@ -749,3 +754,328 @@ def test_compute_round_interval_floors_at_minimum() -> None:
 def test_compute_round_interval_uses_configured_interval() -> None:
     config = _make_user_config(pr_poll_interval_seconds=45)
     assert _compute_round_interval(config) == 45.0
+
+
+# ---------------------------------------------------------------------------
+# Batched search round: fan-out, Change-2 fallback, short-circuits, cadence.
+# ---------------------------------------------------------------------------
+
+
+_WORKING_DIR = Path("/tmp/repo")
+
+
+def _open_search_node(
+    number: int,
+    repo: str = "org/repo",
+    head: str = "feat-1",
+    base: str = "main",
+    mergeable: str | None = None,
+    check_state: str | None = None,
+    reviews: list[dict] | None = None,
+    threads: list[dict] | None = None,
+) -> dict:
+    """Build one ``... on PullRequest`` search node (open state)."""
+    rollup = {"state": check_state} if check_state is not None else None
+    node = {
+        "number": number,
+        "title": f"PR #{number}",
+        "url": f"https://github.com/{repo}/pull/{number}",
+        "state": "OPEN",
+        "baseRefName": base,
+        "repository": {"nameWithOwner": repo},
+        "headRefName": head,
+        "commits": {"nodes": [{"commit": {"statusCheckRollup": rollup}}]},
+        "latestReviews": {"nodes": reviews or []},
+        "reviewThreads": {"nodes": threads or []},
+    }
+    if mergeable is not None:
+        node["mergeable"] = mergeable
+    return node
+
+
+def _search_result(nodes: list[dict], rate_limit: GithubRateLimit | None = None) -> OpenPrSearchResult:
+    if rate_limit is None:
+        rate_limit = GithubRateLimit(cost=3, remaining=4997, limit=5000, reset_at="2026-01-01T00:00:00Z")
+    return OpenPrSearchResult(nodes=nodes, rate_limit=rate_limit)
+
+
+def _candidate(
+    svc: PrPollingService,
+    workspace_id: WorkspaceID,
+    target_branch: str,
+    current_branch: str = "feat-1",
+    repo: str = "org/repo",
+    host: str = "github.com",
+    is_open: bool = True,
+) -> _RoundCandidate:
+    """Register a poll state and build a matching round candidate (no git I/O)."""
+    state = _WorkspacePollState(
+        workspace_id=workspace_id,
+        working_dir=_WORKING_DIR,
+        target_branch=target_branch,
+        is_open=is_open,
+    )
+    svc._workspace_poll_state[workspace_id] = state
+    return _RoundCandidate(
+        workspace_id=workspace_id,
+        state=state,
+        working_dir=_WORKING_DIR,
+        current_branch=current_branch,
+        target_branch=target_branch,
+        host=host,
+        name_with_owner=repo,
+    )
+
+
+def test_round_shared_branch_different_target_keys_by_workspace_id() -> None:
+    # Two workspaces on the SAME (repo, head branch) but different targets. One
+    # open node (base=main) must yield "open" for the main-targeting workspace
+    # and "none + mismatched" for the develop-targeting one — proving the cache
+    # is keyed by WorkspaceID, not (repo, branch).
+    svc = _make_service()
+    ws_main = WorkspaceID()
+    ws_dev = WorkspaceID()
+    cand_main = _candidate(svc, ws_main, target_branch="main")
+    cand_dev = _candidate(svc, ws_dev, target_branch="develop")
+    node = _open_search_node(100, base="main")
+
+    with patch.object(PrPollingService, "_respect_throttle", return_value=None):
+        with patch(
+            "sculptor.web.pr_polling_service.fetch_open_prs_for_token",
+            return_value=_search_result([node]),
+        ):
+            svc._run_host_round("github.com", [cand_main, cand_dev])
+
+    assert svc._cache[ws_main].pr_state == "open"
+    assert svc._cache[ws_main].pr_iid == 100
+    assert svc._cache[ws_dev].pr_state == "none"
+    assert svc._cache[ws_dev].mismatched_pr_iid == 100
+    assert svc._cache[ws_dev].mismatched_pr_target_branch == "main"
+    # Both were resolved by the round, so neither needs a per-workspace fallback.
+    assert ws_main in svc._matched_workspaces
+    assert ws_dev in svc._matched_workspaces
+    assert svc._job_queue.empty()
+
+
+def test_round_conflicting_node_sets_has_conflicts() -> None:
+    # mergeable rides the search node, so a matched open PR's merge-conflict
+    # signal survives the round (Goal-4: the CI babysitter's MERGE_CONFLICT).
+    svc = _make_service()
+    ws = WorkspaceID()
+    cand = _candidate(svc, ws, target_branch="main")
+    node = _open_search_node(200, base="main", mergeable="CONFLICTING")
+
+    with patch.object(PrPollingService, "_respect_throttle", return_value=None):
+        with patch(
+            "sculptor.web.pr_polling_service.fetch_open_prs_for_token",
+            return_value=_search_result([node]),
+        ):
+            svc._run_host_round("github.com", [cand])
+
+    assert svc._cache[ws].pr_state == "open"
+    assert svc._cache[ws].has_conflicts is True
+
+
+def test_round_unmatched_branch_enqueues_fallback_and_does_not_emit() -> None:
+    # A workspace whose branch has no open authored PR in the search is unmatched:
+    # the round emits nothing for it and enqueues a per-workspace fallback.
+    svc = _make_service()
+    ws = WorkspaceID()
+    cand = _candidate(svc, ws, target_branch="main", current_branch="feat-no-pr")
+
+    with patch.object(PrPollingService, "_respect_throttle", return_value=None):
+        with patch(
+            "sculptor.web.pr_polling_service.fetch_open_prs_for_token",
+            return_value=_search_result([_open_search_node(1, head="other-branch")]),
+        ):
+            svc._run_host_round("github.com", [cand])
+
+    assert ws not in svc._cache
+    assert ws not in svc._matched_workspaces
+    assert ws in svc._pending
+    assert not svc._job_queue.empty()
+
+
+def test_round_stashes_rate_limit_for_governor() -> None:
+    svc = _make_service()
+    cand = _candidate(svc, WorkspaceID(), target_branch="main")
+    rate_limit = GithubRateLimit(cost=3, remaining=4000, limit=5000, reset_at="2026-01-01T00:00:00Z")
+
+    with patch.object(PrPollingService, "_respect_throttle", return_value=None):
+        with patch(
+            "sculptor.web.pr_polling_service.fetch_open_prs_for_token",
+            return_value=_search_result([], rate_limit=rate_limit),
+        ):
+            svc._run_host_round("github.com", [cand])
+
+    assert svc._rate_limit_by_host["github.com"] == rate_limit
+
+
+def test_round_logs_cold_start_unmatched_count_once() -> None:
+    svc = _make_service()
+    cand = _candidate(svc, WorkspaceID(), target_branch="main", current_branch="feat-no-pr")
+
+    with patch.object(PrPollingService, "_respect_throttle", return_value=None):
+        with patch(
+            "sculptor.web.pr_polling_service.fetch_open_prs_for_token",
+            return_value=_search_result([]),
+        ):
+            with patch("sculptor.web.pr_polling_service.logger") as mock_logger:
+                svc._run_host_round("github.com", [cand])
+                # Second round on the same host must not re-log the cold start.
+                svc._run_host_round("github.com", [cand])
+
+    cold_start_logs = [c for c in mock_logger.info.call_args_list if "cold start" in c.args[0]]
+    assert len(cold_start_logs) == 1
+
+
+def test_round_rate_limited_search_enters_cooldown_and_does_not_emit() -> None:
+    svc = _make_service()
+    ws = WorkspaceID()
+    cand = _candidate(svc, ws, target_branch="main")
+
+    with patch.object(PrPollingService, "_respect_throttle", return_value=None):
+        with patch(
+            "sculptor.web.pr_polling_service.fetch_open_prs_for_token",
+            side_effect=CliStatusError("rate_limited", "HTTP 403: API rate limit exceeded"),
+        ):
+            svc._run_host_round("github.com", [cand])
+
+    assert svc._throttle.cooldown_remaining() > 0
+    assert ws not in svc._cache
+
+
+def test_round_skips_search_when_in_cooldown() -> None:
+    # When _respect_throttle reports an active cooldown, the round issues NO
+    # search query at all.
+    svc = _make_service()
+    cand = _candidate(svc, WorkspaceID(), target_branch="main")
+
+    with patch.object(PrPollingService, "_respect_throttle", return_value=_CooldownDeferred(30.0)):
+        with patch(
+            "sculptor.web.pr_polling_service.fetch_open_prs_for_token",
+            side_effect=AssertionError("search must not run during cooldown"),
+        ):
+            svc._run_host_round("github.com", [cand])
+
+
+def test_round_short_circuit_on_target_issues_no_search() -> None:
+    # A workspace on its target branch resolves to `none` with zero gh calls —
+    # it never becomes a round candidate, so no search query runs.
+    svc = _make_service()
+    ws = WorkspaceID()
+    _add_workspace_poll_state(svc, ws)
+    svc._workspace_poll_state[ws].working_dir = _WORKING_DIR
+    svc._workspace_poll_state[ws].target_branch = "origin/main"
+    config = _make_user_config()
+
+    with patch("sculptor.web.pr_polling_service._get_workspace_current_branch", return_value="main"):
+        with patch(
+            "sculptor.web.pr_polling_service.fetch_open_prs_for_token",
+            side_effect=AssertionError("no search for an on-target workspace"),
+        ):
+            svc._run_round(config)
+
+    assert svc._cache[ws].pr_state == "none"
+
+
+def test_round_short_circuit_no_branch_issues_no_search() -> None:
+    svc = _make_service()
+    ws = WorkspaceID()
+    _add_workspace_poll_state(svc, ws)
+    svc._workspace_poll_state[ws].working_dir = _WORKING_DIR
+    config = _make_user_config()
+
+    with patch("sculptor.web.pr_polling_service._get_workspace_current_branch", return_value=None):
+        with patch(
+            "sculptor.web.pr_polling_service.fetch_open_prs_for_token",
+            side_effect=AssertionError("no search for a branchless workspace"),
+        ):
+            svc._run_round(config)
+
+    assert svc._cache[ws].pr_state == "none"
+
+
+def test_fallback_index_blip_open_to_none_is_noop() -> None:
+    # Prior cache shows open; the per-workspace fallback returns no PR at all (a
+    # one-round search-index drop-out). Rule 5: keep the open status, emit
+    # nothing — no spurious open→none transition.
+    svc = _make_service()
+    ws = WorkspaceID()
+    _add_workspace_poll_state(svc, ws)
+    state = svc._workspace_poll_state[ws]
+    svc._pending.add(ws)
+    open_status = PrStatusInfo(workspace_id=ws, pr_state="open", pr_iid=7)
+    svc._cache[ws] = open_status
+
+    observer: queue.Queue = queue.Queue()
+    svc.add_observer(observer)
+    observer.get_nowait()  # drain the replayed open status from add_observer
+
+    empty = PrStatusInfo(workspace_id=ws, pr_state="none")
+    with patch("sculptor.web.pr_polling_service.get_user_config_instance", return_value=_make_user_config()):
+        with patch.object(PrPollingService, "_execute_poll", return_value=empty):
+            svc._poll_and_handle_result(_PollJob(0.0, ws), state)
+
+    assert svc._cache[ws] == open_status
+    assert observer.empty()
+
+
+def test_fallback_terminal_merged_reschedules_at_terminal_cadence() -> None:
+    svc = _make_service()
+    ws = WorkspaceID()
+    _add_workspace_poll_state(svc, ws)
+    state = svc._workspace_poll_state[ws]
+    svc._pending.add(ws)
+    merged = PrStatusInfo(workspace_id=ws, pr_state="merged", pr_iid=9)
+    config = _make_user_config(pr_poll_interval_seconds=30)
+
+    with patch("sculptor.web.pr_polling_service.get_user_config_instance", return_value=config):
+        with patch.object(PrPollingService, "_execute_poll", return_value=merged):
+            svc._poll_and_handle_result(_PollJob(0.0, ws), state)
+
+    assert svc._cache[ws].pr_state == "merged"
+    rescheduled = svc._job_queue.get_nowait()
+    delay = rescheduled.scheduled_time - time.monotonic()
+    expected = 30.0 * _TERMINAL_STATE_MULTIPLIER
+    assert expected - 2 <= delay <= expected
+
+
+def test_fallback_no_pr_reschedules_at_base_interval_independent_of_round() -> None:
+    # A no-PR-yet workspace polls at the base interval via the fallback,
+    # decoupled from the round — the round interval doesn't enter the math.
+    svc = _make_service()
+    ws = WorkspaceID()
+    _add_workspace_poll_state(svc, ws)
+    state = svc._workspace_poll_state[ws]
+    svc._pending.add(ws)
+    none_status = PrStatusInfo(workspace_id=ws, pr_state="none")
+    config = _make_user_config(pr_poll_interval_seconds=45)
+
+    with patch("sculptor.web.pr_polling_service.get_user_config_instance", return_value=config):
+        with patch.object(PrPollingService, "_execute_poll", return_value=none_status):
+            svc._poll_and_handle_result(_PollJob(0.0, ws), state)
+
+    rescheduled = svc._job_queue.get_nowait()
+    delay = rescheduled.scheduled_time - time.monotonic()
+    assert 43 <= delay <= 45
+
+
+def test_fallback_matched_workspace_stops_rescheduling() -> None:
+    # Once the round has matched a workspace, a stale fallback fetch emits its
+    # result but does NOT reschedule — the round now owns it (rule 3 cost control).
+    svc = _make_service()
+    ws = WorkspaceID()
+    _add_workspace_poll_state(svc, ws)
+    state = svc._workspace_poll_state[ws]
+    svc._pending.add(ws)
+    svc._matched_workspaces.add(ws)
+    open_status = PrStatusInfo(workspace_id=ws, pr_state="open", pr_iid=5)
+
+    with patch("sculptor.web.pr_polling_service.get_user_config_instance", return_value=_make_user_config()):
+        with patch.object(PrPollingService, "_execute_poll", return_value=open_status):
+            svc._poll_and_handle_result(_PollJob(0.0, ws), state)
+
+    assert svc._cache[ws] == open_status
+    assert svc._job_queue.empty()
+    assert ws not in svc._pending
