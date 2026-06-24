@@ -298,6 +298,69 @@ describe("useAgentStatus", () => {
     });
   });
 
+  describe("compacting indicator (SCU-1564)", () => {
+    it("shows compacting even when compaction ends within the debounce window", () => {
+      // Regression for the offload flake in SCU-1564: a brief auto-compaction
+      // whose "Compacting" chrome never rendered. The agent is thinking,
+      // compaction starts, then ends (agent resumes streaming its summary)
+      // before the debounce window elapses. If the compacting transition is
+      // debounced like the noisy thinking/streaming/calling_tools states, the
+      // still-pending compacting timer is cleared by the streaming transition
+      // and rescheduled for streaming — so the user (and the integration test
+      // asserting the pill) never sees the compacting state at all. Compaction
+      // is a deliberate lifecycle signal and must show immediately.
+      const observed: Array<AgentState> = [];
+      const { rerender } = renderHook(
+        (props: UseAgentStatusProps) => {
+          const status = useAgentStatus(props);
+          observed.push(status.state);
+          return status;
+        },
+        { initialProps: { ...defaultProps, taskStatus: "RUNNING", workingUserMessageId: "msg-1" } },
+      );
+      expect(observed).toContain("thinking");
+
+      // Compaction starts almost immediately, well within the debounce window.
+      rerender({ ...defaultProps, taskStatus: "RUNNING", workingUserMessageId: "msg-1", isAutoCompacting: true });
+
+      // It ends before DEBOUNCE_MS elapses: the agent resumes streaming.
+      act(() => {
+        vi.advanceTimersByTime(DEBOUNCE_MS - 100);
+      });
+      const summary = makeChatMessage([{ type: "text", text: "Summary of the conversation so far." }]);
+      rerender({
+        ...defaultProps,
+        taskStatus: "RUNNING",
+        workingUserMessageId: "msg-1",
+        isStreaming: true,
+        inProgressChatMessage: summary,
+      });
+      act(() => {
+        vi.runAllTimers();
+      });
+
+      // The compacting state must have been displayed at some point.
+      expect(observed).toContain("compacting");
+    });
+
+    it("shows compacting immediately, not after the debounce delay", () => {
+      // Even when the previous displayed-state change was recent (so an active
+      // state would be debounced), entering compaction must light the pill on
+      // the very next render — the indicator should not lag the actual start
+      // of compaction by up to DEBOUNCE_MS.
+      const { result, rerender } = renderHook((props: UseAgentStatusProps) => useAgentStatus(props), {
+        initialProps: { ...defaultProps, taskStatus: "RUNNING", workingUserMessageId: "msg-1" },
+      });
+      expect(result.current.state).toBe("thinking");
+
+      rerender({ ...defaultProps, taskStatus: "RUNNING", workingUserMessageId: "msg-1", isAutoCompacting: true });
+      // No timer advance: compacting is shown synchronously.
+      expect(result.current.state).toBe("compacting");
+      expect(result.current.label).toBe("Compacting...");
+      expect(result.current.isVisible).toBe(true);
+    });
+  });
+
   describe("stopped state transition", () => {
     it("shows stopped briefly when transitioning from stopping to idle", () => {
       const { result, rerender } = renderHook((props: UseAgentStatusProps) => useAgentStatus(props), {
