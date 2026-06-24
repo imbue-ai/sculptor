@@ -10,7 +10,7 @@ product is, the contracts it upholds, and how its behavior is verified.
   deliberately leaves out: numeric targets, version/platform bars, persistence and migration
   guarantees, integration contracts, and the open questions where the product pins no value yet.
 - **[scenarios.md](scenarios.md)** — every user-facing interaction expressed as a Given/When/Then
-  scenario (~446), the UI-level acceptance layer.
+  scenario, the UI-level acceptance layer.
 - **[scenario_coverage.md](scenario_coverage.md)** — maps each scenario to the integration test that
   demonstrates it (coverage and traceability).
 

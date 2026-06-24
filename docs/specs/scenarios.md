@@ -130,6 +130,16 @@ behavior**.
   - When: the user chooses Delete and confirms in the dialog.
   - Then: the tab disappears and an adjacent tab/page is shown.
 
+- **SHELL-049 — Copy workspace details from tab context menu**
+  - Given: a workspace tab's context menu is open.
+  - When: the user chooses Copy workspace name, Copy branch, or Copy workspace id.
+  - Then: the chosen value is copied to the clipboard (a confirmation appears briefly).
+
+- **SHELL-050 — Delete the active workspace via keybinding**
+  - Given: a workspace tab is active.
+  - When: the user presses `Cmd+Shift+W`.
+  - Then: the same delete-workspace confirmation dialog opens; confirming removes the workspace and its agents and an adjacent tab/page is shown.
+
 - **SHELL-018 — Close others / Close all from tab menu**
   - Given: multiple tabs open and a tab's context menu is open.
   - When: the user chooses "Close others" or "Close all".
@@ -554,6 +564,11 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: authentication is in progress.
   - Then: a spinner and "authenticating" appear with a help message about running `claude auth login` in a terminal.
 
+- **ONB-034 — Claude card: paste-a-code sign-in**
+  - Given: a headless/remote setup where a browser callback can't reach the app, after the user starts Claude sign-in.
+  - When: the card shows the paste-a-code panel.
+  - Then: the sign-in URL and instructions are shown with a "Paste code here" input; pasting the authorization code and submitting (Enter) completes sign-in.
+
 - **ONB-018 — Claude managed install (progress)**
   - Given: Claude is managed and not installed.
   - When: installation runs (auto-triggered on load or via Install).
@@ -664,6 +679,11 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - Given: the user typed a name and navigated away.
   - When: the user returns to the same draft.
   - Then: the previously typed name is restored.
+
+- **ADDWS-025 — Repo/branch/source-branch selections persist across tab switches**
+  - Given: the user chose a repo, source branch, and branch name on the Add Workspace form, then switched tabs.
+  - When: the user returns to the same draft.
+  - Then: the previously chosen repo, source branch, and branch name are all restored.
 
 - **ADDWS-006 — Repo selector dropdown**
   - Given: the repo selector is shown.
@@ -954,6 +974,11 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: the user toggles the babysitter switch.
   - Then: it pauses/resumes and the status text updates.
 
+- **WS-077 — CI babysitter disabled reason in PR dropdown**
+  - Given: the babysitter can't run for this workspace (e.g. its configured agent type can't be resolved) and the PR dropdown is open.
+  - When: the user views the babysitter row.
+  - Then: a short disabled-reason message is shown in place of the usual status; for a persistent reason the switch is forced off and greyed out (inert).
+
 - **WS-029 — Merged/closed PR**
   - Given: the PR was merged or closed.
   - When: viewing the button.
@@ -977,9 +1002,14 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 ## Target branch & repo segment
 
 - **WS-033 — Target-branch selector**
-  - Given: a workspace with a target branch.
+  - Given: any workspace (regardless of remote host).
   - When: viewing the banner.
-  - Then: the target branch name is shown; clicking it opens a dropdown of remote branches, and selecting one updates the target.
+  - Then: the target branch name is shown; clicking it opens a dropdown of branches, and selecting one updates the target.
+
+- **WS-078 — Target-branch selector on a repo with no remote**
+  - Given: a workspace whose repo has no remote configured.
+  - When: the user opens the target-branch selector.
+  - Then: the dropdown offers the repo's local branches (excluding the workspace's own branch), and selecting one updates the target shown in the banner.
 
 - **WS-034 — Target-branch PR mismatch warning**
   - Given: the workspace target differs from an existing PR's target.
@@ -1053,7 +1083,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **WS-047 — Agent context menu**
   - Given: an agent tab.
   - When: the user right-clicks it.
-  - Then: a menu offers Rename, Mark as unread, Delete, and a Diagnostics submenu (Debug View toggle; copy Claude session id / transcript path / Sculptor transcript path — disabled when unavailable).
+  - Then: a menu offers Rename, Mark as unread, Copy agent name, Delete, and a Diagnostics submenu (Debug View toggle; copy Claude session id / transcript path / Sculptor transcript path — disabled when unavailable).
 
 - **WS-048 — Delete an agent**
   - Given: an agent context menu (or close button) is used.
@@ -1463,6 +1493,11 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: the user clicks a timestamp.
   - Then: it toggles between relative and absolute formats.
 
+- **CHAT-046 — Capability-gated model picker / Pi model catalog**
+  - Given: agents whose harness does and doesn't support model selection.
+  - When: the user opens the model picker on each (a Claude agent, a Pi agent, and a terminal agent).
+  - Then: a Claude agent lists Claude models; a Pi agent lists Pi's own models grouped by provider; a terminal agent shows the picker disabled with the current model; switching a Pi model that the harness rejects leaves the selection unchanged and shows an error toast.
+
 ---
 
 # MSG — Message & tool-content rendering
@@ -1660,6 +1695,11 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - Given: an active chat search.
   - When: messages render.
   - Then: all matches are highlighted, with the active occurrence styled distinctly.
+
+- **MSG-037 — Copy an image from the conversation**
+  - Given: an image is shown in the conversation (in a message, the attachment preview, or the zoomed lightbox).
+  - When: the user right-clicks the image and chooses "Copy Image".
+  - Then: the image is copied to the clipboard.
 
 ---
 
@@ -1964,6 +2004,13 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - Given: the user has set folder-expansion, scroll position, active tab, view mode, diff view type, line-wrapping, and diff scope.
   - When: switching tabs/files and returning.
   - Then: each of these states is restored.
+
+## Plugin panels (experimental)
+
+- **PANEL-057 — Plugin-contributed panel appears with a badge**
+  - Given: Frontend plugins is enabled and a plugin contributing a panel is loaded (e.g. the bundled Linear plugin).
+  - When: the user views the Panels list and opens the plugin's panel.
+  - Then: the panel is listed with a "plugin" badge and renders its content when opened.
 
 ---
 
@@ -2281,6 +2328,11 @@ The home page and the Add Workspace page share the recent-workspaces list and it
   - When: the user toggles the babysitter, sets the retry cap (1–10), or edits the pipeline-failed / merge-conflict prompts.
   - Then: each saves with a toast; the dependent fields disable when the babysitter is off; prompts have reset-to-default.
 
+- **SET-039 — Babysitter agent selector**
+  - Given: the CI section with the babysitter enabled.
+  - When: the user opens the "Babysitter agent" selector.
+  - Then: it offers "Most recently used" (default), Claude, Pi (when enabled), and any registered terminal agent that accepts automated prompts; choosing one saves with a toast; the selector is disabled when the babysitter is off.
+
 ## File browser
 
 - **SET-026 — File-browser settings**
@@ -2306,13 +2358,20 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 
 - **SET-029 — Experimental toggles**
   - Given: the Experimental section.
-  - When: the user toggles any feature (Always interrupt and send, Smooth streaming, Per-workspace panel layout, In-place workspaces, Clone workspaces, Review all, Entity mentions, Rich markdown rendering, Pi agent).
+  - When: the user toggles any feature (Always interrupt and send, Smooth streaming, Per-workspace panel layout, In-place workspaces, Clone workspaces, Review all, Entity mentions, Rich markdown rendering, Pi agent, Frontend plugins).
   - Then: each shows "Setting updated".
 
 - **SET-030 — Custom backend command & timeout**
   - Given: the Experimental/Advanced section.
   - When: the user sets a custom backend command or readiness timeout.
   - Then: each saves with a "restart required" toast.
+
+## Plugins (experimental)
+
+- **SET-038 — Manage plugin sources**
+  - Given: Frontend plugins is enabled, so a Plugins section appears in Settings.
+  - When: the user adds a plugin source by URL, toggles a plugin's enable/disable switch, clicks Refresh to rescan the plugins directory, or removes a user-added URL source.
+  - Then: an added source appears in the list; the switch mutes/unmutes the plugin without removing it; Refresh re-scans drop-in plugins; a user-added URL source can be removed while bundled/disk-discovered ones cannot; the plugins directory path is shown.
 
 ## Actions
 
@@ -2360,7 +2419,7 @@ The home page and the Add Workspace page share the recent-workspaces list and it
 - **ACT-001 — Action chip appearance & trigger**
   - Given: an action chip.
   - When: viewing/clicking it.
-  - Then: it shows a play icon (auto-submit) or text-cursor icon (draft), a tooltip with the prompt on hover, and clicking executes (send or append); disabled chips ignore clicks.
+  - Then: it shows a play icon (auto-submit) or text-cursor icon (draft), a tooltip with the prompt on hover, and clicking executes — for a chat agent, send or append to the chat input; for a terminal agent, type-and-submit (auto-submit) or type into the terminal without submitting (draft); disabled chips ignore clicks.
 
 - **ACT-002 — Action context menu**
   - Given: an action chip.

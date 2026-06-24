@@ -14,6 +14,7 @@ import { useWorkspace } from "~/common/state/hooks/useWorkspace";
 import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch";
 import { zenModeActiveAtom } from "~/components/panels/atoms.ts";
 import { getBranchName } from "~/pages/home/Utils";
+import { pluginWorkspaceWidgetsAtom } from "~/plugins/pluginRegistry.ts";
 
 import { useProgressiveCollapse } from "../hooks/useProgressiveCollapse";
 import { useWorkspaceTargetBranches } from "../hooks/useWorkspaceTargetBranches";
@@ -38,6 +39,7 @@ export const WorkspaceBanner = (): ReactElement | null => {
   const targetBranches = useWorkspaceTargetBranches(workspaceID);
   const containerRef = useRef<HTMLDivElement>(null);
   const { hiddenPriorities } = useProgressiveCollapse(containerRef);
+  const workspaceWidgets = useAtomValue(pluginWorkspaceWidgetsAtom);
 
   const branchName = getBranchName(workspaceBranchInfo?.currentBranch);
 
@@ -222,6 +224,18 @@ export const WorkspaceBanner = (): ReactElement | null => {
         <div data-collapse-priority="1">
           <DiffSummary workspaceId={workspaceID} />
         </div>
+      )}
+
+      {/* Plugin-contributed workspace widgets (e.g. the Linear ticket
+          shortcut). Rendered as direct banner children so they share the PR
+          button's progressive-collapse row: each opts in with its own
+          data-collapse-priority and is hidden when that priority collapses. */}
+      {workspaceWidgets.map(({ id, component: Widget, collapsePriority }) =>
+        hiddenPriorities.has(collapsePriority) ? null : (
+          <div key={id} data-collapse-priority={collapsePriority}>
+            <Widget />
+          </div>
+        ),
       )}
 
       {/* PR button */}
