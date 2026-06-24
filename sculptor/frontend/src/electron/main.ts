@@ -24,6 +24,7 @@ import Store from "electron-store";
 import type { AnyBackendStatus, SculptorDevInfo } from "../shared/types";
 import { APP_SCHEME, getAppRendererUrl, resolveRequestToFilePath, shouldFallbackToIndex } from "./appProtocol";
 import { initAutoUpdater } from "./autoUpdater";
+import { captureNonEmptyPage } from "./captureNonEmptyPage";
 import type { ZoomCommand } from "./constants";
 import {
   BACKEND_PORT_CHANNEL_NAME,
@@ -1090,7 +1091,10 @@ app.whenReady().then(async () => {
     if (!contents) {
       throw new Error(`No webContents with id ${webContentsId}`);
     }
-    const image = await contents.capturePage();
+    // Retry until the guest has painted: capturePage() resolves with an empty
+    // image until the first frame is composited, and writing that empty image
+    // would leave no PNG on the clipboard.
+    const image = await captureNonEmptyPage(contents);
     clipboard.writeImage(image);
   });
 
