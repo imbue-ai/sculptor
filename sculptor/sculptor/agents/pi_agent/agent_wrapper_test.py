@@ -28,6 +28,7 @@ from sculptor.agents.pi_agent.agent_wrapper import PI_SESSION_ID_STATE_FILE
 from sculptor.agents.pi_agent.agent_wrapper import PiAgent
 from sculptor.agents.pi_agent.agent_wrapper import _PI_TRANSIENT_RETRY_BASE_DELAY_SECONDS
 from sculptor.agents.pi_agent.agent_wrapper import _PI_TRANSIENT_RETRY_MAX_DELAY_SECONDS
+from sculptor.agents.pi_agent.agent_wrapper import _STALLED_CONTROL_COMMAND_MESSAGE
 from sculptor.agents.pi_agent.agent_wrapper import _TurnState
 from sculptor.agents.pi_agent.agent_wrapper import _curate_models
 from sculptor.agents.pi_agent.agent_wrapper import _model_option_from_pi
@@ -1844,6 +1845,97 @@ def test_set_model_runs_after_an_in_flight_chat_turn() -> None:
         agent._shutdown_event.set()
         worker.join(timeout=5.0)
     assert order == ["turn", "set_model"]
+
+
+def _silent_alive_process() -> MagicMock:
+    """A stub process that is alive (`is_finished` False) but emits no stdout,
+    standing in for a pi whose turn has stalled."""
+    process = MagicMock()
+    process.get_queue.return_value = Queue()
+    process.is_finished.return_value = False
+    return process
+
+
+def _run_turn_until(agent: PiAgent, predicate: Callable[[], bool]) -> None:
+    """Drive `_consume_until_turn_end` on a worker thread until `predicate` holds,
+    then shut the turn pump down. A stalled turn never ends on its own, so the
+    test stops it explicitly once the behavior under test has happened."""
+    worker = threading.Thread(target=agent._consume_until_turn_end, args=("p",), daemon=True)
+    worker.start()
+    try:
+        _wait_until(predicate)
+    finally:
+        agent._shutdown_event.set()
+        worker.join(timeout=5.0)
+    assert not worker.is_alive(), "the turn pump did not stop"
+
+
+def test_stalled_turn_fails_a_starved_set_model_instead_of_hanging() -> None:
+    """A turn whose pi goes silent must not starve a queued model switch forever:
+    past the stall window the set_model is failed (and dropped) so the user gets an
+    actionable outcome. The turn and pi process are left running."""
+    agent = _make_agent()
+    agent._process = _silent_alive_process()
+    set_model = SetModelUserMessage(message_id=AgentMessageID(), provider="anthropic", model_id="claude-haiku-4-5")
+    agent._push_message(set_model)
+    with patch("sculptor.agents.pi_agent.agent_wrapper._TURN_STALL_TIMEOUT_SECONDS", 0.2):
+        # The starved set_model is drained and failed, so the input queue empties.
+        _run_turn_until(agent, lambda: agent._input_agent_messages.empty())
+    emitted = _drain(agent._output_messages)
+    failures = [
+        m for m in emitted if isinstance(m, RequestFailureAgentMessage) and m.request_id == set_model.message_id
+    ]
+    assert len(failures) == 1
+    assert _STALLED_CONTROL_COMMAND_MESSAGE in str(failures[0].error.args[0])
+
+
+def test_stalled_turn_fails_a_starved_clear_context() -> None:
+    """The same stall guard covers a queued context reset, not just model switch."""
+    agent = _make_agent()
+    agent._process = _silent_alive_process()
+    clear = ClearContextUserMessage()
+    agent._push_message(clear)
+    with patch("sculptor.agents.pi_agent.agent_wrapper._TURN_STALL_TIMEOUT_SECONDS", 0.2):
+        _run_turn_until(agent, lambda: agent._input_agent_messages.empty())
+    emitted = _drain(agent._output_messages)
+    assert any(isinstance(m, RequestFailureAgentMessage) and m.request_id == clear.message_id for m in emitted)
+
+
+def test_stall_failure_preserves_a_queued_chat_turn() -> None:
+    """Failing a starved control command must not drop a chat turn queued alongside
+    it: the chat is put back to be processed once the turn ends."""
+    agent = _make_agent()
+    agent._process = _silent_alive_process()
+    chat = ChatInputUserMessage(text="next")
+    set_model = SetModelUserMessage(message_id=AgentMessageID(), provider="anthropic", model_id="claude-haiku-4-5")
+    agent._push_message(chat)
+    agent._push_message(set_model)
+    with patch("sculptor.agents.pi_agent.agent_wrapper._TURN_STALL_TIMEOUT_SECONDS", 0.2):
+        # The set_model is failed and dropped; only the chat remains queued.
+        _run_turn_until(agent, lambda: agent._input_agent_messages.qsize() == 1)
+    remaining = [agent._input_agent_messages.get_nowait()]
+    assert remaining == [chat]
+
+
+def test_normal_turn_leaves_a_queued_set_model_for_between_turns_processing() -> None:
+    """A turn that ends normally must NOT fail a model switch queued behind it: the
+    stall guard fires only on prolonged pi silence, so the switch stays queued to
+    apply between turns as usual."""
+    agent = _make_agent()
+    agent._process = _make_process(
+        [
+            _event({"type": "agent_start"}),
+            _event(_text_delta_update("hi", "hi")),
+            _event({"type": "agent_end", "messages": [_assistant_msg("hi")], "willRetry": False}),
+        ]
+    )
+    set_model = SetModelUserMessage(message_id=AgentMessageID(), provider="anthropic", model_id="claude-haiku-4-5")
+    agent._push_message(set_model)
+    # Default stall window (minutes) far exceeds this fast turn, so it never fires.
+    agent._consume_until_turn_end("p")
+    assert agent._input_agent_messages.get_nowait() is set_model
+    emitted = _drain(agent._output_messages)
+    assert not any(isinstance(m, RequestFailureAgentMessage) and m.request_id == set_model.message_id for m in emitted)
 
 
 def _make_start_env(persisted_session_id: str | None = None) -> MagicMock:
