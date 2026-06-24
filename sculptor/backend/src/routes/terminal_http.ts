@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getOrm } from "~/db/orm";
 import { getAgent, updateAgent } from "~/db/repositories";
 import { getTerminalManager } from "~/terminal/instance";
+import { listRegistrations } from "~/services/terminal_agent_registry/registry";
 
 // Terminal HTTP endpoints (web/app.py): automated input to a terminal agent,
 // the terminal-agent signal event API, terminal close, and the registrations
@@ -108,14 +109,22 @@ export async function registerTerminalHttpRoutes(
       schema: {
         response: {
           200: z.object({
-            registrations: z.array(z.record(z.string(), z.unknown())),
+            registrations: z.array(
+              z.object({
+                registrationId: z.string(),
+                displayName: z.string(),
+                launchCommand: z.string(),
+                resumeCommandTemplate: z.string().nullable(),
+                acceptsAutomatedPrompts: z.boolean(),
+              }),
+            ),
           }),
         },
       },
     },
     async () => {
-      // Registry source lands in Task 7.5; report none for now.
-      return { registrations: [] };
+      // Re-read on demand (REQ-INT-030) — no process-lifetime cache.
+      return { registrations: listRegistrations() };
     },
   );
 }
