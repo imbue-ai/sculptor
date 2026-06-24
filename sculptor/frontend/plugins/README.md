@@ -92,9 +92,10 @@ request. Rules:
 - **Set `staleTime` explicitly**: the host's default is `Infinity` (its
   queries are invalidated by the WebSocket stream); without an override your
   data will never refetch.
-- **Scope imperative calls to your namespace**: `invalidateQueries({ queryKey:
-["<your-id>"] })` is fine; never call `clear()` or unfiltered
-  `invalidateQueries()` — the cache is shared with the host.
+- **Scope imperative calls to your namespace**:
+  `invalidateQueries({ queryKey: ["<your-id>"] })` is fine; never call
+  `clear()` or unfiltered `invalidateQueries()` — the cache is shared with the
+  host.
 - `QueryClient`/`QueryClientProvider` are intentionally not exported by the
   runtime stub: don't construct your own client, it would cut host components
   rendered inside your subtree off from the shared cache.
