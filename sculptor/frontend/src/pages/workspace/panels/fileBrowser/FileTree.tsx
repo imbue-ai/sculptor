@@ -36,9 +36,23 @@ type FileTreeProps = {
   workspaceId: string;
   viewMode: ViewMode;
   searchMatchingPaths?: Set<string> | null;
+  /**
+   * When set, a file click calls this instead of opening a global file-view tab.
+   * The FilesPanel passes its own selection setter so the embedded viewer is
+   * driven by per-panel state rather than the shared diff-panel tab list.
+   */
+  onSelectFile?: (path: string) => void;
+  /** The currently selected file path, highlighted in the list. */
+  selectedPath?: string | null;
 };
 
-export const FileTree = ({ workspaceId, viewMode, searchMatchingPaths }: FileTreeProps): ReactElement => {
+export const FileTree = ({
+  workspaceId,
+  viewMode,
+  searchMatchingPaths,
+  onSelectFile,
+  selectedPath,
+}: FileTreeProps): ReactElement => {
   const [fileBrowserState, setFileBrowserState] = useAtom(fileBrowserStateAtomFamily(workspaceId));
   const toggleFolder = useSetAtom(toggleFolderAtom);
   const expandFolders = useSetAtom(expandFoldersAtom);
@@ -156,9 +170,13 @@ export const FileTree = ({ workspaceId, viewMode, searchMatchingPaths }: FileTre
 
   const handleFileClick = useCallback(
     (path: string): void => {
+      if (onSelectFile) {
+        onSelectFile(path);
+        return;
+      }
       openFileViewTab({ workspaceId, filePath: path });
     },
-    [openFileViewTab, workspaceId],
+    [onSelectFile, openFileViewTab, workspaceId],
   );
 
   const handleCollapseChildren = useCollapseChildren({
@@ -254,6 +272,7 @@ export const FileTree = ({ workspaceId, viewMode, searchMatchingPaths }: FileTre
                   <FlatListRow
                     entry={entry}
                     isFocused={virtualItem.index === focusedIndex}
+                    isSelected={entry.path === selectedPath}
                     onFileClick={handleFileClick}
                   />
                 </FileContextMenu>
@@ -300,6 +319,7 @@ export const FileTree = ({ workspaceId, viewMode, searchMatchingPaths }: FileTre
                   isExpanded={isExpanded}
                   isFocused={virtualItem.index === focusedIndex}
                   isActiveFile={node.path === activeOperation?.filePath}
+                  isSelected={node.path === selectedPath}
                   folderChangeCount={folderChangeCount}
                   onToggleExpand={handleToggleExpand}
                   onFileClick={handleFileClick}

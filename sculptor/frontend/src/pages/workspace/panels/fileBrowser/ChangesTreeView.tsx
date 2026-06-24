@@ -55,6 +55,14 @@ type ChangesTreeViewProps = {
   scope?: DiffScope;
   searchMatchingPaths?: Set<string> | null;
   onDiscardFile?: (filePath: string) => void;
+  /**
+   * When set, a file click calls this instead of opening a global diff tab. The
+   * ChangesPanel passes its own selection setter so its embedded viewer is
+   * driven by per-panel state rather than the shared diff-panel tab list.
+   */
+  onSelectFile?: (filePath: string, status: FileStatus) => void;
+  /** The currently selected file path, highlighted in the list. */
+  selectedPath?: string | null;
 };
 
 export const ChangesTreeView = ({
@@ -63,6 +71,8 @@ export const ChangesTreeView = ({
   scope = "uncommitted",
   searchMatchingPaths,
   onDiscardFile,
+  onSelectFile,
+  selectedPath,
 }: ChangesTreeViewProps): ReactElement => {
   const [fileBrowserState, setFileBrowserState] = useAtom(fileBrowserStateAtomFamily(workspaceId));
   const toggleFolder = useSetAtom(toggleChangesFolderAtom);
@@ -165,11 +175,17 @@ export const ChangesTreeView = ({
     (path: string): void => {
       const statusMap = viewMode === "tree" ? flatRowStatusMap : flatFileStatusMap;
       const status = statusMap.get(path);
-      if (status != null) {
-        openDiffTab({ workspaceId, filePath: path, status, scope });
+      if (status == null) {
+        return;
       }
+
+      if (onSelectFile) {
+        onSelectFile(path, status);
+        return;
+      }
+      openDiffTab({ workspaceId, filePath: path, status, scope });
     },
-    [viewMode, flatRowStatusMap, flatFileStatusMap, openDiffTab, workspaceId, scope],
+    [viewMode, flatRowStatusMap, flatFileStatusMap, onSelectFile, openDiffTab, workspaceId, scope],
   );
 
   const setExpandedFolders = useCallback(
@@ -281,6 +297,7 @@ export const ChangesTreeView = ({
                   <FlatListRow
                     entry={entry}
                     isFocused={virtualItem.index === focusedIndex}
+                    isSelected={entry.path === selectedPath}
                     addedLines={fileDiff?.addedLines}
                     removedLines={fileDiff?.removedLines}
                     onFileClick={handleFileClick}
@@ -332,6 +349,7 @@ export const ChangesTreeView = ({
                   isExpanded={isExpanded}
                   isFocused={virtualItem.index === focusedIndex}
                   isActiveFile={node.path === activeOperation?.filePath}
+                  isSelected={node.path === selectedPath}
                   folderChangeCount={folderChangeCount}
                   addedLines={fileDiff?.addedLines}
                   removedLines={fileDiff?.removedLines}
