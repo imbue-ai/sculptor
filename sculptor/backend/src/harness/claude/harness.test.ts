@@ -1,4 +1,12 @@
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -11,6 +19,7 @@ import {
   computeClaudeJsonlDirectory,
   type ClaudeHarnessEnvironment,
 } from "~/harness/claude/harness";
+import { resolveJsonlDirectory } from "~/harness/claude/paths";
 import type { HarnessExitResult } from "~/runner/harness";
 
 describe("ClaudeHarness — identity", () => {
@@ -55,9 +64,14 @@ describe("ClaudeHarness — identity", () => {
   });
 });
 
-// A fake `claude` binary that ignores stdin and emits a scripted stream-json turn.
+// A fake `claude` binary that ignores stdin and emits a scripted stream-json
+// turn. If SCULPTOR_FAKE_ARGV_OUT is set it first records the CLI flags it was
+// launched with (used to assert the `--resume` wiring).
 function writeFakeClaude(dir: string, sessionId: string): string {
   const script = `#!/usr/bin/env node
+import { writeFileSync } from "node:fs";
+const out = process.env.SCULPTOR_FAKE_ARGV_OUT;
+if (out) writeFileSync(out, process.argv.slice(2).join(" "));
 const lines = [
   { type: "system", subtype: "init", session_id: ${JSON.stringify(sessionId)} },
   { type: "assistant", message: { id: "asst_1", content: [{ type: "text", text: "hi there" }] } },
@@ -154,11 +168,12 @@ describe("ClaudeHarness — end-to-end turn against a fake binary", () => {
         interrupted: false,
       });
 
-      const sessionId = await readFile(
-        path.join(dir, "state", "tsk_int", "session_id"),
-        "utf8",
-      );
-      expect(sessionId).toBe("sess_int");
+      // The session-id persistence is best-effort within the turn (the next
+      // turn reads it), so wait for the file rather than assuming it landed
+      // exactly by RequestSuccess.
+      const sessionFile = path.join(dir, "state", "tsk_int", "session_id");
+      await waitFor(() => existsSync(sessionFile));
+      expect(await readFile(sessionFile, "utf8")).toBe("sess_int");
     },
     E2E_TIMEOUT_MS,
   );
@@ -186,6 +201,121 @@ describe("ClaudeHarness — end-to-end turn against a fake binary", () => {
       expect((exit?.error as { exception: string }).exception).toBe(
         "ClaudeBinaryNotFoundError",
       );
+    },
+    E2E_TIMEOUT_MS,
+  );
+});
+
+describe("ClaudeHarness — session resume (Task 5.4)", () => {
+  let dir: string;
+  let cfg: string;
+  let prevCfg: string | undefined;
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), "sculptor-claude-"));
+    cfg = mkdtempSync(path.join(tmpdir(), "sculptor-claude-cfg-"));
+    prevCfg = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = cfg;
+  });
+  afterEach(() => {
+    if (prevCfg === undefined) {
+      delete process.env.CLAUDE_CONFIG_DIR;
+    } else {
+      process.env.CLAUDE_CONFIG_DIR = prevCfg;
+    }
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(cfg, { recursive: true, force: true });
+  });
+
+  // Seed a session JSONL where the harness will look for the given working dir.
+  function seedValidSession(
+    home: string,
+    workingDir: string,
+    sessionId: string,
+  ): void {
+    const jsonlDir = resolveJsonlDirectory(home, workingDir);
+    mkdirSync(jsonlDir, { recursive: true });
+    writeFileSync(
+      path.join(jsonlDir, `${sessionId}.jsonl`),
+      JSON.stringify({ type: "assistant", sessionId, message: { id: "a" } }),
+    );
+  }
+
+  async function runResumeTurn(
+    env: ClaudeHarnessEnvironment,
+    binary: string,
+    argvFile: string,
+  ): Promise<Record<string, unknown>[]> {
+    const harness = new ClaudeHarness({
+      resolveBinaryPath: () => binary,
+      environmentFor: () => env,
+      initializationStrategyFor: () => "WORKTREE",
+    });
+    const messages: Record<string, unknown>[] = [];
+    const agentProcess = harness.launch({
+      agent: AGENT,
+      workingDirectory: dir,
+      env: { SCULPTOR_FAKE_ARGV_OUT: argvFile },
+    });
+    agentProcess.onMessage((m) => messages.push(m));
+    agentProcess.onExit(() => undefined);
+    agentProcess.sendUserMessage({
+      message_id: "agm_u",
+      text: "hi",
+      model_name: "FAKE_CLAUDE",
+    });
+    await waitFor(() =>
+      messages.some((m) => m.object_type === "RequestSuccessAgentMessage"),
+    );
+    return messages;
+  }
+
+  it(
+    "passes --resume for a valid session",
+    async () => {
+      const binary = writeFakeClaude(dir, "sess_new");
+      const argvFile = path.join(dir, "argv.txt");
+      const env = makeEnvironment(dir);
+      await env.writeFile(
+        path.join(env.getStatePath("tsk_int"), "session_id"),
+        "sess_resume",
+      );
+      seedValidSession(dir, dir, "sess_resume");
+
+      const messages = await runResumeTurn(env, binary, argvFile);
+      expect(readFileSync(argvFile, "utf8")).toContain("--resume sess_resume");
+      expect(
+        messages.some((m) => m.object_type === "WarningAgentMessage"),
+      ).toBe(false);
+    },
+    E2E_TIMEOUT_MS,
+  );
+
+  it(
+    "rolls back to the validated session when the primary pointer is invalid",
+    async () => {
+      const binary = writeFakeClaude(dir, "sess_new");
+      const argvFile = path.join(dir, "argv.txt");
+      const env = makeEnvironment(dir);
+      // Primary pointer references a session with no on-disk file (invalid);
+      // the validated fallback is a real, resumable session.
+      await env.writeFile(
+        path.join(env.getStatePath("tsk_int"), "session_id"),
+        "sess_missing",
+      );
+      await env.writeFile(
+        path.join(env.getStatePath("tsk_int"), "validated_session_id"),
+        "sess_valid_prev",
+      );
+      seedValidSession(dir, dir, "sess_valid_prev");
+
+      const messages = await runResumeTurn(env, binary, argvFile);
+      expect(readFileSync(argvFile, "utf8")).toContain(
+        "--resume sess_valid_prev",
+      );
+      expect(
+        messages.some((m) => m.object_type === "WarningAgentMessage"),
+      ).toBe(true);
     },
     E2E_TIMEOUT_MS,
   );

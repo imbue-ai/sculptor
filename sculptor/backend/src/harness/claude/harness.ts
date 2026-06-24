@@ -6,22 +6,15 @@
 // long-lived `HarnessProcess` contract.
 
 import { spawn, type ChildProcess } from "node:child_process";
-import { realpathSync } from "node:fs";
-import path from "node:path";
 
 import type { AgentRow, WorkspaceInitializationStrategy } from "~/db/schema";
 import { newAgentMessageId } from "~/ids";
 import {
   ASK_USER_QUESTION_TOOL_NAMES,
-  CLAUDE_CONFIG_DIR_ENV_VAR,
-  CLAUDE_DEFAULT_DIR_NAME,
-  CLAUDE_PROJECTS_SUBDIRECTORY,
-  CLAUDE_TASKS_SUBDIRECTORY,
   DEFAULT_EFFORT,
   EXIT_PLAN_MODE_TOOL_NAMES,
   MODEL_SHORTNAME_MAP,
   PRE_COMPACT_CALLBACK_ID,
-  SESSION_ID_STATE_FILE_NAME,
 } from "~/harness/claude/constants";
 import {
   ClaudeBinaryNotFoundError,
@@ -37,15 +30,29 @@ import {
 import { SculptorMcpServer } from "~/harness/claude/mcp";
 import { ClaudeOutputProcessor } from "~/harness/claude/output_processor";
 import {
+  getTasksPath as resolveTasksPath,
+  resolveJsonlDirectory,
+} from "~/harness/claude/paths";
+import {
   getCombinedSystemPrompt,
   getUserInstructions,
 } from "~/harness/claude/prompts";
+import { isSessionIdValid } from "~/harness/claude/session";
+import {
+  readSessionIdState,
+  readValidatedSessionIdState,
+  writeSessionIdState,
+  writeValidatedSessionIdState,
+} from "~/harness/claude/validated_session_state";
 import type {
   Harness,
   HarnessExitResult,
   HarnessLaunchContext,
   HarnessProcess,
 } from "~/runner/harness";
+
+// Re-exported so callers (and tests) keep importing it from the harness module.
+export { computeClaudeJsonlDirectory } from "~/harness/claude/paths";
 
 // The subset of `LocalEnvironment` (Task 3.1) the Claude harness uses; declared
 // structurally so the harness stays decoupled from the concrete environment.
@@ -71,40 +78,11 @@ export interface ClaudeHarnessDeps {
   pluginDirs?: readonly string[];
   // Called when a file-changing tool ran, so the workspace diff can refresh.
   onDiffNeeded?: (agent: AgentRow) => void;
+  // Called when the CLI reports its session id, so the agent row can persist it
+  // (Task 5.4 step 5). The on-disk state file is the authoritative resume
+  // pointer; this is the additional row-level mirror.
+  onSessionIdReported?: (agent: AgentRow, sessionId: string) => void;
   now?: () => number;
-}
-
-// Honor $CLAUDE_CONFIG_DIR (SCU-1295), falling back to <home>/.claude.
-function claudeConfigDir(
-  home: string,
-  env: NodeJS.ProcessEnv = process.env,
-): string {
-  const custom = env[CLAUDE_CONFIG_DIR_ENV_VAR];
-  return custom ? custom : path.join(home, CLAUDE_DEFAULT_DIR_NAME);
-}
-
-// Compute the Claude session-JSONL directory for a working directory. Claude
-// sanitizes paths by replacing every non-alphanumeric character (except '-')
-// with '-'. Mirrors `compute_claude_jsonl_directory`.
-export function computeClaudeJsonlDirectory(
-  home: string,
-  workingDirectory: string,
-  env: NodeJS.ProcessEnv = process.env,
-): string {
-  const sanitized = workingDirectory.replace(/[^a-zA-Z0-9-]/g, "-");
-  return path.join(
-    claudeConfigDir(home, env),
-    CLAUDE_PROJECTS_SUBDIRECTORY,
-    sanitized,
-  );
-}
-
-function resolveSymlink(p: string): string {
-  try {
-    return realpathSync(p);
-  } catch {
-    return p;
-  }
 }
 
 export class ClaudeHarness implements Harness {
@@ -137,16 +115,12 @@ export class ClaudeHarness implements Harness {
     home: string,
     workingDirectory: string,
   ): string {
-    return computeClaudeJsonlDirectory(home, resolveSymlink(workingDirectory));
+    return resolveJsonlDirectory(home, workingDirectory);
   }
 
   // The per-task JSON store directory (`$CLAUDE_CONFIG_DIR/tasks/<session_id>`).
   getTasksPath(home: string, sessionId: string): string {
-    return path.join(
-      claudeConfigDir(home),
-      CLAUDE_TASKS_SUBDIRECTORY,
-      sessionId,
-    );
+    return resolveTasksPath(home, sessionId);
   }
 
   launch(context: HarnessLaunchContext): HarnessProcess {
@@ -170,8 +144,6 @@ class ClaudeHarnessProcess implements HarnessProcess {
   private child: ChildProcess | undefined;
   private stdoutBuffer = "";
   private interrupted = false;
-  private sessionId: string | null = null;
-  private sessionIdLoaded = false;
   private controlRequestCounter = 0;
 
   constructor(
@@ -277,7 +249,7 @@ class ClaudeHarnessProcess implements HarnessProcess {
       userSystemPrompt: this.agent.systemPrompt,
       enableEntityMentions: this.deps.enableEntityMentions,
     });
-    const sessionId = await this.loadSessionId();
+    const sessionId = await this.resolveSessionId();
     const argv = getClaudeCommand({
       binaryPath,
       systemPrompt,
@@ -414,42 +386,64 @@ class ClaudeHarnessProcess implements HarnessProcess {
     this.exitCb?.({ error: serialized });
   }
 
-  // --- Session id -----------------------------------------------------------
+  // --- Session id (Task 5.4: validation + corrupt-tail + resume) ------------
 
-  private async loadSessionId(): Promise<string | null> {
-    if (this.sessionIdLoaded) {
-      return this.sessionId;
+  // Resolve the session id to pass to `claude --resume` for this turn. The
+  // on-disk `session_id` state file is the authoritative pointer (the CLI
+  // rewrites the session JSONL each turn). A valid session resumes and refreshes
+  // the `validated_session_id` fallback; an invalid/missing one rolls back to
+  // the last validated id (errored-with-restore, never silent loss); unset
+  // starts fresh. Mirrors `process_manager.py:_process_single_message`.
+  private async resolveSessionId(): Promise<string | null> {
+    const agentId = this.agent.objectId;
+    const rawSessionId = await readSessionIdState(this.environment, agentId);
+    if (rawSessionId === null) {
+      return null;
     }
-    this.sessionIdLoaded = true;
-    const stateFile = path.join(
-      this.environment.getStatePath(this.agent.objectId),
-      SESSION_ID_STATE_FILE_NAME,
+    const valid = isSessionIdValid({
+      home: this.environment.getUserHomeDirectory(),
+      workingDirectory: this.environment.getWorkingDirectory(),
+      sessionId: rawSessionId,
+      isSessionRunning: false,
+    });
+    if (valid) {
+      await writeValidatedSessionIdState(
+        this.environment,
+        agentId,
+        rawSessionId,
+      ).catch(() => undefined);
+      return rawSessionId;
+    }
+    this.emitWarning(
+      "Rolling back to the last valid session id - this means your last user message may not be in the agent context",
     );
-    try {
-      this.sessionId =
-        (await this.environment.readTextFile(stateFile)).trim() || null;
-    } catch {
-      this.sessionId = null;
-    }
-    return this.sessionId;
+    return readValidatedSessionIdState(this.environment, agentId);
   }
 
   private onSessionId(sessionId: string): void {
-    this.sessionId = sessionId;
-    this.sessionIdLoaded = true;
-    const stateFile = path.join(
-      this.environment.getStatePath(this.agent.objectId),
-      SESSION_ID_STATE_FILE_NAME,
-    );
-    void this.environment
-      .writeFile(stateFile, sessionId)
-      .catch(() => undefined);
+    void writeSessionIdState(
+      this.environment,
+      this.agent.objectId,
+      sessionId,
+    ).catch(() => undefined);
+    this.deps.onSessionIdReported?.(this.agent, sessionId);
   }
 
   // --- I/O helpers ----------------------------------------------------------
 
   private emit(message: Record<string, unknown>): void {
     this.messageCb?.(message);
+  }
+
+  private emitWarning(message: string): void {
+    this.emit({
+      object_type: "WarningAgentMessage",
+      message_id: newAgentMessageId(),
+      source: "AGENT",
+      message,
+      error: null,
+      approximate_creation_time: new Date(this.now()).toISOString(),
+    });
   }
 
   private writeStdin(line: string): void {
