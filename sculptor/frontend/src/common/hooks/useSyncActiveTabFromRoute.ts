@@ -4,7 +4,7 @@ import { useParams } from "react-router-dom";
 
 import { useImbueLocation } from "~/common/NavigateUtils.ts";
 import { newWorkspaceTabId, setActiveTabByIdAtom, setAgentForWorkspaceAtom } from "~/common/state/atoms/workspaces.ts";
-import { COMPONENT_GALLERY_TAB_ID, HOME_TAB_ID, SETTINGS_TAB_ID } from "~/components/workspaceTabIds.ts";
+import { HOME_TAB_ID, SETTINGS_TAB_ID } from "~/components/workspaceTabIds.ts";
 
 /**
  * Mirror the current URL into `tabsAtom`: update `activeIndex` to the matching
@@ -15,7 +15,7 @@ import { COMPONENT_GALLERY_TAB_ID, HOME_TAB_ID, SETTINGS_TAB_ID } from "~/compon
  */
 export const useSyncActiveTabFromRoute = (): void => {
   const { workspaceID, id: agentIDFromUrl } = useParams<{ workspaceID?: string; id?: string }>();
-  const { addWorkspaceDraftId, isHomeRoute, isSettingsRoute, isComponentGalleryRoute } = useImbueLocation();
+  const { addWorkspaceDraftId, isHomeRoute, isSettingsRoute } = useImbueLocation();
   const setActiveTabById = useSetAtom(setActiveTabByIdAtom);
   const setAgentForWorkspace = useSetAtom(setAgentForWorkspaceAtom);
 
@@ -29,8 +29,6 @@ export const useSyncActiveTabFromRoute = (): void => {
       targetTabId = HOME_TAB_ID;
     } else if (isSettingsRoute) {
       targetTabId = SETTINGS_TAB_ID;
-    } else if (isComponentGalleryRoute) {
-      targetTabId = COMPONENT_GALLERY_TAB_ID;
     }
 
     if (targetTabId !== null) {
@@ -46,7 +44,6 @@ export const useSyncActiveTabFromRoute = (): void => {
     addWorkspaceDraftId,
     isHomeRoute,
     isSettingsRoute,
-    isComponentGalleryRoute,
     setActiveTabById,
     setAgentForWorkspace,
   ]);

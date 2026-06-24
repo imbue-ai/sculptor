@@ -153,10 +153,7 @@ const hasHydratedWorkspaceTabsAtom = atom<boolean>(false);
 
 /** Check whether a tab ID is a pseudo-tab (not a real workspace ID). */
 const isPseudoTabId = (id: string): boolean =>
-  id === "__settings__" ||
-  id === "__component_gallery__" ||
-  id === "__home__" ||
-  id.startsWith(NEW_WORKSPACE_TAB_PREFIX);
+  id === "__settings__" || id === "__home__" || id.startsWith(NEW_WORKSPACE_TAB_PREFIX);
 
 const applyClose = (state: TabsState, tabId: string): TabsState => {
   const removedIndex = state.order.findIndex((e) => e.tabId === tabId);

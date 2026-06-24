@@ -105,13 +105,6 @@ describe("buildNavigationCommands", () => {
     );
   });
 
-  it("does NOT emit nav.component_gallery (intentionally removed)", () => {
-    // Regression-lock: Component Gallery is reachable from the
-    // ThemeBuilder / Settings, but we don't want it cluttering the palette.
-    const cmds = buildNavigationCommands(makeRuntime());
-    expect(cmds.find((c) => c.id === "nav.component_gallery")).toBeUndefined();
-  });
-
   it("nav.home perform calls runtime.navigate.toHome", () => {
     const runtime = makeRuntime();
     const cmd = buildNavigationCommands(runtime).find((c) => c.id === "nav.home")!;

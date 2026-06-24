@@ -57,14 +57,6 @@ describe("ThemeBuilderSection", () => {
       expect(screen.getByText("Reset to defaults")).toBeInTheDocument();
     });
 
-    it("renders the component gallery button", () => {
-      const store = createStore();
-      render(<ThemeBuilderSection />, { wrapper: createWrapper(store) });
-
-      expect(screen.getByTestId(ElementIds.SETTINGS_THEME_BUILDER_COMPONENT_GALLERY)).toBeInTheDocument();
-      expect(screen.getByText("Component gallery")).toBeInTheDocument();
-    });
-
     it("renders all setting controls with test IDs", () => {
       const store = createStore();
       render(<ThemeBuilderSection />, { wrapper: createWrapper(store) });

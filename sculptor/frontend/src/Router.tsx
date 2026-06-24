@@ -10,10 +10,9 @@ import {
   SCULPTOR_TABS_STORAGE_KEY,
   WORKSPACE_TAB_ID_PREFIX,
 } from "./common/state/atoms/workspaces.ts";
-import { COMPONENT_GALLERY_TAB_ID, HOME_TAB_ID, SETTINGS_TAB_ID } from "./components/workspaceTabIds.ts";
+import { HOME_TAB_ID, SETTINGS_TAB_ID } from "./components/workspaceTabIds.ts";
 import { EmptyFirstRunGate } from "./EmptyFirstRunGate.tsx";
 import { AppShell } from "./layouts/AppShell";
-import { ComponentGalleryPage } from "./pages/debug/ComponentGalleryPage.tsx";
 import { NotFoundErrorPage } from "./pages/error/NotFound.tsx";
 import { RouteErrorPage } from "./pages/error/RouteErrorPage.tsx";
 import { HomePage } from "./pages/home/HomePage.tsx";
@@ -42,7 +41,6 @@ const readSculptorTabs = (): TabsState => {
 const entryToUrl = (entry: TabEntry): string | null => {
   if (entry.tabId === HOME_TAB_ID) return "/home";
   if (entry.tabId === SETTINGS_TAB_ID) return "/settings";
-  if (entry.tabId === COMPONENT_GALLERY_TAB_ID) return "/component-gallery";
   const draftId = parseDraftIdFromTabId(entry.tabId);
   if (draftId !== null) return null;
   if (entry.tabId.startsWith(WORKSPACE_TAB_ID_PREFIX)) {
@@ -100,27 +98,9 @@ const router = createHashRouter([
               },
             ],
           },
-          {
-            path: "/component-gallery",
-            element: (
-              <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
-                <ComponentGalleryPage />
-              </div>
-            ),
-          },
         ],
       },
     ],
-  },
-  {
-    path: "/debug/components",
-    loader: (): Response => redirect("/debug/components/ws/gallery-demo/agent/demo"),
-    errorElement: <RouteErrorPage />,
-  },
-  {
-    path: "/debug/components/ws/:workspaceID/agent/:id",
-    element: <ComponentGalleryPage />,
-    errorElement: <RouteErrorPage />,
   },
   {
     path: "*",

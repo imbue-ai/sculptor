@@ -31,7 +31,6 @@ vi.mock("~/common/NavigateUtils.ts", () => ({
     navigateToAddWorkspace: vi.fn(),
     navigateToHome: vi.fn(),
     navigateToGlobalSettings: vi.fn(),
-    navigateToComponentGallery: vi.fn(),
     navigateToRoot: vi.fn(),
   }),
 }));

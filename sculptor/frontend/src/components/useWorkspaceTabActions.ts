@@ -15,7 +15,7 @@ import {
   parseDraftIdFromTabId,
 } from "~/common/state/atoms/workspaces.ts";
 
-import { COMPONENT_GALLERY_TAB_ID, HOME_TAB_ID, SETTINGS_TAB_ID } from "./workspaceTabIds.ts";
+import { HOME_TAB_ID, SETTINGS_TAB_ID } from "./workspaceTabIds.ts";
 
 /**
  * The three "close-tab" handlers used by the workspace tab bar AND the
@@ -40,15 +40,9 @@ export const useWorkspaceTabActions = (): {
   const clearAllTabs = useSetAtom(clearAllTabsAtom);
   const effectiveOpenTabIds = useAtomValue(effectiveOpenTabIdsAtom);
   const agentIdsByWorkspace = useAtomValue(agentIdsByWorkspaceAtom);
-  const {
-    navigateToWorkspace,
-    navigateToAddWorkspace,
-    navigateToAgent,
-    navigateToHome,
-    navigateToGlobalSettings,
-    navigateToComponentGallery,
-  } = useImbueNavigate();
-  const { addWorkspaceDraftId, isHomeRoute, isSettingsRoute, isComponentGalleryRoute } = useImbueLocation();
+  const { navigateToWorkspace, navigateToAddWorkspace, navigateToAgent, navigateToHome, navigateToGlobalSettings } =
+    useImbueNavigate();
+  const { addWorkspaceDraftId, isHomeRoute, isSettingsRoute } = useImbueLocation();
   const { workspaceID: activeWorkspaceID } = useParams<{ workspaceID?: string }>();
 
   const handleWorkspaceClick = useCallback(
@@ -76,8 +70,6 @@ export const useWorkspaceTabActions = (): {
         navigateToHome();
       } else if (nextTab === SETTINGS_TAB_ID) {
         navigateToGlobalSettings();
-      } else if (nextTab === COMPONENT_GALLERY_TAB_ID) {
-        navigateToComponentGallery();
       } else {
         const draftId = parseDraftIdFromTabId(nextTab);
         if (draftId !== null) {
@@ -87,14 +79,7 @@ export const useWorkspaceTabActions = (): {
         }
       }
     },
-    [
-      effectiveOpenTabIds,
-      handleWorkspaceClick,
-      navigateToAddWorkspace,
-      navigateToHome,
-      navigateToGlobalSettings,
-      navigateToComponentGallery,
-    ],
+    [effectiveOpenTabIds, handleWorkspaceClick, navigateToAddWorkspace, navigateToHome, navigateToGlobalSettings],
   );
 
   const handleClose = useCallback(
@@ -124,14 +109,6 @@ export const useWorkspaceTabActions = (): {
         return;
       }
 
-      if (tabId === COMPONENT_GALLERY_TAB_ID) {
-        closeTab(COMPONENT_GALLERY_TAB_ID);
-        if (isComponentGalleryRoute) {
-          navigateToNextTab(COMPONENT_GALLERY_TAB_ID);
-        }
-        return;
-      }
-
       // Real workspace tab: close it and navigate away if it was active.
       closeTab(tabId);
       if (tabId === activeWorkspaceID) {
@@ -143,7 +120,6 @@ export const useWorkspaceTabActions = (): {
       addWorkspaceDraftId,
       isHomeRoute,
       isSettingsRoute,
-      isComponentGalleryRoute,
       closeTab,
       closeNewWorkspaceTab,
       navigateToNextTab,
@@ -160,8 +136,6 @@ export const useWorkspaceTabActions = (): {
         if (!isHomeRoute) navigateToHome();
       } else if (tabId === SETTINGS_TAB_ID) {
         if (!isSettingsRoute) navigateToGlobalSettings();
-      } else if (tabId === COMPONENT_GALLERY_TAB_ID) {
-        if (!isComponentGalleryRoute) navigateToComponentGallery();
       } else if (activeWorkspaceID !== tabId) {
         handleWorkspaceClick(tabId);
       }
@@ -170,13 +144,11 @@ export const useWorkspaceTabActions = (): {
       activeWorkspaceID,
       isHomeRoute,
       isSettingsRoute,
-      isComponentGalleryRoute,
       keepOnlyTab,
       closeOtherTabs,
       handleWorkspaceClick,
       navigateToHome,
       navigateToGlobalSettings,
-      navigateToComponentGallery,
     ],
   );
 

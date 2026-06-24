@@ -12,7 +12,6 @@ type ImbueNavigationFunctions = {
   navigateToHome: () => void;
   navigateToGlobalSettings: (section?: string) => void;
   navigateToRepoSetupCommand: (projectId: string) => void;
-  navigateToComponentGallery: () => void;
   navigateToRoot: () => void;
 };
 
@@ -69,9 +68,6 @@ export const useImbueNavigate = (): ImbueNavigationFunctions => {
       },
       [navigate],
     ),
-    navigateToComponentGallery: useCallback((): void => {
-      navigate(`/component-gallery`);
-    }, [navigate]),
     navigateToRoot: useCallback((): void => {
       navigate(`/`);
     }, [navigate]),
@@ -85,7 +81,6 @@ type ImbueLocationType = {
   addWorkspaceDraftId: string | null;
   isHomeRoute: boolean;
   isSettingsRoute: boolean;
-  isComponentGalleryRoute: boolean;
   /** Parsed `workspaceId` from the current pathname, or null when not on a workspace/agent route. */
   workspaceId: string | null;
   /** Parsed agent (task) id from the current pathname, or null when not on an agent route. */
@@ -102,7 +97,6 @@ export const useImbueLocation = (): ImbueLocationType => {
   const addWorkspaceDraftId = addWorkspaceMatch ? addWorkspaceMatch[1] : null;
   const isHomeRoute = /^\/home$/.test(pathname);
   const isSettingsRoute = /^\/settings$/.test(pathname);
-  const isComponentGalleryRoute = /^\/component-gallery$/.test(pathname);
   // A "workspace route" means we're viewing a specific workspace (or one of
   // its agents). Excludes the new-workspace draft page (/ws/new/...).
   const isWorkspaceRoute = /^\/ws\/(?!new\b)[^/]+/.test(pathname);
@@ -121,7 +115,6 @@ export const useImbueLocation = (): ImbueLocationType => {
     addWorkspaceDraftId,
     isHomeRoute,
     isSettingsRoute,
-    isComponentGalleryRoute,
     workspaceId,
     agentId,
   };
