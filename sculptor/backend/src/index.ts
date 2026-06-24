@@ -55,6 +55,10 @@ function installShutdownHandlers(app: FastifyInstance): void {
   process.once("SIGINT", shutdown);
 }
 
+// Only --port/--host/--emit-openapi are read; any other flags are ignored. The
+// Electron launcher (Task 9.2) passes the legacy --no-open-browser /
+// --packaged-entrypoint flags — the headless backend never opens a browser, so
+// they are accepted no-ops, keeping the launch command stable across the cutover.
 export async function main(
   argv: readonly string[] = process.argv,
 ): Promise<void> {

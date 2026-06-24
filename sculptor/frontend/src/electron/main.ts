@@ -143,7 +143,7 @@ if (IS_LINUX) {
   app.commandLine.appendSwitch("password-store", "basic");
 }
 
-let pythonBackgroundProcess: ReturnType<typeof spawn> | null = null;
+let backendProcess: ReturnType<typeof spawn> | null = null;
 let window: BrowserWindow | null = null;
 let currentBackendStatus: AnyBackendStatus = { status: "loading", payload: { message: "Initializing..." } };
 let stderrBuffer = "";
@@ -431,7 +431,7 @@ const spawnCustomCommand = (customCommand: string): void => {
   const updateChannel = store.get("updateChannel", "STABLE") as string;
   const sculptorChannel = updateChannel === "STABLE" ? "slim" : "slim-rc";
 
-  pythonBackgroundProcess = spawn("sh", ["-c", customCommand], {
+  backendProcess = spawn("sh", ["-c", customCommand], {
     stdio: ["ignore", "pipe", "pipe"],
     env: {
       ...process.env,
@@ -443,7 +443,7 @@ const spawnCustomCommand = (customCommand: string): void => {
     detached: true,
   });
 
-  setupProcessHandlers(pythonBackgroundProcess);
+  setupProcessHandlers(backendProcess);
 };
 
 const restartCustomCommand = async (): Promise<void> => {
@@ -480,11 +480,11 @@ const restartCustomCommand = async (): Promise<void> => {
   const readinessTimeoutMs = readinessTimeoutSec * 1000;
 
   try {
-    customCommandBackendUrl = await parseUrlFromStdout(pythonBackgroundProcess!.stdout!, readinessTimeoutMs);
+    customCommandBackendUrl = await parseUrlFromStdout(backendProcess!.stdout!, readinessTimeoutMs);
     resolveBackendUrl?.(customCommandBackendUrl);
     logger.info(`[main] parsed backend URL from restarted command: ${customCommandBackendUrl}`);
 
-    pythonBackgroundProcess!.stdout?.on("data", (data) => {
+    backendProcess!.stdout?.on("data", (data) => {
       try {
         process.stdout.write(data);
       } catch {
@@ -512,7 +512,11 @@ const restartCustomCommand = async (): Promise<void> => {
   }
 };
 
-// Where to launch the sidecar from in DEV vs PROD
+// Where to launch the Node backend sidecar (Task 9.1) from in DEV vs PROD. The
+// sidecar dir ships a `sculptor_backend` launcher wrapper that runs the bundled
+// `node backend.cjs`, so the launch path here is unchanged from the old Python
+// onedir build. The readiness (parseUrlFromStdout + /api/v1/health wait) and
+// restart contract is identical.
 const getBackendCommand = async (): Promise<{ cmd: string; args: Array<string> }> => {
   // Get command line arguments, filtering out Electron-specific ones
   // In packaged apps, arguments might come from different sources
@@ -535,12 +539,16 @@ const getBackendCommand = async (): Promise<{ cmd: string; args: Array<string> }
 
   logger.info("[main] Filtered user args:", userArgs);
 
-  // Base arguments for sculptor_main
+  // Base arguments for the backend. --no-open-browser / --packaged-entrypoint
+  // are legacy flags from the Python launcher; the headless Node backend ignores
+  // unknown flags, so they are harmless and kept for launch-command stability.
   const baseArgs = ["--port", String(await PORT), "--no-open-browser", "--packaged-entrypoint"];
 
+  // The Node sidecar launcher wrapper (Task 9.1), at the same path the Python
+  // onedir build used.
   const exe = "sculptor_backend/sculptor_backend";
   const bin = path.join(resourcesPath(), exe);
-  // Pass through all user arguments to sculptor_main
+  // Pass through all user arguments to the backend.
   return { cmd: bin, args: [...baseArgs, ...userArgs] };
 };
 
@@ -1196,12 +1204,12 @@ app.whenReady().then(async () => {
       const readinessTimeoutMs = readinessTimeoutSec * 1000;
 
       try {
-        customCommandBackendUrl = await parseUrlFromStdout(pythonBackgroundProcess!.stdout!, readinessTimeoutMs);
+        customCommandBackendUrl = await parseUrlFromStdout(backendProcess!.stdout!, readinessTimeoutMs);
         resolveBackendUrl?.(customCommandBackendUrl);
         logger.info(`[main] parsed backend URL from custom command: ${customCommandBackendUrl}`);
 
         // After URL is found, pipe remaining stdout through
-        pythonBackgroundProcess!.stdout?.on("data", (data) => {
+        backendProcess!.stdout?.on("data", (data) => {
           try {
             process.stdout.write(data);
           } catch {
@@ -1230,7 +1238,7 @@ app.whenReady().then(async () => {
       const { cmd, args } = await getBackendCommand();
       logger.info("[main] spawning backend without initial project:", cmd, args.join(" "));
 
-      pythonBackgroundProcess = spawn(cmd, args, {
+      backendProcess = spawn(cmd, args, {
         stdio: ["ignore", "pipe", "pipe"],
         env: {
           ...process.env,
@@ -1240,7 +1248,7 @@ app.whenReady().then(async () => {
         detached: true,
       });
 
-      pythonBackgroundProcess.stdout?.on("data", (data) => {
+      backendProcess.stdout?.on("data", (data) => {
         try {
           process.stdout.write(data);
         } catch {
@@ -1248,13 +1256,13 @@ app.whenReady().then(async () => {
         }
       });
 
-      setupProcessHandlers(pythonBackgroundProcess);
+      setupProcessHandlers(backendProcess);
     }
 
     logger.info("[main] backend process started, waiting for it to be ready...");
   } else {
     resolveBackendUrl?.(null);
-    logger.info("[main] skipping starting the python backend (it should already be running)");
+    logger.info("[main] skipping starting the backend (it should already be running)");
   }
 
   // Determine which URL to poll for health
@@ -1310,7 +1318,7 @@ const cleanupBackendProcess = async (): Promise<void> => {
       await flushTracingBeforeExit();
     }
 
-    if (pythonBackgroundProcess) {
+    if (backendProcess) {
       // With --trace-to active, the backend's lifespan teardown drains the
       // viztracer buffer and writes the combined Chrome JSON file. That can
       // take far longer than the default budget — without the extension the
@@ -1318,11 +1326,11 @@ const cleanupBackendProcess = async (): Promise<void> => {
       // never written.
       const baseGracePeriodMs = isInCustomCommandMode ? 15000 : 32000;
       const gracePeriodMs = tracingTeardownGracePeriodMs(baseGracePeriodMs);
-      await killProcessAndWait(pythonBackgroundProcess, gracePeriodMs);
+      await killProcessAndWait(backendProcess, gracePeriodMs);
     }
   } catch (error) {
     logger.error("Error killing backend process, sending SIGKILL:", error);
-    pythonBackgroundProcess?.kill("SIGKILL");
+    backendProcess?.kill("SIGKILL");
   }
 };
 
