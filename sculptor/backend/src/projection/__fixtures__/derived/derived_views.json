@@ -1,0 +1,1456 @@
+{
+  "cases": [
+    {
+      "name": "status_ready_after_request_stopped_and_env_reacquired",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "ClaudeCodeSDKAgentConfig",
+      "messages": [
+        {
+          "object_type": "ChatInputUserMessage",
+          "message_id": "agm_01kvvskavyerram8ape06x5477",
+          "source": "USER",
+          "approximate_creation_time": "2026-06-24T03:08:23.806865Z",
+          "text": "Do something",
+          "model_name": null,
+          "files": [],
+          "enter_plan_mode": false,
+          "exit_plan_mode": false,
+          "fast_mode": false,
+          "effort": "xhigh",
+          "sent_via": null
+        },
+        {
+          "request_id": "agm_01kvvskavyerram8ape06x5477",
+          "error": {
+            "exception": "ProcessExitedError",
+            "args": [
+              "Process exited with signal SIGTERM"
+            ],
+            "traceback_dict": {},
+            "was_logged_by_log_exception": false
+          },
+          "object_type": "RequestStoppedAgentMessage",
+          "message_id": "agm_01kvvskavyerram8aphat0arz2",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.806963Z"
+        },
+        {
+          "object_type": "EnvironmentAcquiredRunnerMessage",
+          "message_id": "agm_01kvvskavyerram8apj1cxbz01",
+          "source": "RUNNER",
+          "approximate_creation_time": "2026-06-24T03:08:23.806982Z",
+          "environment": null
+        }
+      ],
+      "expected": {
+        "status": "READY",
+        "current_activity": null,
+        "last_activity": null,
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "Do something",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "status_ready_when_request_succeeded",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "ClaudeCodeSDKAgentConfig",
+      "messages": [
+        {
+          "object_type": "ChatInputUserMessage",
+          "message_id": "agm_01kvvskaw0eh9st5k97dz71qgs",
+          "source": "USER",
+          "approximate_creation_time": "2026-06-24T03:08:23.808142Z",
+          "text": "Do something",
+          "model_name": null,
+          "files": [],
+          "enter_plan_mode": false,
+          "exit_plan_mode": false,
+          "fast_mode": false,
+          "effort": "xhigh",
+          "sent_via": null
+        },
+        {
+          "object_type": "EnvironmentAcquiredRunnerMessage",
+          "message_id": "agm_01kvvskaw0eh9st5k98nyev3n7",
+          "source": "RUNNER",
+          "approximate_creation_time": "2026-06-24T03:08:23.808165Z",
+          "environment": null
+        },
+        {
+          "request_id": "agm_01kvvskaw0eh9st5k97dz71qgs",
+          "error": null,
+          "object_type": "RequestSuccessAgentMessage",
+          "message_id": "agm_01kvvskaw0eh9st5k9a3mw44qw",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.808209Z",
+          "interrupted": false
+        }
+      ],
+      "expected": {
+        "status": "READY",
+        "current_activity": null,
+        "last_activity": null,
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "Do something",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "status_building_without_environment",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "ClaudeCodeSDKAgentConfig",
+      "messages": [
+        {
+          "object_type": "ChatInputUserMessage",
+          "message_id": "agm_01kvvskaw0eh9st5k9j91g3r3v",
+          "source": "USER",
+          "approximate_creation_time": "2026-06-24T03:08:23.808878Z",
+          "text": "Do something",
+          "model_name": null,
+          "files": [],
+          "enter_plan_mode": false,
+          "exit_plan_mode": false,
+          "fast_mode": false,
+          "effort": "xhigh",
+          "sent_via": null
+        }
+      ],
+      "expected": {
+        "status": "BUILDING",
+        "current_activity": null,
+        "last_activity": null,
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "Do something",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "status_waiting_when_auq_pending_in_flight",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "ClaudeCodeSDKAgentConfig",
+      "messages": [
+        {
+          "object_type": "ChatInputUserMessage",
+          "message_id": "agm_01kvvskaw1e4g8hmcsajhga5z9",
+          "source": "USER",
+          "approximate_creation_time": "2026-06-24T03:08:23.809464Z",
+          "text": "Pick a color",
+          "model_name": null,
+          "files": [],
+          "enter_plan_mode": false,
+          "exit_plan_mode": false,
+          "fast_mode": false,
+          "effort": "xhigh",
+          "sent_via": null
+        },
+        {
+          "object_type": "EnvironmentAcquiredRunnerMessage",
+          "message_id": "agm_01kvvskaw1e4g8hmcsc2zrfaf6",
+          "source": "RUNNER",
+          "approximate_creation_time": "2026-06-24T03:08:23.809482Z",
+          "environment": null
+        },
+        {
+          "object_type": "AskUserQuestionAgentMessage",
+          "message_id": "agm_01kvvskaw1e4g8hmcsf7r7kh5p",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.809501Z",
+          "question_data": {
+            "questions": [
+              {
+                "question": "Which color?",
+                "header": "Color",
+                "options": [
+                  {
+                    "label": "Red",
+                    "description": ""
+                  },
+                  {
+                    "label": "Blue",
+                    "description": ""
+                  }
+                ],
+                "multi_select": false,
+                "other_label": null
+              }
+            ],
+            "tool_use_id": "toolu_test",
+            "plan_file_path": null
+          }
+        }
+      ],
+      "expected": {
+        "status": "WAITING",
+        "current_activity": null,
+        "last_activity": null,
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "Pick a color",
+        "waiting_detail": "Which color?"
+      }
+    },
+    {
+      "name": "status_not_waiting_for_malformed_auq_block",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "ClaudeCodeSDKAgentConfig",
+      "messages": [
+        {
+          "object_type": "ChatInputUserMessage",
+          "message_id": "agm_01kvvskaw2es0vc0jywzpyastb",
+          "source": "USER",
+          "approximate_creation_time": "2026-06-24T03:08:23.810117Z",
+          "text": "Pick a color",
+          "model_name": null,
+          "files": [],
+          "enter_plan_mode": false,
+          "exit_plan_mode": false,
+          "fast_mode": false,
+          "effort": "xhigh",
+          "sent_via": null
+        },
+        {
+          "object_type": "EnvironmentAcquiredRunnerMessage",
+          "message_id": "agm_01kvvskaw2es0vc0jyy63teseb",
+          "source": "RUNNER",
+          "approximate_creation_time": "2026-06-24T03:08:23.810135Z",
+          "environment": null
+        },
+        {
+          "object_type": "ResponseBlockAgentMessage",
+          "message_id": "agm_01kvvskaw2es0vc0jz1zxv945n",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.810151Z",
+          "role": "assistant",
+          "assistant_message_id": "am_test",
+          "content": [
+            {
+              "object_type": "ToolUseBlock",
+              "type": "tool_use",
+              "id": "toolu_malformed",
+              "name": "mcp__sculptor__ask_user_question",
+              "input": {
+                "questions": [
+                  {
+                    "question": "Pick one",
+                    "header": "Color",
+                    "options": [
+                      {
+                        "label": "Red",
+                        "description": ""
+                      }
+                    ],
+                    "multiSelect": "false"
+                  }
+                ]
+              },
+              "interactive_role": null
+            }
+          ],
+          "parent_tool_use_id": null
+        },
+        {
+          "request_id": "agm_01kvvskaw2es0vc0jywzpyastb",
+          "error": null,
+          "object_type": "RequestSuccessAgentMessage",
+          "message_id": "agm_01kvvskaw2es0vc0jz22rpxyes",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.810191Z",
+          "interrupted": false
+        }
+      ],
+      "expected": {
+        "status": "READY",
+        "current_activity": "mcp__sculptor__ask_user_question",
+        "last_activity": "mcp__sculptor__ask_user_question",
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "Pick a color",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "status_waiting_for_exit_plan_mode_block",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "ClaudeCodeSDKAgentConfig",
+      "messages": [
+        {
+          "object_type": "ChatInputUserMessage",
+          "message_id": "agm_01kvvskaw3fbstfhv5qzp5nr4r",
+          "source": "USER",
+          "approximate_creation_time": "2026-06-24T03:08:23.811123Z",
+          "text": "Plan something",
+          "model_name": null,
+          "files": [],
+          "enter_plan_mode": false,
+          "exit_plan_mode": false,
+          "fast_mode": false,
+          "effort": "xhigh",
+          "sent_via": null
+        },
+        {
+          "object_type": "EnvironmentAcquiredRunnerMessage",
+          "message_id": "agm_01kvvskaw3fbstfhv5rht7cbrh",
+          "source": "RUNNER",
+          "approximate_creation_time": "2026-06-24T03:08:23.811141Z",
+          "environment": null
+        },
+        {
+          "object_type": "ResponseBlockAgentMessage",
+          "message_id": "agm_01kvvskaw3fbstfhv5vm318rpk",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.811155Z",
+          "role": "assistant",
+          "assistant_message_id": "am_plan",
+          "content": [
+            {
+              "object_type": "ToolUseBlock",
+              "type": "tool_use",
+              "id": "toolu_plan",
+              "name": "mcp__sculptor__exit_plan_mode",
+              "input": {},
+              "interactive_role": null
+            }
+          ],
+          "parent_tool_use_id": null
+        }
+      ],
+      "expected": {
+        "status": "WAITING",
+        "current_activity": "mcp__sculptor__exit_plan_mode",
+        "last_activity": "mcp__sculptor__exit_plan_mode",
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "Plan something",
+        "waiting_detail": "Waiting for plan approval"
+      }
+    },
+    {
+      "name": "status_not_waiting_when_auq_request_failed",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "ClaudeCodeSDKAgentConfig",
+      "messages": [
+        {
+          "object_type": "ChatInputUserMessage",
+          "message_id": "agm_01kvvskaw3fbstfhv63ef750gd",
+          "source": "USER",
+          "approximate_creation_time": "2026-06-24T03:08:23.811923Z",
+          "text": "Pick a color",
+          "model_name": null,
+          "files": [],
+          "enter_plan_mode": false,
+          "exit_plan_mode": false,
+          "fast_mode": false,
+          "effort": "xhigh",
+          "sent_via": null
+        },
+        {
+          "object_type": "EnvironmentAcquiredRunnerMessage",
+          "message_id": "agm_01kvvskaw3fbstfhv655f6r9w0",
+          "source": "RUNNER",
+          "approximate_creation_time": "2026-06-24T03:08:23.811946Z",
+          "environment": null
+        },
+        {
+          "object_type": "ResponseBlockAgentMessage",
+          "message_id": "agm_01kvvskaw3fbstfhv67j672hcs",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.811964Z",
+          "role": "assistant",
+          "assistant_message_id": "am_auq",
+          "content": [
+            {
+              "object_type": "ToolUseBlock",
+              "type": "tool_use",
+              "id": "toolu_auq",
+              "name": "mcp__sculptor__ask_user_question",
+              "input": {
+                "questions": [
+                  {
+                    "question": "Pick a color",
+                    "header": "Color",
+                    "options": [
+                      {
+                        "label": "Red",
+                        "description": "warm"
+                      },
+                      {
+                        "label": "Blue",
+                        "description": "cool"
+                      }
+                    ],
+                    "multiSelect": false
+                  }
+                ]
+              },
+              "interactive_role": null
+            }
+          ],
+          "parent_tool_use_id": null
+        },
+        {
+          "object_type": "AskUserQuestionAgentMessage",
+          "message_id": "agm_01kvvskaw3fbstfhv69xyp47d2",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.811978Z",
+          "question_data": {
+            "questions": [
+              {
+                "question": "Pick a color",
+                "header": "Color",
+                "options": [
+                  {
+                    "label": "Red",
+                    "description": "warm"
+                  },
+                  {
+                    "label": "Blue",
+                    "description": "cool"
+                  }
+                ],
+                "multi_select": false,
+                "other_label": null
+              }
+            ],
+            "tool_use_id": "toolu_auq",
+            "plan_file_path": null
+          }
+        },
+        {
+          "request_id": "agm_01kvvskaw3fbstfhv63ef750gd",
+          "error": {
+            "exception": "ProcessExitedError",
+            "args": [
+              "Process exited with signal SIGTERM"
+            ],
+            "traceback_dict": {},
+            "was_logged_by_log_exception": false
+          },
+          "object_type": "RequestFailureAgentMessage",
+          "message_id": "agm_01kvvskaw4e89r7kwv1b5kzq87",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.812025Z"
+        }
+      ],
+      "expected": {
+        "status": "REQUEST_ERROR",
+        "current_activity": "mcp__sculptor__ask_user_question",
+        "last_activity": "mcp__sculptor__ask_user_question",
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "Pick a color",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "status_not_waiting_when_auq_request_stopped",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "ClaudeCodeSDKAgentConfig",
+      "messages": [
+        {
+          "object_type": "ChatInputUserMessage",
+          "message_id": "agm_01kvvskaw4e89r7kwv9rfny8zw",
+          "source": "USER",
+          "approximate_creation_time": "2026-06-24T03:08:23.812703Z",
+          "text": "Pick a color",
+          "model_name": null,
+          "files": [],
+          "enter_plan_mode": false,
+          "exit_plan_mode": false,
+          "fast_mode": false,
+          "effort": "xhigh",
+          "sent_via": null
+        },
+        {
+          "object_type": "EnvironmentAcquiredRunnerMessage",
+          "message_id": "agm_01kvvskaw4e89r7kwvbn187px9",
+          "source": "RUNNER",
+          "approximate_creation_time": "2026-06-24T03:08:23.812722Z",
+          "environment": null
+        },
+        {
+          "object_type": "ResponseBlockAgentMessage",
+          "message_id": "agm_01kvvskaw4e89r7kwvdjgyg4c0",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.812738Z",
+          "role": "assistant",
+          "assistant_message_id": "am_auq_stopped",
+          "content": [
+            {
+              "object_type": "ToolUseBlock",
+              "type": "tool_use",
+              "id": "toolu_auq_stopped",
+              "name": "mcp__sculptor__ask_user_question",
+              "input": {
+                "questions": [
+                  {
+                    "question": "Pick a color",
+                    "header": "Color",
+                    "options": [
+                      {
+                        "label": "Red",
+                        "description": "warm"
+                      },
+                      {
+                        "label": "Blue",
+                        "description": "cool"
+                      }
+                    ],
+                    "multiSelect": false
+                  }
+                ]
+              },
+              "interactive_role": null
+            }
+          ],
+          "parent_tool_use_id": null
+        },
+        {
+          "object_type": "AskUserQuestionAgentMessage",
+          "message_id": "agm_01kvvskaw4e89r7kwveygdgfqq",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.812750Z",
+          "question_data": {
+            "questions": [
+              {
+                "question": "Pick a color",
+                "header": "Color",
+                "options": [
+                  {
+                    "label": "Red",
+                    "description": "warm"
+                  },
+                  {
+                    "label": "Blue",
+                    "description": "cool"
+                  }
+                ],
+                "multi_select": false,
+                "other_label": null
+              }
+            ],
+            "tool_use_id": "toolu_auq_stopped",
+            "plan_file_path": null
+          }
+        },
+        {
+          "request_id": "agm_01kvvskaw4e89r7kwv9rfny8zw",
+          "error": {
+            "exception": "ProcessExitedError",
+            "args": [
+              "Process exited with signal SIGTERM"
+            ],
+            "traceback_dict": {},
+            "was_logged_by_log_exception": false
+          },
+          "object_type": "RequestStoppedAgentMessage",
+          "message_id": "agm_01kvvskaw4e89r7kwvh612t9t4",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.812790Z"
+        }
+      ],
+      "expected": {
+        "status": "READY",
+        "current_activity": "mcp__sculptor__ask_user_question",
+        "last_activity": "mcp__sculptor__ask_user_question",
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "Pick a color",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "status_promptless_no_messages_ready",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "ClaudeCodeSDKAgentConfig",
+      "messages": [],
+      "expected": {
+        "status": "READY",
+        "current_activity": null,
+        "last_activity": null,
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "terminal_building_before_environment",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "TerminalAgentConfig",
+      "messages": [],
+      "expected": {
+        "status": "BUILDING",
+        "current_activity": null,
+        "last_activity": null,
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "terminal_ready_after_environment",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "TerminalAgentConfig",
+      "messages": [
+        {
+          "object_type": "EnvironmentAcquiredRunnerMessage",
+          "message_id": "agm_01kvvskaw6e31vpve6n55rjpyc",
+          "source": "RUNNER",
+          "approximate_creation_time": "2026-06-24T03:08:23.814478Z",
+          "environment": null
+        }
+      ],
+      "expected": {
+        "status": "READY",
+        "current_activity": null,
+        "last_activity": null,
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "terminal_outcome_queued_building",
+      "run_state": "QUEUED",
+      "agent_config_object_type": "TerminalAgentConfig",
+      "messages": [],
+      "expected": {
+        "status": "BUILDING",
+        "current_activity": null,
+        "last_activity": null,
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "terminal_outcome_failed_error",
+      "run_state": "FAILED",
+      "agent_config_object_type": "TerminalAgentConfig",
+      "messages": [],
+      "expected": {
+        "status": "ERROR",
+        "current_activity": null,
+        "last_activity": null,
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "terminal_outcome_deleted_ready",
+      "run_state": "DELETED",
+      "agent_config_object_type": "TerminalAgentConfig",
+      "messages": [],
+      "expected": {
+        "status": "READY",
+        "current_activity": null,
+        "last_activity": null,
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "terminal_signal_busy",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "TerminalAgentConfig",
+      "messages": [
+        {
+          "object_type": "EnvironmentAcquiredRunnerMessage",
+          "message_id": "agm_01kvvskaw8ev187adjj3dh39y3",
+          "source": "RUNNER",
+          "approximate_creation_time": "2026-06-24T03:08:23.816654Z",
+          "environment": null
+        },
+        {
+          "object_type": "TerminalAgentSignalRunnerMessage",
+          "message_id": "agm_01kvvskaw8ev187adjm75z9dhb",
+          "source": "RUNNER",
+          "approximate_creation_time": "2026-06-24T03:08:23.816662Z",
+          "signal": "BUSY"
+        }
+      ],
+      "expected": {
+        "status": "RUNNING",
+        "current_activity": null,
+        "last_activity": null,
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "terminal_signal_waiting",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "TerminalAgentConfig",
+      "messages": [
+        {
+          "object_type": "EnvironmentAcquiredRunnerMessage",
+          "message_id": "agm_01kvvskaw9fs0rgbx6dmvx7b31",
+          "source": "RUNNER",
+          "approximate_creation_time": "2026-06-24T03:08:23.817242Z",
+          "environment": null
+        },
+        {
+          "object_type": "TerminalAgentSignalRunnerMessage",
+          "message_id": "agm_01kvvskaw9fs0rgbx6fgfq6wss",
+          "source": "RUNNER",
+          "approximate_creation_time": "2026-06-24T03:08:23.817247Z",
+          "signal": "WAITING"
+        }
+      ],
+      "expected": {
+        "status": "WAITING",
+        "current_activity": null,
+        "last_activity": null,
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "terminal_signal_idle_ready",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "TerminalAgentConfig",
+      "messages": [
+        {
+          "object_type": "EnvironmentAcquiredRunnerMessage",
+          "message_id": "agm_01kvvskaw9fs0rgbx6p7700b00",
+          "source": "RUNNER",
+          "approximate_creation_time": "2026-06-24T03:08:23.817827Z",
+          "environment": null
+        },
+        {
+          "object_type": "TerminalAgentSignalRunnerMessage",
+          "message_id": "agm_01kvvskaw9fs0rgbx6rmew6rqf",
+          "source": "RUNNER",
+          "approximate_creation_time": "2026-06-24T03:08:23.817833Z",
+          "signal": "IDLE"
+        }
+      ],
+      "expected": {
+        "status": "READY",
+        "current_activity": null,
+        "last_activity": null,
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "terminal_signal_latest_wins",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "TerminalAgentConfig",
+      "messages": [
+        {
+          "object_type": "EnvironmentAcquiredRunnerMessage",
+          "message_id": "agm_01kvvskawaeb8tmnnmt08srej6",
+          "source": "RUNNER",
+          "approximate_creation_time": "2026-06-24T03:08:23.818394Z",
+          "environment": null
+        },
+        {
+          "object_type": "TerminalAgentSignalRunnerMessage",
+          "message_id": "agm_01kvvskawaeb8tmnnmxzycsmkp",
+          "source": "RUNNER",
+          "approximate_creation_time": "2026-06-24T03:08:23.818399Z",
+          "signal": "BUSY"
+        },
+        {
+          "object_type": "TerminalAgentSignalRunnerMessage",
+          "message_id": "agm_01kvvskawaeb8tmnnmzxgnjgqr",
+          "source": "RUNNER",
+          "approximate_creation_time": "2026-06-24T03:08:23.818402Z",
+          "signal": "WAITING"
+        },
+        {
+          "object_type": "TerminalAgentSignalRunnerMessage",
+          "message_id": "agm_01kvvskawaeb8tmnnn19zrz882",
+          "source": "RUNNER",
+          "approximate_creation_time": "2026-06-24T03:08:23.818404Z",
+          "signal": "BUSY"
+        }
+      ],
+      "expected": {
+        "status": "RUNNING",
+        "current_activity": null,
+        "last_activity": null,
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "terminal_signal_resets_at_run_start",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "TerminalAgentConfig",
+      "messages": [
+        {
+          "object_type": "EnvironmentAcquiredRunnerMessage",
+          "message_id": "agm_01kvvskawbfm9aa0qbasppg290",
+          "source": "RUNNER",
+          "approximate_creation_time": "2026-06-24T03:08:23.819576Z",
+          "environment": null
+        },
+        {
+          "object_type": "TerminalAgentSignalRunnerMessage",
+          "message_id": "agm_01kvvskawbfm9aa0qbcjq16xjg",
+          "source": "RUNNER",
+          "approximate_creation_time": "2026-06-24T03:08:23.819581Z",
+          "signal": "WAITING"
+        },
+        {
+          "object_type": "EnvironmentAcquiredRunnerMessage",
+          "message_id": "agm_01kvvskawbfm9aa0qbe1bdrwzb",
+          "source": "RUNNER",
+          "approximate_creation_time": "2026-06-24T03:08:23.819593Z",
+          "environment": null
+        }
+      ],
+      "expected": {
+        "status": "READY",
+        "current_activity": null,
+        "last_activity": null,
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "terminal_outcome_short_circuit_beats_signal",
+      "run_state": "FAILED",
+      "agent_config_object_type": "TerminalAgentConfig",
+      "messages": [
+        {
+          "object_type": "EnvironmentAcquiredRunnerMessage",
+          "message_id": "agm_01kvvskawcebrv25d71c1z0232",
+          "source": "RUNNER",
+          "approximate_creation_time": "2026-06-24T03:08:23.820135Z",
+          "environment": null
+        },
+        {
+          "object_type": "TerminalAgentSignalRunnerMessage",
+          "message_id": "agm_01kvvskawcebrv25d731c9rms0",
+          "source": "RUNNER",
+          "approximate_creation_time": "2026-06-24T03:08:23.820140Z",
+          "signal": "BUSY"
+        }
+      ],
+      "expected": {
+        "status": "ERROR",
+        "current_activity": null,
+        "last_activity": null,
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "activity_no_messages",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "ClaudeCodeSDKAgentConfig",
+      "messages": [],
+      "expected": {
+        "status": "READY",
+        "current_activity": null,
+        "last_activity": null,
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "activity_tool_use_edit",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "ClaudeCodeSDKAgentConfig",
+      "messages": [
+        {
+          "object_type": "ResponseBlockAgentMessage",
+          "message_id": "agm_01kvvskawdfp99va6jzjfxsj7c",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.821164Z",
+          "role": "assistant",
+          "assistant_message_id": "assistant-1",
+          "content": [
+            {
+              "object_type": "ToolUseBlock",
+              "type": "tool_use",
+              "id": "tool-1",
+              "name": "Edit",
+              "input": {
+                "file_path": "/foo/bar.py"
+              },
+              "interactive_role": null
+            }
+          ],
+          "parent_tool_use_id": null
+        }
+      ],
+      "expected": {
+        "status": "READY",
+        "current_activity": "Editing bar.py",
+        "last_activity": "Edited bar.py",
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "activity_text_after_tool",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "ClaudeCodeSDKAgentConfig",
+      "messages": [
+        {
+          "object_type": "ResponseBlockAgentMessage",
+          "message_id": "agm_01kvvskawdfp99va6k6gwtd3wa",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.821725Z",
+          "role": "assistant",
+          "assistant_message_id": "assistant-1",
+          "content": [
+            {
+              "object_type": "ToolUseBlock",
+              "type": "tool_use",
+              "id": "tool-1",
+              "name": "Bash",
+              "input": {},
+              "interactive_role": null
+            }
+          ],
+          "parent_tool_use_id": null
+        },
+        {
+          "object_type": "ResponseBlockAgentMessage",
+          "message_id": "agm_01kvvskawdfp99va6k8jpxfgd5",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.821745Z",
+          "role": "assistant",
+          "assistant_message_id": "assistant-1",
+          "content": [
+            {
+              "object_type": "TextBlock",
+              "type": "text",
+              "text": "Here are the results of the test run."
+            }
+          ],
+          "parent_tool_use_id": null
+        }
+      ],
+      "expected": {
+        "status": "READY",
+        "current_activity": "Responding",
+        "last_activity": "Responded",
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "activity_tool_after_text",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "ClaudeCodeSDKAgentConfig",
+      "messages": [
+        {
+          "object_type": "ResponseBlockAgentMessage",
+          "message_id": "agm_01kvvskawefc8ryd7eaxx8ytj6",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.822303Z",
+          "role": "assistant",
+          "assistant_message_id": "assistant-1",
+          "content": [
+            {
+              "object_type": "TextBlock",
+              "type": "text",
+              "text": "Let me check the file."
+            }
+          ],
+          "parent_tool_use_id": null
+        },
+        {
+          "object_type": "ResponseBlockAgentMessage",
+          "message_id": "agm_01kvvskawefc8ryd7edgvr5zf6",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.822322Z",
+          "role": "assistant",
+          "assistant_message_id": "assistant-1",
+          "content": [
+            {
+              "object_type": "ToolUseBlock",
+              "type": "tool_use",
+              "id": "tool-1",
+              "name": "Read",
+              "input": {
+                "file_path": "/src/main.py"
+              },
+              "interactive_role": null
+            }
+          ],
+          "parent_tool_use_id": null
+        }
+      ],
+      "expected": {
+        "status": "READY",
+        "current_activity": "Reading main.py",
+        "last_activity": "Read main.py",
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "activity_whitespace_text_ignored",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "ClaudeCodeSDKAgentConfig",
+      "messages": [
+        {
+          "object_type": "ResponseBlockAgentMessage",
+          "message_id": "agm_01kvvskawefc8ryd7em48djq5j",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.822887Z",
+          "role": "assistant",
+          "assistant_message_id": "assistant-1",
+          "content": [
+            {
+              "object_type": "ToolUseBlock",
+              "type": "tool_use",
+              "id": "tool-1",
+              "name": "Grep",
+              "input": {},
+              "interactive_role": null
+            }
+          ],
+          "parent_tool_use_id": null
+        },
+        {
+          "object_type": "ResponseBlockAgentMessage",
+          "message_id": "agm_01kvvskawefc8ryd7ep6q2zttd",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.822905Z",
+          "role": "assistant",
+          "assistant_message_id": "assistant-1",
+          "content": [
+            {
+              "object_type": "TextBlock",
+              "type": "text",
+              "text": "   "
+            }
+          ],
+          "parent_tool_use_id": null
+        }
+      ],
+      "expected": {
+        "status": "READY",
+        "current_activity": "Searching codebase",
+        "last_activity": "Searched codebase",
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "activity_mixed_block_text_after_tool",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "ClaudeCodeSDKAgentConfig",
+      "messages": [
+        {
+          "object_type": "ResponseBlockAgentMessage",
+          "message_id": "agm_01kvvskawfebhrtq0hbd2zh44r",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.823493Z",
+          "role": "assistant",
+          "assistant_message_id": "assistant-1",
+          "content": [
+            {
+              "object_type": "ToolUseBlock",
+              "type": "tool_use",
+              "id": "tool-1",
+              "name": "Bash",
+              "input": {},
+              "interactive_role": null
+            },
+            {
+              "object_type": "TextBlock",
+              "type": "text",
+              "text": "Done running the command."
+            }
+          ],
+          "parent_tool_use_id": null
+        }
+      ],
+      "expected": {
+        "status": "READY",
+        "current_activity": "Responding",
+        "last_activity": "Responded",
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "activity_tool_write_no_filepath",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "ClaudeCodeSDKAgentConfig",
+      "messages": [
+        {
+          "object_type": "ResponseBlockAgentMessage",
+          "message_id": "agm_01kvvskawge5gv77t7gw8ts55b",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.824067Z",
+          "role": "assistant",
+          "assistant_message_id": "assistant-1",
+          "content": [
+            {
+              "object_type": "ToolUseBlock",
+              "type": "tool_use",
+              "id": "tool-1",
+              "name": "Write",
+              "input": {},
+              "interactive_role": null
+            }
+          ],
+          "parent_tool_use_id": null
+        }
+      ],
+      "expected": {
+        "status": "READY",
+        "current_activity": "Creating file",
+        "last_activity": "Created file",
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "activity_unknown_tool",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "ClaudeCodeSDKAgentConfig",
+      "messages": [
+        {
+          "object_type": "ResponseBlockAgentMessage",
+          "message_id": "agm_01kvvskawge5gv77t7s07t7n2p",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.824638Z",
+          "role": "assistant",
+          "assistant_message_id": "assistant-1",
+          "content": [
+            {
+              "object_type": "ToolUseBlock",
+              "type": "tool_use",
+              "id": "tool-1",
+              "name": "CustomTool",
+              "input": {},
+              "interactive_role": null
+            }
+          ],
+          "parent_tool_use_id": null
+        }
+      ],
+      "expected": {
+        "status": "READY",
+        "current_activity": "CustomTool",
+        "last_activity": "CustomTool",
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "activity_task_subagent",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "ClaudeCodeSDKAgentConfig",
+      "messages": [
+        {
+          "object_type": "ResponseBlockAgentMessage",
+          "message_id": "agm_01kvvskawhfxgrwzadm901s2bk",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.825199Z",
+          "role": "assistant",
+          "assistant_message_id": "assistant-1",
+          "content": [
+            {
+              "object_type": "ToolUseBlock",
+              "type": "tool_use",
+              "id": "tool-1",
+              "name": "Task",
+              "input": {},
+              "interactive_role": null
+            }
+          ],
+          "parent_tool_use_id": null
+        }
+      ],
+      "expected": {
+        "status": "READY",
+        "current_activity": "Running sub-agent",
+        "last_activity": "Ran sub-agent",
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "tasklist_no_artifact",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "ClaudeCodeSDKAgentConfig",
+      "messages": [],
+      "expected": {
+        "status": "READY",
+        "current_activity": null,
+        "last_activity": null,
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "tasklist_counts_from_latest_v2",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "ClaudeCodeSDKAgentConfig",
+      "messages": [
+        {
+          "object_type": "UpdatedArtifactAgentMessage",
+          "message_id": "agm_01kvvskawjfhha19k3gk0b12ce",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.826776Z",
+          "artifact": {
+            "object_type": "FileAgentArtifact",
+            "name": "PLAN",
+            "url": "file://{TMP}/PLAN-abc.json"
+          }
+        }
+      ],
+      "expected": {
+        "status": "READY",
+        "current_activity": null,
+        "last_activity": null,
+        "title": null,
+        "task_completed": 1,
+        "task_total": 3,
+        "current_task_subject": "B",
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "tasklist_no_in_progress_none_subject",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "ClaudeCodeSDKAgentConfig",
+      "messages": [
+        {
+          "object_type": "UpdatedArtifactAgentMessage",
+          "message_id": "agm_01kvvskawkex8r24rkjspjj0q7",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.827787Z",
+          "artifact": {
+            "object_type": "FileAgentArtifact",
+            "name": "PLAN",
+            "url": "file://{TMP}/PLAN-noprog.json"
+          }
+        }
+      ],
+      "expected": {
+        "status": "READY",
+        "current_activity": null,
+        "last_activity": null,
+        "title": null,
+        "task_completed": 2,
+        "task_total": 2,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "tasklist_legacy_ignored",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "ClaudeCodeSDKAgentConfig",
+      "messages": [
+        {
+          "object_type": "UpdatedArtifactAgentMessage",
+          "message_id": "agm_01kvvskawmf38833b1298hv20h",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.828598Z",
+          "artifact": {
+            "object_type": "FileAgentArtifact",
+            "name": "PLAN",
+            "url": "file://{TMP}/PLAN-legacy.json"
+          }
+        }
+      ],
+      "expected": {
+        "status": "READY",
+        "current_activity": null,
+        "last_activity": null,
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "tasklist_unsupported_version_ignored",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "ClaudeCodeSDKAgentConfig",
+      "messages": [
+        {
+          "object_type": "UpdatedArtifactAgentMessage",
+          "message_id": "agm_01kvvskawpepgb3qqtn1egamqz",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.830169Z",
+          "artifact": {
+            "object_type": "FileAgentArtifact",
+            "name": "PLAN",
+            "url": "file://{TMP}/PLAN-v1.json"
+          }
+        }
+      ],
+      "expected": {
+        "status": "READY",
+        "current_activity": null,
+        "last_activity": null,
+        "title": null,
+        "task_completed": 0,
+        "task_total": 0,
+        "current_task_subject": null,
+        "goal": "",
+        "waiting_detail": null
+      }
+    },
+    {
+      "name": "tasklist_latest_message_wins",
+      "run_state": "RUNNING",
+      "agent_config_object_type": "ClaudeCodeSDKAgentConfig",
+      "messages": [
+        {
+          "object_type": "UpdatedArtifactAgentMessage",
+          "message_id": "agm_01kvvskawqf4h8070fvgt9e75w",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.831017Z",
+          "artifact": {
+            "object_type": "FileAgentArtifact",
+            "name": "PLAN",
+            "url": "file://{TMP}/PLAN-1.json"
+          }
+        },
+        {
+          "object_type": "UpdatedArtifactAgentMessage",
+          "message_id": "agm_01kvvskawqf4h8070fx2t03szg",
+          "source": "AGENT",
+          "approximate_creation_time": "2026-06-24T03:08:23.831025Z",
+          "artifact": {
+            "object_type": "FileAgentArtifact",
+            "name": "PLAN",
+            "url": "file://{TMP}/PLAN-2.json"
+          }
+        }
+      ],
+      "expected": {
+        "status": "READY",
+        "current_activity": null,
+        "last_activity": null,
+        "title": null,
+        "task_completed": 1,
+        "task_total": 2,
+        "current_task_subject": "B",
+        "goal": "",
+        "waiting_detail": null
+      }
+    }
+  ],
+  "artifact_files": {
+    "PLAN-abc.json": "{\n  \"object_type\": \"TaskListArtifact\",\n  \"version\": 2,\n  \"tasks\": [\n    {\n      \"id\": \"1\",\n      \"subject\": \"A\",\n      \"description\": \"\",\n      \"active_form\": null,\n      \"status\": \"completed\",\n      \"blocks\": [],\n      \"blocked_by\": [],\n      \"owner\": null,\n      \"metadata\": {}\n    },\n    {\n      \"id\": \"2\",\n      \"subject\": \"B\",\n      \"description\": \"\",\n      \"active_form\": null,\n      \"status\": \"in_progress\",\n      \"blocks\": [],\n      \"blocked_by\": [],\n      \"owner\": null,\n      \"metadata\": {}\n    },\n    {\n      \"id\": \"3\",\n      \"subject\": \"C\",\n      \"description\": \"\",\n      \"active_form\": null,\n      \"status\": \"pending\",\n      \"blocks\": [],\n      \"blocked_by\": [],\n      \"owner\": null,\n      \"metadata\": {}\n    }\n  ]\n}",
+    "PLAN-noprog.json": "{\n  \"object_type\": \"TaskListArtifact\",\n  \"version\": 2,\n  \"tasks\": [\n    {\n      \"id\": \"1\",\n      \"subject\": \"A\",\n      \"description\": \"\",\n      \"active_form\": null,\n      \"status\": \"completed\",\n      \"blocks\": [],\n      \"blocked_by\": [],\n      \"owner\": null,\n      \"metadata\": {}\n    },\n    {\n      \"id\": \"2\",\n      \"subject\": \"B\",\n      \"description\": \"\",\n      \"active_form\": null,\n      \"status\": \"completed\",\n      \"blocks\": [],\n      \"blocked_by\": [],\n      \"owner\": null,\n      \"metadata\": {}\n    }\n  ]\n}",
+    "PLAN-legacy.json": "{\"object_type\": \"TodoListArtifact\", \"todos\": [{\"id\": \"1\", \"content\": \"x\", \"status\": \"completed\"}]}",
+    "PLAN-v1.json": "{\"object_type\": \"TaskListArtifact\", \"version\": 1, \"tasks\": []}",
+    "PLAN-1.json": "{\n  \"object_type\": \"TaskListArtifact\",\n  \"version\": 2,\n  \"tasks\": [\n    {\n      \"id\": \"1\",\n      \"subject\": \"A\",\n      \"description\": \"\",\n      \"active_form\": null,\n      \"status\": \"pending\",\n      \"blocks\": [],\n      \"blocked_by\": [],\n      \"owner\": null,\n      \"metadata\": {}\n    }\n  ]\n}",
+    "PLAN-2.json": "{\n  \"object_type\": \"TaskListArtifact\",\n  \"version\": 2,\n  \"tasks\": [\n    {\n      \"id\": \"1\",\n      \"subject\": \"A\",\n      \"description\": \"\",\n      \"active_form\": null,\n      \"status\": \"completed\",\n      \"blocks\": [],\n      \"blocked_by\": [],\n      \"owner\": null,\n      \"metadata\": {}\n    },\n    {\n      \"id\": \"2\",\n      \"subject\": \"B\",\n      \"description\": \"\",\n      \"active_form\": null,\n      \"status\": \"in_progress\",\n      \"blocks\": [],\n      \"blocked_by\": [],\n      \"owner\": null,\n      \"metadata\": {}\n    }\n  ]\n}"
+  }
+}
