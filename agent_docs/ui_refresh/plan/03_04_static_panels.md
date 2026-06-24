@@ -53,7 +53,10 @@ minimal/REWRITE-for-removed-enable).
 ## Implementation details
 
 1. Each panel is a thin, shell-agnostic wrapper around the existing content surface,
-   reading from existing data atoms. No layout reads.
+   reading from existing data atoms. No layout reads. If a panel needs an internal
+   header bar (title/actions), copy the prototype's `PanelHeader` (41px;
+   `design_extraction.md`) — but most simply render their content under the section
+   header.
 2. **ReviewAllPanel:** wrap the existing review-all combined-diff (preserve
    auto-collapse, workspace-scoped changes — REVIEW-02). `defaultSection` undefined
    (not open by default).

@@ -92,7 +92,7 @@ This task depends on **Task 5.1** (the modal), **Task 2.2** (the sidebar button 
 - No bare "Terminal" agent type in the dialog's agent-type picker (Decision B2).
 - Reuse the existing create backend + MRU; don't reimplement.
 - Guard: Cmd+Enter inside the repo-path autocomplete must **not** also create the
-  workspace (FIRST-06 negative case — preserved from `test_add_workspace_page`).
+  workspace (a negative-path test case — preserved from `test_add_workspace_page`).
 
 ## Verification checklist
 

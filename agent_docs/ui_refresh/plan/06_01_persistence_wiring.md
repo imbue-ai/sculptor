@@ -75,7 +75,7 @@ extension point), 1.4 (`removeWorkspaceLayoutAtom`), 1.6 (registry)**, and the p
 
 - PERSIST/default e2e land in **Task 6.3** (`test_layout_persistence.py`,
   `test_layout_persistence_regression.py`) + the SEC-01..04 default assertions in
-  `test_section_default_layout.py` (Task 4.6). Adapter-level unit tests (the
+  `test_section_default_layout.py` (Task 6.3). Adapter-level unit tests (the
   per-workspace-vs-global split, the no-migration rule) are a cheaper surface than full
   e2e — exercise the adapter directly (Task 6.3).
 

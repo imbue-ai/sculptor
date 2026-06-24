@@ -13,7 +13,8 @@ PANEL-01 (`+` opens a dropdown; panels added land in that section), PANEL-02
 sub-menu), PANEL-04 ("New terminal" beneath the agent options), PANEL-05 (every
 single-instance panel not already open listed below), PANEL-06 (new-agent binding /
 Cmd+K always create the agent in center), PANEL-12 (Cmd+K → "Add panel" → location →
-valid panels), SEC-19 (empty-state add button + ≤5 quick actions).
+valid panels), SEC-19 (empty-state add button + ≤5 quick actions), TERM-05 (registered
+terminal-agent programs surface in the agent-type sub-menu).
 
 ## Background
 
@@ -89,8 +90,9 @@ terminal flows).
 
 ## Testing suggestions
 
-- PANEL-01..06/12 + SEC-19 e2e land in **Task 4.6** (`test_panel_add_dropdown.py`,
-  `test_section_empty_state.py`) and **Task 3.7** (agent/terminal-type assertions).
+- PANEL-01..06/12 e2e land in **Task 3.7** (`test_panel_add_dropdown.py`, incl. the
+  agent/terminal-type assertions — the file is owned there, co-developed with
+  Sections); SEC-19 empty-state e2e in **Task 4.6** (`test_section_empty_state.py`).
   This task builds the surfaces + the `ADD_PANEL_*`/`SECTION_EMPTY_QUICK_ACTION`
   testids the POMs target.
 

@@ -101,6 +101,16 @@ the `TAB_CONTEXT_MENU_*` workspace-row vs. panel-tab split (`02_07`/`08_01`), an
 SEC-16 (`04_03`).
 - **Bites at:** `03_05`/`03_07`, `02_07`/`08_01`, `04_03`.
 
+### B10. FCC test arrangement + Task 3.6 split — RESOLVED: open via the UI; split per panel
+FCC content tests open their panel the way a user does — a shared helper **clicks the
+section `+` add-panel dropdown** to open it (reusing the `AddPanelDropdown` POM), then
+the test asserts content. No localStorage / layout-state seeding. The ~19-file FCC
+migration is split into `03_06a` (shared POMs + the open-a-panel helper) +
+`03_06b`..`03_06e` (one test file per panel), each deleting only its own sources after
+it runs green (no big-bang delete). Agent/terminal content tests (`03_07`) open their
+panel the same way.
+- **Bites at:** `03_06a`..`03_06e`, `03_07`.
+
 ---
 
 ## C. Logistics / housekeeping
@@ -119,4 +129,5 @@ SEC-16 (`04_03`).
   `measure-react-renders` by hand.
 - **C4. The two mandatory final tasks** (`99_01`, `99_02`) assume a
   `/sculptor-workflow:build` run; still good checklists by hand.
-- **C5. Scope:** ~42 tasks across 10 phases. Ask if you want a smaller first milestone.
+- **C5. Scope:** ~46 tasks across 10 phases (Task 3.6 split into `03_06a`..`e`). Ask if
+  you want a smaller first milestone.

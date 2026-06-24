@@ -19,7 +19,7 @@ as registered panels), FCC-* (any remaining content reach), plus the KEEP majori
 via **`/run-integration-test`**. The new panel surfaces + the shared `PanelTab`/
 `AddPanelDropdown` POMs + the xterm content helpers (kept in `terminal.py`) already
 exist (Phase 3); the new agent/terminal CREATE tests landed in Task 3.7 and FCC in
-Task 3.6.
+Tasks 3.6a–e.
 
 **The migration** (`e2e_test_plan.md` §4a/§4e/§6; `agent_terminal_panels.md` §4):
 separate **CONTENT** (xterm I/O, chat streaming, signals, PTY lifecycle — KEEP, only
@@ -35,6 +35,14 @@ CREATE files). Most content tests need only the harness shim + a helper swap.
   moved to `test_terminal_panel.py` in Task 3.7). Swap create via `create_agent_panel`/
   `create_terminal_panel`, switch via the section/panel-tab POM, signal→`data-dot-status`
   on the panel tab; keep all xterm/PTY/signal/resume assertions.
+- **UPDATE (§4d — `panels.py`-helper importers):** `test_alpha_scroll_behaviors.py`,
+  `test_alpha_scroll_padding_agent_switch.py`, `test_alpha_scroll_to_top.py`,
+  `test_linear_plugin_runtime.py` — swap the old `panels.py` helper calls
+  (`close_bottom_panel` / `ensure_*_visible`) to the new `section_helpers.py`
+  (`collapse_section` / `ensure_section_expanded`, Task 4.6), and re-point
+  `test_linear_plugin_runtime.py`'s plugin panel off the deleted `panel_zones` onto a
+  section. (Task 4.6 keeps the old helper names as aliases, so these break softly until
+  migrated here.)
 - **UPDATE:** `test_skills_panel.py` (panel placement shim — content KEEP).
 - **REWRITE:** `test_browser_panel.py` — the opt-in/opt-out (enable) stories reflect
   the removed enable model; rewrite those as add/close-panel; the isolation /
@@ -51,12 +59,16 @@ CREATE files). Most content tests need only the harness shim + a helper swap.
   the shim — they change only if a renamed POM method they transitively call breaks
   (then a trivial UPDATE) or they carry old vocab (RENAME in Task 8.3).
 
-This task depends on **Phases 2–7** + Tasks 3.6/3.7.
+This task depends on **Phases 2–7** + Tasks 3.6a–e/3.7.
 
 ## Files to modify/create
 
 - The UPDATE-in-place terminal-agent / babysitter / terminal-content files (helper +
   reach swap; content assertions unchanged).
+- The §4d `panels.py`-helper importer files (`test_alpha_scroll_behaviors.py`,
+  `test_alpha_scroll_padding_agent_switch.py`, `test_alpha_scroll_to_top.py`,
+  `test_linear_plugin_runtime.py`) — helper swap to `section_helpers.py`; re-point the
+  linear-plugin panel off `panel_zones`.
 - `test_skills_panel.py` (UPDATE shim), `test_browser_panel.py` (REWRITE),
   `test_custom_actions.py` / `test_notes_panel.py` (minimal), `test_review_all_panel.py`
   (CREATE/finish).

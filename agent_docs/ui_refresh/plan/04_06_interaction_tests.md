@@ -9,7 +9,7 @@ are deleted, not migrated).
 
 ## Stories addressed
 
-SEC-01..04 (default layout), SEC-05..08/20 (collapse/expand + center + panel cycle),
+SEC-05..08/20 (collapse/expand + center + panel cycle),
 SEC-09..16/21 (active/ring/cycle/maximize/SPLIT-06), SEC-17/22 (resize + clamps),
 SEC-19 (empty state), SPLIT-01..06 (splits), PANEL-08..10/16 (drag-and-drop),
 PANEL-07/11/14 (rename/close/context — co-owned with Task 3.7).
@@ -44,7 +44,7 @@ foundation POMs the other areas reuse.
   target_subsection_id, index)`** (DnD via the `KeyboardSensor` — Task 4.1).
 
 **Test files to CREATE** (`e2e_test_plan.md` §1; `sections_panel_layout.md` §2):
-`test_section_default_layout.py` (SEC-01..04/09), `test_section_collapse_expand.py`
+`test_section_collapse_expand.py`
 (SEC-05..08/20), `test_section_active_and_maximize.py` (SEC-09..16/21, SPLIT-06),
 `test_section_resize.py` (SEC-17/22; SEC-18 restored-size aspect),
 `test_section_empty_state.py` (SEC-19, SPLIT-04/05), `test_section_splits.py`
@@ -52,10 +52,10 @@ foundation POMs the other areas reuse.
 `test_panel_rename_and_close.py` (PANEL-07/11/14 — coordinate with Task 3.7 so
 rename/close aren't double-owned, Decision B9).
 
-This task depends on all of Phase 4 (4.1–4.5) and the Phase-2/3 components + the
-default-layout seeding (Task 6.1 finalizes SEC-01..04 defaults — if 6.1 lands after
-this, assert the minimal default and tighten in Task 6.3; prefer ordering 6.1 before
-this if convenient).
+This task depends on all of Phase 4 (4.1–4.5) and the Phase-2/3 components. (The
+SEC-01..04 default-layout test is **not** here — it asserts the Task 6.1 seed, so it
+lives in **Task 6.3**. Section tests here arrange specific layouts by clicking through the UI (add panels via
+the dropdown, collapse/expand via the section controls), not the real default.)
 
 ## Files to modify/create
 
@@ -63,18 +63,19 @@ this if convenient).
   `elements/panel_empty_state.py` (new), `elements/section_helpers.py` (new) — plus
   delete `elements/panel_zones.py` and rewrite `elements/panels.py` helpers (the
   delete itself is Phase 7; the helper rewrite happens here so tests use the new
-  helpers).
-- The eight CREATE test files above.
+  helpers). **Keep the old `panels.py` helper names (`close_bottom_panel` /
+  `ensure_*_visible`) as thin aliases to the new `section_helpers.py` functions until
+  their remaining importers migrate in Task 8.2 (§4d) — renaming them outright breaks
+  those tests at this phase.**
+- The seven CREATE test files above.
 
 ## Implementation details
 
 1. Build the POMs + helpers per `sections_panel_layout.md` §3. The most-leaned-on
    helpers are `drag_panel_to_section` (DnD), `add_panel_via_dropdown`, and the
    panel-tab close→confirmation.
-2. `test_section_default_layout.py`: center is the only expanded section with one
-   agent of the recent type; left collapsed with Files/Changes/Commits (Files
-   active); bottom collapsed with one terminal; right collapsed + empty (SEC-01..04).
-   (These assert the **full** default from Task 6.1.)
+2. *(The SEC-01..04 default-layout test moved to **Task 6.3** — it asserts the Task
+   6.1 seed, which lands after this task.)*
 3. `test_section_collapse_expand.py`: per-section collapse/expand hotkeys; center
    can't collapse; panel-cycle hotkey wraps + no-ops in single/empty; preservation of
    open/active panels across collapse→expand.
@@ -109,8 +110,8 @@ this if convenient).
   (flaky).
 - Coordinate PANEL-07/11/14 ownership with Task 3.7 (Decision B9) so rename/close
   aren't asserted twice.
-- SEC-01..04 assert the full default layout — ensure Task 6.1 seeding is in place (or
-  sequence 6.1 first).
+- The SEC-01..04 default-layout test lives in **Task 6.3** (it needs the Task 6.1
+  seed) — don't add it here.
 - `just generate-api` if any testid changed.
 
 ## Verification checklist
@@ -119,5 +120,5 @@ this if convenient).
   + `section_helpers.py` (incl. `drag_panel_to_section`) exist; `panels.py` helpers
   rewritten.
 - [ ] All eight CREATE test files pass via `/run-integration-test`.
-- [ ] SEC-01..22, SPLIT-01..06, PANEL-08..10/16 (+ PANEL-07/11/14) covered; no
+- [ ] SEC-05..22, SPLIT-01..06, PANEL-08..10/16 (+ PANEL-07/11/14) covered; no
   layout-only assertions.

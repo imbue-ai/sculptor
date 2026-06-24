@@ -35,7 +35,10 @@ top-bar/tab components, the zone components, and the side-toggle before deleting
 `WORKSPACE_TAB`, `ADD_WORKSPACE_TAB`, `TAB_CLOSE_BUTTON` (if no longer used),
 `PANEL_TOP_RIGHT`, `PANEL_BOTTOM_RIGHT`, `PANEL_RIGHT_AREA`, `PANEL_RIGHT_RESIZE_HANDLE`,
 `SIDE_TOGGLE_LEFT`/`SIDE_TOGGLE_RIGHT`/`SIDE_TOGGLE_BOTTOM`, `PANEL_ICON_*` (the zone
-sidebar-icon set), `PANEL_CONTEXT_MENU_MOVE_TO`, `PANEL_CONTEXT_MENU_ZONE_OPTION`. Run
+sidebar-icon set), `PANEL_CONTEXT_MENU_MOVE_TO`, `PANEL_CONTEXT_MENU_ZONE_OPTION`, and
+the old agent/terminal tab-bar ids superseded by `PANEL_TAB`/`ADD_PANEL_*` — `AGENT_TAB`,
+`TERMINAL_TAB`, `ADD_AGENT_BUTTON`, `ADD_AGENT_CHEVRON_BUTTON`, `AGENT_TYPE_MENU*` (Task
+3.7 re-keyed the POMs but left these rendering on the not-yet-removed shell). Run
 `just generate-api` after.
 
 **Tests to delete** (`e2e_test_plan.md` §2): `test_panel_zones.py`,
@@ -49,9 +52,10 @@ This task depends on **all of Phases 2–6** (the new shell must fully own the r
 
 - Delete the old `src/layouts/PageLayout.tsx` (+ scss + `hooks/usePageLayoutKeyboardShortcuts.ts`)
   **iff** unreferenced (the new shell replaced it; the new shortcuts hook is Task 4.5).
-- Delete the top-bar/bottom-bar/tab-strip components and the panel-zone/docking
-  components + the side-toggle bar (grep to find them under `src/components` /
-  `src/pages/workspace`).
+- Delete the top-bar/bottom-bar/tab-strip components, the panel-zone/docking
+  components, the side-toggle bar, and the old agent/terminal **tab-bar** components
+  (the agent tab strip + add-agent button — superseded by panel tabs) (grep to find
+  them under `src/components` / `src/pages/workspace`).
 - Delete `sculptor/sculptor/testing/elements/panel_zones.py`.
 - Delete `sculptor/tests/integration/frontend/test_panel_zones.py`,
   `test_side_toggle.py`.
@@ -92,6 +96,7 @@ This task depends on **all of Phases 2–6** (the new shell must fully own the r
 - [ ] Old page shell / top bar / bottom bar / tab strip / panel zones / side-toggle
   deleted; no importers remain.
 - [ ] `panel_zones.py`, `test_panel_zones.py`, `test_side_toggle.py` deleted.
-- [ ] Zone/tab/top-bar ElementIDs removed + `just generate-api`; TS fallout fixed.
+- [ ] Zone/tab/top-bar + agent/terminal tab-bar (`AGENT_TAB`/`ADD_AGENT_*`/…)
+  ElementIDs removed + `just generate-api`; TS fallout fixed.
 - [ ] `just check` + `just ratchets` pass; integration suite green via
   `/run-integration-test`.

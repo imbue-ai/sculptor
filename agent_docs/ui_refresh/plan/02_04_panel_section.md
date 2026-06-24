@@ -9,9 +9,12 @@ component for left/center/right/bottom and for split halves.
 
 ## Stories addressed
 
-SEC-09 (section header = panel tabs + add + maximize), and the structural
-foundation for SEC-19 (empty state), PANEL-07 (tabs/close), and the non-functional
-SWITCH-02/SWITCH-05 (each panel mounts at most once per switch; memoized re-renders).
+SEC-09 (section header = panel tabs + add + maximize), PANEL-07 (panel tabs + close),
+PANEL-11 (rename multi-instance panels; single-instance can't), PANEL-14 (panels expose
+their own right-click actions + Cmd+K functionality — rendered here from the registry
+`contextMenuActions`/Cmd+K contract in Task 1.6), and the structural foundation for
+SEC-19 (empty state) and the non-functional SWITCH-02/SWITCH-05 (each panel mounts at
+most once per switch; memoized re-renders).
 
 ## Background
 
@@ -96,7 +99,10 @@ droppable/draggable seams but the provider is a stub until 4.1).
    registry `kind`); the `+` button (opens `AddPanelDropdown`, Task 3.5); the
    maximize toggle (writes `maximizedSectionAtom`, Task 1.5). Tab list is the
    shallow-equal-deduped `displayedPanelIdsAtom(ss)` slice; tab drag uses the
-   per-section ghost slice.
+   per-section ghost slice. Each tab's right-click context menu renders the panel's
+   `contextMenuActions` from the registry, and a panel's Cmd+K entries come from the
+   same registry contract (PANEL-14, Task 1.6); rename via `InlineRenameInput` is
+   offered for multi-instance panels only (PANEL-11).
 5. `SectionBody`: render `<ActivePanelComponent />` from
    `activePanelComponentInSubSectionAtom(ss)` (stable identity per panel id →
    **no remount** on registry rebuild or switch — this is the SWITCH-02 boundary),
@@ -112,7 +118,7 @@ droppable/draggable seams but the provider is a stub until 4.1).
   `measure-react-renders` skill in Task 9.1 (resize/drag/switch scenarios). Build the
   memo boundaries correctly now so those pass later.
 - SEC-09 (header shows tabs + add + maximize) is asserted in Task 4.6
-  (`test_section_default_layout.py` / `test_section_active_and_maximize.py`); a smoke
+  (`test_section_active_and_maximize.py`); a smoke
   check (center header renders with add + maximize) lands in Task 2.7.
 
 ## Gotchas
@@ -134,8 +140,8 @@ droppable/draggable seams but the provider is a stub until 4.1).
   `memo` subscribing only to its narrow slice per `component_tree.md`.
 - [ ] `SectionBody` renders the identity-cached active panel component (no remount on
   rebuild) or the empty-state shell.
-- [ ] `SectionHeader` renders tabs (active/close/rename-for-multi-instance), `+`, and
-  maximize.
+- [ ] `SectionHeader` renders tabs (active/close/rename-for-multi-instance —
+  PANEL-07/11), the per-panel context-menu actions (PANEL-14), `+`, and maximize.
 - [ ] Split renders primary + handle + secondary with ratio flex-basis + clamp.
 - [ ] data-testids suffix the sub-section id; `ElementIDs` added + `just generate-api`.
 - [ ] `just check` passes.

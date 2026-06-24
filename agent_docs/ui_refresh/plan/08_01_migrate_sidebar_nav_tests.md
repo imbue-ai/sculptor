@@ -65,8 +65,12 @@ This task depends on **Phases 2–7** (surfaces, POMs, removals).
   UPDATE.
 - Remove the migrated/obsolete source files (`test_home_page_tab.py`,
   `test_settings_tab.py`, `test_workspace_tab_context_menu_icons.py`,
-  `test_workspace_diagnostics_context_menu.py`, `test_workspace_peek.py`) once their
-  assertions land.
+  `test_workspace_diagnostics_context_menu.py`, `test_workspace_peek.py`,
+  `test_optimistic_close.py`) once their assertions land. **Also delete the original
+  `test_optimistic_deletion.py` here** — its agent half migrated to
+  `test_panel_optimistic_deletion.py` (Task 3.7) and its workspace half to
+  `test_workspace_optimistic_deletion.py` (this task); delete it once **both** halves
+  are green, so nothing is left asserting the old auto-create-on-last-delete.
 
 ## Implementation details
 
@@ -93,6 +97,11 @@ This task depends on **Phases 2–7** (surfaces, POMs, removals).
   tab menu.
 - Drop the scrolled-tab peek test (no tab strip to overflow).
 - Remove obsolete source files after migrating — no orphans asserting removed surfaces.
+- `test_optimistic_deletion.py` is **split** (agent → Task 3.7, workspace → here) and
+  **deleted here** after both halves land — it is not an UPDATE target despite the §4a
+  POM-importer list.
+- `test_theme_builder.py`'s Component-Gallery assertion was already removed in Task 7.3
+  — the Phase 8 pass here is only the nav-helper swap (don't re-touch the gallery).
 
 ## Verification checklist
 
