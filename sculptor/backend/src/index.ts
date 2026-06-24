@@ -8,6 +8,7 @@ import { runMigrations } from "~/db/migrate";
 import { setupLogging } from "~/logging/logger";
 import { emitOpenApiToFile } from "~/openapi";
 import { getAgentRunner } from "~/runner/instance";
+import { getCIBabysitterCoordinator } from "~/services/ci_babysitter/coordinator";
 import { getPrPollingService } from "~/services/pr_polling/service";
 import { getRepoPollingManager } from "~/services/repo_polling/manager";
 
@@ -82,6 +83,9 @@ export async function main(
   // Start repo polling (Task 7.2) — 3 s branch + remote-branch refresh per open
   // workspace, stopping a workspace whose checkout is torn down.
   getRepoPollingManager().start();
+
+  // Start the CI babysitter (Task 7.3) — off by default, consumes pr_status.
+  getCIBabysitterCoordinator().start();
 
   const port = resolvePort(argv);
   const host = resolveBindHost();

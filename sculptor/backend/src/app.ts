@@ -11,6 +11,7 @@ import {
 import { registerAgentInteractionRoutes } from "~/routes/agent_interaction";
 import { registerAgentRoutes } from "~/routes/agents";
 import { registerAuthGuard } from "~/auth/guard";
+import { registerCiBabysitterRoutes } from "~/routes/ci_babysitter";
 import { registerConfigRoutes } from "~/routes/config";
 import { registerDependencyRoutes } from "~/routes/dependencies";
 import { registerFilesystemRoutes } from "~/routes/filesystem";
@@ -83,6 +84,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   void app.register(registerWorkspaceOsRoutes);
   void app.register(registerAgentRoutes);
   void app.register(registerAgentInteractionRoutes);
+  void app.register(registerCiBabysitterRoutes);
   void app.register(registerSkillRoutes);
   void app.register(registerFilesystemRoutes);
   void app.register(registerUploadRoutes);
