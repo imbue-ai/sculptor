@@ -109,6 +109,26 @@ export function createTerminalInLocation(store: AppStore, subSection: SubSection
   store.set(jumpToSectionAtom, { subSection });
 }
 
+// Seed the workspace's first-visit terminal for the default bottom section (SEC-03).
+// Reuses the first existing terminal tab if one is already persisted (so a no-migration
+// revisit of a workspace that already had terminals does not spawn a duplicate),
+// otherwise appends one fresh tab with the same index/label scheme as
+// createTerminalInLocation. Returns the terminal's index so the default layout can
+// reference its panel id. Unlike createTerminalInLocation it does NOT place/activate the
+// panel — buildDefaultWorkspaceLayout owns the bottom placement.
+export function seedFirstVisitTerminal(store: AppStore, workspaceId: string): number {
+  const existingTabs = store.get(terminalTabStateAtom)[workspaceId] ?? [];
+  const firstExisting = existingTabs[0];
+  if (firstExisting !== undefined) {
+    return firstExisting.index;
+  }
+  const index = store.get(terminalNextIndexAtom)[workspaceId] ?? 1;
+  const newTab = { id: `terminal-${index}`, index, label: getNextTerminalLabel(existingTabs) };
+  store.set(terminalTabStateAtom, (prev) => ({ ...prev, [workspaceId]: [...(prev[workspaceId] ?? []), newTab] }));
+  store.set(terminalNextIndexAtom, (prev) => ({ ...prev, [workspaceId]: index + 1 }));
+  return index;
+}
+
 type CreateAgentInputs = { agentType: AgentTypeName; registrationId?: string; activeAgentId?: string };
 
 // Create an agent of the given type and place its panel in the CENTER section

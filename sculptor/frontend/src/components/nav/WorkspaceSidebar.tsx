@@ -44,6 +44,7 @@ import { collapsedRepoGroupsAtom } from "~/components/nav/navAtoms.ts";
 import { isWorkspaceListEmptyAtom, newWorkspaceModalAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import { useCreateWorkspaceFromSidebar } from "~/components/newWorkspace/useCreateWorkspaceFromSidebar.ts";
 import { ReportProblemPopover } from "~/components/ReportProblemPopover.tsx";
+import { layoutPersistenceAdapter } from "~/components/sections/persistence/LocalStorageLayoutAdapter.ts";
 import { ResizeHandle } from "~/components/sections/ResizeHandle.tsx";
 import { computeWorkspaceDotStatus, EMPTY_WORKSPACE_DOT_STATUS, WorkspaceStatusDots } from "~/components/statusDot";
 import { Toast, type ToastContent } from "~/components/Toast.tsx";
@@ -258,6 +259,13 @@ export const WorkspaceSidebar = (): ReactElement | null => {
     [agentIdsByWorkspace, navigateToAgent, navigateToWorkspace],
   );
 
+  // Navigation-intent prefetch seam (SWITCH-03): warm the workspace's persisted layout
+  // on hover. A no-op for the localStorage adapter (reads are synchronous); the seam is
+  // here so the future backend adapter can fetch the snapshot before the user clicks.
+  const handleWorkspaceHover = useCallback((workspaceId: string): void => {
+    layoutPersistenceAdapter.prefetch?.({ kind: "workspace", workspaceId });
+  }, []);
+
   const handleOpenHome = useCallback((): void => {
     ensurePseudoTab(HOME_TAB_ID);
     navigateToHome();
@@ -432,6 +440,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
                               type="button"
                               className={styles.workspaceRowButton}
                               onClick={() => handleWorkspaceClick(ws.objectId)}
+                              onMouseEnter={() => handleWorkspaceHover(ws.objectId)}
                               data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW}
                               data-workspace-id={ws.objectId}
                               data-has-unread={String(status.hasUnread)}

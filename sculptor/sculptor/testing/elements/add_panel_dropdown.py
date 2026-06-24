@@ -126,15 +126,38 @@ class PlaywrightAddPanelDropdownElement:
         option.click()
 
 
-def open_panel(page: Page, panel_id: str, sub_section: str = "center") -> Locator:
-    """Open a single-instance panel via the add-panel dropdown and return its section root.
+# Panels the default workspace layout seeds OPEN on a workspace's first visit
+# (SEC-02): Files/Changes/Commits live in the (collapsed) left section, Files active.
+# Being already open, they are single-instance and no longer offered by the add-panel
+# dropdown, so the helper REVEALS them (expands their section + activates their tab)
+# rather than trying to add them. Panels NOT seeded (actions/skills/notes/browser/
+# review-all) still open through the dropdown.
+_DEFAULT_SEEDED_SECTION: dict[str, str] = {"files": "left", "changes": "left", "commits": "left"}
 
-    Brings a panel (e.g. ``files`` / ``changes`` / ``commits``) on screen the way
-    a user does — clicking the section `+`, then the panel option — instead of
-    seeding layout / localStorage state. Returns the owning section's root locator
-    so callers can construct the panel's POM scoped to it (the Files / Changes /
-    Commits list and viewer are siblings under the section).
+
+def open_panel(page: Page, panel_id: str, sub_section: str = "center") -> Locator:
+    """Bring a single-instance panel on screen and return its section root.
+
+    For panels the default layout seeds open (Files/Changes/Commits — SEC-02), this
+    REVEALS the panel in its seeded section (expands it + activates its tab) and
+    returns THAT section's root, ignoring ``sub_section`` (the panel already lives in
+    the left section and cannot be opened a second time). For every other panel it
+    opens it via the section `+` add-panel dropdown into ``sub_section`` the way a user
+    does. Either way it returns the owning section's root locator so callers can
+    construct the panel's POM scoped to it (the Files / Changes / Commits list and
+    viewer are siblings under the section).
     """
+    seeded_section = _DEFAULT_SEEDED_SECTION.get(panel_id)
+    if seeded_section is not None:
+        section = PlaywrightWorkspaceSection(page, seeded_section)
+        section.expand_section()
+        tab = section.get_panel_tab(panel_id)
+        expect(tab).to_be_visible()
+        tab.click()
+        section_root = section.get_section()
+        expect(section_root).to_be_visible()
+        return section_root
+
     dropdown = PlaywrightAddPanelDropdownElement(page, sub_section)
     dropdown.open()
     dropdown.select_panel(panel_id)

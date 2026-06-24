@@ -199,7 +199,11 @@ export const setSectionSizeAtom = atom(
 
 // ── Scope switching / removal ─────────────────────────────────────────────────
 
-function isEmptyLayout(layout: WorkspaceLayoutState): boolean {
+// A workspace's snapshot is "empty" (never visited / nothing seeded) when no panel is
+// placed and no sub-section is active. The bootstrap uses this as the first-visit
+// signal to seed the default arrangement + terminal (Task 6.1/6.2); a restored
+// snapshot is never empty, so it is never re-seeded.
+export function isEmptyLayout(layout: WorkspaceLayoutState): boolean {
   return Object.keys(layout.placement).length === 0 && layout.activeSubSection === null;
 }
 

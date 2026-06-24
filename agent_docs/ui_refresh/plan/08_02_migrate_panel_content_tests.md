@@ -61,6 +61,37 @@ CREATE files). Most content tests need only the harness shim + a helper swap.
 
 This task depends on **Phases 2–7** + Tasks 3.6a–e/3.7.
 
+## Default-layout seeding fallout (introduced by Tasks 6.1/6.2)
+
+Tasks 6.1/6.2 seed the SEC-01..04 default on a workspace's first visit: **Files/Changes/
+Commits open in the (collapsed) left section** (Files active) and **one terminal open in
+the (collapsed) bottom section**. This invalidates the Phase-3 assumption that sections
+start empty and panels are opened fresh through the add-panel `+` dropdown — a seeded
+single-instance panel is no longer offered by the dropdown.
+
+Already mitigated centrally (Task 6.2): the `open_panel(page, panel_id, sub_section)`
+shim (`testing/elements/add_panel_dropdown.py`) now REVEALS a seeded FCC panel in its
+left section (expand + activate tab) instead of dropdown-adding it. This alone took
+`test_files_panel.py` from 18 failing → 1 failing; the Changes/Commits/Diff content
+suites recover the same way (they all reach FCC through `open_panel`).
+
+Residual per-test migrations that the central shim cannot fix (do them here):
+- **FCC opened into a specific non-left section.** `test_section_empty_state.py::
+  test_recently_closed_panel_appears_in_quick_actions` opens Files into `right`; with
+  Files seeded in left it must instead exercise a non-seeded panel (or close/re-open the
+  seeded Files in left). Audit every `open_panel(..., "right"|"center")` for FCC ids.
+- **Section-width-dependent FCC assertions.** `test_files_panel.py::
+  test_shared_sidebar_resizes_and_has_a_minimum_width` measures the explorer list in the
+  now-narrow left section (20%); widen the section (resize/maximize) or assert against
+  the seeded section's width.
+- **Terminal count/label tests.** The seeded bottom terminal is "Terminal 1", so a
+  test's first *created* terminal is now "Terminal 2" and bottom is non-empty on first
+  visit. Update `test_terminal*.py` count/label/initial-empty assertions (and consider a
+  `create_terminal_panel`-side shim) to account for the seeded terminal.
+- **Add-panel dropdown offered-set tests.** Any test asserting the `+` dropdown OFFERS
+  Files/Changes/Commits is now wrong (they are seeded open); re-point to a non-seeded
+  panel or assert they are absent.
+
 ## Files to modify/create
 
 - The UPDATE-in-place terminal-agent / babysitter / terminal-content files (helper +
