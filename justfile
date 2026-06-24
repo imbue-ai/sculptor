@@ -18,10 +18,16 @@ help:
 # hang (Node 24's stream-cleanup change vs extract-zip 2.0.1).
 nvm_use := '''
 set +u
-: "${NVM_DIR:="$HOME/.nvm"}"
-. "$NVM_DIR/nvm.sh"
-nvm use --silent 24.17.0 2>/dev/null || nvm install 24.17.0 >/dev/null
-nvm use --silent 24.17.0
+# CI (GitHub Actions setup-node) provisions the pinned Node directly, with no
+# nvm on disk — so only go through nvm when the pinned Node isn't already active.
+if [ "$(node -v 2>/dev/null)" = "v24.17.0" ]; then
+    :
+else
+    : "${NVM_DIR:="$HOME/.nvm"}"
+    . "$NVM_DIR/nvm.sh"
+    nvm use --silent 24.17.0 2>/dev/null || nvm install 24.17.0 >/dev/null
+    nvm use --silent 24.17.0
+fi
 set -u
 '''
 

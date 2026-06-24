@@ -1,11 +1,11 @@
 # Dockerfile for running Sculptor as an OpenHost app, built from source.
 #
 # Unlike a released-binary image, this builds the exact code on this branch: it
-# installs the backend with uv, regenerates the API client and builds the web
-# UI, then runs the backend from source — serving the bundled UI itself, with no
-# Electron shell. OpenHost builds with the repo root as the build context, from a
-# clean git clone (so gitignored artifacts like node_modules/.venv/frontend dist
-# are regenerated here, not copied in).
+# installs the TypeScript backend (npm), bundles it with esbuild, regenerates the
+# API client and builds the web UI, then runs the Node backend from the bundle —
+# serving the bundled UI itself, with no Electron shell. OpenHost builds with the
+# repo root as the build context, from a clean git clone (so gitignored artifacts
+# like node_modules/frontend dist are regenerated here, not copied in).
 #
 # All persistent state lands in the OpenHost app data dir so it survives
 # rebuilds / "update and reload".
@@ -18,36 +18,32 @@ ENV DEBIAN_FRONTEND=noninteractive
 # arbitrary runtime UID without making /etc/passwd writable (see entrypoint below).
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        git curl ca-certificates xz-utils libnss-wrapper && \
+        git curl ca-certificates xz-utils libnss-wrapper python3 build-essential && \
     rm -rf /var/lib/apt/lists/*
 
-# Node.js 22 — for the frontend build and the API-client codegen.
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+# Node.js 24 — the runtime/ABI the backend's native addons (better-sqlite3,
+# node-pty) are built against (matches the sidecar's pinned Node, Task 9.1), and
+# the toolchain for the frontend build + API-client codegen. python3 +
+# build-essential are present so node-gyp can compile the native addons.
+RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
     apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
-
-# uv — Python package/venv manager; it provisions the right Python for the project.
-RUN curl -fsSL https://astral.sh/uv/install.sh | sh
-ENV PATH="/root/.local/bin:${PATH}"
-# Copy into the venv instead of hardlinking the uv cache, so it stays
-# self-contained when run later under a different (rootless) UID.
-ENV UV_LINK_MODE=copy
-# Install uv's managed Python under a world-readable path (default is
-# /root/.local/share/uv/python, which the non-root runtime UID can't traverse).
-# The venv's python symlinks here, so it must stay accessible at runtime.
-ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python
 
 WORKDIR /app
 COPY . /app
 
-# Install the backend env first — the frontend's generate-api step shells out to
-# `uv run` to emit the OpenAPI schema, so the backend env must already exist.
-RUN cd /app/sculptor && uv sync
+# Install the TypeScript backend deps (builds the native addons for linux-x64 /
+# Node 24) and produce the esbuild bundle (dist/backend.cjs) + its drizzle
+# migrations. The frontend's generate-api step (below) emits the OpenAPI schema
+# from this backend, so it must be built first.
+RUN cd /app/sculptor/backend && \
+    npm ci && \
+    npm run build
 
-# Regenerate the API client from the (just-built) backend, then build the web UI.
-# NODE_OPTIONS raises V8's heap ceiling for the Vite build: the default (~2 GB)
-# leaves the production build right at the limit, so it intermittently aborts
-# with "JavaScript heap out of memory" (exit 134). 4 GB gives reliable headroom.
+# Regenerate the API client from the (just-built) TS backend, then build the web
+# UI. NODE_OPTIONS raises V8's heap ceiling for the Vite build: the default
+# (~2 GB) leaves the production build right at the limit, so it intermittently
+# aborts with "JavaScript heap out of memory" (exit 134). 4 GB gives headroom.
 RUN cd /app/sculptor/frontend && \
     npm install --force && \
     npm run generate-api && \
@@ -59,12 +55,12 @@ RUN cd /app/sculptor/frontend && \
 # rootless podman assigns an arbitrary UID/GID; the entrypoint uses nss_wrapper
 # to present a matching passwd/group entry, so /etc/passwd stays read-only (no
 # `chmod 666`). /app is made world read/executable so the runtime UID can run the
-# built venv and read the UI.
+# bundle and read the UI.
 RUN usermod -l sculptor -d /home/sculptor -m ubuntu && \
     groupmod -n sculptor ubuntu && \
     mkdir -p /home/sculptor && chmod 777 /home/sculptor && \
     mkdir -p /data && chmod 777 /data && \
-    chmod -R a+rX /app /opt/uv-python
+    chmod -R a+rX /app
 
 ENV HOME=/home/sculptor
 # Serve on all interfaces so the OpenHost router can proxy to us.
@@ -76,6 +72,12 @@ ENV SCULPTOR_API_PORT=5050
 ENV SCULPTOR_FOLDER=/data/app_data/sculptor
 # Persist Claude Code's OAuth credentials (written by the in-app sign-in flow).
 ENV CLAUDE_CONFIG_DIR=/data/app_data/sculptor/claude
+# The backend serves the web UI built above + applies its schema migrations.
+# These are resolved cwd-relative too, but set them explicitly so the launch
+# command is independent of the working directory.
+ENV SCULPTOR_STATIC_DIR=/app/sculptor/frontend/dist
+ENV SCULPTOR_MIGRATIONS_DIR=/app/sculptor/backend/drizzle
+ENV NODE_PATH=/app/sculptor/backend/node_modules
 
 # A minimal git repo for Sculptor to open as a project on first run.
 WORKDIR /workspace
@@ -89,7 +91,7 @@ RUN git -c user.email="sculptor@container" -c user.name="Sculptor" init && \
 # $HOME and username lookups). Rather than make /etc/passwd writable, use
 # nss_wrapper: write passwd/group files to a writable tmp location with an entry
 # for the runtime UID/GID and point the NSS layer at them via LD_PRELOAD, leaving
-# the real /etc/passwd read-only. No binary download — we run from the source
+# the real /etc/passwd read-only. No binary download — we run from the bundle
 # built above. The nss_wrapper lib path is resolved at build time and baked in.
 # printf avoids heredoc portability concerns across build backends.
 RUN NSS_WRAPPER_LIB="$(dpkg -L libnss-wrapper | grep -m1 '/libnss_wrapper\.so$')" && \
@@ -112,8 +114,7 @@ RUN NSS_WRAPPER_LIB="$(dpkg -L libnss-wrapper | grep -m1 '/libnss_wrapper\.so$')
 
 USER sculptor
 ENTRYPOINT ["/usr/local/bin/openhost-entrypoint.sh"]
-# Ensure the persistent dirs exist, then run the backend from the built venv.
-# The venv lives at the uv *workspace* root (/app/.venv), not /app/sculptor.
-# No --no-serve-static: the backend serves the web UI built above (resolved via
-# the 'sculptor' package's editable install at /app/sculptor/frontend/dist).
-CMD ["sh", "-c", "mkdir -p \"$SCULPTOR_FOLDER\" \"$CLAUDE_CONFIG_DIR\" && exec /app/.venv/bin/python -m sculptor.cli.main --no-open-browser /workspace"]
+# Ensure the persistent dirs exist, then run the Node backend bundle. The
+# headless backend serves the web UI (SCULPTOR_STATIC_DIR) and applies its
+# migrations; --no-open-browser is an accepted no-op (Task 9.2).
+CMD ["sh", "-c", "mkdir -p \"$SCULPTOR_FOLDER\" \"$CLAUDE_CONFIG_DIR\" && exec node /app/sculptor/backend/dist/backend.cjs --no-open-browser"]
