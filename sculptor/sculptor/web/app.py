@@ -4439,7 +4439,10 @@ def post_trace_start(
             detail=f"tracer_entries must be in 1..{DEFAULT_TRACER_ENTRIES}",
         )
 
-    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    # Microsecond precision (%f), not just seconds: a stop-then-immediate-start
+    # within the same second would otherwise reuse this path, and stop's
+    # os.replace would silently overwrite the previous session's trace.
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     output_path = _adhoc_trace_dir(settings) / f"trace-{timestamp}.json"
     start_tracing(output_path, tracer_entries=tracer_entries)
     # Report the resolved path that start_tracing stored, so it matches what
@@ -4500,17 +4503,19 @@ def get_debug_threads() -> PlainTextResponse:
     faulthandler's stack walk crash). A cheap, instant escape hatch for
     inspecting a wedged backend without arming a full trace. Requires the
     session token."""
-    lines: list[str] = []
-    lines.append(f"Thread dump at {datetime.datetime.now().isoformat()}")
-    lines.append("=" * 72)
-    lines.append("")
+    chunks: list[str] = [
+        f"Thread dump at {datetime.datetime.now().isoformat()}\n",
+        "=" * 72 + "\n\n",
+    ]
     thread_names = {t.ident: t.name for t in threading.enumerate()}
     for thread_id, frame in sys._current_frames().items():
         name = thread_names.get(thread_id, "<unknown>")
-        lines.append(f"Thread {thread_id} ({name}):")
-        lines.extend(traceback.format_stack(frame))
-        lines.append("")
-    return PlainTextResponse("\n".join(lines))
+        chunks.append(f"Thread {thread_id} ({name}):\n")
+        # traceback.format_stack returns lines that already end in "\n", so
+        # join them with "" — using "\n".join here would double every newline.
+        chunks.extend(traceback.format_stack(frame))
+        chunks.append("\n")
+    return PlainTextResponse("".join(chunks))
 
 
 # Dummy routes to include WebSocket types in OpenAPI schema
