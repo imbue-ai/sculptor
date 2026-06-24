@@ -8,6 +8,7 @@
 
 import type { Atom } from "jotai";
 import { atom } from "jotai";
+import { selectAtom } from "jotai/utils";
 import type { LucideIcon } from "lucide-react";
 import { FileText, GitBranch, GitCommitVertical, Globe, ListChecks, NotebookPen, Sparkles, Zap } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
@@ -94,6 +95,14 @@ function memoizedAtomByKey<TKey extends string, TValue>(
     return cached;
   };
 }
+
+// A single panel's definition, sliced out of the registry and memoized per id.
+// Tabs subscribe to this rather than the whole registry so a registry rebuild on a
+// task tick (which produces a new array but the same per-id definition) does not
+// re-render every tab — only the tab whose own definition changed.
+export const panelDefinitionByIdAtom = memoizedAtomByKey<PanelId, PanelDefinition | undefined>((panelId) =>
+  selectAtom(panelRegistryAtom, (registry) => registry.find((definition) => definition.id === panelId)),
+);
 
 // The layout↔registry join SectionBody subscribes to: the resolved component for the
 // sub-section's active panel. Returns a stable reference per panel id (static

@@ -1,0 +1,56 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+// The active-section indicator and the drag drop-target highlight share one
+// treatment: a thin accent edge so the active section and the section a dragged tab
+// will land in read identically. Drawn as a pseudo-element overlay lifted above the
+// opaque tab strip + content (z-index), 1px and flush to the section edges.
+// `box-sizing: border-box` keeps the border INSIDE the inset:0 box so it isn't
+// pushed past the edge (and clipped by overflow) the way an outset border would be.
+.active::after,
+.dropTarget::after {
+  border: 1px solid var(--accent-9);
+  box-sizing: border-box;
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 1;
+}
+
+// The active-section ring is TRANSIENT: it pulses on a deliberate jump and then
+// fades. `.active` persists for as long as the section holds logical focus, so the
+// ring's opacity is gated on `.ringVisible` (flipped on a timer rebuilt in Task 4.4)
+// and fades via an opacity transition rather than vanishing. The `:not(.dropTarget)`
+// guard keeps the drop-target edge solid for the whole drag, even on the active one.
+.active:not(.dropTarget)::after {
+  opacity: 0%;
+  transition: opacity var(--duration-slow) var(--ease-out);
+}
+
+.active.ringVisible:not(.dropTarget)::after {
+  opacity: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .active:not(.dropTarget)::after {
+    transition: none;
+  }
+}
+
+// Maximized section: absolutely positioned to fill the workspace page container
+// (every ancestor up to it is static), covering the header and the rest of the grid
+// while the nav rail stays visible. Opaque background so the layout beneath (still
+// mounted) is fully hidden. The full maximize behavior lands in Task 4.3.
+.maximized {
+  background: var(--gray-1);
+  inset: 0;
+  position: absolute;
+  z-index: var(--z-sticky);
+}

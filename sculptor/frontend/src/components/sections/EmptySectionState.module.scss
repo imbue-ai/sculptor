@@ -1,0 +1,19 @@
+.launcher {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--space-4);
+  width: 100%;
+}
+
+// A centered column: the add button and the close-split affordance are centered in
+// the section via `margin: auto`, which also keeps the column scrollable when the
+// section is too short.
+.column {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: auto;
+}

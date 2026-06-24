@@ -621,6 +621,17 @@ class ElementIDs(StrEnum):
     SECTION_RIGHT = "SECTION_RIGHT"
     SECTION_BOTTOM = "SECTION_BOTTOM"
     SECTION_RESIZE_HANDLE = "SECTION_RESIZE_HANDLE"
+    # Section header, panel tabs, and per-section controls. Per-sub-section
+    # uniqueness is achieved by suffixing the SubSectionId onto the data-testid
+    # string (e.g. f"{SECTION_HEADER}-left:secondary"); no *_SECONDARY members.
+    SECTION_HEADER = "SECTION_HEADER"
+    PANEL_TAB = "PANEL_TAB"
+    PANEL_TAB_CLOSE = "PANEL_TAB_CLOSE"
+    SECTION_ADD_PANEL_BUTTON = "SECTION_ADD_PANEL_BUTTON"
+    SECTION_MAXIMIZE_BUTTON = "SECTION_MAXIMIZE_BUTTON"
+    SECTION_ACTIVE_RING = "SECTION_ACTIVE_RING"
+    SECTION_EMPTY_STATE = "SECTION_EMPTY_STATE"
+    SECTION_SPLIT_SUBSECTION = "SECTION_SPLIT_SUBSECTION"
 
     # Agent tabs (within a workspace)
     AGENT_TAB = "AGENT_TAB"
