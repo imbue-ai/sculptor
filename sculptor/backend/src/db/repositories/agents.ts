@@ -1,4 +1,4 @@
-import { and, desc, eq, like } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 
 import type { Orm } from "~/db/orm";
 import type { RunState } from "~/db/schema";
@@ -12,21 +12,27 @@ export function getAgent(orm: Orm, objectId: string): AgentRow | undefined {
   return orm.select().from(agent).where(eq(agent.objectId, objectId)).get();
 }
 
-// Resolves a full id, or a unique short prefix when no exact row exists. The
-// dual-prefix (tsk_/agt_) handling is finalized in Task 2.5; this provides the
-// prefix lookup it builds on. Returns undefined for no match or an ambiguous
-// prefix.
+// Non-deleted agents whose id starts with the prefix. Filtered in JS (not via
+// SQL LIKE) because typeids contain `_`, which is a LIKE single-char wildcard;
+// this matches the Python str(object_id).startswith(prefix) semantics exactly.
+export function findAgentsByPrefix(orm: Orm, prefix: string): AgentRow[] {
+  return orm
+    .select()
+    .from(agent)
+    .where(eq(agent.isDeleted, false))
+    .all()
+    .filter((row) => row.objectId.startsWith(prefix));
+}
+
+// Resolves a full id, or a unique short prefix when no exact row exists.
+// Accepts both tsk_ and agt_ ids transparently (the prefix is just part of the
+// string). Returns undefined for no match or an ambiguous prefix.
 export function getAgentByIdOrPrefix(orm: Orm, idOrPrefix: string): AgentRow | undefined {
   const exact = getAgent(orm, idOrPrefix);
   if (exact !== undefined) {
     return exact;
   }
-  const matches = orm
-    .select()
-    .from(agent)
-    .where(like(agent.objectId, `${idOrPrefix}%`))
-    .limit(2)
-    .all();
+  const matches = findAgentsByPrefix(orm, idOrPrefix);
   return matches.length === 1 ? matches[0] : undefined;
 }
 
