@@ -306,15 +306,13 @@ def test_pause_state_persists_across_restart(
     backend, restarts onto the same database, and asserts the popover still
     reports "Paused".
     """
-    state_file = tmp_path / "glab_state"
-    pipeline_id_file = tmp_path / "pipeline_id"
+    state_file = tmp_path / "gh_state"
     state_file.write_text("failed")
-    pipeline_id_file.write_text("100")
 
     # First backend: pause the babysitter for the workspace via the PR popover.
     with sculptor_instance_factory_.spawn_instance() as instance:
-        _install_state_driven_glab(instance, state_file, pipeline_id_file)
-        _set_remote(instance, _FAKE_GITLAB_REMOTE)
+        _install_state_driven_gh(instance, state_file)
+        _set_remote(instance, _FAKE_GITHUB_REMOTE)
         _enable_babysitter(instance)
 
         start_task_and_wait_for_ready(instance.page, "say hello")
@@ -335,8 +333,8 @@ def test_pause_state_persists_across_restart(
 
     # Second backend on the same database: the paused flag must be restored.
     with sculptor_instance_factory_.spawn_instance() as instance:
-        _install_state_driven_glab(instance, state_file, pipeline_id_file)
-        _set_remote(instance, _FAKE_GITLAB_REMOTE)
+        _install_state_driven_gh(instance, state_file)
+        _set_remote(instance, _FAKE_GITHUB_REMOTE)
         _enable_babysitter(instance)
 
         layout = PlaywrightProjectLayoutPage(page=instance.page)
