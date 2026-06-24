@@ -90,12 +90,79 @@ class PlaywrightWorkspaceSection:
     def get_maximize_button(self) -> Locator:
         return self._page.get_by_test_id(f"{ElementIDs.SECTION_MAXIMIZE_BUTTON}-{self._sub_section}")
 
+    def get_active_ring(self) -> Locator:
+        """Get this sub-section's PanelSection root (the active-section ring host).
+
+        Carries the behavioural ring/active hooks (``data-active`` /
+        ``data-ring-visible``) and is the click target that sets the section
+        active (a plain pointer-down sets it active silently).
+        """
+        return self._page.get_by_test_id(f"{ElementIDs.SECTION_ACTIVE_RING}-{self._sub_section}")
+
+    def get_resize_handle(self) -> Locator:
+        """Get this section's resize divider (the grid border, not the split divider).
+
+        Keyed by the SECTION id (e.g. ``SECTION_RESIZE_HANDLE-right``); the split
+        divider between a split's halves is suffixed ``:secondary`` and is reached
+        via the ``PlaywrightSectionSplit`` POM instead.
+        """
+        return self._page.get_by_test_id(f"{ElementIDs.SECTION_RESIZE_HANDLE}-{_section_of(self._sub_section)}")
+
+    def is_active(self) -> bool:
+        """Whether this sub-section is the logical active section.
+
+        Reads the ``data-active`` hook on the ring host (absent when not active,
+        ``"true"`` when active). The CSS-attribute read stays inside the POM to
+        honour the integration-test css-locator ratchet.
+        """
+        return self.get_active_ring().get_attribute("data-active") == "true"
+
+    def is_ring_visible(self) -> bool:
+        """Whether this sub-section's transient active-section ring is showing.
+
+        Reads the ``data-ring-visible`` hook (absent until a deliberate jump pulses
+        it, then ``"true"`` for the fade window). The CSS-attribute read stays
+        inside the POM to honour the integration-test css-locator ratchet.
+        """
+        return self.get_active_ring().get_attribute("data-ring-visible") == "true"
+
+    def maximize(self) -> None:
+        """Maximize this section by clicking its header maximize toggle.
+
+        The toggle flips maximize on/off; this clicks it only when the section is
+        not already maximized so it is idempotent. While maximized the workspace
+        header is hidden but this section's own header (and toggle) stay visible.
+        """
+        button = self.get_maximize_button()
+        expect(button).to_be_visible()
+        if self.get_active_ring().get_attribute("data-maximized") == "true":
+            return
+        button.click()
+        expect(self.get_active_ring()).to_have_attribute("data-maximized", "true")
+
+    def restore(self) -> None:
+        """Restore this section from maximized by clicking its header maximize toggle.
+
+        Idempotent: clicks the toggle only when the section is currently maximized.
+        """
+        button = self.get_maximize_button()
+        expect(button).to_be_visible()
+        if self.get_active_ring().get_attribute("data-maximized") != "true":
+            return
+        button.click()
+        expect(self.get_active_ring()).not_to_have_attribute("data-maximized", "true")
+
     def get_section_toggle(self) -> Locator:
         """Get this section's workspace-header expand/collapse toggle.
 
-        Only the non-center sections have a toggle (center is always expanded).
+        Only the non-center sections have a toggle (center is always expanded), so for
+        the center this returns a never-matching locator — callers can assert it has
+        count 0 (SEC-08: center cannot collapse).
         """
-        return self._page.get_by_test_id(_SECTION_TOGGLE_TEST_IDS[_section_of(self._sub_section)])
+        toggle_id = _SECTION_TOGGLE_TEST_IDS.get(_section_of(self._sub_section))
+        if toggle_id is None:
+            return self._page.get_by_test_id("CENTER_HAS_NO_SECTION_TOGGLE")
+        return self._page.get_by_test_id(toggle_id)
 
     def expand_section(self) -> None:
         """Ensure this section is expanded so its header `+` / tabs render.
@@ -111,3 +178,20 @@ class PlaywrightWorkspaceSection:
         expect(toggle).to_be_visible()
         toggle.click()
         expect(header).to_be_visible()
+
+    def collapse_section(self) -> None:
+        """Ensure this section is collapsed so it no longer renders a header.
+
+        Center has no toggle and never collapses, so this is a no-op there. The
+        header toggle is a toggle, so this clicks it only when the section header
+        is currently showing. Idempotent.
+        """
+        if _section_of(self._sub_section) == "center":
+            return
+        header = self.get_header()
+        if header.is_hidden():
+            return
+        toggle = self.get_section_toggle()
+        expect(toggle).to_be_visible()
+        toggle.click()
+        expect(header).to_have_count(0)

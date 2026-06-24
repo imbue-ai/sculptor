@@ -15,6 +15,7 @@ from playwright.sync_api import Page
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
+from sculptor.testing.utils import get_playwright_modifier_key
 
 _ARROW_BY_DIRECTION: dict[str, str] = {
     "left": "ArrowLeft",
@@ -74,3 +75,72 @@ def drag_panel_to_section(
         f"{ElementIDs.PANEL_TAB}-{panel_id}"
     )
     expect(landed).to_be_visible()
+
+
+# The workspace-section keyboard shortcuts (their default bindings live in the
+# keybindings registry). "mod" is the platform primary modifier (Meta on macOS, Control
+# elsewhere); the section-cycle bindings use a LITERAL Control regardless of platform.
+_TOGGLE_ARROW_BY_SECTION: dict[str, str] = {
+    "left": "ArrowLeft",
+    "right": "ArrowRight",
+    "bottom": "ArrowDown",
+}
+
+
+def press_section_shortcut(page: Page, shortcut: str) -> None:
+    """Press a keyboard shortcut and release every modifier afterwards.
+
+    macOS Chromium occasionally fails to emit a modifier keyup after a chord, leaving
+    the modifier "held" so the next plain press arrives modified; this releases every
+    non-trailing key explicitly (mirrors ``press_keyboard_shortcut`` on the layout page,
+    but works against a bare ``Page`` the section tests already hold).
+    """
+    page.keyboard.press(shortcut)
+    for modifier in shortcut.split("+")[:-1]:
+        page.keyboard.up(modifier)
+
+
+def toggle_section_via_hotkey(page: Page, section: str) -> None:
+    """Toggle a non-center section's collapse/expand via its keyboard shortcut.
+
+    ``section`` is "left" | "right" | "bottom" (center has no toggle and its hotkey is
+    a no-op). Uses the default ``mod+Alt+Arrow*`` bindings.
+    """
+    arrow = _TOGGLE_ARROW_BY_SECTION[section]
+    mod = get_playwright_modifier_key()
+    press_section_shortcut(page, f"{mod}+Alt+{arrow}")
+
+
+def maximize_active_section(page: Page) -> None:
+    """Toggle maximize/restore on the active section via ``mod+Shift+m``."""
+    mod = get_playwright_modifier_key()
+    press_section_shortcut(page, f"{mod}+Shift+m")
+
+
+def cycle_sections(page: Page, direction: str) -> None:
+    """Cycle the active section via the literal ``Control+``` bindings.
+
+    ``direction`` is "next" (``Control+```) or "previous"
+    (``Control+Shift+```). These bindings use a literal Control on every platform,
+    NOT the platform primary modifier.
+    """
+    if direction == "next":
+        press_section_shortcut(page, "Control+`")
+    elif direction == "previous":
+        press_section_shortcut(page, "Control+Shift+`")
+    else:
+        raise ValueError(f"unsupported cycle direction: {direction!r}; expected 'next' or 'previous'")
+
+
+def cycle_panels(page: Page, direction: str) -> None:
+    """Cycle the active panel within the active section via ``mod+Alt+]`` / ``mod+Alt+[``.
+
+    ``direction`` is "next" (``mod+Alt+]``) or "previous" (``mod+Alt+[``).
+    """
+    mod = get_playwright_modifier_key()
+    if direction == "next":
+        press_section_shortcut(page, f"{mod}+Alt+]")
+    elif direction == "previous":
+        press_section_shortcut(page, f"{mod}+Alt+[")
+    else:
+        raise ValueError(f"unsupported cycle direction: {direction!r}; expected 'next' or 'previous'")
