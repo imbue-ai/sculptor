@@ -79,7 +79,12 @@ component).
 - **Backend zero-agent support** (Decision B1): relax the backend "≥1 agent"
   assumption and remove the auto-create-an-agent-on-last-delete path so a workspace can
   exist with zero agents (the empty center). Grep the backend/data layer for the
-  ≥1-agent invariant + the last-agent auto-create.
+  ≥1-agent invariant + the last-agent auto-create. Breadcrumb: the *visible*
+  auto-create-on-last-delete lives in the frontend today —
+  `src/pages/workspace/components/AgentTabs.tsx` → `handleNavigateAfterDelete` calls
+  `handleCreateAgent()` when no agents remain (old-shell code, deleted in Phase 7) — so
+  zero-agent support spans both dropping that frontend path and hardening the
+  backend/data layer where an agent is assumed.
 
 ## Implementation details
 
