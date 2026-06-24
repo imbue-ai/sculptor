@@ -130,7 +130,10 @@ const ConfigStatusResponseSchema = z.object({
 });
 
 const EmailConfigRequestSchema = z.object({
-  userEmail: z.string().email(),
+  // NOT z.string().email(): a bad address must reach the handler so it returns
+  // the FastAPI-shaped 422 (detail[0].msg) the onboarding wizard reads, rather
+  // than fastify's generic FST_ERR_VALIDATION 400.
+  userEmail: z.string(),
   fullName: z.string().nullable().optional().default(null),
   didOptInToMarketing: z.boolean().optional().default(false),
   isTelemetryEnabled: z.boolean().optional().default(true),
@@ -239,11 +242,40 @@ export async function registerConfigRoutes(
     {
       schema: {
         body: EmailConfigRequestSchema,
-        response: { 200: TelemetryInfoSchema },
+        response: {
+          200: TelemetryInfoSchema,
+          // Mirror FastAPI's EmailStr 422 (detail is the validation-error array
+          // the onboarding wizard reads via err.detail[0].msg).
+          422: z.object({
+            detail: z.array(
+              z.object({
+                type: z.string(),
+                loc: z.array(z.union([z.string(), z.number()])),
+                msg: z.string(),
+                input: z.unknown(),
+              }),
+            ),
+          }),
+        },
       },
     },
-    async (request) => {
+    async (request, reply) => {
       const body = request.body;
+      // EmailConfigRequest.user_email is a pydantic EmailStr in the Python
+      // backend, so an invalid address fails request validation with a 422
+      // carrying "value is not a valid email address".
+      if (!/^[^@]+@[^@]+\.[^@]+$/.test(body.userEmail)) {
+        return reply.code(422).send({
+          detail: [
+            {
+              type: "value_error",
+              loc: ["body", "userEmail"],
+              msg: "value is not a valid email address: An email address must have an @-sign.",
+              input: body.userEmail,
+            },
+          ],
+        });
+      }
       const current = getCurrentUserConfig();
       const updated = UserConfigSchema.parse({
         ...current,

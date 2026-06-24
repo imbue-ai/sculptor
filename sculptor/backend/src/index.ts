@@ -9,6 +9,7 @@ import { setupLogging } from "~/logging/logger";
 import { emitOpenApiToFile } from "~/openapi";
 import { getAgentRunner } from "~/runner/instance";
 import { getCIBabysitterCoordinator } from "~/services/ci_babysitter/coordinator";
+import { getProjectService } from "~/services/project";
 import { getPrPollingService } from "~/services/pr_polling/service";
 import { getRepoPollingManager } from "~/services/repo_polling/manager";
 
@@ -74,6 +75,21 @@ export async function main(
   const logger = setupLogging();
   const db = getDatabase();
   runMigrations(db);
+
+  // Register the initial project path when one is passed as a positional arg
+  // (the harness + the `sculptor <path>` invocation open a repo to start with),
+  // idempotently — an already-added or invalid path is a non-fatal no-op. This
+  // is what lets onboarding skip the add-repo step when a project already exists.
+  const initialProjectPath = argv.slice(2).find((arg) => !arg.startsWith("--"));
+  if (initialProjectPath !== undefined) {
+    try {
+      await getProjectService().initializeProject(initialProjectPath);
+    } catch (error) {
+      logger.info(
+        `Initial project not registered (${initialProjectPath}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
 
   // Re-supervise every non-terminal agent (crash-recovery / cutover resume,
   // RW-DATA-6). The shared runner is wired with the harness registry resolver
