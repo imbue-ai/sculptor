@@ -96,7 +96,7 @@ from threading import Event
 from pydantic import Field
 
 from sculptor.foundation.pydantic_serialization import MutableModel
-from sculptor.services.dependency_management_service import PI_VERSION_RANGE
+from sculptor.services.pi_version import PI_PINNED_VERSION
 
 # Mirrors FakeClaude's ``fake_claude:`` directive prefix; keeps the grammar
 # parallel so test authors can transplant intuition between the two fakes.
@@ -1242,7 +1242,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if parsed.version:
         # WHY: real pi emits --version to stderr, not stdout; FakePi mirrors that.
-        sys.stderr.write(f"pi {PI_VERSION_RANGE.recommended_version}\n")
+        sys.stderr.write(f"pi {PI_PINNED_VERSION}\n")
         return 0
 
     if parsed.mode != "rpc":
@@ -1282,7 +1282,7 @@ def install_fake_pi_binary(fake_bin_dir: Path) -> Path:
     binary_path.write_text(
         _BINARY_WRAPPER_TEMPLATE.format(
             python=shlex.quote(sys.executable),
-            version=PI_VERSION_RANGE.recommended_version,
+            version=PI_PINNED_VERSION,
         )
     )
     binary_path.chmod(0o755)
