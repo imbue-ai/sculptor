@@ -23,7 +23,7 @@ import {
 // A per-process random id identifying this run of Sculptor. Mirrors
 // _EXECUTION_INSTANCE_ID; used as the anonymous user's identity before
 // onboarding writes a real one.
-const EXECUTION_INSTANCE_ID = createHash("md5")
+export const EXECUTION_INSTANCE_ID = createHash("md5")
   .update(randomBytes(32))
   .digest("hex");
 
