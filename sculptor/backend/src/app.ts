@@ -1,10 +1,12 @@
 import fastifySwagger from "@fastify/swagger";
+import fastifyWebsocket from "@fastify/websocket";
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from "fastify";
 import { jsonSchemaTransform, serializerCompiler, validatorCompiler } from "fastify-type-provider-zod";
 
 import { registerAuthGuard } from "~/auth/guard";
 import { registerHealthRoutes } from "~/routes/health";
 import { registerSessionTokenRoutes } from "~/routes/session_token";
+import { registerStreamWsRoutes } from "~/routes/stream_ws";
 import { registerStatic } from "~/static";
 
 export interface BuildAppOptions {
@@ -37,12 +39,17 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     transform: jsonSchemaTransform,
   });
 
+  // @fastify/websocket must be registered before any route that uses
+  // { websocket: true } (the /stream/ws channel).
+  void app.register(fastifyWebsocket);
+
   // The auth guard is a root-level onRequest hook, so it runs for every route
   // (including those registered by later plugins) regardless of order.
   registerAuthGuard(app);
 
   void app.register(registerSessionTokenRoutes);
   void app.register(registerHealthRoutes);
+  void app.register(registerStreamWsRoutes);
 
   // Static SPA serving + fallback, registered last so API routes win. A no-op
   // when no built frontend is present.
