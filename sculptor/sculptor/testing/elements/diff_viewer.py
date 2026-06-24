@@ -85,10 +85,27 @@ class PlaywrightDiffViewerElement(PlaywrightIntegrationTestElement):
         return self.get_file_header().get_by_test_id(ElementIDs.DIFF_FILE_HEADER_MENU_TRIGGER)
 
     def open_menu(self) -> None:
-        """Open the header's triple-dot options menu."""
+        """Open the header's triple-dot options menu.
+
+        Idempotent and verified: a Radix trigger toggles, so clicking one that is
+        already open would close it. Gate on the trigger's ``data-state`` and wait
+        until it is actually open, so repeated open/read/close cycles (e.g. flipping
+        a checkbox item then re-reading) are reliable.
+        """
         trigger = self.get_menu_trigger()
         expect(trigger).to_be_visible()
-        trigger.click()
+        # Radix can swallow the trigger click in the brief settle window right after
+        # a previous close, so retry until the menu actually opens.
+        for _ in range(5):
+            if trigger.get_attribute("data-state") == "open":
+                return
+            trigger.click()
+            try:
+                expect(trigger).to_have_attribute("data-state", "open", timeout=2_000)
+                return
+            except AssertionError:
+                self._page.wait_for_timeout(250)
+        expect(trigger).to_have_attribute("data-state", "open")
 
     def get_menu_option(self, option: MenuOption) -> Locator:
         """Get a menu item by its logical option name.

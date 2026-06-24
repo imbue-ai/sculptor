@@ -36,9 +36,13 @@ const DiffViewOptionItems = ({ isBinary, options }: { isBinary: boolean; options
   <>
     {!isBinary && (
       <>
-        <DropdownMenu.Item onSelect={() => options.onToggleSearch()} data-testid={ElementIds.DIFF_FIND_IN_FILE_BTN}>
-          <Search size={14} /> Find in file
-        </DropdownMenu.Item>
+        {/* Find-in-file walks the source DOM, so it is unavailable while markdown
+            is rendered (FCC-07 preserves the old toolbar's behavior). */}
+        {!(options.showRenderToggle && options.isRendered) && (
+          <DropdownMenu.Item onSelect={() => options.onToggleSearch()} data-testid={ElementIds.DIFF_FIND_IN_FILE_BTN}>
+            <Search size={14} /> Find in file
+          </DropdownMenu.Item>
+        )}
         <DropdownMenu.Item onSelect={() => options.onToggleViewType()} data-testid={ElementIds.DIFF_SPLIT_VIEW_TOGGLE}>
           <SplitSquareHorizontal size={14} /> {options.viewType === "split" ? "Unified view" : "Split view"}
         </DropdownMenu.Item>
