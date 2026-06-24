@@ -359,17 +359,17 @@ def _ready_terminal_messages() -> list[Message]:
 
 
 def _idle_agent_messages() -> list[Message]:
-    """Live messages for which derive_agent_task_status reports READY (idle).
+    """Live messages for which is_agent_busy_or_waiting is False (idle).
 
     Just the run-start anchor, no in-flight request and no busy/waiting signal —
-    yields READY for both chat and terminal agents.
+    an IDLE agent status for both chat and terminal agents.
     """
     return [EnvironmentAcquiredRunnerMessage.model_construct(message_id=AgentMessageID(), environment=None)]
 
 
 def _busy_chat_messages() -> list[Message]:
     """Live messages for a chat agent mid-turn (a sent prompt with no matching
-    request-complete) → derive_agent_task_status reports RUNNING (busy)."""
+    request-complete) → is_agent_busy_or_waiting is True (WORKING)."""
     return [
         EnvironmentAcquiredRunnerMessage.model_construct(message_id=AgentMessageID(), environment=None),
         ChatInputUserMessage(text="busy work", message_id=AgentMessageID(), model_name=LLMModel.FAKE_CLAUDE),
@@ -822,7 +822,7 @@ def test_scenario_8_feature_disabled(
 def _add_existing_agent(env: _FakeEnv, *, agent_config: Any = None) -> Task:
     """Register a non-babysitter agent task in the workspace and return it.
 
-    Its outcome is RUNNING so derive_agent_task_status reads its live messages
+    Its outcome is RUNNING so is_agent_busy_or_waiting reads its live messages
     (a QUEUED task would short-circuit to BUILDING regardless of messages).
     """
     task = _make_agent_task(env, agent_config or ClaudeCodeSDKAgentConfig(), "2026-01-01T00:00:00").model_copy(

@@ -56,8 +56,7 @@ from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import PrStatusInfo
-from sculptor.web.derived import TaskStatus
-from sculptor.web.derived import derive_agent_task_status
+from sculptor.web.derived import is_agent_busy_or_waiting
 from sculptor.web.derived import scan_terminal_signal_state
 from sculptor.web.pr_polling_service import PrPollingService
 from sculptor.web.terminal_input import TerminalDeliveryResult
@@ -84,14 +83,6 @@ _TRANSIENT_REASON_UNREACHABLE = "Couldn't reach the terminal agent's prompt; wil
 # unit tests run fast.
 _TERMINAL_READINESS_BACKSTOP_SECONDS = 30.0
 _TERMINAL_READINESS_POLL_SECONDS = 0.5
-
-# Statuses that mean an agent is mid-flight and the babysitter must not inject a
-# prompt yet (SCU-1601): BUILDING/RUNNING are the blue "working" states and
-# WAITING is the yellow "needs your input" state. READY (idle), ERROR, and
-# REQUEST_ERROR are at-rest — a stopped or errored agent does not block, so a
-# wedged agent can never park the babysitter indefinitely. A SUCCEEDED task maps
-# to READY and is likewise not blocking.
-_BUSY_OR_WAITING_STATUSES = frozenset({TaskStatus.BUILDING, TaskStatus.RUNNING, TaskStatus.WAITING})
 
 
 @dataclass(frozen=True)
@@ -364,18 +355,20 @@ class CIBabysitterCoordinator(Service):
     def _are_all_workspace_agents_idle(self, state: CIBabysitterState) -> bool:
         """True when no non-babysitter agent in the workspace is busy or waiting.
 
-        Reads each agent's *live* messages so the status matches what the UI
-        shows (the babysitter's own task is excluded by
-        ``_workspace_agent_tasks_most_recent_first``). Any agent in a
-        busy/waiting state (see ``_BUSY_OR_WAITING_STATUSES``) makes the
-        workspace not-idle and the babysitter holds off (SCU-1601). A workspace
-        with no prior agent is trivially idle.
+        Reads each agent's *live* messages and asks ``is_agent_busy_or_waiting``,
+        which keys off the same agent status (WORKING/WAITING) the UI shows — so
+        the gate and the status dot never disagree. The babysitter's own task is
+        excluded by ``_workspace_agent_tasks_most_recent_first``. Any
+        busy/waiting agent makes the workspace not-idle and the babysitter holds
+        off (SCU-1601); an idle, errored, or completed agent does not block, so a
+        wedged agent can never park the babysitter indefinitely. A workspace with
+        no prior agent is trivially idle.
         """
         with self._data_model_service.open_transaction(RequestID()) as transaction:
             tasks = self._workspace_agent_tasks_most_recent_first(state.workspace_id, state.project_id, transaction)
         for task in tasks:
             messages = self._task_service.get_live_messages_for_task(task.object_id)
-            if derive_agent_task_status(task, messages) in _BUSY_OR_WAITING_STATUSES:
+            if is_agent_busy_or_waiting(task, messages):
                 return False
         return True
 
