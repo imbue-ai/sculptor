@@ -2,6 +2,7 @@ from playwright.sync_api import Locator
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
+from sculptor.testing.elements.add_panel_dropdown import open_panel
 from sculptor.testing.elements.add_repo_dialog import PlaywrightAddRepoDialogElement
 from sculptor.testing.elements.command_palette import PlaywrightCommandPaletteElement
 from sculptor.testing.elements.git_init_dialog import PlaywrightGitInitDialogElement
@@ -58,9 +59,6 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
         return PlaywrightWorkspaceSection(page=self._page, sub_section=sub_section)
 
     # -- Settings (reachable from the sidebar; the page marker survives) --
-
-    def get_settings_button(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.SETTINGS_BUTTON)
 
     def get_settings_page_locator(self) -> Locator:
         return self.get_by_test_id(ElementIDs.SETTINGS_PAGE)
@@ -163,15 +161,12 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
         return PlaywrightSkillsPanelElement(self.get_by_test_id(ElementIDs.SKILLS_PANEL), page=self._page)
 
     def open_skills_panel(self) -> PlaywrightSkillsPanelElement:
-        """Click the skills sidebar icon and return the visible SkillsPanel.
+        """Reveal the Skills panel (a registered panel) and return it.
 
-        The Skills panel becomes a registered section panel later (FCC §3); until
-        then this drives the still-present zone sidebar icon so the existing
-        skills-panel content tests keep their open path.
+        Skills is opened through the section add-panel dropdown like the other
+        registered panels.
         """
-        sidebar_icon = self.get_by_test_id(ElementIDs.PANEL_ICON_SKILLS)
-        expect(sidebar_icon).to_be_visible()
-        sidebar_icon.click()
+        open_panel(self._page, "skills", "right")
         panel = self.get_skills_panel()
         expect(panel).to_be_visible()
         return panel

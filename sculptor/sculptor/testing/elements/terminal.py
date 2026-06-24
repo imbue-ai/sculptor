@@ -16,6 +16,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 
 
 def get_terminal_textarea(page: Page) -> Locator:
@@ -233,31 +234,14 @@ def get_xterm_cursor_row(page: Page) -> int:
 
 
 def ensure_terminal_panel_open(page: Page) -> None:
-    """Ensure the terminal panel zone is open, clicking the icon only if needed.
+    """Reveal a terminal panel by expanding the (seeded) bottom section.
 
-    The sidebar icon is a toggle: clicking it when the zone is already visible
-    will CLOSE the zone.  Between tests, ``_targeted_cleanup_ui`` does not clear
-    localStorage, so ``zoneVisibilityAtom`` (key ``sculptor-zone-visibility``)
-    may still have ``"bottom": true`` from a previous test.  If we blindly
-    click, we close the panel instead of opening it.
-
-    This helper checks whether the terminal panel content is already showing
-    before deciding whether to click.
+    The default layout seeds one terminal (Terminal 1) in the collapsed bottom
+    section; expanding it reveals the terminal panel content. ``expand_section``
+    is idempotent (a no-op when the bottom section is already showing).
     """
-    add_button = page.get_by_test_id(ElementIDs.ADD_TERMINAL_BUTTON)
-    starting_text = page.get_by_test_id(ElementIDs.TERMINAL_STARTING_TEXT)
-    panel_content = add_button.or_(starting_text)
-
-    if not panel_content.is_visible():
-        terminal_icon = page.get_by_test_id(ElementIDs.PANEL_ICON_TERMINAL)
-        expect(terminal_icon).to_be_visible()
-        terminal_icon.click()
-
-    # Two-phase wait: the panel shows "Starting terminal..." while waiting for
-    # the workspace ID to be available, then switches to the tab bar once the
-    # terminal component mounts.
-    expect(panel_content).to_be_visible(timeout=10_000)
-    expect(add_button).to_be_visible(timeout=60_000)
+    PlaywrightWorkspaceSection(page, "bottom").expand_section()
+    expect(get_agent_terminal_panel(page)).to_be_visible(timeout=60_000)
 
 
 def open_terminal_and_wait(page: Page) -> None:

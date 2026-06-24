@@ -23,6 +23,7 @@ from tenacity import wait_fixed
 from sculptor.constants import ElementIDs
 from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.state.messages import LLMModel
+from sculptor.testing.elements.add_panel_dropdown import open_panel
 from sculptor.testing.elements.base import type_into_tiptap
 from sculptor.testing.elements.chat_panel import select_model_by_name
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
@@ -67,9 +68,8 @@ def navigate_to_home_page(page: Page) -> None:
     """Navigate to the Home page (/home).
 
     Prefers the sidebar Home link (SIDE-01) when the sidebar is rendered (the
-    workspace route's shell), then falls back to the old top-bar Home button
-    (still present on the not-yet-migrated Home / Settings / new-workspace
-    routes), and finally to direct URL navigation.
+    workspace route's shell), and falls back to direct URL navigation when it is
+    not (e.g. the empty first-run route).
     """
     sidebar_home_link = page.get_by_test_id(ElementIDs.SIDEBAR_HOME_LINK)
     if sidebar_home_link.is_visible():
@@ -79,16 +79,7 @@ def navigate_to_home_page(page: Page) -> None:
         expect(workspace_rows.first.or_(empty_state)).to_be_visible(timeout=10000)
         return
 
-    home_button = page.get_by_test_id(ElementIDs.HOME_BUTTON)
-    if home_button.is_visible():
-        home_button.click()
-        # Wait for the workspace list or empty state to appear
-        workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
-        empty_state = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_EMPTY_STATE)
-        expect(workspace_rows.first.or_(empty_state)).to_be_visible(timeout=10000)
-        return
-
-    # Home button not visible — navigate via URL. Append the hash directly to
+    # Sidebar not present — navigate via URL. Append the hash directly to
     # the base (no extra "/"): an injected slash would turn a document path
     # like ".../index.html" into ".../index.html/", breaking relative-to-
     # document asset resolution under the sculptor://app origin.
@@ -233,89 +224,34 @@ def navigate_to_add_workspace_page(page: Page) -> None:
 
 
 def reset_active_panel_to_files(page: Page) -> None:
-    """Click the files sidebar icon to ensure the file browser is active.
+    """Reveal the Files panel (seeded in the left section) on the workspace shell.
 
-    Any test that clicks a different sidebar tab changes the
-    ``activePanelPerZone`` atom.  Calling this resets it through normal
-    UI interaction so subsequent tests start with the default panel visible.
-
-    No-op if the sidebar icons aren't visible (e.g. on the Add Workspace page).
+    No-op when the workspace sidebar isn't rendered (e.g. the empty first-run
+    route), so it is safe to call as cleanup from any state.
     """
-    files_icon = page.get_by_test_id(ElementIDs.PANEL_ICON_FILES)
-    if files_icon.is_visible():
-        files_icon.click()
-        # Click again to ensure the panel is *active* (first click might toggle
-        # it closed if it was already active, second click re-opens it).
-        if not page.get_by_test_id(ElementIDs.FILE_BROWSER_PANEL).is_visible():
-            files_icon.click()
+    if page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR).is_visible():
+        open_panel(page, "files", "left")
 
 
 _MAX_WORKSPACE_DELETE_ITERATIONS = 50
 
 
 def delete_all_workspaces_via_ui(page: Page) -> None:
-    """Delete every workspace through the UI and land on the Add Workspace page.
+    """Delete every workspace through the Home page workspace list.
 
-    Phase 1: For each open workspace tab, right-click → Delete → Confirm.
-    Phase 2: Navigate to the Add Workspace page, then delete any remaining
-    workspace rows (closed-but-not-deleted workspaces) via their inline
-    delete buttons.
+    Workspaces live in the sidebar + Home list now (no tab strip); deleting each
+    Home row via its inline delete button + confirmation removes them all and
+    lands on the empty first-run state.
     """
     # Dismiss any open popover/context menu that might intercept clicks.
     page.keyboard.press("Escape")
 
-    workspace_tabs = page.get_by_test_id(ElementIDs.WORKSPACE_TAB)
     confirm_button = page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_CONFIRM)
     confirm_dialog = page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_DIALOG)
 
-    # Phase 1: Delete all open workspace tabs.
-    for _ in range(_MAX_WORKSPACE_DELETE_ITERATIONS):
-        if workspace_tabs.count() == 0:
-            break
-        workspace_tabs.first.click(button="right")
-        delete_item = page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_DELETE).first
-        expect(delete_item).to_be_visible()
-        delete_item.click()
-        expect(confirm_button).to_be_visible()
-        confirm_button.click()
-        expect(confirm_dialog).to_be_hidden()
-    else:
-        remaining = workspace_tabs.count()
-        logger.error(
-            "Failed to delete all workspace tabs after {} iterations ({} remaining)",
-            _MAX_WORKSPACE_DELETE_ITERATIONS,
-            remaining,
-        )
-        raise RuntimeError(
-            f"Could not delete all workspace tabs after {_MAX_WORKSPACE_DELETE_ITERATIONS} iterations ({remaining} remaining)"
-        )
-
-    # Close any leftover pseudo-tabs (Settings, Component Gallery, Open Workspace)
-    # that a previous test may have opened.  These persist in localStorage and
-    # can interfere with navigation expectations in subsequent tests.
-    for tab_test_id in (ElementIDs.SETTINGS_TAB, ElementIDs.COMPONENT_GALLERY_TAB):
-        tab = page.get_by_test_id(tab_test_id)
-        if tab.is_visible():
-            tab.hover()
-            close_btn = tab.get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON)
-            expect(close_btn).to_be_visible()
-            close_btn.click()
-            expect(tab).not_to_be_visible()
-
-    # Close extra "Open Workspace" tabs (multiple can exist now).
-    # Leave at most one — it won't have a close button when it's the sole tab.
-    add_workspace_tabs = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_TAB)
-    while add_workspace_tabs.count() > 1:
-        tab = add_workspace_tabs.first
-        tab.hover()
-        close_btn = tab.get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON)
-        expect(close_btn).to_be_visible()
-        close_btn.click()
-
     navigate_to_home_page(page)
 
-    # Phase 2: Delete any remaining workspaces from the workspace list
-    # on the home page (these were closed but not deleted by the test).
+    # Delete each workspace from the Home page workspace list.
     # navigate_to_home_page already waits for workspace rows or empty state.
     workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
 
