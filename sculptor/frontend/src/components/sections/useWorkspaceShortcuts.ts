@@ -8,10 +8,11 @@
 // empty first-run state (no workspaces) never mounts these handlers — FIRST-03's
 // "global shortcuts disabled in the empty state" falls out for free.
 //
-// new_workspace (Meta+T) is intentionally NOT handled here: today it is served by the
-// surviving page-layout hook (→ the add-workspace page); Task 5.2 repoints it to the
-// new-workspace modal. Cycling reads live state through the Jotai store at press time
-// to avoid stale closures and per-keystroke re-subscription.
+// new_workspace (Meta+T) is intentionally NOT handled here: it is served by the
+// surviving page-layout hook (usePageLayoutKeyboardShortcuts), which opens the global
+// new-workspace dialog. Registering it here too would fire two openers per press.
+// Cycling reads live state through the Jotai store at press time to avoid stale
+// closures and per-keystroke re-subscription.
 
 import { useSetAtom, useStore } from "jotai";
 import { useCallback } from "react";

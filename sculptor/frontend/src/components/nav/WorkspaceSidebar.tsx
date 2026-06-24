@@ -39,6 +39,8 @@ import { buildWorkspaceActions } from "~/components/CommandPalette/contextAction
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { sidebarCollapsedAtom, sidebarWidthAtom } from "~/components/layout/sidebarAtoms.ts";
 import { collapsedRepoGroupsAtom } from "~/components/nav/navAtoms.ts";
+import { newWorkspaceModalAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
+import { useCreateWorkspaceFromSidebar } from "~/components/newWorkspace/useCreateWorkspaceFromSidebar.ts";
 import { ReportProblemPopover } from "~/components/ReportProblemPopover.tsx";
 import { ResizeHandle } from "~/components/sections/ResizeHandle.tsx";
 import { computeWorkspaceDotStatus, EMPTY_WORKSPACE_DOT_STATUS, WorkspaceStatusDots } from "~/components/statusDot";
@@ -136,8 +138,9 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useAtom(renamingWorkspaceIdAtom);
 
   // External hooks
-  const { navigateToWorkspace, navigateToAgent, navigateToAddWorkspace, navigateToHome, navigateToGlobalSettings } =
-    useImbueNavigate();
+  const { navigateToWorkspace, navigateToAgent, navigateToHome, navigateToGlobalSettings } = useImbueNavigate();
+  const setNewWorkspaceModal = useSetAtom(newWorkspaceModalAtom);
+  const { createFromSidebar } = useCreateWorkspaceFromSidebar();
   const { toggle: toggleCommandPalette } = useCommandPalette();
   const openSettings = useOpenSettings();
   const { workspaceId: activeWorkspaceId, isHomeRoute, isSettingsRoute } = useImbueLocation();
@@ -301,11 +304,12 @@ export const WorkspaceSidebar = (): ReactElement | null => {
           testId={ElementIds.SIDEBAR_HOME_LINK}
         />
         <NavItem icon={Search} label="Search" onClick={toggleCommandPalette} testId={ElementIds.SIDEBAR_CMDK_LINK} />
-        {/* Task 5.2: replace with direct-create */}
+        {/* WSC-01: direct-create reusing the last settings + a fresh auto branch;
+            falls back to the dialog when there are no last settings yet. */}
         <NavItem
           icon={Plus}
           label="New Workspace"
-          onClick={() => navigateToAddWorkspace()}
+          onClick={() => void createFromSidebar()}
           testId={ElementIds.SIDEBAR_NEW_WORKSPACE_BUTTON}
         />
       </nav>
@@ -345,12 +349,12 @@ export const WorkspaceSidebar = (): ReactElement | null => {
                     </IconButton>
                   </Tooltip>
                   <Tooltip content="New workspace in this repo" side="right">
-                    {/* Task 5.2: replace with direct-create dialog */}
+                    {/* WSC-04: open the dialog pre-selecting this repo. */}
                     <IconButton
                       variant="ghost"
                       size="1"
                       color="gray"
-                      onClick={() => navigateToAddWorkspace()}
+                      onClick={() => setNewWorkspaceModal({ open: true, presetProjectId: group.projectId })}
                       aria-label="New workspace in this repo"
                       data-testid={ElementIds.SIDEBAR_REPO_ADD_WORKSPACE}
                       data-project-id={group.projectId}

@@ -14,6 +14,7 @@ import { useHelpDialog } from "../../common/state/hooks/useHelpDialog.ts";
 import { useOpenSettings } from "../../common/state/hooks/useOpenSettings.ts";
 import { useUserConfig } from "../../common/state/hooks/useUserConfig.ts";
 import type { AppearanceMode } from "../../common/theme/appearanceModes.ts";
+import { newWorkspaceModalAtom } from "../newWorkspace/newWorkspaceAtoms.ts";
 import { useFocusMode, usePanelActions, useSideToggle, useZenMode } from "../panels/hooks.ts";
 import { type CommandActionId, commandActionsAtom } from "./commandActions.ts";
 import type { AppStore, CommandRuntime } from "./runtime.ts";
@@ -110,6 +111,9 @@ export const useCommandRuntime = (): CommandRuntime => {
     openWorkspaceTab(workspaceId);
     navigate.navigateToAgent(workspaceId, agentId);
   });
+  // Set the modal atom directly (rather than via useSetAtom) so this stays a
+  // useEvent-stable callback and the runtime object never churns.
+  const openNewWorkspaceModal = useEvent((): void => store.set(newWorkspaceModalAtom, { open: true }));
 
   const uiToggleHelpDialog = useEvent((): void => toggleHelpDialog());
   const uiToggleDevPanel = useEvent((): void => toggleDevPanel());
@@ -159,6 +163,7 @@ export const useCommandRuntime = (): CommandRuntime => {
       // call `runtime.store.get(atom)`.
       store,
       navigate: { toHome, toSettings, toAddWorkspace, toWorkspace, toAgent },
+      openNewWorkspaceModal,
       ui: {
         toggleHelpDialog: uiToggleHelpDialog,
         toggleDevPanel: uiToggleDevPanel,
@@ -190,6 +195,7 @@ export const useCommandRuntime = (): CommandRuntime => {
       toAddWorkspace,
       toWorkspace,
       toAgent,
+      openNewWorkspaceModal,
       uiToggleHelpDialog,
       uiToggleDevPanel,
       uiToggleZenMode,

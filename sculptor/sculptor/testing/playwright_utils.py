@@ -3,6 +3,7 @@ from __future__ import annotations
 import itertools
 import json
 import re
+import uuid
 from collections.abc import Callable
 from collections.abc import Mapping
 from collections.abc import Sequence
@@ -216,21 +217,15 @@ def navigate_to_add_workspace_page(page: Page) -> None:
         expect(submit_button).to_be_visible(timeout=45_000)
         return
 
-    # New shell: the workspace route has no top-bar tab/button — use the sidebar's
-    # new-workspace button, which routes to /ws/new (Task 5.2 switches it to
-    # direct-create; until then it opens the add-workspace page).
-    sidebar_new_workspace_button = page.get_by_test_id(ElementIDs.SIDEBAR_NEW_WORKSPACE_BUTTON)
-    if sidebar_new_workspace_button.is_visible():
-        sidebar_new_workspace_button.click()
-        expect(submit_button).to_be_visible(timeout=45_000)
-        return
-
-    # Neither button visible (e.g. on settings page) — navigate via URL.
-    # Use the base URL without a hash to force the SPA to reinitialize from
-    # the root loader, which redirects to /ws/new.  A hash-only goto can be
-    # a no-op if the router thinks we're already on a /ws/new path.
+    # New shell: the workspace route has no top-bar tab/button, and the sidebar's
+    # new-workspace button now DIRECT-CREATES (Task 5.2) rather than opening the
+    # /ws/new page. The page itself is still present until Task 7.3, so reach it
+    # directly by its route (a fresh draft id avoids reusing prior draft state).
+    # The bare base-URL fallback only lands on /ws/new when no workspace exists yet
+    # (the root loader then redirects); for a second-workspace create it would land
+    # on the existing workspace, so navigate to the draft route explicitly.
     base_url = page.url.split("#")[0].rstrip("/")
-    page.goto(base_url)
+    page.goto(f"{base_url}/#/ws/new/{uuid.uuid4()}")
     page.wait_for_load_state("domcontentloaded")
     expect(submit_button).to_be_visible(timeout=45_000)
 

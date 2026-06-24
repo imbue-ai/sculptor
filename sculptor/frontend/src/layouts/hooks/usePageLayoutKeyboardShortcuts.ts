@@ -15,6 +15,7 @@ import { useHelpDialog } from "../../common/state/hooks/useHelpDialog.ts";
 import { useOpenSettings } from "../../common/state/hooks/useOpenSettings.ts";
 import { useResolvedTheme } from "../../common/Utils.ts";
 import { useCommandPalette } from "../../components/CommandPalette";
+import { newWorkspaceModalAtom } from "../../components/newWorkspace/newWorkspaceAtoms.ts";
 import { useFocusMode, useSideToggle, useZenMode } from "../../components/panels/hooks.ts";
 import { chatToolDensityAtom } from "../../pages/workspace/components/chat-alpha/atoms.ts";
 
@@ -27,9 +28,10 @@ export const usePageLayoutKeyboardShortcuts = (): void => {
     openTo: openCommandPaletteTo,
   } = useCommandPalette();
   const { toggleHelpDialog } = useHelpDialog();
-  const { navigateToAddWorkspace, navigateToHome } = useImbueNavigate();
+  const { navigateToHome } = useImbueNavigate();
   const setChatSearchVisible = useSetAtom(chatSearchVisibleAtom);
   const setFocusRequest = useSetAtom(chatSearchFocusRequestAtom);
+  const setNewWorkspaceModal = useSetAtom(newWorkspaceModalAtom);
   const openSettings = useOpenSettings();
 
   const { toggleFocusMode } = useFocusMode();
@@ -152,7 +154,9 @@ export const usePageLayoutKeyboardShortcuts = (): void => {
             if (isCommandPaletteOpen) {
               closeCommandPalette();
             }
-            navigateToAddWorkspace();
+            // Open the global new-workspace dialog (mounted in both layouts so
+            // the shortcut works on every route, workspace or not).
+            setNewWorkspaceModal({ open: true });
           },
         ],
         [
@@ -217,7 +221,7 @@ export const usePageLayoutKeyboardShortcuts = (): void => {
     toggleDevPanel,
     toggleCommandPalette,
     openCommandPaletteTo,
-    navigateToAddWorkspace,
+    setNewWorkspaceModal,
     navigateToHome,
     openSettings,
     toggleHelpDialog,

@@ -22,6 +22,7 @@ import { CommandRegistrations } from "../components/CommandPalette/CommandRegist
 import { DevModeIndicator } from "../components/DevModeIndicator.tsx";
 import { ExitZenModeButton } from "../components/ExitZenModeButton.tsx";
 import { KeyboardShortcutsDialog } from "../components/KeyboardShortcutsDialog.tsx";
+import { NewWorkspaceModal } from "../components/newWorkspace/NewWorkspaceModal.tsx";
 import { NotificationToasts } from "../components/NotificationToasts.tsx";
 import { zenModeActiveAtom } from "../components/panels/atoms.ts";
 import { PanelRegistryProvider } from "../components/panels/PanelRegistryProvider.tsx";
@@ -158,6 +159,7 @@ export const PageLayout = ({ showVersionIndicator = true }: PageLayoutProps): Re
       <CommandRegistrations />
       <CommandPalette />
       <KeyboardShortcutsDialog />
+      <NewWorkspaceModal />
       <RepoPathDialog
         isOpen={isRepoPathDialogOpen}
         project={currentProject}

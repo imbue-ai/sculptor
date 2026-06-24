@@ -67,7 +67,9 @@ export const buildNavigationCommands = (runtime: CommandRuntime): Array<Command>
     shortcut: "new_workspace",
     primary: true,
     order: 10,
-    perform: () => runtime.navigate.toAddWorkspace(),
+    // Opens the global new-workspace dialog rather than navigating to the
+    // legacy `/ws/new` page — the dialog is the sanctioned create surface.
+    perform: () => runtime.openNewWorkspaceModal(),
   },
   {
     // Agent analog of nav.new_workspace: creates an agent in the current

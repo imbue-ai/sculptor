@@ -60,6 +60,7 @@ const makeRuntime = (overrides: Partial<CommandRuntime> = {}): CommandRuntime =>
       toWorkspace: vi.fn(),
       toAgent: vi.fn(),
     },
+    openNewWorkspaceModal: vi.fn(),
     ui: {
       toggleHelpDialog: vi.fn(),
       toggleDevPanel: vi.fn(),
@@ -130,11 +131,12 @@ describe("buildNavigationCommands", () => {
     expect(runtime.navigate.toSettings).toHaveBeenCalledWith();
   });
 
-  it("nav.new_workspace perform calls runtime.navigate.toAddWorkspace", () => {
+  it("nav.new_workspace perform opens the new-workspace dialog (not the legacy page)", () => {
     const runtime = makeRuntime();
     const cmd = buildNavigationCommands(runtime).find((c) => c.id === "nav.new_workspace")!;
     runPerform(cmd);
-    expect(runtime.navigate.toAddWorkspace).toHaveBeenCalledTimes(1);
+    expect(runtime.openNewWorkspaceModal).toHaveBeenCalledTimes(1);
+    expect(runtime.navigate.toAddWorkspace).not.toHaveBeenCalled();
   });
 
   it("nav.settings is titled 'Open settings' (direct nav, distinct from settings.open's 'Go to settings...' picker)", () => {

@@ -9,10 +9,12 @@ import { PaletteDialog } from "~/components/PaletteDialog/PaletteDialog.tsx";
 
 /**
  * Global host for the new-workspace dialog. Opened/closed via
- * `newWorkspaceModalAtom` (the entry points that set it are wired in a later
- * task). Renders the PaletteDialog shell around the WSC-05 form, remounting the
- * form on each open (keyed on the preset repo) so its local field state starts
- * fresh from the MRU seed every time.
+ * `newWorkspaceModalAtom`, set by the creation entry points — the Cmd+K command,
+ * the Cmd/Meta+T shortcut, and the sidebar repo "+" (the plain sidebar button
+ * direct-creates and only falls back to opening this). Mounted in both layouts
+ * so it is reachable on every route. Renders the PaletteDialog shell around the
+ * WSC-05 form, remounting the form on each open (keyed on the preset repo) so
+ * its local field state starts fresh from the MRU seed every time.
  */
 export const NewWorkspaceModal = (): ReactElement | undefined => {
   // State and hooks

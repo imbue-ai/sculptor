@@ -58,6 +58,7 @@ const makeCommandRuntime = (): CommandRuntime => {
   return {
     store: getDefaultStore(),
     navigate: { toHome: noop, toSettings: noop, toAddWorkspace: noop, toWorkspace: vi.fn(), toAgent: vi.fn() },
+    openNewWorkspaceModal: noop,
     ui: {
       toggleHelpDialog: noop,
       toggleDevPanel: noop,
