@@ -82,7 +82,7 @@ fake_claude:multi_step `{
     shutil.rmtree(task_sync_dir)
 
     with sculptor_instance_factory_.spawn_instance() as instance:
-        workspace_tab = instance.page.get_by_test_id(ElementIDs.WORKSPACE_TAB).first
+        workspace_tab = instance.page.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW).first
         expect(workspace_tab).to_be_visible(timeout=_VISIBILITY_TIMEOUT_MS)
         workspace_tab.click()
 

@@ -226,10 +226,12 @@ def navigate_to_add_workspace_page(page: Page) -> None:
 def reset_active_panel_to_files(page: Page) -> None:
     """Reveal the Files panel (seeded in the left section) on the workspace shell.
 
-    No-op when the workspace sidebar isn't rendered (e.g. the empty first-run
-    route), so it is safe to call as cleanup from any state.
+    No-op when the workspace section shell isn't rendered (e.g. the Home /
+    empty first-run route). The sidebar renders on Home too, so it can't be the
+    guard signal; the center section only exists once a workspace is open, which
+    is exactly when there is a left section to reset. Safe to call from any state.
     """
-    if page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR).is_visible():
+    if page.get_by_test_id(ElementIDs.SECTION_CENTER).is_visible():
         open_panel(page, "files", "left")
 
 

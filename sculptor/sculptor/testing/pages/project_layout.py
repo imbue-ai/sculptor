@@ -27,11 +27,12 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
     add-repo / project-path / keyboard-shortcuts dialogs) keep their original
     method signatures so the content-only majority of tests keep passing.
 
-    The old tab getters (``get_home_tab``, ``get_workspace_tabs``, the
-    ``get_tab_context_menu_*`` set, ``get_topbar``, ``get_bottom_bar``, …)
-    targeted surfaces that no longer render on the workspace route; the tests
-    that drove them are deleted in Phase 8. Use ``get_workspace_sidebar()`` for
-    navigation and ``get_section()`` for the panel grid.
+    The old tab getters (``get_home_tab``, the ``get_tab_context_menu_*`` set,
+    ``get_topbar``, ``get_bottom_bar``, …) targeted surfaces that no longer
+    render on the workspace route; the tests that drove them are deleted in
+    Phase 8. Use ``get_workspace_sidebar()`` for navigation and ``get_section()``
+    for the panel grid. ``get_workspace_tabs`` survives below as a thin shim onto
+    the sidebar rows for the regression / real_pi suites that were not swept.
     """
 
     # -- Sidebar + sections (the new layout spine) --
@@ -57,6 +58,17 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
         section, which hosts the active agent's chat.
         """
         return PlaywrightWorkspaceSection(page=self._page, sub_section=sub_section)
+
+    def get_workspace_tabs(self) -> Locator:
+        """Back-compat shim: the sidebar workspace rows (successor to workspace tabs).
+
+        The old top-bar workspace tabs are gone; the sidebar's workspace rows are
+        their 1:1 successor (click to navigate, hover to peek, middle-click to
+        close), so this returns ``get_workspace_sidebar().get_workspace_rows()``.
+        Retained for the regression / real_pi suites that grab "the workspace" by
+        position; new tests should call ``get_workspace_sidebar()`` directly.
+        """
+        return self.get_workspace_sidebar().get_workspace_rows()
 
     # -- Settings (reachable from the sidebar; the page marker survives) --
 

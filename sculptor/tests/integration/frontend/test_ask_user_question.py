@@ -1018,7 +1018,7 @@ fake_claude:ask_user_question `{
         page = instance.page
 
         # The workspace still exists after restart.
-        workspace_tab = page.get_by_test_id(ElementIDs.WORKSPACE_TAB).first
+        workspace_tab = page.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW).first
         expect(workspace_tab).to_be_visible()
         workspace_tab.click()
 

@@ -158,10 +158,15 @@ def open_panel(page: Page, panel_id: str, sub_section: str = "center") -> Locato
         expect(section_root).to_be_visible()
         return section_root
 
+    # Non-center sections (right/bottom) start collapsed, so their PanelSection —
+    # and therefore the header `+` that triggers the dropdown — isn't mounted yet.
+    # Expand first (idempotent; a no-op for the always-expanded center) so the `+`
+    # is present, mirroring the seeded path above.
+    section = PlaywrightWorkspaceSection(page, sub_section)
+    section.expand_section()
     dropdown = PlaywrightAddPanelDropdownElement(page, sub_section)
     dropdown.open()
     dropdown.select_panel(panel_id)
-    section = PlaywrightWorkspaceSection(page, sub_section)
     section_root = section.get_section()
     expect(section_root).to_be_visible()
     return section_root

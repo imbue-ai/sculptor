@@ -41,7 +41,7 @@ _AUQ_PROMPT = 'fake_claude:ask_user_question `{"questions": [{"question": "Pick 
 
 
 def _open_workspace_after_restart(page: Page) -> None:
-    workspace_tab = page.get_by_test_id(ElementIDs.WORKSPACE_TAB).first
+    workspace_tab = page.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW).first
     expect(workspace_tab).to_be_visible(timeout=_RESTART_VISIBILITY_TIMEOUT_MS)
     workspace_tab.click()
 
