@@ -2,6 +2,7 @@ from sculptor.database.models import TaskID
 from sculptor.foundation.pydantic_serialization import MutableModel
 from sculptor.primitives.ids import ProjectID
 from sculptor.primitives.ids import WorkspaceID
+from sculptor.services.ci_babysitter_service.transitions import Transition
 from sculptor.web.data_types import PrStatusInfo
 
 
@@ -29,3 +30,11 @@ class CIBabysitterState(MutableModel):
     # this workspace's PTY, so a second near-simultaneous failure coalesces
     # instead of starting a racing worker.
     is_terminal_drive_in_progress: bool = False
+    # All-agents-idle gate (SCU-1601): an actionable transition whose dispatch
+    # was deferred because another agent in the workspace was busy/waiting.
+    # The consumer loop re-checks each tick and dispatches once every agent is
+    # idle; the deferral is cleared when the CI cycle resolves (pipeline passes,
+    # PR merged/closed) or superseded by a newer actionable transition. Both
+    # fields move together — set on defer, cleared on dispatch/resolve.
+    pending_dispatch_transition: Transition | None = None
+    pending_dispatch_status: PrStatusInfo | None = None

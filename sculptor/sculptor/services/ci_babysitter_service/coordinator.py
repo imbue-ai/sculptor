@@ -56,6 +56,8 @@ from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
 from sculptor.web.data_types import StreamingUpdateSourceTypes
 from sculptor.web.derived import PrStatusInfo
+from sculptor.web.derived import TaskStatus
+from sculptor.web.derived import derive_agent_task_status
 from sculptor.web.derived import scan_terminal_signal_state
 from sculptor.web.pr_polling_service import PrPollingService
 from sculptor.web.terminal_input import TerminalDeliveryResult
@@ -82,6 +84,14 @@ _TRANSIENT_REASON_UNREACHABLE = "Couldn't reach the terminal agent's prompt; wil
 # unit tests run fast.
 _TERMINAL_READINESS_BACKSTOP_SECONDS = 30.0
 _TERMINAL_READINESS_POLL_SECONDS = 0.5
+
+# Statuses that mean an agent is mid-flight and the babysitter must not inject a
+# prompt yet (SCU-1601): BUILDING/RUNNING are the blue "working" states and
+# WAITING is the yellow "needs your input" state. READY (idle), ERROR, and
+# REQUEST_ERROR are at-rest — a stopped or errored agent does not block, so a
+# wedged agent can never park the babysitter indefinitely. A SUCCEEDED task maps
+# to READY and is likewise not blocking.
+_BUSY_OR_WAITING_STATUSES = frozenset({TaskStatus.BUILDING, TaskStatus.RUNNING, TaskStatus.WAITING})
 
 
 @dataclass(frozen=True)
@@ -259,13 +269,21 @@ class CIBabysitterCoordinator(Service):
             try:
                 item = self._queue.get(timeout=_CONSUMER_QUEUE_TIMEOUT_SECONDS)
             except Empty:
-                continue
-            if not isinstance(item, PrStatusInfo):
-                continue
+                item = None
+            if isinstance(item, PrStatusInfo):
+                try:
+                    self._handle_status(item)
+                except Exception:
+                    logger.exception("CIBabysitterCoordinator: error handling PrStatusInfo for {}", item.workspace_id)
+            # Re-check deferred dispatches on every tick — including idle ticks,
+            # since the polling service only re-pushes a status on change, so a
+            # still-failing pipeline never re-arrives to retrigger the gate. This
+            # is what lets a deferred prompt fire within ~1s of every agent in
+            # the workspace going idle (SCU-1601).
             try:
-                self._handle_status(item)
+                self._process_deferred_dispatches()
             except Exception:
-                logger.exception("CIBabysitterCoordinator: error handling PrStatusInfo for {}", item.workspace_id)
+                logger.opt(exception=True).error("CIBabysitterCoordinator: error processing deferred dispatches")
 
     def _handle_status(self, new: PrStatusInfo) -> None:
         state = self._ensure_state(new.workspace_id)
@@ -302,13 +320,64 @@ class CIBabysitterCoordinator(Service):
                     # The transient reason reflects a one-off hiccup; once the
                     # cycle resolves it no longer applies.
                     state.transient_disabled_reason = None
+                    # A passing pipeline cancels any prompt deferred for the
+                    # now-resolved failure (SCU-1601).
+                    self._clear_pending_dispatch(state)
             elif transition in (Transition.MR_MERGED, Transition.MR_CLOSED):
                 with self._lock:
                     state.retired = True
                     state.transient_disabled_reason = None
+                    # A merged/closed PR retires the babysitter; drop any
+                    # deferred prompt so it can't fire after retirement.
+                    self._clear_pending_dispatch(state)
         for transition in transitions:
             if transition in (Transition.PIPELINE_FAILED, Transition.MERGE_CONFLICT):
                 self._dispatch_prompt(state, transition, new)
+
+    def _clear_pending_dispatch(self, state: CIBabysitterState) -> None:
+        """Drop a deferred dispatch. The caller MUST hold ``self._lock``."""
+        state.pending_dispatch_transition = None
+        state.pending_dispatch_status = None
+
+    def _process_deferred_dispatches(self) -> None:
+        """Re-attempt every dispatch that was deferred because an agent was busy.
+
+        Called on each consumer-loop tick. ``_dispatch_prompt`` re-runs the
+        all-agents-idle gate, so this is a no-op for a workspace whose agents are
+        still busy and a real dispatch the moment they all go idle (SCU-1601).
+        """
+        with self._lock:
+            pending: list[tuple[CIBabysitterState, Transition, PrStatusInfo]] = []
+            for state in self._state.values():
+                transition = state.pending_dispatch_transition
+                status = state.pending_dispatch_status
+                if transition is not None and status is not None:
+                    pending.append((state, transition, status))
+        for state, transition, status in pending:
+            try:
+                self._dispatch_prompt(state, transition, status)
+            except Exception:
+                logger.opt(exception=True).error(
+                    "CIBabysitterCoordinator: error re-dispatching deferred prompt for {}", state.workspace_id
+                )
+
+    def _are_all_workspace_agents_idle(self, state: CIBabysitterState) -> bool:
+        """True when no non-babysitter agent in the workspace is busy or waiting.
+
+        Reads each agent's *live* messages so the status matches what the UI
+        shows (the babysitter's own task is excluded by
+        ``_workspace_agent_tasks_most_recent_first``). Any agent in a
+        busy/waiting state (see ``_BUSY_OR_WAITING_STATUSES``) makes the
+        workspace not-idle and the babysitter holds off (SCU-1601). A workspace
+        with no prior agent is trivially idle.
+        """
+        with self._data_model_service.open_transaction(RequestID()) as transaction:
+            tasks = self._workspace_agent_tasks_most_recent_first(state.workspace_id, state.project_id, transaction)
+        for task in tasks:
+            messages = self._task_service.get_live_messages_for_task(task.object_id)
+            if derive_agent_task_status(task, messages) in _BUSY_OR_WAITING_STATUSES:
+                return False
+        return True
 
     def _dispatch_prompt(self, state: CIBabysitterState, transition: Transition, new: PrStatusInfo) -> None:
         config = get_user_config_instance()
@@ -341,6 +410,28 @@ class CIBabysitterCoordinator(Service):
                         state.workspace_id,
                     )
                     return
+
+        # All-agents-idle gate (SCU-1601). Never inject a fix prompt while another
+        # agent in the workspace is busy or waiting for input — the babysitter
+        # runs as its own agent, so two agents would then edit the same workspace
+        # at once. Computing agent status does DB I/O, so it runs outside the
+        # lock. When an agent is busy, record this transition as pending and bail;
+        # the consumer loop's _process_deferred_dispatches re-checks each tick and
+        # dispatches once every agent is idle. The deferral counts no retry and
+        # sets no dedup, so re-checking re-enters this method cleanly.
+        if not self._are_all_workspace_agents_idle(state):
+            with self._lock:
+                state.pending_dispatch_transition = transition
+                state.pending_dispatch_status = new
+            logger.info(
+                "CIBabysitterCoordinator: deferring {} for workspace={} — another agent is busy/waiting",
+                transition,
+                state.workspace_id,
+            )
+            return
+        # Every agent is idle: this dispatch supersedes any earlier deferral.
+        with self._lock:
+            self._clear_pending_dispatch(state)
 
         if transition is Transition.PIPELINE_FAILED:
             prompt_text = config.ci_babysitter.pipeline_failed_prompt

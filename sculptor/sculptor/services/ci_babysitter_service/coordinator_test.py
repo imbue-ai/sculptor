@@ -44,6 +44,7 @@ from sculptor.interfaces.agents.agent import RegisteredTerminalAgentConfig
 from sculptor.interfaces.agents.agent import TerminalAgentConfig
 from sculptor.interfaces.agents.agent import TerminalAgentSignalRunnerMessage
 from sculptor.interfaces.agents.agent import TerminalStatusSignal
+from sculptor.interfaces.agents.tasks import TaskState
 from sculptor.primitives.ids import AgentMessageID
 from sculptor.primitives.ids import OrganizationReference
 from sculptor.primitives.ids import ProjectID
@@ -357,6 +358,24 @@ def _ready_terminal_messages() -> list[Message]:
     ]
 
 
+def _idle_agent_messages() -> list[Message]:
+    """Live messages for which derive_agent_task_status reports READY (idle).
+
+    Just the run-start anchor, no in-flight request and no busy/waiting signal —
+    yields READY for both chat and terminal agents.
+    """
+    return [EnvironmentAcquiredRunnerMessage.model_construct(message_id=AgentMessageID(), environment=None)]
+
+
+def _busy_chat_messages() -> list[Message]:
+    """Live messages for a chat agent mid-turn (a sent prompt with no matching
+    request-complete) → derive_agent_task_status reports RUNNING (busy)."""
+    return [
+        EnvironmentAcquiredRunnerMessage.model_construct(message_id=AgentMessageID(), environment=None),
+        ChatInputUserMessage(text="busy work", message_id=AgentMessageID(), model_name=LLMModel.FAKE_CLAUDE),
+    ]
+
+
 class _FakeTaskService(_StubTaskService):
     _env: _FakeEnv = PrivateAttr()
     _create_task_calls: list[Task] = PrivateAttr(default_factory=list)
@@ -368,11 +387,22 @@ class _FakeTaskService(_StubTaskService):
     # messages after the worker subscribes.
     _seeded_terminal_messages: list[Message] = PrivateAttr(default_factory=list)
     _live_terminal_queue: "Queue[Message] | None" = PrivateAttr(default=None)
+    # Per-task live messages backing get_live_messages_for_task (used by the
+    # all-agents-idle gate). Tasks without an explicit entry default to idle.
+    _live_messages_by_task_id: dict[TaskID, list[Message]] = PrivateAttr(default_factory=dict)
 
     def __init__(self, env: _FakeEnv, concurrency_group: ConcurrencyGroup) -> None:
         super().__init__(concurrency_group=concurrency_group, task_sync_dir=Path("/tmp"))
         self._env = env
         self._seeded_terminal_messages = _ready_terminal_messages()
+
+    def set_live_messages(self, task_id: TaskID, messages: list[Message]) -> None:
+        self._live_messages_by_task_id[task_id] = messages
+
+    def get_live_messages_for_task(self, task_id: TaskID) -> tuple[Message, ...]:
+        # Default to an at-rest (idle) agent; tests that exercise the all-idle
+        # gate set explicit busy/waiting messages via set_live_messages.
+        return tuple(self._live_messages_by_task_id.get(task_id, _idle_agent_messages()))
 
     @property
     def create_task_calls(self) -> list[Task]:
@@ -786,6 +816,99 @@ def test_scenario_8_feature_disabled(
     coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
 
     assert task_service.create_task_calls == []
+    assert task_service.create_message_calls == []
+
+
+def _add_existing_agent(env: _FakeEnv, *, agent_config: Any = None) -> Task:
+    """Register a non-babysitter agent task in the workspace and return it.
+
+    Its outcome is RUNNING so derive_agent_task_status reads its live messages
+    (a QUEUED task would short-circuit to BUILDING regardless of messages).
+    """
+    task = _make_agent_task(env, agent_config or ClaudeCodeSDKAgentConfig(), "2026-01-01T00:00:00").model_copy(
+        update={"outcome": TaskState.RUNNING}
+    )
+    env.tasks.append(task)
+    env.tasks_by_id[task.object_id] = task
+    return task
+
+
+def test_busy_agent_defers_dispatch_until_idle(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    """SCU-1601: with another agent busy, a PIPELINE_FAILED transition is
+    recorded as pending and NOT dispatched. Once that agent goes idle, the next
+    re-check delivers the deferred prompt."""
+    coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
+    busy_agent = _add_existing_agent(env)
+    task_service.set_live_messages(busy_agent.object_id, _busy_chat_messages())
+    _seed_baseline(coordinator, env.workspace_id)
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+
+    # Deferred: nothing dispatched, but the transition is pending and no retry burned.
+    assert task_service.create_task_calls == []
+    assert task_service.create_message_calls == []
+    state = coordinator._state[env.workspace_id]
+    assert state.pending_dispatch_transition == Transition.PIPELINE_FAILED
+    assert state.retry_count == 0
+
+    # Re-checking while still busy is a no-op.
+    coordinator._process_deferred_dispatches()
+    assert task_service.create_message_calls == []
+
+    # The agent goes idle → the next re-check dispatches the deferred prompt.
+    task_service.set_live_messages(busy_agent.object_id, _idle_agent_messages())
+    coordinator._process_deferred_dispatches()
+
+    assert len(task_service.create_task_calls) == 1
+    assert len(task_service.create_message_calls) == 1
+    sent_message, _ = task_service.create_message_calls[0]
+    assert sent_message.text == "FAILED_PROMPT"
+    assert state.pending_dispatch_transition is None
+    assert state.pending_dispatch_status is None
+    assert state.retry_count == 1
+
+
+def test_idle_agent_dispatches_immediately(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    """An idle prior agent does not block the babysitter — it dispatches on the
+    failed transition with no deferral."""
+    coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
+    idle_agent = _add_existing_agent(env)
+    task_service.set_live_messages(idle_agent.object_id, _idle_agent_messages())
+    _seed_baseline(coordinator, env.workspace_id)
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+
+    assert len(task_service.create_message_calls) == 1
+    state = coordinator._state[env.workspace_id]
+    assert state.pending_dispatch_transition is None
+    assert state.retry_count == 1
+
+
+def test_pipeline_passed_clears_pending_deferral(
+    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
+) -> None:
+    """A deferred prompt is cancelled when the pipeline passes before the busy
+    agent goes idle — the failure it was queued for is resolved."""
+    coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
+    busy_agent = _add_existing_agent(env)
+    task_service.set_live_messages(busy_agent.object_id, _busy_chat_messages())
+    _seed_baseline(coordinator, env.workspace_id)
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
+    state = coordinator._state[env.workspace_id]
+    assert state.pending_dispatch_transition == Transition.PIPELINE_FAILED
+
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="passed", pipeline_id=1))
+    assert state.pending_dispatch_transition is None
+    assert state.pending_dispatch_status is None
+
+    # Even after the agent goes idle, nothing is dispatched — the deferral is gone.
+    task_service.set_live_messages(busy_agent.object_id, _idle_agent_messages())
+    coordinator._process_deferred_dispatches()
     assert task_service.create_message_calls == []
 
 

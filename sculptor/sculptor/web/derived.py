@@ -842,3 +842,23 @@ def create_initial_task_view(
     instance._task_container.append(task)
     instance._settings_container.append(settings)
     return instance
+
+
+def derive_agent_task_status(task: Task, messages: Sequence[Message]) -> TaskStatus:
+    """The live ``TaskStatus`` of a coding-agent task from its messages.
+
+    A lightweight wrapper around ``CodingAgentTaskView.status`` for callers that
+    need an agent's status outside the streaming view (and without a
+    ``SculptorSettings`` — ``status`` does not read settings). The CI babysitter's
+    all-agents-idle gate uses it so it reads the exact status the UI shows.
+
+    ``messages`` MUST be the task's *live* messages (e.g. from
+    ``TaskService.get_live_messages_for_task``): the derivation depends on
+    ephemeral run-scoped messages (environment-acquired anchors, terminal-agent
+    signals) that the persisted message log never contains.
+    """
+    view = CodingAgentTaskView()
+    view._task_container.append(task)
+    for message in messages:
+        view.add_message(message)
+    return view.status
