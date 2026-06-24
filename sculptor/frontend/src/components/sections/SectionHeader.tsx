@@ -43,8 +43,8 @@ type PanelTabProps = {
 
 // One panel tab. Subscribes only to its own panel definition so a registry rebuild
 // re-renders this tab only if ITS definition changed. Rename is offered for
-// multi-instance panels (agent/terminal) via the context menu; single-instance
-// panels cannot be renamed (PANEL-11).
+// multi-instance panels (agent/terminal) via double-click or the context menu;
+// single-instance panels cannot be renamed (PANEL-11).
 const PanelTabComponent = ({ panelId, subSection, isActive, isGhost }: PanelTabProps): ReactElement | null => {
   const definition = useAtomValue(panelDefinitionByIdAtom(panelId));
   const setActivePanel = useSetAtom(setActivePanelAtom);
@@ -65,6 +65,14 @@ const PanelTabComponent = ({ panelId, subSection, isActive, isGhost }: PanelTabP
 
   const handleActivate = (): void => {
     setActivePanel({ panelId, in: subSection });
+  };
+
+  // Double-clicking a multi-instance tab starts an inline rename (PANEL-11), matching
+  // the old agent/terminal tab gesture; the context-menu Rename item is the other entry.
+  const handleDoubleClick = (): void => {
+    if (canRename) {
+      setIsRenaming(true);
+    }
   };
 
   const handleClose = (event: React.MouseEvent): void => {
@@ -98,6 +106,7 @@ const PanelTabComponent = ({ panelId, subSection, isActive, isGhost }: PanelTabP
       data-testid={`${ElementIds.PANEL_TAB}-${panelId}`}
       data-section-tab="true"
       onClick={handleActivate}
+      onDoubleClick={handleDoubleClick}
     >
       <span className={styles.icon}>
         {/* Multi-instance panels carry a per-instance tabIcon (the agent status dot —

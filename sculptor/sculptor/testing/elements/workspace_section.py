@@ -1,5 +1,6 @@
 from playwright.sync_api import Locator
 from playwright.sync_api import Page
+from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 
@@ -11,6 +12,14 @@ _SECTION_ROOT_TEST_IDS: dict[str, ElementIDs] = {
     "center": ElementIDs.SECTION_CENTER,
     "right": ElementIDs.SECTION_RIGHT,
     "bottom": ElementIDs.SECTION_BOTTOM,
+}
+
+# The workspace-header toggle that expands/collapses each non-center section. Center
+# is always expanded, so it has no toggle.
+_SECTION_TOGGLE_TEST_IDS: dict[str, ElementIDs] = {
+    "left": ElementIDs.HEADER_SECTION_TOGGLE_LEFT,
+    "right": ElementIDs.HEADER_SECTION_TOGGLE_RIGHT,
+    "bottom": ElementIDs.HEADER_SECTION_TOGGLE_BOTTOM,
 }
 
 
@@ -80,3 +89,25 @@ class PlaywrightWorkspaceSection:
 
     def get_maximize_button(self) -> Locator:
         return self._page.get_by_test_id(f"{ElementIDs.SECTION_MAXIMIZE_BUTTON}-{self._sub_section}")
+
+    def get_section_toggle(self) -> Locator:
+        """Get this section's workspace-header expand/collapse toggle.
+
+        Only the non-center sections have a toggle (center is always expanded).
+        """
+        return self._page.get_by_test_id(_SECTION_TOGGLE_TEST_IDS[_section_of(self._sub_section)])
+
+    def expand_section(self) -> None:
+        """Ensure this section is expanded so its header `+` / tabs render.
+
+        A collapsed section renders no header (and therefore no `+`); the header
+        toggle is a toggle, so this clicks it only when the section header is not
+        already showing. Idempotent.
+        """
+        header = self.get_header()
+        if header.is_visible():
+            return
+        toggle = self.get_section_toggle()
+        expect(toggle).to_be_visible()
+        toggle.click()
+        expect(header).to_be_visible()
