@@ -1,21 +1,28 @@
-// minimal cutover bootstrap; Task 6.1/6.2 expand to full default layout + seamless switch
+// Workspace shell bootstrap (Task 6.1 default seeding; Task 6.2 expands the seamless
+// switch + terminal seed + ring pulse).
 //
 // Wires the new section shell for the active workspace + agent: switches the layout
-// scope to this workspace, keeps the panel registry in sync with its agents, and
+// scope to this workspace (seeding the full SEC-01..04 default arrangement on the
+// workspace's first visit), keeps the panel registry in sync with its agents, and
 // places the active agent's panel in the center section (always expanded, so it
-// renders). The full default arrangement (left Files/Changes/Commits, bottom
-// terminal) is Task 6.1; this is the minimal "center agent visible" cutover.
+// renders).
 
 import { useSetAtom, useStore } from "jotai";
 import { useLayoutEffect } from "react";
 
 import { useMarkRead } from "~/common/state/hooks/useMarkRead";
-import { makeAgentPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
+import { buildDefaultWorkspaceLayout } from "~/components/sections/persistence/defaultLayout.ts";
+import { makeAgentPanelId, makeTerminalPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
 import { openPanelAtom, setActivePanelAtom } from "~/components/sections/sectionActions.ts";
 import { switchActiveWorkspaceAtom, workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
 import { useArtifactSync } from "~/pages/workspace/hooks/useArtifactSync";
 
 import { useWorkspaceDynamicPanels } from "./useWorkspaceDynamicPanels.ts";
+
+// The first-visit seeded terminal is always index 0 (the bottom section's lone
+// terminal). Task 6.2 creates the matching terminal entry; the default only records
+// its placement so the section is arranged correctly the instant it is expanded.
+const FIRST_VISIT_TERMINAL_INDEX = 0;
 
 export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId: string }): void => {
   const { workspaceId, taskId } = inputs;
@@ -33,11 +40,17 @@ export const useWorkspaceShellBootstrap = (inputs: { workspaceId: string; taskId
   useArtifactSync(workspaceId, taskId);
   useMarkRead(workspaceId, taskId);
 
-  // Switch the layout scope to this workspace. useLayoutEffect so the proxy points
-  // at the right snapshot before the grid reads it on first paint.
+  // Switch the layout scope to this workspace, seeding the SEC-01..04 default on the
+  // workspace's first visit (switchActiveWorkspaceAtom only seeds when the snapshot is
+  // still empty — a restored snapshot is never clobbered). useLayoutEffect so the
+  // proxy points at the right (seeded) snapshot before the grid reads it on first paint.
   useLayoutEffect(() => {
-    switchActiveWorkspace({ workspaceId });
-  }, [workspaceId, switchActiveWorkspace]);
+    const defaultLayout = buildDefaultWorkspaceLayout({
+      agentPanelId: makeAgentPanelId(taskId),
+      terminalPanelId: makeTerminalPanelId(workspaceId, FIRST_VISIT_TERMINAL_INDEX),
+    });
+    switchActiveWorkspace({ workspaceId, defaultLayout });
+  }, [workspaceId, taskId, switchActiveWorkspace]);
 
   // Place the active agent in the center. Read placement imperatively (via the
   // store) so this runs once per agent id rather than on every layout change.
