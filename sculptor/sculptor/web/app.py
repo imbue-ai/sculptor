@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import contextlib
+import datetime
 import json
 import logging
 import mimetypes
@@ -10,7 +11,9 @@ import queue
 import re
 import subprocess
 import sys
+import threading
 import time
+import traceback
 import urllib.parse
 from asyncio import CancelledError
 from importlib import resources
@@ -37,6 +40,7 @@ from fastapi import UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
+from fastapi.responses import PlainTextResponse
 from fastapi.responses import StreamingResponse
 from fastapi.websockets import WebSocket
 from fastapi.websockets import WebSocketDisconnect
@@ -163,10 +167,16 @@ from sculptor.utils.build import get_sculptor_folder
 from sculptor.utils.build import is_packaged
 from sculptor.utils.errors import is_irrecoverable_exception
 from sculptor.utils.timeout import log_runtime
+from sculptor.utils.tracing import DEFAULT_ADHOC_TRACER_ENTRIES
+from sculptor.utils.tracing import DEFAULT_TRACER_ENTRIES
 from sculptor.utils.tracing import ELECTRON_MAIN_PID
 from sculptor.utils.tracing import RENDERER_PID
 from sculptor.utils.tracing import add_external_events
+from sculptor.utils.tracing import get_buffered_external_event_count
+from sculptor.utils.tracing import get_trace_to_path
 from sculptor.utils.tracing import is_tracing_enabled
+from sculptor.utils.tracing import start_tracing
+from sculptor.utils.tracing import stop_and_write_trace
 from sculptor.web.access_log_filter import should_suppress_access_log
 from sculptor.web.auth import SESSION_TOKEN_HEADER_NAME
 from sculptor.web.auth import SessionTokenMiddleware
@@ -4375,6 +4385,143 @@ def post_trace_batch(payload: TraceBatchRequest) -> None:
     if not is_tracing_enabled():
         return
     add_external_events(payload.events, _TRACE_SOURCE_TO_PID[payload.source])
+
+
+class TraceStartRequest(SerializableModel):
+    """Knobs for arming an ad-hoc backend trace at runtime.
+
+    There is intentionally no ``output_path`` field: the file is always written
+    under a fixed server-owned directory (see ``post_trace_start``). These
+    endpoints require the session token, but constraining the path keeps an
+    attacker who obtains the token from using the trace writer as an
+    arbitrary-file-write primitive."""
+
+    # None → DEFAULT_ADHOC_TRACER_ENTRIES. Bounded server-side; the ring buffer
+    # costs ~50 bytes/entry of resident memory, so an unbounded value would be
+    # an OOM lever.
+    tracer_entries: int | None = None
+
+
+class TraceStatusResponse(SerializableModel):
+    enabled: bool
+    output_path: str | None
+    buffered_external_events: int
+
+
+class TraceStopResponse(SerializableModel):
+    output_path: str
+    backend_event_count: int
+    external_event_count: int
+
+
+def _adhoc_trace_dir(settings: SculptorSettings) -> Path:
+    return Path(settings.LOG_PATH) / "traces"
+
+
+@router.post("/api/v1/trace/start")
+def post_trace_start(
+    payload: TraceStartRequest,
+    settings: SculptorSettings = Depends(get_settings),
+) -> TraceStatusResponse:
+    """Arm viztracer on the running backend, writing to a fresh timestamped
+    file under ``{LOG_PATH}/traces``. 409 if a trace is already running.
+
+    Renderer / Electron-main events are only captured if the renderer learned
+    tracing was on at boot (it reads ``window.__SCULPTOR_TRACING__`` once);
+    a trace armed at runtime therefore captures backend Python only, which is
+    the point of this endpoint — profiling a live (e.g. production) backend
+    without a restart. Requires the session token (not exempt like
+    ``/trace/batch``)."""
+    if is_tracing_enabled():
+        raise HTTPException(
+            status_code=409,
+            detail="A trace is already running. Stop it first with POST /api/v1/trace/stop.",
+        )
+
+    tracer_entries = payload.tracer_entries if payload.tracer_entries is not None else DEFAULT_ADHOC_TRACER_ENTRIES
+    if tracer_entries <= 0 or tracer_entries > DEFAULT_TRACER_ENTRIES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"tracer_entries must be in 1..{DEFAULT_TRACER_ENTRIES}",
+        )
+
+    # Microsecond precision (%f), not just seconds: a stop-then-immediate-start
+    # within the same second would otherwise reuse this path, and stop's
+    # os.replace would silently overwrite the previous session's trace.
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    output_path = _adhoc_trace_dir(settings) / f"trace-{timestamp}.json"
+    start_tracing(output_path, tracer_entries=tracer_entries)
+    # Report the resolved path that start_tracing stored, so it matches what
+    # /trace/status and /trace/stop later report (start_tracing resolves it,
+    # e.g. /tmp -> /private/tmp on macOS).
+    resolved_path = get_trace_to_path()
+    logger.info("Ad-hoc trace armed, output -> {} (tracer_entries={})", resolved_path, tracer_entries)
+    return TraceStatusResponse(
+        enabled=True,
+        output_path=str(resolved_path),
+        buffered_external_events=get_buffered_external_event_count(),
+    )
+
+
+@router.post("/api/v1/trace/stop")
+def post_trace_stop() -> TraceStopResponse:
+    """Stop the running trace, flush the combined Chrome-JSON file to disk, and
+    return where it landed plus how much was captured. 409 if no trace is
+    running. The backend is left disarmed and ready to be armed again."""
+    if not is_tracing_enabled():
+        raise HTTPException(
+            status_code=409,
+            detail="No trace is running. Start one first with POST /api/v1/trace/start.",
+        )
+    result = stop_and_write_trace()
+    if result is None:
+        # Defensive: is_tracing_enabled() was true above, so a None here means
+        # the tracer state was torn down concurrently (e.g. process shutdown
+        # raced this request). Surface it rather than returning a bogus path.
+        raise HTTPException(status_code=409, detail="Trace was torn down before it could be written.")
+    logger.info("Ad-hoc trace written to {}", result.path)
+    return TraceStopResponse(
+        output_path=str(result.path),
+        backend_event_count=result.backend_event_count,
+        external_event_count=result.external_event_count,
+    )
+
+
+@router.get("/api/v1/trace/status")
+def get_trace_status() -> TraceStatusResponse:
+    """Report whether a trace is currently running and, if so, where it will be
+    written and how many external events are buffered so far."""
+    path = get_trace_to_path()
+    return TraceStatusResponse(
+        enabled=is_tracing_enabled(),
+        output_path=str(path) if path is not None else None,
+        buffered_external_events=get_buffered_external_event_count(),
+    )
+
+
+@router.get("/api/v1/debug/threads", response_class=PlainTextResponse)
+def get_debug_threads() -> PlainTextResponse:
+    """Dump a Python traceback for every live thread, as plain text.
+
+    Uses ``sys._current_frames()`` rather than ``faulthandler``/signals: it
+    reads Python frame objects and never walks the C stack, so it is safe with
+    greenlet (which manipulates the C stack for coroutine switching and makes
+    faulthandler's stack walk crash). A cheap, instant escape hatch for
+    inspecting a wedged backend without arming a full trace. Requires the
+    session token."""
+    chunks: list[str] = [
+        f"Thread dump at {datetime.datetime.now().isoformat()}\n",
+        "=" * 72 + "\n\n",
+    ]
+    thread_names = {t.ident: t.name for t in threading.enumerate()}
+    for thread_id, frame in sys._current_frames().items():
+        name = thread_names.get(thread_id, "<unknown>")
+        chunks.append(f"Thread {thread_id} ({name}):\n")
+        # traceback.format_stack returns lines that already end in "\n", so
+        # join them with "" — using "\n".join here would double every newline.
+        chunks.extend(traceback.format_stack(frame))
+        chunks.append("\n")
+    return PlainTextResponse("".join(chunks))
 
 
 # Dummy routes to include WebSocket types in OpenAPI schema

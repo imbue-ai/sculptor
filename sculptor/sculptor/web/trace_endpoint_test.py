@@ -135,6 +135,75 @@ def test_post_trace_batch_with_session_token_still_works(
     assert response.status_code == 204
 
 
+def test_trace_start_status_stop_roundtrip(client: TestClient) -> None:
+    """Arm via HTTP, confirm status reflects it, stop, and confirm the file is
+    written and the backend is left disarmed and ready to re-arm."""
+    # Responses serialize with camelCase aliases (SerializableModel).
+    start = client.post("/api/v1/trace/start", json={})
+    assert start.status_code == 200, start.text
+    output_path = Path(start.json()["outputPath"])
+    assert start.json()["enabled"] is True
+
+    status = client.get("/api/v1/trace/status")
+    assert status.status_code == 200
+    assert status.json()["enabled"] is True
+    assert status.json()["outputPath"] == str(output_path)
+
+    stop = client.post("/api/v1/trace/stop")
+    assert stop.status_code == 200, stop.text
+    assert stop.json()["outputPath"] == str(output_path)
+    assert stop.json()["backendEventCount"] > 0
+    assert output_path.exists()
+
+    after = client.get("/api/v1/trace/status")
+    assert after.json()["enabled"] is False
+    assert after.json()["outputPath"] is None
+
+
+def test_trace_start_conflicts_when_already_running(client: TestClient) -> None:
+    assert client.post("/api/v1/trace/start", json={}).status_code == 200
+    try:
+        second = client.post("/api/v1/trace/start", json={})
+        assert second.status_code == 409
+    finally:
+        client.post("/api/v1/trace/stop")
+
+
+def test_trace_stop_conflicts_when_not_running(client: TestClient) -> None:
+    assert client.post("/api/v1/trace/stop").status_code == 409
+
+
+def test_trace_start_rejects_out_of_range_tracer_entries(client: TestClient) -> None:
+    assert client.post("/api/v1/trace/start", json={"tracer_entries": 0}).status_code == 422
+    assert client.post("/api/v1/trace/start", json={"tracer_entries": 10**12}).status_code == 422
+    # The rejected starts must not have armed anything.
+    assert client.get("/api/v1/trace/status").json()["enabled"] is False
+
+
+def test_trace_control_endpoints_require_session_token(
+    client_with_session_token_required: TestClient,
+) -> None:
+    """Unlike /trace/batch, the control endpoints are NOT auth-exempt: an
+    arbitrary-file-write + multi-GB-alloc primitive must sit behind the token."""
+    assert client_with_session_token_required.post("/api/v1/trace/start", json={}).status_code == 403
+    assert client_with_session_token_required.post("/api/v1/trace/stop").status_code == 403
+    assert client_with_session_token_required.get("/api/v1/trace/status").status_code == 403
+    assert client_with_session_token_required.get("/api/v1/debug/threads").status_code == 403
+
+
+def test_debug_threads_dumps_stacks(client: TestClient) -> None:
+    response = client.get("/api/v1/debug/threads")
+    assert response.status_code == 200
+    body = response.text
+    assert "Thread dump at" in body
+    # At least the thread serving this request should appear.
+    assert "Thread " in body
+    assert "File " in body  # traceback frames render "File ..., line ..."
+    # traceback.format_stack lines already end in "\n"; the dump must not
+    # double them up into blank lines between every frame (a "\n".join bug).
+    assert "\n\n\n" not in body
+
+
 def test_trace_file_written_on_lifespan_shutdown(
     test_settings: SculptorSettings,
     test_already_started_services: CompleteServiceCollection,

@@ -14,9 +14,11 @@ Add the `--trace-to=<path>` flag when starting Sculptor:
 sculptor --trace-to=/tmp/sculptor.json
 ```
 
-The path is taken literally — relative or absolute. The flag's presence is
-the only on/off control; there is no separate env var or runtime toggle.
-When the flag is absent, no tracing code runs and overhead is near zero.
+The path is taken literally — relative or absolute. This traces from the
+earliest possible point (it captures backend import time) and writes once on
+clean shutdown. To instead arm/disarm a backend that is already running, see
+"Ad-hoc tracing on a running backend" below. When neither is active, no
+tracing code runs and overhead is near zero.
 
 When Sculptor is launched via Electron, pass the flag through the standard
 arg-forwarding prefix:
@@ -28,6 +30,55 @@ sculptor-electron --sculptor=--trace-to=/tmp/sculptor.json
 Electron's main process picks up the flag from its own argv (so it can wire
 up Node-side tracing before any windows are created) and forwards it to the
 spawned Python backend.
+
+## Ad-hoc tracing on a running backend (no restart)
+
+The `--trace-to` flag traces from boot and writes once, on clean shutdown.
+When you instead need to profile a backend that is *already running* — most
+importantly a signed production build, which `py-spy`/`lldb` cannot attach to
+because of the hardened runtime — arm and disarm viztracer at runtime over
+HTTP. These commands live under `sculpt debug` because they exist for Sculptor
+development only, not as end-user functionality:
+
+```sh
+sculpt debug trace start    # arm; prints the output path it will write to
+# ...reproduce the slow path...
+sculpt debug trace stop     # stop, flush the Chrome-JSON file, print its path
+sculpt debug trace status   # is a trace running right now?
+```
+
+This works in-process, so it needs no debugger entitlement and no signals.
+The file lands under `{LOG_PATH}/traces/trace-<timestamp>.json`
+(`~/.sculptor/internal/logs/traces/` in a normal install); open it at
+<https://ui.perfetto.dev> as usual.
+
+The underlying endpoints are `POST /api/v1/trace/start`,
+`POST /api/v1/trace/stop`, and `GET /api/v1/trace/status`. Unlike
+`/api/v1/trace/batch`, they **require the session token** (see the security
+note below); `sculpt` supplies it automatically.
+
+Two limitations of a runtime-armed trace versus a boot-time `--trace-to` run:
+
+- **Backend Python only.** The renderer and Electron main decide whether to
+  forward their events by reading `window.__SCULPTOR_TRACING__`, which is
+  injected once at page load. A trace armed after boot therefore captures the
+  backend process alone — which is exactly what you want when profiling a live
+  backend, but means no renderer/Electron lanes appear in the file.
+- **No import-time spans.** Boot and import durations already happened; the
+  capture covers only what runs between `start` and `stop`.
+
+### Just dump thread stacks
+
+When the backend merely looks *wedged* and you want an instant snapshot rather
+than a profile:
+
+```sh
+sculpt debug threads        # Python traceback for every live thread
+```
+
+This hits `GET /api/v1/debug/threads`, which renders `sys._current_frames()`.
+It is greenlet-safe (no signals, no C-stack walk — the reason the old
+`faulthandler`/`SIGUSR1` route was dropped) and effectively free.
 
 ## What you get
 
@@ -116,6 +167,23 @@ surface and the dev-only flag gating; flagged here so a future change that
 broadens the network surface (e.g. exposing the backend on a non-loopback
 address while tracing is on) knows to add per-event size limits.
 
+## Security note on the trace-control and debug endpoints
+
+`POST /api/v1/trace/start`, `POST /api/v1/trace/stop`,
+`GET /api/v1/trace/status`, and `GET /api/v1/debug/threads` are **not**
+exempt from `SessionTokenMiddleware` — they require the session token,
+because each is a more powerful primitive than the fire-and-forget
+`/trace/batch` ingest:
+
+- `start` allocates viztracer's ring buffer (hundreds of MB to ~2.5 GB) and
+  writes a file. The output path is **not** caller-supplied — it is always a
+  timestamped file under `{LOG_PATH}/traces` — specifically so the token
+  holder cannot use the trace writer as an arbitrary-file-write primitive.
+  `tracer_entries` is bounded server-side to cap the memory lever.
+- `debug/threads` exposes Python stacks (function names, file paths), the
+  same class of information a trace file contains; treat its output like a
+  code dump.
+
 ## Future augmentations
 
 Out of scope for v1, in rough priority order:
@@ -133,9 +201,14 @@ Out of scope for v1, in rough priority order:
   in SQLAlchemy sessions, etc.) make this unsafe as a default.
 - **Cross-source clock synchronization** via a handshake protocol.
 - **Live trace snapshot endpoint** (`GET`) so developers can sample a
-  running process without stopping it. v1 only writes at process exit;
-  fetching mid-run would require transcoding viztracer's native buffer to
+  running process *without* stopping it. Runtime arm/disarm (above) already
+  lets you trace a live process, but you must `stop` to get the file;
+  snapshotting mid-run would require transcoding viztracer's native buffer to
   Chrome JSON on the fly, which fights the library's internals.
+- **Renderer/Electron capture for runtime-armed traces.** A trace armed after
+  boot is backend-only because the renderer reads its on/off flag once at page
+  load; a status-poll or push would let the frontend start forwarding events
+  mid-session.
 - **Named "category" hot-path spans** for LLM, SQL, git, per-message-type
   WebSocket handlers, and FastAPI routes — we currently rely on
   viztracer's auto-captured function names.
@@ -143,7 +216,5 @@ Out of scope for v1, in rough priority order:
   follow-up will add it.
 - **Selective subprocess filtering** (e.g. trace agent processes but skip
   short-lived git utilities).
-- **Runtime start/stop control** — explicitly out of scope; lifecycle is
-  whole-process only.
 - **End-user-facing tracing UX** (badges, banners, in-app "download trace"
   affordances).
