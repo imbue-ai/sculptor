@@ -65,6 +65,11 @@ _MERGED_MODE_STABLE_WAIT_MS = 25_000
 # poll. The polling service uses a 10s minimum interval in tests; 12s is a
 # safe lower bound that still keeps the test snappy.
 _BASELINE_POLL_SETTLE_MS = 12_000
+# Buffer, measured from the moment the pipeline badge confirms the failed poll
+# was observed, in which a babysitter that ignored the busy gate would have
+# spawned its tab. The coordinator consumes that same poll result (≤1s behind
+# the badge), so 15s is generous headroom against a contended runner.
+_BUSY_DEFER_STABLE_WAIT_MS = 15_000
 
 _FAKE_GITHUB_REMOTE = "https://github.com/test-org/test-repo.git"
 
@@ -552,3 +557,69 @@ def test_github_pr_merge_conflict_creates_babysitter(sculptor_instance_: Sculpto
     alpha_chat = get_alpha_chat_view(sculptor_instance_.page)
     conflict_prompt_messages = alpha_chat.get_messages().filter(has_text=_MERGE_CONFLICT_PROMPT_FRAGMENT)
     expect(conflict_prompt_messages.first).to_be_visible()
+
+
+@user_story("to have the CI Babysitter wait until my other agent is idle before it starts fixing CI")
+def test_babysitter_defers_while_agent_busy_then_dispatches_when_idle(
+    sculptor_instance_: SculptorInstance, tmp_path: Path
+) -> None:
+    """The CI Babysitter must not inject a fix prompt while another agent in the
+    workspace is actively working — two agents editing the same workspace at
+    once corrupts the tree (SCU-1601). It holds off until every agent is idle,
+    then delivers the deferred prompt.
+
+    The workspace agent is held busy with ``fake_claude:wait_for_file`` so it
+    stays RUNNING until the test releases it. With a failed pipeline armed while
+    it is busy, no 'CI Babysitter' tab may appear. Releasing the agent (it goes
+    idle) lets the deferred prompt dispatch on the coordinator's next re-check.
+    """
+    page = sculptor_instance_.page
+    state_file = tmp_path / "gh_state"
+    state_file.write_text("running")
+    # Sentinel the busy agent blocks on; absent → the agent stays RUNNING.
+    release_file = tmp_path / "agent_release"
+
+    _enable_babysitter(sculptor_instance_)
+    _install_state_driven_gh(sculptor_instance_, state_file)
+    _set_remote(sculptor_instance_, _FAKE_GITHUB_REMOTE)
+
+    # Start an agent that stays busy until the test creates the sentinel file.
+    busy_prompt = f'fake_claude:wait_for_file `{{"path": "{release_file}", "timeout_seconds": 300}}`'
+    task_page = start_task_and_wait_for_ready(page, busy_prompt, wait_for_agent_to_finish=False)
+    chat_panel = task_page.get_chat_panel()
+    # Confirm the agent is actually busy before arming CI.
+    expect(chat_panel.get_thinking_indicator()).to_be_visible(timeout=30_000)
+
+    # Arm the running → failed pipeline transition with the PR popover kept open
+    # the whole time, so the badge flip is read live without a re-open race. Once
+    # the badge shows "Failed", the coordinator has consumed that same poll result
+    # (observer fan-out is simultaneous with the cache update the badge renders
+    # from), so a babysitter ignoring the busy gate has already dispatched.
+    # Anchoring here — rather than on a fixed wall-clock window after arming —
+    # makes the negative assertion a reliable discriminator at any poll interval.
+    pr_popover = PlaywrightPrPopoverElement(page)
+    expect(pr_popover.get_chevron()).to_be_visible(timeout=60_000)
+    pr_popover.get_chevron().click()
+    badge = pr_popover.get_pipeline_status_badge()
+    expect(badge).to_have_text("Running", timeout=60_000)
+    state_file.write_text("failed")
+    expect(badge).to_have_text("Failed", timeout=60_000)
+    page.keyboard.press("Escape")
+
+    agent_tabs = PlaywrightAgentTabBarElement(page)
+    babysitter_tab = agent_tabs.get_agent_tab_by_name("CI Babysitter")
+    # The coordinator has now seen the failure. Give it a beat to act: with the
+    # bug it spawns the babysitter tab here; with the fix it defers while the
+    # workspace agent is busy, so no tab appears.
+    page.wait_for_timeout(_BUSY_DEFER_STABLE_WAIT_MS)
+    expect(babysitter_tab).to_have_count(0)
+
+    # Release the agent → it finishes its turn and goes idle → the deferred
+    # babysitter prompt is delivered on the coordinator's next re-check tick.
+    release_file.write_text("go")
+
+    expect(babysitter_tab.first).to_be_visible(timeout=60_000)
+    babysitter_tab.first.click()
+    alpha_chat = get_alpha_chat_view(page)
+    pipeline_prompt_messages = alpha_chat.get_messages().filter(has_text=_PIPELINE_PROMPT_FRAGMENT)
+    expect(pipeline_prompt_messages.first).to_be_visible()
