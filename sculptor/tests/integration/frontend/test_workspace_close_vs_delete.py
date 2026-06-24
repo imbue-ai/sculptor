@@ -132,6 +132,57 @@ def test_cmd_shift_w_deletes_active_workspace(
     expect(home_page.get_workspace_rows().filter(has_text="Delete WS")).to_have_count(0)
 
 
+@user_story("to delete a workspace with Cmd+Shift+W without the dialog flickering shut")
+def test_cmd_shift_w_does_not_dismiss_open_delete_dialog(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """Cmd+Shift+W must not dismiss an already-open dismissible overlay.
+
+    Regression test for SCU-1575. The page-layout shortcut handler closes an
+    open overlay on Cmd+W (so the tab-close chord dismisses a dialog rather
+    than closing the Electron window). Cmd+Shift+W is a different chord
+    (delete_workspace) that *opens* the delete-confirmation dialog, so it must
+    not be treated as a close-overlay gesture.
+
+    Opening the dialog via the context menu (not the racy Cmd+Shift+W path)
+    makes the overlay reliably present, so pressing Cmd+Shift+W here
+    deterministically checks that the chord leaves the dialog open and
+    confirmable.
+
+    Steps:
+    1. Create a workspace
+    2. Open the delete-confirmation dialog via the right-click context menu
+    3. Press Cmd+Shift+W
+    4. Verify the dialog is still open (not dismissed) and still deletes
+    """
+    page = sculptor_instance_.page
+    layout = PlaywrightProjectLayoutPage(page=page)
+
+    start_task_and_wait_for_ready(page, prompt="Task", workspace_name="Dialog WS")
+
+    workspace_tabs = layout.get_workspace_tabs()
+    expect(workspace_tabs).to_have_count(1)
+
+    # Open the delete-confirmation dialog deterministically (not via the racy
+    # Cmd+Shift+W path) so the overlay is reliably present for step 3.
+    layout.open_workspace_tab_context_menu(0)
+    delete_item = layout.get_tab_context_menu_delete()
+    expect(delete_item).to_be_visible()
+    delete_item.click()
+
+    confirm_dialog = layout.get_delete_confirmation_dialog()
+    expect(confirm_dialog).to_be_visible()
+
+    # Press the delete chord while the dialog is open. It must NOT be treated
+    # as a "close the open overlay" gesture (only bare Cmd+W is).
+    mod_key = get_playwright_modifier_key()
+    page.keyboard.press(f"{mod_key}+Shift+w")
+
+    expect(confirm_dialog).to_be_visible()
+    layout.confirm_delete()
+    expect(workspace_tabs).to_have_count(0)
+
+
 @user_story("to reopen a previously closed workspace from the workspace list")
 def test_reopen_closed_workspace_from_list(
     sculptor_instance_: SculptorInstance,
