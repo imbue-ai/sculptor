@@ -5,8 +5,9 @@
 Rewrite the test-harness spine so the large body of integration tests survives the
 Phase 2 cutover: re-point `project_layout.py` and `task_page.py` to drive the new
 sidebar/section surfaces **while keeping their method signatures stable** (a
-compatibility shim), add the first `WorkspaceSidebar`/`WorkspaceSection` POMs, and
-add smoke e2e tests proving cutover works. This unblocks all later test work.
+compatibility shim), add the first `WorkspaceSidebar`/`WorkspaceSection` POMs, migrate
+the shared default-layout fixture to the new shell, and add smoke e2e tests proving
+cutover works. This unblocks all later test work.
 
 ## Stories addressed
 
@@ -62,7 +63,12 @@ Phase 7.
 - `sculptor/sculptor/testing/elements/workspace_section.py` — new POM
   (`PlaywrightWorkspaceSection`, basic: section/header/tabs/add/maximize accessors).
 - `sculptor/sculptor/testing/playwright_utils.py` — add shared nav helpers
-  (`navigate_to_workspace`, `open_settings`, `open_home`, `open_command_palette`).
+  (`navigate_to_workspace`, `new_workspace`, `open_settings`, `open_home`,
+  `open_command_palette`).
+- `sculptor/sculptor/testing/resources.py` (+ `conftest.py`) — migrate the shared
+  `sculptor_instance_` default-layout fixture + setup helpers off the old layout
+  assumptions ("terminal visible" / "right area") to the new default; add a
+  **zero-agent** fixture variant (gated on the Task 2.5 backend zero-agent relaxation).
 - `sculptor/tests/integration/frontend/test_workspace_sidebar_smoke.py` — new smoke
   test (or fold into an existing area file).
 
@@ -90,14 +96,27 @@ Phase 7.
    getters with the header.
 5. **`playwright_utils.py` nav helpers** (`sidebar_nav.md` §3): `navigate_to_workspace
    (page, name|index)` (replaces `get_workspace_tabs().nth(i).click()`),
-   `open_settings`, `open_home`, `open_command_palette`. These are the
-   "swap-not-rewrite" surface the ~18 route-to-feature UPDATE tests use in Phase 8.
+   `new_workspace(page)` (clicks the sidebar new-workspace button; the full dialog flow
+   is Workspace-creation's `create_workspace()`, Task 5.4), `open_settings`,
+   `open_home`, `open_command_palette`. These are the "swap-not-rewrite" surface the
+   ~25 route-to-feature UPDATE tests use in Phase 8.
 6. **Smoke tests** (via `/run-integration-test`, never `pytest` directly): the
    sidebar renders with home/Cmd+K/new-workspace links and at least one workspace
    row; clicking a row navigates to the workspace (SIDE-07); the center section
    renders the active agent's chat (SEC-01/AGENT-01); the workspace header renders.
 7. Run `just generate-api` if any ElementID was added here (most were added in
    Tasks 2.2–2.4).
+8. **Shared fixture migration** (`harness_migration.md` §3): update the
+   `sculptor_instance_` fixture + `resources.py` setup helpers to assume the new default
+   (center agent expanded; left/bottom/right collapsed) — not the old "terminal visible
+   / right area" layout. Add a **zero-agent** fixture variant for the empty-center tests
+   (depends on the Task 2.5 backend relaxation). Nearly every content test rides this
+   fixture; if it still assumes the old layout the suite breaks after cutover.
+9. **Known bounded-red window (Decision A2):** the FCC source tests
+   (`test_file_browser*` / `test_history_panel*` / `test_diff_*` / `test_markdown_*`)
+   assert the **old** file-browser bundle and are **not** shimmed here — they are
+   expected-red from cutover until migrated + deleted in Tasks 3.6b–e (Phase 3). Don't
+   try to keep them green; they are removed shortly.
 
 ## Testing suggestions
 
@@ -125,8 +144,11 @@ Phase 7.
   signatures (shim); cross-cutting survivors kept.
 - [ ] `workspace_sidebar.py` + `workspace_section.py` POMs exist and target the new
   `data-testid`s.
-- [ ] `navigate_to_workspace`/`open_settings`/`open_home`/`open_command_palette`
-  helpers added.
+- [ ] `navigate_to_workspace`/`new_workspace`/`open_settings`/`open_home`/
+  `open_command_palette` helpers added.
+- [ ] Shared `sculptor_instance_` fixture + `resources.py` helpers migrated to the new
+  default layout; a zero-agent fixture variant added.
+- [ ] FCC source tests noted as expected-red until Tasks 3.6b–e (not shimmed here).
 - [ ] Smoke e2e (sidebar + row-navigate + center agent + header) passes via
   `/run-integration-test`.
 - [ ] No still-rendered ElementIDs removed; `just generate-api` run if needed;

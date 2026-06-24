@@ -210,7 +210,8 @@ assertions into the four §1 files (`test_files_panel.py`, `test_changes_panel.p
 `test_diff_tab_close_others.py`, `test_diff_loading_bar_no_file.py`,
 `test_commit_from_changes_tab.py`, `test_discard_file.py`,
 `test_discard_preserves_all_tab.py`, `test_target_branch.py`,
-`test_markdown_render_toggle.py`, `test_markdown_gfm.py`, `test_open_in_viewer.py`.
+`test_markdown_render_toggle.py`, `test_markdown_gfm.py`, `test_open_in_viewer.py`,
+`test_path_tilde_display.py`.
 (The relocated config icons → triple-dot menu shift selectors under the menu —
 FCC-07. The per-diff fullscreen-expand is deprecated: `test_expand_escape.py` is
 DELETEd (§2) and the fullscreen half of `test_diff_scope_and_fullscreen.py` is

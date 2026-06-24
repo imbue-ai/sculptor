@@ -74,7 +74,8 @@ This task depends on **Task 3.2** (`ExplorerLayout` + `DiffViewer`) and **Task
 
 ## Testing suggestions
 
-- All FCC e2e + the migrated content tests land in **Task 3.6** via the shared
+- All FCC e2e + the migrated content tests land in **Tasks 3.6b–e** (POMs + open-a-panel
+  helper: Task 3.6a) via the shared
   `DiffViewer`/`ExplorerLayout` POMs (`test_files_panel.py`,
   `test_changes_panel.py`, `test_commits_panel.py`, `test_diff_viewer.py`). This task
   just builds the panels so those tests have something to drive.

@@ -14,8 +14,9 @@ create, see Task 5.2), SIDE-04 (collapsible repo groups), SIDE-05 (repo `+`
 add-workspace), SIDE-06 (repo settings), SIDE-07 (row → navigate), SIDE-08
 (row right-click context menu), SIDE-09 (row hover: delete + menu icons), SIDE-10
 (Settings link), SIDE-11 (report a bug), SIDE-12 (version), SIDE-13 (collapse to
-icon; no OS-control collision on home), SIDE-14 (resize + min width), SIDE-17
-(row unread indicator). Sidebar toggle hotkey (SIDE-15) is wired in Task 4.5.
+icon; no OS-control collision on home), SIDE-14 (resize + min width), SIDE-16 (optimistic workspace delete/close + rollback
+toast), SIDE-17 (row unread indicator). Sidebar toggle hotkey (SIDE-15) is wired in
+Task 4.5.
 
 ## Background
 
@@ -81,10 +82,13 @@ This task depends on **Task 1.3** (`sidebarAtoms.ts`) and **Task 2.1** (tokens).
 3. **Repo groups** (SIDE-04/05/06): collapsible per-repo sections with a plus
    (add-workspace → dialog, Task 5.2) and a settings link (route to that repo's
    settings).
-4. **Workspace rows** (SIDE-07/08/09/17): click → navigate to the workspace;
+4. **Workspace rows** (SIDE-07/08/09/16/17): click → navigate to the workspace;
    right-click → context menu (Task 2.7/8.1 build the menu POM; render the menu
    here reusing today's workspace context-menu actions); hover → reveal delete +
-   menu icons; unread indicator via `data-has-unread` (reuse today's attribute).
+   menu icons; deleting/closing a workspace updates the sidebar **optimistically** and
+   rolls back with an error toast on failure (SIDE-16 — preserve today's
+   optimistic-delete behavior); unread indicator via `data-has-unread` (reuse today's
+   attribute).
 5. **Bottom** (SIDE-10/11/12): Settings link (route), report-a-bug
    (`ReportProblemPopover`), and the `VersionDisplay`.
 6. **Resize + collapse** (SIDE-13/14): a drag handle on the right border writing
@@ -132,6 +136,7 @@ This task depends on **Task 1.3** (`sidebarAtoms.ts`) and **Task 2.1** (tokens).
   version).
 - [ ] Resize handle clamps to a minimum width; collapse shows only the expand icon
   and avoids OS controls on home.
+- [ ] Workspace-row delete/close is optimistic with rollback + error toast (SIDE-16).
 - [ ] Width/collapsed read/write the global sidebar atoms (persist globally).
 - [ ] New sidebar `ElementIDs` added and `just generate-api` run.
 - [ ] `just check` passes.

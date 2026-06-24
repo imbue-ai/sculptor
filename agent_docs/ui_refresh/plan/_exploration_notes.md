@@ -125,7 +125,7 @@ New code uses `goals.md` vocabulary; do not carry prototype names forward.
 ## Registry essentials (`supplemental/panel_registry.md`)
 
 - `PanelDefinition { id, displayName, icon, kind: static|agent|terminal,
-  defaultSection: SubSectionId, component, tabIcon?, contextMenuActions? }`. **No**
+  defaultSection?: SubSectionId, component, tabIcon?, contextMenuActions? }`. **No**
   `enabled`/`defaultEnabled`/`isBuiltin`.
 - Static single-instance: `files` (left), `changes` (left), `commits` (left),
   `review-all` (none), `actions` (right), `skills` (right), `browser` (none),

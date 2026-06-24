@@ -117,8 +117,9 @@ computes a new immutable snapshot, and writes it back once:
 - The self-heal **reload guard** is subtle: during workspace load a dynamic panel
   id may be in `placement` before its task/terminal source atom has hydrated; don't
   treat that as "empty" and collapse the split.
-- `jumpToSectionAtom` depends on the ring nonce atom from Task 1.5 — implement 1.5
-  first or keep the ring-bump in a tiny helper imported from the transient module.
+- `jumpToSectionAtom` depends on the ring-nonce atom built in Task 1.5. **Define the
+  nonce atom in Task 1.5 and import it here** — a forward reference within Phase 1 is
+  fine (both land before any Phase-2 consumer); do not duplicate the atom.
 - Decision B1: closing the last agent in center leaves it empty (do **not**
   auto-create a replacement here).
 

@@ -54,14 +54,17 @@ the triple-dot menu. The per-diff **expand/fullscreen toggle is deprecated** —
 are deleted; users maximize the section instead).
 
 This task depends on **Task 1.3** (`explorerListWidthAtom`) and **Task 2.1**
-(tokens). The three panels that embed these are **Task 3.3**; the POMs + tests are
-**Task 3.6**.
+(tokens). The three panels that embed these are **Task 3.3**; the POMs + open-a-panel
+helper are **Task 3.6a** and the migrated tests are **Tasks 3.6b–e**.
 
 ## Files to modify/create
 
 - `sculptor/frontend/src/pages/workspace/panels/ExplorerLayout.tsx` +
   `.module.scss` — new (shared scaffold: list + viewer + empty + resizable shared
   width + sidebar toggle).
+- `sculptor/frontend/src/pages/workspace/panels/ExplorerTreeHeader.tsx` +
+  `.module.scss` — new (the 41px list header: search box + tree-options menu;
+  ← prototype `MasterDetailTreeHeader`).
 - `sculptor/frontend/src/pages/workspace/components/diffViewer/` — new embeddable
   `DiffViewer` assembled from the copied diff-panel pieces, with the config options
   under the triple-dot menu.
@@ -90,7 +93,8 @@ This task depends on **Task 1.3** (`explorerListWidthAtom`) and **Task 2.1**
 ## Testing suggestions
 
 - The shared viewer is exercised once in `test_diff_viewer.py` and the explorer
-  shape in the three panel tests — all in **Task 3.6**, which migrates the proven
+  shape in the three panel tests — all in **Tasks 3.6b–e** (on the **3.6a** POMs +
+  fixture), which migrate the proven
   assertions from today's `test_file_browser*`/`test_history_panel*`/`test_diff_*`/
   `test_markdown_*` via the shared `DiffViewer`/`ExplorerLayout` POMs.
 - Visual aspects (skeleton, empty state) are screenshot-verified, not asserted.

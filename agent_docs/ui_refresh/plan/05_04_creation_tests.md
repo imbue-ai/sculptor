@@ -10,7 +10,10 @@ old page tests).
 ## Stories addressed
 
 WSC-01..11 (`test_new_workspace_dialog.py` + `test_new_workspace_creation_modes.py`),
-FIRST-01..05 (`test_empty_first_run.py`), FIRST-06 (autocomplete-Cmd+Enter guard).
+FIRST-01..05 (`test_empty_first_run.py` — FIRST-05 asserts navigation + that the full
+workspace page is shown; the SEC-01..04 default-**arrangement** assertion lives in
+`test_section_default_layout.py` (Task 6.3), which runs after the 6.1 seed), plus the
+autocomplete-Cmd+Enter guard (a negative-path **test case**, not a numbered story).
 
 ## Background
 
@@ -85,8 +88,8 @@ This task depends on **Tasks 5.1–5.3** and the Phase-2 harness spine.
 3. Write the three CREATE files; migrate the real test bodies listed above. **Drop**
    the tab-model stories (multiple new-workspace tabs, no-extra-tab-flash, `/ws/new`
    draft) — they die with the tab model.
-4. FIRST-06: Cmd+Enter inside the repo-path autocomplete must not create the workspace
-   (port the negative-path test).
+4. Autocomplete-Cmd+Enter guard (negative-path test case): Cmd+Enter inside the
+   repo-path autocomplete must not create the workspace (port the negative-path test).
 5. Add the zero-workspace fixture for `test_empty_first_run.py`.
 
 ## Testing suggestions

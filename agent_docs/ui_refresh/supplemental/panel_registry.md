@@ -14,7 +14,7 @@ type PanelDefinition = {
   displayName: string;
   icon: LucideIcon;
   kind: PanelKind;                   // default "static"
-  defaultSection: SubSectionId;      // where it lands by default
+  defaultSection?: SubSectionId;     // where it lands by default (review-all/browser: none)
   component: ComponentType;          // the content; decoupled from the shell
   tabIcon?: ReactNode;              // e.g. agent live status dot
   contextMenuActions?: ContextMenuItem[];   // goals.md → "Panels": right-click actions

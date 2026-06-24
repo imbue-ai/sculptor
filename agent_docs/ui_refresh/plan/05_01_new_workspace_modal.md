@@ -45,8 +45,10 @@ current inputs by grepping `TASK_INPUT`, `WORKSPACE_NAME_INPUT`, `BRANCH_NAME_IN
 **Decision B8:** WSC-05/06 surfaces (auto-grow textarea, context pills, keep-open
 switch, branch shuffle) are net-new with no current testid; "keep open" keeps the
 dialog open after Create for rapid multi-create (form resets, repo/agent-type
-retained). The Create button id is renamed `START_TASK_BUTTON` →
-`NEW_WORKSPACE_CREATE_BUTTON` (or reuse — see Decision B8).
+retained). The dialog's Create button uses a new id `NEW_WORKSPACE_CREATE_BUTTON`;
+**keep the old `START_TASK_BUTTON` on the still-rendered `/ws/new` page** until Task 7.3
+deletes that page — don't rename it out from under the old page in the Phase 5–7 window
+(Decision B8).
 
 This task depends on the existing add-workspace form/create flow. The four entry
 points + modes are **Task 5.2**; the POMs + tests are **Task 5.4**; the `/ws/new`

@@ -81,7 +81,11 @@ CREATE tests; Phase 8 is only the *legacy* burn-down.
 | `03_03_files_changes_commits.md` | Files / Changes / Commits panels | 3 | FCC-01..07, REVIEW-* deps |
 | `03_04_static_panels.md` | Review-all / Actions / Skills / Browser / Notes panels (no enable/disable) | 3 | REVIEW-01/02, PANEL-05/15 |
 | `03_05_add_panel_dropdown_empty_state.md` | `AddPanelDropdown` + `EmptySectionState` quick actions | 3 | PANEL-01..05, PANEL-12, SEC-19 |
-| `03_06_fcc_tests.md` | FCC POMs (DiffViewer/ExplorerLayout) + FCC CREATE/migrate tests | 3 | FCC-01..07 |
+| `03_06a_fcc_poms_and_fixture.md` | FCC POMs (DiffViewer/ExplorerLayout) + open-a-panel helper (smoke only) | 3 | FCC-01..07 (harness) |
+| `03_06b_diff_viewer_tests.md` | `test_diff_viewer.py` (migrate diff/markdown) | 3 | FCC-02/06/07 |
+| `03_06c_files_panel_tests.md` | `test_files_panel.py` (migrate file-browser) | 3 | FCC-01/03/04/05 |
+| `03_06d_changes_panel_tests.md` | `test_changes_panel.py` (migrate changes/scope/discard) | 3 | FCC-01/02/03 |
+| `03_06e_commits_panel_tests.md` | `test_commits_panel.py` (migrate history) | 3 | FCC-01/02/03 |
 | `03_07_agent_terminal_panel_tests.md` | PanelTab POM + agent/terminal panel CREATE/migrate tests | 3 | AGENT-01..09, TERM-01..05, PANEL-07/11/14 |
 | `04_01_dnd_provider.md` | `PanelDndProvider` + KeyboardSensor + drag handle + dropzones | 4 | PANEL-08..10, PANEL-16 |
 | `04_02_splits.md` | Split create/close, direction rules, self-heal | 4 | SPLIT-01..06 |

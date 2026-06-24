@@ -12,7 +12,9 @@ placement in a single pre-paint (layout-effect) flush.
 SWITCH-01 (`[perf]` zero layout-shift; sidebar/header/section headers/frames present
 in the first frame), SWITCH-02 (`[perf]` ≤1 mount per panel per switch), SWITCH-03
 (no spinner — prefetch or stale-then-update), SWITCH-04 (re-entry preserves what the
-user was looking at), SEC-18/PERSIST-02 (`[perf]` global sizes in the first frame).
+user was looking at), PERSIST-04 (Home→back round-trip stability — built on SWITCH-04's
+re-entry preservation; regression-tested in Task 6.3), SEC-18/PERSIST-02 (`[perf]`
+global sizes in the first frame).
 
 ## Background
 

@@ -8,10 +8,11 @@ vs-global split and the no-migration rule, and the PERSIST/SWITCH end-to-end tes
 
 ## Stories addressed
 
-PERSIST-01 (per-workspace arrangement stored + isolated), PERSIST-03 (persists across
-restart), PERSIST-04 (round-trip stability regression), PERSIST-05 (cross-workspace
-isolation), SWITCH-03 (no spinner), SWITCH-04 (last view preserved). (PERSIST-02,
-SWITCH-01/02/05, SEC-18 are `[perf]` → Task 9.1.)
+SEC-01..04 (the first-open default layout — **moved here from Task 4.6** because it
+asserts the Task 6.1 seed), PERSIST-01 (per-workspace arrangement stored + isolated),
+PERSIST-03 (persists across restart), PERSIST-04 (round-trip stability regression),
+PERSIST-05 (cross-workspace isolation), SWITCH-03 (no spinner), SWITCH-04 (last view
+preserved). (PERSIST-02, SWITCH-01/02/05, SEC-18 are `[perf]` → Task 9.1.)
 
 ## Background
 
@@ -34,9 +35,13 @@ rule — exercise the adapter directly where a full restart isn't needed.
   section + add a terminal panel → navigate Home → back; the agent panel survives.
 - `test_seamless_switch.py` (SWITCH-03/04) — no spinner (skeleton/stale-then-update);
   last-view preserved.
+- `test_section_default_layout.py` (SEC-01..04) — the first-open default arrangement:
+  center agent expanded; left collapsed with Files/Changes/Commits (Files active);
+  bottom collapsed with one terminal; right collapsed + empty. Asserts the Task 6.1
+  seed. **Moved here from Task 4.6**, which runs before the seed exists.
 
 This task depends on **Tasks 6.1 (wiring + default), 6.2 (switch sequence)** and the
-Phase-2..5 surfaces + POMs.
+Phase-2..5 surfaces + POMs (incl. the Task 4.6 section collapse/expand POMs).
 
 ## Files to modify/create
 
@@ -46,6 +51,8 @@ Phase-2..5 surfaces + POMs.
 - `sculptor/tests/integration/frontend/test_layout_persistence.py` — new.
 - `sculptor/tests/integration/frontend/test_layout_persistence_regression.py` — new.
 - `sculptor/tests/integration/frontend/test_seamless_switch.py` — new.
+- `sculptor/tests/integration/frontend/test_section_default_layout.py` — new (moved
+  from Task 4.6; asserts the SEC-01..04 default seeded in Task 6.1).
 
 ## Implementation details
 
@@ -62,7 +69,11 @@ Phase-2..5 surfaces + POMs.
 4. `test_seamless_switch.py` (SWITCH-03/04): switching workspaces shows **no spinner**
    (assert the skeleton/stale-then-update path, not a spinner element); re-entering a
    workspace preserves the last-active sub-section + active panels.
-5. Skip **layout-property-only** assertions (`.sculptor/testing.md`); the zero-reflow
+5. `test_section_default_layout.py` (SEC-01..04): assert the seeded default — center
+   agent expanded; left collapsed with Files/Changes/Commits (Files active); bottom
+   collapsed with one terminal; right collapsed + empty. Drives the Task 4.6 section
+   POMs; needs the Task 6.1 seed (hence here, not Phase 4).
+6. Skip **layout-property-only** assertions (`.sculptor/testing.md`); the zero-reflow
    / mount-count guarantees are `[perf]` (Task 9.1), not asserted here.
 
 ## Testing suggestions
@@ -84,6 +95,8 @@ Phase-2..5 surfaces + POMs.
 
 - [ ] Adapter unit tests cover the per-workspace-vs-global split + no-migration.
 - [ ] `test_layout_persistence.py` / `test_layout_persistence_regression.py` /
-  `test_seamless_switch.py` pass via `/run-integration-test`.
-- [ ] PERSIST-01/03/04/05 + SWITCH-03/04 covered; `[perf]` bars deferred to Task 9.1.
+  `test_seamless_switch.py` / `test_section_default_layout.py` pass via
+  `/run-integration-test`.
+- [ ] SEC-01..04 default layout + PERSIST-01/03/04/05 + SWITCH-03/04 covered; `[perf]`
+  bars deferred to Task 9.1.
 - [ ] `just test-unit-frontend` passes.

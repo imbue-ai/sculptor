@@ -244,6 +244,11 @@ components are built.
   surface than full e2e for the per-workspace-vs-global split (PERSIST-01/02) and
   the "old keys ignored, no migration" rule — exercise the adapter directly where
   a full restart isn't needed.
+- **Open-a-panel helper:** a shared helper that opens a panel the way a user does —
+  clicking the section `+` add-panel dropdown (reusing the `AddPanelDropdown` POM) — so
+  content tests can bring their panel on screen before asserting, instead of each test
+  re-implementing the open flow. Files/Changes/Commits and agent/terminal panels all
+  open this way; no layout-state/localStorage seeding.
 
 ---
 

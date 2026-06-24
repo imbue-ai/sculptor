@@ -12,8 +12,13 @@ data still comes from the existing data atoms.
 ## Stories addressed
 
 AGENT-01 (renders the existing chat with all functionality preserved), AGENT-02
-(zero/one/multiple agents), AGENT-03 (an agent in center and another in right at
-once), AGENT-09 (tab numbering reuses the lowest available number).
+(zero/one/multiple agents — incl. the backend zero-agent relaxation below), AGENT-03
+(an agent in center and another in right at once), AGENT-04 (closing an agent = delete
+confirmation; closing the last leaves the center empty), AGENT-05 (two agents stream
+independently — via the identity cache + per-panel `taskId`), AGENT-06 (tab
+diagnostics actions), AGENT-07 (tab status dot: read/unread + running/waiting),
+AGENT-08 (optimistic agent deletion + rollback), AGENT-09 (tab numbering reuses the
+lowest available number). (The e2e for these land in Task 3.7; this task builds them.)
 
 ## Background
 
@@ -68,7 +73,18 @@ component).
   `useWorkspacePageParams().agentID` to `ChatPanelContent` explicitly.
 - `sculptor/frontend/src/components/sections/registry/dynamicPanels.tsx` — modify
   (from Task 1.6): bind the agent component per `agent:<taskId>` in the identity
-  cache; derive the display name with **lowest-available-number reuse** (AGENT-09).
+  cache; derive the display name with **lowest-available-number reuse** (AGENT-09);
+  provide the agent's `tabIcon` status dot (AGENT-07) and `contextMenuActions`
+  diagnostics (AGENT-06).
+- **Backend zero-agent support** (Decision B1): relax the backend "≥1 agent"
+  assumption and remove the auto-create-an-agent-on-last-delete path so a workspace can
+  exist with zero agents (the empty center). Grep the backend/data layer for the
+  ≥1-agent invariant + the last-agent auto-create. Breadcrumb: the *visible*
+  auto-create-on-last-delete lives in the frontend today —
+  `src/pages/workspace/components/AgentTabs.tsx` → `handleNavigateAfterDelete` calls
+  `handleCreateAgent()` when no agents remain (old-shell code, deleted in Phase 7) — so
+  zero-agent support spans both dropping that frontend path and hardening the
+  backend/data layer where an agent is assumed.
 
 ## Implementation details
 
@@ -83,16 +99,27 @@ component).
    `PanelDefinition` with `id = agent:<taskId>`, `kind: "agent"`, `defaultSection:
    "center"`, `displayName` = the agent's name/number, and a `component` that is the
    **cached** `() => <AgentPanel taskId={taskId} />` (cache keyed by the panel id so
-   the reference is stable across rebuilds). Include the live status dot as
-   `tabIcon` (reuse today's status-dot reader).
+   the reference is stable across rebuilds). Provide the agent's `tabIcon` status dot
+   (read/unread + running/waiting — AGENT-07) and its `contextMenuActions` (the
+   diagnostics submenu: copy session id / transcript path / agent id / name, disabled
+   when there is no session — AGENT-06), both reusing today's agent-tab readers.
 3. **AGENT-09 numbering:** when naming unnamed agents (e.g. "Agent 2"), reuse the
    lowest available number after deletions (mirror today's numbering logic — grep
    for the existing agent-tab numbering and reuse it).
-4. Confirm zero/one/multiple agents work: zero agents → center shows the empty state
-   (Task 2.4's `EmptySectionState`); multiple agents → multiple `agent:*` panels can
-   be placed in different sections (AGENT-03). The center-targeting of new agents
-   (Cmd+Shift+T / Cmd+K) is Task 4.5/3.5; closing-an-agent = delete confirmation is
-   Task 3.7.
+4. **Close = delete (AGENT-04/08):** wire the panel-tab close (built in Task 2.4) for
+   an agent to the existing agent-delete flow — the same delete confirmation dialog as
+   today, optimistic tab removal, and rollback + error toast + Retry on failure
+   (preserve today's optimistic-delete behavior; the e2e are Task 3.7). Closing the
+   **last** agent leaves the center **empty** (AGENT-04 + the backend relaxation in
+   step 5), not auto-create. Confirm zero/one/multiple agents: zero → center empty
+   state (Task 2.4's `EmptySectionState`); multiple → `agent:*` panels in different
+   sections (AGENT-03). Center-targeting of new agents (Cmd+Shift+T / Cmd+K) is Task
+   4.5/3.5.
+5. **Backend zero-agent relaxation (Decision B1):** remove the "a workspace needs ≥1
+   agent" invariant and the auto-create-on-last-delete behavior so the center can be
+   empty (AGENT-02/04). This is the precondition for the empty-center state and the
+   zero-agent test fixture (Task 2.7); without it, closing the last agent cannot leave
+   the center empty. Coordinate with `01_06`/`06_01` (Decision B1's other bite points).
 
 ## Testing suggestions
 
@@ -128,4 +155,9 @@ component).
   identity and lowest-available-number display names.
 - [ ] Zero/one/multiple agents supported; an agent can live in center and right at
   once.
+- [ ] Backend ≥1-agent invariant relaxed + auto-create-on-last-delete removed
+  (zero-agent workspace works end-to-end; closing the last agent leaves the center
+  empty).
+- [ ] Agent close = delete confirmation + optimistic removal/rollback (AGENT-04/08);
+  tab status dot + diagnostics actions provided (AGENT-06/07).
 - [ ] `just check` passes.

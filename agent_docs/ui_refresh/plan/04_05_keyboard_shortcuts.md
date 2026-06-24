@@ -81,9 +81,10 @@ This task depends on the action atoms (Task 1.4: `toggleSectionAtom`,
 
 ## Testing suggestions
 
-- SEC-05..08/12/15/20, SIDE-15, PANEL-06 e2e land in **Task 4.6**
+- SEC-05..08/12/15/20, SIDE-15 e2e land in **Task 4.6**
   (`test_section_collapse_expand.py`, `test_section_active_and_maximize.py`,
-  `test_sidebar_collapse_resize.py`, `test_panel_add_dropdown.py`). WSC-02 is in Task
+  `test_sidebar_collapse_resize.py`); PANEL-06 (center-targeting) is asserted in
+  `test_panel_add_dropdown.py` (**Task 3.7**). WSC-02 is in Task
   5.4. PANEL-13 is `[unit]` (test the binding registration + focus logic) plus a
   "binding visible" check in `test_keybindings.py` (Phase 8 UPDATE).
 - The keybindings settings integration is testable by asserting the new bindings
