@@ -125,12 +125,13 @@ describe("project routes", () => {
     });
     expect(set.json()).toBe("npm ci");
 
+    // Blank input strips to "" — stored as "" (disable), distinct from null.
     const cleared = await app.inject({
       method: "PUT",
       url: `/api/v1/projects/${id}/workspace_setup_command`,
       payload: { workspaceSetupCommand: "  " },
     });
-    expect(cleared.json()).toBeNull();
+    expect(cleared.json()).toBe("");
 
     const pattern = await app.inject({
       method: "PUT",

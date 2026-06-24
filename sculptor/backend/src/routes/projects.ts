@@ -183,10 +183,11 @@ export async function registerProjectRoutes(
       },
     },
     async (request, reply) => {
-      // Tri-state: null resets to default; "" / blank disables (also null);
-      // a value is the custom command.
+      // Tri-state (web/app.py L2861): null resets to default; "" (or blank,
+      // which strips to "") disables; a value is the custom command. Note ""
+      // is stored AS "" — distinct from null — so resolve() can skip it.
       const raw = request.body.workspaceSetupCommand;
-      const value = raw === null ? null : raw.trim() === "" ? null : raw.trim();
+      const value = raw === null ? null : raw.trim();
       try {
         const updated = service.updateField(request.params.project_id, {
           workspaceSetupCommand: value,

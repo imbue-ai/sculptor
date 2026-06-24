@@ -8,6 +8,7 @@ import { registerConfigRoutes } from "~/routes/config";
 import { registerDependencyRoutes } from "~/routes/dependencies";
 import { registerHealthRoutes } from "~/routes/health";
 import { registerProjectRoutes } from "~/routes/projects";
+import { registerWorkspaceRoutes } from "~/routes/workspaces";
 import { registerSessionTokenRoutes } from "~/routes/session_token";
 import { registerStreamWsRoutes } from "~/routes/stream_ws";
 import { registerTelemetryInfoRoutes } from "~/routes/telemetry_info";
@@ -56,6 +57,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   void app.register(registerConfigRoutes);
   void app.register(registerDependencyRoutes);
   void app.register(registerProjectRoutes);
+  void app.register(registerWorkspaceRoutes);
   void app.register(registerTelemetryInfoRoutes);
   void app.register(registerStreamWsRoutes);
 

@@ -16,7 +16,12 @@
 // stateless cases; the deps dedup MUST go through a builder.
 
 import type { Orm } from "~/db/orm";
-import { getNotification, getRepo, getUserSettings, getWorkspace } from "~/db/repositories";
+import {
+  getNotification,
+  getRepo,
+  getUserSettings,
+  getWorkspace,
+} from "~/db/repositories";
 import { ProjectionCache, projectionCache } from "~/projection/cache";
 import type { BusEvent, DataModelChangeEvent } from "~/events/types";
 import type { RawMessage } from "~/projection/message_log";
@@ -56,8 +61,14 @@ function dataModelChangeToDelta(
 ): StreamingUpdate {
   const delta = emptyStreamingUpdate();
   const user: UserUpdate = delta.user_update;
-  const projectsById = new Map<string, ReturnType<typeof repoRowToWireProject>>();
-  const workspacesById = new Map<string, ReturnType<typeof workspaceRowToWire>>();
+  const projectsById = new Map<
+    string,
+    ReturnType<typeof repoRowToWireProject>
+  >();
+  const workspacesById = new Map<
+    string,
+    ReturnType<typeof workspaceRowToWire>
+  >();
   const notifications: ReturnType<typeof notificationRowToWire>[] = [];
 
   for (const ref of event.changedEntities ?? []) {
@@ -187,7 +198,8 @@ export class DeltaBuilder {
       }
       case "workspace_remote_branches": {
         const delta = emptyStreamingUpdate();
-        delta.workspace_remote_branches_by_workspace_id[event.workspaceId] = null;
+        delta.workspace_remote_branches_by_workspace_id[event.workspaceId] =
+          null;
         return delta;
       }
       case "pr_status": {
@@ -196,10 +208,10 @@ export class DeltaBuilder {
         return delta;
       }
       case "workspace_setup_status": {
-        // The status snapshot is produced by the setup runner (Phase 7); the
-        // event carries the workspace id, the runner fills the value. Until then
-        // no value to emit.
-        return null;
+        const delta = emptyStreamingUpdate();
+        delta.workspace_setup_status_by_workspace_id[event.workspaceId] =
+          event.status as unknown as StreamingUpdate["workspace_setup_status_by_workspace_id"][string];
+        return delta;
       }
       case "workspace_setup_output": {
         const delta = emptyStreamingUpdate();
@@ -210,7 +222,8 @@ export class DeltaBuilder {
       }
       case "ui_open_file": {
         const delta = emptyStreamingUpdate();
-        delta.ui_open_file_by_workspace_id[event.workspaceId] = event.action as unknown as OpenFileUiAction;
+        delta.ui_open_file_by_workspace_id[event.workspaceId] =
+          event.action as unknown as OpenFileUiAction;
         return delta;
       }
       case "ui_webview_command": {
@@ -226,7 +239,10 @@ export class DeltaBuilder {
 // Convenience for stateless callers / tests: builds a fresh DeltaBuilder per
 // call, so the dependencies_status dedup does NOT carry across calls. Use a
 // long-lived DeltaBuilder for a real connection.
-export function eventToDelta(event: BusEvent, ctx: DeltaContext): StreamingUpdate | null {
+export function eventToDelta(
+  event: BusEvent,
+  ctx: DeltaContext,
+): StreamingUpdate | null {
   return new DeltaBuilder(ctx).eventToDelta(event);
 }
 

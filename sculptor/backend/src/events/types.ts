@@ -67,11 +67,13 @@ export interface DependenciesStatusEvent {
   status: Record<string, unknown> | null;
 }
 
-// Drives workspace_setup_status_by_workspace_id.
+// Drives workspace_setup_status_by_workspace_id. Carries the WorkspaceSetupStatus
+// snapshot the setup runner (Task 6.4) produces on each state transition.
 export interface WorkspaceSetupStatusEvent {
   kind: "workspace_setup_status";
   workspaceId: string;
   projectId?: string;
+  status: Record<string, unknown>;
 }
 
 // Drives workspace_setup_output_by_workspace_id: a chunk of setup-command output.
@@ -125,7 +127,5 @@ export type BusEventKind = BusEvent["kind"];
 
 // The kinds with no per-workspace key — user_update / dependencies_status are
 // dropped for scoped (non-ScopeAll) connections (Task 4.5 applies this).
-export const SCOPE_ALL_ONLY_EVENT_KINDS: ReadonlySet<BusEventKind> = new Set<BusEventKind>([
-  "data_model_change",
-  "dependencies_status",
-]);
+export const SCOPE_ALL_ONLY_EVENT_KINDS: ReadonlySet<BusEventKind> =
+  new Set<BusEventKind>(["data_model_change", "dependencies_status"]);
