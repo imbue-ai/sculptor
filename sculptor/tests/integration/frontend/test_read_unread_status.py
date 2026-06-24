@@ -330,7 +330,7 @@ def test_terminal_agent_read_status_persists_after_restart(
         # restored terminal shows "running" (BUILDING) until the run-start
         # EnvironmentAcquiredRunnerMessage is re-emitted, after which an idle
         # terminal is neutral (read/unread).
-        expect(terminal_tab).to_have_attribute("data-dot-status", re.compile(r"^(read|unread)$"), timeout=30_000)
+        expect(terminal_tab).to_have_attribute("data-dot-status", re.compile(r"^(read|unread)$"))
 
         # The fix: the re-emitted ephemeral EnvironmentAcquired must NOT advance
         # updated_at past last_read_at, so the restored idle terminal stays read
