@@ -10,9 +10,9 @@ import { BranchSelectorCore, type BranchWithBadges } from "~/components/BranchSe
 import styles from "./TargetBranchSelector.module.scss";
 
 type MismatchInfo = {
-  /** The branch the existing MR/PR targets (bare name, e.g. "main") */
+  /** The branch the existing PR targets (bare name, e.g. "main") */
   targetBranch: string;
-  /** Badge to show on that branch in the dropdown (e.g. "MR !847") */
+  /** Badge to show on that branch in the dropdown (e.g. "PR #847") */
   badge: BadgeInfo;
 };
 

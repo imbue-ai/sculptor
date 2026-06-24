@@ -59,6 +59,7 @@ from packaging.version import Version
 from pydantic import PrivateAttr
 from pydantic import ValidationError
 
+from sculptor.agents.attachments import save_attachments_to_environment
 from sculptor.agents.default.agent_wrapper import DefaultAgentWrapper
 from sculptor.agents.default.utils import get_state_file_contents
 from sculptor.agents.default.utils import get_turn_request_id
@@ -102,7 +103,6 @@ from sculptor.agents.pi_agent.output_processor import is_transient_provider_erro
 from sculptor.agents.pi_agent.output_processor import parse_rpc_message
 from sculptor.agents.pi_agent.prompt_assembly import build_attachment_instructions
 from sculptor.agents.pi_agent.prompt_assembly import build_image_block
-from sculptor.agents.pi_agent.prompt_assembly import save_attachments_to_environment
 from sculptor.agents.pi_agent.prompt_assembly import split_image_and_path_attachments
 from sculptor.agents.pi_agent.subagent import SubagentChild
 from sculptor.agents.pi_agent.subagent import SubagentCompletion

@@ -51,7 +51,9 @@ export const useRegisterCommandAction = (id: CommandActionId, callback: CommandA
   // Keep the callback in a ref so the registered function always sees the
   // latest closure without forcing the effect to re-run on every render.
   const ref = useRef(callback);
-  ref.current = callback;
+  useEffect(() => {
+    ref.current = callback;
+  });
 
   useEffect(() => {
     const stableCallback: CommandActionCallback = () => ref.current();

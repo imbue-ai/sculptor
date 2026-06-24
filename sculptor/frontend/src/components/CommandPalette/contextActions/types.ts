@@ -85,7 +85,7 @@ export type WorkspaceAction = ContextActionShared & {
   disabled?: (workspace: Workspace) => boolean;
   /**
    * Reason a disabled row is greyed-out — e.g. "No uncommitted changes",
-   * "An open merge request already exists". Surfaced inline as the
+   * "An open pull request already exists". Surfaced inline as the
    * palette row's subtitle when the row is disabled (so the user sees
    * the explanation without hovering); the right-click menu has no
    * tooltip slot, so this is palette-only.
@@ -93,24 +93,21 @@ export type WorkspaceAction = ContextActionShared & {
   disabledReason?: (workspace: Workspace) => string;
   /**
    * Render-time title override. Used when the label depends on workspace
-   * state — e.g. "Create pull request" vs "Create merge request" based on
-   * the git provider. `title` remains the stable identifier for testing;
-   * `getTitle` only affects display.
+   * state. `title` remains the stable identifier for testing; `getTitle`
+   * only affects display.
    */
   getTitle?: (workspace: Workspace) => string;
   /**
    * Render-time subtitle override. Mirrors `getTitle` for the subtitle
    * slot — used when the line beneath the title depends on workspace
-   * state (e.g. PR/MR verb flips by git provider). Static
-   * `paletteSubtitle` remains the fallback / right-click-menu-side text.
+   * state. Static `paletteSubtitle` remains the fallback /
+   * right-click-menu-side text.
    */
   getPaletteSubtitle?: (workspace: Workspace) => string;
   /**
    * Render-time fuzzy-search keyword override. Mirrors `getTitle` for
    * the keyword slot — used when the synonym set depends on workspace
-   * state (e.g. drop "merge"/"mr" on GitHub repos so typing "merge"
-   * doesn't surface "Create pull request"). Static `paletteKeywords`
-   * remains the fallback.
+   * state. Static `paletteKeywords` remains the fallback.
    */
   getPaletteKeywords?: (workspace: Workspace) => ReadonlyArray<string>;
   perform: (workspace: Workspace) => void | Promise<void>;
@@ -144,19 +141,17 @@ export type WorkspaceActionRuntime = {
   commitChanges: (workspace: Workspace) => void;
   /** Send the PR-creation prompt to chat (with target branch hint). */
   createMergeRequest: (workspace: Workspace) => void;
-  /** Open the existing PR/MR's web URL in a new tab. */
+  /** Open the existing PR's web URL in a new tab. */
   openMergeRequest: (workspace: Workspace) => void;
   /** Reveal the workspace's repo path in the chosen external app. */
   openInApp: (workspace: Workspace, app: ExternalApp) => void;
 
   /** True when the workspace has uncommitted changes (for "Commit" enable). */
   hasUncommittedChanges: (workspace: Workspace) => boolean;
-  /** True when there's an open PR/MR with a web URL ("Open" enable). */
+  /** True when there's an open PR with a web URL ("Open" enable). */
   hasOpenPr: (workspace: Workspace) => boolean;
-  /** True when no open PR/MR exists yet ("Create" enable). */
+  /** True when no open PR exists yet ("Create" enable). */
   canCreatePr: (workspace: Workspace) => boolean;
-  /** "merge request" for GitLab, "pull request" otherwise. Drives labels. */
-  prTerm: (workspace: Workspace) => "merge request" | "pull request";
   /** Backend exposes the open-in-app endpoint (false on remote backends). */
   canOpenInOS: () => boolean;
   /** True when the UI runs on macOS (Open-in is mac-only for now). */

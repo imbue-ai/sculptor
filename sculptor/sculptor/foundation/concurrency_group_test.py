@@ -3,6 +3,7 @@ import time
 from pathlib import Path
 from threading import Event
 from typing import Any
+from typing import NoReturn
 from unittest import mock
 from unittest.mock import Mock
 
@@ -27,6 +28,11 @@ LARGE_SLEEP = 1.0
 def _small_sleep_and_return_1() -> int:
     time.sleep(0.1)
     return 1
+
+
+def _raise_zero_division() -> NoReturn:
+    """Raise a ZeroDivisionError to exercise thread-failure paths."""
+    raise ZeroDivisionError("division by zero")
 
 
 def test_concurrency_group_shortly_waits_for_threads_to_finish() -> None:
@@ -95,7 +101,7 @@ def test_failed_threads_raise_when_probed(mock_log_exception: mock.MagicMock) ->
     i = 0
     with pytest.raises(ConcurrencyExceptionGroup) as exception_info:
         with ConcurrencyGroup(name="outer") as cg:
-            thread = cg.start_new_thread(target=lambda: 1 / 0)
+            thread = cg.start_new_thread(target=_raise_zero_division)
             cg.raise_if_any_strands_or_ancestors_failed_or_is_shutting_down()
             i += 1
     assert exception_info.value.only_exception_is_instance_of(ZeroDivisionError)
@@ -110,7 +116,7 @@ def test_failed_threads_raise_when_exiting(mock_log_exception: mock.MagicMock) -
     i = 0
     with pytest.raises(ConcurrencyExceptionGroup) as exception_info:
         with ConcurrencyGroup(name="outer") as cg:
-            thread = cg.start_new_thread(target=lambda: 1 / 0)
+            thread = cg.start_new_thread(target=_raise_zero_division)
             i += 1
     assert exception_info.value.only_exception_is_instance_of(ZeroDivisionError)
     assert i == 1
@@ -120,7 +126,7 @@ def test_failed_threads_raise_when_exiting(mock_log_exception: mock.MagicMock) -
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
 def test_failed_threads_do_not_raise_when_suppressed(mock_log_exception: mock.MagicMock) -> None:
     with ConcurrencyGroup(name="outer") as cg:
-        thread = cg.start_new_thread(target=lambda: 1 / 0, suppressed_exceptions=(ZeroDivisionError,))
+        thread = cg.start_new_thread(target=_raise_zero_division, suppressed_exceptions=(ZeroDivisionError,))
         cg.raise_if_any_strands_or_ancestors_failed_or_is_shutting_down()
 
 
@@ -128,7 +134,7 @@ def test_failed_threads_do_not_raise_when_suppressed(mock_log_exception: mock.Ma
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
 def test_failed_threads_do_not_raise_when_explicitly_unchecked(mock_log_exception: mock.MagicMock) -> None:
     with ConcurrencyGroup(name="outer") as cg:
-        thread = cg.start_new_thread(target=lambda: 1 / 0, is_checked=False)
+        thread = cg.start_new_thread(target=_raise_zero_division, is_checked=False)
         cg.raise_if_any_strands_or_ancestors_failed_or_is_shutting_down()
 
 
@@ -205,7 +211,7 @@ def test_all_failure_modes_get_combined(tmp_path: Path) -> None:
             process2 = cg.run_process_in_background(["bash", "-c", "exit 1"], is_checked_by_group=True)
             # Avoid explicitly calling wait() on process2 to test that the probing in the exit works.
             time.sleep(SMALL_SLEEP)
-            i = 1 / 0
+            _raise_zero_division()
     assert len(exception_info.value.exceptions) == 3
     assert any(isinstance(e, ProcessError) for e in exception_info.value.exceptions)
     assert any(isinstance(e, ZeroDivisionError) for e in exception_info.value.exceptions)
@@ -269,7 +275,7 @@ def test_nesting_across_threads_raises_timeout_when_child_group_does_not_finish_
 
 def _create_nested_failing_concurrency_group(concurrency_group: ConcurrencyGroup, thread_started_event: Event) -> None:
     with concurrency_group.make_concurrency_group(name="inner") as cg:
-        cg.start_new_thread(target=lambda: 1 / 0)
+        cg.start_new_thread(target=_raise_zero_division)
         thread_started_event.set()
 
 
@@ -453,7 +459,7 @@ def test_new_resources_cannot_be_created_when_ancestor_has_failed_strands(mock_l
         with ConcurrencyGroup(name="outer") as cg_outer:
             with pytest.raises(ConcurrencyExceptionGroup) as exception_info_inner:
                 with cg_outer.make_concurrency_group(name="inner") as cg_inner:
-                    outer_failed_thread = cg_outer.start_new_thread(target=lambda: 1 / 0)
+                    outer_failed_thread = cg_outer.start_new_thread(target=_raise_zero_division)
                     with pytest.raises(ZeroDivisionError):
                         outer_failed_thread.join()
                     with pytest.raises(ConcurrencyExceptionGroup):

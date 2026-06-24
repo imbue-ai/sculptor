@@ -511,7 +511,7 @@ export const updateWorkspacesAtom = atom(null, (get, set, workspaces: ReadonlyAr
     // active observers refetch. The same `diffUpdatedAt` bump fires for any
     // git event the backend surfaces — file changes, commits, branch
     // movement — so it's the right shared trigger. Non-git workspace queries
-    // (e.g. future MR status) live outside the `git` subtree and are
+    // (e.g. future PR status) live outside the `git` subtree and are
     // unaffected. We compare against the prior atom value here rather than
     // tracking the previous snapshot externally.
     const previous = get(workspaceAtomFamily(workspace.objectId));

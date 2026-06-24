@@ -21,9 +21,10 @@ import { StateDot } from "./StateDot.tsx";
 export const WorkspaceShortcutWidget = (): ReactElement | null => {
   const branch = useCurrentWorkspace((workspace) => workspace?.branch ?? null);
   const workspaceId = useCurrentWorkspace((workspace) => workspace?.id ?? null);
+  const pullRequestUrl = useCurrentWorkspace((workspace) => workspace?.pullRequestUrl ?? null);
   const [apiKey] = usePluginSetting("apiKey");
   const { shortcutId } = useShortcut(workspaceId);
-  const { issue, isDefault } = useShortcutTicket({ apiKey, branch, shortcutId });
+  const { issue, isDefault } = useShortcutTicket({ apiKey, branch, pullRequestUrl, shortcutId });
 
   if (!apiKey || !issue) return null;
 

@@ -24,8 +24,13 @@ export function useKeybindingHandler(id: KeybindingId, handler: () => void): voi
 
   // Keep the latest handler in a ref so the keydown listener is registered only
   // when the binding changes, not on every render when `handler` is an inline function.
+  // The ref is synced in an effect (not during render) so it satisfies the refs lint;
+  // the listener only fires on real keypresses, well after commit, so a brief stale
+  // window is harmless.
   const handlerRef = useRef(handler);
-  handlerRef.current = handler;
+  useEffect(() => {
+    handlerRef.current = handler;
+  }, [handler]);
 
   useEffect(() => {
     if (binding == null) return;

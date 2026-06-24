@@ -1,8 +1,8 @@
 import { ContextMenu } from "@radix-ui/themes";
 import type { ReactElement, ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
 
 import { ElementIds } from "~/api";
+import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
 import { ZONE_DISPLAY_NAMES } from "~/components/panels/constants.ts";
 import { usePanelActions, usePanelById, usePanelsByZone } from "~/components/panels/hooks.ts";
 import type { PanelId, ZoneId } from "~/components/panels/types.ts";
@@ -20,7 +20,7 @@ export const PanelContextMenu = ({ panelId, zoneId, children, onOpenChange }: Pa
   const panelDef = usePanelById(panelId);
   const panelsByZone = usePanelsByZone();
   const { movePanel } = usePanelActions();
-  const navigate = useNavigate();
+  const openSettings = useOpenSettings();
 
   const isDisabled = (targetZone: ZoneId): boolean =>
     targetZone === zoneId || isZoneMoveDisabled({ panelId, targetZone, panelsByZone });
@@ -31,7 +31,7 @@ export const PanelContextMenu = ({ panelId, zoneId, children, onOpenChange }: Pa
   };
 
   const handleConfigurePanels = (): void => {
-    navigate(`/settings?section=PANELS&panel=${encodeURIComponent(panelId)}`);
+    openSettings("PANELS", panelId);
   };
 
   return (

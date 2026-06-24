@@ -437,8 +437,6 @@ class DependencyManagementService(Service):
                 return self._resolve_git_path()
             case Dependency.PI:
                 return self._resolve_pi_path()
-            case Dependency():
-                raise ValueError(f"Unhandled dependency: {tool}")
             case _ as unreachable:
                 assert_never(unreachable)
 
@@ -479,8 +477,6 @@ class DependencyManagementService(Service):
                     logger.info("Invalid custom Claude binary path: {!r}, ignoring", custom_value)
                     return None
                 return shutil.which(custom_value)
-            case BinaryMode():
-                raise ValueError(f"Unhandled claude binary mode: {mode}")
             case _ as unreachable:
                 assert_never(unreachable)
 

@@ -1,7 +1,7 @@
 import { Flex, Text } from "@radix-ui/themes";
 import { GitBranchIcon } from "lucide-react";
 import type { ReactElement } from "react";
-import { memo, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 
 import type { RepoInfo } from "~/api";
 import { ElementIds } from "~/api";
@@ -27,6 +27,8 @@ const BranchSelectorComponent = ({
   triggerVariant = "soft",
 }: BranchSelectorProps): ReactElement => {
   const [isFetchingBranches, setIsFetchingBranches] = useState(false);
+  // Drop refresh requests that arrive while one is already in flight, so they
+  // don't stack into concurrent fetches.
   const isFetchingRef = useRef(false);
 
   const selectedBranchName = sourceBranch || "";
@@ -50,26 +52,27 @@ const BranchSelectorComponent = ({
     });
   }, [repoInfo]);
 
-  // Refresh the branch list when the user opens the dropdown or picks a branch.
-  // Single-flight via a ref so an overlapping trigger is dropped, not stacked.
-  const refreshBranches = (): void => {
-    if (isFetchingRef.current) {
-      return;
-    }
+  const displayBranchName = selectedBranchName;
+
+  // Refresh the branch list in response to a user interaction (selecting a
+  // branch or opening the dropdown), straight from the handler. A request that
+  // arrives while a refresh is in flight is dropped.
+  const triggerFetch = useCallback((): void => {
+    if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     setIsFetchingBranches(true);
-    fetchRepoInfo().finally(() => {
+    void fetchRepoInfo().finally(() => {
       isFetchingRef.current = false;
       setIsFetchingBranches(false);
     });
-  };
+  }, [fetchRepoInfo]);
 
   return (
     <BranchSelectorCore
       selectedBranch={selectedBranchName}
       onBranchSelected={(branch) => {
         setUserSelectedBranch(branch);
-        refreshBranches();
+        triggerFetch();
       }}
       branches={branches}
       isLoadingBranches={!areBranchesLoaded && isFetchingBranches}
@@ -79,14 +82,16 @@ const BranchSelectorComponent = ({
           <GitBranchIcon size={12} />
           <Text className={styles.selectorLabel}>source</Text>
           <Text className={styles.branchName} truncate={true}>
-            {selectedBranchName}
+            {displayBranchName}
           </Text>
         </Flex>
       }
       triggerVariant={triggerVariant}
       testId={ElementIds.BRANCH_SELECTOR}
       className={styles.dropdownButton}
-      onOpenChange={(open) => open && refreshBranches()}
+      onOpenChange={(open) => {
+        if (open) triggerFetch();
+      }}
     />
   );
 };

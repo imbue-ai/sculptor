@@ -96,8 +96,9 @@ export const taskStatusAtomFamily = atomFamily<string, Atom<TaskStatus | undefin
   atom((get) => get(taskAtomFamily(taskId))?.status),
 );
 
+// Terminal agents carry no model (`model` is null); treat that the same as "unknown".
 export const taskModelAtomFamily = atomFamily<string, Atom<string | undefined>>((taskId) =>
-  atom((get) => get(taskAtomFamily(taskId))?.model),
+  atom((get) => get(taskAtomFamily(taskId))?.model ?? undefined),
 );
 
 // A stable reference for the "no backend list" case, so the derived atom below

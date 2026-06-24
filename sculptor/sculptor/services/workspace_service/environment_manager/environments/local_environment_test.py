@@ -24,7 +24,7 @@ from sculptor.testing.local_git_repo import LocalGitRepo
 
 @pytest.fixture
 def local_environment(test_root_concurrency_group: ConcurrencyGroup) -> Generator[LocalEnvironment, None, None]:
-    workspace_dir = LOCAL_WORKSPACE_DIR / str(uuid4().hex)
+    workspace_dir = LOCAL_WORKSPACE_DIR / uuid4().hex
     workspace_dir.mkdir(parents=True, exist_ok=True)
     # Create a repo directory to simulate the user's repo
     repo_dir = workspace_dir / "repo"

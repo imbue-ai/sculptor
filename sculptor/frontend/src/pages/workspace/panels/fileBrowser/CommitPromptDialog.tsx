@@ -1,7 +1,7 @@
 import { Button, Dialog, Flex, TextArea } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { UserConfigField } from "~/api";
 import { commitPromptAtom } from "~/common/state/atoms/userConfig.ts";
@@ -15,13 +15,19 @@ type CommitPromptDialogProps = {
 export const CommitPromptDialog = ({ open, onOpenChange }: CommitPromptDialogProps): ReactElement => {
   const commitPrompt = useAtomValue(commitPromptAtom);
   const { updateField } = useUserConfig();
+  // Local draft of the prompt. While the dialog is open, reset the draft to the
+  // committed value on each open transition and whenever that value changes, so
+  // editing always starts from (and follows) the current commit prompt.
   const [promptValue, setPromptValue] = useState(commitPrompt);
-
-  useEffect(() => {
-    if (open) {
-      setPromptValue(commitPrompt);
-    }
-  }, [open, commitPrompt]);
+  const [isPreviouslyOpen, setIsPreviouslyOpen] = useState(false);
+  const [lastSyncedPrompt, setLastSyncedPrompt] = useState(commitPrompt);
+  if (open && (!isPreviouslyOpen || commitPrompt !== lastSyncedPrompt)) {
+    setIsPreviouslyOpen(true);
+    setLastSyncedPrompt(commitPrompt);
+    setPromptValue(commitPrompt);
+  } else if (!open && isPreviouslyOpen) {
+    setIsPreviouslyOpen(false);
+  }
 
   const handleSave = async (): Promise<void> => {
     await updateField(UserConfigField.COMMIT_PROMPT, promptValue);

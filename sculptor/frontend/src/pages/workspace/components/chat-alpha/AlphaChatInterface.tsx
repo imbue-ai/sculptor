@@ -262,22 +262,23 @@ export const AlphaChatInterface = ({
   // synchronously and assign scrollTop *absolutely* (overrides whatever the
   // virtualizer's auto-compensation might also have adjusted).
   const prevDensityRef = useRef(density);
-  const anchorRef = useRef<{ msgIdx: number; oldStart: number; oldScrollTop: number } | null>(null);
-
-  if (prevDensityRef.current !== density && anchorRef.current === null) {
-    const container = scrollContainerRef.current;
-    const msgIdx = userPromptIndices[activePromptIndex.index];
-    const oldStart = msgIdx !== undefined ? virtualizer.measurementsCache[msgIdx]?.start : undefined;
-    if (container && msgIdx !== undefined && oldStart != null) {
-      anchorRef.current = { msgIdx, oldStart, oldScrollTop: container.scrollTop };
-    }
-  }
 
   useLayoutEffect(() => {
     if (prevDensityRef.current === density) return;
     prevDensityRef.current = density;
     const container = scrollContainerRef.current;
     if (!container) return;
+
+    // Capture the anchor *before* remeasuring below. This layout effect runs
+    // after the new-density DOM commits but before the manual remeasure, so the
+    // virtualizer's measurementsCache and the container's scrollTop still hold
+    // their pre-flip values here.
+    let captured: { msgIdx: number; oldStart: number; oldScrollTop: number } | null = null;
+    const msgIdx = userPromptIndices[activePromptIndex.index];
+    const oldStart = msgIdx !== undefined ? virtualizer.measurementsCache[msgIdx]?.start : undefined;
+    if (msgIdx !== undefined && oldStart != null) {
+      captured = { msgIdx, oldStart, oldScrollTop: container.scrollTop };
+    }
 
     // Each chat message wrapper carries `ref={virtualizer.measureElement}`,
     // but its identity is preserved across density flips, so the
@@ -294,8 +295,6 @@ export const AlphaChatInterface = ({
     });
     virtualizer.getVirtualItems();
 
-    const captured = anchorRef.current;
-    anchorRef.current = null;
     if (!captured) return;
     const newStart = virtualizer.measurementsCache[captured.msgIdx]?.start;
     if (newStart == null) return;
@@ -314,6 +313,10 @@ export const AlphaChatInterface = ({
       virtualContent.style.height = `${totalSize}px`;
     }
     container.scrollTop = newScrollTop;
+    // userPromptIndices / activePromptIndex are intentionally read at the
+    // density flip only; the effect early-returns on every other render, so
+    // re-running when they change would be wasted work.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [density, virtualizer]);
 
   const { exitNavigation, navigateToPrompt } = useAlphaPromptNav(
@@ -392,9 +395,13 @@ export const AlphaChatInterface = ({
     isJumpSuppressed,
   );
 
-  // Global Cmd+Shift+Enter handler: interrupt and send the queued message
+  // Global Cmd+Shift+Enter handler: interrupt and send the queued message.
+  // Mirror the latest "has queued messages" flag into a ref so the keydown
+  // handler below reads the current value without re-subscribing the listener.
   const hasQueuedMessagesRef = useRef(effectiveQueuedMessages.length > 0);
-  hasQueuedMessagesRef.current = effectiveQueuedMessages.length > 0;
+  useEffect(() => {
+    hasQueuedMessagesRef.current = effectiveQueuedMessages.length > 0;
+  });
 
   useEffect(() => {
     if (!taskID) return;

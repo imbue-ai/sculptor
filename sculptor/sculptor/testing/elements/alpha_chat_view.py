@@ -192,6 +192,42 @@ def scroll_alpha_chat_to_top(page: Page) -> None:
     )
 
 
+def wait_for_alpha_scroll_idle(page: Page, stable_frames: int = 5) -> None:
+    """Wait until the alpha chat's ``scrollTop`` stops changing across frames.
+
+    After a task/agent switch the scroll position is restored asynchronously:
+    the virtualizer re-measures and re-anchors over a settle double-rAF, and
+    ``useAlphaScrollPersistence`` re-applies the saved anchor over its own
+    double-rAF *after* that.  A test that programmatically scrolls immediately
+    after switching can be clobbered by those late corrections (the source of
+    intermittent CI flakes).
+
+    This polls ``scrollTop`` once per animation frame and returns only once it
+    has held the *same* value for ``stable_frames`` consecutive frames — i.e.
+    every queued restore/settle frame has drained.  Any change resets the
+    counter, so the wait can't return mid-restoration even if a correction is
+    still pending when it starts.
+    """
+    page.wait_for_function(
+        f"""(stableFrames) => new Promise((resolve) => {{
+        const el = document.querySelector('[data-testid="{ElementIDs.ALPHA_CHAT_VIEW}"]');
+        if (!el) {{ resolve(false); return; }}
+        let last = el.scrollTop;
+        let steady = 0;
+        let budget = 120;
+        const tick = () => {{
+            if (budget-- <= 0) {{ resolve(false); return; }}
+            const now = el.scrollTop;
+            if (now === last) {{ steady++; }} else {{ steady = 0; last = now; }}
+            if (steady >= stableFrames) {{ resolve(true); return; }}
+            requestAnimationFrame(tick);
+        }};
+        requestAnimationFrame(tick);
+    }})""",
+        arg=stable_frames,
+    )
+
+
 def scroll_alpha_chat_by(page: Page, delta: int) -> None:
     """Scroll the alpha chat by a pixel delta (negative = up, positive = down)."""
     page.evaluate(

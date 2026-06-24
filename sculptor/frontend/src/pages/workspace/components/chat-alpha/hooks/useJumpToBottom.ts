@@ -21,15 +21,26 @@ export const useJumpToBottom = (
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const hasMessages = chatMessages.length > 0;
+  const shouldHide = isJumpSuppressed || isAtBottom || !hasMessages;
 
-  // Debounced visibility: show after 150ms, hide immediately
+  // Hide immediately when the button should no longer show. Adjusting during
+  // render with a prev-value guard keeps the synchronous reset out of the
+  // effect and re-arms the 150ms debounce the next time the button reappears.
+  const [prevShouldHide, setPrevShouldHide] = useState({ value: shouldHide });
+  if (shouldHide !== prevShouldHide.value) {
+    setPrevShouldHide({ value: shouldHide });
+    if (shouldHide) {
+      setIsVisible(false);
+    }
+  }
+
+  // Debounced visibility: show after 150ms once the button should appear.
   useEffect(() => {
-    if (isJumpSuppressed || isAtBottom || !hasMessages) {
+    if (shouldHide) {
       if (debounceTimer.current) {
         clearTimeout(debounceTimer.current);
         debounceTimer.current = null;
       }
-      setIsVisible(false);
     } else {
       debounceTimer.current = setTimeout(() => {
         setIsVisible(true);
@@ -41,7 +52,7 @@ export const useJumpToBottom = (
         clearTimeout(debounceTimer.current);
       }
     };
-  }, [isJumpSuppressed, isAtBottom, hasMessages]);
+  }, [shouldHide]);
 
   // "New activity" while the agent is actively streaming; once streaming
   // stops the label reverts to "Jump" (a neutral scroll-to-bottom action).

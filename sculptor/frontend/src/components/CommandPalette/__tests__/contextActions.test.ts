@@ -24,7 +24,6 @@ type WorkspaceRuntimeOverrides = {
   hasUncommittedChanges?: boolean;
   hasOpenPr?: boolean;
   canCreatePr?: boolean;
-  prTerm?: "merge request" | "pull request";
   canOpenInOS?: boolean;
   isMacUi?: boolean;
 };
@@ -43,7 +42,6 @@ const makeWorkspaceRuntime = (overrides: WorkspaceRuntimeOverrides = {}): Worksp
   hasUncommittedChanges: vi.fn(() => overrides.hasUncommittedChanges ?? false),
   hasOpenPr: vi.fn(() => overrides.hasOpenPr ?? false),
   canCreatePr: vi.fn(() => overrides.canCreatePr ?? true),
-  prTerm: vi.fn(() => overrides.prTerm ?? "pull request"),
   canOpenInOS: vi.fn(() => overrides.canOpenInOS ?? true),
   isMacUi: vi.fn(() => overrides.isMacUi ?? true),
 });
@@ -110,12 +108,9 @@ describe("buildWorkspaceActions", () => {
     expect(runtime.commitChanges).toHaveBeenCalledWith(ws);
   });
 
-  it("create_pr title flips to 'Create merge request' on GitLab", () => {
-    const ws = fakeWorkspace("w1");
-    const gh = buildWorkspaceActions(makeWorkspaceRuntime({ prTerm: "pull request" }));
-    const gl = buildWorkspaceActions(makeWorkspaceRuntime({ prTerm: "merge request" }));
-    expect(gh.find((a) => a.id === "create_pr")?.getTitle?.(ws)).toBe("Create pull request");
-    expect(gl.find((a) => a.id === "create_pr")?.getTitle?.(ws)).toBe("Create merge request");
+  it("create_pr uses pull request terminology", () => {
+    const actions = buildWorkspaceActions(makeWorkspaceRuntime());
+    expect(actions.find((a) => a.id === "create_pr")?.title).toBe("Create pull request");
   });
 
   it("create_pr is disabled when an open PR already exists", () => {
@@ -134,12 +129,9 @@ describe("buildWorkspaceActions", () => {
     expect(openPr.find((a) => a.id === "open_pr")?.disabled?.(ws)).toBe(false);
   });
 
-  it("open_pr title flips to 'Open merge request' on GitLab", () => {
-    const ws = fakeWorkspace("w1");
-    const gh = buildWorkspaceActions(makeWorkspaceRuntime({ prTerm: "pull request" }));
-    const gl = buildWorkspaceActions(makeWorkspaceRuntime({ prTerm: "merge request" }));
-    expect(gh.find((a) => a.id === "open_pr")?.getTitle?.(ws)).toBe("Open pull request");
-    expect(gl.find((a) => a.id === "open_pr")?.getTitle?.(ws)).toBe("Open merge request");
+  it("open_pr uses pull request terminology", () => {
+    const actions = buildWorkspaceActions(makeWorkspaceRuntime());
+    expect(actions.find((a) => a.id === "open_pr")?.title).toBe("Open pull request");
   });
 
   it("open_pr perform routes to runtime.openMergeRequest", () => {

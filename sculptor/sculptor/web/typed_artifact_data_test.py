@@ -92,4 +92,4 @@ def test_unknown_object_type_still_raises_500(monkeypatch: pytest.MonkeyPatch) -
         with pytest.raises(HTTPException) as exc:
             _invoke(monkeypatch, raw)
     assert exc.value.status_code == 500
-    assert "SomeNewArtifact" in str(exc.value.detail)
+    assert "SomeNewArtifact" in exc.value.detail

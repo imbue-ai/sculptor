@@ -19,6 +19,7 @@ import { TicketSection } from "./TicketSection.tsx";
 export const LinearPanel = (): ReactElement => {
   const branch = useCurrentWorkspace((workspace) => workspace?.branch ?? null);
   const workspaceId = useCurrentWorkspace((workspace) => workspace?.id ?? null);
+  const pullRequestUrl = useCurrentWorkspace((workspace) => workspace?.pullRequestUrl ?? null);
   const [apiKey] = usePluginSetting("apiKey");
   const { pinnedIds, pin, unpin } = usePinnedIds(workspaceId);
   const { overrides, setExpanded } = useExpandedIds(workspaceId);
@@ -26,7 +27,12 @@ export const LinearPanel = (): ReactElement => {
   // ticket identifier but namespaced so it can't collide with the section map.
   const { overrides: subOverrides, setExpanded: setSubExpanded } = useExpandedIds(workspaceId, "subissues");
   const { shortcutId, setShortcut, clearShortcut } = useShortcut(workspaceId);
-  const { tickets, isFetching, isError, error, refetch } = useLinearTickets({ apiKey, branch, pinnedIds });
+  const { tickets, isFetching, isError, error, refetch } = useLinearTickets({
+    apiKey,
+    branch,
+    pullRequestUrl,
+    pinnedIds,
+  });
 
   // The effective shortcut: the explicit assignment, or — when none — the branch
   // (primary) ticket, mirroring what the banner widget shows. Highlighting that

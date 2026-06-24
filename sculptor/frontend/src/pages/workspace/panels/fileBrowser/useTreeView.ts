@@ -58,9 +58,14 @@ export const useSearchAutoExpand = ({
 }: UseSearchAutoExpandParams): void => {
   // We intentionally omit currentExpandedFolders from deps so that
   // user-driven collapse/expand during search doesn't trigger re-expansion.
+  // The ref mirror lets the search effect read the latest expanded folders
+  // without depending on them; it is read only in effects, never during
+  // render, so syncing it in an effect keeps render pure.
   const preSearchExpandedRef = useRef<Array<string> | undefined>(undefined);
   const expandedFoldersRef = useRef(currentExpandedFolders);
-  expandedFoldersRef.current = currentExpandedFolders;
+  useEffect(() => {
+    expandedFoldersRef.current = currentExpandedFolders;
+  });
   const wasSearchActiveRef = useRef(false);
 
   useEffect(() => {

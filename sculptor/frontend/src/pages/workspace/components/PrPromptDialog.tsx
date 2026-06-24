@@ -1,29 +1,39 @@
 import { Button, Dialog, Flex, TextArea } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { ElementIds, UserConfigField } from "../../../api";
 import { prCreationPromptAtom } from "../../../common/state/atoms/userConfig.ts";
 import { useUserConfig } from "../../../common/state/hooks/useUserConfig.ts";
-import type { GitProvider } from "./PrButton.tsx";
 
 type PrPromptDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  gitProvider: GitProvider;
 };
 
-export const PrPromptDialog = ({ open, onOpenChange, gitProvider }: PrPromptDialogProps): ReactElement => {
+export const PrPromptDialog = ({ open, onOpenChange }: PrPromptDialogProps): ReactElement => {
   const prCreationPrompt = useAtomValue(prCreationPromptAtom);
   const { updateField } = useUserConfig();
   const [promptValue, setPromptValue] = useState(prCreationPrompt);
 
-  useEffect(() => {
-    if (open) {
-      setPromptValue(prCreationPrompt);
-    }
-  }, [open, prCreationPrompt]);
+  // While the dialog is open, keep the editor seeded with the saved prompt:
+  // re-sync on open and whenever the saved value changes underneath us.
+  // Adjusting state during render (with previous-value guards) avoids the
+  // stale frame an effect would produce.
+  const [isOpenOnPrevRender, setIsOpenOnPrevRender] = useState(open);
+  const [prevPrompt, setPrevPrompt] = useState(prCreationPrompt);
+  if (open && (open !== isOpenOnPrevRender || prCreationPrompt !== prevPrompt)) {
+    setPromptValue(prCreationPrompt);
+  }
+
+  if (open !== isOpenOnPrevRender) {
+    setIsOpenOnPrevRender(open);
+  }
+
+  if (prCreationPrompt !== prevPrompt) {
+    setPrevPrompt(prCreationPrompt);
+  }
 
   const handleSave = async (): Promise<void> => {
     await updateField(UserConfigField.PR_CREATION_PROMPT, promptValue);
@@ -35,8 +45,8 @@ export const PrPromptDialog = ({ open, onOpenChange, gitProvider }: PrPromptDial
       <Dialog.Content maxWidth="500px" data-testid={ElementIds.PR_PROMPT_DIALOG}>
         <Dialog.Title>Edit PR Creation Prompt</Dialog.Title>
         <Dialog.Description size="2" mb="4">
-          This prompt is sent to the agent when you click {gitProvider === "gitlab" ? "Create MR" : "Create PR"}. The
-          agent will push your changes and create the {gitProvider === "gitlab" ? "merge request" : "pull request"}.
+          This prompt is sent to the agent when you click Create PR. The agent will push your changes and create the
+          pull request.
         </Dialog.Description>
         <TextArea
           value={promptValue}

@@ -4,7 +4,6 @@ import signal
 import time
 import uuid
 from contextlib import AbstractContextManager
-from pathlib import Path
 from queue import Queue
 from subprocess import TimeoutExpired
 from threading import Event
@@ -14,6 +13,7 @@ from typing import Mapping
 
 from loguru import logger
 
+from sculptor.agents.attachments import save_attachments_to_environment
 from sculptor.agents.default.claude_code_sdk.diff_tracker import DiffTracker
 from sculptor.agents.default.claude_code_sdk.harness import ClaudeCodeHarness
 from sculptor.agents.default.claude_code_sdk.mcp_server import SculptorMcpServer
@@ -63,7 +63,6 @@ from sculptor.services.workspace_service.setup_command_runner import SetupStateP
 from sculptor.state.messages import ChatInputUserMessage
 from sculptor.state.messages import LLMModel
 from sculptor.state.messages import Message
-from sculptor.utils.build import get_internal_folder
 
 
 class ClaudeProcessManager:
@@ -557,26 +556,7 @@ class ClaudeProcessManager:
     def _maybe_save_files_to_environment(self, message: UserMessageUnion) -> tuple[str, ...]:
         if not isinstance(message, ChatInputUserMessage):
             return tuple()
-
-        file_paths = []
-        for local_file_path in message.files:
-            filename = Path(local_file_path).name
-            if os.path.isabs(local_file_path):
-                source = Path(local_file_path)
-            else:
-                source = get_internal_folder() / "uploads" / local_file_path
-
-            try:
-                file_content = source.read_bytes()
-            except FileNotFoundError:
-                logger.warning("Skipping missing file attachment: {}", source)
-                continue
-
-            file_path = self.environment.get_attachments_path() / filename
-            self.environment.write_file(path=str(file_path), content=file_content, mode="wb")
-            file_paths.append(str(file_path))
-
-        return tuple(file_paths)
+        return save_attachments_to_environment(self.environment, message.files)
 
     def _process_single_message(self, message: UserMessageUnion) -> None:
         with self._handle_user_message_callback(message):

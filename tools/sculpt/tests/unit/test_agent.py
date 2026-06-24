@@ -342,6 +342,27 @@ class TestAgentList:
 
     @patch("sculpt.commands.agent.fetch_all_agents")
     @patch("sculpt.commands._follow_helpers.get_session_token", return_value="test-token")
+    @respx.mock
+    def test_list_terminal_agent_reports_no_model(self, _mock_token: Any, mock_fetch: Any, runner: CliRunner) -> None:
+        """Terminal agents carry no model (SCU-1580): the list must not invent one."""
+        _mock_session()
+        _mock_workspaces("ws_test123")
+        mock_fetch.return_value = [_make_snapshot(model=None)]
+
+        # Table output renders a placeholder, never a model name.
+        result = runner.invoke(app, ["agent", "list", "-w", "ws_test123"])
+        assert result.exit_code == 0
+        assert "opus" not in result.output
+        assert "sonnet" not in result.output
+
+        # JSON output reports the model as null.
+        result = runner.invoke(app, ["agent", "list", "-w", "ws_test123", "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data[0]["model"] is None
+
+    @patch("sculpt.commands.agent.fetch_all_agents")
+    @patch("sculpt.commands._follow_helpers.get_session_token", return_value="test-token")
     def test_list_all(self, _mock_token: Any, mock_fetch: Any, runner: CliRunner) -> None:
         mock_fetch.return_value = [_make_snapshot()]
 
@@ -798,6 +819,7 @@ class TestAgentSend:
 def _make_snapshot(
     task_id: str = "tsk_abc123def456",
     status: str = "RUNNING",
+    model: str | None = "CLAUDE-4-SONNET",
     current_activity: str | None = None,
     last_activity: str | None = None,
     waiting_detail: str | None = None,
@@ -823,7 +845,7 @@ def _make_snapshot(
         error_detail=error_detail,
         updated_at="2026-01-15T10:35:00Z",
         title="Test task",
-        model="CLAUDE-4-SONNET",
+        model=model,
         interface="TERMINAL",
         project_id=project_id,
         workspace_id=workspace_id,
