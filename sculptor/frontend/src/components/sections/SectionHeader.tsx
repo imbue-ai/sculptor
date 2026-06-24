@@ -10,9 +10,10 @@
 // (panelDefinitionByIdAtom) so a registry rebuild on a task tick re-renders only the
 // tab whose definition actually changed, not the whole strip.
 
+import { useDraggable } from "@dnd-kit/core";
 import { ContextMenu, Flex, IconButton } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
-import { Maximize2, Minimize2, Plus, X } from "lucide-react";
+import { GripVertical, Maximize2, Minimize2, Plus, X } from "lucide-react";
 import type { ReactElement } from "react";
 import { memo, useState } from "react";
 
@@ -30,6 +31,7 @@ import { toSection } from "./sectionTypes.ts";
 import {
   displayedPanelIdsAtom,
   ghostPanelIdAtom,
+  isReorderWithinSubSectionAtom,
   maximizedSectionAtom,
   recentlyClosedPanelIdsAtom,
 } from "./transientAtoms.ts";
@@ -37,6 +39,7 @@ import {
 type PanelTabProps = {
   panelId: PanelId;
   subSection: SubSectionId;
+  index: number;
   isActive: boolean;
   isGhost: boolean;
 };
@@ -45,12 +48,23 @@ type PanelTabProps = {
 // re-renders this tab only if ITS definition changed. Rename is offered for
 // multi-instance panels (agent/terminal) via double-click or the context menu;
 // single-instance panels cannot be renamed (PANEL-11).
-const PanelTabComponent = ({ panelId, subSection, isActive, isGhost }: PanelTabProps): ReactElement | null => {
+//
+// The tab is a dnd-kit draggable (PANEL-08): the whole tab is the measured node, and
+// a focusable grip handle is the activator that carries the pointer/keyboard sensor
+// listeners — so a plain click still activates the panel and the drag starts only
+// from the handle. The floating copy is the ancestor DragOverlay; while dragging, the
+// source tab dims (the live ghost placeholder is drawn in whichever section the panel
+// would land in).
+const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: PanelTabProps): ReactElement | null => {
   const definition = useAtomValue(panelDefinitionByIdAtom(panelId));
   const setActivePanel = useSetAtom(setActivePanelAtom);
   const closePanel = useSetAtom(closePanelAtom);
   const recordRecentlyClosed = useSetAtom(recentlyClosedPanelIdsAtom);
   const [isRenaming, setIsRenaming] = useState<boolean>(false);
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({
+    id: panelId,
+    data: { kind: "panel", panelId, from: subSection, index },
+  });
 
   if (definition === undefined) {
     return null;
@@ -59,7 +73,12 @@ const PanelTabComponent = ({ panelId, subSection, isActive, isGhost }: PanelTabP
   const canRename = isMultiInstanceKind(definition.kind);
   const Icon = definition.icon;
 
-  const tabClassName = [styles.tab, isActive ? styles.tabActive : "", isGhost ? styles.tabGhost : ""]
+  const tabClassName = [
+    styles.tab,
+    isActive ? styles.tabActive : "",
+    isGhost ? styles.tabGhost : "",
+    isDragging ? styles.tabDragging : "",
+  ]
     .filter(Boolean)
     .join(" ");
 
@@ -100,14 +119,26 @@ const PanelTabComponent = ({ panelId, subSection, isActive, isGhost }: PanelTabP
 
   const tabBody = (
     <div
+      ref={setNodeRef}
       className={tabClassName}
       role="tab"
       aria-selected={isActive}
       data-testid={`${ElementIds.PANEL_TAB}-${panelId}`}
       data-section-tab="true"
+      data-panel-id={panelId}
       onClick={handleActivate}
       onDoubleClick={handleDoubleClick}
     >
+      <span
+        ref={setActivatorNodeRef}
+        className={styles.dragHandle}
+        data-testid={`${ElementIds.PANEL_TAB_DRAG_HANDLE}-${panelId}`}
+        aria-label={`Drag ${definition.displayName}`}
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical size={12} />
+      </span>
       <span className={styles.icon}>
         {/* Multi-instance panels carry a per-instance tabIcon (the agent status dot —
             read/unread + running/waiting, AGENT-07); static panels fall back to their
@@ -167,12 +198,34 @@ const PanelTabComponent = ({ panelId, subSection, isActive, isGhost }: PanelTabP
 
 const PanelTab = memo(PanelTabComponent);
 
+// The non-interactive ghost placeholder shown in the section a panel would land in
+// during a CROSS-section drag. It is deliberately NOT a draggable/droppable: the real
+// draggable (same panel id) is still mounted in the source section, and registering
+// the id twice would confuse dnd-kit. Mirrors the tab pill shape with the ghost
+// styling so the strip reserves the right footprint for the drop.
+const GhostTabComponent = ({ panelId }: { panelId: PanelId }): ReactElement | null => {
+  const definition = useAtomValue(panelDefinitionByIdAtom(panelId));
+  if (definition === undefined) {
+    return null;
+  }
+  const Icon = definition.icon;
+  return (
+    <div className={`${styles.tab} ${styles.tabGhost}`} data-section-tab-ghost="true" aria-hidden="true">
+      <span className={styles.icon}>{definition.tabIcon ?? <Icon size={14} />}</span>
+      <span className={styles.label}>{definition.displayName}</span>
+    </div>
+  );
+};
+
+const GhostTab = memo(GhostTabComponent);
+
 type SectionHeaderProps = { subSection: SubSectionId };
 
 const SectionHeaderComponent = ({ subSection }: SectionHeaderProps): ReactElement => {
   const displayedPanelIds = useAtomValue(displayedPanelIdsAtom(subSection));
   const activePanelId = useAtomValue(activePanelIdInSubSectionAtom(subSection));
   const ghostPanelId = useAtomValue(ghostPanelIdAtom(subSection));
+  const isReorderWithin = useAtomValue(isReorderWithinSubSectionAtom(subSection));
   const maximizedSection = useAtomValue(maximizedSectionAtom);
   const setMaximizedSection = useSetAtom(maximizedSectionAtom);
 
@@ -185,16 +238,25 @@ const SectionHeaderComponent = ({ subSection }: SectionHeaderProps): ReactElemen
 
   return (
     <Flex align="center" className={styles.header} data-testid={`${ElementIds.SECTION_HEADER}-${subSection}`}>
-      <div className={styles.tabs}>
-        {displayedPanelIds.map((panelId) => (
-          <PanelTab
-            key={panelId}
-            panelId={panelId}
-            subSection={subSection}
-            isActive={panelId === activePanelId}
-            isGhost={panelId === ghostPanelId}
-          />
-        ))}
+      <div className={styles.tabs} data-section-tabs={subSection}>
+        {displayedPanelIds.map((panelId, index) => {
+          // A cross-section drag shows a non-draggable ghost here while the real
+          // draggable stays in the source section; a within-section reorder keeps the
+          // single instance fully draggable at its preview slot.
+          if (panelId === ghostPanelId && !isReorderWithin) {
+            return <GhostTab key={panelId} panelId={panelId} />;
+          }
+          return (
+            <PanelTab
+              key={panelId}
+              panelId={panelId}
+              subSection={subSection}
+              index={index}
+              isActive={panelId === activePanelId}
+              isGhost={panelId === ghostPanelId}
+            />
+          );
+        })}
       </div>
       <Flex align="center" gap="2" className={styles.controls}>
         <AddPanelDropdown

@@ -70,6 +70,28 @@
   outline-offset: -1px;
 }
 
+// The drag activator. Always in the DOM (Playwright focuses it to drive the keyboard
+// sensor) but visually recessed; it carries grab cursors and dnd-kit's a11y
+// attributes. touch-action:none lets the pointer sensor own the gesture on touch.
+.dragHandle {
+  align-items: center;
+  color: var(--gray-a7);
+  cursor: grab;
+  display: flex;
+  flex-shrink: 0;
+  touch-action: none;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+// The source tab while its floating copy is being dragged: dimmed so the eye follows
+// the overlay and the live ghost placeholder in the prospective drop section.
+.tabDragging {
+  opacity: 40%;
+}
+
 .icon {
   align-items: center;
   display: flex;

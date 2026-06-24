@@ -1,21 +1,23 @@
 // One uniform section (left / center / right / bottom, or a split half). Renders a
 // single SectionHeader (tabs + add + maximize) and the SectionBody. Deliberately
 // thin: it subscribes only to narrow per-sub-section flags and to the maximized
-// section, while the heavy state lives behind its memoized children. It re-renders
-// on a dnd `over` change once drag wiring lands (Task 4.1), so everything here stays
-// cheap.
+// section, while the heavy state lives behind its memoized children. During a drag it
+// re-renders only when its own isDropTargetAtom slice flips (the section the cursor is
+// over), so a pointer move elsewhere never reaches it.
 //
 // A plain click sets this section active silently (no ring flash) — the ring is only
 // pulsed by deliberate jumps (Task 4.4). The active-section ring is drawn as a CSS
 // overlay gated on isRingVisible; the maximized styling hook (full layout in Task
 // 4.3) flips when this section is the maximized one.
 
+import { useDroppable } from "@dnd-kit/core";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
 import { memo } from "react";
 
 import { ElementIds } from "~/api";
 
+import { sectionBodyDroppableId } from "./panelDnd.ts";
 import styles from "./PanelSection.module.scss";
 import { setActiveSectionAtom } from "./sectionActions.ts";
 import { isActiveSubSectionAtom } from "./sectionAtoms.ts";
@@ -33,6 +35,13 @@ const PanelSectionComponent = ({ subSection }: PanelSectionProps): ReactElement 
   const isRingVisible = useAtomValue(isRingVisibleAtom(subSection));
   const maximizedSection = useAtomValue(maximizedSectionAtom);
   const setActiveSection = useSetAtom(setActiveSectionAtom);
+
+  // This section's body is a drop target keyed by its sub-section id; the drop-target
+  // highlight is driven by the narrow isDropTargetAtom slice above, not dnd's isOver.
+  const { setNodeRef } = useDroppable({
+    id: sectionBodyDroppableId(subSection),
+    data: { kind: "section-body", subSection },
+  });
 
   const isMaximized = maximizedSection === toSection(subSection);
 
@@ -54,12 +63,14 @@ const PanelSectionComponent = ({ subSection }: PanelSectionProps): ReactElement 
 
   return (
     <div
+      ref={setNodeRef}
       className={className}
       data-testid={`${ElementIds.SECTION_ACTIVE_RING}-${subSection}`}
       data-maximized={isMaximized ? "true" : undefined}
-      // Task 4.1: wire dnd droppable (keyed by subSection); for now the drop-target
-      // styling hook is the only seam. isDropTarget reads the per-sub-section slice.
+      // The dnd-kit drop target is keyed by subSection; the drop-target styling hook
+      // (.dropTarget) is driven by the isDropTargetAtom slice, not dnd's own isOver.
       data-drop-target-subsection={subSection}
+      data-drop-active={isDropTarget ? "true" : undefined}
       onPointerDown={handlePointerDown}
     >
       <SectionHeader subSection={subSection} />

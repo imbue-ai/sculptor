@@ -646,6 +646,10 @@ class ElementIDs(StrEnum):
     SECTION_HEADER = "SECTION_HEADER"
     PANEL_TAB = "PANEL_TAB"
     PANEL_TAB_CLOSE = "PANEL_TAB_CLOSE"
+    # Per-tab drag handle (the dnd-kit draggable activator); suffixed with the panel
+    # id (e.g. f"{PANEL_TAB_DRAG_HANDLE}-files"). Carries the keyboard sensor so
+    # Playwright can drive the real drag pipeline (focus → Space → arrows → Space).
+    PANEL_TAB_DRAG_HANDLE = "PANEL_TAB_DRAG_HANDLE"
     SECTION_ADD_PANEL_BUTTON = "SECTION_ADD_PANEL_BUTTON"
     SECTION_MAXIMIZE_BUTTON = "SECTION_MAXIMIZE_BUTTON"
     SECTION_ACTIVE_RING = "SECTION_ACTIVE_RING"

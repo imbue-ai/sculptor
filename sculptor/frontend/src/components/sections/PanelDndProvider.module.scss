@@ -1,0 +1,30 @@
+// The floating copy of the dragged tab, rendered in the dnd-kit DragOverlay so it
+// follows the cursor above the layout. Mirrors the section-header tab pill but
+// elevated (shadow + solid background) to read as "picked up".
+.overlayTab {
+  align-items: center;
+  background: var(--gray-3);
+  border-radius: var(--radius-2);
+  box-shadow: var(--shadow-4);
+  color: var(--gray-12);
+  cursor: grabbing;
+  display: flex;
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  user-select: none;
+}
+
+.overlayIcon {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+}
+
+.overlayLabel {
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- matches the tab label truncation cap
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

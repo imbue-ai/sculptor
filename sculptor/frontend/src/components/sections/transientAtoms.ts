@@ -61,6 +61,16 @@ export const ghostPanelIdAtom = memoizedAtomByKey<SubSectionId, PanelId | null>(
   selectAtom(panelDragStateAtom, (drag) => (drag !== null && drag.to === subSection ? drag.panelId : null)),
 );
 
+// True while a panel is being reordered WITHIN this sub-section (drag origin and
+// target are both this sub-section). In that case the single displayed instance is
+// the live draggable shown at its preview slot; in a CROSS-section drag the dragged
+// panel appears twice (the real draggable stays in its source while a ghost preview
+// shows in the target), so the target must render a non-draggable placeholder to
+// avoid registering the same draggable id twice. SectionHeader uses this to decide.
+export const isReorderWithinSubSectionAtom = memoizedAtomByKey<SubSectionId, boolean>((subSection) =>
+  selectAtom(panelDragStateAtom, (drag) => drag !== null && drag.to === subSection && drag.from === subSection),
+);
+
 // The sub-section's open panels with the in-flight ghost spliced in at its
 // prospective insertion index, so the live preview shows the panel where it would
 // land. Caches the last array to stay reference-stable (no notify when unchanged).
