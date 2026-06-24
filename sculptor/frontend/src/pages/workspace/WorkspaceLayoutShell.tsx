@@ -4,6 +4,9 @@
 // maximized (the full maximize presentation lands in Task 4.3; here we just gate
 // the render). Content components below the grid read no layout/route state.
 
+// Side-effect import: registers the panel components (agent, …) with the registry.
+import "./panels/registerPanels.ts";
+
 import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
 

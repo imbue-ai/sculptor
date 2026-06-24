@@ -6,7 +6,6 @@ from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.actions_panel import PlaywrightActionsPanelElement
-from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
 from sculptor.testing.elements.browser_panel import PlaywrightBrowserPanelElement
 from sculptor.testing.elements.changes_panel import PlaywrightChangesPanelElement
 from sculptor.testing.elements.chat_panel import PlaywrightChatPanelElement
@@ -15,6 +14,7 @@ from sculptor.testing.elements.compaction_panel import PlaywrightCompactionPanel
 from sculptor.testing.elements.diff_panel import PlaywrightDiffPanelElement
 from sculptor.testing.elements.file_browser import PlaywrightFileBrowserElement
 from sculptor.testing.elements.history_panel import PlaywrightHistoryPanelElement
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 
 
@@ -23,8 +23,16 @@ class PlaywrightTaskPage(PlaywrightProjectLayoutPage):
         chat_panel = self.get_by_test_id(ElementIDs.CHAT_PANEL)
         return PlaywrightChatPanelElement(locator=chat_panel, page=self._page)
 
-    def get_agent_tab_bar(self) -> PlaywrightAgentTabBarElement:
-        return PlaywrightAgentTabBarElement(page=self._page)
+    def get_agent_tab_bar(self) -> PlaywrightWorkspaceSection:
+        """Get a thin panel-tab accessor over the center section.
+
+        Agents render as panel tabs in the section header (``PANEL_TAB-agent:<id>``).
+        The full ``PanelTab`` POM (rename/close/diagnostics/add-agent dropdown)
+        lands in a later task; this returns the basic section accessor whose
+        ``get_panel_tabs`` / ``get_panel_tab`` / ``get_active_tab`` cover the
+        tab-strip surface for new tests.
+        """
+        return PlaywrightWorkspaceSection(page=self._page, sub_section="center")
 
     def get_branch_name_element(self) -> Locator:
         branch_name = self.get_by_test_id(ElementIDs.BRANCH_NAME)
@@ -35,28 +43,15 @@ class PlaywrightTaskPage(PlaywrightProjectLayoutPage):
     def get_branch_name(self) -> str:
         return self.get_branch_name_element().text_content() or ""
 
-    def get_workspace_banner(self) -> Locator:
-        """Get the workspace banner (the repo/branch/target header strip)."""
-        return self.get_by_test_id(ElementIDs.WORKSPACE_BANNER)
+    def get_workspace_header(self) -> Locator:
+        """Get the workspace header (the branch/target strip above the section grid).
 
-    def get_repo_segment_button(self) -> Locator:
-        """Get the repo-segment button in the banner (collapse priority 2).
-
-        This is unmounted when the banner is too narrow and the
-        progressive-collapse logic hides it, so it doubles as a reliable
-        signal that the banner has entered its collapsed state.
+        This is the successor to the old ``WORKSPACE_BANNER`` strip; the
+        progressive-collapse banner is gone, replaced by the simpler
+        ``WorkspaceHeader`` (section toggles + branch pill + target-branch
+        selector + the re-homed diff summary / PR button).
         """
-        return self.get_workspace_banner().get_by_test_id(ElementIDs.REPO_PATH_DROPDOWN_TRIGGER)
-
-    def get_workspace_banner_overflow(self) -> Locator:
-        """Locate the collapsed-banner overflow ("...") menu region.
-
-        When the banner is too narrow to show every item, the progressive
-        collapse logic hides the lowest-priority items. This locator targets
-        the overflow region (marked with ``data-overflow``) that used to render
-        an inert "..." menu in their place — tests assert it is not shown.
-        """
-        return self.get_workspace_banner().locator("[data-overflow]")
+        return self.get_by_test_id(ElementIDs.WORKSPACE_HEADER)
 
     def get_pr_button_create(self) -> Locator:
         """Get the Create PR button locator."""

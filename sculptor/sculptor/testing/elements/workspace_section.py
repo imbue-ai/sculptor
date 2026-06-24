@@ -1,0 +1,82 @@
+from playwright.sync_api import Locator
+from playwright.sync_api import Page
+
+from sculptor.constants import ElementIDs
+
+# The four sections of the workspace grid. A sub-section id is either a section id
+# (the unsplit "primary" half) or a section id suffixed with ":secondary" (e.g.
+# "left:secondary") — the flat sub-section keyspace from state_design.md.
+_SECTION_ROOT_TEST_IDS: dict[str, ElementIDs] = {
+    "left": ElementIDs.SECTION_LEFT,
+    "center": ElementIDs.SECTION_CENTER,
+    "right": ElementIDs.SECTION_RIGHT,
+    "bottom": ElementIDs.SECTION_BOTTOM,
+}
+
+
+def _section_of(sub_section: str) -> str:
+    """Return the section id ("left"/"center"/"right"/"bottom") for a sub-section.
+
+    The primary half's sub-section id IS the section id; a split's secondary half
+    suffixes it with ":secondary".
+    """
+    return sub_section.split(":", 1)[0]
+
+
+class PlaywrightWorkspaceSection:
+    """Page Object Model for a single workspace section / sub-section.
+
+    Constructed with a ``sub_section`` id from the flat sub-section keyspace
+    ("left" | "center" | "right" | "bottom", or one suffixed with ":secondary").
+    The primary and secondary halves run through the same methods.
+
+    The section ROOT (``SECTION_LEFT`` etc.) is keyed by the section id only, but
+    the header, panel tabs, add-panel "+", and maximize toggle are suffixed with
+    the sub-section id (e.g. ``f"{SECTION_HEADER}-left:secondary"``).
+
+    This is the basic accessor POM. Splits, the empty state, and the full
+    ``PanelTab`` POM land in later tasks.
+    """
+
+    def __init__(self, page: Page, sub_section: str) -> None:
+        self._page = page
+        self._sub_section = sub_section
+
+    def get_section(self) -> Locator:
+        """Get the section root container (keyed by section id, not sub-section)."""
+        return self._page.get_by_test_id(_SECTION_ROOT_TEST_IDS[_section_of(self._sub_section)])
+
+    def get_header(self) -> Locator:
+        """Get this sub-section's header (tab strip + add + maximize)."""
+        return self._page.get_by_test_id(f"{ElementIDs.SECTION_HEADER}-{self._sub_section}")
+
+    def get_panel_tabs(self) -> Locator:
+        """Get every panel tab in this sub-section's header.
+
+        Panel-tab testids are suffixed with the panel id (e.g.
+        ``f"{PANEL_TAB}-agent:<taskId>"``), so they are matched by a
+        ``data-testid`` prefix selector scoped under this sub-section's header.
+        The CSS selector is kept inside the POM to honour the integration-test
+        css-locator ratchet.
+        """
+        return self.get_header().locator(f'[data-testid^="{ElementIDs.PANEL_TAB}-"]')
+
+    def get_panel_tab(self, panel_id: str) -> Locator:
+        """Get the panel tab for a specific panel id (e.g. ``agent:<taskId>``)."""
+        return self.get_header().get_by_test_id(f"{ElementIDs.PANEL_TAB}-{panel_id}")
+
+    def get_active_tab(self) -> Locator:
+        """Get the active (selected) panel tab in this sub-section.
+
+        The panel tab itself carries ``aria-selected="true"`` (PanelTab sets it
+        from ``isActive``), so the tab locator is intersected with that
+        attribute. CSS-attribute scoping stays inside the POM to honour the
+        integration-test css-locator ratchet.
+        """
+        return self.get_panel_tabs().and_(self._page.locator('[aria-selected="true"]'))
+
+    def get_add_panel_button(self) -> Locator:
+        return self._page.get_by_test_id(f"{ElementIDs.SECTION_ADD_PANEL_BUTTON}-{self._sub_section}")
+
+    def get_maximize_button(self) -> Locator:
+        return self._page.get_by_test_id(f"{ElementIDs.SECTION_MAXIMIZE_BUTTON}-{self._sub_section}")

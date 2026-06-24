@@ -3,94 +3,59 @@ from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.add_repo_dialog import PlaywrightAddRepoDialogElement
-from sculptor.testing.elements.closed_workspaces_dropdown import PlaywrightClosedWorkspacesDropdownElement
 from sculptor.testing.elements.command_palette import PlaywrightCommandPaletteElement
 from sculptor.testing.elements.git_init_dialog import PlaywrightGitInitDialogElement
 from sculptor.testing.elements.keyboard_shortcuts_dialog import PlaywrightKeyboardShortcutsDialogElement
 from sculptor.testing.elements.project_path_dialog import PlaywrightProjectPathDialogElement
 from sculptor.testing.elements.skills_panel import PlaywrightSkillsPanelElement
-from sculptor.testing.elements.topbar import PlaywrightTopBarElement
 from sculptor.testing.elements.warning_banner import PlaywrightWarningBannerElement
-from sculptor.testing.elements.workspace_peek import PlaywrightWorkspacePeekElement
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
+from sculptor.testing.elements.workspace_sidebar import PlaywrightWorkspaceSidebarElement
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.pages.base import PlaywrightIntegrationTestPage
 from sculptor.testing.utils import get_playwright_modifier_key
 
 
 class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
-    """Page object for the PageLayout that contains the top bar and main content."""
+    """Page object for the workspace shell — the sidebar + section grid.
 
-    def get_home_tab(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.HOME_TAB)
+    This is the UI-refresh shim (Task 2.7): the old top-bar/tab API has been
+    replaced by a sidebar + section API while the cross-cutting survivors
+    (keyboard shortcuts, command palette, warning banner, the git-init /
+    add-repo / project-path / keyboard-shortcuts dialogs) keep their original
+    method signatures so the content-only majority of tests keep passing.
 
-    def close_home_tab(self) -> None:
-        home_tab = self.get_home_tab()
-        close_button = home_tab.get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON)
-        close_button.click()
+    The old tab getters (``get_home_tab``, ``get_workspace_tabs``, the
+    ``get_tab_context_menu_*`` set, ``get_topbar``, ``get_bottom_bar``, …)
+    targeted surfaces that no longer render on the workspace route; the tests
+    that drove them are deleted in Phase 8. Use ``get_workspace_sidebar()`` for
+    navigation and ``get_section()`` for the panel grid.
+    """
+
+    # -- Sidebar + sections (the new layout spine) --
+
+    def get_workspace_sidebar(self) -> PlaywrightWorkspaceSidebarElement:
+        """Get the workspace navigation sidebar POM (SIDE-*)."""
+        return get_workspace_sidebar(self._page)
+
+    def get_section(self, sub_section: str = "center") -> PlaywrightWorkspaceSection:
+        """Get a section POM for a sub-section id.
+
+        ``sub_section`` is a flat sub-section id ("left" | "center" | "right" |
+        "bottom", or one suffixed with ":secondary"). Defaults to the center
+        section, which hosts the active agent's chat.
+        """
+        return PlaywrightWorkspaceSection(page=self._page, sub_section=sub_section)
+
+    # -- Settings (reachable from the sidebar; the page marker survives) --
 
     def get_settings_button(self) -> Locator:
         return self.get_by_test_id(ElementIDs.SETTINGS_BUTTON)
 
-    def get_settings_tab(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.SETTINGS_TAB)
+    def get_settings_page_locator(self) -> Locator:
+        return self.get_by_test_id(ElementIDs.SETTINGS_PAGE)
 
-    def open_settings_tab(self) -> Locator:
-        self.get_settings_button().click()
-        settings_tab = self.get_settings_tab()
-        expect(settings_tab).to_be_visible()
-        return settings_tab
-
-    def close_settings_tab(self) -> None:
-        settings_tab = self.get_settings_tab()
-        close_button = settings_tab.get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON)
-        close_button.click()
-
-    def get_tab_context_menu_close(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_CLOSE)
-
-    def get_tab_context_menu_rename(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_RENAME)
-
-    def get_tab_context_menu_delete(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_DELETE)
-
-    def get_tab_context_menu_close_all(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_CLOSE_ALL)
-
-    def get_tab_context_menu_close_others(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_CLOSE_OTHERS)
-
-    def get_add_workspace_button(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
-
-    def get_workspace_tabs(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.WORKSPACE_TAB)
-
-    def get_add_workspace_tabs(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.ADD_WORKSPACE_TAB)
-
-    def close_workspace_tab(self, workspace_tab_index: int = 0) -> None:
-        tab = self.get_workspace_tabs().nth(workspace_tab_index)
-        tab.click()
-        close_button = tab.get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON)
-        close_button.click()
-
-    def close_workspace_tab_via_context_menu(self, workspace_tab_index: int = 0) -> None:
-        tab = self.get_workspace_tabs().nth(workspace_tab_index)
-        tab.click(button="right")
-        close_item = self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_CLOSE)
-        expect(close_item).to_be_visible()
-        close_item.click()
-
-    def delete_workspace_via_context_menu(self, workspace_tab_index: int = 0) -> None:
-        """Right-click a workspace tab, select Delete, and confirm deletion."""
-        tab = self.get_workspace_tabs().nth(workspace_tab_index)
-        tab.click(button="right")
-        delete_item = self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_DELETE)
-        expect(delete_item).to_be_visible()
-        delete_item.click()
-        confirm_button = self._page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_CONFIRM)
-        expect(confirm_button).to_be_visible()
-        confirm_button.click()
+    # -- Delete-confirmation + inline rename (shared across rows and panel tabs) --
 
     def get_delete_confirmation_dialog(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_DIALOG)
@@ -104,76 +69,18 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
     def get_inline_rename_input(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.INLINE_RENAME_INPUT)
 
-    def open_workspace_tab_context_menu(self, workspace_tab_index: int = 0) -> None:
-        """Right-click a workspace tab to open the context menu."""
-        tab = self.get_workspace_tabs().nth(workspace_tab_index)
-        tab.click(button="right")
-
-    def open_workspace_diagnostics_submenu(self, workspace_tab_index: int = 0) -> None:
-        """Right-click a workspace tab and hover Diagnostics to open the submenu."""
-        self.open_workspace_tab_context_menu(workspace_tab_index)
-        trigger = self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_DIAGNOSTICS)
-        expect(trigger).to_be_visible()
-        trigger.hover()
-
-    def get_copy_workspace_name_item(self) -> Locator:
-        """Copy workspace name lives in the top-level context menu (Rename group)."""
-        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_COPY_WORKSPACE_NAME)
-
-    def get_copy_branch_item(self) -> Locator:
-        """Copy branch lives in the top-level context menu (Rename group)."""
-        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_COPY_BRANCH)
-
-    def get_copy_workspace_id_item(self) -> Locator:
-        """Copy workspace id lives in the Diagnostics sub-menu (open it first)."""
-        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_COPY_WORKSPACE_ID)
-
-    def rename_workspace_tab(self, new_name: str, workspace_tab_index: int = 0) -> None:
-        """Rename a workspace tab via context menu."""
-        self.open_workspace_tab_context_menu(workspace_tab_index)
-        rename_item = self.get_tab_context_menu_rename()
-        expect(rename_item).to_be_visible()
-        rename_item.click()
-        rename_input = self.get_inline_rename_input()
-        expect(rename_input).to_be_visible()
-        rename_input.fill(new_name)
-        rename_input.press("Enter")
-        expect(rename_input).not_to_be_visible()
-
-    def get_closed_workspaces_pill(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.CLOSED_WORKSPACES_PILL)
-
-    def get_closed_workspaces_dropdown(self) -> PlaywrightClosedWorkspacesDropdownElement:
-        dropdown = self._page.get_by_test_id(ElementIDs.CLOSED_WORKSPACES_DROPDOWN)
-        return PlaywrightClosedWorkspacesDropdownElement(locator=dropdown, page=self._page)
-
-    def get_workspace_peek_popover(self) -> PlaywrightWorkspacePeekElement:
-        popover = self._page.get_by_test_id(ElementIDs.WORKSPACE_PEEK_POPOVER)
-        return PlaywrightWorkspacePeekElement(locator=popover, page=self._page)
-
-    def get_topbar(self) -> PlaywrightTopBarElement:
-        """Get the topbar element."""
-        topbar = self.get_by_test_id(ElementIDs.TOP_BAR)
-        return PlaywrightTopBarElement(locator=topbar, page=self._page)
-
-    def get_top_bar_locator(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.TOP_BAR)
-
-    def get_bottom_bar(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.BOTTOM_BAR)
-
-    def get_component_gallery_tab(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.COMPONENT_GALLERY_TAB)
-
-    def get_settings_page_locator(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.SETTINGS_PAGE)
+    # -- Keyboard-shortcuts dialog (cross-cutting survivor) --
 
     def get_keyboard_shortcuts_dialog(self) -> PlaywrightKeyboardShortcutsDialogElement:
         locator = self.get_by_test_id(ElementIDs.KEYBOARD_SHORTCUTS_DIALOG)
         return PlaywrightKeyboardShortcutsDialogElement(locator=locator, page=self._page)
 
+    # -- Report-a-bug popover (cross-cutting survivor; re-homed to the sidebar) --
+
     def get_report_problem_popover(self) -> Locator:
         return self.get_by_test_id(ElementIDs.REPORT_PROBLEM_POPOVER)
+
+    # -- Command palette (cross-cutting survivor; open path moves to the sidebar) --
 
     def get_command_palette(self) -> PlaywrightCommandPaletteElement:
         """Get the command palette locator (visible only when open)."""
@@ -181,8 +88,15 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
         return PlaywrightCommandPaletteElement(locator=palette, page=self._page)
 
     def open_command_palette(self) -> PlaywrightCommandPaletteElement:
-        """Open the command palette by clicking the topbar button."""
-        self.get_topbar().open_command_palette()
+        """Open the command palette by clicking the sidebar Cmd+K link.
+
+        The open path moved from the old top-bar search button to the sidebar
+        ``SIDEBAR_CMDK_LINK`` (SIDE-02); the method signature is unchanged so
+        existing callers keep working.
+        """
+        cmdk_link = self.get_workspace_sidebar().get_cmdk_link()
+        expect(cmdk_link).to_be_visible()
+        cmdk_link.click()
         palette = self.get_command_palette()
         expect(palette).to_be_visible()
         return palette
@@ -195,6 +109,8 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
         expect(palette).to_be_visible()
         return palette
 
+    # -- Keyboard helpers (cross-cutting survivor) --
+
     def press_keyboard_shortcut(self, shortcut: str) -> None:
         self._page.keyboard.press(shortcut)
         # macOS Chromium occasionally fails to emit the modifier keyup
@@ -204,6 +120,13 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
         # release every non-trailing key in the shortcut.
         for modifier in shortcut.split("+")[:-1]:
             self._page.keyboard.up(modifier)
+
+    def toggle_theme(self) -> None:
+        """Toggle between dark and light theme via Cmd/Ctrl+Shift+D."""
+        mod_key = get_playwright_modifier_key()
+        self.press_keyboard_shortcut(f"{mod_key}+Shift+d")
+
+    # -- Warning banner + dialogs (cross-cutting survivors) --
 
     def get_warning_banner(self) -> PlaywrightWarningBannerElement:
         """Get the warning banner element. Only visible when a warning is active."""
@@ -223,20 +146,18 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
         dialog_locator = self.get_by_test_id(ElementIDs.PROJECT_PATH_DIALOG)
         return PlaywrightProjectPathDialogElement(locator=dialog_locator, page=self._page)
 
-    def get_skills_panel(self) -> PlaywrightSkillsPanelElement:
-        """Get the SkillsPanel element. Only visible when its zone is open."""
-        return PlaywrightSkillsPanelElement(self.get_by_test_id(ElementIDs.SKILLS_PANEL), page=self._page)
+    # -- Skills panel (survives as a registered panel; content getter kept) --
 
-    def toggle_theme(self) -> None:
-        """Toggle between dark and light theme via Cmd/Ctrl+Shift+D."""
-        mod_key = get_playwright_modifier_key()
-        self.press_keyboard_shortcut(f"{mod_key}+Shift+d")
+    def get_skills_panel(self) -> PlaywrightSkillsPanelElement:
+        """Get the SkillsPanel element. Only visible when its panel is active."""
+        return PlaywrightSkillsPanelElement(self.get_by_test_id(ElementIDs.SKILLS_PANEL), page=self._page)
 
     def open_skills_panel(self) -> PlaywrightSkillsPanelElement:
         """Click the skills sidebar icon and return the visible SkillsPanel.
 
-        The panel lives in the right zone, collapsed by default. Clicking its
-        sidebar icon both reveals the zone and switches to the skills panel.
+        The Skills panel becomes a registered section panel later (FCC §3); until
+        then this drives the still-present zone sidebar icon so the existing
+        skills-panel content tests keep their open path.
         """
         sidebar_icon = self.get_by_test_id(ElementIDs.PANEL_ICON_SKILLS)
         expect(sidebar_icon).to_be_visible()

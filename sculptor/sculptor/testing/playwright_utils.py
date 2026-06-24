@@ -30,6 +30,7 @@ from sculptor.testing.elements.user_config import enable_clone_workspaces
 from sculptor.testing.elements.user_config import enable_pi_agent
 from sculptor.testing.pages.settings_page import PlaywrightSettingsPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
+from sculptor.testing.utils import get_playwright_modifier_key
 
 _ResponseT = TypeVar("_ResponseT")
 
@@ -65,9 +66,19 @@ def expect_app_not_onboarding(page: Page, app_element: Locator, *, timeout: int 
 def navigate_to_home_page(page: Page) -> None:
     """Navigate to the Home page (/home).
 
-    Clicks the Home button in the top bar, or falls back to direct URL
-    navigation when the button is not visible (e.g. on settings page).
+    Prefers the sidebar Home link (SIDE-01) when the sidebar is rendered (the
+    workspace route's shell), then falls back to the old top-bar Home button
+    (still present on the not-yet-migrated Home / Settings / new-workspace
+    routes), and finally to direct URL navigation.
     """
+    sidebar_home_link = page.get_by_test_id(ElementIDs.SIDEBAR_HOME_LINK)
+    if sidebar_home_link.is_visible():
+        sidebar_home_link.click()
+        workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
+        empty_state = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_EMPTY_STATE)
+        expect(workspace_rows.first.or_(empty_state)).to_be_visible(timeout=10000)
+        return
+
     home_button = page.get_by_test_id(ElementIDs.HOME_BUTTON)
     if home_button.is_visible():
         home_button.click()
@@ -86,6 +97,91 @@ def navigate_to_home_page(page: Page) -> None:
     workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
     empty_state = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_EMPTY_STATE)
     expect(workspace_rows.first.or_(empty_state)).to_be_visible(timeout=10000)
+
+
+def navigate_to_workspace(page: Page, name_or_index: str | int = 0) -> None:
+    """Navigate to a workspace by clicking its sidebar row (SIDE-07).
+
+    Replaces the old ``get_workspace_tabs().nth(i).click()``: the workspace tab
+    strip is gone, so navigation happens through the sidebar's workspace rows
+    (the successor to the home-page rows). ``name_or_index`` selects the row by
+    its visible name (substring match) or by zero-based position.
+
+    The sidebar renders on the workspace route's shell, so callers must already
+    be on a workspace (or land there via a prior create/navigate).
+    """
+    rows = page.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW)
+    if isinstance(name_or_index, int):
+        row = rows.nth(name_or_index)
+    else:
+        row = rows.filter(has_text=name_or_index)
+    expect(row).to_be_visible()
+    row.click()
+
+
+def new_workspace(page: Page) -> None:
+    """Click the sidebar's new-workspace button (SIDE-03).
+
+    Opens the new-workspace flow. The full create-and-fill flow is Workspace
+    creation's ``create_workspace()`` (a refactor of
+    ``start_task_and_wait_for_ready``); this helper only triggers the entry
+    point from the sidebar.
+    """
+    button = page.get_by_test_id(ElementIDs.SIDEBAR_NEW_WORKSPACE_BUTTON)
+    expect(button).to_be_visible()
+    button.click()
+
+
+def open_home(page: Page) -> None:
+    """Open the Home page via the sidebar Home link (SIDE-01).
+
+    Clicks ``SIDEBAR_HOME_LINK`` when the sidebar is present (workspace route)
+    and waits for the workspace list or empty state. Falls back to
+    ``navigate_to_home_page`` (top-bar Home button or direct URL) when the
+    sidebar is not rendered — e.g. on the still-old-shell Home / Settings /
+    new-workspace routes.
+    """
+    home_link = page.get_by_test_id(ElementIDs.SIDEBAR_HOME_LINK)
+    if home_link.is_visible():
+        home_link.click()
+        workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
+        empty_state = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_EMPTY_STATE)
+        expect(workspace_rows.first.or_(empty_state)).to_be_visible(timeout=10000)
+        return
+    navigate_to_home_page(page)
+
+
+def open_settings(page: Page) -> PlaywrightSettingsPage:
+    """Open Settings via the sidebar Settings link (SIDE-10).
+
+    Clicks ``SIDEBAR_SETTINGS_LINK`` when the sidebar is present (workspace
+    route), then waits for the settings page to render. Falls back to
+    ``navigate_to_settings_page`` (top-bar gear or direct nav) when the sidebar
+    is not rendered.
+    """
+    settings_link = page.get_by_test_id(ElementIDs.SIDEBAR_SETTINGS_LINK)
+    if settings_link.is_visible():
+        settings_link.click()
+        expect(page.get_by_test_id(ElementIDs.SETTINGS_PAGE)).to_be_visible(timeout=10000)
+        return PlaywrightSettingsPage(page=page)
+    return navigate_to_settings_page(page)
+
+
+def open_command_palette(page: Page) -> None:
+    """Open the command palette via the sidebar Cmd+K link (SIDE-02).
+
+    The open affordance moved from the old top-bar search button to the sidebar
+    ``SIDEBAR_CMDK_LINK``. Falls back to the keyboard shortcut when the sidebar
+    is not rendered.
+    """
+    cmdk_link = page.get_by_test_id(ElementIDs.SIDEBAR_CMDK_LINK)
+    if cmdk_link.is_visible():
+        cmdk_link.click()
+    else:
+        mod_key = get_playwright_modifier_key()
+        page.keyboard.press(f"{mod_key}+k")
+        page.keyboard.up(mod_key)
+    expect(page.get_by_test_id(ElementIDs.COMMAND_PALETTE)).to_be_visible()
 
 
 def navigate_to_add_workspace_page(page: Page) -> None:
@@ -117,6 +213,15 @@ def navigate_to_add_workspace_page(page: Page) -> None:
     add_workspace_button = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
     if add_workspace_button.is_visible():
         add_workspace_button.click()
+        expect(submit_button).to_be_visible(timeout=45_000)
+        return
+
+    # New shell: the workspace route has no top-bar tab/button — use the sidebar's
+    # new-workspace button, which routes to /ws/new (Task 5.2 switches it to
+    # direct-create; until then it opens the add-workspace page).
+    sidebar_new_workspace_button = page.get_by_test_id(ElementIDs.SIDEBAR_NEW_WORKSPACE_BUTTON)
+    if sidebar_new_workspace_button.is_visible():
+        sidebar_new_workspace_button.click()
         expect(submit_button).to_be_visible(timeout=45_000)
         return
 
@@ -694,6 +799,55 @@ def navigate_to_workspace_without_agent(page: Page, workspace_id: str) -> None:
     a hash-only navigation via React Router).
     """
     page.evaluate(f"window.location.hash = '/ws/{workspace_id}'")
+
+
+def create_zero_agent_workspace(page: Page, *, description: str | None = None, source_branch: str = "testing") -> str:
+    """Create a WORKTREE workspace with NO agent and navigate to it, returning its id.
+
+    The redesign relaxes the old "≥1 agent" invariant (AGENT-02, Task 2.5), so a
+    workspace can exist with an empty center section. This drives that state via
+    the backend API — ``POST /api/v1/workspaces`` creates the workspace WITHOUT
+    an agent (agents are a separate ``/agents`` POST), so no agent is ever
+    created — then navigates to ``/ws/<id>`` with a hash change so the WebSocket
+    stays alive (mirroring ``navigate_to_workspace_without_agent``).
+
+    Resolves the active project and a unique branch name (via the same
+    ``preview-branch-name`` endpoint the Add Workspace form uses) so the worktree
+    branch never collides across repeated calls.
+    """
+    base_url = page.url.split("#")[0].rstrip("/")
+
+    projects_response = request_with_retry(page.request.get, f"{base_url}/api/v1/projects/active")
+    assert projects_response.ok, f"list active projects failed: {projects_response.status} {projects_response.text()}"
+    projects = projects_response.json()
+    assert projects, "no active project to create a zero-agent workspace in"
+    project_id = projects[0]["objectId"]
+
+    workspace_name = description or f"Zero Agent WS {next(_workspace_name_counter)}"
+    preview_response = request_with_retry(
+        page.request.get,
+        f"{base_url}/api/v1/workspaces/preview-branch-name",
+        params={"project_id": project_id, "workspace_name": workspace_name, "mode": "WORKTREE"},
+    )
+    assert preview_response.ok, f"preview-branch-name failed: {preview_response.status} {preview_response.text()}"
+    branch_name = preview_response.json()["branchName"]
+
+    create_response = request_with_retry(
+        page.request.post,
+        f"{base_url}/api/v1/workspaces",
+        data={
+            "projectId": project_id,
+            "initializationStrategy": "WORKTREE",
+            "sourceBranch": source_branch,
+            "requestedBranchName": branch_name,
+            "description": workspace_name,
+        },
+    )
+    assert create_response.ok, f"create workspace failed: {create_response.status} {create_response.text()}"
+    workspace_id = create_response.json()["objectId"]
+
+    navigate_to_workspace_without_agent(page, workspace_id)
+    return workspace_id
 
 
 def get_electron_app_version(page: Page) -> str:
