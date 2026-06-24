@@ -31,7 +31,7 @@ dependencies = [
     "loguru",
     "psutil>=5.9.0",
     "pydantic>=2.11.4",
-    "pydantic-settings",
+    "pydantic-settings>=2.14.2",
     "pygit2>=1.18.0",
     "pyjwt[crypto]",
     "python-multipart",
