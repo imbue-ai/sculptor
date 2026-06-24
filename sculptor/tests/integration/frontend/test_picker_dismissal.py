@@ -24,6 +24,7 @@ explicitly closed it.
 from playwright.sync_api import expect
 
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -83,11 +84,11 @@ def _click_outside_chat_input(task_page: PlaywrightTaskPage) -> None:
     the chat input's DOM. The picker's document-level pointerdown listener
     (capture phase) will see the event and tear the popover down.
 
-    Uses the active workspace tab as the click target — it sits at the top of
+    Uses the active workspace row as the click target — it sits at the top of
     the window and is reliably present in any task-page test. Clicking the
-    already-active tab is a navigation no-op, so the only side effect is the
+    already-active row is a navigation no-op, so the only side effect is the
     pointerdown the picker is listening for."""
-    task_page.get_workspace_tabs().first.click()
+    navigate_to_workspace(task_page)
 
 
 @user_story("to dismiss the @-mention picker by clicking outside the editor")

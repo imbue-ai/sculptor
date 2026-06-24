@@ -13,7 +13,9 @@ from playwright.sync_api import expect
 
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -93,8 +95,7 @@ def test_single_agent_shows_one_agent_tab(
     expect(agent_tabs).to_have_count(1)
 
     # Verify exactly one workspace tab
-    workspace_tabs = task_page.get_workspace_tabs()
-    expect(workspace_tabs).to_have_count(1)
+    expect(get_workspace_sidebar(page).get_workspace_rows()).to_have_count(1)
 
 
 @user_story("to see my agents organized by workspace")
@@ -131,19 +132,17 @@ def test_workspaces_have_isolated_agent_tabs(
     expect(agent_tabs).to_have_count(1)
 
     # Verify there are now 2 workspace tabs
-    workspace_tabs = task_page.get_workspace_tabs()
-    expect(workspace_tabs).to_have_count(2)
+    expect(get_workspace_sidebar(page).get_workspace_rows()).to_have_count(2)
 
-    # Navigate back to workspace A by clicking its tab
-    workspace_tabs.first.click()
+    # Navigate back to workspace A by clicking its sidebar row
+    navigate_to_workspace(page, "Workspace A")
 
     # Verify workspace A still has 2 agent tabs
     agent_tabs = agent_tab_bar.get_agent_tabs()
     expect(agent_tabs).to_have_count(2)
 
-    # Navigate to workspace B by clicking its tab
-    workspace_tabs = task_page.get_workspace_tabs()
-    workspace_tabs.last.click()
+    # Navigate to workspace B by clicking its sidebar row
+    navigate_to_workspace(page, "Workspace B")
 
     # Verify workspace B still has 1 agent tab
     agent_tabs = agent_tab_bar.get_agent_tabs()
@@ -168,9 +167,9 @@ def test_workspace_deleted_when_last_agent_deleted(
     # Create a workspace with one agent
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Deletable WS")
 
-    # Verify workspace tab and agent tab exist
-    workspace_tabs = task_page.get_workspace_tabs()
-    expect(workspace_tabs).to_have_count(1)
+    # Verify workspace row and agent tab exist
+    workspace_rows = get_workspace_sidebar(page).get_workspace_rows()
+    expect(workspace_rows).to_have_count(1)
     agent_tabs = agent_tab_bar.get_agent_tabs()
     expect(agent_tabs).to_have_count(1)
 
@@ -193,7 +192,7 @@ def test_workspace_deleted_when_last_agent_deleted(
     expect(agent_tab_bar.get_delete_confirmation_dialog()).to_be_hidden()
 
     # Workspace tab should be removed (last agent was deleted)
-    expect(workspace_tabs).to_have_count(0)
+    expect(workspace_rows).to_have_count(0)
 
     # Verify workspace directories have been cleaned up from disk
     workspace_dirs_after = {p for p in workspaces_dir.iterdir() if p.is_dir()} if workspaces_dir.exists() else set()

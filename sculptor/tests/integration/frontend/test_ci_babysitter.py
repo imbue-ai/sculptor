@@ -26,9 +26,9 @@ from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
 from sculptor.testing.elements.pr_popover import PlaywrightPrPopoverElement
 from sculptor.testing.elements.terminal import get_agent_terminal_panel
 from sculptor.testing.elements.terminal import wait_for_xterm_substring
-from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import full_spa_reload
 from sculptor.testing.playwright_utils import navigate_to_settings_page
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
@@ -456,10 +456,7 @@ def test_restart_reuses_existing_babysitter_tab(
     # it must re-discover the persisted babysitter task rather than create a new
     # one.
     with sculptor_instance_factory_.spawn_instance() as instance:
-        layout = PlaywrightProjectLayoutPage(page=instance.page)
-        workspace_tab = layout.get_workspace_tabs().first
-        expect(workspace_tab).to_be_visible()
-        workspace_tab.click()
+        navigate_to_workspace(instance.page)
 
         agent_tabs = PlaywrightAgentTabBarElement(instance.page)
         babysitter_tab = agent_tabs.get_agent_tab_by_name("CI Babysitter")

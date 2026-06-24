@@ -13,6 +13,7 @@ from playwright.sync_api import expect
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.playwright_utils import navigate_to_settings_page
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -177,7 +178,7 @@ def test_effort_level_persists_across_workspace_switches(sculptor_instance_: Scu
     expect(chat_panel_2.get_effort_selector()).to_have_attribute("data-value", "xhigh")
 
     # -- Step 3: Switch back to workspace 1 — effort should show High --
-    task_page_2.get_workspace_tabs().first.click()
+    navigate_to_workspace(page)
 
     # Wait for the chat panel of workspace 1 to appear
     chat_panel_ws1 = task_page.get_chat_panel()

@@ -12,6 +12,8 @@ from sculptor.testing.elements.task_starter import FAKE_CLAUDE_2_MODEL_NAME
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
 from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
+from sculptor.testing.playwright_utils import navigate_to_workspace
+from sculptor.testing.playwright_utils import new_workspace
 from sculptor.testing.playwright_utils import soft_reload_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -44,11 +46,11 @@ def test_prompt_drafts_persist_on_multiple_tasks_and_home_page(sculptor_instance
     # Type a follow-up message draft in chat input (don't send it)
     chat_panel.get_chat_input().fill(follow_up_text)
 
-    task_page.get_add_workspace_button().click()
+    new_workspace(page)
     add_workspace_page = PlaywrightAddWorkspacePage(page=page)
     expect(add_workspace_page.get_submit_button()).to_be_visible()
 
-    task_page.get_workspace_tabs().first.click()
+    navigate_to_workspace(page)
     expect(task_page.get_chat_panel()).to_be_visible()
 
     task_page = PlaywrightTaskPage(page=page)
@@ -233,13 +235,12 @@ def test_model_selector_updates_when_switching_tasks(sculptor_instance_: Sculpto
 
     # We should now be on the second workspace tab; verify its model
     second_task_page = PlaywrightTaskPage(page=page)
-    workspace_tabs = second_task_page.get_workspace_tabs()
     second_chat_panel = second_task_page.get_chat_panel()
     model_selector = second_chat_panel.get_model_selector()
     expect(model_selector).to_be_visible()
     expect(model_selector).to_contain_text("Fake Claude 2", ignore_case=True)
 
-    workspace_tabs.first.click()
+    navigate_to_workspace(page)
     first_task_page = PlaywrightTaskPage(page=page)
     first_chat_panel = first_task_page.get_chat_panel()
     expect(first_chat_panel).to_be_visible()

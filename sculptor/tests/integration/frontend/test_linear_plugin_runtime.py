@@ -26,6 +26,7 @@ from sculptor.services.user_config.user_config import save_config
 from sculptor.testing.elements.panel_zones import PlaywrightPanelZonesElement
 from sculptor.testing.elements.panels import ensure_right_area_visible
 from sculptor.testing.playwright_utils import navigate_to_settings_page
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.resources import _default_sculptor_folder_populator
 from sculptor.testing.resources import custom_sculptor_folder_populator
@@ -119,7 +120,7 @@ def test_linear_panel_follows_workspace_branch_and_sends_key(
         expect(zones.get_top_right_zone()).to_contain_text(f"Issue for {branch_b}")
 
         # Switching back re-adjusts the panel to the first workspace's branch.
-        task_page_a.get_workspace_tabs().first.click()
+        navigate_to_workspace(page)
         expect(zones.get_top_right_zone()).to_contain_text(f"Issue for {branch_a}")
 
         # Every Linear request carried the configured API key (raw, no Bearer).

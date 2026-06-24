@@ -10,6 +10,7 @@ import pytest
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.base import dismiss_with_escape
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import blur_active_element
 from sculptor.testing.playwright_utils import navigate_to_settings_page
@@ -329,7 +330,7 @@ def test_keybindings_suppressed_when_overlay_open(sculptor_instance_: SculptorIn
     blur_active_element(page)
 
     layout = PlaywrightProjectLayoutPage(page=page)
-    initial_tab_count = layout.get_workspace_tabs().count()
+    initial_tab_count = get_workspace_sidebar(page).get_workspace_rows().count()
 
     # Open the help dialog (a dismissible overlay)
     layout.press_keyboard_shortcut(f"{mod}+/")
@@ -350,7 +351,7 @@ def test_keybindings_suppressed_when_overlay_open(sculptor_instance_: SculptorIn
     dismiss_with_escape(dialog)
 
     # No new workspace should have been created
-    expect(layout.get_workspace_tabs()).to_have_count(initial_tab_count)
+    expect(get_workspace_sidebar(page).get_workspace_rows()).to_have_count(initial_tab_count)
 
 
 @pytest.mark.release

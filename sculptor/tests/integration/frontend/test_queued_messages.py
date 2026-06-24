@@ -9,6 +9,7 @@ from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.fake_claude_pause import FakeClaudePause
 from sculptor.testing.playwright_utils import navigate_to_settings_page
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import soft_reload_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -400,7 +401,7 @@ def test_always_interrupt_setting_does_not_affect_existing_queued_message(
     # Start a busy agent and queue a message BEFORE enabling always-interrupt.
     # Use a longer sleep because this test navigates to settings and back,
     # which can take extra time on slow CI runners.
-    task_page, chat_panel = _start_busy_agent(sculptor_instance_, sleep_seconds=60)
+    _, chat_panel = _start_busy_agent(sculptor_instance_, sleep_seconds=60)
     send_chat_message(chat_panel=chat_panel, message="already queued")
     expect(chat_panel.get_queued_message_bar()).to_have_count(1)
 
@@ -409,10 +410,10 @@ def test_always_interrupt_setting_does_not_affect_existing_queued_message(
     experimental = settings_page.click_on_experimental()
     experimental.enable_always_interrupt()
 
-    # Navigate back to the workspace by clicking its tab in the top bar.
+    # Navigate back to the workspace by clicking its row in the sidebar.
     # This is more reliable than page.go_back() which depends on browser
     # history state that can be unpredictable with hash-based routing.
-    task_page.get_workspace_tabs().click()
+    navigate_to_workspace(page)
 
     # Wait for the chat panel to re-appear and the agent to still be streaming
     # (confirms the WebSocket reconnected and delivered the initial state).

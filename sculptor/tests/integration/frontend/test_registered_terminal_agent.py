@@ -17,7 +17,7 @@ from sculptor.testing.elements.terminal import get_agent_terminal_textarea
 from sculptor.testing.elements.terminal import get_xterm_buffer_text
 from sculptor.testing.elements.terminal import run_command_in_agent_terminal
 from sculptor.testing.elements.terminal import wait_for_xterm_substring
-from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
@@ -122,10 +122,7 @@ def test_registered_terminal_agent_resumes_after_restart(
 
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
-        layout = PlaywrightProjectLayoutPage(page=page)
-        workspace_tab = layout.get_workspace_tabs().first
-        expect(workspace_tab).to_be_visible()
-        workspace_tab.click()
+        navigate_to_workspace(page)
 
         agent_tab_bar = PlaywrightAgentTabBarElement(page)
         resume_tab = agent_tab_bar.get_agent_tab_by_name("Fake Resume 1").first
@@ -157,10 +154,7 @@ def test_plain_terminal_agent_gets_fresh_shell_after_restart(
 
     with sculptor_instance_factory_.spawn_instance() as instance:
         page = instance.page
-        layout = PlaywrightProjectLayoutPage(page=page)
-        workspace_tab = layout.get_workspace_tabs().first
-        expect(workspace_tab).to_be_visible()
-        workspace_tab.click()
+        navigate_to_workspace(page)
 
         agent_tab_bar = PlaywrightAgentTabBarElement(page)
         terminal_tab = agent_tab_bar.get_agent_tab_by_name("Terminal 1").first

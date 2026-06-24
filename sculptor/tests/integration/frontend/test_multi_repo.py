@@ -17,10 +17,12 @@ from playwright.sync_api import expect
 
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
 from sculptor.testing.playwright_utils import navigate_to_settings_page
+from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.test_repo_factory import TestRepoFactory
@@ -162,17 +164,16 @@ def test_create_workspaces_in_multiple_projects_and_switch(
     chat_panel_b = task_page_b.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel_b, expected_message_count=2)
 
-    # Verify there are 2 workspace tabs
-    workspace_tabs = task_page_b.get_workspace_tabs()
-    expect(workspace_tabs).to_have_count(2)
+    # Verify there are 2 workspace rows
+    expect(get_workspace_sidebar(page).get_workspace_rows()).to_have_count(2)
 
-    # Click the first workspace tab (Alpha) to switch back
-    workspace_tabs.first.click()
+    # Click the Alpha workspace row to switch back (sidebar rows sort by name)
+    navigate_to_workspace(page, "Alpha Workspace")
     task_page = PlaywrightTaskPage(page=page)
     expect(task_page.get_chat_panel()).to_be_visible()
 
-    # Click the second workspace tab (Beta) to switch
-    workspace_tabs.nth(1).click()
+    # Click the Beta workspace row to switch
+    navigate_to_workspace(page, "Beta Workspace")
     expect(task_page.get_chat_panel()).to_be_visible()
 
 
@@ -229,9 +230,8 @@ def test_send_messages_across_multiple_project_workspaces(
     send_chat_message(chat_panel=chat_panel_b, message=follow_up_prompt_b)
     wait_for_completed_message_count(chat_panel=chat_panel_b, expected_message_count=4)
 
-    # Switch back to workspace A via workspace tab
-    workspace_tabs = task_page_b.get_workspace_tabs()
-    workspace_tabs.first.click()
+    # Switch back to workspace A via its sidebar row
+    navigate_to_workspace(page, "Alpha Workspace")
 
     # Re-acquire the chat panel after navigation
     chat_panel_a = PlaywrightTaskPage(page=page).get_chat_panel()
@@ -241,7 +241,7 @@ def test_send_messages_across_multiple_project_workspaces(
     expect(chat_panel_a.get_messages()).to_have_count(4)
 
     # Switch back to workspace B
-    workspace_tabs.nth(1).click()
+    navigate_to_workspace(page, "Beta Workspace")
     chat_panel_b = PlaywrightTaskPage(page=page).get_chat_panel()
     expect(chat_panel_b._locator).to_be_visible()
 
