@@ -51,7 +51,7 @@ def _request(method: str, path: str, json_output: bool, body: dict | None = None
 
 @trace_app.command("start")
 def start(
-    tracer_entries: int = typer.Option(
+    tracer_entries: int | None = typer.Option(
         None,
         "--tracer-entries",
         help="Ring-buffer size (entries). Larger = longer capture window, more memory. Defaults to the backend's ad-hoc default.",

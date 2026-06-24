@@ -199,6 +199,9 @@ def test_debug_threads_dumps_stacks(client: TestClient) -> None:
     # At least the thread serving this request should appear.
     assert "Thread " in body
     assert "File " in body  # traceback frames render "File ..., line ..."
+    # traceback.format_stack lines already end in "\n"; the dump must not
+    # double them up into blank lines between every frame (a "\n".join bug).
+    assert "\n\n\n" not in body
 
 
 def test_trace_file_written_on_lifespan_shutdown(

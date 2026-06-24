@@ -31,7 +31,7 @@ _OUTPUT_OPTION = typer.Option(None, "--output", "-o", help="Write the dump to th
 
 
 @debug_app.command("threads")
-def threads(output: str = _OUTPUT_OPTION) -> None:
+def threads(output: str | None = _OUTPUT_OPTION) -> None:
     """Dump a Python traceback for every live backend thread."""
     client = get_authenticated_client(get_default_base_url())
     try:
