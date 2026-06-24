@@ -29,7 +29,7 @@ import styles from "./EmptyFirstRunPage.module.scss";
 export const EmptyFirstRunPage = (): ReactElement => {
   const isSidebarCollapsed = useAtomValue(sidebarCollapsedAtom);
 
-  // The normal layouts (PageLayout / WorkspaceShellLayout) don't mount while
+  // The normal app shell (AppShell) doesn't mount while
   // this page is showing, so own the websocket stream here. Without it the
   // first created workspace would never arrive and the gate would never flip
   // back to the full workspace page (FIRST-05).

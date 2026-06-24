@@ -1,13 +1,13 @@
-// The route-level chrome host for the workspace route (the strangler cutover of
-// the old PageLayout/docking shell). It renders the global WorkspaceSidebar as the
-// left rail (component_hierarchy.md → "Top-level tree": the sidebar is global
-// chrome) and the route Outlet in the content area to its right. It also mounts the
-// cross-cutting survivors that the old PageLayout provided for this route — the
-// unified data stream, command palette, keyboard shortcuts, plugins, dialogs, and
-// toasts — so swapping the top bar for the sidebar keeps the route at parity.
+// The app-wide route shell: the global WorkspaceSidebar as the left rail and the
+// route Outlet in the content area to its right. It hosts EVERY in-app destination —
+// the workspace route (whose Outlet renders WorkspacePage's header + sections), Home,
+// and Settings — so the sidebar + cross-cutting chrome stay continuously mounted as
+// the user moves between them (no tear-down, no top-bar/tab-strip).
 //
-// PageLayout still backs Home / Settings / new-workspace; those routes migrate off
-// it later.
+// It mounts the cross-cutting survivors the old PageLayout provided — the unified data
+// stream, command palette, keyboard shortcuts, plugins, dialogs, and toasts. This is
+// the strangler replacement for PageLayout (now removed): nothing here is
+// workspace-specific, so the same shell backs Home and Settings.
 
 import { Flex } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
@@ -48,7 +48,7 @@ import { PluginOverlays } from "~/plugins/PluginOverlays.tsx";
 // failure before it auto-dismisses.
 const ERROR_TOAST_DURATION_MS = 10_000;
 
-export const WorkspaceShellLayout = (): ReactElement => {
+export const AppShell = (): ReactElement => {
   // External atoms
   const isSidebarCollapsed = useAtomValue(sidebarCollapsedAtom);
   const backendStatus = useAtomValue(backendStatusAtom);

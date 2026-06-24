@@ -12,6 +12,7 @@ import {
 } from "./common/state/atoms/workspaces.ts";
 import { COMPONENT_GALLERY_TAB_ID, HOME_TAB_ID, SETTINGS_TAB_ID } from "./components/workspaceTabIds.ts";
 import { EmptyFirstRunGate } from "./EmptyFirstRunGate.tsx";
+import { AppShell } from "./layouts/AppShell";
 import { PageLayout } from "./layouts/PageLayout";
 import { AddWorkspacePage } from "./pages/add-workspace/AddWorkspacePage.tsx";
 import { ComponentGalleryPage } from "./pages/debug/ComponentGalleryPage.tsx";
@@ -20,7 +21,6 @@ import { RouteErrorPage } from "./pages/error/RouteErrorPage.tsx";
 import { HomePage } from "./pages/home/HomePage.tsx";
 import { SettingsPage } from "./pages/settings/SettingsPage.tsx";
 import { WorkspacePage } from "./pages/workspace/WorkspacePage";
-import { WorkspaceShellLayout } from "./pages/workspace/WorkspaceShellLayout";
 
 const DEFAULT_TABS_STATE: TabsState = { order: [], activeIndex: INVALID_ACTIVE_INDEX };
 
@@ -80,17 +80,36 @@ const router = createHashRouter([
   {
     element: <EmptyFirstRunGate />,
     children: [
+      // The app-wide sidebar shell hosts Home, Settings, and the workspace route, so
+      // the sidebar + chrome stay mounted as the user moves between them.
       {
-        path: "/home",
-        element: <PageLayout />,
+        element: <AppShell />,
         errorElement: <RouteErrorPage />,
         children: [
           {
-            index: true,
+            path: "/home",
             element: <HomePage />,
+          },
+          {
+            path: "/settings",
+            element: <SettingsPage />,
+          },
+          {
+            path: "/ws/:workspaceID",
+            children: [
+              {
+                index: true,
+                element: <WorkspacePage />,
+              },
+              {
+                path: "agent/:id",
+                element: <WorkspacePage />,
+              },
+            ],
           },
         ],
       },
+      // Routes still on the legacy PageLayout until Task 7.3 removes them.
       {
         path: "/ws/new/:draftId",
         element: <PageLayout />,
@@ -99,32 +118,6 @@ const router = createHashRouter([
           {
             index: true,
             element: <AddWorkspacePage />,
-          },
-        ],
-      },
-      {
-        path: "/ws/:workspaceID",
-        element: <WorkspaceShellLayout />,
-        errorElement: <RouteErrorPage />,
-        children: [
-          {
-            index: true,
-            element: <WorkspacePage />,
-          },
-          {
-            path: "agent/:id",
-            element: <WorkspacePage />,
-          },
-        ],
-      },
-      {
-        path: "/settings",
-        element: <PageLayout />,
-        errorElement: <RouteErrorPage />,
-        children: [
-          {
-            index: true,
-            element: <SettingsPage />,
           },
         ],
       },
