@@ -1,4 +1,4 @@
-import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 import type { DiffStatus, WorkspaceInitializationStrategy } from "~/db/schema/enums";
 import { repo } from "~/db/schema/repo";
@@ -36,7 +36,7 @@ export const workspace = sqliteTable("workspace", {
   diffStatus: text("diff_status").$type<DiffStatus>().notNull().default("NONE"),
   diffUpdatedAt: text("diff_updated_at"),
   requestedBranchName: text("requested_branch_name"),
-});
+}, (table) => [index("workspace_project_id_idx").on(table.projectId)]);
 
 export type WorkspaceRow = typeof workspace.$inferSelect;
 export type NewWorkspaceRow = typeof workspace.$inferInsert;

@@ -15,6 +15,13 @@
       "when": 1782262848043,
       "tag": "0001_easy_the_santerians",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1782263609498,
+      "tag": "0002_graceful_firelord",
+      "breakpoints": true
     }
   ]
 }

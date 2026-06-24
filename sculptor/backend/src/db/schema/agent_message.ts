@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 import { agent } from "~/db/schema/agent";
 import type { AgentMessageSource } from "~/db/schema/enums";
@@ -20,7 +20,7 @@ export const agentMessage = sqliteTable("agent_message", {
   message: text("message", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
   source: text("source").$type<AgentMessageSource>().notNull(),
   isPartial: integer("is_partial", { mode: "boolean" }).notNull(),
-});
+}, (table) => [index("agent_message_agent_id_idx").on(table.agentId)]);
 
 export type AgentMessageRow = typeof agentMessage.$inferSelect;
 export type NewAgentMessageRow = typeof agentMessage.$inferInsert;

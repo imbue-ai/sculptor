@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 import type { RunState } from "~/db/schema/enums";
 import { repo } from "~/db/schema/repo";
@@ -52,7 +52,7 @@ export const agent = sqliteTable("agent", {
   isDeleted: integer("is_deleted", { mode: "boolean" }).notNull().default(false),
   isDeleting: integer("is_deleting", { mode: "boolean" }).notNull().default(false),
   lastReadAt: text("last_read_at"),
-});
+}, (table) => [index("agent_workspace_id_idx").on(table.workspaceId)]);
 
 export type AgentRow = typeof agent.$inferSelect;
 export type NewAgentRow = typeof agent.$inferInsert;
