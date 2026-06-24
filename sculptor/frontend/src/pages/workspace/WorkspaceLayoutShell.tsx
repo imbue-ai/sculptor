@@ -14,6 +14,7 @@ import { PanelDndProvider } from "~/components/sections/PanelDndProvider.tsx";
 import { SectionGrid } from "~/components/sections/SectionGrid.tsx";
 import { maximizedSectionAtom } from "~/components/sections/transientAtoms.ts";
 import { useActiveSectionRing } from "~/components/sections/useActiveSectionRing.ts";
+import { useWorkspaceShortcuts } from "~/components/sections/useWorkspaceShortcuts.ts";
 
 import { AgentDeleteConfirmation } from "./components/AgentDeleteConfirmation.tsx";
 import { TerminalCloseConfirmation } from "./components/TerminalCloseConfirmation.tsx";
@@ -26,6 +27,9 @@ export const WorkspaceLayoutShell = (): ReactElement => {
 
   // The active-section ring fade timer, mounted once for the whole shell (SEC-11).
   useActiveSectionRing();
+  // The new-shell section/panel keyboard shortcuts (collapse/cycle/maximize/sidebar/
+  // new-agent), registered through the keybindings registry.
+  useWorkspaceShortcuts();
 
   return (
     <PanelDndProvider>
