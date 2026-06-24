@@ -64,9 +64,9 @@ class DependencyCheckResult(FrozenModel):
 
 
 # Pinned-single-version range — Sculptor refuses to talk to a pi outside this pin
-# so the RPC schema stays known. The version string lives in the dependency-free
-# ``pi_version`` module so ``fake_pi`` can report it without importing this heavy
-# module (see pi_version.py / SCU-1568).
+# so the RPC schema stays known. The version string is sourced from the
+# dependency-free ``pi_version`` module so ``fake_pi`` can report it without
+# importing this heavy module.
 PI_VERSION_RANGE = VersionRange(
     min_version=PI_PINNED_VERSION,
     max_version=PI_PINNED_VERSION,

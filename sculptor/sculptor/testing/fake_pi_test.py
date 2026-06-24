@@ -102,11 +102,7 @@ def test_fake_pi_v_short_flag_reports_pinned_version() -> None:
     assert result.stdout == ""
 
 
-# The DB/web/httpx service modules that `fake_pi` must NOT drag in just to boot.
-# Importing any of them makes `python -m sculptor.testing.fake_pi` cold-start
-# slow (sqlalchemy + alembic + httpx + the whole web/database layer), and that
-# cost is what `pi --version` pays on the hot path PiAgent._check_pi_version
-# probes with a 5s timeout.
+# The DB/web/httpx service modules `fake_pi` must not import just to boot.
 _FAKE_PI_FORBIDDEN_HEAVY_IMPORTS = (
     "sculptor.services.dependency_management_service",
     "sculptor.web.data_types",
@@ -118,7 +114,7 @@ _FAKE_PI_FORBIDDEN_HEAVY_IMPORTS = (
 
 
 def test_fake_pi_import_stays_off_heavy_service_layer() -> None:
-    """Importing FakePi must not pull in the DB/web/httpx service layer (SCU-1568).
+    """Importing FakePi must not pull in the DB/web/httpx service layer.
 
     Real pi answers ``--version`` instantly; FakePi has to boot Python and import
     its module first. If that import drags in ``dependency_management_service``
