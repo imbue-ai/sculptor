@@ -4,9 +4,11 @@ import Fastify, { type FastifyBaseLogger, type FastifyInstance } from "fastify";
 import { jsonSchemaTransform, serializerCompiler, validatorCompiler } from "fastify-type-provider-zod";
 
 import { registerAuthGuard } from "~/auth/guard";
+import { registerConfigRoutes } from "~/routes/config";
 import { registerHealthRoutes } from "~/routes/health";
 import { registerSessionTokenRoutes } from "~/routes/session_token";
 import { registerStreamWsRoutes } from "~/routes/stream_ws";
+import { registerTelemetryInfoRoutes } from "~/routes/telemetry_info";
 import { registerStatic } from "~/static";
 
 export interface BuildAppOptions {
@@ -49,6 +51,8 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
 
   void app.register(registerSessionTokenRoutes);
   void app.register(registerHealthRoutes);
+  void app.register(registerConfigRoutes);
+  void app.register(registerTelemetryInfoRoutes);
   void app.register(registerStreamWsRoutes);
 
   // Static SPA serving + fallback, registered last so API routes win. A no-op
