@@ -1,0 +1,139 @@
+{
+  "name": "streamed_partials_fold_into_one_message",
+  "input": [
+    {
+      "object_type": "ChatInputUserMessage",
+      "message_id": "agm_0532a7b8e0328a8d05a8e6258b",
+      "source": "USER",
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "text": "Hello!",
+      "model_name": "CLAUDE-4-SONNET",
+      "files": [],
+      "enter_plan_mode": false,
+      "exit_plan_mode": false,
+      "fast_mode": false,
+      "effort": "xhigh",
+      "sent_via": null
+    },
+    {
+      "object_type": "RequestStartedAgentMessage",
+      "message_id": "agm_0e138384fdfa918d820655d01f",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:01Z",
+      "request_id": "agm_0532a7b8e0328a8d05a8e6258b"
+    },
+    {
+      "object_type": "PartialResponseBlockAgentMessage",
+      "message_id": "agm_0bc90bc042258322ce27cf15e4",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:02Z",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "You're"
+        }
+      ],
+      "assistant_message_id": "assistant-3",
+      "first_response_message_id": "agm_09d607a663f3e9b0a90c3c8d44",
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "PartialResponseBlockAgentMessage",
+      "message_id": "agm_055eb33503956e0cf6abd3f0cc",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:03Z",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "You're absolutely"
+        }
+      ],
+      "assistant_message_id": "assistant-3",
+      "first_response_message_id": "agm_09d607a663f3e9b0a90c3c8d44",
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "PartialResponseBlockAgentMessage",
+      "message_id": "agm_0fb8fdd7ee25bbf275316b27ed",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:04Z",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "You're absolutely right!"
+        }
+      ],
+      "assistant_message_id": "assistant-3",
+      "first_response_message_id": "agm_09d607a663f3e9b0a90c3c8d44",
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "StreamingMessageCompleteAgentMessage",
+      "message_id": "agm_0af04a151d4d66cf9456352276",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:06Z"
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_09d607a663f3e9b0a90c3c8d44",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:07Z",
+      "role": "assistant",
+      "assistant_message_id": "assistant-3",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "You're absolutely right!"
+        }
+      ],
+      "parent_tool_use_id": null
+    },
+    {
+      "request_id": "agm_0532a7b8e0328a8d05a8e6258b",
+      "error": null,
+      "object_type": "RequestSuccessAgentMessage",
+      "message_id": "agm_09135b222b6c0c06978788f3b9",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:08Z",
+      "interrupted": false
+    }
+  ],
+  "expected": [
+    {
+      "role": "USER",
+      "id": "agm_0532a7b8e0328a8d05a8e6258b",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "Hello!"
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    },
+    {
+      "role": "ASSISTANT",
+      "id": "agm_09d607a663f3e9b0a90c3c8d44",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "You're absolutely right!"
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:02Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    }
+  ]
+}

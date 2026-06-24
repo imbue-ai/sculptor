@@ -1,0 +1,267 @@
+{
+  "name": "streamed_text_turn_after_subagent_no_stacking",
+  "input": [
+    {
+      "object_type": "ChatInputUserMessage",
+      "message_id": "agm_0077393852be20e37026d62818",
+      "source": "USER",
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "text": "/verify-conversation",
+      "model_name": "CLAUDE-4-SONNET",
+      "files": [],
+      "enter_plan_mode": false,
+      "exit_plan_mode": false,
+      "fast_mode": false,
+      "effort": "xhigh",
+      "sent_via": null
+    },
+    {
+      "object_type": "RequestStartedAgentMessage",
+      "message_id": "agm_0287cd552bf7dd5245c0bb3a98",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:01Z",
+      "request_id": "agm_0077393852be20e37026d62818"
+    },
+    {
+      "object_type": "PartialResponseBlockAgentMessage",
+      "message_id": "agm_09ff65fafc41754700835373dc",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:02Z",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "Launching review subagent."
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "toolu_agent_b",
+          "name": "Agent",
+          "input": {
+            "run_in_background": true,
+            "prompt": "review"
+          },
+          "interactive_role": null
+        }
+      ],
+      "assistant_message_id": "a8-turnA-assistant",
+      "first_response_message_id": "agm_01e1263863ad2a86ba3bd80c91",
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "StreamingMessageCompleteAgentMessage",
+      "message_id": "agm_088edd602770253664ea0570e3",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:03Z"
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_01e1263863ad2a86ba3bd80c91",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:04Z",
+      "role": "assistant",
+      "assistant_message_id": "a8-turnA-assistant",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "Launching review subagent."
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "toolu_agent_b",
+          "name": "Agent",
+          "input": {
+            "run_in_background": true,
+            "prompt": "review"
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_012f6e335ec70d48fbab055563",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:05Z",
+      "role": "assistant",
+      "assistant_message_id": "a8-subagent",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "subagent working"
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "a8-sub-tool",
+          "name": "Bash",
+          "input": {
+            "cmd": "ls"
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": "toolu_agent_b"
+    },
+    {
+      "object_type": "PartialResponseBlockAgentMessage",
+      "message_id": "agm_0536df5f84b695d4f280f3d4e5",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:06Z",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "REVIEW_MARKER alpha"
+        }
+      ],
+      "assistant_message_id": "a8-turnB-assistant",
+      "first_response_message_id": "agm_07599d79a60e2a36e689fe17ac",
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "PartialResponseBlockAgentMessage",
+      "message_id": "agm_08d25f865767135ec0ed55c6dd",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:07Z",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "REVIEW_MARKER alpha beta"
+        }
+      ],
+      "assistant_message_id": "a8-turnB-assistant",
+      "first_response_message_id": "agm_07599d79a60e2a36e689fe17ac",
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "PartialResponseBlockAgentMessage",
+      "message_id": "agm_030208d450049e164f875aaaa4",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:08Z",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "REVIEW_MARKER alpha beta gamma"
+        }
+      ],
+      "assistant_message_id": "a8-turnB-assistant",
+      "first_response_message_id": "agm_07599d79a60e2a36e689fe17ac",
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "StreamingMessageCompleteAgentMessage",
+      "message_id": "agm_048c9fc832f9a7017cf865b42e",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:10Z"
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_07599d79a60e2a36e689fe17ac",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:11Z",
+      "role": "assistant",
+      "assistant_message_id": "a8-turnB-assistant",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "REVIEW_MARKER alpha beta gamma"
+        }
+      ],
+      "parent_tool_use_id": null
+    },
+    {
+      "request_id": "agm_0077393852be20e37026d62818",
+      "error": null,
+      "object_type": "RequestSuccessAgentMessage",
+      "message_id": "agm_051d19b60fd000071e9c74caf5",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:12Z",
+      "interrupted": false
+    }
+  ],
+  "expected": [
+    {
+      "role": "USER",
+      "id": "agm_0077393852be20e37026d62818",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "/verify-conversation"
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    },
+    {
+      "role": "ASSISTANT",
+      "id": "agm_012f6e335ec70d48fbab055563",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "subagent working"
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "a8-sub-tool",
+          "name": "Bash",
+          "input": {
+            "cmd": "ls"
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": "toolu_agent_b",
+      "approximate_creation_time": "2024-01-01T00:00:05Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    },
+    {
+      "role": "ASSISTANT",
+      "id": "agm_01e1263863ad2a86ba3bd80c91",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "Launching review subagent."
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "toolu_agent_b",
+          "name": "Agent",
+          "input": {
+            "run_in_background": true,
+            "prompt": "review"
+          },
+          "interactive_role": null
+        },
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "REVIEW_MARKER alpha beta gamma"
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:02Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    }
+  ]
+}

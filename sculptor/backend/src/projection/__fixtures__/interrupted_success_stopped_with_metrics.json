@@ -1,0 +1,108 @@
+{
+  "name": "interrupted_success_stopped_with_metrics",
+  "input": [
+    {
+      "object_type": "ChatInputUserMessage",
+      "message_id": "agm_0de59a481c9d8ace262670bda2",
+      "source": "USER",
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "text": "interrupt me",
+      "model_name": "CLAUDE-4-SONNET",
+      "files": [],
+      "enter_plan_mode": false,
+      "exit_plan_mode": false,
+      "fast_mode": false,
+      "effort": "xhigh",
+      "sent_via": null
+    },
+    {
+      "object_type": "RequestStartedAgentMessage",
+      "message_id": "agm_0c3dcca6a4ad032d678b4b51ff",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:01Z",
+      "request_id": "agm_0de59a481c9d8ace262670bda2"
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_0d7b24e66a3c4ea77a4a224995",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:02Z",
+      "role": "assistant",
+      "assistant_message_id": "assistant-16",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "half done"
+        }
+      ],
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "TurnMetricsAgentMessage",
+      "message_id": "agm_0821c77eccb6b4d478ae614a7f",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:03Z",
+      "turn_metrics": {
+        "duration_seconds": 3.0,
+        "input_tokens": null,
+        "output_tokens": null,
+        "reasoning_tokens": null,
+        "changed_files": [],
+        "context_total_tokens": null,
+        "auto_compact_threshold": null
+      }
+    },
+    {
+      "request_id": "agm_0de59a481c9d8ace262670bda2",
+      "error": null,
+      "object_type": "RequestSuccessAgentMessage",
+      "message_id": "agm_0de4227b7f299ded07315adefd",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:04Z",
+      "interrupted": true
+    }
+  ],
+  "expected": [
+    {
+      "role": "USER",
+      "id": "agm_0de59a481c9d8ace262670bda2",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "interrupt me"
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    },
+    {
+      "role": "ASSISTANT",
+      "id": "agm_0d7b24e66a3c4ea77a4a224995",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "half done"
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:02Z",
+      "turn_metrics": {
+        "duration_seconds": 3.0,
+        "input_tokens": null,
+        "output_tokens": null,
+        "reasoning_tokens": null,
+        "changed_files": [],
+        "context_total_tokens": null,
+        "auto_compact_threshold": null
+      },
+      "stopped": true,
+      "sent_via": null
+    }
+  ]
+}

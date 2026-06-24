@@ -1,0 +1,85 @@
+{
+  "name": "single_text_response",
+  "input": [
+    {
+      "object_type": "ChatInputUserMessage",
+      "message_id": "agm_0e4774cdda0793f86414e8b914",
+      "source": "USER",
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "text": "Hello!",
+      "model_name": "CLAUDE-4-SONNET",
+      "files": [],
+      "enter_plan_mode": false,
+      "exit_plan_mode": false,
+      "fast_mode": false,
+      "effort": "xhigh",
+      "sent_via": null
+    },
+    {
+      "object_type": "RequestStartedAgentMessage",
+      "message_id": "agm_04fc2f671f0898f76d30da6b1f",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:01Z",
+      "request_id": "agm_0e4774cdda0793f86414e8b914"
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_08a8bb7cd343aa2ad99b7d7620",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:02Z",
+      "role": "assistant",
+      "assistant_message_id": "assistant-1",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "You're absolutely right!"
+        }
+      ],
+      "parent_tool_use_id": null
+    },
+    {
+      "request_id": "agm_0e4774cdda0793f86414e8b914",
+      "error": null,
+      "object_type": "RequestSuccessAgentMessage",
+      "message_id": "agm_04bb916da5a7ea9b96d7626fb8",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:03Z",
+      "interrupted": false
+    }
+  ],
+  "expected": [
+    {
+      "role": "USER",
+      "id": "agm_0e4774cdda0793f86414e8b914",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "Hello!"
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    },
+    {
+      "role": "ASSISTANT",
+      "id": "agm_08a8bb7cd343aa2ad99b7d7620",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "You're absolutely right!"
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:02Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    }
+  ]
+}

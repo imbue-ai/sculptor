@@ -1,0 +1,41 @@
+{
+  "name": "remove_queued_message",
+  "input": [
+    {
+      "object_type": "ChatInputUserMessage",
+      "message_id": "agm_0ae50d12b5e1931775525de276",
+      "source": "USER",
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "text": "first",
+      "model_name": "CLAUDE-4-SONNET",
+      "files": [],
+      "enter_plan_mode": false,
+      "exit_plan_mode": false,
+      "fast_mode": false,
+      "effort": "xhigh",
+      "sent_via": null
+    },
+    {
+      "object_type": "ChatInputUserMessage",
+      "message_id": "agm_0f70ed2fcf7304156cf989109d",
+      "source": "USER",
+      "approximate_creation_time": "2024-01-01T00:00:01Z",
+      "text": "second",
+      "model_name": "CLAUDE-4-SONNET",
+      "files": [],
+      "enter_plan_mode": false,
+      "exit_plan_mode": false,
+      "fast_mode": false,
+      "effort": "xhigh",
+      "sent_via": null
+    },
+    {
+      "object_type": "RemoveQueuedMessageAgentMessage",
+      "message_id": "agm_081aa6bf5a27b16d2f019cd438",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:02Z",
+      "removed_message_id": "agm_0f70ed2fcf7304156cf989109d"
+    }
+  ],
+  "expected": []
+}

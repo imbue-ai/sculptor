@@ -1,0 +1,80 @@
+{
+  "name": "tool_use_paired_with_result",
+  "input": [
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_0894f782a148b33af1e39a0efe",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "role": "assistant",
+      "assistant_message_id": "assistant-pair",
+      "content": [
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "tool-pair-1",
+          "name": "Bash",
+          "input": {
+            "command": "ls"
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_0894f782a148b33af1e39a0efe",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:01Z",
+      "role": "assistant",
+      "assistant_message_id": "assistant-pair",
+      "content": [
+        {
+          "object_type": "ToolResultBlock",
+          "type": "tool_result",
+          "tool_use_id": "tool-pair-1",
+          "tool_name": "Bash",
+          "invocation_string": "ls",
+          "content": {
+            "content_type": "generic",
+            "text": "a.txt\nb.txt"
+          },
+          "is_error": false,
+          "duration_seconds": null,
+          "interactive_role": null,
+          "description": null
+        }
+      ],
+      "parent_tool_use_id": null
+    }
+  ],
+  "expected": [
+    {
+      "role": "ASSISTANT",
+      "id": "agm_0894f782a148b33af1e39a0efe",
+      "content": [
+        {
+          "object_type": "ToolResultBlock",
+          "type": "tool_result",
+          "tool_use_id": "tool-pair-1",
+          "tool_name": "Bash",
+          "invocation_string": "ls",
+          "content": {
+            "content_type": "generic",
+            "text": "a.txt\nb.txt"
+          },
+          "is_error": false,
+          "duration_seconds": null,
+          "interactive_role": null,
+          "description": null
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    }
+  ]
+}

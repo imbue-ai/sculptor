@@ -1,0 +1,192 @@
+{
+  "name": "ask_user_question_no_duplicate",
+  "input": [
+    {
+      "object_type": "ChatInputUserMessage",
+      "message_id": "agm_00d716c7220ab3b521fb56b6a4",
+      "source": "USER",
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "text": "ask me",
+      "model_name": "CLAUDE-4-SONNET",
+      "files": [],
+      "enter_plan_mode": false,
+      "exit_plan_mode": false,
+      "fast_mode": false,
+      "effort": "xhigh",
+      "sent_via": null
+    },
+    {
+      "object_type": "RequestStartedAgentMessage",
+      "message_id": "agm_0f92ef4de65f936aacfb965a45",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:01Z",
+      "request_id": "agm_00d716c7220ab3b521fb56b6a4"
+    },
+    {
+      "object_type": "PartialResponseBlockAgentMessage",
+      "message_id": "agm_0919d250e02683667351d5452a",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:02Z",
+      "content": [
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "toolu_ask_q_1",
+          "name": "AskUserQuestion",
+          "input": {
+            "questions": [
+              {
+                "question": "What language?",
+                "header": "Lang",
+                "options": [
+                  {
+                    "label": "Python",
+                    "description": "Great language"
+                  },
+                  {
+                    "label": "Rust",
+                    "description": "Systems language"
+                  }
+                ],
+                "multi_select": false,
+                "other_label": null
+              }
+            ]
+          },
+          "interactive_role": null
+        }
+      ],
+      "assistant_message_id": "assistant-ask-q-1",
+      "first_response_message_id": "agm_07db183c15847634a301761dc8",
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "AskUserQuestionAgentMessage",
+      "message_id": "agm_080e8a3e8b1ae0b0f04b15407b",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:03Z",
+      "question_data": {
+        "questions": [
+          {
+            "question": "What language?",
+            "header": "Lang",
+            "options": [
+              {
+                "label": "Python",
+                "description": "Great language"
+              },
+              {
+                "label": "Rust",
+                "description": "Systems language"
+              }
+            ],
+            "multi_select": false,
+            "other_label": null
+          }
+        ],
+        "tool_use_id": "toolu_ask_q_1",
+        "plan_file_path": null
+      }
+    },
+    {
+      "object_type": "StreamingMessageCompleteAgentMessage",
+      "message_id": "agm_03d39717f8f5e75fc53e9f459b",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:04Z"
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_07db183c15847634a301761dc8",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:05Z",
+      "role": "assistant",
+      "assistant_message_id": "assistant-ask-q-1",
+      "content": [
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "toolu_ask_q_1",
+          "name": "AskUserQuestion",
+          "input": {
+            "questions": [
+              {
+                "question": "What language?",
+                "header": "Lang",
+                "options": [
+                  {
+                    "label": "Python",
+                    "description": "Great language"
+                  },
+                  {
+                    "label": "Rust",
+                    "description": "Systems language"
+                  }
+                ],
+                "multi_select": false,
+                "other_label": null
+              }
+            ]
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": null
+    }
+  ],
+  "expected": [
+    {
+      "role": "USER",
+      "id": "agm_00d716c7220ab3b521fb56b6a4",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "ask me"
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    },
+    {
+      "role": "ASSISTANT",
+      "id": "agm_07db183c15847634a301761dc8",
+      "content": [
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "toolu_ask_q_1",
+          "name": "AskUserQuestion",
+          "input": {
+            "questions": [
+              {
+                "question": "What language?",
+                "header": "Lang",
+                "options": [
+                  {
+                    "label": "Python",
+                    "description": "Great language"
+                  },
+                  {
+                    "label": "Rust",
+                    "description": "Systems language"
+                  }
+                ],
+                "multi_select": false,
+                "other_label": null
+              }
+            ]
+          },
+          "interactive_role": "ask_user_question"
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:02Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    }
+  ]
+}

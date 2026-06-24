@@ -1,0 +1,130 @@
+{
+  "name": "context_summary_and_cleared",
+  "input": [
+    {
+      "object_type": "ChatInputUserMessage",
+      "message_id": "agm_0e2dba064904f7c6d8d2984bc7",
+      "source": "USER",
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "text": "compact",
+      "model_name": "CLAUDE-4-SONNET",
+      "files": [],
+      "enter_plan_mode": false,
+      "exit_plan_mode": false,
+      "fast_mode": false,
+      "effort": "xhigh",
+      "sent_via": null
+    },
+    {
+      "object_type": "RequestStartedAgentMessage",
+      "message_id": "agm_029db0bf385befddd528f6ee06",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:01Z",
+      "request_id": "agm_0e2dba064904f7c6d8d2984bc7"
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_0ed20a959d410ccd843d9e1dfc",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:02Z",
+      "role": "assistant",
+      "assistant_message_id": "assistant-12",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "some work before compaction"
+        }
+      ],
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "ContextSummaryMessage",
+      "message_id": "agm_0801cc562a89a7fdaef42e9e9f",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:03Z",
+      "content": "Summary of the conversation so far."
+    },
+    {
+      "object_type": "ContextClearedMessage",
+      "message_id": "agm_04a96420492dd5aab19a5791ec",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:04Z"
+    },
+    {
+      "request_id": "agm_0e2dba064904f7c6d8d2984bc7",
+      "error": null,
+      "object_type": "RequestSuccessAgentMessage",
+      "message_id": "agm_08080ca8407c0ec4ae51d27ae2",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:05Z",
+      "interrupted": false
+    }
+  ],
+  "expected": [
+    {
+      "role": "USER",
+      "id": "agm_0e2dba064904f7c6d8d2984bc7",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "compact"
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    },
+    {
+      "role": "ASSISTANT",
+      "id": "agm_0ed20a959d410ccd843d9e1dfc",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "some work before compaction"
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:02Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    },
+    {
+      "role": "ASSISTANT",
+      "id": "agm_0801cc562a89a7fdaef42e9e9f",
+      "content": [
+        {
+          "object_type": "ContextSummaryBlock",
+          "type": "context_summary",
+          "text": "Summary of the conversation so far."
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:03Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    },
+    {
+      "role": "ASSISTANT",
+      "id": "agm_04a96420492dd5aab19a5791ec",
+      "content": [
+        {
+          "object_type": "ContextClearedBlock",
+          "type": "context_cleared",
+          "text": "Cleared successfully"
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:04Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    }
+  ]
+}

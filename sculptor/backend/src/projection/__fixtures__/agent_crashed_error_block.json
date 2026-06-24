@@ -1,0 +1,40 @@
+{
+  "name": "agent_crashed_error_block",
+  "input": [
+    {
+      "object_type": "AgentCrashedRunnerMessage",
+      "message_id": "agm_047cfc27c36f07700a44a24887",
+      "source": "RUNNER",
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "exit_code": 1,
+      "error": {
+        "exception": "ChildProcessError",
+        "args": [
+          "agent died"
+        ],
+        "traceback_dict": null,
+        "was_logged_by_log_exception": false
+      }
+    }
+  ],
+  "expected": [
+    {
+      "role": "ASSISTANT",
+      "id": "agm_047cfc27c36f07700a44a24887",
+      "content": [
+        {
+          "object_type": "ErrorBlock",
+          "type": "error",
+          "message": "agent died",
+          "traceback": "Traceback (most recent call last):\n\nChildProcessError: ('agent died',)",
+          "error_type": "ChildProcessError"
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    }
+  ]
+}

@@ -1,0 +1,84 @@
+{
+  "name": "request_skipped_finalizes",
+  "input": [
+    {
+      "object_type": "ChatInputUserMessage",
+      "message_id": "agm_06d90e8ba946fc03a5c43e1e45",
+      "source": "USER",
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "text": "skip",
+      "model_name": "CLAUDE-4-SONNET",
+      "files": [],
+      "enter_plan_mode": false,
+      "exit_plan_mode": false,
+      "fast_mode": false,
+      "effort": "xhigh",
+      "sent_via": null
+    },
+    {
+      "object_type": "RequestStartedAgentMessage",
+      "message_id": "agm_011885f9f95f4dd1d1d16a0998",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:01Z",
+      "request_id": "agm_06d90e8ba946fc03a5c43e1e45"
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_02169184650ee32062f115ec35",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:02Z",
+      "role": "assistant",
+      "assistant_message_id": "assistant-14",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "partial work"
+        }
+      ],
+      "parent_tool_use_id": null
+    },
+    {
+      "request_id": "agm_06d90e8ba946fc03a5c43e1e45",
+      "error": null,
+      "object_type": "RequestSkippedAgentMessage",
+      "message_id": "agm_002de310acc641c2dbd972c9eb",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:03Z"
+    }
+  ],
+  "expected": [
+    {
+      "role": "USER",
+      "id": "agm_06d90e8ba946fc03a5c43e1e45",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "skip"
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    },
+    {
+      "role": "ASSISTANT",
+      "id": "agm_02169184650ee32062f115ec35",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "partial work"
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:02Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    }
+  ]
+}

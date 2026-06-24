@@ -1,0 +1,39 @@
+{
+  "name": "user_question_answer_no_queued",
+  "input": [
+    {
+      "object_type": "UserQuestionAnswerMessage",
+      "message_id": "agm_0f825b73c127f45c832b98460c",
+      "source": "USER",
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "answers": {
+        "What language do you prefer?": "Python"
+      },
+      "notes": {},
+      "question_data": {
+        "questions": [
+          {
+            "question": "What language do you prefer?",
+            "header": "Language",
+            "options": [
+              {
+                "label": "Python",
+                "description": "A versatile language"
+              },
+              {
+                "label": "Rust",
+                "description": "A systems language"
+              }
+            ],
+            "multi_select": false,
+            "other_label": null
+          }
+        ],
+        "tool_use_id": "tool-use-ask-1",
+        "plan_file_path": null
+      },
+      "tool_use_id": "tool-use-ask-1"
+    }
+  ],
+  "expected": []
+}

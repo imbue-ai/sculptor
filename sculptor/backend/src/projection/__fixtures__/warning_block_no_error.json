@@ -1,0 +1,33 @@
+{
+  "name": "warning_block_no_error",
+  "input": [
+    {
+      "object_type": "WarningAgentMessage",
+      "message_id": "agm_063c90b57e231aa37d93f2ec1f",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "error": null,
+      "message": "plain warning"
+    }
+  ],
+  "expected": [
+    {
+      "role": "ASSISTANT",
+      "id": "agm_063c90b57e231aa37d93f2ec1f",
+      "content": [
+        {
+          "object_type": "WarningBlock",
+          "type": "warning",
+          "message": "plain warning",
+          "traceback": null,
+          "warning_type": null
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    }
+  ]
+}

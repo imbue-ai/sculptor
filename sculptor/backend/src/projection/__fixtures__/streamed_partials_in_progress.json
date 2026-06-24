@@ -1,0 +1,108 @@
+{
+  "name": "streamed_partials_in_progress",
+  "input": [
+    {
+      "object_type": "ChatInputUserMessage",
+      "message_id": "agm_0154706d0d22db4afaa8ec45cf",
+      "source": "USER",
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "text": "Hello!",
+      "model_name": "CLAUDE-4-SONNET",
+      "files": [],
+      "enter_plan_mode": false,
+      "exit_plan_mode": false,
+      "fast_mode": false,
+      "effort": "xhigh",
+      "sent_via": null
+    },
+    {
+      "object_type": "RequestStartedAgentMessage",
+      "message_id": "agm_09a493381d1376cbd856bab6d1",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:01Z",
+      "request_id": "agm_0154706d0d22db4afaa8ec45cf"
+    },
+    {
+      "object_type": "PartialResponseBlockAgentMessage",
+      "message_id": "agm_0d579bb21fba38f3c2d52064de",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:02Z",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "Let me"
+        }
+      ],
+      "assistant_message_id": "assistant-3b",
+      "first_response_message_id": "agm_0aff42aef2a723843c75943fae",
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "PartialResponseBlockAgentMessage",
+      "message_id": "agm_0cb66e1df2d1880c2971996aeb",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:03Z",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "Let me think"
+        }
+      ],
+      "assistant_message_id": "assistant-3b",
+      "first_response_message_id": "agm_0aff42aef2a723843c75943fae",
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "PartialResponseBlockAgentMessage",
+      "message_id": "agm_0b3afafe297d08f3d7c31a0b4b",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:04Z",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "Let me think about it"
+        }
+      ],
+      "assistant_message_id": "assistant-3b",
+      "first_response_message_id": "agm_0aff42aef2a723843c75943fae",
+      "parent_tool_use_id": null
+    }
+  ],
+  "expected": [
+    {
+      "role": "USER",
+      "id": "agm_0154706d0d22db4afaa8ec45cf",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "Hello!"
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    },
+    {
+      "role": "ASSISTANT",
+      "id": "agm_0aff42aef2a723843c75943fae",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "Let me think about it"
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:02Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    }
+  ]
+}

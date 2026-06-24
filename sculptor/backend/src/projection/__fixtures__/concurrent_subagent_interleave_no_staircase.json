@@ -1,0 +1,690 @@
+{
+  "name": "concurrent_subagent_interleave_no_staircase",
+  "input": [
+    {
+      "object_type": "ChatInputUserMessage",
+      "message_id": "agm_06bce05df9831da7799a5edc4f",
+      "source": "USER",
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "text": "audit the codebase",
+      "model_name": "CLAUDE-4-SONNET",
+      "files": [],
+      "enter_plan_mode": false,
+      "exit_plan_mode": false,
+      "fast_mode": false,
+      "effort": "xhigh",
+      "sent_via": null
+    },
+    {
+      "object_type": "RequestStartedAgentMessage",
+      "message_id": "agm_0954844b2fb57da1393edd125c",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:01Z",
+      "request_id": "agm_06bce05df9831da7799a5edc4f"
+    },
+    {
+      "object_type": "PartialResponseBlockAgentMessage",
+      "message_id": "agm_01ea20f973b2a0fc2054030c14",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:02Z",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "Launching the audit subagent."
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "toolu_agent",
+          "name": "Agent",
+          "input": {
+            "run_in_background": true,
+            "prompt": "audit"
+          },
+          "interactive_role": null
+        }
+      ],
+      "assistant_message_id": "mt-launch-assistant",
+      "first_response_message_id": "agm_0d855b2892a256a289667181e5",
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "StreamingMessageCompleteAgentMessage",
+      "message_id": "agm_090d9d89c95e5c466d061dcb8a",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:03Z"
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_0d855b2892a256a289667181e5",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:04Z",
+      "role": "assistant",
+      "assistant_message_id": "mt-launch-assistant",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "Launching the audit subagent."
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "toolu_agent",
+          "name": "Agent",
+          "input": {
+            "run_in_background": true,
+            "prompt": "audit"
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_090a8595dfb4461aba3f70401f",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:05Z",
+      "role": "assistant",
+      "assistant_message_id": "subagent-0",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "subagent step 0"
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "sub-tool-0",
+          "name": "Grep",
+          "input": {
+            "pattern": "x"
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": "toolu_agent"
+    },
+    {
+      "object_type": "PartialResponseBlockAgentMessage",
+      "message_id": "agm_044b5a84a1636bc59cc8c499d3",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:06Z",
+      "content": [
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "main-bash-0",
+          "name": "Bash",
+          "input": {
+            "command": "echo 0"
+          },
+          "interactive_role": null
+        }
+      ],
+      "assistant_message_id": "mt-bash0-assistant",
+      "first_response_message_id": "agm_0eeeea5bdce543c5b2375e7049",
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "StreamingMessageCompleteAgentMessage",
+      "message_id": "agm_04ee8a33ff3ce6b7dbaa5f6f43",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:07Z"
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_0eeeea5bdce543c5b2375e7049",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:08Z",
+      "role": "assistant",
+      "assistant_message_id": "mt-bash0-assistant",
+      "content": [
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "main-bash-0",
+          "name": "Bash",
+          "input": {
+            "command": "echo 0"
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_01873a0c8f41a998f9e3efdd46",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:09Z",
+      "role": "assistant",
+      "assistant_message_id": "subagent-1",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "subagent step 1"
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "sub-tool-1",
+          "name": "Grep",
+          "input": {
+            "pattern": "x"
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": "toolu_agent"
+    },
+    {
+      "object_type": "PartialResponseBlockAgentMessage",
+      "message_id": "agm_0c31b4ad8eaed415330cf1e7c5",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:10Z",
+      "content": [
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "main-bash-1",
+          "name": "Bash",
+          "input": {
+            "command": "echo 1"
+          },
+          "interactive_role": null
+        }
+      ],
+      "assistant_message_id": "mt-bash1-assistant",
+      "first_response_message_id": "agm_0d8e06f9ca332e1890b8dd83f8",
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "StreamingMessageCompleteAgentMessage",
+      "message_id": "agm_00c6aea4a390e1e2f322569b2f",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:11Z"
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_0d8e06f9ca332e1890b8dd83f8",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:12Z",
+      "role": "assistant",
+      "assistant_message_id": "mt-bash1-assistant",
+      "content": [
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "main-bash-1",
+          "name": "Bash",
+          "input": {
+            "command": "echo 1"
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_01408b32918da66bcbcf05d538",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:13Z",
+      "role": "assistant",
+      "assistant_message_id": "subagent-2",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "subagent step 2"
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "sub-tool-2",
+          "name": "Grep",
+          "input": {
+            "pattern": "x"
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": "toolu_agent"
+    },
+    {
+      "object_type": "PartialResponseBlockAgentMessage",
+      "message_id": "agm_0a7aeeeeca4a144af3dc88b80f",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:14Z",
+      "content": [
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "main-bash-2",
+          "name": "Bash",
+          "input": {
+            "command": "echo 2"
+          },
+          "interactive_role": null
+        }
+      ],
+      "assistant_message_id": "mt-bash2-assistant",
+      "first_response_message_id": "agm_010c7c37a5942c94989baece73",
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "StreamingMessageCompleteAgentMessage",
+      "message_id": "agm_039f74f95e308ff4f64dba14cf",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:15Z"
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_010c7c37a5942c94989baece73",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:16Z",
+      "role": "assistant",
+      "assistant_message_id": "mt-bash2-assistant",
+      "content": [
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "main-bash-2",
+          "name": "Bash",
+          "input": {
+            "command": "echo 2"
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_0ce3cba8948e7d6fa012458793",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:17Z",
+      "role": "assistant",
+      "assistant_message_id": "subagent-3",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "subagent step 3"
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "sub-tool-3",
+          "name": "Grep",
+          "input": {
+            "pattern": "x"
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": "toolu_agent"
+    },
+    {
+      "object_type": "PartialResponseBlockAgentMessage",
+      "message_id": "agm_0686a6991a317595567c17b796",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:18Z",
+      "content": [
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "main-bash-3",
+          "name": "Bash",
+          "input": {
+            "command": "echo 3"
+          },
+          "interactive_role": null
+        }
+      ],
+      "assistant_message_id": "mt-bash3-assistant",
+      "first_response_message_id": "agm_082f0a5ce5cd28464e5d7ee41b",
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "StreamingMessageCompleteAgentMessage",
+      "message_id": "agm_06aa0e9286aef595b9652b2109",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:19Z"
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_082f0a5ce5cd28464e5d7ee41b",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:20Z",
+      "role": "assistant",
+      "assistant_message_id": "mt-bash3-assistant",
+      "content": [
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "main-bash-3",
+          "name": "Bash",
+          "input": {
+            "command": "echo 3"
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_0db9e20c89a1c554fd8b56fef7",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:21Z",
+      "role": "assistant",
+      "assistant_message_id": "subagent-4",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "subagent step 4"
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "sub-tool-4",
+          "name": "Grep",
+          "input": {
+            "pattern": "x"
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": "toolu_agent"
+    },
+    {
+      "object_type": "PartialResponseBlockAgentMessage",
+      "message_id": "agm_0983fff5490005321341930699",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:22Z",
+      "content": [
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "main-bash-4",
+          "name": "Bash",
+          "input": {
+            "command": "echo 4"
+          },
+          "interactive_role": null
+        }
+      ],
+      "assistant_message_id": "mt-bash4-assistant",
+      "first_response_message_id": "agm_0cb3d2d871f391d0314097c984",
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "StreamingMessageCompleteAgentMessage",
+      "message_id": "agm_092817dfdd912090e92c7a838d",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:23Z"
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_0cb3d2d871f391d0314097c984",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:24Z",
+      "role": "assistant",
+      "assistant_message_id": "mt-bash4-assistant",
+      "content": [
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "main-bash-4",
+          "name": "Bash",
+          "input": {
+            "command": "echo 4"
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": null
+    },
+    {
+      "request_id": "agm_06bce05df9831da7799a5edc4f",
+      "error": null,
+      "object_type": "RequestSuccessAgentMessage",
+      "message_id": "agm_0e54ef5a543401da806dc70553",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:01:39Z",
+      "interrupted": false
+    }
+  ],
+  "expected": [
+    {
+      "role": "USER",
+      "id": "agm_06bce05df9831da7799a5edc4f",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "audit the codebase"
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    },
+    {
+      "role": "ASSISTANT",
+      "id": "agm_090a8595dfb4461aba3f70401f",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "subagent step 0"
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "sub-tool-0",
+          "name": "Grep",
+          "input": {
+            "pattern": "x"
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": "toolu_agent",
+      "approximate_creation_time": "2024-01-01T00:00:05Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    },
+    {
+      "role": "ASSISTANT",
+      "id": "agm_01873a0c8f41a998f9e3efdd46",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "subagent step 1"
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "sub-tool-1",
+          "name": "Grep",
+          "input": {
+            "pattern": "x"
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": "toolu_agent",
+      "approximate_creation_time": "2024-01-01T00:00:09Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    },
+    {
+      "role": "ASSISTANT",
+      "id": "agm_01408b32918da66bcbcf05d538",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "subagent step 2"
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "sub-tool-2",
+          "name": "Grep",
+          "input": {
+            "pattern": "x"
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": "toolu_agent",
+      "approximate_creation_time": "2024-01-01T00:00:13Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    },
+    {
+      "role": "ASSISTANT",
+      "id": "agm_0ce3cba8948e7d6fa012458793",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "subagent step 3"
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "sub-tool-3",
+          "name": "Grep",
+          "input": {
+            "pattern": "x"
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": "toolu_agent",
+      "approximate_creation_time": "2024-01-01T00:00:17Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    },
+    {
+      "role": "ASSISTANT",
+      "id": "agm_0db9e20c89a1c554fd8b56fef7",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "subagent step 4"
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "sub-tool-4",
+          "name": "Grep",
+          "input": {
+            "pattern": "x"
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": "toolu_agent",
+      "approximate_creation_time": "2024-01-01T00:00:21Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    },
+    {
+      "role": "ASSISTANT",
+      "id": "agm_0d855b2892a256a289667181e5",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "Launching the audit subagent."
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "toolu_agent",
+          "name": "Agent",
+          "input": {
+            "run_in_background": true,
+            "prompt": "audit"
+          },
+          "interactive_role": null
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "main-bash-0",
+          "name": "Bash",
+          "input": {
+            "command": "echo 0"
+          },
+          "interactive_role": null
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "main-bash-1",
+          "name": "Bash",
+          "input": {
+            "command": "echo 1"
+          },
+          "interactive_role": null
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "main-bash-2",
+          "name": "Bash",
+          "input": {
+            "command": "echo 2"
+          },
+          "interactive_role": null
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "main-bash-3",
+          "name": "Bash",
+          "input": {
+            "command": "echo 3"
+          },
+          "interactive_role": null
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "main-bash-4",
+          "name": "Bash",
+          "input": {
+            "command": "echo 4"
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:02Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    }
+  ]
+}

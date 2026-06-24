@@ -1,0 +1,114 @@
+{
+  "name": "turn_metrics_attached_on_success",
+  "input": [
+    {
+      "object_type": "ChatInputUserMessage",
+      "message_id": "agm_080b4425719161816e401b4ec8",
+      "source": "USER",
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "text": "measure me",
+      "model_name": "CLAUDE-4-SONNET",
+      "files": [],
+      "enter_plan_mode": false,
+      "exit_plan_mode": false,
+      "fast_mode": false,
+      "effort": "xhigh",
+      "sent_via": null
+    },
+    {
+      "object_type": "RequestStartedAgentMessage",
+      "message_id": "agm_0c4ebf75168b5213f4e9e2e974",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:01Z",
+      "request_id": "agm_080b4425719161816e401b4ec8"
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_09c8a0632757d66bb9ae533b2d",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:02Z",
+      "role": "assistant",
+      "assistant_message_id": "assistant-15",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "done with work"
+        }
+      ],
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "TurnMetricsAgentMessage",
+      "message_id": "agm_0881aecb72bf32d59438b9e66b",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:03Z",
+      "turn_metrics": {
+        "duration_seconds": 12.5,
+        "input_tokens": 1000,
+        "output_tokens": 250,
+        "reasoning_tokens": 50,
+        "changed_files": [
+          "src/a.py",
+          "src/b.py"
+        ],
+        "context_total_tokens": 5000,
+        "auto_compact_threshold": 160000
+      }
+    },
+    {
+      "request_id": "agm_080b4425719161816e401b4ec8",
+      "error": null,
+      "object_type": "RequestSuccessAgentMessage",
+      "message_id": "agm_0ef4163bd0a545c33c1d9a3a67",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:04Z",
+      "interrupted": false
+    }
+  ],
+  "expected": [
+    {
+      "role": "USER",
+      "id": "agm_080b4425719161816e401b4ec8",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "measure me"
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    },
+    {
+      "role": "ASSISTANT",
+      "id": "agm_09c8a0632757d66bb9ae533b2d",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "done with work"
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:02Z",
+      "turn_metrics": {
+        "duration_seconds": 12.5,
+        "input_tokens": 1000,
+        "output_tokens": 250,
+        "reasoning_tokens": 50,
+        "changed_files": [
+          "src/a.py",
+          "src/b.py"
+        ],
+        "context_total_tokens": 5000,
+        "auto_compact_threshold": 160000
+      },
+      "stopped": false,
+      "sent_via": null
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "name": "warning_block",
+  "input": [
+    {
+      "object_type": "WarningAgentMessage",
+      "message_id": "agm_03bcba9c4c9a88f16fcaba0eea",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "error": {
+        "exception": "UserWarning",
+        "args": [
+          "warned"
+        ],
+        "traceback_dict": null,
+        "was_logged_by_log_exception": false
+      },
+      "message": "heads up, something is off"
+    }
+  ],
+  "expected": [
+    {
+      "role": "ASSISTANT",
+      "id": "agm_03bcba9c4c9a88f16fcaba0eea",
+      "content": [
+        {
+          "object_type": "WarningBlock",
+          "type": "warning",
+          "message": "heads up, something is off",
+          "traceback": "Traceback (most recent call last):\n\nUserWarning: ('warned',)",
+          "warning_type": "UserWarning"
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    }
+  ]
+}

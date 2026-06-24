@@ -1,0 +1,98 @@
+{
+  "name": "request_failure_error_block",
+  "input": [
+    {
+      "object_type": "ChatInputUserMessage",
+      "message_id": "agm_05486259f9c01e2199ac7cddca",
+      "source": "USER",
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "text": "break it",
+      "model_name": "CLAUDE-4-SONNET",
+      "files": [],
+      "enter_plan_mode": false,
+      "exit_plan_mode": false,
+      "fast_mode": false,
+      "effort": "xhigh",
+      "sent_via": null
+    },
+    {
+      "object_type": "RequestStartedAgentMessage",
+      "message_id": "agm_0d0001659b6b7a021d6538d9a8",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:01Z",
+      "request_id": "agm_05486259f9c01e2199ac7cddca"
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_03d1e97d18e692ca5484d1abfe",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:02Z",
+      "role": "assistant",
+      "assistant_message_id": "assistant-9",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "working on it"
+        }
+      ],
+      "parent_tool_use_id": null
+    },
+    {
+      "request_id": "agm_05486259f9c01e2199ac7cddca",
+      "error": {
+        "exception": "RuntimeError",
+        "args": [
+          "something failed"
+        ],
+        "traceback_dict": null,
+        "was_logged_by_log_exception": false
+      },
+      "object_type": "RequestFailureAgentMessage",
+      "message_id": "agm_06506f0388343a1f09fd708fb1",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:03Z"
+    }
+  ],
+  "expected": [
+    {
+      "role": "USER",
+      "id": "agm_05486259f9c01e2199ac7cddca",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "break it"
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    },
+    {
+      "role": "ASSISTANT",
+      "id": "agm_03d1e97d18e692ca5484d1abfe",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "working on it"
+        },
+        {
+          "object_type": "ErrorBlock",
+          "type": "error",
+          "message": "something failed",
+          "traceback": "Traceback (most recent call last):\n\nRuntimeError: ('something failed',)",
+          "error_type": "RuntimeError"
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:02Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    }
+  ]
+}

@@ -1,0 +1,113 @@
+{
+  "name": "subagent_parent_tool_use_id_flush",
+  "input": [
+    {
+      "object_type": "PartialResponseBlockAgentMessage",
+      "message_id": "agm_092ca8e390d810b85e133772b3",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "Launching subagent."
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "toolu_agent_sf",
+          "name": "Agent",
+          "input": {
+            "run_in_background": true,
+            "prompt": "go"
+          },
+          "interactive_role": null
+        }
+      ],
+      "assistant_message_id": "assistant-6-main",
+      "first_response_message_id": "agm_0a1bd8623bf805136bbc50f84f",
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_046d9b661fb724694292fb1115",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:01Z",
+      "role": "assistant",
+      "assistant_message_id": "subagent-6",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "subagent working"
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "sub-tool-6",
+          "name": "Grep",
+          "input": {
+            "pattern": "x"
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": "toolu_agent_sf"
+    }
+  ],
+  "expected": [
+    {
+      "role": "ASSISTANT",
+      "id": "agm_046d9b661fb724694292fb1115",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "subagent working"
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "sub-tool-6",
+          "name": "Grep",
+          "input": {
+            "pattern": "x"
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": "toolu_agent_sf",
+      "approximate_creation_time": "2024-01-01T00:00:01Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    },
+    {
+      "role": "ASSISTANT",
+      "id": "agm_0a1bd8623bf805136bbc50f84f",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "Launching subagent."
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "toolu_agent_sf",
+          "name": "Agent",
+          "input": {
+            "run_in_background": true,
+            "prompt": "go"
+          },
+          "interactive_role": null
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    }
+  ]
+}

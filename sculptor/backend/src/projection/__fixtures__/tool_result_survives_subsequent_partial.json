@@ -1,0 +1,132 @@
+{
+  "name": "tool_result_survives_subsequent_partial",
+  "input": [
+    {
+      "object_type": "PartialResponseBlockAgentMessage",
+      "message_id": "agm_0eb97d19a760edea30602564e7",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "Let me check."
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "tool-survive-1",
+          "name": "Read",
+          "input": {
+            "file_path": "/test.txt"
+          },
+          "interactive_role": null
+        }
+      ],
+      "assistant_message_id": "assistant-survive",
+      "first_response_message_id": "agm_032cfe6c19200b67afb7c3d0e1",
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "ResponseBlockAgentMessage",
+      "message_id": "agm_053bfed0ac794e917c182edf36",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:01Z",
+      "role": "assistant",
+      "assistant_message_id": "assistant-survive",
+      "content": [
+        {
+          "object_type": "ToolResultBlock",
+          "type": "tool_result",
+          "tool_use_id": "tool-survive-1",
+          "tool_name": "Read",
+          "invocation_string": "/test.txt",
+          "content": {
+            "content_type": "generic",
+            "text": "file contents here"
+          },
+          "is_error": false,
+          "duration_seconds": null,
+          "interactive_role": null,
+          "description": null
+        }
+      ],
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "PartialResponseBlockAgentMessage",
+      "message_id": "agm_0fd51d26ef0fdd5203c8e3872f",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:02Z",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "Let me check."
+        },
+        {
+          "object_type": "ToolUseBlock",
+          "type": "tool_use",
+          "id": "tool-survive-1",
+          "name": "Read",
+          "input": {
+            "file_path": "/test.txt"
+          },
+          "interactive_role": null
+        },
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "Now continuing..."
+        }
+      ],
+      "assistant_message_id": "assistant-survive",
+      "first_response_message_id": "agm_032cfe6c19200b67afb7c3d0e1",
+      "parent_tool_use_id": null
+    },
+    {
+      "object_type": "StreamingMessageCompleteAgentMessage",
+      "message_id": "agm_03af043f744fee850f7860187a",
+      "source": "AGENT",
+      "approximate_creation_time": "2024-01-01T00:00:03Z"
+    }
+  ],
+  "expected": [
+    {
+      "role": "ASSISTANT",
+      "id": "agm_032cfe6c19200b67afb7c3d0e1",
+      "content": [
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "Let me check."
+        },
+        {
+          "object_type": "ToolResultBlock",
+          "type": "tool_result",
+          "tool_use_id": "tool-survive-1",
+          "tool_name": "Read",
+          "invocation_string": "/test.txt",
+          "content": {
+            "content_type": "generic",
+            "text": "file contents here"
+          },
+          "is_error": false,
+          "duration_seconds": null,
+          "interactive_role": null,
+          "description": null
+        },
+        {
+          "object_type": "TextBlock",
+          "type": "text",
+          "text": "Now continuing..."
+        }
+      ],
+      "parent_tool_use_id": null,
+      "approximate_creation_time": "2024-01-01T00:00:00Z",
+      "turn_metrics": null,
+      "stopped": false,
+      "sent_via": null
+    }
+  ]
+}
