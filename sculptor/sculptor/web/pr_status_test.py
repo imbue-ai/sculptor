@@ -331,7 +331,9 @@ def test_graphql_query_requests_the_fields_the_parser_reads() -> None:
         assert field in query, f"query is missing field {field!r}"
     # `reviewThreads` is requested directly (it is a valid GraphQL PullRequest
     # field, unlike `gh pr view --json`'s curated subset that shipped the bug).
-    assert "reviewThreads" in query
+    # Its page size is trimmed to 10 (Change-1b) — `reviewThreads` is the
+    # dominant cost term, so this caps the per-poll GraphQL point cost.
+    assert "reviewThreads(first: 10)" in query
 
 
 # ---------------------------------------------------------------------------

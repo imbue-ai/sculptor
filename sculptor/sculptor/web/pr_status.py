@@ -173,7 +173,7 @@ query($owner: String!, $name: String!, $branch: String!, $limit: Int!) {
         mergeable
         commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
         latestReviews(first: 20) { nodes { state author { login } } }
-        reviewThreads(first: 30) {
+        reviewThreads(first: 10) {
           nodes { isResolved comments(first: 1) { nodes { author { login } path line body } } }
         }
       }
