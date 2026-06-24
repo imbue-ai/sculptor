@@ -22,7 +22,9 @@ from sculptor.web.pr_polling_service import _PollJob
 from sculptor.web.pr_polling_service import _RATE_LIMIT_COOLDOWN_SECONDS
 from sculptor.web.pr_polling_service import _TERMINAL_STATE_MULTIPLIER
 from sculptor.web.pr_polling_service import _WorkspacePollState
+from sculptor.web.pr_polling_service import _build_pr_index
 from sculptor.web.pr_polling_service import _compute_poll_delay
+from sculptor.web.pr_polling_service import _compute_round_interval
 from sculptor.web.pr_polling_service import _parse_origin
 from sculptor.web.pr_polling_service import _parse_origin_owner_repo
 from sculptor.web.streams import _notify_pr_polling_service
@@ -54,6 +56,10 @@ def _make_service() -> PrPollingService:
     svc._worker_sleep_lock = threading.Lock()
     svc._gh_available = None
     svc._throttle = _HostThrottle(_GLOBAL_MIN_POLL_SPACING_SECONDS)
+    svc._matched_workspaces = set()
+    svc._rate_limit_by_host = {}
+    svc._round_failed_hosts = set()
+    svc._cold_start_logged_hosts = set()
     object.__setattr__(svc, "_data_model_service", MagicMock())
     object.__setattr__(svc, "_workspace_service", MagicMock())
     return svc
@@ -699,3 +705,47 @@ def test_parse_origin_owner_repo_strips_dot_git() -> None:
     # nameWithOwner from GitHub's API never carries .git; origin URLs usually do.
     assert _parse_origin_owner_repo("https://github.com/imbue-ai/sculptor.git") == ("imbue-ai", "sculptor")
     assert _parse_origin_owner_repo("git@github.com:imbue-ai/sculptor.git") == ("imbue-ai", "sculptor")
+
+
+# ---------------------------------------------------------------------------
+# Transient per-round (repo, branch) -> nodes index (Change-1 fan-out).
+# ---------------------------------------------------------------------------
+
+
+def _node(number: int, repo: str = "org/repo", head: str = "feat-1", base: str = "main") -> dict:
+    return {
+        "number": number,
+        "repository": {"nameWithOwner": repo},
+        "headRefName": head,
+        "baseRefName": base,
+    }
+
+
+def test_build_pr_index_keys_by_repo_and_head_branch() -> None:
+    nodes = [_node(1, head="feat-1"), _node(2, repo="org/other", head="feat-2")]
+    index = _build_pr_index(nodes)
+    assert set(index.keys()) == {("org/repo", "feat-1"), ("org/other", "feat-2")}
+    assert [n["number"] for n in index[("org/repo", "feat-1")]] == [1]
+
+
+def test_build_pr_index_groups_multiple_prs_on_one_branch_preserving_order() -> None:
+    # One source branch can carry several PRs (different bases); order is
+    # preserved (search returns most-recently-updated first).
+    nodes = [_node(10, head="feat-1", base="develop"), _node(11, head="feat-1", base="main")]
+    index = _build_pr_index(nodes)
+    assert [n["number"] for n in index[("org/repo", "feat-1")]] == [10, 11]
+
+
+def test_build_pr_index_skips_nodes_missing_repo_or_head() -> None:
+    nodes = [{"number": 1, "headRefName": "feat-1"}, {"number": 2, "repository": {"nameWithOwner": "org/repo"}}]
+    assert _build_pr_index(nodes) == {}
+
+
+def test_compute_round_interval_floors_at_minimum() -> None:
+    config = _make_user_config(pr_poll_interval_seconds=1)
+    assert _compute_round_interval(config) == _MIN_POLL_INTERVAL_SECONDS
+
+
+def test_compute_round_interval_uses_configured_interval() -> None:
+    config = _make_user_config(pr_poll_interval_seconds=45)
+    assert _compute_round_interval(config) == 45.0
