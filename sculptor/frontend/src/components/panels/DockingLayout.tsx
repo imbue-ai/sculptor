@@ -217,12 +217,15 @@ export const DockingLayout = ({ centerContent }: DockingLayoutProps): ReactEleme
   // defaults to zoneSizesAtom — that caused downstream re-renders that
   // destabilised other tests (e.g. clipboard/toast flows). The atom only
   // holds values the user has explicitly dragged to.
+  //
+  // The freeze is performed by adjusting state during render (React's
+  // "storing information from previous renders" pattern) instead of in an
+  // effect: once a non-zero measurement arrives we set state immediately,
+  // so the frozen value is used on the same render pass with no extra cycle.
   const [initialGroupSize, setInitialGroupSize] = useState<{ width: number; height: number } | null>(null);
-  useLayoutEffect(() => {
-    if (initialGroupSize !== null) return;
-    if (panelGroupWidth <= 0 || panelGroupHeight <= 0) return;
+  if (initialGroupSize === null && panelGroupWidth > 0 && panelGroupHeight > 0) {
     setInitialGroupSize({ width: panelGroupWidth, height: panelGroupHeight });
-  }, [panelGroupWidth, panelGroupHeight, initialGroupSize]);
+  }
 
   // ── Zone sizes (pixels) ──────────────────────────────────────────────
   // Every persisted zone size is a pixel value. The layout keeps side panels
@@ -260,13 +263,16 @@ export const DockingLayout = ({ centerContent }: DockingLayoutProps): ReactEleme
   }, [panelGroupWidth, isLeftVisible, isRightVisible, isExpanded, setZoneVisibility]);
 
   // Refs keep the latest values accessible from within the resize-handle
-  // callbacks without re-creating them on every pixel of drag.
+  // callbacks without re-creating them on every pixel of drag. Written in an
+  // effect (not during render) so the values are read only after commit.
   const sizesRef = useRef(zoneSizes);
-  sizesRef.current = zoneSizes;
   const defaultSideWidthRef = useRef(defaultSideWidthPx);
-  defaultSideWidthRef.current = defaultSideWidthPx;
   const defaultBottomHeightRef = useRef(defaultBottomHeightPx);
-  defaultBottomHeightRef.current = defaultBottomHeightPx;
+  useEffect(() => {
+    sizesRef.current = zoneSizes;
+    defaultSideWidthRef.current = defaultSideWidthPx;
+    defaultBottomHeightRef.current = defaultBottomHeightPx;
+  });
 
   const readSize = useCallback((key: ZoneId, fallback: number): number => sizesRef.current[key] ?? fallback, []);
 

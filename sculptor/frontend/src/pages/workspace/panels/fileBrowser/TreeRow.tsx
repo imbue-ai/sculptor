@@ -1,6 +1,6 @@
 import { IconButton, Tooltip } from "@radix-ui/themes";
 import { AlertTriangle, ChevronRight, Folder, X } from "lucide-react";
-import { memo, type ReactElement } from "react";
+import { createElement, memo, type ReactElement } from "react";
 
 import { ElementIds } from "~/api";
 
@@ -50,8 +50,9 @@ const FolderIcon = memo(function FolderIcon({ isExpanded }: { isExpanded: boolea
 });
 
 const FileTypeIcon = memo(function FileTypeIcon({ filename }: { filename: string }): ReactElement {
-  const Icon = getFileIcon(filename);
-  return <Icon size={14} className={styles.fileIcon} />;
+  // getFileIcon selects a stable module-level Lucide component; render it via
+  // createElement so it reads as choosing a component, not creating one.
+  return createElement(getFileIcon(filename), { size: 14, className: styles.fileIcon });
 });
 
 const LineStats = ({

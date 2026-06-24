@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from "react";
-import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useState } from "react";
 
 import { ImageLightbox } from "./ImageLightbox.tsx";
 
@@ -31,23 +31,29 @@ type AgentLightboxProviderProps = {
 };
 
 export const AgentLightboxProvider = ({ taskId, children }: AgentLightboxProviderProps): ReactElement => {
-  const listsRef = useRef<Map<string, ListEntry>>(new Map());
-  // forceUpdate triggers a re-render so allMedia (computed from the mutable ref) reflects the latest state.
-  const [, forceUpdate] = useReducer((n: number) => n + 1, 0);
+  // Registered media is real state (keyed by list id), so the render reads state
+  // rather than a mutable ref and updates re-render automatically.
+  const [lists, setLists] = useState<ReadonlyMap<string, ListEntry>>(() => new Map());
   const [lightboxPath, setLightboxPath] = useState<string | null>(null);
 
-  // Reset media registry and close lightbox when switching agents. Resetting in
-  // an effect rather than remounting the subtree (via key={taskId}) avoids scroll
-  // container DOM element swaps and visible scroll flickering.
-  useEffect(() => {
-    listsRef.current.clear();
+  // Reset the media registry and close the lightbox when switching agents.
+  // Adjusting state during render (comparing taskId to its previous value)
+  // instead of remounting via key={taskId} avoids scroll container DOM element
+  // swaps and visible scroll flickering, and avoids the extra render an effect
+  // would introduce.
+  const [prevTaskId, setPrevTaskId] = useState(taskId);
+  if (taskId !== prevTaskId) {
+    setPrevTaskId(taskId);
+    setLists(new Map());
     setLightboxPath(null);
-    forceUpdate();
-  }, [taskId]);
+  }
 
   const registerMedia = useCallback((listId: string, order: number, media: ReadonlyArray<LightboxMediaFile>): void => {
-    listsRef.current.set(listId, { order, media });
-    forceUpdate();
+    setLists((prev) => {
+      const next = new Map(prev);
+      next.set(listId, { order, media });
+      return next;
+    });
   }, []);
 
   const openLightbox = useCallback((filePath: string): void => {
@@ -63,8 +69,10 @@ export const AgentLightboxProvider = ({ taskId, children }: AgentLightboxProvide
     [registerMedia, openLightbox],
   );
 
-  // Computed fresh each render; forceUpdate() is called whenever listsRef changes.
-  const allMedia = [...listsRef.current.values()].sort((a, b) => a.order - b.order).flatMap(({ media }) => [...media]);
+  const allMedia = useMemo(
+    () => [...lists.values()].sort((a, b) => a.order - b.order).flatMap(({ media }) => [...media]),
+    [lists],
+  );
 
   const lightboxIndex = lightboxPath != null ? allMedia.findIndex((m) => m.path === lightboxPath) : -1;
 

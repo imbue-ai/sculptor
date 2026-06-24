@@ -1,7 +1,7 @@
 import { Select, Switch, Text, TextField } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { type CiBabysitterConfig, ElementIds, UserConfigField } from "../../../api";
 import {
@@ -63,9 +63,14 @@ export const CIBabysitterSettingsSection = ({ onSettingChange }: CIBabysitterSet
   const isPiEnabled = useAtomValue(isPiAgentEnabledAtom);
   const { registrations, refetch } = useTerminalAgentRegistrations();
 
+  // Local draft of the retry cap input, resynced during render whenever the
+  // committed atom value changes (e.g. another tab edits it or a blur rejects).
   const [retryCapValue, setRetryCapValue] = useState(String(retryCap));
-
-  useEffect(() => setRetryCapValue(String(retryCap)), [retryCap]);
+  const [lastRetryCap, setLastRetryCap] = useState(retryCap);
+  if (retryCap !== lastRetryCap) {
+    setLastRetryCap(retryCap);
+    setRetryCapValue(String(retryCap));
+  }
 
   // Only registered terminal agents that opted into automated prompts can be
   // driven by the babysitter; plain terminals never appear.

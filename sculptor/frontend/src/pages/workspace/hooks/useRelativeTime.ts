@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 import { useInterval } from "../../../common/useInterval.ts";
 
@@ -7,6 +7,7 @@ type RelativeTimeResult = {
   absoluteTime: string;
 };
 
+const EMPTY_RESULT: RelativeTimeResult = { relativeTime: "", absoluteTime: "" };
 const UPDATE_INTERVAL_MS = 60_000;
 
 function computeRelativeTime(isoTimestamp: string): string {
@@ -48,32 +49,39 @@ function computeAbsoluteTime(isoTimestamp: string): string {
   });
 }
 
-export function useRelativeTime(isoTimestamp: string | null | undefined): RelativeTimeResult {
-  // `relativeTime` depends on the current wall-clock time, so it is held in
-  // state and refreshed by the interval below. `absoluteTime` depends only on
-  // the timestamp, so it is derived during render rather than stored.
-  const [relativeTime, setRelativeTime] = useState<string>(() =>
-    isoTimestamp ? computeRelativeTime(isoTimestamp) : "",
-  );
-
-  // Recompute immediately when the timestamp changes instead of waiting for the
-  // next interval tick. Adjusting state during render avoids the stale
-  // intermediate render a prop-syncing useEffect would produce.
-  const previousTimestampRef = useRef(isoTimestamp);
-  if (previousTimestampRef.current !== isoTimestamp) {
-    previousTimestampRef.current = isoTimestamp;
-    setRelativeTime(isoTimestamp ? computeRelativeTime(isoTimestamp) : "");
+function computeResult(isoTimestamp: string | null | undefined): RelativeTimeResult {
+  if (!isoTimestamp) {
+    return EMPTY_RESULT;
   }
+  return {
+    relativeTime: computeRelativeTime(isoTimestamp),
+    absoluteTime: computeAbsoluteTime(isoTimestamp),
+  };
+}
+
+export function useRelativeTime(isoTimestamp: string | null | undefined): RelativeTimeResult {
+  // Derive the displayed value during render from the timestamp, so it always
+  // reflects the latest `isoTimestamp` without an effect. The interval below
+  // forces a re-render on a schedule so the relative time recomputes as
+  // wall-clock time advances.
+  const result = computeResult(isoTimestamp);
+
+  // `tick` is never read; bumping it from the interval simply forces a
+  // re-render so the derived `result` above recomputes against the new time.
+  const [tick, setTick] = useState(0);
+  void tick;
 
   useInterval(() => {
-    if (!isoTimestamp) {
-      return;
+    if (!isoTimestamp) return;
+
+    // Re-render only when the displayed relative time would actually change,
+    // preserving the original update cadence. `result.relativeTime` is captured
+    // from the latest render, since useInterval always calls the latest callback.
+    const newRelativeTime = computeRelativeTime(isoTimestamp);
+    if (newRelativeTime !== result.relativeTime) {
+      setTick((current) => current + 1);
     }
-    // Setting an unchanged string is a no-op render thanks to React's bail-out,
-    // so this only re-renders when the displayed value actually advances.
-    setRelativeTime(computeRelativeTime(isoTimestamp));
   }, UPDATE_INTERVAL_MS);
 
-  const absoluteTime = isoTimestamp ? computeAbsoluteTime(isoTimestamp) : "";
-  return { relativeTime, absoluteTime };
+  return result;
 }

@@ -87,8 +87,11 @@ export const StatusPill = ({
   );
   const interruptHint = useKeybindingDisplayText("interrupt_agent");
   const store = useStore();
-  const animationIndexRef = useRef<number>(pickAnimationIndex());
-  const wasVisibleRef = useRef(false);
+  // Pick a new animation each time the pill transitions from hidden to visible.
+  // Tracked in state (with a previous-value guard, adjusted during render) so the
+  // chosen index drives the rendered animation without reading a ref mid-render.
+  const [animationIndex, setAnimationIndex] = useState<number>(pickAnimationIndex);
+  const [isVisiblePrev, setIsVisiblePrev] = useState(false);
 
   const {
     state,
@@ -232,11 +235,15 @@ export const StatusPill = ({
     };
   }, [store, taskID, canStop]);
 
-  // Pick a new animation each time the pill becomes visible
-  if (isVisible && !wasVisibleRef.current) {
-    animationIndexRef.current = pickAnimationIndex();
+  // Pick a new animation each time the pill becomes visible. Adjusting state
+  // during render (guarded by the previous-visibility value) re-renders
+  // immediately with the fresh index — no effect, no stale intermediate frame.
+  if (isVisible !== isVisiblePrev) {
+    setIsVisiblePrev(isVisible);
+    if (isVisible) {
+      setAnimationIndex(pickAnimationIndex());
+    }
   }
-  wasVisibleRef.current = isVisible;
 
   // Elapsed time keeps ticking only while the agent is in a non-idle, non-stopped
   // state; once the turn ends the displayed value freezes (the pill itself may
@@ -258,20 +265,23 @@ export const StatusPill = ({
   // tasks UI doesn't pop open under the Stop tooltip.
   const [isHoveringStop, setIsHoveringStop] = useState(false);
   const triggerRef = useRef<HTMLDivElement>(null);
-  const isPopoverOpen = isPopoverEnabled && !isHoveringStop && (isHoverOpen || isPinned);
-
-  // A pinned popover stays open until the user clicks outside it or clicks
-  // the pill again to toggle it off.
 
   // Drop pin and hover when the popover trigger no longer applies (e.g. the
   // agent stops), so the popover doesn't get stuck open across state
-  // transitions.
-  useEffect(() => {
+  // transitions. Adjusting during render (guarded by the previous-enabled
+  // value) resets the flags before paint, avoiding the extra effect render.
+  const [isPopoverEnabledPrev, setIsPopoverEnabledPrev] = useState(isPopoverEnabled);
+  if (isPopoverEnabled !== isPopoverEnabledPrev) {
+    setIsPopoverEnabledPrev(isPopoverEnabled);
     if (!isPopoverEnabled) {
       setIsPinned(false);
       setIsHoverOpen(false);
     }
-  }, [isPopoverEnabled]);
+  }
+
+  // A pinned popover stays open until the user clicks outside it or clicks
+  // the pill again to toggle it off.
+  const isPopoverOpen = isPopoverEnabled && !isHoveringStop && (isHoverOpen || isPinned);
 
   if (!isVisible) return null;
 
@@ -280,7 +290,7 @@ export const StatusPill = ({
       ? null
       : state === "compacting"
         ? SpinnerAnimation
-        : ANIMATION_POOL[animationIndexRef.current];
+        : ANIMATION_POOL[animationIndex];
 
   const pillClassName = state === "compacting" ? `${styles.pill} ${styles.pillCompacting}` : styles.pill;
 
