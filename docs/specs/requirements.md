@@ -262,11 +262,15 @@ makes durability and upgrade-survival guarantees (§9.5) that rest directly on t
 
 - **REQ-DATA-020 [Unspecified].** The product does not state a **back-compat horizon** — how far back
   older data folders / DB versions are guaranteed readable. → OPEN-7 (§7).
-- **REQ-DATA-021 (SHOULD).** A **data-folder migration helper** (`sculptor_migrate`, i.e.
-  `scripts/migrate_sculptor_folder.py`) relocates/restructures the folder (legacy `~/.sculptor_data`
-  → `~/.sculptor`): it is **idempotent** and **resumable** (renames to `.migrating`), backs up the DB
-  via SQLite native backup, rewrites embedded workspace paths (`workspace.environment_id` / `_latest`),
-  migrates Claude session folders to match new workspace paths, and writes `.format_version`.
+- **REQ-DATA-021 (SHOULD, historical).** The legacy **data-folder migration helper**
+  (`sculptor_migrate` / `scripts/migrate_sculptor_folder.py`) relocated/restructured the folder
+  (legacy `~/.sculptor_data` → `~/.sculptor`), rewriting embedded workspace paths and Claude session
+  folders. That helper has been **removed**: the TypeScript-backend cutover ships a **standalone
+  one-time DB migration tool** (`sculptor/backend/migrate/`) that rewrites only the database into the
+  new schema and **preserves the on-disk layout and all IDs in place** — no path rewrite, no session
+  relocation — backing up the old DB and leaving `config.toml`/workspaces/session files untouched. So
+  the folder-relocation behavior this bar described no longer applies; on-disk-path stability (rather
+  than path rewriting) is the current invariant.
 - **REQ-DATA-022 (SHOULD).** Startup tolerates an old/unversioned folder by bootstrapping the
   structure and writing `.format_version` (`sculptor/sculptor/utils/migration.py`); config loading tolerates
   legacy fields via model validators (e.g. old `claude_binary_mode` folding, invalid `custom_actions`
