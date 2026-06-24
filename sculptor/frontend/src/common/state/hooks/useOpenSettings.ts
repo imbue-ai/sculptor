@@ -5,9 +5,12 @@ import { useImbueNavigate } from "~/common/NavigateUtils.ts";
 import { ensurePseudoTabAtom } from "~/common/state/atoms/workspaces.ts";
 import { SETTINGS_TAB_ID } from "~/components/workspaceTabIds.ts";
 
+// `section` is a `SettingsSection` id from `~/pages/settings/sections.ts`.
+// `SettingsPage` matches the `?section=` query param against those ids
+// case-sensitively, so these literals MUST stay uppercase to match (SCU-1599).
 type OpenSettings = {
   (section?: string): void;
-  (section: "repositories", focusRepoId: string): void;
+  (section: "REPOSITORIES", focusRepoId: string): void;
   (section: "PANELS", focusPanelId: string): void;
 };
 
@@ -23,11 +26,11 @@ export const useOpenSettings = (): OpenSettings => {
 
   return useMemo<OpenSettings>(() => {
     function openSettings(section?: string): void;
-    function openSettings(section: "repositories", focusRepoId: string): void;
+    function openSettings(section: "REPOSITORIES", focusRepoId: string): void;
     function openSettings(section: "PANELS", focusPanelId: string): void;
     function openSettings(section?: string, focusId?: string): void {
       ensurePseudoTab(SETTINGS_TAB_ID);
-      if (focusId !== undefined && section === "repositories") {
+      if (focusId !== undefined && section === "REPOSITORIES") {
         navigateToRepoSetupCommand(focusId);
       } else if (focusId !== undefined && section === "PANELS") {
         navigateToPanelSettings(focusId);

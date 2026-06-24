@@ -14,9 +14,9 @@ export const SetupConfigPrompt = (): ReactElement => {
 
   const handleOpenSettings = useCallback((): void => {
     if (projectId !== null) {
-      openSettings("repositories", projectId);
+      openSettings("REPOSITORIES", projectId);
     } else {
-      openSettings("repositories");
+      openSettings("REPOSITORIES");
     }
   }, [projectId, openSettings]);
 

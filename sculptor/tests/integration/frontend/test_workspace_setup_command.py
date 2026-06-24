@@ -125,7 +125,7 @@ def test_setup_edit_button_deep_links_to_focused_textarea(sculptor_instance_: Sc
     expect(setup.get_card()).to_be_visible()
     setup.get_edit_button().click()
 
-    expect(page).to_have_url(re.compile(r".*section=repositories.*focusRepo=.*"))
+    expect(page).to_have_url(re.compile(r".*section=REPOSITORIES.*focusRepo=.*"))
 
     textarea = repos.get_setup_command_input()
     expect(textarea).to_be_visible()
@@ -192,7 +192,7 @@ def test_setup_config_prompt_deep_links_to_focused_textarea(sculptor_instance_: 
     expect(setup.get_config_prompt()).to_be_visible()
     setup.get_config_settings_link().click()
 
-    expect(page).to_have_url(re.compile(r".*section=repositories.*focusRepo=.*"))
+    expect(page).to_have_url(re.compile(r".*section=REPOSITORIES.*focusRepo=.*"))
 
     textarea = repos.get_setup_command_input()
     expect(textarea).to_be_visible()
