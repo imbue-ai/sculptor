@@ -16,16 +16,14 @@ import {
   MODEL_SHORTNAME_MAP,
   PRE_COMPACT_CALLBACK_ID,
 } from "~/harness/claude/constants";
-import {
-  ClaudeBinaryNotFoundError,
-  serializeError,
-} from "~/harness/claude/errors";
+import { serializeError } from "~/harness/claude/errors";
 import {
   buildInitializeControlRequest,
   buildInterruptControlRequest,
   buildStdinUserMessage,
   getClaudeCommand,
   modelShortnameFor,
+  resolveClaudeBinary,
 } from "~/harness/claude/launch";
 import { SculptorMcpServer } from "~/harness/claude/mcp";
 import { ClaudeOutputProcessor } from "~/harness/claude/output_processor";
@@ -225,12 +223,9 @@ class ClaudeHarnessProcess implements HarnessProcess {
       request_id: requestId,
     });
 
-    let binaryPath: string | undefined;
+    let binaryPath: string;
     try {
-      binaryPath = this.deps.resolveBinaryPath();
-      if (binaryPath === undefined) {
-        throw new ClaudeBinaryNotFoundError();
-      }
+      binaryPath = resolveClaudeBinary(this.deps.resolveBinaryPath);
     } catch (error) {
       this.failTurnFatally(requestId, error);
       return;

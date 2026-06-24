@@ -18,8 +18,9 @@ import {
   getPiCommand,
   PI_SESSION_DIR_NAME,
   PI_SESSION_ID_STATE_FILE,
+  resolvePiBinary,
 } from "~/harness/pi/launch";
-import { PiBinaryNotFoundError, PiCrashError } from "~/harness/pi/errors";
+import { PiCrashError } from "~/harness/pi/errors";
 import {
   curateModels,
   type ModelOption,
@@ -366,10 +367,7 @@ class PiHarnessProcess implements HarnessProcess {
   }
 
   private async startProcess(): Promise<void> {
-    const binaryPath = this.deps.resolveBinaryPath();
-    if (binaryPath === undefined) {
-      throw new PiBinaryNotFoundError();
-    }
+    const binaryPath = resolvePiBinary(this.deps.resolveBinaryPath);
     const agentId = this.agent.objectId;
     const statePath = this.environment.getStatePath(agentId);
     const sessionDir = path.join(statePath, PI_SESSION_DIR_NAME);

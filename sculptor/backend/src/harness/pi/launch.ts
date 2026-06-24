@@ -3,6 +3,18 @@
 // `bash -c`; it is executed directly as a long-lived RPC subprocess. Pins pi
 // 0.78.0 (REQ-COMPAT-022).
 
+import { PiBinaryNotFoundError } from "~/harness/errors";
+
+// Resolve the host `pi` binary, raising the specific, surfaced
+// PiBinaryNotFoundError when it is absent (REQ-INT-023).
+export function resolvePiBinary(resolver: () => string | undefined): string {
+  const binaryPath = resolver();
+  if (binaryPath === undefined) {
+    throw new PiBinaryNotFoundError();
+  }
+  return binaryPath;
+}
+
 // The default API-key env vars looked up at spawn (config.pi.api_key_env_var_names).
 export const DEFAULT_PI_API_KEY_ENV_VAR_NAMES: readonly string[] = [
   "ANTHROPIC_API_KEY",

@@ -9,6 +9,20 @@ import {
   MCP_SERVER_NAME,
   MODEL_SHORTNAME_MAP,
 } from "~/harness/claude/constants";
+import { ClaudeBinaryNotFoundError } from "~/harness/errors";
+
+// Resolve the host `claude` binary, raising the specific, surfaced
+// ClaudeBinaryNotFoundError when it is absent (REQ-INT-023) rather than a
+// generic failure.
+export function resolveClaudeBinary(
+  resolver: () => string | undefined,
+): string {
+  const binaryPath = resolver();
+  if (binaryPath === undefined) {
+    throw new ClaudeBinaryNotFoundError();
+  }
+  return binaryPath;
+}
 
 // Single-quote a string for POSIX sh, matching Python's `shlex.quote`.
 export function shellQuote(value: string): string {
