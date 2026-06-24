@@ -26,7 +26,7 @@ def _make_status(
 def test_pipeline_failed_does_not_fire_from_none_prev() -> None:
     # First-poll baseline: a failed pipeline observed on the very first
     # poll for a workspace is the baseline, not a transition. This avoids
-    # burning a retry on Sculptor restart against an already-red MR.
+    # burning a retry on Sculptor restart against an already-red PR.
     new = _make_status(pipeline_status="failed", pipeline_id=1)
     assert classify_transitions(None, new) == []
 
@@ -77,7 +77,7 @@ def test_merge_conflict_fires_from_none_prev() -> None:
     # (prev is None) MUST surface. A branch cut from a stale main conflicts
     # within seconds, so by the first poll has_conflicts is already True; and
     # the coordinator's prev_status is in-memory, so any restart against an
-    # already-conflicted MR re-enters here with prev is None too. Unlike
+    # already-conflicted PR re-enters here with prev is None too. Unlike
     # PIPELINE_FAILED (which re-arms on a new pipeline_id), the conflict edge
     # never re-arms in-process once prev.has_conflicts is True, so suppressing
     # it on the first poll means it is never surfaced at all. Level-trigger it

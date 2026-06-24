@@ -165,7 +165,7 @@ class CIBabysitterWorkspaceStateView(SerializableModel):
 
 
 class CIBabysitterCoordinator(Service):
-    """In-process observer that turns CI/MR transitions into agent prompts."""
+    """In-process observer that turns CI/PR transitions into agent prompts."""
 
     _data_model_service: DataModelService = PrivateAttr()
     _task_service: TaskService = PrivateAttr()
@@ -275,12 +275,12 @@ class CIBabysitterCoordinator(Service):
                 state = CIBabysitterState(workspace_id=new.workspace_id, project_id=project_id)
                 self._state[new.workspace_id] = state
             prev = state.prev_status
-            # Transient "lost MR" gap: when the workspace's branch flips
+            # Transient "lost PR" gap: when the workspace's branch flips
             # (e.g. detached HEAD during a babysitter-driven rebase), the
-            # polling service can't match the workspace to an MR and emits
+            # polling service can't match the workspace to an PR and emits
             # pr_state="none". Treating this as a real transition would
             # clobber the coordinator's prev_status with an "unknown"
-            # value, and the next poll that re-finds the MR would look
+            # value, and the next poll that re-finds the PR would look
             # like a fresh False→True / running→failed transition.
             #
             # Suppress: don't update prev_status and don't dispatch.

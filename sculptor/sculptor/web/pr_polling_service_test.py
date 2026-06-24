@@ -49,7 +49,6 @@ def _make_service() -> PrPollingService:
     svc._worker_sleep_until = {}
     svc._worker_sleep_lock = threading.Lock()
     svc._gh_available = None
-    svc._glab_available = None
     svc._throttle = _HostThrottle(_GLOBAL_MIN_POLL_SPACING_SECONDS)
     object.__setattr__(svc, "_data_model_service", MagicMock())
     object.__setattr__(svc, "_workspace_service", MagicMock())
@@ -114,29 +113,6 @@ def test_gh_becomes_available_after_install() -> None:
     # Now should be cached
     with patch("shutil.which", side_effect=AssertionError("should not be called")):
         assert svc._is_gh_available() is True
-
-
-def test_glab_available_cached_when_found() -> None:
-    svc = _make_service()
-    with patch("shutil.which", return_value="/usr/bin/glab"):
-        assert svc._is_glab_available() is True
-    with patch("shutil.which", side_effect=AssertionError("should not be called")):
-        assert svc._is_glab_available() is True
-
-
-def test_glab_not_cached_when_missing() -> None:
-    svc = _make_service()
-    call_count = 0
-
-    def counting_which(name: str) -> None:
-        nonlocal call_count
-        call_count += 1
-        return None
-
-    with patch("shutil.which", side_effect=counting_which):
-        assert svc._is_glab_available() is False
-        assert svc._is_glab_available() is False
-    assert call_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -562,7 +538,7 @@ def test_poll_dynamic_config_re_read_per_cycle() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Global throttle: spacing + per-provider cooldown
+# Global throttle: spacing + cooldown
 # ---------------------------------------------------------------------------
 
 
@@ -580,27 +556,25 @@ def test_host_throttle_reserve_slot_spaces_starts() -> None:
 
 def test_host_throttle_cooldown_remaining_tracks_window() -> None:
     throttle = _HostThrottle(min_interval=1.0)
-    assert throttle.cooldown_remaining("github") == 0.0
-    throttle.enter_cooldown("github", 30.0)
-    assert 29.0 <= throttle.cooldown_remaining("github") <= 30.0
-    # Cooldown is per-provider.
-    assert throttle.cooldown_remaining("gitlab") == 0.0
+    assert throttle.cooldown_remaining() == 0.0
+    throttle.enter_cooldown(30.0)
+    assert 29.0 <= throttle.cooldown_remaining() <= 30.0
 
 
 def test_host_throttle_enter_cooldown_never_shortens() -> None:
     throttle = _HostThrottle(min_interval=1.0)
-    throttle.enter_cooldown("github", 60.0)
+    throttle.enter_cooldown(60.0)
     # A shorter cooldown must not clobber the longer one already in effect.
-    throttle.enter_cooldown("github", 5.0)
-    assert throttle.cooldown_remaining("github") > 50.0
+    throttle.enter_cooldown(5.0)
+    assert throttle.cooldown_remaining() > 50.0
 
 
-def test_respect_throttle_defers_when_provider_in_cooldown() -> None:
-    """When a provider is cooling down, no slot is reserved and a deferral is returned."""
+def test_respect_throttle_defers_when_in_cooldown() -> None:
+    """When a cooldown is active, no slot is reserved and a deferral is returned."""
     svc = _make_service()
-    svc._throttle.enter_cooldown("github", 45.0)
+    svc._throttle.enter_cooldown(45.0)
 
-    result = svc._respect_throttle("github")
+    result = svc._respect_throttle()
 
     assert isinstance(result, _CooldownDeferred)
     assert 44.0 <= result.retry_after <= 45.0
@@ -609,7 +583,7 @@ def test_respect_throttle_defers_when_provider_in_cooldown() -> None:
 def test_respect_throttle_allows_when_not_in_cooldown() -> None:
     svc = _make_service()
     # First call is due immediately, so it returns None (proceed) without sleeping.
-    assert svc._respect_throttle("github") is None
+    assert svc._respect_throttle() is None
 
 
 def test_note_rate_limit_starts_cooldown_only_for_rate_limited() -> None:
@@ -617,14 +591,14 @@ def test_note_rate_limit_starts_cooldown_only_for_rate_limited() -> None:
     workspace_id = WorkspaceID()
 
     ok = PrStatusInfo(workspace_id=workspace_id, pr_state="open")
-    svc._note_rate_limit(ok, "github")
-    assert svc._throttle.cooldown_remaining("github") == 0.0
+    svc._note_rate_limit(ok)
+    assert svc._throttle.cooldown_remaining() == 0.0
 
     limited = PrStatusInfo(
         workspace_id=workspace_id, pr_state="none", error_category="rate_limited", error_provider="github"
     )
-    svc._note_rate_limit(limited, "github")
-    assert svc._throttle.cooldown_remaining("github") > 0.0
+    svc._note_rate_limit(limited)
+    assert svc._throttle.cooldown_remaining() > 0.0
 
 
 def test_cooldown_deferred_result_does_not_overwrite_cache() -> None:
@@ -661,7 +635,7 @@ def test_rate_limited_result_re_enqueues_after_cooldown() -> None:
     svc._pending.add(workspace_id)
 
     # Simulate the cooldown the poll would have set via _note_rate_limit.
-    svc._throttle.enter_cooldown("github", _RATE_LIMIT_COOLDOWN_SECONDS)
+    svc._throttle.enter_cooldown(_RATE_LIMIT_COOLDOWN_SECONDS)
     limited = PrStatusInfo(
         workspace_id=workspace_id, pr_state="none", error_category="rate_limited", error_provider="github"
     )

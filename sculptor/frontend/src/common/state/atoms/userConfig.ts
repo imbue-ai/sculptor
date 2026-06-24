@@ -98,7 +98,7 @@ export const customActionsAtom = atom<CustomActionsConfig>((get) => {
 
 // PR creation settings
 const DEFAULT_PR_CREATION_PROMPT =
-  "Push my changes to origin and create a pull request. Check whether the repo uses GitHub (gh) or GitLab (glab) and use the appropriate tool. Write a clear description summarizing the changes.";
+  "Push my changes to origin and create a pull request using the GitHub CLI (gh). Write a clear description summarizing the changes.";
 
 export const prCreationPromptAtom = atom<string>(
   (get) => get(userConfigAtom)?.prCreationPrompt ?? DEFAULT_PR_CREATION_PROMPT,
@@ -119,9 +119,9 @@ export const prDefaultTargetBranchAtom = atom<string>(
 // that object with sensible per-field defaults for when the config hasn't
 // been loaded yet.
 const DEFAULT_CI_BABYSITTER_PIPELINE_PROMPT =
-  "Investigate the failing pipeline for this MR, identify the root cause, fix the code, commit, and push.";
+  "Investigate the failing pipeline for this PR, identify the root cause, fix the code, commit, and push.";
 const DEFAULT_CI_BABYSITTER_MERGE_CONFLICT_PROMPT =
-  "This MR has a merge conflict with its base branch. Fetch the latest, then rebase against the base branch, resolve all conflicts, and force-push the result.";
+  "This PR has a merge conflict with its base branch. Fetch the latest, then rebase against the base branch, resolve all conflicts, and force-push the result.";
 
 export const ciBabysitterConfigAtom = atom<CiBabysitterConfig | null>(
   (get) => get(userConfigAtom)?.ciBabysitter ?? null,

@@ -9,8 +9,8 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
-# A Bitbucket origin is neither GitHub nor GitLab, so it exercises the
-# "unrecognized host" path that used to hide the target-branch selector.
+# A Bitbucket origin is not GitHub, so it exercises the "unrecognized host"
+# path that used to hide the target-branch selector.
 _BITBUCKET_REMOTE = "https://bitbucket.org/test-org/test-repo.git"
 
 
@@ -41,31 +41,32 @@ def _remove_origin_and_add_local_branches(instance: SculptorInstance, branches: 
     full_spa_reload(instance.page)
 
 
-@user_story("to not see PR management UI on a non-GitLab workspace")
-def test_banner_hides_pr_ui_for_non_gitlab_origin(sculptor_instance_: SculptorInstance) -> None:
-    """Verify the banner does NOT show the PR button for non-GitHub/GitLab origins.
+@user_story("to not see PR management UI on a non-GitHub workspace")
+def test_banner_hides_pr_ui_for_non_github_origin(sculptor_instance_: SculptorInstance) -> None:
+    """Verify the banner does NOT show the PR button for non-GitHub origins.
 
-    PR/MR creation requires a GitHub or GitLab provider, so the PR button stays
-    hidden. The target-branch selector is host-agnostic and remains visible — it
-    is covered by ``test_banner_shows_target_branch_selector_for_non_github_gitlab_origin``.
+    PR creation requires a GitHub provider, so the PR button stays hidden. The
+    target-branch selector is host-agnostic and remains visible — it is covered
+    by ``test_banner_shows_target_branch_selector_for_non_github_origin``.
     """
     page = sculptor_instance_.page
 
     task_page = start_task_and_wait_for_ready(page, "say hello")
 
-    # Non-GitHub/GitLab workspace should not show the PR button.
+    # Non-GitHub workspace should not show the PR button (the target-branch
+    # selector is host-agnostic and stays visible).
     expect(task_page.get_pr_button_create()).not_to_be_visible()
 
 
-@user_story("to choose a target branch on a repo whose origin is not GitHub or GitLab")
-def test_banner_shows_target_branch_selector_for_non_github_gitlab_origin(
+@user_story("to choose a target branch on a repo whose origin is not GitHub")
+def test_banner_shows_target_branch_selector_for_non_github_origin(
     sculptor_instance_: SculptorInstance,
 ) -> None:
     """SCU-1526: the target-branch selector must be available regardless of git host.
 
-    A Bitbucket origin (neither GitHub nor GitLab) used to hide the selector
-    entirely, leaving the merge target fixed and uneditable. The selector is
-    host-agnostic, so it should render and open for any repo.
+    A Bitbucket origin (not GitHub) used to hide the selector entirely, leaving
+    the merge target fixed and uneditable. The selector is host-agnostic, so it
+    should render and open for any repo.
     """
     page = sculptor_instance_.page
     _set_remote(sculptor_instance_, _BITBUCKET_REMOTE)
@@ -82,8 +83,8 @@ def test_banner_shows_target_branch_selector_for_non_github_gitlab_origin(
     expect(page.get_by_placeholder("Search branches...")).to_be_visible()
     page.keyboard.press("Escape")
 
-    # PR/MR creation still requires a GitHub or GitLab provider, so the PR
-    # button stays hidden for other hosts.
+    # PR creation still requires a GitHub provider, so the PR button stays
+    # hidden for other hosts.
     expect(task_page.get_pr_button_create()).not_to_be_visible()
 
 

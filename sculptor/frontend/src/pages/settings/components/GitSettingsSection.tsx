@@ -17,7 +17,7 @@ import { SettingsSectionLayout } from "./SettingsSection.tsx";
 import { TextAreaSettingRow } from "./TextAreaSettingRow.tsx";
 
 const DEFAULT_PR_CREATION_PROMPT =
-  "Push my changes to origin and create a pull request. Check whether the repo uses GitHub (gh) or GitLab (glab) and use the appropriate tool. Write a clear description summarizing the changes.";
+  "Push my changes to origin and create a pull request using the GitHub CLI (gh). Write a clear description summarizing the changes.";
 
 const MIN_POLL_INTERVAL_SECONDS = 10;
 const MAX_POLL_INTERVAL_SECONDS = 300;
@@ -90,8 +90,8 @@ export const GitSettingsSection = ({ onSettingChange }: GitSettingsSectionProps)
       />
 
       <SettingRow
-        title="Enable PR/MR Status Polling"
-        description="When off, Sculptor stops calling gh/glab to refresh PR status. The workspace banner keeps showing the last cached status."
+        title="Enable PR Status Polling"
+        description="When off, Sculptor stops calling gh to refresh PR status. The workspace banner keeps showing the last cached status."
       >
         <Switch
           checked={isPrPollingEnabled}
