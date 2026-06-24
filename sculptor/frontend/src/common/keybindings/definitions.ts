@@ -114,20 +114,6 @@ export const KEYBINDING_DEFINITIONS: ReadonlyArray<KeybindingDefinition> = [
     defaultBinding: "Meta+Shift+D",
   },
   {
-    id: "focus_mode",
-    name: "Focus mode",
-    description: "Hide or restore all panels",
-    category: "general",
-    defaultBinding: "Meta+\\",
-  },
-  {
-    id: "zen_mode",
-    name: "Zen mode",
-    description: "Maximize chat by hiding all panels and UI chrome",
-    category: "general",
-    defaultBinding: "Meta+Shift+\\",
-  },
-  {
     id: "toggle_left_panel",
     name: "Toggle left panel",
     description: "Show or hide the left sidebar",

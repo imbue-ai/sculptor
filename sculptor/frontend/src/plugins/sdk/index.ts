@@ -11,5 +11,15 @@ export type { CodingAgentTaskView, Workspace } from "~/api";
 // The contract a plugin's `activate(api)` targets. Re-exported as types so
 // plugins reference the host's real definitions instead of hand-redeclaring
 // the registration shape (types are erased at build, so no runtime stub).
-export type { OverlayDefinition, PluginHostApi, PluginManifest, WorkspaceWidgetDefinition } from "../types.ts";
-export type { PanelDefinition } from "~/components/panels/types.ts";
+//
+// `PanelDefinition` is kept as a deprecated alias of `PluginPanelDefinition` so
+// existing plugins that import the old name still type-check; the new section
+// shell ignores the legacy zone fields.
+export type {
+  OverlayDefinition,
+  PluginPanelDefinition as PanelDefinition,
+  PluginHostApi,
+  PluginManifest,
+  PluginPanelDefinition,
+  WorkspaceWidgetDefinition,
+} from "../types.ts";

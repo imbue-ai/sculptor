@@ -14,8 +14,6 @@ export type StaticKeybindingId =
   | "send_message"
   | "interrupt_agent"
   | "toggle_theme"
-  | "focus_mode"
-  | "zen_mode"
   | "toggle_left_panel"
   | "toggle_bottom_panel"
   | "toggle_right_panel"

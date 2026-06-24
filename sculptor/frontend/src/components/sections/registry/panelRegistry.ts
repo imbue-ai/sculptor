@@ -82,9 +82,37 @@ export function buildStaticPanelDefinitions(): ReadonlyArray<PanelDefinition> {
   }));
 }
 
-// The current registry (static + dynamic). Kept in sync with the active workspace's
-// agent/terminal panels by useSyncPanelRegistry (Task 6.2); defaults to the static
-// panels so reads before sync never crash.
+// The minimal plugin-panel shape this registry adapts. Declared structurally (rather
+// than importing the plugins module) so the registry stays plugin-agnostic and the
+// dependency only points one way (plugins → sections, never the reverse).
+export type PluginRegistryPanel = {
+  id: PanelId;
+  displayName: string;
+  icon: LucideIcon;
+  component: ComponentType;
+  defaultSection?: SubSectionId;
+};
+
+// Adapt plugin-contributed panels into registry PanelDefinitions so the new shell can
+// resolve and render them. Plugin panels are single-instance ("static") and
+// host-managed; the plugin's component is already wrapped (error boundary + contexts)
+// by the loader before it reaches here.
+export function buildPluginPanelDefinitions(
+  pluginPanels: ReadonlyArray<PluginRegistryPanel>,
+): ReadonlyArray<PanelDefinition> {
+  return pluginPanels.map((panel) => ({
+    id: panel.id,
+    displayName: panel.displayName,
+    icon: panel.icon,
+    kind: "static",
+    defaultSection: panel.defaultSection,
+    component: panel.component,
+  }));
+}
+
+// The current registry (static + plugin + dynamic). Kept in sync with the active
+// workspace's agent/terminal panels and the loaded plugins by useWorkspaceDynamicPanels;
+// defaults to the static panels so reads before sync never crash.
 export const panelRegistryAtom = atom<ReadonlyArray<PanelDefinition>>(buildStaticPanelDefinitions());
 
 function memoizedAtomByKey<TKey extends string, TValue>(

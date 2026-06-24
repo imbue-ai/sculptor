@@ -1,11 +1,8 @@
 import { createStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { expandedPanelIdAtom } from "~/components/panels/atoms.ts";
-
 import {
   closeAllDiffTabsAtom,
-  closeDiffPanelAtom,
   closeDiffTabAtom,
   diffPanelOpenAtom,
   diffPanelStateAtomFamily,
@@ -40,17 +37,6 @@ describe("closeDiffTabAtom", () => {
     expect(store.get(diffPanelOpenAtom)).toBe(true);
   });
 
-  it("when closing the last remaining tab, exits expand mode", () => {
-    const store = createStore();
-    store.set(openFileViewTabAtom, { workspaceId: WORKSPACE_ID, filePath: "only.ts" });
-    store.set(expandedPanelIdAtom, "files");
-
-    const onlyTabPath = store.get(diffPanelStateAtomFamily(WORKSPACE_ID)).activeTabPath!;
-    store.set(closeDiffTabAtom, { workspaceId: WORKSPACE_ID, filePath: onlyTabPath, tabCloseBehavior: "mru" });
-
-    expect(store.get(expandedPanelIdAtom)).toBeNull();
-  });
-
   it("when closing a non-last tab, keeps the panel open and advances the active tab", () => {
     const store = createStore();
     seedTwoTabs(store);
@@ -68,10 +54,9 @@ describe("closeDiffTabAtom", () => {
 });
 
 describe("closeAllDiffTabsAtom", () => {
-  it("clears all tabs but leaves the panel open and exits expand mode", () => {
+  it("clears all tabs but leaves the panel open", () => {
     const store = createStore();
     seedTwoTabs(store);
-    store.set(expandedPanelIdAtom, "files");
 
     store.set(closeAllDiffTabsAtom, { workspaceId: WORKSPACE_ID });
 
@@ -79,24 +64,6 @@ describe("closeAllDiffTabsAtom", () => {
     expect(state.openTabs).toEqual([]);
     expect(state.activeTabPath).toBeNull();
     expect(store.get(diffPanelOpenAtom)).toBe(true);
-    expect(store.get(expandedPanelIdAtom)).toBeNull();
-  });
-});
-
-describe("closeDiffPanelAtom", () => {
-  it("closes the panel and exits expand mode but preserves tabs", () => {
-    const store = createStore();
-    seedTwoTabs(store);
-    store.set(expandedPanelIdAtom, "files");
-    const tabsBefore = store.get(diffPanelStateAtomFamily(WORKSPACE_ID)).openTabs;
-
-    store.set(closeDiffPanelAtom);
-
-    expect(store.get(diffPanelOpenAtom)).toBe(false);
-    expect(store.get(expandedPanelIdAtom)).toBeNull();
-    // Tabs survive panel close — reopening should restore them.
-    const tabsAfter = store.get(diffPanelStateAtomFamily(WORKSPACE_ID)).openTabs;
-    expect(tabsAfter).toEqual(tabsBefore);
   });
 });
 

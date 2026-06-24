@@ -49,7 +49,6 @@ export type PaletteContext = {
   activeAgentId: string | null;
   hasChatPanel: boolean;
   hasTerminalPanel: boolean;
-  isZenMode: boolean;
   /** The current sub-page id, or null for the root page. */
   page: PageId | null;
 };

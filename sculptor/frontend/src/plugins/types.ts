@@ -1,6 +1,32 @@
+import type { LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
 
-import type { PanelDefinition } from "~/components/panels/types.ts";
+/**
+ * A panel a plugin contributes via `registerPanel`. The host renders the
+ * `component` inside the new section shell (the manager adapts this into the
+ * host's internal registry shape). `defaultSection` is an optional hint for
+ * where the panel first lands; absent, it is not placed by default and the
+ * user opens it from the section "+" / Cmd+K. The legacy `defaultZone` /
+ * `defaultShortcut` / `description` fields are accepted but ignored — the
+ * docking shell they targeted is gone.
+ */
+export type PluginPanelDefinition = {
+  /** Stable id; registering twice with the same id replaces the previous one. */
+  id: string;
+  displayName: string;
+  icon: LucideIcon;
+  component: ComponentType;
+  /** Where the panel first lands ("left" | "center" | "right" | "bottom"). */
+  defaultSection?: "left" | "center" | "right" | "bottom";
+  /** @deprecated Ignored — the zone/docking shell is gone. */
+  defaultZone?: string;
+  /** @deprecated Ignored — per-panel keybindings were removed. */
+  defaultShortcut?: string;
+  /** @deprecated Ignored. */
+  description?: string;
+  /** Set by the loader to the owning plugin's id; not supplied by plugins. */
+  pluginId?: string;
+};
 
 /**
  * The manifest a plugin ships alongside its bundle. Loaded by the host before
@@ -75,7 +101,7 @@ export type WorkspaceWidgetDefinition = {
 };
 
 export type PluginHostApi = {
-  registerPanel: (panel: PanelDefinition) => () => void;
+  registerPanel: (panel: PluginPanelDefinition) => () => void;
   /**
    * Registers a settings component shown under the plugin in the Plugins
    * settings section. Rendered inside the host's PluginContext (so SDK hooks

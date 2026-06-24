@@ -87,7 +87,6 @@ describe("Appearance modes drift", () => {
           activeAgentId: null,
           hasChatPanel: false,
           hasTerminalPanel: false,
-          isZenMode: false,
           page: null,
         },
         keepOpen: false,

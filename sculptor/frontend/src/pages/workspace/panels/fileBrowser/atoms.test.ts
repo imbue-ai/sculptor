@@ -1,7 +1,7 @@
 import { createStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { activePanelPerZoneAtom, zoneAssignmentsAtom, zoneVisibilityAtom } from "~/components/panels/atoms.ts";
+import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "~/components/sections/sectionAtoms.ts";
 
 import { fileBrowserStateAtomFamily, focusFolderAtom, revealFolderAtom } from "./atoms.ts";
 
@@ -82,47 +82,24 @@ describe("revealFolderAtom", () => {
     expect(store.get(focusFolderAtom)).toBeNull();
   });
 
-  it("sets the files panel as active in its assigned zone", () => {
-    store.set(zoneAssignmentsAtom, { files: "top-left" });
-    store.set(activePanelPerZoneAtom, { "top-left": "info" });
+  it("opens the files panel in the left section and makes it active", () => {
+    store.set(activeWorkspaceIdAtom, WORKSPACE_ID);
 
     store.set(revealFolderAtom, { workspaceId: WORKSPACE_ID, path: "src" });
 
-    expect(store.get(activePanelPerZoneAtom)["top-left"]).toBe("files");
+    const layout = store.get(workspaceLayoutAtom);
+    expect(layout.placement["files"]).toBe("left");
+    expect(layout.activePanel["left"]).toBe("files");
+    expect(layout.activeSubSection).toBe("left");
   });
 
-  it("marks the files panel's zone visible", () => {
-    store.set(zoneAssignmentsAtom, { files: "top-left" });
-    store.set(zoneVisibilityAtom, { "top-left": false });
+  it("expands the left section when it was collapsed", () => {
+    store.set(activeWorkspaceIdAtom, WORKSPACE_ID);
+    store.set(workspaceLayoutAtom, (prev) => ({ ...prev, expanded: { ...prev.expanded, left: false } }));
 
     store.set(revealFolderAtom, { workspaceId: WORKSPACE_ID, path: "src" });
 
-    expect(store.get(zoneVisibilityAtom)["top-left"]).toBe(true);
-  });
-
-  it("leaves zone state alone when the files panel is unassigned", () => {
-    store.set(zoneAssignmentsAtom, {});
-    const activeBefore = store.get(activePanelPerZoneAtom);
-    const visibilityBefore = store.get(zoneVisibilityAtom);
-
-    store.set(revealFolderAtom, { workspaceId: WORKSPACE_ID, path: "src" });
-
-    expect(store.get(activePanelPerZoneAtom)).toBe(activeBefore);
-    expect(store.get(zoneVisibilityAtom)).toBe(visibilityBefore);
-  });
-
-  it("does not overwrite zone state when already active and visible", () => {
-    store.set(zoneAssignmentsAtom, { files: "top-left" });
-    store.set(activePanelPerZoneAtom, { "top-left": "files" });
-    store.set(zoneVisibilityAtom, { "top-left": true });
-
-    const activeBefore = store.get(activePanelPerZoneAtom);
-    const visibilityBefore = store.get(zoneVisibilityAtom);
-
-    store.set(revealFolderAtom, { workspaceId: WORKSPACE_ID, path: "src" });
-
-    expect(store.get(activePanelPerZoneAtom)).toBe(activeBefore);
-    expect(store.get(zoneVisibilityAtom)).toBe(visibilityBefore);
+    expect(store.get(workspaceLayoutAtom).expanded["left"]).toBe(true);
   });
 
   it("emits a focus request with workspace id, normalised path, and numeric nonce", () => {

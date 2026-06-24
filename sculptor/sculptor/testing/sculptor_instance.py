@@ -315,15 +315,18 @@ class SculptorInstance:
 
         self.page.goto(f"{self.frontend_url}#/ws/new")
 
-        # Wait for the Add Workspace page to render — raise if onboarding
-        # shows instead (no shared-instance test should trigger onboarding).
-        start_task_button = self.page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
-        expect_app_not_onboarding(self.page, start_task_button)
+        # Wait for the app shell to render — raise if onboarding shows instead (no
+        # shared-instance test should trigger onboarding). The sidebar rail is the
+        # universal "app rendered" signal in the new shell (present whether this lands on
+        # the add-workspace form, the empty-first-run page, or a workspace).
+        app_ready = self.page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)
+        expect_app_not_onboarding(self.page, app_ready)
 
-        # Verify no workspace tabs leaked through via stale WebSocket updates.
-        workspace_tabs = self.page.get_by_test_id(ElementIDs.WORKSPACE_TAB)
-        if workspace_tabs.count() > 0:
-            logger.debug("Stale workspace tab(s) after reset — deleting via UI")
+        # Workspace cleanup is API-based (_delete_all_workspaces_via_api in _pre_test); this
+        # is only a belt-and-suspenders leak check for any row that lingered in the sidebar.
+        workspace_rows = self.page.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW)
+        if workspace_rows.count() > 0:
+            logger.debug("Stale workspace row(s) after reset — deleting via UI")
             delete_all_workspaces_via_ui(self.page)
 
     # Hard upper bound on _pre_test duration.  If cleanup takes longer than

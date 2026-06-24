@@ -2,15 +2,15 @@ import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 import type { ComponentType } from "react";
 
-import type { PanelDefinition } from "~/components/panels/types.ts";
-
-import type { PluginManifest } from "./types.ts";
+import type { PluginManifest, PluginPanelDefinition } from "./types.ts";
 
 /**
- * Panels contributed by loaded plugins, ready to be merged into the host's
- * static `workspacePanels` list and handed to `PanelRegistryProvider`.
+ * Panels contributed by loaded plugins. The plugin manager merges these into the
+ * new section shell's `panelRegistryAtom` (via the per-workspace registry sync) so
+ * `SectionBody` can resolve and render them. Each entry's component is already
+ * wrapped by the loader in an error boundary and the plugin's contexts.
  */
-export const pluginPanelsAtom = atom<ReadonlyArray<PanelDefinition>>([]);
+export const pluginPanelsAtom = atom<ReadonlyArray<PluginPanelDefinition>>([]);
 
 /**
  * Settings components contributed by plugins via `registerSettings`, keyed by

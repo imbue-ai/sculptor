@@ -7,7 +7,7 @@ import { closeBtwPopupIfNotForAgentAtom, isBtwPopupOpenAtom } from "~/common/sta
 import type { InsertSkillArg } from "~/common/state/atoms/chatActions.ts";
 import { taskAtomFamily } from "~/common/state/atoms/tasks.ts";
 import { useTaskSupportsChatInterface } from "~/common/state/hooks/useTaskHelpers.ts";
-import { chatPanelMountedAtom } from "~/components/panels/atoms.ts";
+import { chatPanelMountedAtom } from "~/pages/workspace/atoms.ts";
 
 import { AgentTerminalPanel } from "./AgentTerminalPanel.tsx";
 import { BtwPopup } from "./BtwPopup.tsx";

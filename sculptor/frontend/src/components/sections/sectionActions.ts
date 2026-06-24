@@ -292,3 +292,31 @@ export const jumpToSectionAtom = atom(null, (get, set, { subSection }: SetActive
   set(workspaceLayoutAtom, { ...layout, activeSubSection: subSection });
   set(activeSectionRingNonceAtom, (nonce) => nonce + 1);
 });
+
+// Smart panel visibility toggle for the Cmd+K "Toggle <panel>" commands: closes the
+// panel when it is already open, active in its sub-section, and that section is
+// expanded; otherwise opens it (in its existing placement, or `fallbackSection` if it
+// has never been placed) and makes it active. Mirrors the docking shell's togglePanel
+// in the new section model.
+type TogglePanelParams = { panelId: PanelId; fallbackSection: SubSectionId };
+
+export const togglePanelAtom = atom(null, (get, set, { panelId, fallbackSection }: TogglePanelParams) => {
+  const layout = get(workspaceLayoutAtom);
+  const placement = layout.placement[panelId];
+
+  if (placement !== undefined) {
+    const section = toSection(placement);
+    const isExpanded = isSectionExpanded(layout, section);
+    const isActive = layout.activePanel[placement] === panelId;
+    if (isExpanded && isActive) {
+      set(closePanelAtom, { panelId });
+      return;
+    }
+    set(openPanelAtom, { panelId, in: placement });
+    set(jumpToSectionAtom, { subSection: placement });
+    return;
+  }
+
+  set(openPanelAtom, { panelId, in: fallbackSection });
+  set(jumpToSectionAtom, { subSection: fallbackSection });
+});

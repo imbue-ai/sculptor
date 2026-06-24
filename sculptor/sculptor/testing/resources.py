@@ -314,9 +314,12 @@ def _get_or_create_shared_instance(
     # Use a longer timeout than the default 30s for this initial check to
     # allow headroom for cold Electron starts on CI.
     t2 = time.monotonic()
-    add_ws_button = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
+    # The sidebar rail is rendered by AppShell on every in-app destination AND by the
+    # empty-first-run page, but not by the onboarding wizard — so it is the universal
+    # "app rendered, not onboarding" signal in the new shell.
+    app_ready = page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)
     try:
-        expect_app_not_onboarding(page, add_ws_button, timeout=_INITIAL_RENDER_TIMEOUT_MS)
+        expect_app_not_onboarding(page, app_ready, timeout=_INITIAL_RENDER_TIMEOUT_MS)
     except Exception:
         logger.warning("[timing] SPA render failed after {:.2f}s", time.monotonic() - t2)
         if electron_frontend is not None:
@@ -466,10 +469,10 @@ def _create_packaged_instance(
     page.goto(base_url, wait_until="networkidle")
 
     # Wait for the SPA to render — raise if onboarding shows instead of the main app.
-    logger.info("Waiting for SPA to render (checking for ADD_WORKSPACE_BUTTON or onboarding)")
-    add_ws_button = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
+    logger.info("Waiting for SPA to render (checking for the sidebar rail or onboarding)")
+    app_ready = page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)
     try:
-        expect_app_not_onboarding(page, add_ws_button, timeout=_INITIAL_RENDER_TIMEOUT_MS)
+        expect_app_not_onboarding(page, app_ready, timeout=_INITIAL_RENDER_TIMEOUT_MS)
     except Exception:
         logger.error("SPA render failed. Page URL: {}", page.url)
         logger.error("Page content preview: {}", page.content()[:2000])
@@ -578,11 +581,10 @@ def _create_custom_command_instance(
         ]
     )
 
-    # Wait for the React SPA to render.
+    # Wait for the React SPA to render (the sidebar rail is the new shell's universal
+    # "app rendered" signal — present on every in-app route and the empty-first-run page).
     try:
-        expect(
-            page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON).or_(page.get_by_test_id(ElementIDs.START_TASK_BUTTON))
-        ).to_be_visible()
+        expect(page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)).to_be_visible()
     except Exception:
         electron_frontend.__exit__(None, None, None)
         raise

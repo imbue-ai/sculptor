@@ -13,7 +13,6 @@ import {
 import { COMPONENT_GALLERY_TAB_ID, HOME_TAB_ID, SETTINGS_TAB_ID } from "./components/workspaceTabIds.ts";
 import { EmptyFirstRunGate } from "./EmptyFirstRunGate.tsx";
 import { AppShell } from "./layouts/AppShell";
-import { PageLayout } from "./layouts/PageLayout";
 import { AddWorkspacePage } from "./pages/add-workspace/AddWorkspacePage.tsx";
 import { ComponentGalleryPage } from "./pages/debug/ComponentGalleryPage.tsx";
 import { NotFoundErrorPage } from "./pages/error/NotFound.tsx";
@@ -107,27 +106,12 @@ const router = createHashRouter([
               },
             ],
           },
-        ],
-      },
-      // Routes still on the legacy PageLayout until Task 7.3 removes them.
-      {
-        path: "/ws/new/:draftId",
-        element: <PageLayout />,
-        errorElement: <RouteErrorPage />,
-        children: [
           {
-            index: true,
+            path: "/ws/new/:draftId",
             element: <AddWorkspacePage />,
           },
-        ],
-      },
-      {
-        path: "/component-gallery",
-        element: <PageLayout />,
-        errorElement: <RouteErrorPage />,
-        children: [
           {
-            index: true,
+            path: "/component-gallery",
             element: (
               <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
                 <ComponentGalleryPage />

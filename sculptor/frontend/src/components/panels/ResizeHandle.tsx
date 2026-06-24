@@ -1,7 +1,7 @@
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, ReactElement } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import styles from "./DockingLayout.module.scss";
+import styles from "./ResizeHandle.module.scss";
 
 // Native Electron <webview> elements run in a separate render process, so
 // pointer events that occur over them are delivered to the embedded

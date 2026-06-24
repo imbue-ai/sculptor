@@ -4,8 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CodingAgentTaskView, Workspace } from "../../../api";
 import { taskAtomFamily, taskIdsAtom } from "../../../common/state/atoms/tasks.ts";
 import { workspaceAtomFamily, workspaceIdsAtom } from "../../../common/state/atoms/workspaces.ts";
-import { panelRegistryAtom } from "../../panels/atoms.ts";
-import type { PanelDefinition } from "../../panels/types.ts";
+import type { PanelDefinition } from "../../sections/registry/panelRegistry.ts";
+import { panelRegistryAtom } from "../../sections/registry/panelRegistry.ts";
+import { togglePanelAtom } from "../../sections/sectionActions.ts";
 import { buildAgentProvider } from "../dynamic/agentCommands.ts";
 import { buildPanelTogglesProvider } from "../dynamic/panels.ts";
 import { buildWorkspaceProvider } from "../dynamic/workspaceCommands.tsx";
@@ -18,7 +19,6 @@ const ROOT_CTX: PaletteContext = {
   activeAgentId: null,
   hasChatPanel: false,
   hasTerminalPanel: false,
-  isZenMode: false,
   page: null,
 };
 
@@ -39,12 +39,9 @@ const makeRuntime = (): CommandRuntime => {
     ui: {
       toggleHelpDialog: noop,
       toggleDevPanel: noop,
-      toggleZenMode: noop,
-      toggleFocusMode: noop,
       toggleLeftPanel: noop,
       toggleBottomPanel: noop,
       toggleRightPanel: noop,
-      togglePanel: noop,
       setTheme: noop,
       focusChatInput: noop,
       showChatSearch: noop,
@@ -339,8 +336,8 @@ describe("buildPanelTogglesProvider", () => {
           id: p.id,
           displayName: p.displayName,
           icon: TestIcon as unknown,
-          defaultZone: "top-left",
-          defaultShortcut: "",
+          kind: "static",
+          defaultSection: "left",
           component: (() => null) as unknown,
         }) as unknown as PanelDefinition,
     );
@@ -440,13 +437,14 @@ describe("buildPanelTogglesProvider", () => {
     }
   });
 
-  it("perform calls runtime.ui.togglePanel with the panel id", () => {
+  it("perform sets togglePanelAtom with the panel id and its fallback section", () => {
     seedRegistry([{ id: "terminal", displayName: "Terminal" }]);
     const runtime = makeRuntime();
-    runtime.ui.togglePanel = vi.fn();
+    const setSpy = vi.spyOn(runtime.store, "set");
     const cmd = buildPanelTogglesProvider(runtime).produce(WORKSPACE_CTX)[0]!;
     cmd.perform({ ctx: WORKSPACE_CTX, keepOpen: true, pushPage: vi.fn() });
-    expect(runtime.ui.togglePanel).toHaveBeenCalledWith("terminal");
+    expect(setSpy).toHaveBeenCalledWith(togglePanelAtom, { panelId: "terminal", fallbackSection: "left" });
+    setSpy.mockRestore();
   });
 
   it("picks up panels added to the registry without re-creating the provider", () => {

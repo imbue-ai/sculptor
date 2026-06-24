@@ -19,7 +19,6 @@ import {
   areGlobalShortcutsDisabledAtom,
   newWorkspaceModalAtom,
 } from "../../components/newWorkspace/newWorkspaceAtoms.ts";
-import { useFocusMode, useSideToggle, useZenMode } from "../../components/panels/hooks.ts";
 import { chatToolDensityAtom } from "../../pages/workspace/components/chat-alpha/atoms.ts";
 
 export const usePageLayoutKeyboardShortcuts = (): void => {
@@ -37,11 +36,6 @@ export const usePageLayoutKeyboardShortcuts = (): void => {
   const setNewWorkspaceModal = useSetAtom(newWorkspaceModalAtom);
   const openSettings = useOpenSettings();
 
-  const { toggleFocusMode } = useFocusMode();
-  const { toggleZenMode } = useZenMode();
-  const { toggle: toggleLeftPanel } = useSideToggle("left");
-  const { toggle: toggleBottomPanel } = useSideToggle("bottom");
-  const { toggle: toggleRightPanel } = useSideToggle("right");
   const resolvedTheme = useResolvedTheme();
   const setThemeSettings = useSetAtom(themeBuilderSettingsAtom);
   const setChatToolDensity = useSetAtom(chatToolDensityAtom);
@@ -137,10 +131,6 @@ export const usePageLayoutKeyboardShortcuts = (): void => {
         return;
       }
 
-      // Workspace-only keybindings (zen/focus mode, panel toggles) should
-      // not fire on non-workspace pages like Settings or Home.
-      const isOnWorkspacePage = /^#\/ws\/(?!new\b)/.test(window.location.hash);
-
       const handlers: Array<[KeybindingId, () => void]> = [
         ["command_palette", (): void => toggleCommandPalette()],
         ["help", (): void => toggleHelpDialog()],
@@ -212,15 +202,6 @@ export const usePageLayoutKeyboardShortcuts = (): void => {
             setChatToolDensity((prev) => (prev === "expanded" ? "default" : "expanded"));
           },
         ],
-        ...(isOnWorkspacePage
-          ? ([
-              ["zen_mode", (): void => toggleZenMode()],
-              ["focus_mode", (): void => toggleFocusMode()],
-              ["toggle_left_panel", (): void => toggleLeftPanel()],
-              ["toggle_bottom_panel", (): void => toggleBottomPanel()],
-              ["toggle_right_panel", (): void => toggleRightPanel()],
-            ] as Array<[KeybindingId, () => void]>)
-          : []),
       ];
 
       for (const [id, handler] of handlers) {
@@ -252,10 +233,5 @@ export const usePageLayoutKeyboardShortcuts = (): void => {
     resolvedTheme,
     setThemeSettings,
     setChatToolDensity,
-    toggleFocusMode,
-    toggleZenMode,
-    toggleLeftPanel,
-    toggleBottomPanel,
-    toggleRightPanel,
   ]);
 };

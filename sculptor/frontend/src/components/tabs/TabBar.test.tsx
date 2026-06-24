@@ -3,7 +3,7 @@ import { createStore } from "jotai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ElementIds } from "~/api";
-import { renderWithProviders } from "~/components/panels/testUtils";
+import { renderWithProviders } from "~/common/testUtils.tsx";
 import { TabBar } from "~/components/tabs/TabBar";
 import type { TabBarProps, TabDefinition } from "~/components/tabs/types";
 

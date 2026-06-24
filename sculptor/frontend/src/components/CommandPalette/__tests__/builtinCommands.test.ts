@@ -20,7 +20,6 @@ const ROOT_CTX: PaletteContext = {
   activeAgentId: null,
   hasChatPanel: false,
   hasTerminalPanel: false,
-  isZenMode: false,
   page: null,
 };
 
@@ -64,12 +63,9 @@ const makeRuntime = (overrides: Partial<CommandRuntime> = {}): CommandRuntime =>
     ui: {
       toggleHelpDialog: vi.fn(),
       toggleDevPanel: vi.fn(),
-      toggleZenMode: vi.fn(),
-      toggleFocusMode: vi.fn(),
       toggleLeftPanel: vi.fn(),
       toggleBottomPanel: vi.fn(),
       toggleRightPanel: vi.fn(),
-      togglePanel: vi.fn(),
       setTheme: vi.fn(),
       focusChatInput: vi.fn(),
       showChatSearch: vi.fn(),
@@ -322,8 +318,6 @@ describe("buildPanelCommands", () => {
         "view.toggle_left_panel",
         "view.toggle_right_panel",
         "view.toggle_bottom_panel",
-        "view.focus_mode",
-        "view.zen_mode",
       ].sort(),
     );
   });
@@ -358,15 +352,9 @@ describe("buildPanelCommands", () => {
     }
   });
 
-  it("zone toggles + Focus/Zen modes are scoped to the view.layout sub-page", () => {
+  it("section toggles are scoped to the view.layout sub-page", () => {
     const cmds = buildPanelCommands(makeRuntime());
-    for (const id of [
-      "view.toggle_left_panel",
-      "view.toggle_right_panel",
-      "view.toggle_bottom_panel",
-      "view.focus_mode",
-      "view.zen_mode",
-    ]) {
+    for (const id of ["view.toggle_left_panel", "view.toggle_right_panel", "view.toggle_bottom_panel"]) {
       const cmd = cmds.find((c) => c.id === id)!;
       expect(cmd.onPage).toBe("view.layout");
     }
@@ -383,14 +371,12 @@ describe("buildPanelCommands", () => {
     }
   });
 
-  it("the three zone-toggle commands have keepOpen: true; focus_mode and zen_mode do not", () => {
+  it("the three section-toggle commands have keepOpen: true", () => {
     const cmds = buildPanelCommands(makeRuntime());
     const byId = (id: string): Command => cmds.find((c) => c.id === id)!;
     expect(byId("view.toggle_left_panel").keepOpen).toBe(true);
     expect(byId("view.toggle_right_panel").keepOpen).toBe(true);
     expect(byId("view.toggle_bottom_panel").keepOpen).toBe(true);
-    expect(byId("view.focus_mode").keepOpen).not.toBe(true);
-    expect(byId("view.zen_mode").keepOpen).not.toBe(true);
   });
 
   it("perform delegates to the matching runtime.ui method", () => {
@@ -399,13 +385,9 @@ describe("buildPanelCommands", () => {
     runPerform(cmds.find((c) => c.id === "view.toggle_left_panel")!);
     runPerform(cmds.find((c) => c.id === "view.toggle_right_panel")!);
     runPerform(cmds.find((c) => c.id === "view.toggle_bottom_panel")!);
-    runPerform(cmds.find((c) => c.id === "view.focus_mode")!);
-    runPerform(cmds.find((c) => c.id === "view.zen_mode")!);
     expect(runtime.ui.toggleLeftPanel).toHaveBeenCalledTimes(1);
     expect(runtime.ui.toggleRightPanel).toHaveBeenCalledTimes(1);
     expect(runtime.ui.toggleBottomPanel).toHaveBeenCalledTimes(1);
-    expect(runtime.ui.toggleFocusMode).toHaveBeenCalledTimes(1);
-    expect(runtime.ui.toggleZenMode).toHaveBeenCalledTimes(1);
   });
 });
 

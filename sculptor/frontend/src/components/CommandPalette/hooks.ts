@@ -5,12 +5,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSyncExtern
 import { useImbueLocation } from "~/common/NavigateUtils.ts";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
 import { effectiveOpenTabIdsAtom, workspacesArrayAtom } from "~/common/state/atoms/workspaces.ts";
-import {
-  chatPanelMountedAtom,
-  panelRegistryAtom,
-  terminalPanelMountedAtom,
-  zenModeActiveAtom,
-} from "~/components/panels/atoms.ts";
+import { panelRegistryAtom } from "~/components/sections/registry/panelRegistry.ts";
+import { chatPanelMountedAtom, terminalPanelMountedAtom } from "~/pages/workspace/atoms.ts";
 
 import { areGlobalShortcutsDisabledAtom } from "../newWorkspace/newWorkspaceAtoms.ts";
 import {
@@ -47,7 +43,6 @@ const COMMAND_TIMEOUT_MS = 30_000;
  */
 export const usePaletteContext = (): PaletteContext => {
   const loc = useImbueLocation();
-  const isZen = useAtomValue(zenModeActiveAtom);
   // Reactive read: `chatPanelMountedAtom` is flipped by the chat panel
   // component on mount/unmount, so this updates without poking the DOM.
   const hasChatPanel = useAtomValue(chatPanelMountedAtom);
@@ -74,7 +69,6 @@ export const usePaletteContext = (): PaletteContext => {
       activeAgentId,
       hasChatPanel,
       hasTerminalPanel,
-      isZenMode: isZen,
       page,
     }),
     [
@@ -87,7 +81,6 @@ export const usePaletteContext = (): PaletteContext => {
       activeAgentId,
       hasChatPanel,
       hasTerminalPanel,
-      isZen,
       page,
     ],
   );

@@ -3,11 +3,10 @@ import { atomFamily, atomWithStorage } from "jotai/utils";
 
 import { atomWithDebouncedStorage } from "~/common/state/atoms/atomWithDebouncedStorage.ts";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
-import { expandedPanelIdAtom, zoneAssignmentsAtom } from "~/components/panels/atoms.ts";
 import { getUncommittedFileStatusMap } from "~/pages/workspace/panels/fileBrowser/atoms.ts";
 import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types.ts";
 
-import type { DiffPanelTabState, DiffScope, DiffTab, SplitPosition } from "./types.ts";
+import type { DiffPanelTabState, DiffScope, DiffTab } from "./types.ts";
 import { COMBINED_REVIEW_PATH, COMMIT_DIFF_PREFIX, FILE_VIEW_PREFIX, TARGET_BRANCH_DIFF_PREFIX } from "./types.ts";
 
 /** Transient per-workspace scope for the combined diff view. Resets on page refresh. */
@@ -18,17 +17,6 @@ const STORAGE_DEBOUNCE_MS = 200;
 
 /** Ratio (0–100) controlling the left/right column split in side-by-side diffs. */
 export const splitDiffColumnRatioAtom = atom(50);
-
-/** Derives the side ("left" | "right") of the chat where the diff viewer should
- *  appear based on which docking zone the file browser panel is assigned to. */
-export const fileBrowserDockSideAtom = atom<SplitPosition>((get) => {
-  const assignments = get(zoneAssignmentsAtom);
-  const filesZone = assignments["files"];
-  if (filesZone && filesZone.includes("left")) {
-    return "left";
-  }
-  return "right";
-});
 
 const DEFAULT_DIFF_PANEL_TAB_STATE: DiffPanelTabState = {
   openTabs: [],
@@ -296,10 +284,8 @@ export const closeDiffTabAtom = atom(
 
     if (remainingTabs.length === 0) {
       // Leave the panel open so the user sees the empty placeholder rather
-      // than the panel collapsing out from under them.  Exit expand mode
-      // since a fullscreened empty placeholder is poor UX.
+      // than the panel collapsing out from under them.
       set(stateAtom, { ...state, openTabs: [], activeTabPath: null });
-      set(expandedPanelIdAtom, null);
       return;
     }
 
@@ -318,11 +304,6 @@ export const closeDiffTabAtom = atom(
   },
 );
 
-export const closeDiffPanelAtom = atom(null, (_get, set) => {
-  set(diffPanelOpenAtom, false);
-  set(expandedPanelIdAtom, null);
-});
-
 export const closeOtherDiffTabsAtom = atom(
   null,
   (get, set, { workspaceId, filePath }: { workspaceId: string; filePath: string }) => {
@@ -337,9 +318,8 @@ export const closeOtherDiffTabsAtom = atom(
 export const closeAllDiffTabsAtom = atom(null, (get, set, { workspaceId }: { workspaceId: string }) => {
   const stateAtom = diffPanelStateAtomFamily(workspaceId);
   const state = get(stateAtom);
-  // Leave the panel open and show the empty placeholder, but drop expand mode.
+  // Leave the panel open and show the empty placeholder.
   set(stateAtom, { ...state, openTabs: [], activeTabPath: null });
-  set(expandedPanelIdAtom, null);
 });
 
 /** Reorder tabs to match the given path order (e.g. after a drag-and-drop). */

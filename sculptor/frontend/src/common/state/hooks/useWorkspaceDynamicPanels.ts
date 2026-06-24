@@ -17,13 +17,19 @@ import { terminalTabStateAtom } from "~/common/state/atoms/terminalTabs.ts";
 import { agentDeleteTargetAtom, terminalCloseTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
 import type { DynamicAgentInput, DynamicTerminalInput } from "~/components/sections/registry/dynamicPanels.tsx";
 import { deriveDynamicPanels, makeTerminalPanelId } from "~/components/sections/registry/dynamicPanels.tsx";
-import { buildStaticPanelDefinitions, panelRegistryAtom } from "~/components/sections/registry/panelRegistry.ts";
+import {
+  buildPluginPanelDefinitions,
+  buildStaticPanelDefinitions,
+  panelRegistryAtom,
+} from "~/components/sections/registry/panelRegistry.ts";
+import { pluginPanelsAtom } from "~/plugins/pluginRegistry.ts";
 
 import { useWorkspaceAgentDiagnostics } from "./useWorkspaceAgentDiagnostics.ts";
 
 export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
   const tasks = useAtomValue(tasksArrayAtom);
   const allTerminalTabs = useAtomValue(terminalTabStateAtom);
+  const pluginPanels = useAtomValue(pluginPanelsAtom);
   const setPanelRegistry = useSetAtom(panelRegistryAtom);
   const setTerminalCloseTarget = useSetAtom(terminalCloseTargetAtom);
   const setAgentDeleteTarget = useSetAtom(agentDeleteTargetAtom);
@@ -82,6 +88,15 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
 
   useEffect(() => {
     const dynamicDefinitions = deriveDynamicPanels(agents, terminals);
-    setPanelRegistry([...buildStaticPanelDefinitions(), ...dynamicDefinitions]);
-  }, [agents, terminals, setPanelRegistry]);
+    // Merge plugin-contributed panels (PANEL-/plugin spec) into the rebuilt registry so
+    // they survive every task-tick rebuild. A plugin panel whose id collides with a
+    // static or dynamic panel loses (the host panel wins) so a plugin can't shadow a
+    // built-in surface.
+    const reservedIds = new Set([
+      ...buildStaticPanelDefinitions().map((p) => p.id),
+      ...dynamicDefinitions.map((p) => p.id),
+    ]);
+    const pluginDefinitions = buildPluginPanelDefinitions(pluginPanels.filter((panel) => !reservedIds.has(panel.id)));
+    setPanelRegistry([...buildStaticPanelDefinitions(), ...pluginDefinitions, ...dynamicDefinitions]);
+  }, [agents, terminals, pluginPanels, setPanelRegistry]);
 };

@@ -6,27 +6,24 @@ import { Provider } from "jotai";
 import type { ReactElement, ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 
-import { PanelRegistryProvider } from "~/components/panels/PanelRegistryProvider";
-import type { PanelDefinition } from "~/components/panels/types.ts";
-
 type Store = ReturnType<typeof createStore>;
 
 type RenderWithProvidersResult = RenderResult & { store: Store };
 
 type RenderWithProvidersOptions = {
   store: Store;
-  panels?: ReadonlyArray<PanelDefinition>;
   initialEntries?: ReadonlyArray<string>;
 };
 
+// Shared test helper: render a component inside the Jotai store, Radix Theme, and a
+// MemoryRouter. The section/panel shell reads the registry from a global atom (no
+// provider), so unlike the docking shell's helper there is nothing to seed here.
 export const renderWithProviders = (ui: ReactNode, options: RenderWithProvidersOptions): RenderWithProvidersResult => {
-  const { store, panels, initialEntries } = options;
+  const { store, initialEntries } = options;
   const Wrapper = ({ children }: { children: ReactNode }): ReactElement => (
     <Provider store={store}>
       <Theme>
-        <MemoryRouter initialEntries={initialEntries ? [...initialEntries] : undefined}>
-          {panels ? <PanelRegistryProvider panels={panels}>{children}</PanelRegistryProvider> : children}
-        </MemoryRouter>
+        <MemoryRouter initialEntries={initialEntries ? [...initialEntries] : undefined}>{children}</MemoryRouter>
       </Theme>
     </Provider>
   );

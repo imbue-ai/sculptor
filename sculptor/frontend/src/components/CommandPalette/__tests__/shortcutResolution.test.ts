@@ -68,7 +68,6 @@ const WORKSPACE_CTX: PaletteContext = {
   activeAgentId: null,
   hasChatPanel: true,
   hasTerminalPanel: false,
-  isZenMode: false,
   page: null,
 };
 

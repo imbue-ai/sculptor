@@ -34,7 +34,6 @@ const ROOT_CTX: PaletteContext = {
   activeAgentId: null,
   hasChatPanel: false,
   hasTerminalPanel: false,
-  isZenMode: false,
   page: null,
 };
 
@@ -62,12 +61,9 @@ const makeCommandRuntime = (): CommandRuntime => {
     ui: {
       toggleHelpDialog: noop,
       toggleDevPanel: noop,
-      toggleZenMode: noop,
-      toggleFocusMode: noop,
       toggleLeftPanel: noop,
       toggleBottomPanel: noop,
       toggleRightPanel: noop,
-      togglePanel: noop,
       setTheme: noop,
       focusChatInput: noop,
       showChatSearch: noop,

@@ -15,7 +15,7 @@ import { useOpenSettings } from "../../common/state/hooks/useOpenSettings.ts";
 import { useUserConfig } from "../../common/state/hooks/useUserConfig.ts";
 import type { AppearanceMode } from "../../common/theme/appearanceModes.ts";
 import { newWorkspaceModalAtom } from "../newWorkspace/newWorkspaceAtoms.ts";
-import { useFocusMode, usePanelActions, useSideToggle, useZenMode } from "../panels/hooks.ts";
+import { toggleSectionAtom } from "../sections/sectionActions.ts";
 import { type CommandActionId, commandActionsAtom } from "./commandActions.ts";
 import type { AppStore, CommandRuntime } from "./runtime.ts";
 
@@ -71,12 +71,7 @@ export const useCommandRuntime = (): CommandRuntime => {
 
   const { toggleHelpDialog } = useHelpDialog();
   const { toggleDevPanel } = useDevPanel();
-  const { toggleFocusMode } = useFocusMode();
-  const { toggleZenMode } = useZenMode();
-  const { toggle: toggleLeftPanel } = useSideToggle("left");
-  const { toggle: toggleBottomPanel } = useSideToggle("bottom");
-  const { toggle: toggleRightPanel } = useSideToggle("right");
-  const { togglePanel } = usePanelActions();
+  const toggleSection = useSetAtom(toggleSectionAtom);
 
   const setThemeSettings = useSetAtom(themeBuilderSettingsAtom);
   const setChatSearchVisible = useSetAtom(chatSearchVisibleAtom);
@@ -117,12 +112,9 @@ export const useCommandRuntime = (): CommandRuntime => {
 
   const uiToggleHelpDialog = useEvent((): void => toggleHelpDialog());
   const uiToggleDevPanel = useEvent((): void => toggleDevPanel());
-  const uiToggleZenMode = useEvent((): void => toggleZenMode());
-  const uiToggleFocusMode = useEvent((): void => toggleFocusMode());
-  const uiToggleLeftPanel = useEvent((): void => toggleLeftPanel());
-  const uiToggleBottomPanel = useEvent((): void => toggleBottomPanel());
-  const uiToggleRightPanel = useEvent((): void => toggleRightPanel());
-  const uiTogglePanel = useEvent((panelId: string): void => togglePanel(panelId));
+  const uiToggleLeftPanel = useEvent((): void => toggleSection({ section: "left" }));
+  const uiToggleBottomPanel = useEvent((): void => toggleSection({ section: "bottom" }));
+  const uiToggleRightPanel = useEvent((): void => toggleSection({ section: "right" }));
   const setTheme = useEvent((mode: AppearanceMode): void => {
     setThemeSettings((prev) => ({ ...prev, appearance: mode }));
   });
@@ -167,12 +159,9 @@ export const useCommandRuntime = (): CommandRuntime => {
       ui: {
         toggleHelpDialog: uiToggleHelpDialog,
         toggleDevPanel: uiToggleDevPanel,
-        toggleZenMode: uiToggleZenMode,
-        toggleFocusMode: uiToggleFocusMode,
         toggleLeftPanel: uiToggleLeftPanel,
         toggleBottomPanel: uiToggleBottomPanel,
         toggleRightPanel: uiToggleRightPanel,
-        togglePanel: uiTogglePanel,
         setTheme,
         focusChatInput: uiFocusChatInput,
         showChatSearch,
@@ -198,12 +187,9 @@ export const useCommandRuntime = (): CommandRuntime => {
       openNewWorkspaceModal,
       uiToggleHelpDialog,
       uiToggleDevPanel,
-      uiToggleZenMode,
-      uiToggleFocusMode,
       uiToggleLeftPanel,
       uiToggleBottomPanel,
       uiToggleRightPanel,
-      uiTogglePanel,
       setTheme,
       uiFocusChatInput,
       showChatSearch,

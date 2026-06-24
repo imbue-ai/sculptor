@@ -9,7 +9,6 @@ const ROOT_CTX: PaletteContext = {
   activeAgentId: null,
   hasChatPanel: false,
   hasTerminalPanel: false,
-  isZenMode: false,
   page: null,
 };
 

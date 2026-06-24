@@ -620,7 +620,11 @@ def navigate_to_settings_page(page: Page, **_kwargs: object) -> PlaywrightSettin
     fires while WorkspacePage is mounted, so once we reach Settings nothing
     redirects away again.
     """
-    settings_button = page.get_by_test_id(ElementIDs.SETTINGS_BUTTON)
+    # The Settings link lives in the persistent sidebar (AppShell renders it on every
+    # in-app route, and the empty-first-run page renders it too), so it is reachable from
+    # any state this helper is called from. Clicking routes via React Router with no
+    # document reload, keeping the WebSocket alive.
+    settings_button = page.get_by_test_id(ElementIDs.SIDEBAR_SETTINGS_LINK)
     settings_page_marker = page.get_by_test_id(ElementIDs.SETTINGS_PAGE)
 
     def _click_into_settings() -> None:

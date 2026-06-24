@@ -44,7 +44,6 @@ import { EnvironmentVariablesSection } from "./components/EnvironmentVariablesSe
 import { FileBrowserSettingsSection } from "./components/FileBrowserSettingsSection.tsx";
 import { GitSettingsSection } from "./components/GitSettingsSection.tsx";
 import { KeybindingsSection } from "./components/KeybindingsSection.tsx";
-import { PanelsSettingsSection } from "./components/PanelsSettingsSection.tsx";
 import { PiSettingsSection } from "./components/PiSettingsSection.tsx";
 import { PluginsSettingsSection } from "./components/PluginsSettingsSection.tsx";
 import { ReposSection } from "./components/ReposSection.tsx";
@@ -367,9 +366,6 @@ export const SettingsPage = (): ReactElement => {
               )}
               {activeSection === SettingsSection.KEYBINDINGS && (
                 <KeybindingsSection onSettingChange={handleSettingChange} />
-              )}
-              {activeSection === SettingsSection.PANELS && (
-                <PanelsSettingsSection onSettingChange={handleSettingChange} />
               )}
               {activeSection === SettingsSection.PLUGINS && <PluginsSettingsSection />}
               {activeSection === SettingsSection.PRIVACY && (

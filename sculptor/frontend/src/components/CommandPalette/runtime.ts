@@ -39,18 +39,13 @@ export type CommandRuntime = {
   ui: {
     toggleHelpDialog: () => void;
     toggleDevPanel: () => void;
-    toggleZenMode: () => void;
-    toggleFocusMode: () => void;
+    /**
+     * Expand or collapse the left / bottom / right section of the workspace shell.
+     * Wraps `toggleSectionAtom`; center never collapses.
+     */
     toggleLeftPanel: () => void;
     toggleBottomPanel: () => void;
     toggleRightPanel: () => void;
-    /**
-     * Toggle the visibility of one specific panel by id (e.g. "files",
-     * "terminal", "notes"). Smart-toggles via `usePanelActions`: opens
-     * a hidden zone, switches the active panel inside a zone, or
-     * closes the zone if the panel is already active and visible.
-     */
-    togglePanel: (panelId: string) => void;
     setTheme: (mode: AppearanceMode) => void;
     focusChatInput: () => void;
     showChatSearch: () => void;

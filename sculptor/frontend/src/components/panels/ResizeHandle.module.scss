@@ -1,0 +1,52 @@
+// Visible dividers are 1px but the clickable hit area extends further via a
+// transparent pseudo-element. Position/z-index lifts the pseudo-element above
+// adjacent scrollbars so they don't steal pointer events near the edge.
+.horizontalResizeHandle {
+  background-color: var(--gray-a5);
+  cursor: col-resize;
+  flex-shrink: 0;
+  position: relative;
+  transition: background-color var(--duration-normal);
+  width: 1px;
+  z-index: 1;
+
+  &::before {
+    content: "";
+    // stylelint-disable-next-line sculptor/no-hardcoded-values -- 4px hit-area extension each side
+    inset: 0 -4px;
+    position: absolute;
+  }
+
+  &:hover {
+    background-color: var(--gray-a7);
+  }
+
+  &[data-resize-handle-active] {
+    background-color: var(--accent-9);
+  }
+}
+
+.verticalResizeHandle {
+  background-color: var(--gray-a5);
+  cursor: row-resize;
+  flex-shrink: 0;
+  height: 1px;
+  position: relative;
+  transition: background-color var(--duration-normal);
+  z-index: 1;
+
+  &::before {
+    content: "";
+    // stylelint-disable-next-line sculptor/no-hardcoded-values -- 4px hit-area extension each side
+    inset: -4px 0;
+    position: absolute;
+  }
+
+  &:hover {
+    background-color: var(--gray-a7);
+  }
+
+  &[data-resize-handle-active] {
+    background-color: var(--accent-9);
+  }
+}

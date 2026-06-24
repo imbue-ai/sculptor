@@ -1,5 +1,7 @@
 export type FileListEntry = { path: string; type: "file" | "directory" };
 
+export type FileBrowserTab = "all" | "changes" | "history";
+
 export type FileStatus = "M" | "A" | "D" | "R";
 
 export type ViewMode = "tree" | "flat";
