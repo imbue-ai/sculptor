@@ -33,6 +33,7 @@ import json
 import os
 import shutil
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -62,6 +63,14 @@ MAX_BUFFERED_EXTERNAL_EVENTS = 100_000
 # materialize anyway.
 DEFAULT_TRACER_ENTRIES = 50_000_000
 
+# Smaller default ring buffer for ad-hoc tracing armed at runtime (via the
+# trace-control HTTP endpoint / `sculpt trace start`) rather than at boot.
+# Runtime arming targets steady-state interactive work, whose event rate is
+# far below the boot peak the 50M buffer is sized for, so a fifth of the
+# entries (~500 MB) still covers a generous capture window while keeping the
+# resident footprint reasonable on a machine running a real workload.
+DEFAULT_ADHOC_TRACER_ENTRIES = 10_000_000
+
 # Required keys on every Chrome-JSON event we accept. Events missing either
 # field are dropped; the rest of the batch is still ingested. This is cheap
 # insurance against a renderer regression silently corrupting every trace
@@ -86,6 +95,21 @@ _dropped_event_count = 0
 _invalid_event_count = 0
 
 
+@dataclass(frozen=True)
+class TraceWriteResult:
+    """Outcome of a completed trace flush, returned by ``stop_and_write_trace``.
+
+    ``path`` is the file the combined Chrome-JSON trace was written to.
+    The counts are the number of backend (viztracer) and external (renderer /
+    Electron-main) events the file contains, exposed so the trace-control HTTP
+    endpoint can report how much was captured without re-reading the file.
+    """
+
+    path: Path
+    backend_event_count: int
+    external_event_count: int
+
+
 def is_tracing_enabled() -> bool:
     return _trace_to_path is not None
 
@@ -94,19 +118,39 @@ def get_trace_to_path() -> Path | None:
     return _trace_to_path
 
 
-def start_tracing(output_path: Path) -> None:
-    """Start viztracer. Idempotent — safe to call twice."""
+def get_buffered_external_event_count() -> int:
+    """Number of external (renderer / Electron-main) events currently buffered
+    and awaiting the next flush. Read under the lock so the count is consistent
+    with concurrent ``add_external_events`` writers."""
+    with _external_events_lock:
+        return len(_external_events)
+
+
+def start_tracing(output_path: Path, tracer_entries: int | None = None) -> None:
+    """Start viztracer, writing the combined trace to ``output_path`` when it is
+    later stopped. ``tracer_entries`` sizes viztracer's in-memory ring buffer;
+    ``None`` uses ``DEFAULT_TRACER_ENTRIES`` (resolved at call time so tests can
+    monkeypatch the constant).
+
+    Idempotent — a second call while a trace is already running is a no-op (it
+    does NOT change the path or buffer size). After ``stop_and_write_trace``
+    has flushed and torn down a session, calling this again arms a fresh one,
+    which is what makes the runtime arm/disarm cycle (`sculpt trace start` then
+    `stop` then `start`) work.
+    """
     global _trace_to_path, _tracer, _internal_trace_path
     if _tracer is not None:
         return
     from viztracer import VizTracer
 
+    if tracer_entries is None:
+        tracer_entries = DEFAULT_TRACER_ENTRIES
     _trace_to_path = output_path.resolve()
     tmp_dir = Path(tempfile.mkdtemp(prefix="sculptor_viztrace_"))
     _internal_trace_path = tmp_dir / "viztracer.json"
     _tracer = VizTracer(
         output_file=str(_internal_trace_path),
-        tracer_entries=DEFAULT_TRACER_ENTRIES,
+        tracer_entries=tracer_entries,
         log_func_args=False,
         log_print=False,
         minimize_memory=True,
@@ -223,19 +267,28 @@ def _flush_event_batch(batch: Sequence[dict[str, Any]], f: IO[str], is_first_bat
     f.write(payload)
 
 
-def stop_and_write_trace() -> None:
+def stop_and_write_trace() -> TraceWriteResult | None:
     """Stop viztracer, merge with buffered external events, and write the
-    combined Chrome-JSON file to the configured `--trace-to` path.
+    combined Chrome-JSON file to the configured trace path. Returns a
+    ``TraceWriteResult`` describing the written file, or ``None`` if no trace
+    was active.
 
     The output is stream-written one event at a time rather than building a
     single dict in memory, so peak memory at exit is just viztracer's parsed
     events plus one in-flight serializer call.
+
+    After a successful (or failed) flush the module's trace state is reset to
+    the disarmed state, so a subsequent ``start_tracing`` arms a fresh session.
+    This is what makes runtime arm/disarm cycling work; it also means the
+    shutdown-time caller must read ``get_trace_to_path()`` BEFORE calling this
+    (or use the returned result), since the global is cleared here.
     """
+    global _trace_to_path, _tracer, _internal_trace_path, _dropped_event_count, _invalid_event_count
     trace_to_path = _trace_to_path
     tracer = _tracer
     internal_trace_path = _internal_trace_path
     if trace_to_path is None or tracer is None or internal_trace_path is None:
-        return
+        return None
 
     try:
         tracer.stop()
@@ -276,8 +329,23 @@ def stop_and_write_trace() -> None:
             # On success, the tmp file has been renamed away and this is a
             # no-op. On failure, drop the partial `.tmp` so we don't leak it.
             tmp_path.unlink(missing_ok=True)
+        return TraceWriteResult(
+            path=trace_to_path,
+            backend_event_count=len(viztracer_events),
+            external_event_count=len(buffered),
+        )
     finally:
         # Always clean up the viztracer temp dir, even on partial-write
         # failure. The user-facing trace file at trace_to_path is intentionally
         # NOT cleaned up — that's the artifact they came here for.
         shutil.rmtree(internal_trace_path.parent, ignore_errors=True)
+        # Disarm: drop references to the stopped tracer and clear the path so
+        # the module is ready to arm a fresh session. Dropping the only
+        # reference to the VizTracer also lets it be garbage-collected; the
+        # next start_tracing builds a new instance (viztracer's global
+        # __viz_tracer__ pointer is simply overwritten).
+        _tracer = None
+        _trace_to_path = None
+        _internal_trace_path = None
+        _dropped_event_count = 0
+        _invalid_event_count = 0

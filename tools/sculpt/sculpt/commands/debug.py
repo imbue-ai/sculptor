@@ -1,0 +1,39 @@
+"""Low-level diagnostics against a running Sculptor backend.
+
+    sculpt debug threads        # print a Python traceback for every thread
+
+This is the lightweight alternative to a full trace when the backend looks
+wedged: it returns an instant snapshot of every thread's Python stack via
+``sys._current_frames()`` (greenlet-safe — no signals, no C-stack walk).
+Requires the session token, which ``get_authenticated_client`` resolves.
+"""
+
+import httpx
+import typer
+
+from sculpt.auth import get_authenticated_client
+from sculpt.auth import get_default_base_url
+from sculpt.formatting import cli_error
+from sculpt.formatting import handle_connection_error
+
+debug_app = typer.Typer(help="Low-level diagnostics for a running Sculptor backend.")
+
+_OUTPUT_OPTION = typer.Option(None, "--output", "-o", help="Write the dump to this file instead of stdout.")
+
+
+@debug_app.command("threads")
+def threads(output: str = _OUTPUT_OPTION) -> None:
+    """Dump a Python traceback for every live backend thread."""
+    client = get_authenticated_client(get_default_base_url())
+    try:
+        response = client.get_httpx_client().get("/api/v1/debug/threads")
+    except (httpx.ConnectError, httpx.ConnectTimeout):
+        handle_connection_error()
+    if response.status_code >= 400:
+        cli_error(f"Request failed with status {response.status_code}", detail=response.text)
+    if output is not None:
+        with open(output, "w") as f:
+            f.write(response.text)
+        typer.echo(f"Thread dump written to {output}")
+    else:
+        typer.echo(response.text)
