@@ -1,15 +1,24 @@
+import fastifyMultipart from "@fastify/multipart";
 import fastifySwagger from "@fastify/swagger";
 import fastifyWebsocket from "@fastify/websocket";
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from "fastify";
-import { jsonSchemaTransform, serializerCompiler, validatorCompiler } from "fastify-type-provider-zod";
+import {
+  jsonSchemaTransform,
+  serializerCompiler,
+  validatorCompiler,
+} from "fastify-type-provider-zod";
 
 import { registerAgentInteractionRoutes } from "~/routes/agent_interaction";
 import { registerAgentRoutes } from "~/routes/agents";
 import { registerAuthGuard } from "~/auth/guard";
 import { registerConfigRoutes } from "~/routes/config";
 import { registerDependencyRoutes } from "~/routes/dependencies";
+import { registerFilesystemRoutes } from "~/routes/filesystem";
 import { registerHealthRoutes } from "~/routes/health";
 import { registerProjectRoutes } from "~/routes/projects";
+import { registerSkillRoutes } from "~/routes/skills";
+import { registerTraceRoutes } from "~/routes/trace";
+import { registerUploadRoutes } from "~/routes/uploads";
 import { registerUiActionRoutes } from "~/routes/ui_actions";
 import { registerWorkspaceFileRoutes } from "~/routes/workspace_files";
 import { registerWorkspaceOsRoutes } from "~/routes/workspace_os";
@@ -55,6 +64,10 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   // { websocket: true } (the /stream/ws channel).
   void app.register(fastifyWebsocket);
 
+  // Multipart powers POST /api/v1/upload-file (the per-file size cap is applied
+  // per-request in the handler, RW-NFR-051).
+  void app.register(fastifyMultipart);
+
   // The auth guard is a root-level onRequest hook, so it runs for every route
   // (including those registered by later plugins) regardless of order.
   registerAuthGuard(app);
@@ -70,6 +83,10 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   void app.register(registerWorkspaceOsRoutes);
   void app.register(registerAgentRoutes);
   void app.register(registerAgentInteractionRoutes);
+  void app.register(registerSkillRoutes);
+  void app.register(registerFilesystemRoutes);
+  void app.register(registerUploadRoutes);
+  void app.register(registerTraceRoutes);
   void app.register(registerTerminalHttpRoutes);
   void app.register(registerTerminalWsRoutes);
   void app.register(registerTelemetryInfoRoutes);
