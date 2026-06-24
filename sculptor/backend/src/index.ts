@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 
 import { buildApp } from "~/app";
+import { ensureSculptorFolderReady } from "~/config/bootstrap";
 import { resolveBindHost, resolvePort } from "~/config/port";
 import { emitOpenApiToFile } from "~/openapi";
 
@@ -44,6 +45,9 @@ export async function main(argv: readonly string[] = process.argv): Promise<void
     await emitOpenApiToFile(emitPath);
     return;
   }
+
+  // Bootstrap the on-disk Sculptor folder before opening any resources.
+  ensureSculptorFolderReady();
 
   const port = resolvePort(argv);
   const host = resolveBindHost();

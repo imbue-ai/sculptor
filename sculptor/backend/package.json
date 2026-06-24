@@ -29,6 +29,7 @@
     "fastify-type-provider-zod": "4.0.2",
     "node-pty": "1.0.0",
     "posthog-node": "4.4.1",
+    "smol-toml": "1.7.0",
     "typeid-js": "1.2.0",
     "zod": "3.25.76"
   },
