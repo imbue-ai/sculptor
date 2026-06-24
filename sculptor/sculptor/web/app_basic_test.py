@@ -222,6 +222,44 @@ def test_create_task_creates_task(
     assert len(response.json()) == 1
 
 
+def test_terminal_agent_does_not_carry_a_model(
+    client: TestClient, test_services: CompleteServiceCollection, test_project: Project
+) -> None:
+    """Terminal agents must not carry a model (SCU-1580).
+
+    Sculptor doesn't control the model for terminal agents, so creating one must
+    not stamp a ``default_model`` onto its task, and the agent view that
+    ``sculpt agent list`` (and the frontend) read must report no model — even
+    when the creation request happens to carry a model value.
+    """
+    user_session = authenticate_anonymous(test_services, RequestID())
+    with user_session.open_transaction(test_services) as transaction:
+        workspace = _create_workspace(transaction, test_services, test_project)
+
+    response = client.post(
+        f"/api/v1/workspaces/{workspace.object_id}/agents",
+        json=model_dump(
+            CreateAgentRequest(
+                agent_type=AgentTypeName.TERMINAL,
+                model=LLMModel.CLAUDE_4_OPUS,
+            ),
+            is_camel_case=True,
+        ),
+    )
+    assert response.status_code == 200, response.text
+
+    # The view the CLI / frontend consume must report no model for a terminal agent.
+    assert response.json()["model"] is None
+
+    # The deeper fix: creation must not persist a model on the terminal agent's task.
+    task_id = TaskID(response.json()["id"])
+    with user_session.open_transaction(test_services) as transaction:
+        created_task = test_services.task_service.get_task(task_id, transaction)
+    assert created_task is not None
+    assert isinstance(created_task.input_data, AgentTaskInputsV2)
+    assert created_task.input_data.default_model is None
+
+
 def test_create_task_returns_422_when_missing_required_attribute(
     client: TestClient, test_services: CompleteServiceCollection, test_project: Project
 ) -> None:
