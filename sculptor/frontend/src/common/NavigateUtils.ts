@@ -2,6 +2,7 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
+import { markSwitchStart } from "./perf/workspaceSwitchProfiler.ts";
 import { setActiveTabByIdAtom, setAgentForWorkspaceAtom, workspaceAtomFamily } from "./state/atoms/workspaces";
 
 type ImbueNavigationFunctions = {
@@ -23,6 +24,7 @@ export const useImbueNavigate = (): ImbueNavigationFunctions => {
   return {
     navigateToWorkspace: useCallback(
       (workspaceID: string): void => {
+        markSwitchStart(workspaceID);
         navigate(`/ws/${workspaceID}`);
       },
       [navigate],
@@ -35,6 +37,7 @@ export const useImbueNavigate = (): ImbueNavigationFunctions => {
     // and redirect to /ws/<wsId> instead of /ws/<wsId>/agent/<agentID>.
     navigateToAgent: useCallback(
       (workspaceID: string, agentID: string): void => {
+        markSwitchStart(workspaceID);
         setActiveTabById(workspaceID);
         setAgentForWorkspace({ wsId: workspaceID, agentId: agentID });
         navigate(`/ws/${workspaceID}/agent/${agentID}`);

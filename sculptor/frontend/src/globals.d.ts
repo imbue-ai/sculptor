@@ -1,6 +1,7 @@
 import type { Terminal as XTerm } from "@xterm/xterm";
 import type { DetailedHTMLProps, HTMLAttributes } from "react";
 
+import type { WsSwitchTimingRecord } from "./common/perf/workspaceSwitchProfiler.ts";
 import type { SculptorElectronAPI } from "./shared/types.ts";
 
 type WebviewHTMLAttributes = HTMLAttributes<HTMLElement> & {
@@ -21,6 +22,10 @@ declare global {
     /** Inlined by the backend's static-HTML serve path when --trace-to is set.
      * The renderer reads this synchronously at boot in common/tracing.ts. */
     __SCULPTOR_TRACING__?: { enabled: boolean };
+    /** Opts the workspace-switch profiler in (set by perf/capture harnesses). */
+    __WS_SWITCH_PROFILER__?: boolean;
+    /** Finalized workspace-switch timing records, appended by the profiler. */
+    __WS_SWITCH_TIMINGS__?: Array<WsSwitchTimingRecord>;
   }
 
   declare const API_URL_BASE: string | undefined;
