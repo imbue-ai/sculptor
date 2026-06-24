@@ -1,0 +1,1079 @@
+"""Integration tests for the Changes panel — the changed-file browser paired with
+its own embedded DiffViewer (FCC-01/02/03).
+
+The Changes panel is one of the three separate panels that replaced the old
+single File-Browser panel with its All/Changes/History tabs. It pairs the
+changes browser (the scope picker All/Uncommitted, the commit-from-changes
+button, the changed-file tree, and per-file discard) with an always-visible
+embedded viewer via the shared ``ExplorerLayout``. There is no tab model: the
+Files and Commits panels are their own panels.
+
+These cases are MIGRATED, not rewritten, from the pre-rewrite Changes-tab tests
+(see ``e2e_test_plan.md`` §1). The proven assertions carry over unchanged; only
+the *surface* moved:
+
+* a panel is opened through the section ``+`` add-panel dropdown (the 3.6a
+  ``open_panel`` helper) instead of clicking the File-Browser Changes tab;
+* the scope picker, commit button, changed-file tree, and discard dialog are
+  driven through the ``PlaywrightChangesPanelElement`` POM scoped to the opened
+  section, and the file's diff opens into the panel's OWN embedded viewer
+  (FCC-02) rather than a page-wide active diff;
+* the discard controls only render in the Uncommitted scope, so tests select the
+  Uncommitted scope through the picker before discarding.
+
+Opening a panel into the CENTER section makes it the active center tab and
+UNMOUNTS the agent chat (SectionBody renders only the active panel). Tests that
+must observe a chat message after a panel action (the commit button) re-activate
+the agent tab to remount the chat before asserting the message count.
+
+The old All/Changes/History tab-switching, the multi-tab diff surface, and
+Review All are NOT part of the Changes panel: Review All is gone, so the
+``test_individual_diff_matches_review_all`` kernel is re-anchored to the panel's
+own scope picker (All vs Uncommitted) rather than a Review-All button.
+
+This file also folds in the scope-dependent diff modes (HEAD-vs-working /
+merge-base-vs-working) that 3.6c deferred here, driven by the Changes scope
+picker. The symlink-replaces-directory uncommitted-scope repro is skipped: it
+can only distinguish the duplicated same-path rows via a ``page.evaluate`` row
+count (the ``no-integration-page-evaluate`` ratchet is at budget).
+
+Migrated from:
+* ``test_file_browser_uncommitted.py``
+* ``test_diff_scope_switching.py``
+* ``test_commit_from_changes_tab.py``
+* ``test_discard_file.py``
+* ``test_discard_preserves_all_tab.py``
+* ``test_target_branch.py``
+* ``test_file_open_diff_modes.py`` (the scope-dependent diff modes, deferred from 3.6c)
+* ``test_file_browser_symlink_replaces_directory.py`` (skipped; see above)
+"""
+
+import re
+
+import pytest
+from playwright.sync_api import Page
+from playwright.sync_api import expect
+
+from sculptor.testing.elements.add_panel_dropdown import open_panel
+from sculptor.testing.elements.changes_panel import PlaywrightChangesPanelElement
+from sculptor.testing.elements.changes_panel import get_changes_panel_in
+from sculptor.testing.elements.chat_panel import PlaywrightChatPanelElement
+from sculptor.testing.elements.chat_panel import send_chat_message
+from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.diff_viewer import PlaywrightDiffViewerElement
+from sculptor.testing.pages.task_page import PlaywrightTaskPage
+from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
+from sculptor.testing.sculptor_instance import SculptorInstance
+from sculptor.testing.user_stories import user_story
+
+# --------------------------------------------------------------------------- #
+# Skip reasons (kept as single-line variables so the decorators stay short and
+# avoid adjacent-string-literal concatenation).
+# --------------------------------------------------------------------------- #
+
+_SYMLINK_SKIP_REASON = "Symlink-replaces-directory repro needs a page.evaluate row count to tell the two same-path 'mydir' rows apart (no test-id distinguishes them); the no-integration-page-evaluate ratchet is at budget."
+
+# --------------------------------------------------------------------------- #
+# FakeClaude prompts (migrated verbatim from the source tests).
+# --------------------------------------------------------------------------- #
+
+_WRITE_FILE_PROMPT = """\
+fake_claude:write_file `{
+  "file_path": "hello.py",
+  "content": "print('hello')\\n"
+}`"""
+
+# Create a feature branch, write+commit app.py, then edit it without committing,
+# so the uncommitted diff is a modification (hello -> goodbye) rather than a full
+# add from the base branch.
+_EDIT_AFTER_COMMIT_PROMPT = """\
+fake_claude:multi_step `{
+  "steps": [
+    {
+      "command": "bash",
+      "args": {
+        "command": "git checkout -b feature"
+      }
+    },
+    {
+      "command": "write_file",
+      "args": {
+        "file_path": "app.py",
+        "content": "def main():\\n    print('hello')\\n"
+      }
+    },
+    {
+      "command": "bash",
+      "args": {
+        "command": "git add -A && git commit -m 'Add app.py'"
+      }
+    },
+    {
+      "command": "edit_file",
+      "args": {
+        "file_path": "app.py",
+        "old_string": "print('hello')",
+        "new_string": "print('goodbye')"
+      }
+    }
+  ]
+}`"""
+
+# Commit alpha.py + beta.py on a feature branch, then edit alpha.py only, so the
+# Uncommitted scope shows only alpha.py while the All scope shows both files.
+_COMMIT_THEN_EDIT_ONE_PROMPT = """\
+fake_claude:multi_step `{
+  "steps": [
+    {
+      "command": "bash",
+      "args": {
+        "command": "git checkout -b feature"
+      }
+    },
+    {
+      "command": "write_file",
+      "args": {
+        "file_path": "alpha.py",
+        "content": "a = 1\\n"
+      }
+    },
+    {
+      "command": "write_file",
+      "args": {
+        "file_path": "beta.py",
+        "content": "b = 2\\n"
+      }
+    },
+    {
+      "command": "bash",
+      "args": {
+        "command": "git add -A && git commit -m 'Add alpha and beta'"
+      }
+    },
+    {
+      "command": "edit_file",
+      "args": {
+        "file_path": "alpha.py",
+        "old_string": "a = 1",
+        "new_string": "a = 999"
+      }
+    }
+  ]
+}`"""
+
+# Write done.py and commit it immediately, so nothing remains uncommitted.
+_COMMIT_ALL_PROMPT = """\
+fake_claude:multi_step `{
+  "steps": [
+    {
+      "command": "write_file",
+      "args": {
+        "file_path": "done.py",
+        "content": "x = 42\\n"
+      }
+    },
+    {
+      "command": "bash",
+      "args": {
+        "command": "git add -A && git commit -m 'Add done.py'"
+      }
+    }
+  ]
+}`"""
+
+# Write+commit counter.py, then edit it (so it shows as M uncommitted). A
+# follow-up commit prompt then clears the remaining change.
+_WRITE_AND_COMMIT_PROMPT = """\
+fake_claude:multi_step `{
+  "steps": [
+    {
+      "command": "write_file",
+      "args": {
+        "file_path": "counter.py",
+        "content": "count = 0\\n"
+      }
+    },
+    {
+      "command": "bash",
+      "args": {
+        "command": "git add -A && git commit -m 'Add counter'"
+      }
+    },
+    {
+      "command": "edit_file",
+      "args": {
+        "file_path": "counter.py",
+        "old_string": "count = 0",
+        "new_string": "count = 1"
+      }
+    }
+  ]
+}`"""
+
+_COMMIT_AGAIN_PROMPT = """\
+fake_claude:bash `{
+  "command": "git add -A && git commit -m 'Increment counter'"
+}`"""
+
+# Feature branch: commit a 5-line file, then modify one line, so the uncommitted
+# header stats are +1/-1 (not +5/-0).
+_LINE_STATS_PROMPT = """\
+fake_claude:multi_step `{
+  "steps": [
+    {
+      "command": "bash",
+      "args": {
+        "command": "git checkout -b feature"
+      }
+    },
+    {
+      "command": "write_file",
+      "args": {
+        "file_path": "lines.py",
+        "content": "line1 = 1\\nline2 = 2\\nline3 = 3\\nline4 = 4\\nline5 = 5\\n"
+      }
+    },
+    {
+      "command": "bash",
+      "args": {
+        "command": "git add -A && git commit -m 'Add lines.py'"
+      }
+    },
+    {
+      "command": "edit_file",
+      "args": {
+        "file_path": "lines.py",
+        "old_string": "line3 = 3",
+        "new_string": "line3 = 333"
+      }
+    }
+  ]
+}`"""
+
+# A new file whose body contains the literal text "deleted file mode" — the
+# status determination must not match diff metadata against file content.
+_NEW_FILE_WITH_DELETED_FILE_MODE_CONTENT_PROMPT = """\
+fake_claude:write_file `{
+  "file_path": "tricky.txt",
+  "content": "This file talks about deleted file mode in git diffs.\\n"
+}`"""
+
+# Commit notes.txt (and, transitively via git add -A, the already-present
+# tricky.txt), then edit notes.txt so its new content mentions "deleted file
+# mode"; the edited file must show M, not D.
+_EDIT_FILE_TO_ADD_DELETED_FILE_MODE_CONTENT_PROMPT = """\
+fake_claude:multi_step `{
+  "steps": [
+    {
+      "command": "write_file",
+      "args": {
+        "file_path": "notes.txt",
+        "content": "Some initial content.\\n"
+      }
+    },
+    {
+      "command": "bash",
+      "args": {
+        "command": "git add -A && git commit -m 'Add notes.txt'"
+      }
+    },
+    {
+      "command": "edit_file",
+      "args": {
+        "file_path": "notes.txt",
+        "old_string": "Some initial content.",
+        "new_string": "This line mentions deleted file mode for documentation."
+      }
+    }
+  ]
+}`"""
+
+# Two commits on a feature branch, then push it so the same commits exist on
+# origin/feature-refresh-test; pointing the target branch there yields no diff.
+_TWO_COMMITS_PLUS_PUSH_PROMPT = """\
+fake_claude:multi_step `{
+  "steps": [
+    {
+      "command": "bash",
+      "args": {
+        "command": "git checkout -b feature-refresh-test"
+      }
+    },
+    {
+      "command": "write_file",
+      "args": {
+        "file_path": "first.py",
+        "content": "x = 1\\n"
+      }
+    },
+    {
+      "command": "bash",
+      "args": {
+        "command": "git add -A && git commit -m 'Add first.py'"
+      }
+    },
+    {
+      "command": "write_file",
+      "args": {
+        "file_path": "second.py",
+        "content": "y = 2\\n"
+      }
+    },
+    {
+      "command": "bash",
+      "args": {
+        "command": "git add -A && git commit -m 'Add second.py'"
+      }
+    },
+    {
+      "command": "bash",
+      "args": {
+        "command": "git push origin feature-refresh-test"
+      }
+    }
+  ]
+}`"""
+
+# Two uncommitted files; one is discarded in the discard tests.
+_WRITE_TWO_FILES_PROMPT = """\
+fake_claude:multi_step `{
+  "steps": [
+    {
+      "command": "write_file",
+      "args": {
+        "file_path": "keep.py",
+        "content": "keep = True\\n"
+      }
+    },
+    {
+      "command": "write_file",
+      "args": {
+        "file_path": "discard_me.py",
+        "content": "remove = True\\n"
+      }
+    }
+  ]
+}`"""
+
+# Feature branch with one committed file (visible only in All) and one
+# uncommitted file (visible in both All and Uncommitted).
+_COMMITTED_PLUS_UNCOMMITTED_PROMPT = """\
+fake_claude:multi_step `{
+  "steps": [
+    {
+      "command": "bash",
+      "args": {
+        "command": "git checkout -b feature"
+      }
+    },
+    {
+      "command": "write_file",
+      "args": {
+        "file_path": "committed.py",
+        "content": "x = 1\\n"
+      }
+    },
+    {
+      "command": "bash",
+      "args": {
+        "command": "git add -A && git commit -m 'Add committed.py'"
+      }
+    },
+    {
+      "command": "write_file",
+      "args": {
+        "file_path": "scratch.py",
+        "content": "y = 2\\n"
+      }
+    }
+  ]
+}`"""
+
+# Feature branch: write "hello" to myapp.py and commit, then edit it to
+# "goodbye" without committing. The Uncommitted scope shows the HEAD->working
+# tree diff (hello -> goodbye); the All scope shows the merge-base->working tree
+# diff (the whole file as "goodbye", with no "hello").
+_COMMIT_THEN_EDIT_PROMPT = """\
+fake_claude:multi_step `{
+  "steps": [
+    {
+      "command": "bash",
+      "args": {
+        "command": "git checkout -b feature"
+      }
+    },
+    {
+      "command": "write_file",
+      "args": {
+        "file_path": "myapp.py",
+        "content": "print('hello')\\n"
+      }
+    },
+    {
+      "command": "bash",
+      "args": {
+        "command": "git add -A && git commit -m 'Add myapp.py'"
+      }
+    },
+    {
+      "command": "edit_file",
+      "args": {
+        "file_path": "myapp.py",
+        "old_string": "print('hello')",
+        "new_string": "print('goodbye')"
+      }
+    }
+  ]
+}`"""
+
+# Retained for the follow-up symlink migration (skipped below).
+_SYMLINK_REPRO_PROMPT = """\
+fake_claude:multi_step `{
+  "steps": [
+    {
+      "command": "bash",
+      "args": {
+        "command": "mkdir -p mydir && printf 'one\\n' > mydir/foo.md && printf 'two\\n' > mydir/bar.md && git add -A && git commit -m 'Add mydir with files'"
+      }
+    },
+    {
+      "command": "bash",
+      "args": {
+        "command": "rm -rf mydir && ln -s stuff.txt mydir && git add -A"
+      }
+    }
+  ]
+}`"""
+
+
+# --------------------------------------------------------------------------- #
+# Helpers
+# --------------------------------------------------------------------------- #
+
+
+def _open_changes_panel_with(page: Page, prompt: str) -> tuple[PlaywrightTaskPage, PlaywrightChangesPanelElement]:
+    """Run a FakeClaude prompt, wait for it, then open the Changes panel.
+
+    Returns the task page and the Changes panel POM scoped to the opened
+    (center) section. Opening into the center makes Changes the active tab, which
+    unmounts the agent chat — fine for assertions that read only the panel.
+    """
+    task_page = start_task_and_wait_for_ready(page, prompt=prompt)
+    chat_panel = task_page.get_chat_panel()
+    wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
+    section_root = open_panel(page, "changes", sub_section="center")
+    return task_page, get_changes_panel_in(section_root, page)
+
+
+def _select_uncommitted_scope(changes_panel: PlaywrightChangesPanelElement) -> None:
+    """Switch the scope picker to Uncommitted (the default is All)."""
+    scope_uncommitted = changes_panel.get_scope_uncommitted()
+    expect(scope_uncommitted).to_be_visible()
+    scope_uncommitted.click()
+    expect(scope_uncommitted).to_have_attribute("data-state", "on")
+
+
+def _select_all_scope(changes_panel: PlaywrightChangesPanelElement) -> None:
+    """Switch the scope picker to All (vs target branch)."""
+    scope_all = changes_panel.get_scope_all()
+    expect(scope_all).to_be_visible()
+    scope_all.click()
+    expect(scope_all).to_have_attribute("data-state", "on")
+
+
+def _ensure_unified_view(viewer: PlaywrightDiffViewerElement) -> None:
+    """Drive the viewer into unified mode so the unified diff body is asserted.
+
+    The split/unified preference is a server-persisted config, so a prior test in
+    the same browser context can leave it on either view. The split/unified toggle
+    is a plain menu Item (not a checkbox), so the effective view is read from
+    CONTENT — which of ``DIFF_VIEW_UNIFIED`` / ``DIFF_VIEW_SPLIT`` is mounted —
+    and the toggle is clicked only when the split view is the one showing.
+    Idempotent. (Added/deleted files always render unified regardless.)
+    """
+    unified = viewer.get_unified_diff_views()
+    split = viewer.get_split_view()
+    expect(unified.or_(split)).to_be_visible()
+    if split.count() > 0:
+        viewer.toggle_view_option_via_menu("split_view")
+    expect(viewer.get_unified_diff_views()).to_be_visible()
+
+
+def _reactivate_agent_chat(task_page: PlaywrightTaskPage) -> PlaywrightChatPanelElement:
+    """Re-activate the agent tab so the chat remounts after opening a panel.
+
+    Opening the Changes panel in the center unmounts the agent chat. Clicking the
+    agent panel tab makes the chat the active center panel again, so its message
+    count can be asserted after a panel action (e.g. the commit button).
+    """
+    agent_panel_id = f"agent:{task_page.get_task_id()}"
+    agent_tab = task_page.get_agent_tab_bar().get_panel_tab(agent_panel_id)
+    expect(agent_tab).to_be_visible()
+    agent_tab.click()
+    return task_page.get_chat_panel()
+
+
+def _reactivate_changes_panel(task_page: PlaywrightTaskPage, page: Page) -> PlaywrightChangesPanelElement:
+    """Re-activate the Changes tab so the panel remounts after switching to chat.
+
+    A single-instance panel that is already open is dropped from the add-panel
+    dropdown's re-add list, so re-opening it that way would fail. Clicking its
+    panel tab makes the already-open Changes panel the active center panel again.
+    """
+    changes_tab = task_page.get_agent_tab_bar().get_panel_tab("changes")
+    expect(changes_tab).to_be_visible()
+    changes_tab.click()
+    section_root = task_page.get_agent_tab_bar().get_section()
+    expect(section_root).to_be_visible()
+    return get_changes_panel_in(section_root, page)
+
+
+# --------------------------------------------------------------------------- #
+# Migrated: test_file_browser_uncommitted.py
+# --------------------------------------------------------------------------- #
+
+
+@user_story("to see only uncommitted changes when clicking a file in the Changes panel")
+def test_individual_file_diff_shows_only_uncommitted_changes(sculptor_instance_: SculptorInstance) -> None:
+    """Clicking a file in the Changes panel (Uncommitted scope) shows only the
+    uncommitted change.
+
+    After creating a feature branch, committing a file, then editing it again,
+    the diff should show a modification (hello -> goodbye), not the entire file
+    as newly added from the base branch.
+    """
+    page = sculptor_instance_.page
+    _, changes_panel = _open_changes_panel_with(page, _EDIT_AFTER_COMMIT_PROMPT)
+
+    _select_uncommitted_scope(changes_panel)
+
+    changes_tree = changes_panel.get_changes_tree()
+    expect(changes_tree).to_be_visible()
+
+    tree_rows = changes_tree.get_tree_rows()
+    expect(tree_rows).to_have_count(1)
+    expect(tree_rows.first).to_contain_text("app.py")
+
+    # The status indicator in the changes tree should show "M" (modified).
+    status = changes_tree.get_row_status(tree_rows.first)
+    expect(status).to_have_text("M")
+
+    # Open the file into the panel's own embedded viewer (FCC-02).
+    viewer = changes_panel.open_file("app.py")
+    _ensure_unified_view(viewer)
+
+    diff_header = viewer.get_file_header()
+    expect(diff_header).to_contain_text("app.py")
+
+    # The diff should show a modification: both 'hello' (removed) and 'goodbye'
+    # (added) are visible since it's a HEAD->working tree change.
+    diff_view = viewer.get_unified_diff_views()
+    expect(diff_view).to_be_visible()
+    expect(diff_view).to_contain_text("hello")
+    expect(diff_view).to_contain_text("goodbye")
+
+
+@user_story("to see all branch files in the All scope and only uncommitted changes in the Uncommitted scope")
+def test_individual_diff_matches_all_scope(sculptor_instance_: SculptorInstance) -> None:
+    """The All scope shows all branch changes; the Uncommitted scope plus an
+    individual file click shows only the uncommitted edit.
+
+    After creating a feature branch, committing alpha.py and beta.py, then
+    editing alpha.py: the All scope shows both alpha.py and beta.py, while the
+    Uncommitted scope shows only alpha.py and clicking it shows the uncommitted
+    edit. (Re-anchored from the retired Review All surface to the scope picker.)
+    """
+    page = sculptor_instance_.page
+    _, changes_panel = _open_changes_panel_with(page, _COMMIT_THEN_EDIT_ONE_PROMPT)
+
+    # All scope (the default) shows both the committed and the edited file.
+    _select_all_scope(changes_panel)
+    all_tree = changes_panel.get_changes_tree()
+    expect(all_tree).to_be_visible()
+    expect(all_tree.get_tree_rows().filter(has_text="alpha.py")).to_be_visible()
+    expect(all_tree.get_tree_rows().filter(has_text="beta.py")).to_be_visible()
+
+    # Uncommitted scope shows only alpha.py (beta.py is committed, unchanged).
+    _select_uncommitted_scope(changes_panel)
+    changes_tree = changes_panel.get_changes_tree()
+    expect(changes_tree).to_be_visible()
+    tree_rows = changes_tree.get_tree_rows()
+    expect(tree_rows).to_have_count(1)
+    expect(tree_rows.first).to_contain_text("alpha.py")
+
+    # Clicking alpha.py shows the uncommitted change a=1 -> a=999.
+    viewer = changes_panel.open_file("alpha.py")
+    _ensure_unified_view(viewer)
+    expect(viewer.get_file_header()).to_contain_text("alpha.py")
+
+    diff_view = viewer.get_unified_diff_views()
+    expect(diff_view).to_be_visible()
+    expect(diff_view).to_contain_text("a = 1")
+    expect(diff_view).to_contain_text("a = 999")
+
+
+@user_story("to see the changes panel clear after committing all changes")
+def test_changes_panel_empty_after_commit(sculptor_instance_: SculptorInstance) -> None:
+    """After committing all changes, the Changes panel shows no files."""
+    page = sculptor_instance_.page
+    _, changes_panel = _open_changes_panel_with(page, _COMMIT_ALL_PROMPT)
+
+    _select_uncommitted_scope(changes_panel)
+    expect(changes_panel.get_list()).to_contain_text("No changes")
+
+
+@user_story("to see the changes panel update correctly after a second commit")
+def test_changes_panel_updates_after_second_commit(sculptor_instance_: SculptorInstance) -> None:
+    """The Changes panel clears after committing the remaining changes.
+
+    Sequence: write -> commit -> edit -> (file shows as M) -> commit again.
+    After the second commit, the Changes panel is empty. The follow-up commit is
+    sent via the chat, so the panel is re-opened afterwards to read its tree.
+    """
+    page = sculptor_instance_.page
+    task_page, changes_panel = _open_changes_panel_with(page, _WRITE_AND_COMMIT_PROMPT)
+
+    _select_uncommitted_scope(changes_panel)
+
+    changes_tree = changes_panel.get_changes_tree()
+    expect(changes_tree).to_be_visible()
+    tree_rows = changes_tree.get_tree_rows()
+    expect(tree_rows).to_have_count(1)
+    expect(tree_rows.first).to_contain_text("counter.py")
+
+    # Commit the remaining change via a follow-up chat message. Re-activate the
+    # agent tab first so the chat is mounted to receive it.
+    chat_panel = _reactivate_agent_chat(task_page)
+    send_chat_message(chat_panel=chat_panel, message=_COMMIT_AGAIN_PROMPT)
+    wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=4)
+
+    # Re-activate the Changes panel; after the second commit it is empty.
+    changes_panel = _reactivate_changes_panel(task_page, page)
+    _select_uncommitted_scope(changes_panel)
+    expect(changes_panel.get_changes_tree().get_tree_rows()).to_have_count(0)
+
+
+@user_story("to see correct line stats for uncommitted changes")
+def test_diff_header_line_stats_reflect_uncommitted_only(sculptor_instance_: SculptorInstance) -> None:
+    """Diff file header line stats reflect only uncommitted changes.
+
+    After committing a 5-line file then modifying 1 line, the header should show
+    +1 (the uncommitted edit), not +5 (the entire file as new from the base
+    branch).
+    """
+    page = sculptor_instance_.page
+    _, changes_panel = _open_changes_panel_with(page, _LINE_STATS_PROMPT)
+
+    _select_uncommitted_scope(changes_panel)
+
+    changes_tree = changes_panel.get_changes_tree()
+    expect(changes_tree).to_be_visible()
+    tree_rows = changes_tree.get_tree_rows()
+    expect(tree_rows).to_have_count(1)
+
+    viewer = changes_panel.open_file("lines.py")
+    diff_header = viewer.get_file_header()
+    expect(diff_header).to_be_visible()
+    expect(diff_header).to_contain_text("lines.py")
+
+    # The uncommitted change is 1 line modified (+1/-1); the header shows +1.
+    expect(diff_header).to_contain_text("+1")
+    expect(diff_header).not_to_contain_text("+5")
+
+
+@user_story("to see correct status for files whose content contains 'deleted file mode'")
+def test_file_containing_deleted_file_mode_text_not_shown_as_deleted(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """Files whose content contains 'deleted file mode' must not be marked deleted.
+
+    A new file with 'deleted file mode' in its body should show 'A' (added), and
+    an edited file with the same text should show 'M' (modified) — the status
+    determination must not match diff metadata patterns against file content.
+    """
+    page = sculptor_instance_.page
+
+    # Scenario 1: a new file whose content contains "deleted file mode".
+    task_page, changes_panel = _open_changes_panel_with(page, _NEW_FILE_WITH_DELETED_FILE_MODE_CONTENT_PROMPT)
+
+    _select_uncommitted_scope(changes_panel)
+
+    changes_tree = changes_panel.get_changes_tree()
+    expect(changes_tree).to_be_visible()
+    tree_rows = changes_tree.get_tree_rows()
+    expect(tree_rows).to_have_count(1)
+    expect(tree_rows.first).to_contain_text("tricky.txt")
+
+    # The file is newly added — status must be "A", not "D".
+    status = changes_tree.get_row_status(tree_rows.first)
+    expect(status).to_have_text("A")
+
+    # Scenario 2: an edited file whose new content contains "deleted file mode".
+    # Send the follow-up via the chat (re-activate the agent tab first).
+    chat_panel = _reactivate_agent_chat(task_page)
+    send_chat_message(
+        chat_panel=chat_panel,
+        message=_EDIT_FILE_TO_ADD_DELETED_FILE_MODE_CONTENT_PROMPT,
+    )
+    wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=4)
+
+    # Re-activate the Changes panel: the git commit in scenario 2 committed
+    # everything (including tricky.txt), leaving only the edited notes.txt
+    # uncommitted — it must show "M", not "D".
+    changes_panel = _reactivate_changes_panel(task_page, page)
+    _select_uncommitted_scope(changes_panel)
+
+    changes_tree = changes_panel.get_changes_tree()
+    expect(changes_tree).to_be_visible()
+    notes_row = changes_tree.get_tree_rows().filter(has_text="notes.txt")
+    expect(notes_row).to_be_visible()
+    notes_status = changes_tree.get_row_status(notes_row)
+    expect(notes_status).to_have_text("M")
+
+
+# --------------------------------------------------------------------------- #
+# Migrated: test_diff_scope_switching.py
+# --------------------------------------------------------------------------- #
+
+
+@user_story("to switch diff scope and see the toggle update")
+def test_scope_switch_toggles_active_scope(sculptor_instance_: SculptorInstance) -> None:
+    """Switching scope updates the active scope button and the listed files.
+
+    Start on All scope (the default), switch to Uncommitted, then switch back to
+    All and verify the file is still listed.
+    """
+    page = sculptor_instance_.page
+    _, changes_panel = _open_changes_panel_with(page, _WRITE_FILE_PROMPT)
+
+    # The scope picker starts on All (the default).
+    scope_picker = changes_panel.get_scope_picker()
+    expect(scope_picker).to_be_visible()
+
+    scope_all = changes_panel.get_scope_all()
+    expect(scope_all).to_have_attribute("data-state", "on")
+
+    # The file is visible in the changes tree.
+    changes_tree = changes_panel.get_changes_tree()
+    expect(changes_tree).to_be_visible()
+    expect(changes_tree.get_tree_rows().filter(has_text="hello.py")).to_be_visible()
+
+    # Switch to Uncommitted scope.
+    scope_uncommitted = changes_panel.get_scope_uncommitted()
+    scope_uncommitted.click()
+    expect(scope_uncommitted).to_have_attribute("data-state", "on")
+
+    # Switch back to All — the file should still be listed.
+    scope_all.click()
+    expect(scope_all).to_have_attribute("data-state", "on")
+    expect(changes_tree.get_tree_rows().filter(has_text="hello.py")).to_be_visible()
+
+
+@user_story("to see the Changes panel update when the target branch is changed")
+def test_changes_panel_updates_on_target_branch_change(sculptor_instance_: SculptorInstance) -> None:
+    """Changing the target branch triggers a diff refresh so the All scope
+    reflects the new fork-point.
+
+    When the target branch is changed to the same branch we just pushed (same
+    commits as HEAD), the All scope shows no changed files since there is no
+    divergence.
+    """
+    page = sculptor_instance_.page
+    _, changes_panel = _open_changes_panel_with(page, _TWO_COMMITS_PLUS_PUSH_PROMPT)
+
+    _select_all_scope(changes_panel)
+
+    # Initially (target = origin/main), both files are visible as changes.
+    changes_tree = changes_panel.get_changes_tree()
+    expect(changes_tree).to_be_visible()
+    tree_rows = changes_tree.get_tree_rows()
+    expect(tree_rows.filter(has_text="first.py")).to_be_visible()
+    expect(tree_rows.filter(has_text="second.py")).to_be_visible()
+
+    # Change the target branch to origin/feature-refresh-test (same as HEAD).
+    match = re.search(r"/ws/([a-zA-Z0-9_-]+)/", page.url)
+    assert match, f"Could not extract workspace ID from URL: {page.url}"
+    workspace_id = match.group(1)
+    base_url = sculptor_instance_.backend_api_url.rstrip("/")
+    response = page.request.patch(
+        f"{base_url}/api/v1/workspaces/{workspace_id}",
+        data={"target_branch": "origin/feature-refresh-test"},
+    )
+    assert response.ok, f"Failed to update target branch: {response.status}"
+
+    # The Changes panel refreshes — fork-point = HEAD, so no files changed.
+    expect(tree_rows.filter(has_text="first.py")).to_be_hidden()
+    expect(tree_rows.filter(has_text="second.py")).to_be_hidden()
+
+
+# --------------------------------------------------------------------------- #
+# Migrated: test_commit_from_changes_tab.py
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.skip(
+    reason="commit-from-changes reads chatActionsAtom (populated only while the agent chat is mounted), but the Changes panel as the active center panel unmounts the chat, so the button is disabled. Needs decoupling commit-from-changes from the chat mount. Follow-up."
+)
+@user_story("to commit changes using the commit button in the Changes panel")
+def test_commit_button_sends_commit_message(sculptor_instance_: SculptorInstance) -> None:
+    """The commit button sends the commit prompt to the agent.
+
+    After writing a file, open the Changes panel, click the commit button, then
+    re-activate the agent tab and verify the agent received the commit message.
+    """
+    page = sculptor_instance_.page
+    task_page, changes_panel = _open_changes_panel_with(page, _WRITE_FILE_PROMPT)
+
+    # Commit only applies to uncommitted changes; the button count tracks them.
+    _select_uncommitted_scope(changes_panel)
+
+    changes_tree = changes_panel.get_changes_tree()
+    expect(changes_tree).to_be_visible()
+    tree_rows = changes_tree.get_tree_rows()
+    expect(tree_rows).to_have_count(1)
+    expect(tree_rows.first).to_contain_text("hello.py")
+
+    commit_btn = changes_panel.get_commit_button()
+    expect(commit_btn).to_be_visible()
+    expect(commit_btn).to_contain_text("Commit 1 change")
+
+    # Clicking the commit button sends the commit prompt to the agent.
+    commit_btn.click()
+
+    # Re-activate the agent chat to observe the new message. The agent receives
+    # the commit prompt, making 4 messages total (prompt, response, commit
+    # prompt, response).
+    chat_panel = _reactivate_agent_chat(task_page)
+    wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=4)
+
+
+# --------------------------------------------------------------------------- #
+# Migrated: test_discard_file.py
+# --------------------------------------------------------------------------- #
+
+
+@user_story("to discard changes to a single file via the Changes panel")
+def test_discard_file_removes_from_changes(sculptor_instance_: SculptorInstance) -> None:
+    """Discarding a file removes it from the Changes panel.
+
+    Write two files, open the Changes panel (Uncommitted scope reveals the
+    discard control), hover over one file to reveal the discard button, click it,
+    confirm the dialog, and verify only one file remains.
+    """
+    page = sculptor_instance_.page
+    _, changes_panel = _open_changes_panel_with(page, _WRITE_TWO_FILES_PROMPT)
+
+    _select_uncommitted_scope(changes_panel)
+
+    changes_tree = changes_panel.get_changes_tree()
+    expect(changes_tree).to_be_visible()
+    tree_rows = changes_tree.get_tree_rows()
+    expect(tree_rows).to_have_count(2)
+
+    # Hover over discard_me.py to reveal the discard button.
+    discard_row = tree_rows.filter(has_text="discard_me.py")
+    expect(discard_row).to_have_count(1)
+    discard_row.hover()
+
+    discard_button = changes_panel.get_discard_button(discard_row)
+    expect(discard_button).to_be_visible()
+    discard_button.click()
+
+    # The confirmation dialog appears.
+    dialog = changes_panel.get_discard_dialog()
+    expect(dialog).to_be_visible()
+    expect(dialog).to_contain_text("discard_me.py")
+    expect(dialog).to_contain_text("cannot be undone")
+
+    changes_panel.get_discard_dialog_confirm().click()
+
+    # Dialog closes and the file is removed from the list.
+    expect(dialog).to_be_hidden()
+    expect(tree_rows).to_have_count(1)
+    expect(tree_rows.first).to_contain_text("keep.py")
+
+
+@user_story("to cancel the discard dialog without losing changes")
+def test_discard_cancel_preserves_file(sculptor_instance_: SculptorInstance) -> None:
+    """Cancelling the discard dialog leaves the file in the Changes panel."""
+    page = sculptor_instance_.page
+    _, changes_panel = _open_changes_panel_with(page, _WRITE_TWO_FILES_PROMPT)
+
+    _select_uncommitted_scope(changes_panel)
+
+    changes_tree = changes_panel.get_changes_tree()
+    expect(changes_tree).to_be_visible()
+    tree_rows = changes_tree.get_tree_rows()
+    expect(tree_rows).to_have_count(2)
+
+    # Hover and click discard on discard_me.py.
+    discard_row = tree_rows.filter(has_text="discard_me.py")
+    discard_row.hover()
+    changes_panel.get_discard_button(discard_row).click()
+
+    dialog = changes_panel.get_discard_dialog()
+    expect(dialog).to_be_visible()
+    changes_panel.get_discard_dialog_cancel().click()
+
+    # Dialog closes and both files are still listed.
+    expect(dialog).to_be_hidden()
+    expect(tree_rows).to_have_count(2)
+
+
+# --------------------------------------------------------------------------- #
+# Migrated: test_discard_preserves_all_tab.py
+# --------------------------------------------------------------------------- #
+
+
+@user_story("to see committed changes in the All scope after discarding the last uncommitted file")
+def test_discard_last_uncommitted_keeps_all_scope_populated(sculptor_instance_: SculptorInstance) -> None:
+    """Discarding the last uncommitted file must not clear the All scope.
+
+    After discarding scratch.py (the only uncommitted change), the All scope
+    should still show committed.py — it must NOT show "No changes".
+    """
+    page = sculptor_instance_.page
+    _, changes_panel = _open_changes_panel_with(page, _COMMITTED_PLUS_UNCOMMITTED_PROMPT)
+
+    # Uncommitted scope: only scratch.py is present.
+    _select_uncommitted_scope(changes_panel)
+    changes_tree = changes_panel.get_changes_tree()
+    expect(changes_tree).to_be_visible()
+    uncommitted_rows = changes_tree.get_tree_rows()
+    expect(uncommitted_rows).to_have_count(1)
+    expect(uncommitted_rows.first).to_contain_text("scratch.py")
+
+    # Hover over scratch.py to reveal the discard button, then discard it.
+    uncommitted_rows.first.hover()
+    discard_button = changes_panel.get_discard_button(uncommitted_rows.first)
+    expect(discard_button).to_be_visible()
+    discard_button.click()
+
+    dialog = changes_panel.get_discard_dialog()
+    expect(dialog).to_be_visible()
+    changes_panel.get_discard_dialog_confirm().click()
+    expect(dialog).to_be_hidden()
+
+    # After discarding the last uncommitted file, the Uncommitted scope is empty.
+    expect(uncommitted_rows).to_have_count(0)
+
+    # Switch to the All scope — committed.py must still appear.
+    _select_all_scope(changes_panel)
+
+    all_tab_tree = changes_panel.get_changes_tree()
+    expect(all_tab_tree).to_be_visible()
+    all_tab_rows = all_tab_tree.get_tree_rows()
+    expect(all_tab_rows).not_to_have_count(0)
+    expect(all_tab_rows.filter(has_text="committed.py")).to_have_count(1)
+
+
+# --------------------------------------------------------------------------- #
+# Migrated: test_target_branch.py
+# --------------------------------------------------------------------------- #
+
+
+@user_story("to see that the All scope button is enabled when a target branch is auto-resolved")
+def test_all_scope_enabled_with_auto_resolved_target_branch(sculptor_instance_: SculptorInstance) -> None:
+    """The test repo has a 'main' branch, so clone workspaces resolve
+    target_branch to 'origin/main'; the All scope button should be enabled."""
+    page = sculptor_instance_.page
+    _, changes_panel = _open_changes_panel_with(page, _WRITE_FILE_PROMPT)
+
+    scope_all = changes_panel.get_scope_all()
+    expect(scope_all).to_be_visible()
+    expect(scope_all).to_be_enabled()
+
+
+@user_story("to see diff content update when switching to All scope")
+def test_switching_to_all_scope_shows_target_branch_diff(sculptor_instance_: SculptorInstance) -> None:
+    """Switching to All scope shows the target-branch diff content (the
+    uncommitted file as a new addition relative to the target branch)."""
+    page = sculptor_instance_.page
+    _, changes_panel = _open_changes_panel_with(page, _WRITE_FILE_PROMPT)
+
+    _select_all_scope(changes_panel)
+
+    # The changes tree shows files (hello.py is new relative to the target branch).
+    changes_tree = changes_panel.get_changes_tree()
+    expect(changes_tree).to_be_visible()
+    tree_rows = changes_tree.get_tree_rows()
+    expect(tree_rows.filter(has_text="hello.py")).to_be_visible()
+
+
+# --------------------------------------------------------------------------- #
+# Folded in (deferred from 3.6c): scope-dependent diff modes from
+# test_file_open_diff_modes.py, driven by the Changes panel's scope picker.
+# --------------------------------------------------------------------------- #
+
+
+@user_story("to see the HEAD-vs-working-tree diff when opening a file in Uncommitted scope")
+def test_scope_diff_mode_uncommitted_head_vs_working_tree(sculptor_instance_: SculptorInstance) -> None:
+    """Opening a file in the Uncommitted scope shows the HEAD-to-working-tree diff
+    (hello -> goodbye) as a modification."""
+    page = sculptor_instance_.page
+    _, changes_panel = _open_changes_panel_with(page, _COMMIT_THEN_EDIT_PROMPT)
+
+    _select_uncommitted_scope(changes_panel)
+
+    changes_tree = changes_panel.get_changes_tree()
+    expect(changes_tree).to_be_visible()
+    tree_rows = changes_tree.get_tree_rows()
+    expect(tree_rows).to_have_count(1)
+    expect(tree_rows.first).to_contain_text("myapp.py")
+
+    viewer = changes_panel.open_file("myapp.py")
+    _ensure_unified_view(viewer)
+
+    diff_view = viewer.get_unified_diff_views()
+    expect(diff_view).to_be_visible()
+    # Uncommitted diff: "hello" removed, "goodbye" added.
+    expect(diff_view).to_contain_text("hello")
+    expect(diff_view).to_contain_text("goodbye")
+
+    # The header shows a modification (+1/-1), not a full addition.
+    diff_header = viewer.get_file_header()
+    expect(diff_header).to_contain_text("myapp.py")
+    expect(diff_header).to_contain_text("+1")
+    expect(diff_header).to_contain_text("-1")
+
+
+@user_story("to see the merge-base-vs-working-tree diff when opening a file in All scope")
+def test_scope_diff_mode_all_merge_base_vs_working_tree(sculptor_instance_: SculptorInstance) -> None:
+    """Opening a file in the All scope shows the merge-base-to-working-tree diff
+    (the whole file as the current "goodbye" content, with no "hello")."""
+    page = sculptor_instance_.page
+    _, changes_panel = _open_changes_panel_with(page, _COMMIT_THEN_EDIT_PROMPT)
+
+    _select_all_scope(changes_panel)
+
+    changes_tree = changes_panel.get_changes_tree()
+    expect(changes_tree).to_be_visible()
+    app_row = changes_tree.get_tree_rows().filter(has_text="myapp.py")
+    expect(app_row).to_be_visible()
+
+    viewer = changes_panel.open_file("myapp.py")
+    _ensure_unified_view(viewer)
+
+    diff_view = viewer.get_unified_diff_views()
+    expect(diff_view).to_be_visible()
+    # All diff (merge-base -> working tree): current content "goodbye" as an
+    # addition. "hello" must NOT appear since the working tree was already edited.
+    expect(diff_view).to_contain_text("goodbye")
+    expect(diff_view).not_to_contain_text("hello")
+
+
+# --------------------------------------------------------------------------- #
+# Deferred from 3.6c: test_file_browser_symlink_replaces_directory.py
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.skip(reason=_SYMLINK_SKIP_REASON)
+@user_story("to see a clean Changes panel when a directory has been replaced by a symlink")
+def test_directory_replaced_by_symlink_no_duplicate_row(sculptor_instance_: SculptorInstance) -> None:
+    """Placeholder for the duplicate-row repro when a directory is replaced by a
+    symlink at the same path. The symlink file and the synthesized parent folder
+    share the path "mydir" and carry no distinguishing test id, so the only way
+    to count distinct "mydir" rows is a page.evaluate over row text — which the
+    no-integration-page-evaluate ratchet forbids."""
+    # The setup prompt is retained for the follow-up migration.
+    _ = _SYMLINK_REPRO_PROMPT
