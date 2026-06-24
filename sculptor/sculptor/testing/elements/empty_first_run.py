@@ -1,0 +1,68 @@
+from playwright.sync_api import Locator
+from playwright.sync_api import Page
+from playwright.sync_api import expect
+
+from sculptor.constants import ElementIDs
+from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
+from sculptor.testing.pages.task_page import PlaywrightTaskPage
+
+
+class PlaywrightEmptyFirstRun(PlaywrightIntegrationTestElement):
+    """Page Object Model for the empty first-run page (FIRST-01..05).
+
+    With zero workspaces the app gate (``EmptyFirstRunGate``) renders
+    ``EmptyFirstRunPage`` in place of every route: the sidebar (open) on the
+    left and, in the content area, the WSC-05 ``NewWorkspaceForm`` inline in a
+    card with the prompt prefilled to ``/sculptor:help`` (FIRST-04). Navigation
+    is otherwise pared back — Cmd+K and the global shortcuts are off (FIRST-03),
+    so only this form and Settings are reachable.
+
+    The inline form shares the new-workspace form's field ids, so the form
+    getters here mirror ``PlaywrightNewWorkspaceDialog``'s; the sidebar
+    empty-state affordances (FIRST-02) are unique to this page.
+    """
+
+    def __init__(self, page: Page) -> None:
+        super().__init__(locator=page.get_by_test_id(ElementIDs.EMPTY_FIRST_RUN_PAGE), page=page)
+
+    # -- Page + inline form --
+
+    def get_page(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.EMPTY_FIRST_RUN_PAGE)
+
+    def get_form(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.NEW_WORKSPACE_FORM)
+
+    def get_workspace_name_input(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT)
+
+    def get_prompt_textarea(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.NEW_WORKSPACE_PROMPT_TEXTAREA)
+
+    def get_create_button(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.NEW_WORKSPACE_CREATE_BUTTON)
+
+    # -- Sidebar empty-state affordances (FIRST-02) --
+
+    def get_add_repo_button(self) -> Locator:
+        """The "Add a repo" button shown when no repos are registered yet."""
+        return self._page.get_by_test_id(ElementIDs.SIDEBAR_ADD_REPO_BUTTON)
+
+    def get_no_workspaces_hint(self) -> Locator:
+        """The "No workspaces yet" hint shown under each repo with no workspaces."""
+        return self._page.get_by_test_id(ElementIDs.SIDEBAR_NO_WORKSPACES_HINT)
+
+    # -- Create --
+
+    def create_and_wait_for_chat_panel(self, timeout: int = 60_000) -> PlaywrightTaskPage:
+        """Create the first workspace and wait for the full workspace page (FIRST-05).
+
+        The create navigates to the new agent, flipping the gate off so the
+        normal workspace shell takes over and the chat panel renders.
+        """
+        create_button = self.get_create_button()
+        expect(create_button).to_be_enabled()
+        create_button.click()
+        chat_panel = self._page.get_by_test_id(ElementIDs.CHAT_PANEL)
+        expect(chat_panel).to_be_visible(timeout=timeout)
+        return PlaywrightTaskPage(page=self._page)

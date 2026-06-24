@@ -96,6 +96,7 @@ export const NewWorkspaceForm = ({
   const { isCreating, createWorkspace } = useCreateWorkspace();
   const nameInputRef = useRef<HTMLInputElement>(null);
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const formRef = useRef<HTMLDivElement>(null);
 
   const isBranchNameManuallyEdited = branchNameOverride !== null;
   const {
@@ -266,11 +267,16 @@ export const NewWorkspaceForm = ({
   ]);
 
   // Effects — Cmd+Enter creates from anywhere in the form. An overlay open over
-  // the form (e.g. the Add Repository dialog) owns Cmd+Enter for its own action.
+  // the form (e.g. the Add Repository dialog or an open Select) owns Cmd+Enter for
+  // its own action. The form's OWN host modal is ignored: when rendered inside the
+  // new-workspace dialog the form is itself within a `role="dialog"`, so without the
+  // ignore it would always treat its own modal as a blocker and Cmd+Enter would
+  // never fire. The inline first-run form has no host dialog, so the ignore is null.
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent): void => {
       if (e.key !== "Enter" || !isModifierPressed(e)) return;
-      if (isDismissibleOverlayOpen()) return;
+      const hostDialog = formRef.current?.closest('[role="dialog"][data-state="open"]') ?? null;
+      if (isDismissibleOverlayOpen(hostDialog)) return;
       e.preventDefault();
       void handleSubmit();
     };
@@ -289,7 +295,7 @@ export const NewWorkspaceForm = ({
 
   return (
     <>
-      <Flex direction="column" className={styles.form} data-testid={ElementIds.NEW_WORKSPACE_FORM}>
+      <Flex ref={formRef} direction="column" className={styles.form} data-testid={ElementIds.NEW_WORKSPACE_FORM}>
         <input
           ref={nameInputRef}
           type="text"

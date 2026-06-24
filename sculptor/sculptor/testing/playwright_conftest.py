@@ -18,6 +18,7 @@ from playwright.sync_api import expect
 from sculptor.testing.frontend_utils import DEFAULT_TEST_LOCALE
 from sculptor.testing.frontend_utils import DEFAULT_TEST_VIEWPORT
 from sculptor.testing.resources import sculptor_instance_  # noqa: F401
+from sculptor.testing.resources import sculptor_instance_empty_first_run_  # noqa: F401
 from sculptor.testing.resources import sculptor_instance_factory_  # noqa: F401
 from sculptor.testing.resources import sculptor_instance_zero_agent_  # noqa: F401
 from sculptor.testing.resources import test_repo_factory_  # noqa: F401

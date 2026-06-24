@@ -130,6 +130,25 @@ def sculptor_instance_zero_agent_(
     return sculptor_instance_
 
 
+@pytest.fixture
+def sculptor_instance_empty_first_run_(
+    sculptor_instance_: SculptorInstance,
+) -> SculptorInstance:
+    """Shared instance settled on the empty first-run page (FIRST-01).
+
+    The shared ``sculptor_instance_`` already deletes every workspace in its
+    per-test cleanup and lands the browser on ``/ws/new`` with one repo and zero
+    workspaces — the genuine first-run state — so this fixture only waits for the
+    ``EmptyFirstRunGate`` to settle on ``EmptyFirstRunPage``. The gate briefly
+    flashes the legacy ``/ws/new`` page before the (empty) workspace snapshot
+    arrives and flips ``isWorkspaceListEmptyAtom`` true, so wait for the
+    empty-page marker rather than asserting it synchronously.
+    """
+    page = sculptor_instance_.page
+    expect(page.get_by_test_id(ElementIDs.EMPTY_FIRST_RUN_PAGE)).to_be_visible(timeout=45_000)
+    return sculptor_instance_
+
+
 def _get_packaged_binary_path(config: pytest.Config) -> Path:
     """Return the verified ``--packaged-binary-path`` from the pytest config.
 
