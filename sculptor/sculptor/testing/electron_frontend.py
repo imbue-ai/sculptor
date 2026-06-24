@@ -6,7 +6,6 @@ import sys
 import tempfile
 import time
 from collections import deque
-from collections.abc import Sequence
 from pathlib import Path
 
 from filelock import FileLock
@@ -15,8 +14,10 @@ from playwright.sync_api import BrowserContext
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page
 from playwright.sync_api import Playwright
+from tenacity import RetryCallState
 from tenacity import retry
 from tenacity import retry_if_exception_type
+from tenacity import stop_after_attempt
 from tenacity import stop_after_delay
 from tenacity import wait_fixed
 
@@ -40,6 +41,14 @@ _MAX_ELECTRON_LAUNCH_ATTEMPTS = 3
 # esbuild's Go crash dump spans many goroutines; keep enough of the tail that its
 # bundler frames survive both for the raised error and the relaunch decision.
 _RECENT_OUTPUT_LINES = 200
+
+
+class _TransientElectronStartError(RuntimeError):
+    """Electron exited before its ready message with a transient esbuild dev-bundle crash.
+
+    Tenacity retries on this so a fresh launch can win the startup race; other
+    startup failures raise a plain ``RuntimeError`` and are not retried.
+    """
 
 
 def _is_known_harmless_electron_error(line: str) -> bool:
@@ -67,11 +76,13 @@ def _is_transient_electron_start_crash(output: str) -> bool:
     return "github.com/evanw/esbuild" in output
 
 
-def _should_retry_electron_launch(attempt_index: int, max_attempts: int, recent_output: Sequence[str]) -> bool:
-    """Whether to relaunch after a failed start: a transient esbuild crash with attempts remaining."""
-    if attempt_index >= max_attempts - 1:
-        return False
-    return _is_transient_electron_start_crash("\n".join(recent_output))
+def _log_electron_relaunch(retry_state: RetryCallState) -> None:
+    """Warn before each relaunch (tenacity ``before_sleep`` hook)."""
+    logger.warning(
+        "[Electron] dev bundler (esbuild) crashed on launch attempt {}/{}; relaunching",
+        retry_state.attempt_number,
+        _MAX_ELECTRON_LAUNCH_ATTEMPTS,
+    )
 
 
 class ElectronFrontend:
@@ -183,6 +194,12 @@ class ElectronFrontend:
 
         return (context, page)
 
+    @retry(
+        stop=stop_after_attempt(_MAX_ELECTRON_LAUNCH_ATTEMPTS),
+        retry=retry_if_exception_type(_TransientElectronStartError),
+        before_sleep=_log_electron_relaunch,
+        reraise=True,
+    )
     def _launch_electron_with_retries(
         self,
         cmd: tuple[str, ...],
@@ -190,31 +207,23 @@ class ElectronFrontend:
         frontend_dir: Path,
         file_lock: FileLock,
     ) -> deque[str]:
-        """Launch electron-forge, relaunching on a transient esbuild dev-bundle crash.
+        """Launch electron-forge once, returning its recent output once it is ready.
 
-        Returns the most recent Electron output of the successful launch; raises
-        ``RuntimeError`` if every attempt fails, or any attempt fails for a
-        non-transient reason.
+        A transient esbuild dev-bundle crash raises ``_TransientElectronStartError``,
+        which the ``@retry`` above relaunches on (up to ``_MAX_ELECTRON_LAUNCH_ATTEMPTS``
+        times); any other startup failure raises a plain ``RuntimeError`` and is not
+        retried.
         """
-        recent_output: deque[str] = deque(maxlen=_RECENT_OUTPUT_LINES)
-        for attempt_index in range(_MAX_ELECTRON_LAUNCH_ATTEMPTS):
-            is_launched, recent_output = self._start_electron_process(cmd, full_env, frontend_dir, file_lock)
-            if is_launched:
-                return recent_output
-            self._kill_electron()
-            if _should_retry_electron_launch(attempt_index, _MAX_ELECTRON_LAUNCH_ATTEMPTS, recent_output):
-                logger.warning(
-                    "[Electron] dev bundler (esbuild) crashed on launch attempt {}/{}; relaunching",
-                    attempt_index + 1,
-                    _MAX_ELECTRON_LAUNCH_ATTEMPTS,
-                )
-                continue
-            exit_code = self._electron_proc.poll() if self._electron_proc is not None else None
-            tail = "\n".join(recent_output) or "(no output captured)"
-            message = f"Electron frontend failed to start (exit code {exit_code}). Last Electron output:\n{tail}"
-            raise RuntimeError(message)
-        # Unreachable, but satisfies the return-type checker.
-        raise RuntimeError("Electron frontend failed to start after all launch attempts.")
+        is_launched, recent_output = self._start_electron_process(cmd, full_env, frontend_dir, file_lock)
+        if is_launched:
+            return recent_output
+        self._kill_electron()
+        exit_code = self._electron_proc.poll() if self._electron_proc is not None else None
+        tail = "\n".join(recent_output) or "(no output captured)"
+        message = f"Electron frontend failed to start (exit code {exit_code}). Last Electron output:\n{tail}"
+        if _is_transient_electron_start_crash(tail):
+            raise _TransientElectronStartError(message)
+        raise RuntimeError(message)
 
     def _start_electron_process(
         self,

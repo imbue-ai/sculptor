@@ -8,8 +8,9 @@ import pytest
 from filelock import FileLock
 
 from sculptor.testing.electron_frontend import ElectronFrontend
+from sculptor.testing.electron_frontend import _MAX_ELECTRON_LAUNCH_ATTEMPTS
+from sculptor.testing.electron_frontend import _TransientElectronStartError
 from sculptor.testing.electron_frontend import _is_transient_electron_start_crash
-from sculptor.testing.electron_frontend import _should_retry_electron_launch
 
 _READY_OUTPUT = ["Logging to temp file: /tmp/sculptor.log"]
 
@@ -62,30 +63,15 @@ def test_is_transient_electron_start_crash_ignores_empty_output() -> None:
     assert not _is_transient_electron_start_crash("")
 
 
-def test_should_retry_electron_launch_relaunches_transient_crash_with_attempts_left() -> None:
-    """An esbuild crash on a non-final attempt triggers a relaunch."""
-    assert _should_retry_electron_launch(0, 3, _ESBUILD_ONLOAD_CRASH_TAIL.splitlines())
-
-
-def test_should_retry_electron_launch_does_not_relaunch_on_final_attempt() -> None:
-    """Even a transient crash on the final attempt stops retrying so the error surfaces."""
-    assert not _should_retry_electron_launch(2, 3, _ESBUILD_LINKER_CRASH_TAIL.splitlines())
-
-
-def test_should_retry_electron_launch_does_not_relaunch_unrelated_failure() -> None:
-    """A non-transient failure is never retried, even with attempts remaining."""
-    assert not _should_retry_electron_launch(0, 3, _PORT_IN_USE_TAIL.splitlines())
-
-
 class _FakeElectronProcess:
-    """Stand-in for a dead forge process; the retry loop only reads its exit code."""
+    """Stand-in for a dead forge process; the launch path only reads its exit code."""
 
     def poll(self) -> int:
         return 1
 
 
 class _ScriptedElectronFrontend(ElectronFrontend):
-    """Drives the retry loop with scripted per-attempt outcomes — no real Electron."""
+    """Drives ``_launch_electron_with_retries`` with scripted per-attempt outcomes — no real Electron."""
 
     def __init__(self, attempts: Sequence[tuple[bool, Sequence[str]]]) -> None:
         self._scripted_attempts = list(attempts)
@@ -136,9 +122,10 @@ def test_launch_raises_on_non_transient_failure_without_retrying(tmp_path: Path)
     )
     file_lock = FileLock(str(tmp_path / "forge.lock"))
 
-    with pytest.raises(RuntimeError, match="Electron frontend failed to start"):
+    with pytest.raises(RuntimeError) as exc_info:
         frontend._launch_electron_with_retries((), {}, tmp_path, file_lock)
 
+    assert not isinstance(exc_info.value, _TransientElectronStartError)
     assert frontend.start_call_count == 1
 
 
@@ -147,8 +134,8 @@ def test_launch_gives_up_after_max_attempts_of_transient_crashes(tmp_path: Path)
     frontend = _ScriptedElectronFrontend([(False, _ESBUILD_LINKER_CRASH_TAIL.splitlines())] * 5)
     file_lock = FileLock(str(tmp_path / "forge.lock"))
 
-    with pytest.raises(RuntimeError, match="Electron frontend failed to start"):
+    with pytest.raises(_TransientElectronStartError, match="Electron frontend failed to start"):
         frontend._launch_electron_with_retries((), {}, tmp_path, file_lock)
 
-    assert frontend.start_call_count == 3
-    assert frontend.kill_call_count == 3
+    assert frontend.start_call_count == _MAX_ELECTRON_LAUNCH_ATTEMPTS
+    assert frontend.kill_call_count == _MAX_ELECTRON_LAUNCH_ATTEMPTS
