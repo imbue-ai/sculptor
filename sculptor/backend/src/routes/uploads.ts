@@ -15,6 +15,7 @@ import { z } from "zod";
 
 import { uploadsDir } from "~/config/sculptor_folder";
 import { spawnBackgroundProcess } from "~/environment/process";
+import { uploadDiagnostics } from "~/services/diagnostics/upload";
 
 // Upload + open-path endpoints (web/app.py). Uploads land in internal/uploads/
 // (Task 1.5) so migrated files resolve (RW-DATA-5). upload-diagnostics is the
@@ -96,6 +97,30 @@ export async function registerUploadRoutes(
       }
       return reply.code(200).send(readFileSync(filePath));
     },
+  );
+
+  typed.post(
+    "/api/v1/upload-diagnostics",
+    {
+      schema: {
+        body: z.object({
+          description: z.string(),
+          currentUrl: z.string(),
+          frontendDiagnostics: z
+            .record(z.string(), z.union([z.string(), z.number(), z.null()]))
+            .default({}),
+        }),
+        response: {
+          200: z.object({ reportId: z.string(), s3Url: z.string() }),
+        },
+      },
+    },
+    async (request) =>
+      uploadDiagnostics({
+        description: request.body.description,
+        currentUrl: request.body.currentUrl,
+        frontendDiagnostics: request.body.frontendDiagnostics,
+      }),
   );
 
   typed.post(
