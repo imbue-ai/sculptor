@@ -16,6 +16,7 @@ import { getWorkspaceWorkingDirectory } from "~/services/workspace";
 import { localPathFromRepo } from "~/services/project";
 import { getRepo } from "~/db/repositories";
 import { workingDirectory } from "~/environment/paths";
+import { resolveEnv } from "~/services/env_injection/env";
 
 // Terminal WebSocket channels (web/app.py). The xterm contract (RW-API-2):
 //   server -> client: raw PTY output as BINARY frames.
@@ -94,6 +95,17 @@ function workspaceWorkingDirOrNull(workspaceId: string): string | null {
   }
 }
 
+// The `.env`-injected environment for a workspace's repo (Task 7.6, per-repo
+// over global), merged into the terminal subprocess.
+function repoEnvForWorkspace(workspaceId: string): Record<string, string> {
+  const workspace = getWorkspace(getOrm(), workspaceId);
+  const repo =
+    workspace === undefined
+      ? undefined
+      : getRepo(getOrm(), workspace.projectId);
+  return resolveEnv(repo !== undefined ? localPathFromRepo(repo) : null);
+}
+
 export async function registerTerminalWsRoutes(
   app: FastifyInstance,
 ): Promise<void> {
@@ -119,7 +131,7 @@ export async function registerTerminalWsRoutes(
       }
       const pty = getTerminalManager().getOrCreateTerminal(
         Number.parseInt(index, 10),
-        { cwd },
+        { cwd, extraEnv: repoEnvForWorkspace(workspaceId) },
       );
       bridge(socket, pty);
     },
@@ -161,6 +173,9 @@ export async function registerTerminalWsRoutes(
             );
       const pty = getTerminalManager().getOrCreateAgentTerminal(agentId, {
         cwd,
+        extraEnv: resolveEnv(
+          repo !== undefined ? localPathFromRepo(repo) : null,
+        ),
       });
       bridge(socket, pty);
     },

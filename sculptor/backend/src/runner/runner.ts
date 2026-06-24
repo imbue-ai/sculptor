@@ -1,4 +1,8 @@
-import { getAgent, listNonTerminalAgents, setAgentRunState } from "~/db/repositories";
+import {
+  getAgent,
+  listNonTerminalAgents,
+  setAgentRunState,
+} from "~/db/repositories";
 import type { Orm } from "~/db/orm";
 import type { AgentRow } from "~/db/schema";
 import { ProjectionCache } from "~/projection/cache";
@@ -18,6 +22,9 @@ export interface AgentRunnerDeps {
   // Resolves the workspace working directory for an agent (Task 3.1/5.3). When
   // omitted, supervisors launch with an empty cwd (tests / harness-resolved).
   workingDirectoryFor?: (agent: AgentRow) => string;
+  // Resolves the `.env`-injected environment for an agent's subprocess (Task
+  // 7.6, per-repo over global). Omitted in tests → no extra env.
+  envFor?: (agent: AgentRow) => Record<string, string>;
   cache?: ProjectionCache;
   resuperviseConcurrency?: number;
 }
@@ -44,6 +51,7 @@ export class AgentRunner {
       agent,
       harness,
       workingDirectory: this.deps.workingDirectoryFor?.(agent) ?? "",
+      env: this.deps.envFor?.(agent),
       cache: this.deps.cache,
     });
     this.supervisors.set(agent.objectId, supervisor);
@@ -52,7 +60,11 @@ export class AgentRunner {
 
   startAgent(agentId: string): void {
     const agent = getAgent(this.deps.orm, agentId);
-    if (agent === undefined || agent.isDeleted || TERMINAL_RUN_STATES.has(agent.runState)) {
+    if (
+      agent === undefined ||
+      agent.isDeleted ||
+      TERMINAL_RUN_STATES.has(agent.runState)
+    ) {
       return;
     }
     this.supervise(agent);
@@ -84,7 +96,9 @@ export class AgentRunner {
   // bounded so cutover doesn't spawn the whole fleet at once.
   async resuperviseOnStartup(): Promise<void> {
     const agents = listNonTerminalAgents(this.deps.orm);
-    const limiter = new ConcurrencyLimiter(this.deps.resuperviseConcurrency ?? DEFAULT_RESUPERVISE_CONCURRENCY);
+    const limiter = new ConcurrencyLimiter(
+      this.deps.resuperviseConcurrency ?? DEFAULT_RESUPERVISE_CONCURRENCY,
+    );
     await Promise.all(
       agents.map((agent) =>
         limiter.run(async () => {

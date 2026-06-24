@@ -20,6 +20,7 @@ import { getCurrentUserConfig } from "~/config/user_config";
 import { localPathFromRepo } from "~/services/project";
 import { getRepo } from "~/db/repositories";
 import { resolveBinaryPath } from "~/services/dependencies";
+import { resolveEnv } from "~/services/env_injection/env";
 import { projectionCache } from "~/projection/cache";
 import { AgentRunner } from "~/runner/runner";
 
@@ -47,6 +48,15 @@ function workingDirForWorkspace(workspace: WorkspaceRow | undefined): string {
     workspace.initializationStrategy,
     repoHostPath,
   );
+}
+
+function repoLocalPathForAgent(agent: AgentRow): string | null {
+  const workspace = workspaceForAgent(agent);
+  if (workspace === undefined) {
+    return null;
+  }
+  const repo = getRepo(getOrm(), workspace.projectId);
+  return repo === undefined ? null : localPathFromRepo(repo);
 }
 
 function strategyForAgent(agent: AgentRow): WorkspaceInitializationStrategy {
@@ -110,6 +120,7 @@ export function getAgentRunner(): AgentRunner {
       harnessFor,
       workingDirectoryFor: (agent) =>
         workingDirForWorkspace(workspaceForAgent(agent)),
+      envFor: (agent) => resolveEnv(repoLocalPathForAgent(agent)),
       cache: projectionCache,
     });
   }
