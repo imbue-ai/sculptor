@@ -1,4 +1,3 @@
-import { useDroppable } from "@dnd-kit/core";
 import { Flex, Skeleton, Tooltip } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";
 import { GitBranchIcon, PanelBottom, PanelLeft, PanelRight } from "lucide-react";
@@ -13,12 +12,9 @@ import { useRepoInfo } from "~/common/state/hooks/useRepoInfo";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace";
 import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch";
 import { sidebarCollapsedAtom } from "~/components/layout/sidebarAtoms.ts";
-import { sectionToggleDropData, sectionToggleDroppableId } from "~/components/sections/panelDnd.ts";
 import { toggleSectionAtom } from "~/components/sections/sectionActions.ts";
 import { isSectionExpandedAtom } from "~/components/sections/sectionAtoms.ts";
 import type { SectionId } from "~/components/sections/sectionTypes.ts";
-import { primaryOf } from "~/components/sections/sectionTypes.ts";
-import { isDropTargetAtom } from "~/components/sections/transientAtoms.ts";
 import { TooltipIconButton } from "~/components/TooltipIconButton.tsx";
 import { getTitleBarLeftPadding } from "~/electron/utils.ts";
 import { getBranchName } from "~/pages/home/Utils";
@@ -38,40 +34,25 @@ type SectionToggleProps = {
 
 // One collapse/expand toggle for a side/bottom section. Reads the per-section
 // expanded slice and writes through the shared toggleSectionAtom so the header,
-// keyboard shortcuts, and drag-to-expand all funnel through one reducer.
-//
-// The toggle is also the section's collapsed-section drop target (PANEL-09): a panel
-// dragged onto it lands in the section's primary sub-section, which expands the
-// section and appends the panel. It highlights while it is the active drop target
-// (the isDropTargetAtom slice for the primary sub-section).
+// keyboard shortcuts, and drag-to-expand (via the collapsed-section drop rail) all
+// funnel through one reducer.
 const SectionToggle = ({ section, icon, label, testId }: SectionToggleProps): ReactElement => {
   const isExpanded = useAtomValue(isSectionExpandedAtom(section));
-  const isDropTarget = useAtomValue(isDropTargetAtom(primaryOf(section)));
   const toggleSection = useSetAtom(toggleSectionAtom);
-  const { setNodeRef } = useDroppable({
-    id: sectionToggleDroppableId(section),
-    data: sectionToggleDropData(section),
-  });
-
-  const className = [isExpanded ? styles.toggleActive : "", isDropTarget ? styles.toggleDropTarget : ""]
-    .filter(Boolean)
-    .join(" ");
 
   return (
-    <span ref={setNodeRef} className={styles.toggleDropWrapper} data-drop-active={isDropTarget ? "true" : undefined}>
-      <TooltipIconButton
-        tooltipText={isExpanded ? `Hide ${label}` : `Show ${label}`}
-        variant="ghost"
-        size="1"
-        color="gray"
-        className={className || undefined}
-        onClick={() => toggleSection({ section })}
-        aria-label={`Toggle ${label}`}
-        data-testid={testId}
-      >
-        {icon}
-      </TooltipIconButton>
-    </span>
+    <TooltipIconButton
+      tooltipText={isExpanded ? `Hide ${label}` : `Show ${label}`}
+      variant="ghost"
+      size="1"
+      color="gray"
+      className={isExpanded ? styles.toggleActive : undefined}
+      onClick={() => toggleSection({ section })}
+      aria-label={`Toggle ${label}`}
+      data-testid={testId}
+    >
+      {icon}
+    </TooltipIconButton>
   );
 };
 

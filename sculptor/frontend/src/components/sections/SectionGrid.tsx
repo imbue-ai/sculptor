@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 
+import { CollapsedSectionDropRail } from "./CollapsedSectionDropRail.tsx";
 import { PanelSection } from "./PanelSection.tsx";
 import { ResizeHandle } from "./ResizeHandle.tsx";
 import { isSectionExpandedAtom, sectionSizesAtom, setSectionSizeAtom } from "./sectionAtoms.ts";
@@ -18,7 +19,7 @@ import { resolveSectionPixelSizes, sizeToPercent } from "./sectionGeometry.ts";
 import styles from "./SectionGrid.module.scss";
 import { primaryOf } from "./sectionTypes.ts";
 import { SplittableSection } from "./SplittableSection.tsx";
-import { maximizedSectionAtom } from "./transientAtoms.ts";
+import { draggedPanelIdAtom, maximizedSectionAtom } from "./transientAtoms.ts";
 
 export const SectionGrid = (): ReactElement => {
   const sizes = useAtomValue(sectionSizesAtom);
@@ -26,6 +27,9 @@ export const SectionGrid = (): ReactElement => {
   const isRightExpanded = useAtomValue(isSectionExpandedAtom("right"));
   const isBottomExpanded = useAtomValue(isSectionExpandedAtom("bottom"));
   const maximizedSection = useAtomValue(maximizedSectionAtom);
+  // A drag is in progress (stable for the whole drag, so this re-renders the grid only
+  // on drag start/end) — used to surface drop rails for the collapsed sections.
+  const isDragging = useAtomValue(draggedPanelIdAtom) !== null;
   const setSectionSize = useSetAtom(setSectionSizeAtom);
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -77,6 +81,8 @@ export const SectionGrid = (): ReactElement => {
   return (
     <div ref={containerRef} className={styles.outer}>
       <div className={styles.topRow}>
+        {/* Collapsed left section: a drop rail at the left edge while dragging (PANEL-09). */}
+        {isDragging && !isLeftExpanded && <CollapsedSectionDropRail section="left" orientation="vertical" />}
         {isLeftExpanded && (
           <>
             <div className={styles.side} style={{ width: leftPx }} data-testid={ElementIds.SECTION_LEFT}>
@@ -111,6 +117,8 @@ export const SectionGrid = (): ReactElement => {
             </div>
           </>
         )}
+        {/* Collapsed right section: a drop rail at the right edge while dragging. */}
+        {isDragging && !isRightExpanded && <CollapsedSectionDropRail section="right" orientation="vertical" />}
       </div>
 
       {isBottomExpanded && (
@@ -128,6 +136,8 @@ export const SectionGrid = (): ReactElement => {
           </div>
         </>
       )}
+      {/* Collapsed bottom section: a drop rail along the bottom edge while dragging. */}
+      {isDragging && !isBottomExpanded && <CollapsedSectionDropRail section="bottom" orientation="horizontal" />}
     </div>
   );
 };

@@ -16,22 +16,20 @@
 // the real sensor pipeline (focus handle → Space → arrows → Space) — a plain
 // PointerSensor cannot be driven faithfully by Playwright's synthetic mouse events.
 
-import type { DragEndEvent, DragMoveEvent, DragStartEvent } from "@dnd-kit/core";
-import {
-  closestCenter,
-  DndContext,
-  DragOverlay,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
+import type { DragEndEvent, DragMoveEvent, DragOverEvent, DragStartEvent } from "@dnd-kit/core";
+import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement, ReactNode } from "react";
 import { useCallback, useRef } from "react";
 
 import type { PanelDragData, PanelDropData } from "./panelDnd.ts";
-import { APPEND_INDEX } from "./panelDnd.ts";
+import { APPEND_INDEX, sectionBodyDroppableId } from "./panelDnd.ts";
+import {
+  panelCollisionDetection,
+  panelKeyboardCoordinateGetter,
+  resetKeyboardDropTarget,
+  setKeyboardDropTarget,
+} from "./panelDndKeyboard.ts";
 import styles from "./PanelDndProvider.module.scss";
 import { panelDefinitionByIdAtom } from "./registry/panelRegistry.ts";
 import { jumpToSectionAtom, movePanelAtom } from "./sectionActions.ts";
@@ -67,7 +65,7 @@ function computeDropIndex(subSection: SubSectionId, draggedPanelId: PanelId, poi
 
 // The drop target resolved from a drag event, or null when the pointer is not over a
 // known drop zone (a release there is a no-op that leaves placement unchanged).
-function resolveDropTarget(event: DragMoveEvent | DragEndEvent): DropTarget | null {
+function resolveDropTarget(event: DragMoveEvent | DragOverEvent | DragEndEvent): DropTarget | null {
   const overData = event.over?.data.current as PanelDropData | undefined;
   if (overData?.kind !== "section-body") {
     return null;
@@ -106,7 +104,9 @@ export const PanelDndProvider = ({ children }: { children: ReactNode }): ReactEl
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor),
+    // The directional coordinate getter makes one arrow press jump to the adjacent
+    // section, so the keyboard pipeline is the reliable Playwright-drivable drag path.
+    useSensor(KeyboardSensor, { coordinateGetter: panelKeyboardCoordinateGetter }),
   );
 
   const handleDragStart = useCallback(
@@ -115,8 +115,11 @@ export const PanelDndProvider = ({ children }: { children: ReactNode }): ReactEl
       if (activeData === undefined) {
         return;
       }
-      dropTargetRef.current = null;
-      // Seed the preview with the panel in place; drag-move refines the target.
+      dropTargetRef.current = { to: activeData.from, index: activeData.index };
+      // Seed the keyboard target to the source section so the initial `over` is the
+      // source; each arrow updates it via the coordinate getter.
+      setKeyboardDropTarget(sectionBodyDroppableId(activeData.from));
+      // Seed the preview with the panel in place; drag-over refines the target.
       setPanelDragState({
         panelId: activeData.panelId,
         from: activeData.from,
@@ -127,8 +130,12 @@ export const PanelDndProvider = ({ children }: { children: ReactNode }): ReactEl
     [setPanelDragState],
   );
 
-  const handleDragMove = useCallback(
-    (event: DragMoveEvent): void => {
+  // Update on `over` change (onDragOver) AND coordinate change (onDragMove). onDragOver
+  // is what makes keyboard drags reliable: a keyboard step changes `over` even when the
+  // sensor's scroll-clamping suppresses the coordinate move (so onDragMove may not
+  // fire); onDragMove additionally refines the pointer insertion index within a section.
+  const handleDragUpdate = useCallback(
+    (event: DragMoveEvent | DragOverEvent): void => {
       const activeData = event.active.data.current as PanelDragData | undefined;
       if (activeData === undefined) {
         return;
@@ -151,6 +158,7 @@ export const PanelDndProvider = ({ children }: { children: ReactNode }): ReactEl
       const target = dropTargetRef.current;
       const activeData = event.active.data.current as PanelDragData | undefined;
       dropTargetRef.current = null;
+      resetKeyboardDropTarget();
       setPanelDragState(null);
       if (target === null || activeData === undefined) {
         return;
@@ -168,15 +176,17 @@ export const PanelDndProvider = ({ children }: { children: ReactNode }): ReactEl
 
   const handleDragCancel = useCallback((): void => {
     dropTargetRef.current = null;
+    resetKeyboardDropTarget();
     setPanelDragState(null);
   }, [setPanelDragState]);
 
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={panelCollisionDetection}
       onDragStart={handleDragStart}
-      onDragMove={handleDragMove}
+      onDragOver={handleDragUpdate}
+      onDragMove={handleDragUpdate}
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >

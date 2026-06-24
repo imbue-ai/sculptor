@@ -53,17 +53,3 @@
   background: var(--accent-a3);
   color: var(--accent-11);
 }
-
-// Wraps the toggle button so it can carry the dnd-kit droppable ref without altering
-// the button's own layout; it shrinks to the button's footprint.
-.toggleDropWrapper {
-  display: inline-flex;
-}
-
-// The toggle while it is the active drop target for a dragged panel (PANEL-09): an
-// accent ring invites the drop that will expand the section.
-.toggleDropTarget {
-  background: var(--accent-a4);
-  box-shadow: inset 0 0 0 1px var(--accent-8);
-  color: var(--accent-11);
-}

@@ -655,6 +655,10 @@ class ElementIDs(StrEnum):
     SECTION_ACTIVE_RING = "SECTION_ACTIVE_RING"
     SECTION_EMPTY_STATE = "SECTION_EMPTY_STATE"
     SECTION_SPLIT_SUBSECTION = "SECTION_SPLIT_SUBSECTION"
+    # The collapsed-section drop rail shown at a collapsed section's grid edge during a
+    # panel drag (PANEL-09); suffixed with the section id (e.g.
+    # f"{SECTION_DROP_RAIL}-bottom"). Dropping on it expands the section and appends.
+    SECTION_DROP_RAIL = "SECTION_DROP_RAIL"
     # Split affordances: the panel context-menu "Create {direction} split" items
     # (one per allowed axis, suffixed with the axis — e.g.
     # f"{SPLIT_CREATE_OPTION}-horizontal") and the empty-state "Close split" button.
