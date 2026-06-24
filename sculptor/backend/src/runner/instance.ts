@@ -81,6 +81,13 @@ function piEnvironmentFor(agent: AgentRow): PiHarnessEnvironment {
 
 let runner: AgentRunner | undefined;
 
+// Drop the cached runner so the next getAgentRunner() rebinds to the current
+// orm. Tests close/reopen the DB per case, which would otherwise leave the
+// runner holding a closed connection.
+export function resetAgentRunnerForTests(): void {
+  runner = undefined;
+}
+
 export function getAgentRunner(): AgentRunner {
   if (runner === undefined) {
     const config = getCurrentUserConfig();

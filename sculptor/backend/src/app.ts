@@ -3,6 +3,7 @@ import fastifyWebsocket from "@fastify/websocket";
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from "fastify";
 import { jsonSchemaTransform, serializerCompiler, validatorCompiler } from "fastify-type-provider-zod";
 
+import { registerAgentRoutes } from "~/routes/agents";
 import { registerAuthGuard } from "~/auth/guard";
 import { registerConfigRoutes } from "~/routes/config";
 import { registerDependencyRoutes } from "~/routes/dependencies";
@@ -64,6 +65,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   void app.register(registerWorkspaceFileRoutes);
   void app.register(registerUiActionRoutes);
   void app.register(registerWorkspaceOsRoutes);
+  void app.register(registerAgentRoutes);
   void app.register(registerTelemetryInfoRoutes);
   void app.register(registerStreamWsRoutes);
 
