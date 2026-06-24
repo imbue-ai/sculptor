@@ -16,6 +16,11 @@ export function resolveStaticAssetDir(
   if (env.SCULPTOR_STATIC_DIR !== undefined && env.SCULPTOR_STATIC_DIR !== "") {
     candidates.push(env.SCULPTOR_STATIC_DIR);
   }
+  // The integration harness points static serving at the built frontend via
+  // STATIC_FILES_PATH (sculptor/sculptor/testing/server_utils.py).
+  if (env.STATIC_FILES_PATH !== undefined && env.STATIC_FILES_PATH !== "") {
+    candidates.push(env.STATIC_FILES_PATH);
+  }
   candidates.push(
     path.resolve(cwd, "sculptor/frontend-dist"),
     path.resolve(cwd, "sculptor/frontend/dist"),

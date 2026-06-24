@@ -210,10 +210,41 @@ def get_testing_environment(
     return environment
 
 
+# Opt-in flag to launch the rewritten TypeScript backend instead of the Python
+# one. Defaults to the Python command so existing runs are unaffected until
+# cutover (Tasks 9.4/9.5). Set SCULPTOR_BACKEND=ts to run the integration suite
+# against the TS backend (the live progress meter during the rewrite).
+SCULPTOR_BACKEND_OVERRIDE_ENV_FLAG = "SCULPTOR_BACKEND"
+TYPESCRIPT_BACKEND_OVERRIDE_VALUE = "ts"
+
+
+def get_typescript_backend_bundle_path() -> Path:
+    """Path to the esbuild bundle produced by `just build-backend-ts`."""
+    return get_git_repo_root() / "sculptor" / "backend" / "dist" / "backend.cjs"
+
+
 def get_sculptor_command_backend_only(
     repo_path: Path | None,
     port: int,
 ) -> tuple[str, ...]:
+    if os.environ.get(SCULPTOR_BACKEND_OVERRIDE_ENV_FLAG) == TYPESCRIPT_BACKEND_OVERRIDE_VALUE:
+        bundle_path = get_typescript_backend_bundle_path()
+        if not bundle_path.is_file():
+            message = (
+                f"{SCULPTOR_BACKEND_OVERRIDE_ENV_FLAG}={TYPESCRIPT_BACKEND_OVERRIDE_VALUE} but the TypeScript backend"
+                + f" bundle is missing at {bundle_path}. Build it first with `just build-backend-ts`."
+            )
+            raise RuntimeError(message)
+        command = [
+            "node",
+            str(bundle_path),
+            "--no-open-browser",
+            f"--port={port}",
+        ]
+        if repo_path is not None:
+            command.append(str(repo_path))
+        return tuple(command)
+
     command = [
         "python",
         "-m",
