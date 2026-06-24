@@ -17,6 +17,8 @@ import { registerWorkspaceRoutes } from "~/routes/workspaces";
 import { registerSessionTokenRoutes } from "~/routes/session_token";
 import { registerStreamWsRoutes } from "~/routes/stream_ws";
 import { registerTelemetryInfoRoutes } from "~/routes/telemetry_info";
+import { registerTerminalHttpRoutes } from "~/routes/terminal_http";
+import { registerTerminalWsRoutes } from "~/routes/terminal_ws";
 import { registerStatic } from "~/static";
 
 export interface BuildAppOptions {
@@ -68,6 +70,8 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   void app.register(registerWorkspaceOsRoutes);
   void app.register(registerAgentRoutes);
   void app.register(registerAgentInteractionRoutes);
+  void app.register(registerTerminalHttpRoutes);
+  void app.register(registerTerminalWsRoutes);
   void app.register(registerTelemetryInfoRoutes);
   void app.register(registerStreamWsRoutes);
 
