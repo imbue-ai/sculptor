@@ -2,7 +2,10 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 
+import { getOrm } from "~/db/orm";
+import { updateWorkspace } from "~/db/repositories";
 import { workspaceInitializationStrategySchema } from "~/db/schema/enums";
+import { eventBus } from "~/events";
 import {
   getWorkspaceService,
   previewWorkspaceBranchName,
@@ -227,6 +230,50 @@ export async function registerWorkspaceRoutes(
       },
     },
     async (request) => service.listByProject(request.params.project_id),
+  );
+
+  // PATCH a workspace's mutable fields (description / target branch / open
+  // state). The codegen contract for this operation is the snapshot overlay
+  // (Task 9.4); the data_model_change refreshes the projection.
+  typed.patch(
+    "/api/v1/workspaces/:workspace_id",
+    {
+      schema: {
+        params: WorkspaceIdParamsSchema,
+        body: z.object({
+          description: z.string().nullable().optional(),
+          targetBranch: z.string().nullable().optional(),
+          isOpen: z.boolean().nullable().optional(),
+        }),
+        response: { 200: WorkspaceResponseSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const patch: Record<string, unknown> = {};
+        if (request.body.description != null) {
+          patch.description = request.body.description;
+        }
+        if (request.body.targetBranch !== undefined) {
+          patch.targetBranch = request.body.targetBranch;
+        }
+        if (request.body.isOpen != null) {
+          patch.isOpen = request.body.isOpen;
+        }
+        if (Object.keys(patch).length > 0) {
+          updateWorkspace(getOrm(), request.params.workspace_id, patch);
+          eventBus.publish({
+            kind: "data_model_change",
+            changedEntities: [
+              { type: "workspace", id: request.params.workspace_id },
+            ],
+          });
+        }
+        return service.get(request.params.workspace_id);
+      } catch (error) {
+        return handleError(error, reply);
+      }
+    },
   );
 
   typed.delete(

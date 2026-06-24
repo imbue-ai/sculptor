@@ -18,7 +18,7 @@
     "depcheck": "depcheck --ignores=typescript,eslint,prettier,tailwindcss,prettier-plugin-organize-imports",
     "rule-errors": "eslint-config-prettier src/Main.tsx",
     "freeze": "npm list --depth=0",
-    "generate-api-json-schema": "uv run python ../../sculptor/sculptor/scripts/generate_json_schema.py ./sculptor_schema.json",
+    "generate-api-json-schema": "cd ../backend && npx tsx src/index.ts --emit-openapi ../frontend/sculptor_schema.json",
     "fixup-js-types": "uv run python ../../sculptor/sculptor/scripts/fixup_js_types.py ./src/api/types.gen.ts",
     "generate-api": "./scripts/generate-api.sh",
     "test": "vitest run",

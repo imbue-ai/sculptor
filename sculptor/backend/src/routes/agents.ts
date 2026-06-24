@@ -2,8 +2,12 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 
+import { getOrm } from "~/db/orm";
+import { getAgent, markAgentRead, updateAgent } from "~/db/repositories";
+import { eventBus } from "~/events";
 import {
   AgentError,
+  agentViewWire,
   getAgentService,
   type AgentTypeName,
 } from "~/services/agent";
@@ -296,6 +300,78 @@ export async function registerAgentRoutes(app: FastifyInstance): Promise<void> {
       } catch (error) {
         return handleError(error, reply);
       }
+    },
+  );
+
+  // PATCH an agent's title (rename) / read state. The codegen contract for these
+  // operations is the snapshot overlay (Task 9.4); the agent_status event
+  // refreshes the projection. Each returns the updated CodingAgentTaskView.
+  const refreshedView = (
+    reply: FastifyReply,
+    agentId: string,
+  ): ReturnType<typeof agentViewWire> | FastifyReply => {
+    const updated = getAgent(getOrm(), agentId);
+    if (updated === undefined) {
+      return reply.code(404).send({ detail: "Agent not found" });
+    }
+    eventBus.publish({ kind: "agent_status", agentId });
+    return agentViewWire(updated);
+  };
+
+  typed.patch(
+    "/api/v1/workspaces/:workspace_id/agents/:agent_id",
+    {
+      schema: {
+        params: WorkspaceAgentParamsSchema,
+        body: z.object({ title: z.string() }),
+        response: { 200: AgentViewSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) => {
+      const agent = getAgent(getOrm(), request.params.agent_id);
+      if (agent === undefined || agent.isDeleted) {
+        return reply.code(404).send({ detail: "Agent not found" });
+      }
+      updateAgent(getOrm(), request.params.agent_id, {
+        title: request.body.title,
+      });
+      return refreshedView(reply, request.params.agent_id);
+    },
+  );
+
+  typed.patch(
+    "/api/v1/workspaces/:workspace_id/agents/:agent_id/mark-read",
+    {
+      schema: {
+        params: WorkspaceAgentParamsSchema,
+        response: { 200: AgentViewSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) => {
+      const agent = getAgent(getOrm(), request.params.agent_id);
+      if (agent === undefined || agent.isDeleted) {
+        return reply.code(404).send({ detail: "Agent not found" });
+      }
+      markAgentRead(getOrm(), request.params.agent_id);
+      return refreshedView(reply, request.params.agent_id);
+    },
+  );
+
+  typed.patch(
+    "/api/v1/workspaces/:workspace_id/agents/:agent_id/mark-unread",
+    {
+      schema: {
+        params: WorkspaceAgentParamsSchema,
+        response: { 200: AgentViewSchema, ...errorResponses },
+      },
+    },
+    async (request, reply) => {
+      const agent = getAgent(getOrm(), request.params.agent_id);
+      if (agent === undefined || agent.isDeleted) {
+        return reply.code(404).send({ detail: "Agent not found" });
+      }
+      updateAgent(getOrm(), request.params.agent_id, { lastReadAt: null });
+      return refreshedView(reply, request.params.agent_id);
     },
   );
 }

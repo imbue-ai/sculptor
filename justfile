@@ -494,12 +494,16 @@ generate-sculpt-client:
     {{ _quiet_by_default_fn }}
     _do_generate_sculpt_client() {
       echo "Generating sculpt CLI Python client..."
+      {{ nvm_use }}
       # Use a per-invocation temp dir so parallel runs in separate clones
       # don't clobber each other's schema file.
       tmp_dir=$(mktemp -d)
       trap 'rm -rf "$tmp_dir"' EXIT
       tmp_schema="$tmp_dir/sculpt_openapi.json"
-      uv run --project sculptor python sculptor/sculptor/scripts/generate_json_schema.py "$tmp_schema" >/dev/null 2>&1
+      # Source of truth is now the TypeScript backend's OpenAPI (RW-API-4):
+      # emit it (side-effect-free, no running DB) and feed the same document to
+      # openapi-python-client, exactly as the frontend client consumes it.
+      ( cd "{{justfile_directory()}}/sculptor/backend" && npx tsx src/index.ts --emit-openapi "$tmp_schema" ) >/dev/null 2>&1
       # Skip openapi-python-client when neither the schema nor the pinned
       # generator version changed since the last successful codegen. The
       # digest lives inside the generated client directory so it disappears
