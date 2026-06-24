@@ -1,4 +1,4 @@
-import { runProcessToCompletion } from "~/environment/process";
+import { type ProcessResult, runProcessToCompletion } from "~/environment/process";
 
 // Typed wrapper around the system `git` binary (REQ-COMPAT-021 — git is already
 // required; no native libgit2 binding). Shells out via the Task 3.1 process
@@ -13,6 +13,12 @@ export class GitCommandError extends Error {
     super(`git ${args.join(" ")} failed (exit ${exitCode}): ${stderr.trim()}`);
     this.name = "GitCommandError";
   }
+}
+
+// Non-throwing git runner for read-side ops where a non-zero exit is expected
+// (e.g. `git diff` returns 1 for a non-empty diff). Callers inspect exitCode.
+export function runGit(args: readonly string[], cwd: string): Promise<ProcessResult> {
+  return runProcessToCompletion(["git", ...args], { cwd });
 }
 
 async function git(args: readonly string[], cwd?: string): Promise<string> {
