@@ -214,6 +214,69 @@ def _is_github_url(url: str) -> bool:
     return "github" in _extract_hostname(url).lower()
 
 
+@dataclass(frozen=True)
+class _OriginInfo:
+    """Parsed identity of a workspace's ``origin`` remote.
+
+    ``host`` keys the per-(host, token) poll round, so a ``github.com`` workspace
+    and a GitHub Enterprise workspace get separate rounds (Risk-5).
+    ``name_with_owner`` (``owner/name``, ``.git`` stripped) is compared *exactly*
+    against a search node's ``repository.nameWithOwner`` to map the node back to
+    this workspace. GitHub returns canonical casing there, so a casing mismatch
+    would simply drop the workspace to the per-workspace fallback (acceptable
+    degradation).
+    """
+
+    host: str
+    owner: str
+    name: str
+
+    @property
+    def name_with_owner(self) -> str:
+        return f"{self.owner}/{self.name}"
+
+
+def _parse_origin_owner_repo(url: str) -> tuple[str, str] | None:
+    """Parse ``(owner, name)`` from a git ``origin`` URL, ``.git`` stripped.
+
+    Handles the scp-like (``git@host:owner/repo.git``), ``ssh://``, and http(s)
+    forms. Pure string parsing — no git call. Returns ``None`` for any URL that
+    does not yield exactly an owner and a repo, so a malformed remote degrades
+    (the workspace falls to the fallback) instead of crashing the round.
+    """
+    if ":" in url and not url.startswith(("https://", "http://", "ssh://")):
+        # scp-like ``git@host:owner/repo.git`` — the path follows the first ':'.
+        path = url.split(":", 1)[1]
+    else:
+        path = urllib.parse.urlparse(url).path
+    parts = path.strip("/").split("/")
+    if len(parts) != 2:
+        return None
+    owner, repo = parts
+    if repo.endswith(".git"):
+        repo = repo[: -len(".git")]
+    if not owner or not repo:
+        return None
+    return owner, repo
+
+
+def _parse_origin(url: str) -> _OriginInfo | None:
+    """Parse a git ``origin`` URL into its ``(host, owner, name)`` identity.
+
+    Reuses ``_extract_hostname`` (consistent with ``_is_github_url``) for the
+    host and ``_parse_origin_owner_repo`` for the path. Returns ``None`` if
+    either the host or the ``owner/repo`` can't be parsed.
+    """
+    host = _extract_hostname(url)
+    if not host:
+        return None
+    owner_repo = _parse_origin_owner_repo(url)
+    if owner_repo is None:
+        return None
+    owner, name = owner_repo
+    return _OriginInfo(host=host, owner=owner, name=name)
+
+
 # ---------------------------------------------------------------------------
 # Per-workspace poll state
 # ---------------------------------------------------------------------------

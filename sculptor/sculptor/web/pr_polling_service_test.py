@@ -5,6 +5,8 @@ from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+import pytest
+
 from sculptor.config.user_config import UserConfig
 from sculptor.primitives.ids import WorkspaceID
 from sculptor.web.data_types import StreamingUpdateSourceTypes
@@ -21,6 +23,8 @@ from sculptor.web.pr_polling_service import _RATE_LIMIT_COOLDOWN_SECONDS
 from sculptor.web.pr_polling_service import _TERMINAL_STATE_MULTIPLIER
 from sculptor.web.pr_polling_service import _WorkspacePollState
 from sculptor.web.pr_polling_service import _compute_poll_delay
+from sculptor.web.pr_polling_service import _parse_origin
+from sculptor.web.pr_polling_service import _parse_origin_owner_repo
 from sculptor.web.streams import _notify_pr_polling_service
 
 # ---------------------------------------------------------------------------
@@ -649,3 +653,49 @@ def test_rate_limited_result_re_enqueues_after_cooldown() -> None:
     delay = rescheduled.scheduled_time - time.monotonic()
     # Re-enqueued at ~the remaining cooldown (60s), not the 30s base interval.
     assert _RATE_LIMIT_COOLDOWN_SECONDS - 2 <= delay <= _RATE_LIMIT_COOLDOWN_SECONDS
+
+
+# ---------------------------------------------------------------------------
+# origin URL -> (host, owner, name) parsing (Change-1 fan-out, Risk-5 GHE hosts).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "url, host, owner, name",
+    [
+        ("https://github.com/imbue-ai/sculptor.git", "github.com", "imbue-ai", "sculptor"),
+        ("git@github.com:imbue-ai/sculptor.git", "github.com", "imbue-ai", "sculptor"),
+        ("ssh://git@github.com/imbue-ai/sculptor.git", "github.com", "imbue-ai", "sculptor"),
+        ("https://github.com/imbue-ai/sculptor", "github.com", "imbue-ai", "sculptor"),
+        ("https://github.example.com/org/repo.git", "github.example.com", "org", "repo"),
+    ],
+)
+def test_parse_origin_valid_forms(url: str, host: str, owner: str, name: str) -> None:
+    info = _parse_origin(url)
+    assert info is not None
+    assert info.host == host
+    assert info.owner == owner
+    assert info.name == name
+    # name_with_owner is what the poller compares against repository.nameWithOwner.
+    assert info.name_with_owner == f"{owner}/{name}"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://github.com/onlyowner",
+        "git@github.com:onlyowner.git",
+        "https://github.com/",
+        "https://github.com/a/b/c",
+        "not a url",
+        "",
+    ],
+)
+def test_parse_origin_malformed_returns_none(url: str) -> None:
+    assert _parse_origin(url) is None
+
+
+def test_parse_origin_owner_repo_strips_dot_git() -> None:
+    # nameWithOwner from GitHub's API never carries .git; origin URLs usually do.
+    assert _parse_origin_owner_repo("https://github.com/imbue-ai/sculptor.git") == ("imbue-ai", "sculptor")
+    assert _parse_origin_owner_repo("git@github.com:imbue-ai/sculptor.git") == ("imbue-ai", "sculptor")
