@@ -61,7 +61,7 @@ The top of the sidebar contains links to perform the following actions:
 - Quickly open the Cmd+K window
 - Create a new workspace
 
-After the top links, we show workspaces grouped into collapsible repository sections. 
+After the top links, we show workspaces grouped into collapsible repository sections.
 
 For each repo
 - You can collapse the section
@@ -116,8 +116,8 @@ When the workspace sidebar is collapsed, the show-sidebar icon is present at the
 There is a keyboard shortcut to maximize and restore the active section.
 
 #### Section empty state
-A section (including an empty split sub-section) shows an empty state when it has no open panels. 
-Centered is an add panel button which opens a dropdown displaying panel options. 
+A section (including an empty split sub-section) shows an empty state when it has no open panels.
+Centered is an add panel button which opens a dropdown displaying panel options.
 There are also at most five quick actions below the add panel button that can be selected.
 By default, we always show a “New {recent} agent” action (the most recently used agent type, Claude by default) and a “New terminal” action.
 We reserve the last three slots for the most recently created panels that are not open (fewer are shown if there are not three).
@@ -131,7 +131,7 @@ A split is closed by an option that appears on the section empty state, after wh
 
 ### Panels
 Panels represent specific content and functionality that can be displayed inside a workspace section.
-Panels can either be single or multi instance. 
+Panels can either be single or multi instance.
 By default, all panels are single instance outside of the agent and terminal panels.
 
 Functionality:
@@ -145,8 +145,8 @@ Functionality:
 - Keyboard shortcuts can be configured to focus a single instance panel or the last active multi instance panel. All panel keyboard shortcuts (panel-specific actions and focus bindings) are configured on the keybindings settings page.
 
 #### Adding a panel
-Each section header renders a plus button which opens a dropdown. Panels added from a section’s dropdown are created in that section. 
-The dropdown has recent agent creation pinned to the top with its default keyboard binding (Cmd+Shift+T) visible. 
+Each section header renders a plus button which opens a dropdown. Panels added from a section’s dropdown are created in that section.
+The dropdown has recent agent creation pinned to the top with its default keyboard binding (Cmd+Shift+T) visible.
 The new-agent keyboard binding (and adding an agent via Cmd+K) always creates the agent in the center section — and in the center’s original sub-section when the center is split — regardless of which section is active.
 There is a sub-dropdown menu to create an agent of a different type.
 A new terminal option is directly beneath these two options.
