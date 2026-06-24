@@ -19,6 +19,7 @@ from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.add_panel_dropdown import PlaywrightAddPanelDropdownElement
+from sculptor.testing.elements.add_panel_dropdown import close_seeded_panel
 from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
 from sculptor.testing.elements.user_config import disable_pi_agent
 from sculptor.testing.elements.user_config import enable_pi_agent
@@ -37,12 +38,15 @@ def test_dropdown_shows_new_agent_terminal_and_panels(sculptor_instance_: Sculpt
     dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Add Dropdown WS")
+    # Files is seeded open in the left section by default, so close it first to return it
+    # to the single-instance re-add list.
+    close_seeded_panel(page, "files")
     dropdown.open()
 
     expect(dropdown.get_new_agent_item()).to_be_visible()
     expect(dropdown.get_agent_type_submenu_trigger()).to_be_visible()
     expect(dropdown.get_new_terminal_item()).to_be_visible()
-    # Files is not open by default, so it appears in the single-instance re-add list.
+    # Files (now closed) appears in the single-instance re-add list.
     expect(dropdown.get_panel_option("files")).to_be_visible()
 
 
@@ -147,7 +151,11 @@ def test_new_terminal_creates_terminal_panel(sculptor_instance_: SculptorInstanc
     dropdown.open()
     dropdown.get_new_terminal_item().click()
 
-    expect(center_tabs.get_panel_tab_by_name("Terminal 1")).to_have_count(1)
+    # The center had one tab (the agent); the new terminal joins it. Terminal numbering
+    # is workspace-global and the default layout already seeds a "Terminal 1" in the
+    # bottom section, so the center terminal is the next free label rather than "Terminal 1".
+    expect(center_tabs.get_panel_tabs()).to_have_count(2)
+    expect(center_tabs.get_panel_tab_by_name("Terminal")).to_have_count(1)
 
 
 @user_story("to not be offered a single-instance panel that is already open")
@@ -157,6 +165,9 @@ def test_open_single_instance_panel_drops_from_list(sculptor_instance_: Sculptor
     dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Single Instance WS")
+    # Files is seeded open in the left section by default; close it so it is offered in
+    # the center dropdown's re-add list, then re-opening it drops it from the list again.
+    close_seeded_panel(page, "files")
 
     dropdown.open()
     files_option = dropdown.get_panel_option("files")
@@ -172,8 +183,9 @@ def test_open_single_instance_panel_drops_from_list(sculptor_instance_: Sculptor
 def test_new_agent_from_left_lands_in_center(sculptor_instance_: SculptorInstance) -> None:
     """A new agent created from the LEFT section `+` still lands in center (PANEL-06).
 
-    Opens Files into the left section so the left header (and its `+`) renders, then
-    creates an agent from that left `+`; the new agent tab appears in center, not left.
+    Expands the left section so its header (and its `+`) renders — the default layout
+    already seeds Files there — then creates an agent from that left `+`; the new agent
+    tab appears in center, not left.
     """
     page = sculptor_instance_.page
     left_dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="left")
@@ -183,10 +195,8 @@ def test_new_agent_from_left_lands_in_center(sculptor_instance_: SculptorInstanc
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Center Targeting WS")
     expect(center_tabs.get_panel_tabs()).to_have_count(1)
 
-    # Bring the left section up so its header `+` renders, then open Files there.
+    # Bring the left section up so its header `+` renders; Files is seeded there already.
     PlaywrightWorkspaceSection(page, "left").expand_section()
-    left_dropdown.open()
-    left_dropdown.get_panel_option("files").click()
     expect(left_tabs.get_panel_tab("files")).to_be_visible()
 
     # Create an agent from the LEFT `+` — it must land in center (PANEL-06).

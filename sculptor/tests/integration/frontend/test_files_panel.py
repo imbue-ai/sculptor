@@ -619,10 +619,10 @@ def test_shared_sidebar_resizes_and_has_a_minimum_width(sculptor_instance_: Scul
     the list's measured width is read from its bounding box.
     """
     page = sculptor_instance_.page
-    _, files_panel = _open_files_panel_with(page, WRITE_FILES_PROMPT)
-
-    # Files is seeded into the narrow (~20%) left section; maximize that section so
+    # Open Files into the narrow (~20%) left section, then maximize that section so
     # the shared list has room to grow before the resize is measured.
+    _, files_panel = _open_files_panel_with(page, WRITE_FILES_PROMPT, sub_section="left")
+
     PlaywrightWorkspaceSection(page, "left").maximize()
 
     layout = files_panel.get_explorer_layout()

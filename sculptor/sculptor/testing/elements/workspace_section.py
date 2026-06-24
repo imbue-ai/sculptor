@@ -23,7 +23,7 @@ _SECTION_TOGGLE_TEST_IDS: dict[str, ElementIDs] = {
 }
 
 
-def _section_of(sub_section: str) -> str:
+def section_of(sub_section: str) -> str:
     """Return the section id ("left"/"center"/"right"/"bottom") for a sub-section.
 
     The primary half's sub-section id IS the section id; a split's secondary half
@@ -53,7 +53,7 @@ class PlaywrightWorkspaceSection:
 
     def get_section(self) -> Locator:
         """Get the section root container (keyed by section id, not sub-section)."""
-        return self._page.get_by_test_id(_SECTION_ROOT_TEST_IDS[_section_of(self._sub_section)])
+        return self._page.get_by_test_id(_SECTION_ROOT_TEST_IDS[section_of(self._sub_section)])
 
     def get_header(self) -> Locator:
         """Get this sub-section's header (tab strip + add + maximize)."""
@@ -106,7 +106,7 @@ class PlaywrightWorkspaceSection:
         divider between a split's halves is suffixed ``:secondary`` and is reached
         via the ``PlaywrightSectionSplit`` POM instead.
         """
-        return self._page.get_by_test_id(f"{ElementIDs.SECTION_RESIZE_HANDLE}-{_section_of(self._sub_section)}")
+        return self._page.get_by_test_id(f"{ElementIDs.SECTION_RESIZE_HANDLE}-{section_of(self._sub_section)}")
 
     def is_active(self) -> bool:
         """Whether this sub-section is the logical active section.
@@ -159,7 +159,7 @@ class PlaywrightWorkspaceSection:
         the center this returns a never-matching locator — callers can assert it has
         count 0 (SEC-08: center cannot collapse).
         """
-        toggle_id = _SECTION_TOGGLE_TEST_IDS.get(_section_of(self._sub_section))
+        toggle_id = _SECTION_TOGGLE_TEST_IDS.get(section_of(self._sub_section))
         if toggle_id is None:
             return self._page.get_by_test_id("CENTER_HAS_NO_SECTION_TOGGLE")
         return self._page.get_by_test_id(toggle_id)
@@ -167,15 +167,22 @@ class PlaywrightWorkspaceSection:
     def expand_section(self) -> None:
         """Ensure this section is expanded so its header `+` / tabs render.
 
-        A collapsed section renders no header (and therefore no `+`); the header
-        toggle is a toggle, so this clicks it only when the section header is not
-        already showing. Idempotent.
+        A collapsed section renders no header (and therefore no `+`). Center is always
+        expanded and has no toggle, so this just waits for its header. For the non-center
+        sections the expand/collapse toggle lives in the workspace header, which only
+        mounts once the workspace has loaded; wait for the toggle to be visible BEFORE
+        reading the section's (non-auto-waiting) ``is_visible`` state, so a check that
+        races a still-loading shell doesn't misfire the toggle and collapse a section
+        that was already (about to be) expanded. Idempotent.
         """
         header = self.get_header()
-        if header.is_visible():
+        if section_of(self._sub_section) == "center":
+            expect(header).to_be_visible()
             return
         toggle = self.get_section_toggle()
         expect(toggle).to_be_visible()
+        if header.is_visible():
+            return
         toggle.click()
         expect(header).to_be_visible()
 
@@ -186,7 +193,7 @@ class PlaywrightWorkspaceSection:
         header toggle is a toggle, so this clicks it only when the section header
         is currently showing. Idempotent.
         """
-        if _section_of(self._sub_section) == "center":
+        if section_of(self._sub_section) == "center":
             return
         header = self.get_header()
         if header.is_hidden():

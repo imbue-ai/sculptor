@@ -12,8 +12,8 @@ from sculptor.testing.elements.task_starter import FAKE_CLAUDE_2_MODEL_NAME
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
 from sculptor.testing.pages.add_workspace_page import PlaywrightAddWorkspacePage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
+from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
 from sculptor.testing.playwright_utils import navigate_to_workspace
-from sculptor.testing.playwright_utils import new_workspace
 from sculptor.testing.playwright_utils import soft_reload_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -46,7 +46,11 @@ def test_prompt_drafts_persist_on_multiple_tasks_and_home_page(sculptor_instance
     # Type a follow-up message draft in chat input (don't send it)
     chat_panel.get_chat_input().fill(follow_up_text)
 
-    new_workspace(page)
+    # The sidebar's new-workspace button direct-creates from the last settings
+    # (WSC-01); use the add-workspace surface opener, which deterministically
+    # brings up the create form (and its create button) for this navigate-away
+    # step. The point of this step is to leave workspace 1 and come back to it.
+    navigate_to_add_workspace_page(page)
     add_workspace_page = PlaywrightAddWorkspacePage(page=page)
     expect(add_workspace_page.get_submit_button()).to_be_visible()
 

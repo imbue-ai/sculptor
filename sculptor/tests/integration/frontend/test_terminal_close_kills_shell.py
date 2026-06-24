@@ -28,7 +28,7 @@ import time
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import expect
 
-from sculptor.testing.elements.terminal import get_add_terminal_button
+from sculptor.testing.elements.terminal import add_terminal
 from sculptor.testing.elements.terminal import get_tab_close_button
 from sculptor.testing.elements.terminal import get_terminal_tabs
 from sculptor.testing.elements.terminal import get_xterm_buffer_text
@@ -133,8 +133,7 @@ def test_close_terminal_tab_kills_shell_process(sculptor_instance_: SculptorInst
     #    handleCloseTerminal doesn't fire (which would mask the close).
     # 2. After the close, we can run a command in the surviving second
     #    tab to prove the panel is still healthy.
-    add_button = get_add_terminal_button(page)
-    add_button.click()
+    add_terminal(page)
     terminal_tabs = get_terminal_tabs(page)
     expect(terminal_tabs).to_have_count(2)
 

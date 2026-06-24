@@ -15,7 +15,7 @@ from playwright.sync_api import expect
 
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
-from sculptor.testing.elements.terminal import get_add_terminal_button
+from sculptor.testing.elements.terminal import add_terminal
 from sculptor.testing.elements.terminal import get_terminal_tabs
 from sculptor.testing.elements.terminal import open_terminal_and_wait
 from sculptor.testing.elements.terminal import run_command_in_active_terminal
@@ -207,7 +207,7 @@ def test_terminal_picks_up_newly_added_env_var(sculptor_instance_: SculptorInsta
 
     global_env_file.write_text("SCTEST_LATE_TERMINAL_VAR=terminal_loaded_after\n")
 
-    get_add_terminal_button(page).click()
+    add_terminal(page)
     expect(get_terminal_tabs(page)).to_have_count(2)
     expect(page.get_by_label("Terminal input")).to_have_count(2)
 

@@ -55,6 +55,7 @@ from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.commits_panel import PlaywrightCommitsPanelElement
 from sculptor.testing.elements.commits_panel import get_commits_panel_in
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -510,13 +511,17 @@ def _reactivate_commits_panel(task_page: PlaywrightTaskPage, page: Page) -> Play
     """Re-activate the Commits tab so the panel remounts after switching to chat.
 
     A single-instance panel that is already open is dropped from the add-panel
-    dropdown's re-add list, so re-opening it that way would fail. Clicking its
-    panel tab makes the already-open Commits panel the active center panel again.
+    dropdown's re-add list, so re-opening it that way would fail. The Commits panel
+    is seeded into the (collapsed-by-default) LEFT section; ``_open_commits_panel_with``
+    already expanded it, so this re-expands it (idempotent) and clicks its LEFT-section
+    panel tab to make the already-open Commits panel active again.
     """
-    commits_tab = task_page.get_agent_tab_bar().get_panel_tab("commits")
+    left_section = PlaywrightWorkspaceSection(page, "left")
+    left_section.expand_section()
+    commits_tab = left_section.get_panel_tab("commits")
     expect(commits_tab).to_be_visible()
     commits_tab.click()
-    section_root = task_page.get_agent_tab_bar().get_section()
+    section_root = left_section.get_section()
     expect(section_root).to_be_visible()
     return get_commits_panel_in(section_root, page)
 

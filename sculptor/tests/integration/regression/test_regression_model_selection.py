@@ -56,11 +56,9 @@ def test_new_agent_inherits_model_from_existing_agent(
     model_selector = chat_panel.get_model_selector()
     expect(model_selector).to_have_text(FAKE_CLAUDE_2_MODEL_NAME)
 
-    # Add a new agent via the "+" button
+    # Add a new agent via the section "+" add-panel dropdown
     agent_tab_bar = task_page.get_agent_tab_bar()
-    add_agent_button = agent_tab_bar.get_add_agent_button()
-    expect(add_agent_button).to_be_visible()
-    add_agent_button.click()
+    agent_tab_bar.add_agent()
 
     # Wait for the second agent tab to appear
     agent_tabs = agent_tab_bar.get_agent_tabs()

@@ -11,11 +11,10 @@ Tests cover:
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.base import type_with_delay
-from sculptor.testing.elements.terminal import get_add_terminal_button
-from sculptor.testing.elements.terminal import get_terminal_panel_icon
-from sculptor.testing.elements.terminal import get_terminal_starting_text
+from sculptor.testing.elements.terminal import add_terminal
+from sculptor.testing.elements.terminal import confirm_close_terminal
+from sculptor.testing.elements.terminal import get_tab_close_button
 from sculptor.testing.elements.terminal import get_terminal_tabs
 from sculptor.testing.elements.terminal import get_terminal_textarea
 from sculptor.testing.elements.terminal import get_xterm_active_line
@@ -24,6 +23,7 @@ from sculptor.testing.elements.terminal import get_xterm_cursor_row
 from sculptor.testing.elements.terminal import open_terminal_and_wait
 from sculptor.testing.elements.terminal import wait_for_xterm_buffer_nonempty
 from sculptor.testing.elements.terminal import wait_for_xterm_substring
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -31,39 +31,32 @@ from sculptor.testing.user_stories import user_story
 
 @user_story("to use the terminal without duplicated input/output")
 def test_terminal_panel_creates_single_websocket_connection(sculptor_instance_: SculptorInstance) -> None:
-    """Opening the terminal panel should create exactly one WebSocket connection.
+    """Revealing the terminal panel should create exactly one WebSocket connection.
+
+    The default layout seeds one terminal into the COLLAPSED bottom section, whose
+    content (and WebSocket) is not mounted until the section is expanded. So this
+    registers the WebSocket counter while the bottom section is still collapsed, then
+    expands it and asserts exactly one terminal WebSocket opened.
 
     Steps:
-    1. Create a workspace and wait for it to be ready (terminal available)
+    1. Create a workspace and wait for it to be ready (terminal seeded, collapsed)
     2. Set up a WebSocket connection counter for terminal endpoints
-    3. Open the terminal panel via its sidebar icon
-    4. Wait for connections to stabilize
+    3. Expand the bottom section to mount the seeded terminal panel
+    4. Wait for the shell prompt to render
     5. Assert exactly one WebSocket connection was made to the terminal endpoint
     """
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(sculptor_page=page, prompt="Hello")
 
-    # Wait for the workspace page to load — the terminal sidebar icon only
-    # exists on the workspace page (not the add workspace page).
-    terminal_icon = get_terminal_panel_icon(page)
-    expect(terminal_icon).to_be_visible()
-
-    # If the terminal panel is already open (from a previous test's localStorage
-    # state), close it first so we can track WebSocket connections from scratch.
-    add_button = get_add_terminal_button(page)
-    starting_text = get_terminal_starting_text(page)
-    panel_content = add_button.or_(starting_text)
-
-    if panel_content.is_visible():
-        terminal_icon.click()
-        expect(panel_content).not_to_be_visible()
-        # Allow time for the terminal component to unmount and close its WebSocket.
-        page.wait_for_timeout(1000)
+    # The bottom section starts collapsed, so the seeded terminal panel is not
+    # mounted yet — its toggle is the signal that the workspace page has loaded.
+    bottom_section = PlaywrightWorkspaceSection(page, "bottom")
+    expect(bottom_section.get_section_toggle()).to_be_visible()
 
     # Track WebSocket connections to the terminal endpoint.
-    # Register AFTER navigation but BEFORE opening the terminal panel so we
-    # capture the connections that fire when the panel mounts.
+    # Register BEFORE expanding the bottom section so we capture the connections
+    # that fire when the terminal panel mounts.
     terminal_ws_connections: list[str] = []
 
     def on_websocket(ws):
@@ -72,15 +65,9 @@ def test_terminal_panel_creates_single_websocket_connection(sculptor_instance_: 
 
     page.on("websocket", on_websocket)
 
-    # Open the terminal panel by clicking its sidebar icon.
-    terminal_icon.click()
-
-    # Wait for the add-terminal button to appear — this confirms the panel is
-    # mounted and the tab bar is rendered.  First confirm the panel zone
-    # opened (shows either "Starting terminal..." or the tab bar), then wait
-    # for the add button specifically (terminal component mounted).
-    expect(panel_content).to_be_visible(timeout=10_000)
-    expect(add_button).to_be_visible(timeout=60_000)
+    # Expand the bottom section to mount the seeded terminal panel and wait for its
+    # xterm to be ready (this confirms the panel mounted and connected).
+    open_terminal_and_wait(page)
 
     # Wait for the shell prompt to render in the (single) connection's buffer.
     # A rendered prompt means the WebSocket connected and the mount/connect cycle
@@ -225,9 +212,8 @@ def test_add_terminal_tab_creates_new_session(sculptor_instance_: SculptorInstan
 
     page.on("websocket", on_websocket)
 
-    # Click the '+' button to add a second terminal tab.
-    add_button = get_add_terminal_button(page)
-    add_button.click()
+    # Add a second terminal tab via the section `+` dropdown's "New terminal".
+    add_terminal(page)
 
     # Verify two tabs exist, with the second one now active.
     expect(terminal_tabs).to_have_count(2)
@@ -260,17 +246,16 @@ def test_close_terminal_tab_switches_to_neighbor(sculptor_instance_: SculptorIns
     open_terminal_and_wait(page)
 
     # Add a second terminal tab.
-    add_button = get_add_terminal_button(page)
-    add_button.click()
+    add_terminal(page)
 
     terminal_tabs = get_terminal_tabs(page)
     expect(terminal_tabs).to_have_count(2)
 
-    # Close the active second tab by clicking its close button.
+    # Close the active second tab by clicking its close button and confirming.
     second_tab = terminal_tabs.nth(1)
     expect(second_tab).to_have_attribute("aria-selected", "true")
-    close_button = second_tab.get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON)
-    close_button.click()
+    get_tab_close_button(second_tab).click()
+    confirm_close_terminal(page)
 
     # Verify only the first tab remains and is active.
     expect(terminal_tabs).to_have_count(1)
@@ -299,23 +284,22 @@ def test_terminal_tab_reuses_lowest_available_number(sculptor_instance_: Sculpto
     expect(terminal_tabs.first).to_have_text("Terminal 1")
 
     # Add a second terminal tab.
-    add_button = get_add_terminal_button(page)
-    add_button.click()
+    add_terminal(page)
     expect(terminal_tabs).to_have_count(2)
     expect(terminal_tabs.nth(1)).to_have_text("Terminal 2")
 
     # Close the first tab ("Terminal 1").
     first_tab = terminal_tabs.first
     first_tab.click()
-    close_button = first_tab.get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON)
-    close_button.click()
+    get_tab_close_button(first_tab).click()
+    confirm_close_terminal(page)
 
     # Only "Terminal 2" remains.
     expect(terminal_tabs).to_have_count(1)
     expect(terminal_tabs.first).to_have_text("Terminal 2")
 
     # Add another terminal — should reuse number 1, not increment to 3.
-    add_button.click()
+    add_terminal(page)
     expect(terminal_tabs).to_have_count(2)
     expect(terminal_tabs.nth(1)).to_have_text("Terminal 1")
 

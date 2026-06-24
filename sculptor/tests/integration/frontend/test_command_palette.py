@@ -1,7 +1,7 @@
 """Integration tests for the Command Palette (Cmd+K).
 
 These tests cover the high-level UX of the rebuilt palette:
-- opening via topbar button + keyboard shortcut
+- opening via the sidebar Cmd+K link + keyboard shortcut
 - closing via Escape
 - typing to filter the list
 - executing a navigation command and confirming the route changes
@@ -11,7 +11,6 @@ These tests cover the high-level UX of the rebuilt palette:
 import pytest
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.base import dismiss_with_escape
 from sculptor.testing.elements.base import wait_for_one_frame
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
@@ -165,12 +164,13 @@ def test_command_palette_keyboard_suppressed_when_overlay_open(sculptor_instance
 
 
 @pytest.mark.release
-@user_story("to see the command palette open button in the top bar")
-def test_command_palette_open_button_visible_in_topbar(sculptor_instance_: SculptorInstance) -> None:
+@user_story("to see the command palette open affordance in the sidebar")
+def test_command_palette_open_button_visible_in_sidebar(sculptor_instance_: SculptorInstance) -> None:
     # Regression lock: the legacy SearchModal was removed in favour of the
-    # Command Palette. The TopBar must continue to render the open button.
+    # Command Palette. The open affordance moved off the old top bar onto the
+    # sidebar Cmd+K link (SIDE-02), which must continue to render.
     layout = _layout(sculptor_instance_)
-    expect(layout.get_topbar().get_command_palette_button()).to_be_visible()
+    expect(layout.get_workspace_sidebar().get_cmdk_link()).to_be_visible()
 
 
 @pytest.mark.release
@@ -329,7 +329,9 @@ def test_command_palette_creates_new_agent(sculptor_instance_: SculptorInstance)
     page = sculptor_instance_.page
     task_page = start_task_and_wait_for_ready(page, prompt="", workspace_name="Cmd+K New Agent")
 
-    agent_tabs = page.get_by_test_id(ElementIDs.AGENT_TAB)
+    # Agents render as panel tabs in the center section (PANEL_TAB-agent:<id>);
+    # the agent-tab-bar shim counts them.
+    agent_tabs = task_page.get_agent_tab_bar().get_agent_tabs()
     expect(agent_tabs).to_have_count(1)
 
     palette = task_page.open_command_palette()

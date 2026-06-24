@@ -446,11 +446,11 @@ def test_btw_popup_dismisses_on_agent_tab_switch(sculptor_instance_: SculptorIns
     expect(popup).to_be_visible(timeout=60_000)
     expect(popup.get_answer()).to_contain_text("agent A answer", timeout=60_000)
 
-    # Add a second agent in the same workspace and switch to it.
-    add_agent_button = page.get_by_test_id(ElementIDs.ADD_AGENT_BUTTON)
-    add_agent_button.click()
-    agent_tabs = page.get_by_test_id(ElementIDs.AGENT_TAB)
-    expect(agent_tabs).to_have_count(2, timeout=30_000)
+    # Add a second agent in the same workspace (the add-panel dropdown creates it
+    # in the center section and navigates to it).
+    agent_tab_bar = task_page.get_agent_tab_bar()
+    agent_tab_bar.add_agent()
+    expect(agent_tab_bar.get_agent_tabs()).to_have_count(2, timeout=30_000)
 
     # The popup must disappear: it belonged to agent A and we're now on agent B.
     expect(popup).not_to_be_visible()

@@ -43,6 +43,8 @@ transactions) cannot be reproduced at this layer; those are pinned by backend
 unit tests in ``sculptor/sculptor/tasks/handlers/run_agent/v1_test.py``.
 """
 
+import re
+
 from playwright.sync_api import Locator
 from playwright.sync_api import Page
 from playwright.sync_api import expect
@@ -57,9 +59,14 @@ from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
 from sculptor.testing.user_stories import user_story
-from sculptor.web.derived import TaskStatus
 
 _SECONDS_MS = 1000
+
+# An idle (READY) agent panel tab settles to a read/unread status dot once the
+# user is viewing the workspace — the section shell exposes lifecycle as
+# ``data-dot-status`` (the getAgentDotStatus vocabulary), not the raw TaskStatus.
+# A stuck mid-turn task would instead keep the dot at "running".
+_IDLE_DOT_STATUS = re.compile(r"^(read|unread)$")
 
 # Visibility gate for the post-restart page — generous because the Phase-2
 # backend is restoring a previously-running task and CI can be slow.
@@ -142,8 +149,9 @@ def _assert_recovered_transcript(page: Page, chat_panel: PlaywrightChatPanelElem
     # RequestStopped after a graceful shutdown — then the queued follow-up is
     # dispatched and completes, and only then does the task settle into READY.
     # With the original bug the follow-up was never dispatched and the task
-    # stayed RUNNING with a stuck Thinking pill, so this expect times out.
-    expect(_agent_tab(page)).to_have_attribute("data-status", TaskStatus.READY, timeout=_SETTLE_TIMEOUT_MS)
+    # stayed RUNNING with a stuck Thinking pill (a "running" dot), so this
+    # expect times out.
+    expect(_agent_tab(page)).to_have_attribute("data-dot-status", _IDLE_DOT_STATUS, timeout=_SETTLE_TIMEOUT_MS)
 
     # The follow-up was dequeued (not stuck in the queued bar forever)...
     expect(chat_panel.get_queued_message_bar()).to_have_count(0)

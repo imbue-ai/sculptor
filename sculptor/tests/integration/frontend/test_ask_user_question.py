@@ -1512,11 +1512,12 @@ def test_ask_user_question_draft_does_not_leak_across_agents(sculptor_instance_:
     chat_panel_1 = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel_1, expected_message_count=2)
 
-    # Add agent 2 and send it a single-question AUQ.
-    add_agent_button = page.get_by_test_id(ElementIDs.ADD_AGENT_BUTTON)
-    add_agent_button.click()
+    # Add agent 2 (the add-panel dropdown creates it in the center section and
+    # navigates to it) and send it a single-question AUQ.
+    agent_tab_bar = task_page.get_agent_tab_bar()
+    agent_tab_bar.add_agent()
 
-    agent_tabs = page.get_by_test_id(ElementIDs.AGENT_TAB)
+    agent_tabs = agent_tab_bar.get_agent_tabs()
     expect(agent_tabs).to_have_count(2)
 
     task_page_2 = PlaywrightTaskPage(page=page)

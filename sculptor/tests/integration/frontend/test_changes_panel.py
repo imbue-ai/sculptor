@@ -61,6 +61,7 @@ from sculptor.testing.elements.chat_panel import PlaywrightChatPanelElement
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.diff_viewer import PlaywrightDiffViewerElement
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -517,13 +518,17 @@ def _reactivate_changes_panel(task_page: PlaywrightTaskPage, page: Page) -> Play
     """Re-activate the Changes tab so the panel remounts after switching to chat.
 
     A single-instance panel that is already open is dropped from the add-panel
-    dropdown's re-add list, so re-opening it that way would fail. Clicking its
-    panel tab makes the already-open Changes panel the active center panel again.
+    dropdown's re-add list, so re-opening it that way would fail. The Changes panel
+    is seeded into the (collapsed-by-default) LEFT section; ``_open_changes_panel_with``
+    already expanded it, so this re-expands it (idempotent) and clicks its LEFT-section
+    panel tab to make the already-open Changes panel active again.
     """
-    changes_tab = task_page.get_agent_tab_bar().get_panel_tab("changes")
+    left_section = PlaywrightWorkspaceSection(page, "left")
+    left_section.expand_section()
+    changes_tab = left_section.get_panel_tab("changes")
     expect(changes_tab).to_be_visible()
     changes_tab.click()
-    section_root = task_page.get_agent_tab_bar().get_section()
+    section_root = left_section.get_section()
     expect(section_root).to_be_visible()
     return get_changes_panel_in(section_root, page)
 

@@ -63,10 +63,13 @@ def test_terminal_tab_double_click_rename(sculptor_instance_: SculptorInstance) 
     bottom_tabs = PlaywrightPanelTabElement(page, sub_section="bottom")
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Terminal Rename WS")
+    # Create a terminal in the bottom section and rename the one we just created (it is
+    # the active tab). Renaming the active tab keeps this independent of terminal label
+    # numbering — the default layout already seeds a terminal in the bottom section.
     create_terminal_panel(page, section="bottom")
 
-    terminal_tab = bottom_tabs.get_panel_tab_by_name("Terminal 1")
-    expect(terminal_tab).to_have_count(1)
+    terminal_tab = bottom_tabs.get_active_tab()
+    expect(terminal_tab).to_be_visible()
     terminal_tab.dblclick()
     expect(bottom_tabs.get_inline_rename_input()).to_be_visible()
 

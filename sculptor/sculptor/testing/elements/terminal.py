@@ -16,7 +16,14 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
+from sculptor.testing.elements.add_panel_dropdown import create_terminal_panel
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
+
+# The default workspace layout seeds terminal panels into the (collapsed) bottom
+# section (SEC-03). A terminal renders as a dynamic panel tab whose id is
+# ``terminal:<wsId>:<index>`` and whose xterm content carries no testid of its own,
+# so the terminal panel is reached through the bottom section's tab strip / xterm I/O.
+_TERMINAL_SECTION = "bottom"
 
 
 def get_terminal_textarea(page: Page) -> Locator:
@@ -239,9 +246,17 @@ def ensure_terminal_panel_open(page: Page) -> None:
     The default layout seeds one terminal (Terminal 1) in the collapsed bottom
     section; expanding it reveals the terminal panel content. ``expand_section``
     is idempotent (a no-op when the bottom section is already showing).
+
+    The terminal panel content (``TerminalPanelView``) is a bare xterm wrapper with
+    no testid of its own, so readiness is keyed off the seeded terminal's panel tab
+    plus its xterm "Terminal input" textarea becoming attached in the bottom section.
     """
-    PlaywrightWorkspaceSection(page, "bottom").expand_section()
-    expect(get_agent_terminal_panel(page)).to_be_visible(timeout=60_000)
+    section = PlaywrightWorkspaceSection(page, _TERMINAL_SECTION)
+    section.expand_section()
+    # At least one terminal panel tab must be present in the bottom section's strip.
+    expect(get_terminal_tabs(page).first).to_be_visible(timeout=60_000)
+    # The active terminal's xterm textarea (the mount signal) is rendered inside it.
+    expect(get_terminal_textarea(page).first).to_be_attached(timeout=60_000)
 
 
 def open_terminal_and_wait(page: Page) -> None:
@@ -284,23 +299,47 @@ def get_xterm_theme_background(page: Page) -> str:
 
 
 def get_terminal_tabs(page: Page) -> Locator:
-    return page.get_by_test_id(ElementIDs.TERMINAL_TAB)
+    """Every terminal panel tab in the bottom section's header.
+
+    Terminals render as dynamic panel tabs whose id is ``terminal:<wsId>:<index>``
+    (``PANEL_TAB-terminal:...``); they are matched by a ``data-testid`` prefix
+    selector scoped under the bottom section's header. The CSS selector stays inside
+    the POM to honour the integration-test css-locator ratchet.
+    """
+    header = PlaywrightWorkspaceSection(page, _TERMINAL_SECTION).get_header()
+    return header.locator(f'[data-testid^="{ElementIDs.PANEL_TAB}-terminal:"]')
 
 
-def get_add_terminal_button(page: Page) -> Locator:
-    return page.get_by_test_id(ElementIDs.ADD_TERMINAL_BUTTON)
+def add_terminal(page: Page, section: str = _TERMINAL_SECTION) -> None:
+    """Create a new terminal panel in ``section`` via the section `+` add-panel dropdown.
 
-
-def get_terminal_panel_icon(page: Page) -> Locator:
-    return page.get_by_test_id(ElementIDs.PANEL_ICON_TERMINAL)
-
-
-def get_terminal_starting_text(page: Page) -> Locator:
-    return page.get_by_test_id(ElementIDs.TERMINAL_STARTING_TEXT)
+    Replaces the old single "+" add-terminal button: in the section shell a terminal
+    is created from the section header `+` dropdown's "New terminal" item (the section
+    is expanded first when collapsed). Delegates to the shared ``create_terminal_panel``.
+    """
+    create_terminal_panel(page, section)
 
 
 def get_tab_close_button(tab: Locator) -> Locator:
-    return tab.get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON)
+    """A terminal panel tab's always-visible close (X) button.
+
+    The close button is rendered inside the tab body with id
+    ``PANEL_TAB_CLOSE-<panelId>``; since the panel id is dynamic it is matched by a
+    ``data-testid`` prefix selector scoped to the given tab locator. Closing a
+    terminal tab opens the close-confirmation dialog (use ``confirm_close_terminal``).
+    """
+    return tab.locator(f'[data-testid^="{ElementIDs.PANEL_TAB_CLOSE}-"]')
+
+
+def confirm_close_terminal(page: Page) -> None:
+    """Confirm the terminal close-confirmation dialog (TERM-02).
+
+    Closing a terminal tab opens a "Close terminal?" confirmation; clicking its
+    confirm button kills the backend shell and drops the tab.
+    """
+    confirm_button = page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_CONFIRM)
+    expect(confirm_button).to_be_visible()
+    confirm_button.click()
 
 
 def get_tab_context_menu_close_others(page: Page) -> Locator:
@@ -313,10 +352,6 @@ def get_tab_context_menu_rename(page: Page) -> Locator:
 
 def get_inline_rename_input(page: Page) -> Locator:
     return page.get_by_test_id(ElementIDs.INLINE_RENAME_INPUT)
-
-
-def get_terminal_heading(page: Page) -> Locator:
-    return page.get_by_test_id(ElementIDs.TERMINAL_HEADING)
 
 
 def get_xterm_theme_foreground(page: Page) -> str:

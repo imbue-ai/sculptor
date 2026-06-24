@@ -4,6 +4,7 @@ from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
+from sculptor.testing.elements.workspace_section import section_of
 
 
 class PlaywrightAddPanelDropdownElement:
@@ -128,48 +129,78 @@ class PlaywrightAddPanelDropdownElement:
 
 # Panels the default workspace layout seeds OPEN on a workspace's first visit
 # (SEC-02): Files/Changes/Commits live in the (collapsed) left section, Files active.
-# Being already open, they are single-instance and no longer offered by the add-panel
-# dropdown, so the helper REVEALS them (expands their section + activates their tab)
-# rather than trying to add them. Panels NOT seeded (actions/skills/notes/browser/
-# review-all) still open through the dropdown.
+# A single-instance panel can only live in ONE section at a time, and the add-panel
+# dropdown only offers panels not already open anywhere, so to land a seeded panel in
+# a DIFFERENT section the helper first closes it from its seeded section (which a
+# single-instance close does silently, no confirmation) so the dropdown offers it
+# again. Panels NOT seeded (actions/skills/notes/browser/review-all) start closed and
+# always open straight through the dropdown.
 _DEFAULT_SEEDED_SECTION: dict[str, str] = {"files": "left", "changes": "left", "commits": "left"}
 
 
 def open_panel(page: Page, panel_id: str, sub_section: str = "center") -> Locator:
-    """Bring a single-instance panel on screen and return its section root.
+    """Bring a single-instance panel into ``sub_section`` and return its section root.
 
-    For panels the default layout seeds open (Files/Changes/Commits — SEC-02), this
-    REVEALS the panel in its seeded section (expands it + activates its tab) and
-    returns THAT section's root, ignoring ``sub_section`` (the panel already lives in
-    the left section and cannot be opened a second time). For every other panel it
-    opens it via the section `+` add-panel dropdown into ``sub_section`` the way a user
-    does. Either way it returns the owning section's root locator so callers can
-    construct the panel's POM scoped to it (the Files / Changes / Commits list and
-    viewer are siblings under the section).
+    Idempotent and section-honouring: if the panel already lives in ``sub_section`` it is
+    just re-activated; if it lives in another section (e.g. the default layout seeds
+    Files/Changes/Commits in the left section — SEC-02) it is closed there first so the
+    add-panel dropdown offers it again, then opened into ``sub_section`` via the section
+    `+` the way a user does. Returns the requested section's root locator so callers can
+    construct the panel's POM scoped to it (the Files / Changes / Commits list and viewer
+    are siblings under the section).
     """
-    seeded_section = _DEFAULT_SEEDED_SECTION.get(panel_id)
-    if seeded_section is not None:
-        section = PlaywrightWorkspaceSection(page, seeded_section)
-        section.expand_section()
-        tab = section.get_panel_tab(panel_id)
-        expect(tab).to_be_visible()
-        tab.click()
+    section = PlaywrightWorkspaceSection(page, sub_section)
+    # Non-center sections (right/bottom) start collapsed, so their PanelSection — and
+    # therefore the header `+` / panel tabs — aren't mounted yet. Expand first
+    # (idempotent; a no-op for the always-expanded center).
+    section.expand_section()
+
+    # Already open in the requested section: just activate its tab (idempotent re-open).
+    target_tab = section.get_panel_tab(panel_id)
+    if target_tab.count() > 0:
+        target_tab.click()
         section_root = section.get_section()
         expect(section_root).to_be_visible()
         return section_root
 
-    # Non-center sections (right/bottom) start collapsed, so their PanelSection —
-    # and therefore the header `+` that triggers the dropdown — isn't mounted yet.
-    # Expand first (idempotent; a no-op for the always-expanded center) so the `+`
-    # is present, mirroring the seeded path above.
-    section = PlaywrightWorkspaceSection(page, sub_section)
-    section.expand_section()
+    # Open in a DIFFERENT section than where it is seeded (a seeded panel in its home
+    # section): a single-instance panel can't be duplicated and the dropdown won't offer
+    # it while it is open, so close it from its seeded section first.
+    current_section = _DEFAULT_SEEDED_SECTION.get(panel_id)
+    if current_section is not None and current_section != section_of(sub_section):
+        close_seeded_panel(page, panel_id)
+
     dropdown = PlaywrightAddPanelDropdownElement(page, sub_section)
     dropdown.open()
     dropdown.select_panel(panel_id)
+    expect(section.get_panel_tab(panel_id)).to_be_visible()
     section_root = section.get_section()
     expect(section_root).to_be_visible()
     return section_root
+
+
+def close_seeded_panel(page: Page, panel_id: str) -> None:
+    """Close a default-seeded single-instance panel from its seeded section.
+
+    The default layout seeds Files/Changes/Commits OPEN in the (collapsed) left
+    section (SEC-02), so they are not offered by the add-panel dropdown until closed.
+    Expands the seeded section to render the tab's close button (page-wide by panel id)
+    and clicks it; a single-instance close removes the panel silently (no confirmation),
+    which both returns it to the dropdown's re-add list and records it as recently-closed
+    for the empty-state quick actions. Idempotent: a no-op if the panel is not open.
+    """
+    seeded_section = _DEFAULT_SEEDED_SECTION.get(panel_id)
+    if seeded_section is None:
+        return
+    origin = PlaywrightWorkspaceSection(page, seeded_section)
+    origin.expand_section()
+    origin_tab = origin.get_panel_tab(panel_id)
+    if origin_tab.count() == 0:
+        return
+    close_button = page.get_by_test_id(f"{ElementIDs.PANEL_TAB_CLOSE}-{panel_id}")
+    expect(close_button).to_be_visible()
+    close_button.click()
+    expect(origin_tab).to_have_count(0)
 
 
 def create_agent_panel(page: Page, section: str = "center", agent_type: str | None = None) -> None:

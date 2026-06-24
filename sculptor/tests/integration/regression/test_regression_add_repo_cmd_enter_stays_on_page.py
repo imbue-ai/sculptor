@@ -60,8 +60,13 @@ def test_add_repo_cmd_enter_stays_on_add_workspace_page(
     path_input.press(f"{get_playwright_modifier_key()}+Enter")
     expect(add_repo_dialog).to_be_hidden(timeout=30_000)
 
-    # Cmd+Enter must only add the repo: we stay on the Add Workspace page with
-    # the new repo selected and no workspace created.
+    # Cmd+Enter must only add the repo: we stay on the Add Workspace page and no
+    # workspace was created (no chat panel opened).
     expect(add_ws_page.get_submit_button()).to_be_enabled(timeout=30_000)
-    expect(add_ws_page.get_project_selector()).to_contain_text(target_repo_name)
     expect(add_ws_page.get_chat_panel()).not_to_be_visible()
+
+    # The repo really was added — it now appears as an option in the selector.
+    # (Adding a repo via the dialog does not auto-select it in the modal, so we
+    # confirm the add by opening the selector rather than reading its label.)
+    add_ws_page.get_project_selector().click()
+    expect(add_ws_page.get_project_options().filter(has_text=target_repo_name)).to_be_visible()

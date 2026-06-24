@@ -64,6 +64,24 @@ def expect_app_not_onboarding(page: Page, app_element: Locator, *, timeout: int 
         )
 
 
+def _expect_home_landed(page: Page) -> None:
+    """Wait for the Home destination to render after navigating to ``/home``.
+
+    The ``/home`` route resolves to one of two pages depending on the workspace
+    list. With workspaces it is the Home list page, which shows workspace rows
+    (or, in the search-empty case, the ``ADD_WORKSPACE_EMPTY_STATE`` heading).
+    With NO workspaces the app gate swaps in the empty-first-run page instead —
+    it renders neither of those, just the inline new-workspace form keyed by
+    ``EMPTY_FIRST_RUN_PAGE``. All three are valid "we landed on Home" signals;
+    waiting on only the first two times out whenever the list is empty (e.g.
+    right after pre-test cleanup deletes every workspace).
+    """
+    workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
+    empty_state = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_EMPTY_STATE)
+    empty_first_run = page.get_by_test_id(ElementIDs.EMPTY_FIRST_RUN_PAGE)
+    expect(workspace_rows.first.or_(empty_state).or_(empty_first_run)).to_be_visible(timeout=10000)
+
+
 def navigate_to_home_page(page: Page) -> None:
     """Navigate to the Home page (/home).
 
@@ -74,9 +92,7 @@ def navigate_to_home_page(page: Page) -> None:
     sidebar_home_link = page.get_by_test_id(ElementIDs.SIDEBAR_HOME_LINK)
     if sidebar_home_link.is_visible():
         sidebar_home_link.click()
-        workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
-        empty_state = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_EMPTY_STATE)
-        expect(workspace_rows.first.or_(empty_state)).to_be_visible(timeout=10000)
+        _expect_home_landed(page)
         return
 
     # Sidebar not present — navigate via URL. Append the hash directly to
@@ -85,9 +101,7 @@ def navigate_to_home_page(page: Page) -> None:
     # document asset resolution under the sculptor://app origin.
     base_url = page.url.split("#")[0].rstrip("/")
     page.goto(f"{base_url}#/home")
-    workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
-    empty_state = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_EMPTY_STATE)
-    expect(workspace_rows.first.or_(empty_state)).to_be_visible(timeout=10000)
+    _expect_home_landed(page)
 
 
 def navigate_to_workspace(page: Page, name_or_index: str | int = 0) -> None:
@@ -101,6 +115,16 @@ def navigate_to_workspace(page: Page, name_or_index: str | int = 0) -> None:
     The sidebar renders on the workspace route's shell, so callers must already
     be on a workspace (or land there via a prior create/navigate).
     """
+    # The new-workspace modal renders a dimmed dialog overlay that covers the
+    # whole page, so a sidebar row beneath it is not clickable (Playwright's
+    # actionability check fails on "stable"). A common caller sequence is
+    # ``navigate_to_add_workspace_page`` (which opens that modal) then
+    # ``navigate_to_workspace`` to return — so dismiss the modal first.
+    dialog = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG)
+    if dialog.count() > 0:
+        page.keyboard.press("Escape")
+        expect(dialog).to_have_count(0)
+
     rows = page.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW)
     if isinstance(name_or_index, int):
         row = rows.nth(name_or_index)
@@ -200,23 +224,41 @@ def navigate_to_add_workspace_page(page: Page) -> None:
     form or an already-open modal exposes ``NEW_WORKSPACE_CREATE_BUTTON``. Otherwise
     opens the new-workspace modal via the ``new_workspace`` keybinding (Cmd/Meta+T)
     and waits for its create button to appear.
+
+    Callers may arrive parked on a surface that exposes NEITHER create button nor
+    chat panel — e.g. the Settings page (a prior step navigated there, or a config
+    flag helper's GET+PUT+``page.reload()`` reloaded the current ``/settings`` URL).
+    When neither surface is present we first route Home, which always settles on a
+    create surface: the empty-first-run inline form (no workspaces) or the Home
+    workspace list (from which the modal shortcut below opens the create button).
     """
     create_button = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_CREATE_BUTTON)
     chat_panel = page.get_by_test_id(ElementIDs.CHAT_PANEL)
+    settings_page = page.get_by_test_id(ElementIDs.SETTINGS_PAGE)
 
     # Settle on a known surface before deciding. Without this, a non-waiting
     # is_visible() check on a not-yet-rendered page can race: pressing the modal
     # shortcut on the empty-first-run page (where it is disabled, and where the
     # inline form is the create surface) would open the modal OVER the inline form
-    # and leave its overlay stuck. Wait until either a create surface is showing
-    # (inline form or already-open modal) or we are on a workspace (chat panel).
-    expect(create_button.or_(chat_panel)).to_be_visible(timeout=45_000)
+    # and leave its overlay stuck. Wait until a create surface is showing (inline
+    # form or already-open modal), we are on a workspace (chat panel), or we are
+    # parked on Settings — the one no-create-affordance surface callers reach
+    # (a prior step navigated there, or a config flag helper's GET+PUT+reload
+    # reloaded the current ``/settings`` URL, including its repo-config section).
+    expect(create_button.or_(chat_panel).or_(settings_page)).to_be_visible(timeout=45_000)
+    # Parked on Settings (no create affordance) — route Home, which settles on a
+    # definite Home surface: the empty-first-run inline form (no workspaces, which
+    # exposes the create button and returns below) or the Home workspace list (no
+    # create button — handled by the modal shortcut path below, like a workspace).
+    # navigate_to_home_page waits for Home to land, so no extra wait is needed here.
+    if settings_page.is_visible():
+        navigate_to_home_page(page)
     if create_button.is_visible():
         return
 
-    # On a workspace with no create surface yet — open the modal via the
-    # new_workspace keybinding (Cmd/Meta+T). The empty-first-run case already
-    # returned above via the visible inline create button.
+    # No create surface yet — a workspace (chat panel) or the Home list. Open the
+    # modal via the new_workspace keybinding (Cmd/Meta+T), which is mounted on every
+    # route. The empty-first-run case already returned above via the inline button.
     mod = get_playwright_modifier_key()
     page.keyboard.press(f"{mod}+t")
     page.keyboard.up(mod)
