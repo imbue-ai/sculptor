@@ -44,11 +44,7 @@ _RECENT_OUTPUT_LINES = 200
 
 
 class _TransientElectronStartError(RuntimeError):
-    """Electron exited before its ready message with a transient esbuild dev-bundle crash.
-
-    Tenacity retries on this so a fresh launch can win the startup race; other
-    startup failures raise a plain ``RuntimeError`` and are not retried.
-    """
+    """Electron exited before its ready message with a transient esbuild dev-bundle crash."""
 
 
 def _is_known_harmless_electron_error(line: str) -> bool:
@@ -207,12 +203,11 @@ class ElectronFrontend:
         frontend_dir: Path,
         file_lock: FileLock,
     ) -> deque[str]:
-        """Launch electron-forge once, returning its recent output once it is ready.
+        """Launch electron-forge once, returning its recent output when it is ready.
 
-        A transient esbuild dev-bundle crash raises ``_TransientElectronStartError``,
-        which the ``@retry`` above relaunches on (up to ``_MAX_ELECTRON_LAUNCH_ATTEMPTS``
-        times); any other startup failure raises a plain ``RuntimeError`` and is not
-        retried.
+        A transient esbuild dev-bundle crash raises ``_TransientElectronStartError``, which
+        the ``@retry`` decorator relaunches on; other startup failures raise a plain
+        ``RuntimeError`` and surface immediately.
         """
         is_launched, recent_output = self._start_electron_process(cmd, full_env, frontend_dir, file_lock)
         if is_launched:
