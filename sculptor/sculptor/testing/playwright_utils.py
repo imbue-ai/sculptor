@@ -347,6 +347,11 @@ def start_task_and_wait_for_ready(
     # that assert post-creation focus rely on this.
     if model_name is not None:
         select_model_by_name(chat_panel=chat_panel, model_name=model_name)
+        # The model selector is a Radix Select; closing it restores focus to its
+        # trigger asynchronously (FocusScope onUnmountAutoFocus -> trigger.focus()).
+        # Wait for that restore to land before focusing the chat input below, so the
+        # late refocus can't steal focus back from it.
+        expect(chat_panel.get_model_selector()).to_be_focused()
     chat_input = chat_panel.get_chat_input()
     chat_input.focus()
 
