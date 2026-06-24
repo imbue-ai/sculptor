@@ -102,6 +102,55 @@ def test_fake_pi_v_short_flag_reports_pinned_version() -> None:
     assert result.stdout == ""
 
 
+# The DB/web/httpx service modules that `fake_pi` must NOT drag in just to boot.
+# Importing any of them makes `python -m sculptor.testing.fake_pi` cold-start
+# slow (sqlalchemy + alembic + httpx + the whole web/database layer), and that
+# cost is what `pi --version` pays on the hot path PiAgent._check_pi_version
+# probes with a 5s timeout.
+_FAKE_PI_FORBIDDEN_HEAVY_IMPORTS = (
+    "sculptor.services.dependency_management_service",
+    "sculptor.web.data_types",
+    "sculptor.database.models",
+    "sqlalchemy",
+    "alembic",
+    "httpx",
+)
+
+
+def test_fake_pi_import_stays_off_heavy_service_layer() -> None:
+    """Importing FakePi must not pull in the DB/web/httpx service layer (SCU-1568).
+
+    Real pi answers ``--version`` instantly; FakePi has to boot Python and import
+    its module first. If that import drags in ``dependency_management_service``
+    (and through it sqlalchemy, alembic, httpx, and the web/database layer), the
+    cold import balloons under CI load and races the 5s timeout in
+    ``PiAgent._check_pi_version`` — surfacing a spurious
+    ``PiVersionMismatchError`` with detected version ``<unknown>`` and flaking
+    the fake-pi integration tests. The same slow boot delays the ``--mode rpc``
+    agent process, so a turn's response can blow the 30s Playwright wait too.
+
+    This pins the import surface so the heavy chain can never creep back onto
+    that hot path. It runs in a subprocess because the test process has already
+    imported the heavy modules transitively, so an in-process ``sys.modules``
+    check would always pass.
+    """
+    code = (
+        "import sys, json\n"
+        "import sculptor.testing.fake_pi  # noqa: F401\n"
+        f"forbidden = {_FAKE_PI_FORBIDDEN_HEAVY_IMPORTS!r}\n"
+        "print(json.dumps([m for m in forbidden if m in sys.modules]))\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        timeout=30.0,
+        check=True,
+    )
+    leaked = json.loads(result.stdout.strip().splitlines()[-1])
+    assert leaked == [], f"FakePi import pulled in heavy service modules on the hot path: {leaked}"
+
+
 def test_fake_pi_rpc_emit_text_directive_produces_full_happy_path_envelope() -> None:
     prompt = 'fake_pi:emit_text `{"text": "hello"}`'
     result = _run_fake_pi(
