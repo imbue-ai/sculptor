@@ -1,0 +1,368 @@
+@use "scrollbar" as *;
+
+.popover {
+  background: var(--gray-a1);
+  display: flex;
+  flex-direction: column;
+  max-height: 605px; // stylelint-disable-line sculptor/no-hardcoded-values -- popover max height
+  overflow: hidden;
+  width: 320px;
+}
+
+.agentList {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  position: relative;
+
+  @include thin-scrollbar;
+}
+
+.agentListFade {
+  background: linear-gradient(to top, var(--color-panel-solid), transparent);
+  bottom: 0;
+  height: 24px; // stylelint-disable-line sculptor/no-hardcoded-values -- scroll fade indicator
+  left: 0;
+  pointer-events: none;
+  position: sticky;
+  right: 0;
+}
+
+/* Alert banner — solid vibrant color with auto-contrast text */
+.banner {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  font-size: 11px; // stylelint-disable-line sculptor/no-hardcoded-values -- v11 mock spec
+  font-weight: var(--font-weight-semibold);
+  gap: 6px;
+  padding: 6px var(--space-3);
+
+  &:hover {
+    filter: brightness(0.95);
+  }
+
+  &[data-status="ERROR"] {
+    background: var(--color-danger);
+    color: var(--color-danger-contrast);
+  }
+
+  &[data-status="WAITING"] {
+    background: var(--color-warning);
+    color: var(--color-warning-contrast);
+  }
+
+  &[data-status="COMPLETED"] {
+    background: var(--color-success);
+    color: var(--color-success-contrast);
+  }
+}
+
+.header {
+  border-bottom: 1px solid var(--gray-a4);
+  cursor: pointer;
+  padding: 12px var(--space-3) 10px;
+}
+
+
+.nameRow {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.wsName {
+  font-size: 15px; // stylelint-disable-line sculptor/no-hardcoded-values -- v11 mock spec, between font-size-2 and font-size-3
+  font-weight: var(--font-weight-semibold);
+}
+
+.summary {
+  color: var(--gray-11);
+  font-size: var(--font-size-1);
+  line-height: 1.4;
+
+  &[data-status="COMPLETED"] {
+    color: var(--color-success-text);
+  }
+
+  &[data-status="IDLE"] {
+    color: var(--gray-9);
+  }
+}
+
+/* Agent rows — v11: compact, 10-11px fonts, indented descriptions */
+.agentRow {
+  border-bottom: 1px solid var(--gray-a3);
+  cursor: pointer;
+  padding: 8px var(--space-3);
+
+  &:hover {
+    background: var(--gray-a3);
+  }
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  /* Tinge the specific agent row that the banner is about, in the banner's color. */
+  &[data-attention="ERROR"] {
+    background: var(--color-danger-a2);
+
+    &:hover {
+      background: var(--color-danger-a3);
+    }
+  }
+
+  &[data-attention="WAITING"] {
+    background: var(--color-warning-a2);
+
+    &:hover {
+      background: var(--color-warning-a3);
+    }
+  }
+}
+
+
+.agentNameLine {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: 3px;
+}
+
+.agentName {
+  font-size: 12px; // stylelint-disable-line sculptor/no-hardcoded-values -- v11 mock spec
+  font-weight: var(--font-weight-semibold);
+}
+
+.agentDescription {
+  -webkit-box-orient: vertical;
+  color: var(--gray-10);
+  display: -webkit-box;
+  font-size: 11px; // stylelint-disable-line sculptor/no-hardcoded-values -- v11 mock spec
+  -webkit-line-clamp: 2;
+  line-height: 1.4;
+  overflow: hidden;
+  padding-left: 16px; // stylelint-disable-line sculptor/no-hardcoded-values -- align with agent name (8px dot + 8px gap)
+  text-overflow: ellipsis;
+
+  &[data-status="WAITING"] {
+    color: var(--color-warning-text);
+    font-weight: var(--font-weight-medium);
+  }
+
+  &[data-status="ERROR"] {
+    color: var(--color-danger-text);
+  }
+}
+
+.agentTask {
+  color: var(--gray-8);
+  font-size: 11px; // stylelint-disable-line sculptor/no-hardcoded-values -- v11 mock spec
+  margin-top: 2px;
+  padding-left: 16px; // stylelint-disable-line sculptor/no-hardcoded-values -- align with agent name (8px dot + 8px gap)
+}
+
+.expandControl {
+  cursor: pointer;
+  font-size: 11px; // stylelint-disable-line sculptor/no-hardcoded-values -- v11 mock spec
+  padding: var(--space-2) var(--space-3);
+
+  &:hover {
+    background: var(--gray-a3);
+  }
+}
+
+/* Footer — v11: compact, 10px font, gray-8 text */
+.footer {
+  border-top: 1px solid var(--gray-a3);
+  color: var(--gray-9);
+  display: flex;
+  flex-direction: column;
+  font-size: 11px; // stylelint-disable-line sculptor/no-hardcoded-values -- v11 mock spec
+  gap: var(--space-1);
+  padding: 6px var(--space-3);
+}
+
+.repoName {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.repoNameText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repoIcon {
+  flex-shrink: 0;
+  height: 10px; // stylelint-disable-line sculptor/no-hardcoded-values -- match footer font size
+  width: 10px; // stylelint-disable-line sculptor/no-hardcoded-values -- match footer font size
+}
+
+.footerRow {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.branchInfo {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+
+  &:hover {
+    opacity: 80%;
+  }
+}
+
+.branchName {
+  font-family: var(--mono-font-family);
+  font-size: 0.92em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branchIcon {
+  height: 10px; // stylelint-disable-line sculptor/no-hardcoded-values -- match footer font size
+  width: 10px; // stylelint-disable-line sculptor/no-hardcoded-values -- match footer font size
+}
+
+.diffStats {
+  cursor: pointer;
+  display: flex;
+  font-family: var(--mono-font-family);
+  font-size: 0.92em;
+  gap: 6px;
+
+  &:hover {
+    opacity: 80%;
+  }
+}
+
+.diffStatsRefreshing {
+  composes: shimmer from "../../../styles/shimmer.module.css";
+}
+
+.diffAdditions {
+  color: var(--color-success-text);
+}
+
+.diffDeletions {
+  color: var(--color-danger-text);
+}
+
+.noDiff {
+  font-style: italic;
+}
+
+/* MR status row inside header */
+.mrRow {
+  align-items: center;
+  display: flex;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- v3 mock spec
+  gap: 8px;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- v3 mock spec
+  margin-bottom: 4px;
+}
+
+.mrPill {
+  align-items: center;
+  background: var(--gray-a3);
+  border-radius: var(--radius-2);
+  color: var(--gray-12);
+  display: inline-flex;
+  flex-shrink: 0;
+  font-family: var(--mono-font-family);
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- match PrButton padding
+  padding: 2px var(--space-2);
+  text-decoration: none;
+  white-space: nowrap;
+
+  &:hover {
+    background: var(--gray-a4);
+  }
+}
+
+.statusDot {
+  border-radius: 50%;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- match PrButton dot size
+  height: 6px;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- match PrButton dot size
+  width: 6px;
+}
+
+.dotRunning {
+  animation: peekPulse 1.5s ease-in-out infinite;
+  background: var(--blue-9);
+}
+
+.dotPassed {
+  background: var(--green-9);
+}
+
+.dotFailed {
+  background: var(--red-9);
+}
+
+.dotPending {
+  background: var(--orange-9);
+}
+
+.dotApproved {
+  background: var(--green-9);
+}
+
+.dotMuted {
+  background: var(--gray-7);
+}
+
+@keyframes peekPulse {
+  0%,
+  100% {
+    opacity: 100%;
+  }
+
+  50% {
+    opacity: 40%;
+  }
+}
+
+.mrTitle {
+  color: var(--gray-10);
+  flex: 1;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- v3 mock spec
+  font-size: 11px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mergedBadge {
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- purple merged badge
+  background: rgba(168, 85, 247, 15%);
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- pill badge
+  border-radius: 10px;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- purple-400
+  color: #c084fc;
+  flex-shrink: 0;
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- v3 mock spec
+  font-size: 10px;
+  font-weight: var(--font-weight-medium);
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- pill badge padding
+  padding: 1px 6px;
+}

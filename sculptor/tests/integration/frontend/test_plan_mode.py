@@ -15,8 +15,8 @@ from playwright.sync_api import expect
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.playwright_utils import navigate_away_and_back
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
 from sculptor.testing.playwright_utils import soft_reload_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -80,12 +80,8 @@ def test_enter_plan_mode_does_not_trigger_waiting_status(sculptor_instance_: Scu
     toggle = chat_panel.get_plan_mode_toggle()
     expect(toggle).to_have_attribute("data-active", "true")
 
-    # Navigate away so the workspace tab is hoverable.
-    navigate_to_add_workspace_page(page)
-
-    # Hover the workspace tab to trigger the peek popover.
-    workspace_tab = task_page.get_workspace_tabs().first
-    workspace_tab.hover()
+    # Hover the workspace's sidebar row to trigger the peek popover.
+    get_workspace_sidebar(page).get_workspace_rows().first.hover()
 
     peek = task_page.get_workspace_peek_popover()
     expect(peek).to_be_visible()

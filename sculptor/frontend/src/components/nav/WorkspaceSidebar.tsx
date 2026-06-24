@@ -38,6 +38,7 @@ import { type OpenInRuntime, WorkspaceContextMenuContent } from "~/components/Co
 import type { WorkspaceAction, WorkspaceActionRuntime } from "~/components/CommandPalette/contextActions/types.ts";
 import { useGitAndOpenInRuntime } from "~/components/CommandPalette/contextActions/useGitAndOpenInRuntime.ts";
 import { buildWorkspaceActions } from "~/components/CommandPalette/contextActions/workspaceActions.ts";
+import { DeleteConfirmationDialog } from "~/components/DeleteConfirmationDialog.tsx";
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { sidebarCollapsedAtom, sidebarWidthAtom } from "~/components/layout/sidebarAtoms.ts";
 import { collapsedRepoGroupsAtom } from "~/components/nav/navAtoms.ts";
@@ -52,6 +53,7 @@ import { useWorkspaceTabActions } from "~/components/useWorkspaceTabActions.ts";
 import { VersionDisplay } from "~/components/VersionDisplay.tsx";
 import { HOME_TAB_ID, SETTINGS_TAB_ID } from "~/components/workspaceTabIds.ts";
 import { getTitleBarLeftPadding } from "~/electron/utils.ts";
+import { WorkspacePeekOverlay } from "~/pages/workspace/components/WorkspacePeekOverlay.tsx";
 
 import styles from "./WorkspaceSidebar.module.scss";
 
@@ -149,6 +151,10 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   // "Add a repo" button (and its toast).
   const [isAddRepoDialogOpen, setIsAddRepoDialogOpen] = useState<boolean>(false);
   const [addRepoToast, setAddRepoToast] = useState<ToastContent | null>(null);
+  // Deleting a workspace is destructive, so it is confirmed first. The trash
+  // icon and both Delete menu entries set this target to open the shared
+  // confirmation dialog; confirming runs the optimistic delete below.
+  const [deleteTarget, setDeleteTarget] = useState<Workspace | null>(null);
 
   // External hooks
   const { navigateToWorkspace, navigateToAgent, navigateToHome, navigateToGlobalSettings } = useImbueNavigate();
@@ -193,20 +199,21 @@ export const WorkspaceSidebar = (): ReactElement | null => {
       closeWorkspace: (ws): void => handleClose(ws.objectId),
       closeOtherWorkspaces: (ws): void => handleCloseOthers(ws.objectId),
       closeAllWorkspaces: (): void => handleCloseAll(),
-      beginDelete: (ws): void => executeDelete(ws.objectId, ws.description ?? ""),
+      beginDelete: (ws): void => setDeleteTarget(ws),
       canCloseOthers: (): boolean => effectiveOpenTabIds.length > 1,
       ...gitAndOpenIn,
     }),
-    [
-      setRenamingWorkspaceId,
-      handleClose,
-      handleCloseOthers,
-      handleCloseAll,
-      executeDelete,
-      effectiveOpenTabIds.length,
-      gitAndOpenIn,
-    ],
+    [setRenamingWorkspaceId, handleClose, handleCloseOthers, handleCloseAll, effectiveOpenTabIds.length, gitAndOpenIn],
   );
+
+  // Run the optimistic delete once the user confirms in the dialog.
+  const handleDeleteConfirm = useCallback((): void => {
+    if (deleteTarget === null) {
+      return;
+    }
+    executeDelete(deleteTarget.objectId, deleteTarget.description ?? "");
+    setDeleteTarget(null);
+  }, [deleteTarget, executeDelete]);
   const workspaceActions = useMemo(() => buildWorkspaceActions(workspaceActionRuntime), [workspaceActionRuntime]);
   const openInRuntime = useMemo<OpenInRuntime>(
     () => ({
@@ -265,6 +272,19 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   const handleWorkspaceHover = useCallback((workspaceId: string): void => {
     layoutPersistenceAdapter.prefetch?.({ kind: "workspace", workspaceId });
   }, []);
+
+  // The hover peek popover (anchored beside the row) navigates to the workspace,
+  // or to a specific agent when one of its agent rows is clicked.
+  const handlePeekNavigate = useCallback(
+    (workspaceId: string, agentId?: string): void => {
+      if (agentId) {
+        navigateToAgent(workspaceId, agentId);
+        return;
+      }
+      handleWorkspaceClick(workspaceId);
+    },
+    [navigateToAgent, handleWorkspaceClick],
+  );
 
   const handleOpenHome = useCallback((): void => {
     ensurePseudoTab(HOME_TAB_ID);
@@ -444,6 +464,8 @@ export const WorkspaceSidebar = (): ReactElement | null => {
                               data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW}
                               data-workspace-id={ws.objectId}
                               data-has-unread={String(status.hasUnread)}
+                              data-workspace-tab
+                              data-tab-id={ws.objectId}
                             >
                               <span className={styles.workspaceDot}>
                                 <WorkspaceStatusDots status={status} />
@@ -478,7 +500,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
                                 variant="ghost"
                                 size="1"
                                 color="gray"
-                                onClick={() => executeDelete(ws.objectId, ws.description ?? "")}
+                                onClick={() => setDeleteTarget(ws)}
                                 aria-label="Delete workspace"
                                 data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW_DELETE}
                                 data-workspace-id={ws.objectId}
@@ -539,6 +561,20 @@ export const WorkspaceSidebar = (): ReactElement | null => {
         className={styles.resizeHandle}
         ariaLabel="Resize sidebar"
         data-testid={ElementIds.SIDEBAR_RESIZE_HANDLE}
+      />
+
+      {/* Hover peek popover shared across rows (anchored beside the hovered row). */}
+      <WorkspacePeekOverlay onNavigate={handlePeekNavigate} />
+
+      {/* Destructive workspace delete is confirmed before the optimistic removal. */}
+      <DeleteConfirmationDialog
+        isOpen={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        entityType="workspace"
+        entityName={deleteTarget?.description ?? ""}
+        onConfirm={handleDeleteConfirm}
       />
 
       {/* Empty first-run "Add a repo" flow reuses the standard add-repo dialog. */}

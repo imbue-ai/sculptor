@@ -1,0 +1,17 @@
+.overlay {
+  background: var(--color-panel-solid);
+  border-radius: var(--radius-4);
+  box-shadow: var(--shadow-2);
+  color: var(--gray-12);
+  left: 0;
+  max-width: 320px;
+  overflow: hidden;
+  position: fixed;
+  top: 0;
+  will-change: transform;
+  z-index: var(--z-tooltip);
+}
+
+.animated {
+  transition: transform var(--duration-fast) var(--ease-out);
+}

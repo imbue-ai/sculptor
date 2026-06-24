@@ -1,32 +1,37 @@
 """Integration tests for the workspace peek popover feature.
 
+The peek popover now follows the hovered workspace **row** in the sidebar (it
+used to follow the workspace tab); its content and behaviour are unchanged.
+
 Tests cover:
-- Popover appears on workspace tab hover with correct status content
+- Popover appears on workspace-row hover with correct status content
 - Idle state shows popover with workspace name, summary, and agent row (no banner)
-- Waiting state shows orange waiting banner when agent asks a question
+- Waiting state shows the attention banner when an agent asks a question
 - Hover mechanics: popover appears on hover and dismisses on mouse leave
+- Diff stats appear in the popover footer
 """
 
 from playwright.sync_api import expect
 
+from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
 from sculptor.testing.elements.chat_panel import select_model_by_name
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
 
 
-@user_story("to see workspace peek status when hovering over a workspace tab with a finished agent")
+@user_story("to see workspace peek status when hovering over a workspace row with a finished agent")
 def test_workspace_peek_popover_idle_state(
     sculptor_instance_: SculptorInstance,
 ) -> None:
-    """After an agent finishes its turn, hovering the workspace tab shows a
+    """After an agent finishes its turn, hovering the workspace row shows a
     popover with the workspace name, a summary, and an agent row.  No alert
     banner is shown because the agent is idle (ready for more input).
     """
@@ -39,11 +44,8 @@ def test_workspace_peek_popover_idle_state(
         workspace_name="Idle WS",
     )
 
-    # Navigate away so we can hover over the workspace tab
-    navigate_to_add_workspace_page(page)
-
-    workspace_tab = layout.get_workspace_tabs().first
-    workspace_tab.hover()
+    workspace_row = get_workspace_sidebar(page).get_workspace_rows().first
+    workspace_row.hover()
 
     peek = layout.get_workspace_peek_popover()
     expect(peek).to_be_visible()
@@ -60,8 +62,8 @@ def test_workspace_peek_popover_idle_state(
 def test_workspace_peek_popover_waiting_state(
     sculptor_instance_: SculptorInstance,
 ) -> None:
-    """When an agent invokes AskUserQuestion, hovering the workspace tab shows
-    a popover with an orange waiting banner.
+    """When an agent invokes AskUserQuestion, hovering the workspace row shows
+    a popover with the attention/waiting banner.
     """
     page = sculptor_instance_.page
     layout = PlaywrightProjectLayoutPage(page=page)
@@ -93,11 +95,8 @@ fake_claude:ask_user_question `{
     auq_panel = get_ask_user_question_panel(page)
     expect(auq_panel).to_be_visible(timeout=30_000)
 
-    # Navigate away so we can hover over the workspace tab
-    navigate_to_add_workspace_page(page)
-
-    workspace_tab = layout.get_workspace_tabs().first
-    workspace_tab.hover()
+    workspace_row = get_workspace_sidebar(page).get_workspace_rows().first
+    workspace_row.hover()
 
     peek = layout.get_workspace_peek_popover()
     expect(peek).to_be_visible()
@@ -108,12 +107,12 @@ fake_claude:ask_user_question `{
     expect(peek.get_banner()).to_contain_text("needs your input")
 
 
-@user_story("to quickly glance at workspace status by hovering over its tab")
+@user_story("to quickly glance at workspace status by hovering over its sidebar row")
 def test_workspace_peek_popover_hover_mechanics(
     sculptor_instance_: SculptorInstance,
 ) -> None:
-    """Hovering over a workspace tab shows the popover; moving the mouse
-    away dismisses it. The popover contains a header, agent rows, and footer.
+    """Hovering over a workspace row shows the popover; moving the mouse
+    away dismisses it. The popover contains a header and agent rows.
     """
     page = sculptor_instance_.page
     layout = PlaywrightProjectLayoutPage(page=page)
@@ -124,63 +123,20 @@ def test_workspace_peek_popover_hover_mechanics(
         workspace_name="Hover WS",
     )
 
-    # Navigate away so we can hover over the workspace tab
-    navigate_to_add_workspace_page(page)
-
-    workspace_tab = layout.get_workspace_tabs().first
+    workspace_row = get_workspace_sidebar(page).get_workspace_rows().first
     peek = layout.get_workspace_peek_popover()
 
     expect(peek).to_be_hidden()
 
-    workspace_tab.hover()
+    workspace_row.hover()
     expect(peek).to_be_visible()
 
     expect(peek.get_header()).to_be_visible()
     expect(peek.get_agent_rows().first).to_be_visible()
 
-    # Move to the top-left corner which is far from the tab.
+    # Move to the top-left corner which is far from the row.
     page.mouse.move(0, 0)
     expect(peek).to_be_hidden()
-
-
-@user_story("to see workspace peek status when hovering over a scrolled-into-view workspace tab")
-def test_workspace_peek_popover_on_scrolled_tab(
-    sculptor_instance_: SculptorInstance,
-) -> None:
-    """When the viewport is narrow enough that workspace tabs overflow into a
-    horizontal scroll area, scrolling a tab into view and hovering it should
-    still show the peek popover.
-    """
-    page = sculptor_instance_.page
-    layout = PlaywrightProjectLayoutPage(page=page)
-
-    # Create 3 workspaces so there are enough tabs to overflow a narrow viewport.
-    for i in range(3):
-        start_task_and_wait_for_ready(
-            sculptor_page=page,
-            prompt='fake_claude:text `{"text": "Done"}`',
-            workspace_name=f"WS {i + 1}",
-        )
-
-    # Navigate away so we're not on any workspace tab
-    navigate_to_add_workspace_page(page)
-
-    # Shrink viewport to force tab overflow (3 workspace tabs + "Open Workspace"
-    # tab at 200px each = 800px, which won't fit in a 500px-wide viewport).
-    original_size = page.viewport_size
-    page.set_viewport_size({"width": 500, "height": original_size["height"]})
-
-    # "WS 1" is the leftmost tab, which may be scrolled out of view.
-    # Scroll it into view and hover to trigger the peek popover.
-    ws1_tab = layout.get_workspace_tabs().filter(has_text="WS 1")
-    ws1_tab.scroll_into_view_if_needed()
-    ws1_tab.hover()
-
-    peek = layout.get_workspace_peek_popover()
-    expect(peek).to_be_visible()
-
-    # Restore viewport
-    page.set_viewport_size(original_size)
 
 
 _AUQ_PROMPT = """\
@@ -218,11 +174,8 @@ def test_workspace_peek_waiting_overrides_running_in_banner(
         wait_for_agent_to_finish=False,
     )
 
-    # Add a second agent to the same workspace
-    agent_tab_bar = task_page.get_agent_tab_bar()
-    add_agent_button = agent_tab_bar.get_add_agent_button()
-    expect(add_agent_button).to_be_visible()
-    add_agent_button.click()
+    # Add a second agent to the same workspace (lands in the center section).
+    create_agent_panel(page, section="center")
 
     # The new blank agent needs a model selected before it can receive messages
     chat_panel = task_page.get_chat_panel()
@@ -235,11 +188,8 @@ def test_workspace_peek_waiting_overrides_running_in_banner(
     auq_panel = get_ask_user_question_panel(page)
     expect(auq_panel).to_be_visible()
 
-    # Navigate away so the workspace tab is hoverable
-    navigate_to_add_workspace_page(page)
-
-    workspace_tab = task_page.get_workspace_tabs().first
-    workspace_tab.hover()
+    workspace_row = get_workspace_sidebar(page).get_workspace_rows().first
+    workspace_row.hover()
 
     peek = task_page.get_workspace_peek_popover()
     expect(peek).to_be_visible()
@@ -252,7 +202,7 @@ def test_workspace_peek_waiting_overrides_running_in_banner(
 
 @user_story("to see diff stats in the workspace peek popover")
 def test_peek_popover_shows_diff_stats(sculptor_instance_: SculptorInstance) -> None:
-    """Hovering over the workspace tab should show a popover with
+    """Hovering over the workspace row should show a popover with
     target-branch diff stats (+N / -N)."""
     page = sculptor_instance_.page
 
@@ -263,9 +213,9 @@ def test_peek_popover_shows_diff_stats(sculptor_instance_: SculptorInstance) -> 
     chat_panel = task_page.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
-    workspace_tab = task_page.get_workspace_tabs().first
-    expect(workspace_tab).to_be_visible()
-    workspace_tab.hover()
+    workspace_row = get_workspace_sidebar(page).get_workspace_rows().first
+    expect(workspace_row).to_be_visible()
+    workspace_row.hover()
 
     peek = task_page.get_workspace_peek_popover()
     expect(peek).to_be_visible()

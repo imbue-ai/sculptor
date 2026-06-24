@@ -88,6 +88,98 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         """Right-click a workspace row to open its context menu."""
         workspace_row.click(button="right")
 
+    def open_row_dropdown_menu(self, workspace_row: Locator) -> None:
+        """Hover a row and click its "..." actions dropdown trigger."""
+        workspace_row.hover()
+        menu_icon = self.get_row_menu_icon(workspace_row)
+        expect(menu_icon).to_be_visible()
+        menu_icon.click()
+
+    # -- Workspace-row context menu items + inline rename (SIDE-08/09/16) --
+    #
+    # The sidebar workspace row reuses the shared workspace-action context menu
+    # (the same ``TAB_CONTEXT_MENU_*`` ids the old workspace tab used), reached by
+    # right-clicking the row or via the row's "..." dropdown. Rename commits through
+    # the shared InlineRenameInput; delete fires immediately (optimistic, no confirm).
+
+    def get_context_menu_rename(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_RENAME)
+
+    def get_context_menu_close(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_CLOSE)
+
+    def get_context_menu_close_others(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_CLOSE_OTHERS)
+
+    def get_context_menu_close_all(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_CLOSE_ALL)
+
+    def get_context_menu_delete(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_DELETE)
+
+    def get_copy_workspace_name_item(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_COPY_WORKSPACE_NAME)
+
+    def get_copy_branch_item(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_COPY_BRANCH)
+
+    def get_copy_workspace_id_item(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_COPY_WORKSPACE_ID)
+
+    def get_inline_rename_input(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.INLINE_RENAME_INPUT)
+
+    def get_delete_confirmation_dialog(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_DIALOG)
+
+    def get_delete_confirmation_confirm_button(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_CONFIRM)
+
+    def confirm_delete(self) -> None:
+        """Click the confirm button in the workspace delete-confirmation dialog."""
+        confirm_button = self.get_delete_confirmation_confirm_button()
+        expect(confirm_button).to_be_visible()
+        confirm_button.click()
+
+    def open_diagnostics_submenu(self, workspace_row: Locator) -> None:
+        """Right-click a row and hover Diagnostics to open the copy-id submenu."""
+        self.open_row_context_menu(workspace_row)
+        trigger = self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_DIAGNOSTICS)
+        expect(trigger).to_be_visible()
+        trigger.hover()
+
+    def rename_workspace_via_context_menu(self, workspace_row: Locator, new_name: str) -> None:
+        """Right-click a row, click Rename, then fill and commit the inline input."""
+        self.open_row_context_menu(workspace_row)
+        rename_item = self.get_context_menu_rename()
+        expect(rename_item).to_be_visible()
+        rename_item.click()
+        rename_input = self.get_inline_rename_input()
+        expect(rename_input).to_be_visible()
+        rename_input.fill(new_name)
+        rename_input.press("Enter")
+        expect(rename_input).not_to_be_visible()
+
+    def delete_workspace_via_context_menu(self, workspace_row: Locator) -> None:
+        """Right-click a row, click Delete, and confirm in the delete dialog.
+
+        Deleting a workspace is destructive, so it is confirmed first; the delete
+        itself is then optimistic (the row vanishes before the backend confirms).
+        """
+        self.open_row_context_menu(workspace_row)
+        delete_item = self.get_context_menu_delete()
+        expect(delete_item).to_be_visible()
+        delete_item.click()
+        self.confirm_delete()
+
+    def delete_workspace_via_row_icon(self, workspace_row: Locator) -> None:
+        """Hover a row, click its trash icon, and confirm in the delete dialog."""
+        workspace_row.hover()
+        delete_icon = self.get_row_delete_icon(workspace_row)
+        expect(delete_icon).to_be_visible()
+        delete_icon.click()
+        self.confirm_delete()
+
     # -- Bottom links + chrome --
 
     def get_settings_link(self) -> Locator:

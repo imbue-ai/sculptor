@@ -9,6 +9,7 @@ from sculptor.testing.elements.keyboard_shortcuts_dialog import PlaywrightKeyboa
 from sculptor.testing.elements.project_path_dialog import PlaywrightProjectPathDialogElement
 from sculptor.testing.elements.skills_panel import PlaywrightSkillsPanelElement
 from sculptor.testing.elements.warning_banner import PlaywrightWarningBannerElement
+from sculptor.testing.elements.workspace_peek import PlaywrightWorkspacePeekElement
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.elements.workspace_sidebar import PlaywrightWorkspaceSidebarElement
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
@@ -37,6 +38,15 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
     def get_workspace_sidebar(self) -> PlaywrightWorkspaceSidebarElement:
         """Get the workspace navigation sidebar POM (SIDE-*)."""
         return get_workspace_sidebar(self._page)
+
+    def get_workspace_peek_popover(self) -> PlaywrightWorkspacePeekElement:
+        """Get the workspace peek popover POM (visible only while hovering a sidebar row).
+
+        The peek follows the hovered workspace **row** in the sidebar (it used to
+        follow the workspace tab); the popover content + testids are unchanged.
+        """
+        locator = self.get_by_test_id(ElementIDs.WORKSPACE_PEEK_POPOVER)
+        return PlaywrightWorkspacePeekElement(locator=locator, page=self._page)
 
     def get_section(self, sub_section: str = "center") -> PlaywrightWorkspaceSection:
         """Get a section POM for a sub-section id.
