@@ -5,8 +5,10 @@ import { ensureSculptorFolderReady } from "~/config/bootstrap";
 import { resolveBindHost, resolvePort } from "~/config/port";
 import { closeDatabase, getDatabase } from "~/db/connection";
 import { runMigrations } from "~/db/migrate";
+import { getOrm } from "~/db/orm";
 import { setupLogging } from "~/logging/logger";
 import { emitOpenApiToFile } from "~/openapi";
+import { AgentRunner } from "~/runner";
 
 // The integration harness scrapes stdout for this exact string to decide the
 // backend is ready (READY_MESSAGE_V1 in sculptor/sculptor/testing/server_utils.py).
@@ -61,6 +63,12 @@ export async function main(argv: readonly string[] = process.argv): Promise<void
   const logger = setupLogging();
   const db = getDatabase();
   runMigrations(db);
+
+  // Re-supervise every non-terminal agent (crash-recovery / cutover resume,
+  // RW-DATA-6). The harness resolver is supplied by the registry (Task 5.6);
+  // until then no agent resolves a harness and this is a safe no-op.
+  const runner = new AgentRunner({ orm: getOrm(), harnessFor: () => undefined });
+  await runner.resuperviseOnStartup();
 
   const port = resolvePort(argv);
   const host = resolveBindHost();

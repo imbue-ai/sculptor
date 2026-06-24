@@ -29,10 +29,15 @@ export interface AgentStatusEvent {
 // dropped for scoped connections). The ONLY source of notifications and of live
 // project/workspace/settings changes — Phase 6 mutation paths publish it. It
 // carries the originating request id and the changed entity refs.
+export interface ChangedEntityRef {
+  type: "repo" | "workspace" | "agent" | "notification" | "user_settings";
+  id: string;
+}
+
 export interface DataModelChangeEvent {
   kind: "data_model_change";
   requestId?: string | null;
-  changedEntities?: { type: "repo" | "workspace" | "agent" | "notification" | "user_settings"; id: string }[];
+  changedEntities?: ChangedEntityRef[];
 }
 
 // Drives workspace_branch_by_workspace_id.
