@@ -1,4 +1,4 @@
-import { Flex, IconButton, Skeleton, Text, Tooltip } from "@radix-ui/themes";
+import { Flex, IconButton, Skeleton, Spinner, Text, Tooltip } from "@radix-ui/themes";
 import { FileIcon, FileWarningIcon, XIcon } from "lucide-react";
 import type { ReactElement } from "react";
 
@@ -172,7 +172,11 @@ export const FilePreview = ({
     }
 
     if (!fileUrl) {
-      return <Skeleton className={styles.previewSkeleton} />;
+      return (
+        <Flex align="center" justify="center" className={styles.previewLoading}>
+          <Spinner size="1" />
+        </Flex>
+      );
     }
 
     if (isPdf) {

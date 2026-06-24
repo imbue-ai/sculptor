@@ -60,9 +60,10 @@ describe("FilePreview", () => {
   });
 
   describe("loading state", () => {
-    it("renders a loading skeleton (not the error icon) in compact mode while fileUrl is undefined", () => {
+    it("renders a loading spinner (not the error icon) in compact mode while fileUrl is undefined", () => {
       const { container } = renderPreview({ fileUrl: undefined, isFailed: false });
-      expect(container.querySelector(".previewSkeleton")).toBeInTheDocument();
+      expect(container.querySelector(".previewLoading")).toBeInTheDocument();
+      expect(container.querySelector(".rt-Spinner")).toBeInTheDocument();
       // The failed/error placeholder must NOT appear while still loading.
       expect(container.querySelector(".previewError")).not.toBeInTheDocument();
       expect(screen.queryByAltText("Attachment: photo.png")).not.toBeInTheDocument();

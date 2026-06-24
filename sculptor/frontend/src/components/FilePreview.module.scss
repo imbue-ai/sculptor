@@ -59,9 +59,8 @@
   width: 100%;
 }
 
-// Loading placeholder for the compact thumbnail (matches the 50x30 container).
-.previewSkeleton {
-  border-radius: var(--radius-2);
+// Loading state for the compact thumbnail: a centered spinner in the 50x30 box.
+.previewLoading {
   height: 100%;
   width: 100%;
 }
