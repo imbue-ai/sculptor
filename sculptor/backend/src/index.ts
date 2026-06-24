@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { buildApp } from "~/app";
 import { ensureSculptorFolderReady } from "~/config/bootstrap";
 import { resolveBindHost, resolvePort } from "~/config/port";
+import { closeDatabase, getDatabase } from "~/db/connection";
 import { setupLogging } from "~/logging/logger";
 import { emitOpenApiToFile } from "~/openapi";
 
@@ -32,8 +33,14 @@ function installShutdownHandlers(app: FastifyInstance): void {
   // still bounded.
   const shutdown = (): void => {
     void app.close().then(
-      () => process.exit(0),
-      () => process.exit(1),
+      () => {
+        closeDatabase();
+        process.exit(0);
+      },
+      () => {
+        closeDatabase();
+        process.exit(1);
+      },
     );
   };
   process.once("SIGTERM", shutdown);
@@ -48,9 +55,10 @@ export async function main(argv: readonly string[] = process.argv): Promise<void
   }
 
   // Bootstrap the on-disk Sculptor folder before opening any resources, then
-  // configure logging so all later startup logs are captured.
+  // configure logging so all later startup logs are captured, then open the DB.
   ensureSculptorFolderReady();
   const logger = setupLogging();
+  getDatabase();
 
   const port = resolvePort(argv);
   const host = resolveBindHost();
