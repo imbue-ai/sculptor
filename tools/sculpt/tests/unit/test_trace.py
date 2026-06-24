@@ -29,7 +29,7 @@ def test_trace_start_prints_output_path(runner: CliRunner) -> None:
         return_value=Response(200, json={"enabled": True, "outputPath": "/logs/traces/t.json", "bufferedExternalEvents": 0})
     )
 
-    result = runner.invoke(app, ["trace", "start"])
+    result = runner.invoke(app, ["debug", "trace", "start"])
 
     assert result.exit_code == 0, result.stderr
     assert route.called
@@ -45,7 +45,7 @@ def test_trace_start_forwards_tracer_entries(runner: CliRunner) -> None:
         return_value=Response(200, json={"enabled": True, "outputPath": "/x.json", "bufferedExternalEvents": 0})
     )
 
-    result = runner.invoke(app, ["trace", "start", "--tracer-entries", "12345"])
+    result = runner.invoke(app, ["debug", "trace", "start", "--tracer-entries", "12345"])
 
     assert result.exit_code == 0, result.stderr
     assert json.loads(route.calls.last.request.content) == {"tracer_entries": 12345}
@@ -60,7 +60,7 @@ def test_trace_stop_reports_counts(runner: CliRunner) -> None:
         )
     )
 
-    result = runner.invoke(app, ["trace", "stop"])
+    result = runner.invoke(app, ["debug", "trace", "stop"])
 
     assert result.exit_code == 0, result.stderr
     assert "/logs/traces/t.json" in result.stdout
@@ -75,7 +75,7 @@ def test_trace_stop_surfaces_409_detail(runner: CliRunner) -> None:
         return_value=Response(409, json={"detail": "No trace is running."})
     )
 
-    result = runner.invoke(app, ["trace", "stop"])
+    result = runner.invoke(app, ["debug", "trace", "stop"])
 
     assert result.exit_code == 1
     assert "409" in result.stderr
@@ -88,7 +88,7 @@ def test_trace_status_json_passthrough(runner: CliRunner) -> None:
     payload = {"enabled": True, "outputPath": "/x.json", "bufferedExternalEvents": 3}
     respx.get(f"{_BASE_URL}/api/v1/trace/status").mock(return_value=Response(200, json=payload))
 
-    result = runner.invoke(app, ["trace", "status", "--json"])
+    result = runner.invoke(app, ["debug", "trace", "status", "--json"])
 
     assert result.exit_code == 0, result.stderr
     assert json.loads(result.stdout) == payload

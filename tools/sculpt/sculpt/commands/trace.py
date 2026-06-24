@@ -1,12 +1,14 @@
 """Arm/disarm the backend's viztracer profiler at runtime.
 
-Thin wrappers over the trace-control HTTP endpoints so a developer can profile
-a running (including a signed, production) backend without restarting it or
-passing ``--trace-to`` at launch:
+**For Sculptor development only — not end-user functionality.** Registered as a
+subgroup of ``sculpt debug`` (see ``debug.py``). Thin wrappers over the
+trace-control HTTP endpoints so a developer can profile a running (including a
+signed, production) backend without restarting it or passing ``--trace-to`` at
+launch:
 
-    sculpt trace start         # arm
+    sculpt debug trace start         # arm
     ...reproduce the slow thing...
-    sculpt trace stop          # flush the Chrome-JSON file, print its path
+    sculpt debug trace stop          # flush the Chrome-JSON file, print its path
 
 Drop the resulting file into https://ui.perfetto.dev to inspect it. Unlike the
 ``/api/v1/trace/batch`` ingest endpoint, these require the session token, which
@@ -23,7 +25,7 @@ from sculpt.auth import get_default_base_url
 from sculpt.formatting import cli_error
 from sculpt.formatting import handle_connection_error
 
-trace_app = typer.Typer(help="Profile a running Sculptor backend (viztracer).")
+trace_app = typer.Typer(help="Profile a running Sculptor backend with viztracer (Sculptor development only).")
 
 _JSON_OPTION = typer.Option(False, "--json", help="Output as JSON")
 
@@ -64,7 +66,7 @@ def start(
         return
     # The backend serializes responses with camelCase aliases (SerializableModel).
     typer.echo(f"Tracing armed. Output will be written to:\n  {result['outputPath']}")
-    typer.echo("Reproduce the slow path, then run `sculpt trace stop`.")
+    typer.echo("Reproduce the slow path, then run `sculpt debug trace stop`.")
 
 
 @trace_app.command("stop")
