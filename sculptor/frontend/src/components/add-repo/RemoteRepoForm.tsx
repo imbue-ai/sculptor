@@ -129,9 +129,12 @@ export const RemoteRepoForm = ({
   );
 
   // Latest-ref so the effect below can re-push without listing every input as a
-  // dependency (which would re-run it on every keystroke).
+  // dependency (which would re-run it on every keystroke). The write lives in an
+  // effect, not render, so the ref tracks the newest closure on each commit.
   const pushSubmittableRef = useRef(pushSubmittable);
-  pushSubmittableRef.current = pushSubmittable;
+  useEffect(() => {
+    pushSubmittableRef.current = pushSubmittable;
+  });
 
   // Re-push when `effectiveTargetDir` changes on its own — i.e. the resolved
   // default target folder arrives asynchronously (the clone-defaults fetch

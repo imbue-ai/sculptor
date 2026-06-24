@@ -85,6 +85,9 @@ export const AddRepoStep = ({ onComplete, isLoading, error }: AddRepoStepProps):
   // populating the atom yet — refresh manually on mount.
   useEffect(() => {
     let isCancelled = false;
+    // Genuine mount-time fetch from the backend; the synchronous setState is
+    // only the loading-flag flip on an external-system sync, not derived state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsRefreshingDeps(true);
     void refreshDependencies().finally(() => {
       if (!isCancelled) setIsRefreshingDeps(false);

@@ -103,13 +103,6 @@ export const RemoteRepoCombobox = ({
     setSelectedValue("");
   }, []);
 
-  // Clear the highlight whenever the query changes — the previously
-  // highlighted repo may not exist in the new result set, and a refetch
-  // will re-trigger cmdk's auto-select.
-  useEffect(() => {
-    clearHighlight();
-  }, [debouncedQuery, clearHighlight]);
-
   const handleSelectionChange = useCallback((next: string): void => {
     if (!hasArrowedRef.current) {
       // cmdk's auto-select-on-mount; ignore until the user explicitly arrows.
@@ -146,15 +139,23 @@ export const RemoteRepoCombobox = ({
     }
   }, [isError, error, onNotConfigured]);
 
-  const handleQueryChange = useCallback((next: string): void => {
-    setQuery(next);
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
-    debounceRef.current = setTimeout(() => {
-      setDebouncedQuery(next);
-    }, DEBOUNCE_MS);
-  }, []);
+  const handleQueryChange = useCallback(
+    (next: string): void => {
+      setQuery(next);
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+      debounceRef.current = setTimeout(() => {
+        // Clear the highlight as the query settles — the previously highlighted
+        // repo may not exist in the new result set, and the refetch will
+        // re-trigger cmdk's auto-select. This is the only place debouncedQuery
+        // changes.
+        clearHighlight();
+        setDebouncedQuery(next);
+      }, DEBOUNCE_MS);
+    },
+    [clearHighlight],
+  );
 
   useEffect(() => {
     return (): void => {

@@ -107,6 +107,9 @@ export const AddRepoDialog = ({ open, onOpenChange, setToast }: AddRepoDialogPro
   useEffect(() => {
     if (!open) return;
     let isCancelled = false;
+    // Genuine on-open fetch from the backend; the synchronous setState is only
+    // the loading-flag flip on an external-system sync, not derived state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsRefreshingDeps(true);
     void refreshDependencies().finally(() => {
       if (!isCancelled) setIsRefreshingDeps(false);

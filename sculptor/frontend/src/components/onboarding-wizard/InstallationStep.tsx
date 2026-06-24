@@ -302,16 +302,25 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
   const displayedAuthUrl = isClaudeAuthenticated ? null : authUrl;
   const displayedAuthError = isClaudeAuthenticated ? null : authError;
 
-  // Clear the gh device-flow prompt once gh reports authenticated (the poll in
+  // Hide the gh device-flow prompt once gh reports authenticated (the poll in
   // triggerGhAuth, or the background 30s poll, picked up the completed sign-in).
+  // Derived during render so there's no extra render cycle (and no stale frame
+  // showing the prompt) when the background poll reports success.
+  const isGhAuthenticated = dependencies?.gh?.isAuthenticated === true;
+  const displayedGhAuthUrl = isGhAuthenticated ? null : ghAuthUrl;
+  const displayedGhUserCode = isGhAuthenticated ? null : ghUserCode;
+  const displayedGhAuthError = isGhAuthenticated ? null : ghAuthError;
+
+  // Tear down the device-flow poll once gh authenticates. The prompt is already
+  // hidden via the derived values above; this only stops the interval (a
+  // genuine external-system side effect, idempotent). The device-flow poll also
+  // stops itself, so this just covers the case where the background 30s poll is
+  // what flips the flag.
   useEffect(() => {
-    if (ghAuthUrl && dependencies?.gh?.isAuthenticated === true) {
-      setGhAuthUrl(null);
-      setGhUserCode(null);
-      setGhAuthError(null);
+    if (ghAuthUrl && isGhAuthenticated) {
       stopPolling();
     }
-  }, [ghAuthUrl, dependencies?.gh?.isAuthenticated, stopPolling]);
+  }, [ghAuthUrl, isGhAuthenticated, stopPolling]);
 
   /* We can only submit if all the dependencies are installed, in range, and authenticated */
   const canSubmit = (): boolean => {
@@ -472,9 +481,9 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
               helpText="Used to clone GitHub repos from inside Sculptor."
               onApplyOverride={(path) => handleOverride("gh", path)}
               onAuthenticate={triggerGhAuth}
-              authUrl={ghAuthUrl}
-              userCode={ghUserCode}
-              authError={ghAuthError}
+              authUrl={displayedGhAuthUrl}
+              userCode={displayedGhUserCode}
+              authError={displayedGhAuthError}
             />
           </Flex>
         </>
