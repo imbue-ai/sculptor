@@ -5,6 +5,7 @@ import { jsonSchemaTransform, serializerCompiler, validatorCompiler } from "fast
 import { registerAuthGuard } from "~/auth/guard";
 import { registerHealthRoutes } from "~/routes/health";
 import { registerSessionTokenRoutes } from "~/routes/session_token";
+import { registerStatic } from "~/static";
 
 // Builds the Fastify application. This MUST stay free of side effects (no DB
 // open, no service start) so unit tests can build it cheaply and --emit-openapi
@@ -32,6 +33,10 @@ export function buildApp(): FastifyInstance {
 
   void app.register(registerSessionTokenRoutes);
   void app.register(registerHealthRoutes);
+
+  // Static SPA serving + fallback, registered last so API routes win. A no-op
+  // when no built frontend is present.
+  registerStatic(app);
 
   return app;
 }
