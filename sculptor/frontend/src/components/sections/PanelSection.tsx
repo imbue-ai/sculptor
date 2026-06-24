@@ -71,6 +71,10 @@ const PanelSectionComponent = ({ subSection }: PanelSectionProps): ReactElement 
       // (.dropTarget) is driven by the isDropTargetAtom slice, not dnd's own isOver.
       data-drop-target-subsection={subSection}
       data-drop-active={isDropTarget ? "true" : undefined}
+      // Behavioral hooks for the active-section ring (SEC-10/11): which section is the
+      // logical active one, and whether its transient ring is currently visible.
+      data-active={isActive ? "true" : undefined}
+      data-ring-visible={isRingVisible ? "true" : undefined}
       onPointerDown={handlePointerDown}
     >
       <SectionHeader subSection={subSection} />

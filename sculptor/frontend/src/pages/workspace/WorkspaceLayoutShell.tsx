@@ -13,6 +13,7 @@ import type { ReactElement } from "react";
 import { PanelDndProvider } from "~/components/sections/PanelDndProvider.tsx";
 import { SectionGrid } from "~/components/sections/SectionGrid.tsx";
 import { maximizedSectionAtom } from "~/components/sections/transientAtoms.ts";
+import { useActiveSectionRing } from "~/components/sections/useActiveSectionRing.ts";
 
 import { AgentDeleteConfirmation } from "./components/AgentDeleteConfirmation.tsx";
 import { TerminalCloseConfirmation } from "./components/TerminalCloseConfirmation.tsx";
@@ -22,6 +23,9 @@ import styles from "./WorkspaceLayoutShell.module.scss";
 export const WorkspaceLayoutShell = (): ReactElement => {
   const maximizedSection = useAtomValue(maximizedSectionAtom);
   const isMaximized = maximizedSection !== null;
+
+  // The active-section ring fade timer, mounted once for the whole shell (SEC-11).
+  useActiveSectionRing();
 
   return (
     <PanelDndProvider>

@@ -21,7 +21,7 @@ import { getNextTerminalLabel } from "~/pages/workspace/panels/terminalLabelUtil
 
 import { makeAgentPanelId, makeTerminalPanelId } from "./registry/dynamicPanels.tsx";
 import { type PanelDefinition, STATIC_PANEL_METADATA } from "./registry/panelRegistry.ts";
-import { openPanelAtom, setActivePanelAtom } from "./sectionActions.ts";
+import { jumpToSectionAtom, openPanelAtom, setActivePanelAtom } from "./sectionActions.ts";
 import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "./sectionAtoms.ts";
 import type { PanelId, SectionId, SubSectionId } from "./sectionTypes.ts";
 import { SECTION_IDS, toSecondary } from "./sectionTypes.ts";
@@ -83,6 +83,9 @@ export function listAvailableStaticPanels(store: AppStore): ReadonlyArray<Availa
 
 export function openStaticPanelInLocation(store: AppStore, panelId: PanelId, subSection: SubSectionId): void {
   store.set(openPanelAtom, { panelId, in: subSection });
+  // Adding a panel is a deliberate interaction: make its section active and pulse the
+  // ring (SEC-10/11). openPanel has already expanded the section, so the jump applies.
+  store.set(jumpToSectionAtom, { subSection });
 }
 
 // Append a fresh tab to the workspace's persisted terminal state (the same state
@@ -103,6 +106,7 @@ export function createTerminalInLocation(store: AppStore, subSection: SubSection
   const panelId = makeTerminalPanelId(workspaceId, index);
   store.set(openPanelAtom, { panelId, in: subSection });
   store.set(setActivePanelAtom, { panelId, in: subSection });
+  store.set(jumpToSectionAtom, { subSection });
 }
 
 type CreateAgentInputs = { agentType: AgentTypeName; registrationId?: string; activeAgentId?: string };
@@ -143,6 +147,7 @@ export async function createAgentInCenter(store: AppStore, inputs: CreateAgentIn
     const panelId = makeAgentPanelId(response.data.id);
     store.set(openPanelAtom, { panelId, in: AGENT_TARGET_SUB_SECTION });
     store.set(setActivePanelAtom, { panelId, in: AGENT_TARGET_SUB_SECTION });
+    store.set(jumpToSectionAtom, { subSection: AGENT_TARGET_SUB_SECTION });
     return response.data.id;
   } catch (error) {
     console.error("Failed to create agent:", error);
