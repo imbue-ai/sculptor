@@ -9,16 +9,18 @@ import { useKeybindingDisplayText } from "../common/keybindings/hooks.ts";
 import { useImbueNavigate } from "../common/NavigateUtils.ts";
 import { ensurePseudoTabAtom } from "../common/state/atoms/workspaces.ts";
 import { useHelpDialog } from "../common/state/hooks/useHelpDialog.ts";
+import { useOpenSettings } from "../common/state/hooks/useOpenSettings.ts";
 import { getTitleBarLeftPadding } from "../electron/utils.ts";
 import { ClosedWorkspacesPill } from "./ClosedWorkspacesPill.tsx";
 import { useCommandPalette } from "./CommandPalette";
 import { TooltipIconButton } from "./TooltipIconButton.tsx";
 import styles from "./TopBar.module.scss";
-import { HOME_TAB_ID, SETTINGS_TAB_ID } from "./workspaceTabIds.ts";
+import { HOME_TAB_ID } from "./workspaceTabIds.ts";
 import { WorkspaceTabs } from "./WorkspaceTabs.tsx";
 
 export const TopBar = (): ReactElement => {
-  const { navigateToGlobalSettings, navigateToHome } = useImbueNavigate();
+  const { navigateToHome } = useImbueNavigate();
+  const openSettings = useOpenSettings();
   const { toggle: toggleCommandPalette } = useCommandPalette();
   const { showHelpDialog } = useHelpDialog();
   // Read the live binding from the registry so the tooltip stays accurate
@@ -35,9 +37,8 @@ export const TopBar = (): ReactElement => {
   }, [ensurePseudoTab, navigateToHome]);
 
   const handleOpenSettings = useCallback((): void => {
-    ensurePseudoTab(SETTINGS_TAB_ID);
-    navigateToGlobalSettings();
-  }, [ensurePseudoTab, navigateToGlobalSettings]);
+    openSettings();
+  }, [openSettings]);
 
   return (
     <Flex
