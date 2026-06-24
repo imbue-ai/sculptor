@@ -15,7 +15,7 @@ import type { DiffSelection, TreeViewOptions } from "~/pages/workspace/component
 import { DiffViewer } from "~/pages/workspace/components/diffViewer/index.ts";
 
 import styles from "./CommitsPanel.module.scss";
-import { EmptyDetail, ExplorerLayout } from "./ExplorerLayout.tsx";
+import { ExplorerLayout } from "./ExplorerLayout.tsx";
 import { collapseAllCommitsAtom } from "./historyPanel/atoms.ts";
 import { HistoryTabContent } from "./historyPanel/HistoryTabContent.tsx";
 
@@ -65,7 +65,6 @@ const CommitsPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
           sidebarToggle={sidebarToggle}
         />
       )}
-      emptyDetail={(sidebarToggle) => <EmptyDetail sidebarToggle={sidebarToggle} />}
     />
   );
 };

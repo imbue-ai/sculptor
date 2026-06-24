@@ -21,7 +21,7 @@ import { DiffViewer } from "~/pages/workspace/components/diffViewer/index.ts";
 import styles from "./ChangesPanel.module.scss";
 import { DiscardDialog } from "./changesPanel/DiscardDialog.tsx";
 import { useDiscardFile } from "./changesPanel/useDiscardFile.ts";
-import { EmptyDetail, ExplorerLayout } from "./ExplorerLayout.tsx";
+import { ExplorerLayout } from "./ExplorerLayout.tsx";
 import {
   changesScopeAtomFamily,
   collapseAllChangesFoldersAtom,
@@ -151,7 +151,6 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
           sidebarToggle={sidebarToggle}
         />
       )}
-      emptyDetail={(sidebarToggle) => <EmptyDetail sidebarToggle={sidebarToggle} />}
     />
   );
 };

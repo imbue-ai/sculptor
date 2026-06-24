@@ -15,7 +15,7 @@ import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
 import type { DiffSelection, TreeViewOptions } from "~/pages/workspace/components/diffViewer/index.ts";
 import { DiffViewer } from "~/pages/workspace/components/diffViewer/index.ts";
 
-import { EmptyDetail, ExplorerLayout } from "./ExplorerLayout.tsx";
+import { ExplorerLayout } from "./ExplorerLayout.tsx";
 import { ExplorerTreeHeader } from "./ExplorerTreeHeader.tsx";
 import { collapseAllFoldersAtom, fileBrowserStateAtomFamily, toggleViewModeAtom } from "./fileBrowser/atoms.ts";
 import { EmptyState, SkeletonLoading } from "./fileBrowser/EmptyStates.tsx";
@@ -102,7 +102,6 @@ const FilesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEleme
           sidebarToggle={sidebarToggle}
         />
       )}
-      emptyDetail={(sidebarToggle) => <EmptyDetail sidebarToggle={sidebarToggle} />}
     />
   );
 };
