@@ -26,6 +26,9 @@ export const AgentTerminalPanel = ({ taskId }: AgentTerminalPanelProps): ReactEl
     isVisible: true,
     fontSize: 13,
     lineHeight: 1.1,
+    // The terminal is this agent's only input surface and the pane remounts
+    // on every tab switch, so it must take keyboard focus immediately (SCU-1578).
+    focusOnVisible: true,
   });
 
   return (
