@@ -39,8 +39,8 @@ import { buildWorkspaceActions } from "~/components/CommandPalette/contextAction
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { sidebarCollapsedAtom, sidebarWidthAtom } from "~/components/layout/sidebarAtoms.ts";
 import { collapsedRepoGroupsAtom } from "~/components/nav/navAtoms.ts";
-import { ResizeHandle } from "~/components/panels/ResizeHandle.tsx";
 import { ReportProblemPopover } from "~/components/ReportProblemPopover.tsx";
+import { ResizeHandle } from "~/components/sections/ResizeHandle.tsx";
 import { computeWorkspaceDotStatus, EMPTY_WORKSPACE_DOT_STATUS, WorkspaceStatusDots } from "~/components/statusDot";
 import { useWorkspaceTabActions } from "~/components/useWorkspaceTabActions.ts";
 import { VersionDisplay } from "~/components/VersionDisplay.tsx";

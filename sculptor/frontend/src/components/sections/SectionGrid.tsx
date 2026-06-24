@@ -1,0 +1,128 @@
+// The four-section frame. Owns the geometry: reads the global section sizes and the
+// per-section expanded flags, resolves percentages to pixels (protecting the
+// center's larger minimum by shrinking the sides first), renders only expanded
+// sections, and short-circuits to a single full-bleed section when one is maximized.
+// Its SplittableSection children are memoized with primitive props so a
+// per-pointer-move resize does not cascade into them (SWITCH-05).
+
+import { useAtomValue, useSetAtom } from "jotai";
+import type { ReactElement } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { ElementIds } from "~/api";
+
+import { ResizeHandle } from "./ResizeHandle.tsx";
+import { isSectionExpandedAtom, sectionSizesAtom, setSectionSizeAtom } from "./sectionAtoms.ts";
+import { resolveSectionPixelSizes, sizeToPercent } from "./sectionGeometry.ts";
+import styles from "./SectionGrid.module.scss";
+import { SplittableSection } from "./SplittableSection.tsx";
+import { maximizedSectionAtom } from "./transientAtoms.ts";
+
+export const SectionGrid = (): ReactElement => {
+  const sizes = useAtomValue(sectionSizesAtom);
+  const isLeftExpanded = useAtomValue(isSectionExpandedAtom("left"));
+  const isRightExpanded = useAtomValue(isSectionExpandedAtom("right"));
+  const isBottomExpanded = useAtomValue(isSectionExpandedAtom("bottom"));
+  const maximizedSection = useAtomValue(maximizedSectionAtom);
+  const setSectionSize = useSetAtom(setSectionSizeAtom);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const element = containerRef.current;
+    if (element === null) {
+      return;
+    }
+    const observer = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (rect !== undefined) {
+        setContainerSize({ width: rect.width, height: rect.height });
+      }
+    });
+    observer.observe(element);
+    return (): void => observer.disconnect();
+  }, []);
+
+  const { width, height } = containerSize;
+  const { leftPx, rightPx, bottomPx } = resolveSectionPixelSizes({
+    containerWidth: width,
+    containerHeight: height,
+    sizes,
+    isLeftExpanded,
+    isRightExpanded,
+    isBottomExpanded,
+  });
+
+  const resizeSide = useCallback(
+    (side: "left" | "right" | "bottom", px: number, dimension: number): void => {
+      setSectionSize({ side, percent: sizeToPercent(px, dimension) });
+    },
+    [setSectionSize],
+  );
+
+  if (maximizedSection !== null) {
+    return (
+      <div ref={containerRef} className={styles.maximized}>
+        <SplittableSection section={maximizedSection} />
+      </div>
+    );
+  }
+
+  return (
+    <div ref={containerRef} className={styles.outer}>
+      <div className={styles.topRow}>
+        {isLeftExpanded && (
+          <>
+            <div className={styles.side} style={{ width: leftPx }} data-testid={ElementIds.SECTION_LEFT}>
+              <SplittableSection section="left" />
+            </div>
+            <ResizeHandle
+              axis="x"
+              getSize={() => leftPx}
+              onResize={(px) => resizeSide("left", px, width)}
+              ariaLabel="Resize left section"
+              data-testid={`${ElementIds.SECTION_RESIZE_HANDLE}-left`}
+            />
+          </>
+        )}
+
+        <div className={styles.center} data-testid={ElementIds.SECTION_CENTER}>
+          <SplittableSection section="center" />
+        </div>
+
+        {isRightExpanded && (
+          <>
+            <ResizeHandle
+              axis="x"
+              getSize={() => rightPx}
+              onResize={(px) => resizeSide("right", px, width)}
+              direction={-1}
+              ariaLabel="Resize right section"
+              data-testid={`${ElementIds.SECTION_RESIZE_HANDLE}-right`}
+            />
+            <div className={styles.side} style={{ width: rightPx }} data-testid={ElementIds.SECTION_RIGHT}>
+              <SplittableSection section="right" />
+            </div>
+          </>
+        )}
+      </div>
+
+      {isBottomExpanded && (
+        <>
+          <ResizeHandle
+            axis="y"
+            getSize={() => bottomPx}
+            onResize={(px) => resizeSide("bottom", px, height)}
+            direction={-1}
+            ariaLabel="Resize bottom section"
+            data-testid={`${ElementIds.SECTION_RESIZE_HANDLE}-bottom`}
+          />
+          <div className={styles.bottom} style={{ height: bottomPx }} data-testid={ElementIds.SECTION_BOTTOM}>
+            <SplittableSection section="bottom" />
+          </div>
+        </>
+      )}
+    </div>
+  );
+};

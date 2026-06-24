@@ -15,6 +15,7 @@ import { atomFamily, selectAtom } from "jotai/utils";
 import { layoutPersistenceAdapter } from "./persistence/LocalStorageLayoutAdapter.ts";
 import type { GlobalLayoutState, LayoutScope, WorkspaceLayoutState } from "./persistence/types.ts";
 import { DEFAULT_GLOBAL_LAYOUT, EMPTY_WORKSPACE_LAYOUT } from "./persistence/types.ts";
+import { SECTION_SIZE_MAX_PERCENT, SECTION_SIZE_MIN_PERCENT } from "./sectionGeometry.ts";
 import type { PanelId, SectionId, SectionSplit, SubSectionId } from "./sectionTypes.ts";
 import { toSection } from "./sectionTypes.ts";
 
@@ -181,6 +182,19 @@ export const sectionSizesAtom: Atom<GlobalLayoutState["sectionSizes"]> = selectA
 export const explorerListWidthAtom: WritableAtom<number, [number], void> = atom(
   (get) => get(globalLayoutAtom).explorerListWidthPx,
   (_get, set, width: number) => set(globalLayoutAtom, (prev) => ({ ...prev, explorerListWidthPx: width })),
+);
+
+// Write a section's global size percentage (clamped). Resizing in one workspace
+// changes the size everywhere (SEC-18 / PERSIST-02).
+export const setSectionSizeAtom = atom(
+  null,
+  (_get, set, params: { side: "left" | "right" | "bottom"; percent: number }) => {
+    const clamped = Math.max(SECTION_SIZE_MIN_PERCENT, Math.min(SECTION_SIZE_MAX_PERCENT, params.percent));
+    set(globalLayoutAtom, (prev) => ({
+      ...prev,
+      sectionSizes: { ...prev.sectionSizes, [params.side]: clamped },
+    }));
+  },
 );
 
 // ── Scope switching / removal ─────────────────────────────────────────────────
