@@ -1,3 +1,4 @@
+import datetime
 import queue
 import threading
 import time
@@ -22,14 +23,17 @@ from sculptor.web.pr_polling_service import _HostThrottle
 from sculptor.web.pr_polling_service import _MIN_POLL_INTERVAL_SECONDS
 from sculptor.web.pr_polling_service import _PollJob
 from sculptor.web.pr_polling_service import _RATE_LIMIT_COOLDOWN_SECONDS
+from sculptor.web.pr_polling_service import _RATE_LIMIT_WINDOW_SECONDS
 from sculptor.web.pr_polling_service import _RoundCandidate
 from sculptor.web.pr_polling_service import _TERMINAL_STATE_MULTIPLIER
 from sculptor.web.pr_polling_service import _WorkspacePollState
 from sculptor.web.pr_polling_service import _build_pr_index
+from sculptor.web.pr_polling_service import _compute_governed_interval
 from sculptor.web.pr_polling_service import _compute_poll_delay
 from sculptor.web.pr_polling_service import _compute_round_interval
 from sculptor.web.pr_polling_service import _parse_origin
 from sculptor.web.pr_polling_service import _parse_origin_owner_repo
+from sculptor.web.pr_polling_service import _seconds_until_reset
 from sculptor.web.pr_status import GithubRateLimit
 from sculptor.web.pr_status import OpenPrSearchResult
 from sculptor.web.streams import _notify_pr_polling_service
@@ -65,6 +69,7 @@ def _make_service() -> PrPollingService:
     svc._rate_limit_by_host = {}
     svc._round_failed_hosts = set()
     svc._cold_start_logged_hosts = set()
+    svc._governed_interval = None
     object.__setattr__(svc, "_data_model_service", MagicMock())
     object.__setattr__(svc, "_workspace_service", MagicMock())
     return svc
@@ -1079,3 +1084,109 @@ def test_fallback_matched_workspace_stops_rescheduling() -> None:
     assert svc._cache[ws] == open_status
     assert svc._job_queue.empty()
     assert ws not in svc._pending
+
+
+# ---------------------------------------------------------------------------
+# Rate-budget governor (Change-3): back-off / recover / defer.
+# ---------------------------------------------------------------------------
+
+
+_BASE = 30.0
+_BUDGET_FRACTION = 0.8
+
+
+def _rate_limit(
+    remaining: int, limit: int = 5000, cost: int = 3, reset_at: str = "2026-01-01T00:00:00Z"
+) -> GithubRateLimit:
+    return GithubRateLimit(cost=cost, remaining=remaining, limit=limit, reset_at=reset_at)
+
+
+def test_governor_holds_at_base_with_plenty_of_headroom() -> None:
+    # Barely any of the budget spent → stay at the base interval.
+    interval, throttled = _compute_governed_interval(
+        _BASE, _BASE, _rate_limit(remaining=4900), _BUDGET_FRACTION, seconds_until_reset=3000.0
+    )
+    assert interval == _BASE
+    assert throttled is False
+
+
+def test_governor_backs_off_when_projected_spend_exceeds_ceiling() -> None:
+    # 4000 of 5000 spent in the first 600s of the window → ~24000/hr projected,
+    # far above the 4000/hr ceiling → lengthen the interval.
+    interval, throttled = _compute_governed_interval(
+        _BASE, _BASE, _rate_limit(remaining=1000), _BUDGET_FRACTION, seconds_until_reset=3000.0
+    )
+    assert interval > _BASE
+    assert throttled is True
+
+
+def test_governor_backoff_accumulates_up_to_cap() -> None:
+    over_budget = _rate_limit(remaining=1000)
+    # Each round multiplies the interval; it never exceeds base * the cap multiplier.
+    first, _ = _compute_governed_interval(_BASE, _BASE, over_budget, _BUDGET_FRACTION, 3000.0)
+    second, _ = _compute_governed_interval(_BASE, first, over_budget, _BUDGET_FRACTION, 3000.0)
+    assert second > first
+    capped, _ = _compute_governed_interval(_BASE, 100_000.0, over_budget, _BUDGET_FRACTION, 3000.0)
+    assert capped == _BASE * 20.0
+
+
+def test_governor_recovers_toward_base_when_headroom_returns() -> None:
+    # Stretched to 100s, but spend is now well under the ceiling → step back down,
+    # never below the base interval.
+    headroom = _rate_limit(remaining=4900)
+    recovered, throttled = _compute_governed_interval(_BASE, 100.0, headroom, _BUDGET_FRACTION, 3000.0)
+    assert _BASE <= recovered < 100.0
+    assert throttled is True  # still above base — recovering, not yet recovered
+    at_base, throttled_at_base = _compute_governed_interval(_BASE, _BASE, headroom, _BUDGET_FRACTION, 3000.0)
+    assert at_base == _BASE
+    assert throttled_at_base is False
+
+
+def test_governor_defers_to_reset_when_remaining_is_critically_low() -> None:
+    # remaining below 5% of limit → wait out the window (≈ seconds until reset).
+    interval, throttled = _compute_governed_interval(
+        _BASE, _BASE, _rate_limit(remaining=100), _BUDGET_FRACTION, seconds_until_reset=1800.0
+    )
+    assert interval == 1800.0
+    assert throttled is True
+
+
+def test_governor_ceiling_scales_with_reported_limit_not_hardcoded() -> None:
+    # Same spend rate (≈5000/hr): over the 4000 ceiling for a 5000-point token,
+    # but well under the 12000 ceiling for a 15000-point App token.
+    small_token = _rate_limit(remaining=4167, limit=5000)
+    big_token = _rate_limit(remaining=14167, limit=15000)
+    small_interval, small_throttled = _compute_governed_interval(_BASE, _BASE, small_token, _BUDGET_FRACTION, 3000.0)
+    big_interval, big_throttled = _compute_governed_interval(_BASE, _BASE, big_token, _BUDGET_FRACTION, 3000.0)
+    assert small_throttled is True and small_interval > _BASE
+    assert big_throttled is False and big_interval == _BASE
+
+
+def test_governor_backs_off_on_remaining_decline_even_with_tiny_cost() -> None:
+    # A small search cost but a large drop in remaining (the fallback fetches
+    # spent it) must still trigger back-off — proving the governor drives off
+    # remaining, not the search query's cost.
+    interval, throttled = _compute_governed_interval(
+        _BASE, _BASE, _rate_limit(remaining=1000, cost=3), _BUDGET_FRACTION, seconds_until_reset=3000.0
+    )
+    assert throttled is True
+    assert interval > _BASE
+
+
+def test_seconds_until_reset_parses_future_timestamp() -> None:
+    future = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=600)
+    seconds = _seconds_until_reset(future.isoformat().replace("+00:00", "Z"))
+    assert 590 <= seconds <= 600
+
+
+def test_seconds_until_reset_handles_missing_and_invalid() -> None:
+    assert _seconds_until_reset(None) == _RATE_LIMIT_WINDOW_SECONDS
+    assert _seconds_until_reset("") == _RATE_LIMIT_WINDOW_SECONDS
+    assert _seconds_until_reset("not-a-timestamp") == _RATE_LIMIT_WINDOW_SECONDS
+
+
+def test_seconds_until_reset_floors_past_and_caps_far_future() -> None:
+    past = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=120)
+    assert _seconds_until_reset(past.isoformat().replace("+00:00", "Z")) == 0.0
+    far_future = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=99999)
+    assert _seconds_until_reset(far_future.isoformat().replace("+00:00", "Z")) == _RATE_LIMIT_WINDOW_SECONDS

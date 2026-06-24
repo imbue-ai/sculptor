@@ -106,15 +106,101 @@ def _compute_poll_delay(config: UserConfig, *, is_open: bool, pr_state: _PrState
 
 
 def _compute_round_interval(config: UserConfig) -> float:
-    """Interval between batched search rounds.
+    """Base interval between batched search rounds (before the governor).
 
     One batched ``search`` round is cheap regardless of workspace count, so the
-    round just runs at the configured base interval (floored at
-    ``_MIN_POLL_INTERVAL_SECONDS``). The Task 4.1 governor will stretch this
-    under budget pressure; the per-workspace fallback keeps its own
-    ``_compute_poll_delay`` cadence either way.
+    base is just the configured interval (floored at ``_MIN_POLL_INTERVAL_SECONDS``).
+    The governor (``_compute_governed_interval``) stretches this under budget
+    pressure; the per-workspace fallback keeps its own ``_compute_poll_delay``
+    cadence either way.
     """
     return max(float(config.pr_poll_interval_seconds), _MIN_POLL_INTERVAL_SECONDS)
+
+
+# GitHub's GraphQL rate limit is a rolling one-hour budget that refills at
+# ``resetAt``; the governor projects hourly spend over this window.
+_RATE_LIMIT_WINDOW_SECONDS = 3600.0
+# Multiplicative step the governor takes per round to lengthen (×) or recover (÷)
+# the interval, and the cap on how far it may stretch beyond the base.
+_GOVERNOR_STEP_FACTOR = 1.5
+_GOVERNOR_MAX_INTERVAL_MULTIPLIER = 20.0
+# Recover toward base only once projected spend drops below this fraction of the
+# ceiling (hysteresis, so the interval doesn't oscillate round-to-round).
+_GOVERNOR_RECOVER_FRACTION = 0.5
+# When ``remaining`` falls below this fraction of ``limit`` the wall is near —
+# stop polling until the window resets rather than nibbling the last of the budget.
+_GOVERNOR_DEFER_REMAINING_FRACTION = 0.05
+# A single search round costs only a few points; a cost far above this signals a
+# field addition that ballooned the fan-out (complements the Task 4.2 guard).
+_MAX_PLAUSIBLE_SEARCH_COST = 50
+
+
+def _seconds_until_reset(reset_at: str | None) -> float:
+    """Parse GitHub's ISO-8601 ``resetAt`` into seconds from now (defensively).
+
+    Returns a full window on a missing/unparseable value or backward clock skew,
+    and clamps a far-future value to one window — so a bad timestamp degrades to
+    the base cadence rather than crashing or deferring forever.
+    """
+    if not reset_at:
+        return _RATE_LIMIT_WINDOW_SECONDS
+    try:
+        reset_dt = datetime.datetime.fromisoformat(reset_at.replace("Z", "+00:00"))
+    except ValueError:
+        return _RATE_LIMIT_WINDOW_SECONDS
+    delta = (reset_dt - datetime.datetime.now(datetime.timezone.utc)).total_seconds()
+    if delta <= 0:
+        return 0.0
+    return min(delta, _RATE_LIMIT_WINDOW_SECONDS)
+
+
+def _compute_governed_interval(
+    base_interval: float,
+    current_interval: float,
+    rate_limit: "GithubRateLimit | None",
+    budget_fraction: float,
+    seconds_until_reset: float,
+) -> tuple[float, bool]:
+    """Return ``(next round interval, is_throttled)`` for the rate-budget governor.
+
+    Proactively lengthens the round interval before the token's hourly GraphQL
+    budget is exhausted. The projection is driven off ``remaining`` (the token's
+    *global* budget across every query that hour — search **and** the per-workspace
+    fallback fetches), not the search query's ``cost`` alone, which would
+    under-count the fallback spend. ``limit`` is read from the response so the
+    ceiling scales for tokens with a non-default budget (e.g. GitHub App tokens).
+
+    Behavior: defer to ``reset_at`` when ``remaining`` is critically low; back off
+    multiplicatively (up to a cap) when projected hourly spend exceeds
+    ``budget_fraction × limit``; recover toward ``base_interval`` (never below it)
+    once spend drops comfortably under the ceiling.
+    """
+    if rate_limit is None or rate_limit.limit <= 0:
+        return base_interval, False
+    limit = float(rate_limit.limit)
+    remaining = float(rate_limit.remaining)
+    current_interval = max(current_interval, base_interval)
+
+    # Critically low budget — wait out the window instead of hitting the wall.
+    if remaining <= _GOVERNOR_DEFER_REMAINING_FRACTION * limit:
+        return max(seconds_until_reset, _MIN_POLL_INTERVAL_SECONDS), True
+
+    ceiling = budget_fraction * limit
+    elapsed = min(
+        max(_RATE_LIMIT_WINDOW_SECONDS - seconds_until_reset, _MIN_POLL_INTERVAL_SECONDS), _RATE_LIMIT_WINDOW_SECONDS
+    )
+    spent = max(0.0, limit - remaining)
+    projected_hourly_spend = spent / elapsed * _RATE_LIMIT_WINDOW_SECONDS
+
+    max_interval = base_interval * _GOVERNOR_MAX_INTERVAL_MULTIPLIER
+    if projected_hourly_spend > ceiling:
+        next_interval = min(current_interval * _GOVERNOR_STEP_FACTOR, max_interval)
+        return max(next_interval, base_interval), True
+    if projected_hourly_spend < ceiling * _GOVERNOR_RECOVER_FRACTION:
+        next_interval = max(current_interval / _GOVERNOR_STEP_FACTOR, base_interval)
+        return next_interval, next_interval > base_interval
+    # Comfortable band — hold the current (possibly already-stretched) interval.
+    return current_interval, current_interval > base_interval
 
 
 class _CooldownDeferred:
@@ -402,10 +488,13 @@ class PrPollingService(Service):
     # rescheduling (checked in _poll_and_handle_result). add/discard are atomic
     # under the GIL; the fallback worker only does a membership test.
     _matched_workspaces: set[WorkspaceID] = PrivateAttr(default_factory=set)
-    # Latest ``rateLimit`` snapshot from each host's search round, exposed for
-    # the Task 4.1 governor. Keyed by host so a github.com round and a GHE round
+    # Latest ``rateLimit`` snapshot from each host's search round, read by the
+    # rate-budget governor. Keyed by host so a github.com round and a GHE round
     # keep separate budgets.
     _rate_limit_by_host: dict[str, GithubRateLimit | None] = PrivateAttr(default_factory=dict)
+    # The governor's current (possibly stretched) round interval. None until the
+    # first round produces a rateLimit; multiplicative back-off accumulates here.
+    _governed_interval: float | None = PrivateAttr(default=None)
     # Hosts whose search round is currently failing (transient), for once-only
     # logging until the round recovers.
     _round_failed_hosts: set[str] = PrivateAttr(default_factory=set)
@@ -630,7 +719,50 @@ class PrPollingService(Service):
                 # Never let the round thread die — a single bad round must not
                 # stop all batched polling.
                 log_exception(e, message="PR search round crashed", priority=ExceptionPriority.LOW_PRIORITY)
-            self._shutdown_event.wait(_compute_round_interval(config))
+            self._shutdown_event.wait(self._compute_next_round_interval(config))
+
+    def _compute_next_round_interval(self, config: UserConfig) -> float:
+        """Apply the rate-budget governor to pick the next round's interval.
+
+        Reads the most-constrained host's latest ``rateLimit`` and stretches /
+        recovers the interval (state in ``_governed_interval``). On a hard defer
+        (``remaining`` critically low), also enters the shared rate-limit cooldown
+        so the per-workspace fallback backs off too — leaving the cache untouched,
+        like ``_CooldownDeferred``, so the user keeps seeing last-known status.
+        """
+        base_interval = _compute_round_interval(config)
+        rate_limit = self._most_constrained_rate_limit()
+        if rate_limit is None:
+            self._governed_interval = base_interval
+            return base_interval
+
+        current_interval = self._governed_interval if self._governed_interval is not None else base_interval
+        seconds_until_reset = _seconds_until_reset(rate_limit.reset_at)
+        next_interval, is_throttled = _compute_governed_interval(
+            base_interval, current_interval, rate_limit, config.pr_poll_budget_fraction, seconds_until_reset
+        )
+        self._governed_interval = next_interval
+        is_deferring = rate_limit.remaining <= _GOVERNOR_DEFER_REMAINING_FRACTION * rate_limit.limit
+        if is_throttled:
+            logger.debug(
+                "PR governor throttling: next round in {:.0f}s (remaining={}/{}, base={:.0f}s)",
+                next_interval,
+                rate_limit.remaining,
+                rate_limit.limit,
+                base_interval,
+            )
+        if is_deferring:
+            # Reuse the reactive rate-limit cooldown so fallback fetches pause too
+            # until the budget resets (same mechanism a 403 triggers).
+            self._throttle.enter_cooldown(max(seconds_until_reset, _MIN_POLL_INTERVAL_SECONDS))
+        return next_interval
+
+    def _most_constrained_rate_limit(self) -> GithubRateLimit | None:
+        """The latest per-host ``rateLimit`` with the least headroom (lowest remaining fraction)."""
+        snapshots = [rl for rl in self._rate_limit_by_host.values() if rl is not None]
+        if not snapshots:
+            return None
+        return min(snapshots, key=lambda rl: (rl.remaining / rl.limit) if rl.limit > 0 else 1.0)
 
     def _run_round(self, config: UserConfig) -> None:
         """Run one batched search round per distinct host across tracked workspaces."""
@@ -661,6 +793,15 @@ class PrPollingService(Service):
 
         self._round_failed_hosts.discard(host)
         self._rate_limit_by_host[host] = search_result.rate_limit
+        if search_result.rate_limit is not None and search_result.rate_limit.cost > _MAX_PLAUSIBLE_SEARCH_COST:
+            # A search round should cost only a few points; a spike means a field
+            # addition ballooned the fan-out (lower-bound sanity check for the governor).
+            logger.warning(
+                "PR search round on {} cost {} points (expected <= {})",
+                host,
+                search_result.rate_limit.cost,
+                _MAX_PLAUSIBLE_SEARCH_COST,
+            )
         index = _build_pr_index(search_result.nodes)
 
         unmatched_count = 0
