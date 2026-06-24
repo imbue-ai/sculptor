@@ -1,10 +1,11 @@
-import { appendAgentMessage, updateAgent } from "~/db/repositories";
+import { updateAgent } from "~/db/repositories";
 import type { Orm } from "~/db/orm";
 import type { AgentRow, RunState } from "~/db/schema";
 import { eventBus } from "~/events";
 import type { ChangedEntityRef } from "~/events/types";
-import { ProjectionCache, projectionCache } from "~/projection/cache";
+import type { ProjectionCache } from "~/projection/cache";
 import type { Harness, HarnessExitResult, HarnessProcess } from "~/runner/harness";
+import { MessageWriter } from "~/runner/message_writer";
 
 export const TERMINAL_RUN_STATES: ReadonlySet<RunState> = new Set<RunState>([
   "SUCCEEDED",
@@ -31,13 +32,16 @@ export class AgentSupervisor {
   private agent: AgentRow;
   private process: HarnessProcess | undefined;
   private finalized = false;
+  private readonly writer: MessageWriter;
 
   constructor(private readonly deps: AgentSupervisorDeps) {
     this.agent = deps.agent;
-  }
-
-  private get cache(): ProjectionCache {
-    return this.deps.cache ?? projectionCache;
+    this.writer = new MessageWriter({
+      orm: deps.orm,
+      agentId: this.agent.objectId,
+      cache: deps.cache,
+      onStream: (message) => this.publishAgentMessage(message),
+    });
   }
 
   get agentId(): string {
@@ -56,22 +60,17 @@ export class AgentSupervisor {
   }
 
   private handleMessage(message: Record<string, unknown>): void {
-    const { orm } = this.deps;
-    try {
-      appendAgentMessage(orm, this.agentId, message);
-    } catch {
-      // A malformed message that fails the append invariants is not persisted;
-      // never let it crash the supervisor.
-      return;
-    }
-    this.cache.applyMessage(orm, this.agentId, message);
-    this.publishAgentMessage(message);
+    // The writer streams to the warm cache + bus immediately and persists with
+    // coalescing (Task 5.2).
+    this.writer.write(message);
   }
 
   private handleExit(result: HarnessExitResult): void {
     if (this.finalized) {
       return;
     }
+    // Make any buffered partial durable before finalizing.
+    this.writer.flush();
     this.finalize(result.error !== undefined ? "FAILED" : "SUCCEEDED", result.error ?? null);
   }
 

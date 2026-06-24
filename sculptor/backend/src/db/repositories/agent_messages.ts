@@ -8,6 +8,10 @@ import { agentMessage, type AgentMessageRow, agentMessageSourceSchema } from "~/
 // Python isinstance(message, PartialResponseBlockAgentMessage) check.
 const PARTIAL_MESSAGE_OBJECT_TYPE = "PartialResponseBlockAgentMessage";
 
+export function isPartialMessage(message: Record<string, unknown>): boolean {
+  return message.object_type === PARTIAL_MESSAGE_OBJECT_TYPE;
+}
+
 // The minimal message envelope the append invariants require. The full message
 // payload is stored verbatim as JSON; only these fields are read here.
 const messageEnvelopeSchema = z.object({
