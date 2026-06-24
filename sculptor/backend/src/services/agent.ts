@@ -5,6 +5,7 @@ import { getOrm } from "~/db/orm";
 import {
   appendAgentMessage,
   createAgent,
+  deleteAgentMessage,
   findAgentsByPrefix,
   getAgent,
   getWorkspace,
@@ -12,7 +13,9 @@ import {
   setAgentDeleting,
   setAgentRunState,
   softDeleteAgent,
+  updateAgent,
 } from "~/db/repositories";
+import { eventBus } from "~/events";
 import type { AgentRow } from "~/db/schema";
 import { artifactsPath, workingDirectory } from "~/environment/paths";
 import { revParseHead } from "~/git";
@@ -226,6 +229,121 @@ export class AgentService {
       getAgentRunner().stopAgent(agentId);
     }
     softDeleteAgent(orm, agentId);
+  }
+
+  // --- interaction (Task 6.8) ------------------------------------------------
+
+  private requireAgent(agentId: string): AgentRow {
+    const agent = getAgent(getOrm(), agentId);
+    if (agent === undefined || agent.isDeleted) {
+      throw new AgentError(404, "Agent not found");
+    }
+    return agent;
+  }
+
+  sendMessage(
+    agentId: string,
+    input: {
+      message: string;
+      model?: string | null;
+      files?: string[];
+      enterPlanMode?: boolean;
+      exitPlanMode?: boolean;
+      fastMode?: boolean;
+      effort?: string;
+      sentVia?: string | null;
+    },
+  ): void {
+    const orm = getOrm();
+    this.requireAgent(agentId);
+    const message: Record<string, unknown> = {
+      object_type: "ChatInputUserMessage",
+      message_id: newAgentMessageId(),
+      source: "USER",
+      text: input.message,
+      model_name: input.model ?? null,
+      files: input.files ?? [],
+      enter_plan_mode: input.enterPlanMode ?? false,
+      exit_plan_mode: input.exitPlanMode ?? false,
+      fast_mode: input.fastMode ?? false,
+      effort: input.effort ?? "xhigh",
+      sent_via: input.sentVia ?? null,
+    };
+    appendAgentMessage(orm, agentId, message);
+    const runner = getAgentRunner();
+    runner.startAgent(agentId);
+    runner.sendUserMessage(agentId, message);
+  }
+
+  answerQuestion(
+    agentId: string,
+    input: {
+      answers: Record<string, string>;
+      notes: Record<string, string>;
+      questionData: unknown;
+      toolUseId: string;
+    },
+  ): void {
+    const orm = getOrm();
+    this.requireAgent(agentId);
+    const message: Record<string, unknown> = {
+      object_type: "UserQuestionAnswerMessage",
+      message_id: newAgentMessageId(),
+      source: "USER",
+      answers: input.answers,
+      notes: input.notes,
+      question_data: input.questionData,
+      tool_use_id: input.toolUseId,
+    };
+    appendAgentMessage(orm, agentId, message);
+    getAgentRunner().sendUserMessage(agentId, message);
+  }
+
+  // /clear — discard the model session (reset, not compaction) so the next turn
+  // starts fresh (the CLI's --resume no longer fires).
+  clearContext(agentId: string): void {
+    const orm = getOrm();
+    const agent = this.requireAgent(agentId);
+    updateAgent(orm, agentId, { claudeSessionId: null, piSessionId: null });
+    eventBus.publish({
+      kind: "agent_status",
+      agentId,
+      workspaceId: agent.workspaceId ?? undefined,
+      projectId: agent.projectId,
+    });
+  }
+
+  interrupt(agentId: string): void {
+    this.requireAgent(agentId);
+    getAgentRunner().interruptAgent(agentId);
+  }
+
+  setModel(agentId: string, provider: string, modelId: string): void {
+    const orm = getOrm();
+    const agent = this.requireAgent(agentId);
+    updateAgent(orm, agentId, {
+      currentModel: { provider, model_id: modelId },
+    });
+    eventBus.publish({
+      kind: "agent_status",
+      agentId,
+      workspaceId: agent.workspaceId ?? undefined,
+      projectId: agent.projectId,
+    });
+  }
+
+  deleteMessage(agentId: string, messageId: string): void {
+    const orm = getOrm();
+    const agent = this.requireAgent(agentId);
+    deleteAgentMessage(orm, messageId);
+    // Drop the warm fold so the view recomputes without the deleted message.
+    projectionCache.evict(agentId);
+    eventBus.publish({
+      kind: "agent_status",
+      agentId,
+      workspaceId: agent.workspaceId ?? undefined,
+      projectId: agent.projectId,
+    });
   }
 
   restore(agentId: string): void {

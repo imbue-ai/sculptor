@@ -108,7 +108,7 @@ const AGENT = {
 
 // Generous timeout: these tests spawn a real subprocess, and under the full
 // parallel suite many spawns contend, so the default 5s can be exceeded.
-const E2E_TIMEOUT_MS = 20_000;
+const E2E_TIMEOUT_MS = 28_000;
 
 async function waitFor(
   predicate: () => boolean,

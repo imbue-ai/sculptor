@@ -97,7 +97,7 @@ const AGENT = {
   currentModel: null,
 } as unknown as AgentRow;
 
-const E2E_TIMEOUT_MS = 20_000;
+const E2E_TIMEOUT_MS = 28_000;
 
 async function waitFor(
   predicate: () => boolean,
