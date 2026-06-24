@@ -53,12 +53,13 @@ class PlaywrightPanelTabElement:
         return self._section.get_active_tab()
 
     def get_tab_dot_status(self, tab: Locator) -> Locator:
-        """Read a tab's status-dot value via its ``data-dot-status`` attribute.
+        """Return the tab locator carrying the ``data-dot-status`` attribute.
 
-        The CSS-attribute scoping stays inside the POM to honour the integration-test
-        css-locator ratchet.
+        Agent (and terminal-agent) panel tabs stamp ``data-dot-status`` on the tab
+        element itself (read/unread/running/waiting/error), so callers assert
+        ``to_have_attribute("data-dot-status", …)`` on the returned locator.
         """
-        return tab.locator("[data-dot-status]")
+        return tab
 
     # ── Close (→ delete/close confirmation) ─────────────────────────────────────
 

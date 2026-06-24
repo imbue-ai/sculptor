@@ -13,6 +13,7 @@ import type { LucideIcon } from "lucide-react";
 import { FileText, GitBranch, GitCommitVertical, Globe, ListChecks, NotebookPen, Sparkles, Zap } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 
+import type { AgentDotStatus } from "../../statusDot/statusUtils.ts";
 import { activePanelIdInSubSectionAtom } from "../sectionAtoms.ts";
 import type { PanelId, SubSectionId } from "../sectionTypes.ts";
 
@@ -29,6 +30,10 @@ export type PanelDefinition = {
   defaultSection?: SubSectionId;
   component: ComponentType;
   tabIcon?: ReactNode;
+  // The agent/terminal-agent status reflected by the tab's status dot. Exposed on the
+  // tab element as `data-dot-status` so tests can read read/unread/running/waiting/error
+  // without depending on the dot's visual styling. Unset for static/plain-terminal panels.
+  dotStatus?: AgentDotStatus;
   contextMenuActions?: ReadonlyArray<PanelContextMenuItem>;
   // When set, the tab's close button runs this instead of removing the panel from the
   // layout. Multi-instance panels use it so closing an agent/terminal tab deletes the

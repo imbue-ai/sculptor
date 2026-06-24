@@ -157,6 +157,7 @@ export function deriveDynamicPanels(
       defaultSection: "center",
       component: getAgentComponent(agent.taskId),
       tabIcon: createElement(AgentStatusDot, { status: dotStatus }),
+      dotStatus,
       contextMenuActions: buildAgentContextMenuActions(agent),
       onRequestClose: agent.onRequestClose,
     });

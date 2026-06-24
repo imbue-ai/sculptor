@@ -136,6 +136,7 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
       data-testid={`${ElementIds.PANEL_TAB}-${panelId}`}
       data-section-tab="true"
       data-panel-id={panelId}
+      data-dot-status={definition.dotStatus}
       onClick={handleActivate}
       onDoubleClick={handleDoubleClick}
     >
