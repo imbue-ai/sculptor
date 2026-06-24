@@ -11,7 +11,6 @@ depends on real signals and process-group semantics.
 import os
 import shlex
 import signal
-import tempfile
 import time
 from pathlib import Path
 from queue import Queue
@@ -49,7 +48,7 @@ def _wait_until_dead(pid: int, timeout: float = 5.0) -> bool:
     return False
 
 
-def test_kill_now_escalates_sigterm_then_sigkill_across_the_process_group() -> None:
+def test_kill_now_escalates_sigterm_then_sigkill_across_the_process_group(tmp_path: Path) -> None:
     """A SIGTERM-ignoring process group survives ``kill_now(SIGTERM)`` but is
     fully reaped — leader AND a SIGTERM-ignoring descendant — by
     ``kill_now(SIGKILL)``.
@@ -58,8 +57,8 @@ def test_kill_now_escalates_sigterm_then_sigkill_across_the_process_group() -> N
     trap SIGTERM, so Stop must escalate to SIGKILL on the whole group, issued
     directly (``killpg``) rather than via the worker thread's shutdown path.
     """
-    leader_pid_path = Path(tempfile.mktemp(prefix="scu1340_leader_", suffix=".pid"))
-    child_pid_path = Path(tempfile.mktemp(prefix="scu1340_child_", suffix=".pid"))
+    leader_pid_path = tmp_path / "scu1340_leader.pid"
+    child_pid_path = tmp_path / "scu1340_child.pid"
     leader_pid: int | None = None
     child_pid: int | None = None
     try:
