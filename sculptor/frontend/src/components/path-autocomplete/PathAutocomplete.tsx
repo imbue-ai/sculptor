@@ -23,6 +23,7 @@ type PathAutocompleteProps = {
   onValueChange?: (value: string) => void;
   inputTestId?: string;
   autoFocus?: boolean;
+  suffix?: string;
 };
 
 /**
@@ -61,6 +62,7 @@ export const PathAutocomplete = ({
   onValueChange: controlledOnValueChange,
   inputTestId,
   autoFocus = false,
+  suffix,
 }: PathAutocompleteProps): ReactElement => {
   const [internalValue, setInternalValue] = useState<string>("");
   const inputValue = controlledValue ?? internalValue;
@@ -184,7 +186,13 @@ export const PathAutocomplete = ({
           closeDropdown();
           onSubmit(submittedPath);
         } else if (!isOpen && submittedPath) {
+          // We're consuming this Enter as the autocomplete's submit — stop it
+          // from bubbling. Inside a Radix Select dropdown the bubbled Enter
+          // re-fires onValueChange on the highlighted item, which in the
+          // Add Repository flow can close the dialog and reopen it via
+          // setIsAddDialogOpen(true) — wiping the user's source selection.
           e.preventDefault();
+          e.stopPropagation();
           onSubmit(submittedPath);
           setInputValue("");
         }
@@ -262,16 +270,23 @@ export const PathAutocomplete = ({
         ref={rootRef}
         onKeyDown={handleKeyDown}
       >
-        <Command.Input
-          className={styles.input}
-          value={inputValue}
-          onValueChange={handleInputChange}
-          onFocus={handleFocus}
-          placeholder={placeholder}
-          disabled={disabled}
-          data-testid={inputTestId}
-          autoFocus={autoFocus}
-        />
+        <div className={styles.inputWrapper} data-has-suffix={suffix ? "true" : "false"}>
+          <Command.Input
+            className={styles.input}
+            value={inputValue}
+            onValueChange={handleInputChange}
+            onFocus={handleFocus}
+            placeholder={placeholder}
+            disabled={disabled}
+            data-testid={inputTestId}
+            autoFocus={autoFocus}
+          />
+          {suffix && (
+            <span className={styles.suffix} aria-hidden="true">
+              {suffix}
+            </span>
+          )}
+        </div>
         {isDropdownVisible && (
           <Command.List className={styles.list}>
             {isLoading && items.length === 0 && (

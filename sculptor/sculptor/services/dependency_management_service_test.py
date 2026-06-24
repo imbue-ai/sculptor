@@ -26,7 +26,9 @@ from sculptor.services.dependency_management_service import DependencyCheckResul
 from sculptor.services.dependency_management_service import DependencyManagementService
 from sculptor.services.dependency_management_service import PI_VERSION_RANGE
 from sculptor.services.dependency_management_service import VersionRange
+from sculptor.services.dependency_management_service import _GH_DEVICE_CODE_RE
 from sculptor.services.dependency_management_service import _parse_dependency_config
+from sculptor.services.dependency_management_service import _parse_remote_cli_version
 from sculptor.services.dependency_management_service import parse_pi_version
 from sculptor.services.managed_tools import BlockedVersionRange
 from sculptor.services.managed_tools import ClaudeManagedTool
@@ -61,7 +63,7 @@ def _make_user_config(
         dep_paths = DependencyPaths(claude=claude_binary_mode, pi="pi")
     else:
         claude_value = dependency_paths.claude if dependency_paths.claude else claude_binary_mode
-        dep_paths = DependencyPaths(git=dependency_paths.git, claude=claude_value, pi="pi")
+        dep_paths = DependencyPaths(git=dependency_paths.git, gh=dependency_paths.gh, claude=claude_value, pi="pi")
     return UserConfig(
         user_email=user_email,
         user_id=user_id,
@@ -301,6 +303,31 @@ class TestResolveGitPath:
             result = service.resolve_binary_path(Dependency.GIT)
 
         assert result == "/custom/git"
+
+
+class TestResolveGhPath:
+    @patch("sculptor.services.dependency_management_service.get_user_config_instance")
+    @patch("shutil.which", return_value="/usr/bin/gh")
+    def test_default_path(self, mock_which: MagicMock, mock_config: MagicMock) -> None:
+        mock_config.return_value = _make_user_config()
+
+        with ConcurrencyGroup(name="test") as cg:
+            service = DependencyManagementService(concurrency_group=cg)
+            result = service.resolve_binary_path(Dependency.GH)
+
+        assert result == "/usr/bin/gh"
+
+    @patch("sculptor.services.dependency_management_service.get_user_config_instance")
+    def test_override_path(self, mock_config: MagicMock) -> None:
+        mock_config.return_value = _make_user_config(
+            dependency_paths=DependencyPaths(gh="/custom/gh"),
+        )
+
+        with ConcurrencyGroup(name="test") as cg:
+            service = DependencyManagementService(concurrency_group=cg)
+            result = service.resolve_binary_path(Dependency.GH)
+
+        assert result == "/custom/gh"
 
 
 class TestVersionRange:
@@ -1034,7 +1061,7 @@ class TestCheckAuthenticated:
         assert result is True
         mock_cg.run_process_to_completion.assert_called_once_with(
             ["/usr/bin/claude", "auth", "status"],
-            timeout=10.0,
+            timeout=3.0,
         )
 
     @patch("sculptor.services.dependency_management_service.get_user_config_instance")
@@ -1061,12 +1088,17 @@ class TestCheckAuthenticated:
 
         assert result is None
 
-    def test_unsupported_tool(self) -> None:
-        with ConcurrencyGroup(name="test") as cg:
-            service = DependencyManagementService(concurrency_group=cg)
-            result = service.check_authenticated(Dependency.GIT)
+    def test_unsupported_tools_return_none_without_probing(self) -> None:
+        """Tools with no ``auth status`` subcommand (git, pi) must return None
+        without ever shelling out — otherwise a missing subcommand would be
+        misread as "not authenticated"."""
+        mock_cg = MagicMock()
+        service = DependencyManagementService.model_construct(concurrency_group=mock_cg)
 
-        assert result is None
+        assert service.check_authenticated(Dependency.GIT) is None
+        assert service.check_authenticated(Dependency.PI) is None
+        # The allowlist short-circuit must run before any subprocess.
+        mock_cg.run_process_to_completion.assert_not_called()
 
     @patch("sculptor.services.dependency_management_service.get_user_config_instance")
     @patch("shutil.which", return_value="/usr/bin/claude")
@@ -1089,14 +1121,23 @@ class TestCheckAuthenticated:
         )
 
         mock_cg = MagicMock()
-        # git version, claude version, pi version, claude auth status
-        mock_cg.run_process_to_completion.side_effect = [version_result, version_result, version_result, auth_result]
+        # Order of calls in _get_status: git --version, claude --version, pi --version,
+        # claude auth status, gh --version, gh auth status.
+        mock_cg.run_process_to_completion.side_effect = [
+            version_result,
+            version_result,
+            version_result,
+            auth_result,
+            version_result,
+            auth_result,
+        ]
 
         service = DependencyManagementService.model_construct(concurrency_group=mock_cg)
         status = service.get_status()
 
         assert status.claude.is_authenticated is True
         assert status.git.is_authenticated is None
+        assert status.gh.is_authenticated is True
 
 
 class TestCheckInstalled:
@@ -1676,6 +1717,28 @@ class TestParsePiVersion:
 
     def test_returns_none_on_unparseable_input(self) -> None:
         assert parse_pi_version("not a version") is None
+
+
+class TestParseRemoteCliVersion:
+    def test_parses_gh_version_line(self) -> None:
+        assert _parse_remote_cli_version("gh version 2.65.0 (2024-12-19)") == "2.65.0"
+
+    def test_parses_pre_release_suffix(self) -> None:
+        assert _parse_remote_cli_version("gh version 2.65.0-beta.1 (test)") == "2.65.0-beta.1"
+
+    def test_returns_none_on_unparseable_input(self) -> None:
+        assert _parse_remote_cli_version("gh: command not found") is None
+
+
+class TestGhDeviceCodeRegex:
+    def test_extracts_one_time_code_from_gh_prompt(self) -> None:
+        line = "! First copy your one-time code: ABCD-1234"
+        match = _GH_DEVICE_CODE_RE.search(line)
+        assert match is not None
+        assert match.group(1) == "ABCD-1234"
+
+    def test_returns_no_match_without_code_prompt(self) -> None:
+        assert _GH_DEVICE_CODE_RE.search("Opening github.com in your browser") is None
 
 
 class TestResolvePiPath:
