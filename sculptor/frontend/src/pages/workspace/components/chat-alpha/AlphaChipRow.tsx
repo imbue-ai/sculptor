@@ -142,7 +142,7 @@ export const AlphaChipRow = ({
   useCloseOnChatScroll(handleCloseOnScroll, isPopoverOpen);
 
   const handleKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLDivElement>) => {
+    (e: KeyboardEvent<HTMLDivElement>): void => {
       switch (e.key) {
         case "ArrowRight": {
           e.preventDefault();

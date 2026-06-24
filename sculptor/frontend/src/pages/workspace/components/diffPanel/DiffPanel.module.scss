@@ -7,14 +7,3 @@
 .progressOverlay {
   z-index: 1;
 }
-
-.diffPre {
-  color: var(--gray-12);
-  font-family: var(--code-font-family);
-  font-size: var(--font-size-1);
-  line-height: 1.5;
-  margin: 0;
-  padding: var(--space-3);
-  white-space: pre-wrap;
-  word-break: break-all;
-}

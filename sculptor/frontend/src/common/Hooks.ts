@@ -36,6 +36,10 @@ export const useTimedLatch = (active: boolean, minHoldMs: number, startDelayMs: 
       // No leading delay: latch on synchronously.
       if (startDelayMs <= 0) {
         lastActivatedAtRef.current = Date.now();
+        // Time-driven latch: the on-transition is paired with the activation
+        // timestamp the trailing min-hold timer reads, so it can't move to render
+        // without an impure Date.now() read and a ref write during render.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setIsLatched(true);
         return;
       }

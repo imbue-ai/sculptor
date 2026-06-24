@@ -1,13 +1,17 @@
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Button, Dialog, Flex, Select, Switch, Text, TextField } from "@radix-ui/themes";
 import type { KeyboardEvent, ReactElement } from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 import type { CustomAction, CustomActionGroup } from "~/api";
 import { ElementIds } from "~/api";
 import { Editor } from "~/components/Editor";
 
 import styles from "./ActionDialog.module.scss";
+
+// Sentinel Select values that don't map to a real group id.
+const NO_GROUP_OPTION = "none";
+const NEW_GROUP_OPTION = "new";
 
 export type ActionFormData = {
   name: string;
@@ -32,39 +36,39 @@ export const ActionDialog = ({ open, onOpenChange, action, groups, onSave }: Act
   const [groupId, setGroupId] = useState<string | null>(null);
   const [newGroupName, setNewGroupName] = useState("");
 
-  // Reset form when dialog opens
-  useEffect(() => {
-    if (open) {
-      if (action) {
-        setName(action.name);
-        setPrompt(action.prompt);
-        setShouldAutoSubmit(action.autoSubmit ?? true);
-        setGroupId(action.groupId ?? null);
-        setNewGroupName("");
-      } else {
-        setName("");
-        setPrompt("");
-        setShouldAutoSubmit(true);
-        setGroupId(null);
-        setNewGroupName("");
-      }
-    }
-  }, [open, action]);
+  // Reset the form during render when the dialog opens, and re-seed it if the
+  // action being edited changes while open. Tracking the previous open/action
+  // lets us reset directly during render instead of in an effect. Start as
+  // "not open" so an initial mount with open=true still seeds from the action.
+  const [isPreviouslyOpen, setIsPreviouslyOpen] = useState(false);
+  const [lastAction, setLastAction] = useState(action);
+  if (open && (!isPreviouslyOpen || action !== lastAction)) {
+    setIsPreviouslyOpen(true);
+    setLastAction(action);
+    setName(action?.name ?? "");
+    setPrompt(action?.prompt ?? "");
+    setShouldAutoSubmit(action?.autoSubmit ?? true);
+    setGroupId(action?.groupId ?? null);
+    setNewGroupName("");
+  } else if (!open && isPreviouslyOpen) {
+    setIsPreviouslyOpen(false);
+  }
 
   const handleSave = useCallback((): void => {
     onSave({
       name,
       prompt,
       autoSubmit: shouldAutoSubmit,
-      groupId: groupId === "new" ? null : groupId,
-      newGroupName: groupId === "new" ? newGroupName : undefined,
+      groupId: groupId === NEW_GROUP_OPTION ? null : groupId,
+      newGroupName: groupId === NEW_GROUP_OPTION ? newGroupName : undefined,
     });
   }, [onSave, name, prompt, shouldAutoSubmit, groupId, newGroupName]);
 
-  const isValid = name.trim() !== "" && prompt.trim() !== "" && (groupId !== "new" || newGroupName.trim() !== "");
+  const isValid =
+    name.trim() !== "" && prompt.trim() !== "" && (groupId !== NEW_GROUP_OPTION || newGroupName.trim() !== "");
 
   const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
+    (e: KeyboardEvent): void => {
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && isValid) {
         e.preventDefault();
         handleSave();
@@ -117,23 +121,23 @@ export const ActionDialog = ({ open, onOpenChange, action, groups, onSave }: Act
               Group
             </Text>
             <Select.Root
-              value={groupId === null ? "none" : groupId}
-              onValueChange={(value) => setGroupId(value === "none" ? null : value)}
+              value={groupId === null ? NO_GROUP_OPTION : groupId}
+              onValueChange={(value) => setGroupId(value === NO_GROUP_OPTION ? null : value)}
             >
               <Select.Trigger placeholder="Select group" data-testid={ElementIds.ACTION_DIALOG_GROUP_SELECT} />
               <Select.Content>
-                <Select.Item value="none">No group</Select.Item>
+                <Select.Item value={NO_GROUP_OPTION}>No group</Select.Item>
                 {groups.map((group) => (
                   <Select.Item key={group.id} value={group.id}>
                     {group.name}
                   </Select.Item>
                 ))}
-                <Select.Item value="new">+ Create new group...</Select.Item>
+                <Select.Item value={NEW_GROUP_OPTION}>+ Create new group...</Select.Item>
               </Select.Content>
             </Select.Root>
           </Flex>
 
-          {groupId === "new" && (
+          {groupId === NEW_GROUP_OPTION && (
             <Flex direction="column" gap="2">
               <Text size="2" weight="medium">
                 New Group Name

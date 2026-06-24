@@ -13,6 +13,9 @@ import { COMBINED_REVIEW_PATH, COMMIT_DIFF_PREFIX, FILE_VIEW_PREFIX, TARGET_BRAN
 /** Transient per-workspace scope for the combined diff view. Resets on page refresh. */
 export const diffScopeAtomFamily = atomFamily((_workspaceId: string) => atom<DiffScope>("uncommitted"));
 
+/** Debounce (ms) before persisting panel layout preferences to localStorage. */
+const STORAGE_DEBOUNCE_MS = 200;
+
 /** Ratio (0–100) controlling the left/right column split in side-by-side diffs. */
 export const splitDiffColumnRatioAtom = atom(50);
 
@@ -47,13 +50,21 @@ export const diffPanelStateAtomFamily = atomFamily((workspaceId: string) =>
  * layout" flag is enabled, `usePerWorkspacePanelLayout` saves/restores this
  * value per workspace on switch — mirroring how zone visibility is handled.
  */
-export const diffPanelOpenAtom = atomWithDebouncedStorage<boolean>("sculptor-diffPanel-open", false, 200);
+export const diffPanelOpenAtom = atomWithDebouncedStorage<boolean>(
+  "sculptor-diffPanel-open",
+  false,
+  STORAGE_DEBOUNCE_MS,
+);
 
 /**
  * Diff/chat split ratio (0–100).  Global with optional per-workspace
  * override, parallelling `diffPanelOpenAtom`.
  */
-export const diffPanelSplitRatioAtom = atomWithDebouncedStorage<number>("sculptor-diffPanel-splitRatio", 50, 200);
+export const diffPanelSplitRatioAtom = atomWithDebouncedStorage<number>(
+  "sculptor-diffPanel-splitRatio",
+  50,
+  STORAGE_DEBOUNCE_MS,
+);
 
 /** Global preference for how `.md` / `.markdown` files are shown in ReadOnlyPreview. */
 type MarkdownRenderMode = "raw" | "rendered";
@@ -189,8 +200,8 @@ export const setActiveDiffTabAtom = atom(null, (get, set, payload: SetActiveDiff
  * Path-prefix limitation: status-map keys are git-relative (e.g.
  * "sculptor/web/app.py") while filePath in the event is absolute. For paths
  * inside the workspace clone this means auto-resolution may fall back to
- * file-view when the prefixes don't match. Acceptable for v1; spec
- * (architecture §4.2) explicitly allows the file-view fallback.
+ * file-view when the prefixes don't match. The file-view fallback is the
+ * intended behavior here, not an error path.
  */
 export const openFileFromUiEventAtom = atom(
   null,

@@ -3,6 +3,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import styles from "./StickyHorizontalScrollbar.module.scss";
 
+/** How often to re-measure overflow and re-sync scroll state, in milliseconds. */
+const POLL_INTERVAL_MS = 500;
+/** Smallest thumb width, in pixels, so it stays grabbable on very wide diffs. */
+const MIN_THUMB_WIDTH_PX = 30;
+
 type StickyHorizontalScrollbarProps = {
   /** Container element whose descendant diffs-container shadow DOMs hold the [data-code] elements. */
   containerRef: RefObject<HTMLElement | null>;
@@ -47,14 +52,20 @@ export const StickyHorizontalScrollbar = ({ containerRef }: StickyHorizontalScro
 
   // scrollState drives rendering (thumb position/size). We also keep a ref
   // mirror so that pointer-event callbacks can read the latest values without
-  // being recreated on every scroll tick (avoids unnecessary re-renders).
+  // being recreated on every scroll tick (avoids unnecessary re-renders). The
+  // refs are read only inside callbacks, never during render, so syncing them
+  // in an effect keeps render pure without changing behavior.
   const [scrollState, setScrollState] = useState<ScrollState>({ maxScrollRange: 0, scrollLeft: 0 });
   const scrollStateRef = useRef(scrollState);
-  scrollStateRef.current = scrollState;
+  useEffect(() => {
+    scrollStateRef.current = scrollState;
+  });
 
   const [trackWidth, setTrackWidth] = useState(0);
   const trackWidthRef = useRef(trackWidth);
-  trackWidthRef.current = trackWidth;
+  useEffect(() => {
+    trackWidthRef.current = trackWidth;
+  });
 
   /**
    * Core polling loop that discovers [data-code] elements inside Pierre's
@@ -133,7 +144,7 @@ export const StickyHorizontalScrollbar = ({ containerRef }: StickyHorizontalScro
 
     // Run immediately, then poll at a low frequency.
     poll();
-    const intervalId = setInterval(poll, 500);
+    const intervalId = setInterval(poll, POLL_INTERVAL_MS);
 
     return (): void => {
       clearInterval(intervalId);
@@ -168,9 +179,14 @@ export const StickyHorizontalScrollbar = ({ containerRef }: StickyHorizontalScro
       const container = containerRef.current;
       const elements = container ? findCodeElements(container) : codeElementsRef.current;
       for (const el of elements) {
+        // Imperative DOM scroll sync across the code panes.
+        // eslint-disable-next-line react-hooks/immutability
         el.scrollLeft = clamped;
       }
       setScrollState((prev) => ({ ...prev, scrollLeft: clamped }));
+      // Writing scrollLeft above queues a scroll event that fires before the
+      // next paint; release the sync guard after it so the code-scroll listener
+      // ignores our own programmatic scroll rather than echoing it back.
       requestAnimationFrame(() => {
         isSyncingRef.current = false;
       });
@@ -242,5 +258,5 @@ export const StickyHorizontalScrollbar = ({ containerRef }: StickyHorizontalScro
 const computeThumbWidth = (trackW: number, maxScrollRange: number): number => {
   if (maxScrollRange <= 0 || trackW <= 0) return 0;
   const fraction = trackW / (trackW + maxScrollRange);
-  return Math.max(30, fraction * trackW);
+  return Math.max(MIN_THUMB_WIDTH_PX, fraction * trackW);
 };

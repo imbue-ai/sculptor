@@ -10,7 +10,7 @@ export const useTaskDetail = (taskId: string): TaskDetailState | null => {
 
 export const useTaskDetailWithDefaults = (taskId: string): TaskDetailState => {
   const detail = useTaskDetail(taskId);
-  return detail || getEmptyTaskDetailState();
+  return detail ?? getEmptyTaskDetailState();
 };
 
 export const useTaskChatMessages = (

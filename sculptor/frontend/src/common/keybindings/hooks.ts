@@ -1,5 +1,5 @@
 import { useAtomValue } from "jotai";
-import { useCallback, useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import { formatShortcutForDisplay, isDismissibleOverlayOpen, shouldHandleKeybinding } from "~/common/ShortcutUtils.ts";
 
@@ -22,7 +22,15 @@ export function useKeybindingDisplayText(id: KeybindingId): string {
 export function useKeybindingHandler(id: KeybindingId, handler: () => void): void {
   const binding = useKeybinding(id);
 
-  const stableHandler = useCallback(handler, [handler]);
+  // Keep the latest handler in a ref so the keydown listener is registered only
+  // when the binding changes, not on every render when `handler` is an inline function.
+  // The ref is synced in an effect (not during render) so it satisfies the refs lint;
+  // the listener only fires on real keypresses, well after commit, so a brief stale
+  // window is harmless.
+  const handlerRef = useRef(handler);
+  useEffect(() => {
+    handlerRef.current = handler;
+  }, [handler]);
 
   useEffect(() => {
     if (binding == null) return;
@@ -32,11 +40,11 @@ export function useKeybindingHandler(id: KeybindingId, handler: () => void): voi
       if (shouldHandleKeybinding(e, binding)) {
         e.preventDefault();
         e.stopPropagation();
-        stableHandler();
+        handlerRef.current();
       }
     };
 
     window.addEventListener("keydown", listener);
     return (): void => window.removeEventListener("keydown", listener);
-  }, [binding, stableHandler]);
+  }, [binding]);
 }

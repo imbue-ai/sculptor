@@ -16,7 +16,7 @@ const cursorNode = (): Element => ({
 });
 
 /** Find the deepest last element that holds inline text content. */
-const findCursorTarget = (children: Array<RootContent | ElementContent>): Element | null => {
+const findCursorTarget = (children: Array<RootContent | ElementContent>): Element | undefined => {
   for (let i = children.length - 1; i >= 0; i--) {
     const node = children[i];
     if (node.type !== "element") continue;
@@ -24,42 +24,40 @@ const findCursorTarget = (children: Array<RootContent | ElementContent>): Elemen
     if (INLINE_TAGS.has(node.tagName)) return node;
 
     if (node.tagName === "ul" || node.tagName === "ol") {
-      const lastLi = [...node.children].reverse().find((c) => c.type === "element" && c.tagName === "li");
-      return (lastLi as Element) ?? null;
+      return [...node.children].reverse().find((c): c is Element => c.type === "element" && c.tagName === "li");
     }
 
     if (node.tagName === "blockquote") {
-      const inner = findCursorTarget(node.children);
-      return inner ?? null;
+      return findCursorTarget(node.children);
     }
 
     // <pre><code>...</code></pre> is replaced by AlphaCodeBlock via the
     // components map — injecting into <code> would break its children.
     // Fall through to append at root level instead.
-    if (node.tagName === "pre") return null;
+    if (node.tagName === "pre") return undefined;
 
     if (node.tagName === "table") {
-      return findLastTableCell(node) ?? null;
+      return findLastTableCell(node);
     }
 
     // HR is void — no inline content to append into.
-    if (node.tagName === "hr") return null;
+    if (node.tagName === "hr") return undefined;
 
     return node;
   }
-  return null;
+  return undefined;
 };
 
-const findLastTableCell = (table: Element): Element | null => {
+const findLastTableCell = (table: Element): Element | undefined => {
   const tbody = table.children.find((c): c is Element => c.type === "element" && c.tagName === "tbody");
   const container = tbody ?? table;
   const rows = container.children.filter((c): c is Element => c.type === "element" && c.tagName === "tr");
   const lastRow = rows[rows.length - 1];
-  if (!lastRow) return null;
+  if (!lastRow) return undefined;
   const cells = lastRow.children.filter(
     (c): c is Element => c.type === "element" && (c.tagName === "td" || c.tagName === "th"),
   );
-  return cells[cells.length - 1] ?? null;
+  return cells[cells.length - 1];
 };
 
 export type RehypeCursorOptions = {

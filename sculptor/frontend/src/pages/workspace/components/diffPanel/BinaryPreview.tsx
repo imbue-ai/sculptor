@@ -1,7 +1,7 @@
 import { Button, Flex, Text } from "@radix-ui/themes";
 import { ExternalLink, File as FileIcon, FolderOpen } from "lucide-react";
 import type { ReactElement } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import { getBackendCapabilities } from "~/common/state/atoms/backendCapabilities.ts";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
@@ -47,6 +47,11 @@ type ImageData = {
   sizeBytes: number;
 };
 
+type ImageDimensions = {
+  width: number;
+  height: number;
+};
+
 const payloadToImageData = (payload: WorkspaceFilePayload, filePath: string): ImageData => {
   const { content } = payload;
   const mimeType = getMimeType(filePath);
@@ -74,13 +79,12 @@ type ImageViewerProps = {
 };
 
 const ImageViewer = ({ dataUrl, label }: ImageViewerProps): ReactElement => {
-  const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const panStartRef = useRef({ x: 0, y: 0 });
   const translateStartRef = useRef({ x: 0, y: 0 });
-  const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [dimensions, setDimensions] = useState<ImageDimensions | null>(null);
 
   const handleWheel = useCallback((e: React.WheelEvent): void => {
     e.preventDefault();
@@ -131,7 +135,6 @@ const ImageViewer = ({ dataUrl, label }: ImageViewerProps): ReactElement => {
         </Text>
       )}
       <div
-        ref={containerRef}
         className={styles.imageContainer}
         onWheel={handleWheel}
         onPointerDown={handlePointerDown}
@@ -190,7 +193,7 @@ const ActionButtons = ({ workspaceId, filePath }: ActionButtonsProps): ReactElem
 type ImageMetadataProps = {
   filePath: string;
   imageData: ImageData;
-  dimensions: { width: number; height: number } | null;
+  dimensions: ImageDimensions | null;
 };
 
 const ImageMetadata = ({ filePath, imageData, dimensions }: ImageMetadataProps): ReactElement => {
@@ -218,6 +221,38 @@ const ImageMetadata = ({ filePath, imageData, dimensions }: ImageMetadataProps):
   );
 };
 
+type SingleImagePreviewProps = {
+  workspaceId: string;
+  filePath: string;
+  imageData: ImageData;
+};
+
+const SingleImagePreview = ({ workspaceId, filePath, imageData }: SingleImagePreviewProps): ReactElement => {
+  const [dimensions, setDimensions] = useState<ImageDimensions | null>(null);
+
+  const handleImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>): void => {
+    const img = e.currentTarget;
+    setDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+  }, []);
+
+  return (
+    <Flex
+      direction="column"
+      gap="3"
+      flexGrow="1"
+      p="3"
+      className={styles.scrollArea}
+      data-testid="binary-image-preview"
+    >
+      <div className={styles.imageContainer} style={{ cursor: "default" }}>
+        <img src={imageData.dataUrl} alt="" className={styles.image} onLoad={handleImageLoad} draggable={false} />
+      </div>
+      <ImageMetadata filePath={filePath} imageData={imageData} dimensions={dimensions} />
+      {getBackendCapabilities().canOpenInOS && <ActionButtons workspaceId={workspaceId} filePath={filePath} />}
+    </Flex>
+  );
+};
+
 type BinaryPreviewProps = {
   workspaceId: string;
   filePath: string;
@@ -239,18 +274,6 @@ export const BinaryPreview = ({
   const isModifiedImage = isImage && fileStatus === "M";
   const oldFilePath = previousFilePath ?? filePath;
   const oldImageData = useImageDataAtRef(workspaceId, oldFilePath, isModifiedImage ? baseRef : null);
-
-  const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
-
-  const handleImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>): void => {
-    const img = e.currentTarget;
-    setDimensions({ width: img.naturalWidth, height: img.naturalHeight });
-  }, []);
-
-  // Reset dimensions when file changes
-  useEffect(() => {
-    setDimensions(null);
-  }, [filePath]);
 
   if (!isImage) {
     const fileName = filePath.split("/").pop() ?? filePath;
@@ -306,20 +329,7 @@ export const BinaryPreview = ({
     );
   }
 
-  return (
-    <Flex
-      direction="column"
-      gap="3"
-      flexGrow="1"
-      p="3"
-      className={styles.scrollArea}
-      data-testid="binary-image-preview"
-    >
-      <div className={styles.imageContainer} style={{ cursor: "default" }}>
-        <img src={imageData.dataUrl} alt="" className={styles.image} onLoad={handleImageLoad} draggable={false} />
-      </div>
-      <ImageMetadata filePath={filePath} imageData={imageData} dimensions={dimensions} />
-      {getBackendCapabilities().canOpenInOS && <ActionButtons workspaceId={workspaceId} filePath={filePath} />}
-    </Flex>
-  );
+  // Keyed by filePath so dimensions state resets to null on file change,
+  // avoiding a flash of the previous image's dimensions before onLoad fires.
+  return <SingleImagePreview key={filePath} workspaceId={workspaceId} filePath={filePath} imageData={imageData} />;
 };

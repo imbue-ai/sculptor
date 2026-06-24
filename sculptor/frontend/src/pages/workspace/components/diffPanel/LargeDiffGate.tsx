@@ -1,6 +1,6 @@
 import { Button, Flex, Text } from "@radix-ui/themes";
 import type { ReactElement } from "react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { truncateAtHunkBoundary } from "./truncateAtHunkBoundary";
 
@@ -8,16 +8,18 @@ const LARGE_DIFF_LINE_THRESHOLD = 500;
 
 type LargeDiffGateProps = {
   diffString: string;
-  children: (visibleDiff: string, isTruncated: boolean) => ReactElement;
+  children: (renderProps: { visibleDiff: string; isTruncated: boolean }) => ReactElement;
 };
 
 export const LargeDiffGate = ({ diffString, children }: LargeDiffGateProps): ReactElement => {
   const [isShowingFullDiff, setIsShowingFullDiff] = useState(false);
 
-  // Reset gating state when the diff content changes (e.g., user navigates to a different file)
-  const prevDiffRef = useRef(diffString);
-  if (prevDiffRef.current !== diffString) {
-    prevDiffRef.current = diffString;
+  // Reset gating state when the diff content changes (e.g., user navigates to a
+  // different file) by tracking the previous diff in state and adjusting during
+  // render — see https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  const [prevDiff, setPrevDiff] = useState(diffString);
+  if (prevDiff !== diffString) {
+    setPrevDiff(diffString);
     setIsShowingFullDiff(false);
   }
 
@@ -37,7 +39,7 @@ export const LargeDiffGate = ({ diffString, children }: LargeDiffGateProps): Rea
 
   return (
     <>
-      {children(truncatedDiff, isTruncated)}
+      {children({ visibleDiff: truncatedDiff, isTruncated })}
       {isTruncated && (
         <Flex align="center" justify="center" py="3">
           <Button variant="soft" size="1" onClick={handleShowFullDiff}>

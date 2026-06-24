@@ -1499,11 +1499,16 @@ describe("useAlphaAutoScroll", () => {
 
     let paddingEndAtScrollTime: number | undefined;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const virtualizerObj: any = {
+    const virtualizerObj: {
+      scrollToIndex: (index: number, options: { align: string }) => void;
+      options: { paddingEnd: number };
+      measurementsCache: ReadonlyArray<{ start: number; size: number }>;
+      getTotalSize: () => number;
+      shouldAdjustScrollPositionOnItemSizeChange: unknown;
+    } = {
       scrollToIndex: vi.fn().mockImplementation(() => {
         // Capture paddingEnd at the moment scrollToIndex is called
-        paddingEndAtScrollTime = virtualizerObj.options?.paddingEnd;
+        paddingEndAtScrollTime = virtualizerObj.options.paddingEnd;
       }),
       options: { paddingEnd: 128 }, // Stale — based on old tailContentHeight
       measurementsCache: [
@@ -1511,10 +1516,10 @@ describe("useAlphaAutoScroll", () => {
         { start: 208, size: 2800 }, // item 1: long assistant response
         { start: 3008, size: 60 }, // item 2: new user message (scroll-to-top target)
       ],
-      getTotalSize: vi.fn(() => 128 + 80 + 2800 + 60 + (virtualizerObj.options?.paddingEnd ?? 128)),
-      shouldAdjustScrollPositionOnItemSizeChange: null as unknown,
+      getTotalSize: vi.fn(() => 128 + 80 + 2800 + 60 + virtualizerObj.options.paddingEnd),
+      shouldAdjustScrollPositionOnItemSizeChange: null,
     };
-    const virtualizer = virtualizerObj as Virtualizer<HTMLDivElement, Element>;
+    const virtualizer = virtualizerObj as unknown as Virtualizer<HTMLDivElement, Element>;
 
     // Initial render: 2 messages, last user message at index 0
     const { rerender } = renderHook(

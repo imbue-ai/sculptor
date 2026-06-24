@@ -47,7 +47,9 @@ export const MentionList = forwardRef<SuggestionListRef, MentionListProps>((prop
       return (
         <>
           <Icon className={styles.icon} />
-          <span className={styles.name}>{highlightMatch(displayName, props.query, styles.highlight)}</span>
+          <span className={styles.name}>
+            {highlightMatch({ text: displayName, query: props.query, highlightClassName: styles.highlight })}
+          </span>
           {item.parentPath && <span className={styles.parentPath}>{item.parentPath}</span>}
         </>
       );

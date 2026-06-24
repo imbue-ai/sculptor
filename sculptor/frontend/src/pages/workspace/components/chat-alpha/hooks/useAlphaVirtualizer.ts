@@ -163,6 +163,15 @@ export const useAlphaVirtualizer = (
     return (): void => observer.disconnect();
   }, [scrollContainerRef]);
 
+  // Cancel any pending settle-suppression frame on unmount. The task-switch
+  // branch schedules a requestAnimationFrame chain that ends in
+  // bumpSettleGeneration() (a setState); without this cleanup it can fire
+  // after the component is gone. Kept separate from the per-render layout
+  // effect so it cancels only on unmount, not on every re-render.
+  useEffect(() => {
+    return (): void => cancelAnimationFrame(settlingRafRef.current);
+  }, []);
+
   // paddingEnd needs to be just large enough for the scroll-to-top target
   // (the last user message) to reach the viewport top.  The required padding
   // = containerHeight - tailContentHeight, where tailContentHeight is the sum

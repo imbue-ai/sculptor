@@ -12,6 +12,9 @@ import { highlightTextInTree } from "./highlightTextMatches.tsx";
 import type { DualThemedToken } from "./shikiHighlighter.ts";
 import { highlightCode } from "./shikiHighlighter.ts";
 
+/** How long the copy button shows its "copied" confirmation before reverting. */
+const COPY_FEEDBACK_DURATION_MS = 1500;
+
 type AlphaCodeBlockProps = {
   /** The raw code string to display. */
   content: string;
@@ -45,7 +48,7 @@ export const AlphaCodeBlock = memo(
       navigator.clipboard.writeText(content.trimEnd());
       setIsCopied(true);
       clearTimeout(copyTimerRef.current);
-      copyTimerRef.current = setTimeout(() => setIsCopied(false), 1500);
+      copyTimerRef.current = setTimeout(() => setIsCopied(false), COPY_FEEDBACK_DURATION_MS);
     }, [content]);
 
     useEffect(() => {

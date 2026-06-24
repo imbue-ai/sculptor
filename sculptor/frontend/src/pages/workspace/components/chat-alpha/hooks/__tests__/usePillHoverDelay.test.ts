@@ -39,7 +39,6 @@ const dispatchMouseMove = (clientX: number, clientY: number): void => {
 type Setup = {
   setOpenPillId: ReturnType<typeof vi.fn>;
   isPinnedRef: MutableRefObject<boolean>;
-  popoverElRef: MutableRefObject<HTMLElement | null>;
   /** Re-render the hook with a new openPillId. Simulates the parent's state update. */
   setOpen: (openPillId: string | null) => void;
   result: {
@@ -61,7 +60,6 @@ const setup = (initialOpenPillId: string | null = null, popoverEl: HTMLElement |
   return {
     setOpenPillId,
     isPinnedRef,
-    popoverElRef,
     setOpen: (openPillId: string | null): void => rerender({ openPillId }),
     result,
   };

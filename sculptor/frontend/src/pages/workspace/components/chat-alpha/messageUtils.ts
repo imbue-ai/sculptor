@@ -1,5 +1,9 @@
 import type { ChatMessage } from "~/api";
 
+// Stride between messages when computing a global lightbox order for file groups,
+// so files in a later message always sort after every group in an earlier one.
+export const MESSAGE_LIST_ORDER_STRIDE = 1000;
+
 /**
  * Extract plain text from a message's content blocks.
  * Joins all text blocks into a single string.

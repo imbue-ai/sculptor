@@ -19,16 +19,15 @@ export const useAgentFileTracking = ({
   workspaceId,
   expandFolders,
 }: UseAgentFileTrackingParams): void => {
-  const prevActivePathRef = useRef<string | null>(null);
+  const prevActivePathRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    const activePath = activeFilePath ?? null;
-    if (activePath && activePath !== prevActivePathRef.current) {
-      const ancestors = getAncestorPaths(activePath);
+    if (activeFilePath && activeFilePath !== prevActivePathRef.current) {
+      const ancestors = getAncestorPaths(activeFilePath);
       if (ancestors.length > 0) {
         expandFolders({ workspaceId, paths: ancestors });
       }
     }
-    prevActivePathRef.current = activePath;
+    prevActivePathRef.current = activeFilePath;
   }, [activeFilePath, expandFolders, workspaceId]);
 };
 
@@ -59,15 +58,20 @@ export const useSearchAutoExpand = ({
 }: UseSearchAutoExpandParams): void => {
   // We intentionally omit currentExpandedFolders from deps so that
   // user-driven collapse/expand during search doesn't trigger re-expansion.
-  const preSearchExpandedRef = useRef<Array<string> | null>(null);
+  // The ref mirror lets the search effect read the latest expanded folders
+  // without depending on them; it is read only in effects, never during
+  // render, so syncing it in an effect keeps render pure.
+  const preSearchExpandedRef = useRef<Array<string> | undefined>(undefined);
   const expandedFoldersRef = useRef(currentExpandedFolders);
-  expandedFoldersRef.current = currentExpandedFolders;
+  useEffect(() => {
+    expandedFoldersRef.current = currentExpandedFolders;
+  });
   const wasSearchActiveRef = useRef(false);
 
   useEffect(() => {
     if (isSearchActive) {
       // Save pre-search state on first activation
-      if (preSearchExpandedRef.current === null) {
+      if (preSearchExpandedRef.current === undefined) {
         preSearchExpandedRef.current = expandedFoldersRef.current;
       }
 
@@ -78,9 +82,9 @@ export const useSearchAutoExpand = ({
           expandFolders({ workspaceId, paths: allFolders });
         }
       }
-    } else if (preSearchExpandedRef.current !== null) {
+    } else if (preSearchExpandedRef.current !== undefined) {
       const savedFolders = preSearchExpandedRef.current;
-      preSearchExpandedRef.current = null;
+      preSearchExpandedRef.current = undefined;
       setExpandedFolders(() => savedFolders);
     }
     wasSearchActiveRef.current = isSearchActive;

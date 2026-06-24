@@ -4,11 +4,11 @@ import { userConfigAtom } from "~/common/state/atoms/userConfig.ts";
 import { panelRegistryAtom } from "~/components/panels/atoms.ts";
 
 import { KEYBINDING_DEFINITIONS } from "./definitions.ts";
-import type { KeybindingCategory, KeybindingId, PanelKeybindingId, ResolvedKeybinding } from "./types.ts";
+import type { KeybindingId, PanelKeybindingId, ResolvedKeybinding } from "./types.ts";
 
 export const keybindingsAtom = atom<ReadonlyArray<ResolvedKeybinding>>((get) => {
   const userConfig = get(userConfigAtom);
-  const overrides = (userConfig?.keybindings ?? {}) as Record<string, string | null>;
+  const overrides: Record<string, string | null> = userConfig?.keybindings ?? {};
   const panels = get(panelRegistryAtom);
 
   const staticBindings = KEYBINDING_DEFINITIONS.map((def) => {
@@ -28,7 +28,7 @@ export const keybindingsAtom = atom<ReadonlyArray<ResolvedKeybinding>>((get) => 
       id,
       name: panel.displayName,
       description: panel.description,
-      category: "panels" as KeybindingCategory,
+      category: "panels",
       defaultBinding,
       binding: hasOverride ? overrides[id] || null : defaultBinding,
       isDefault: !hasOverride,

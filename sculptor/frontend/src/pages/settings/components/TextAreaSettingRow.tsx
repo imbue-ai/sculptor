@@ -1,6 +1,6 @@
 import { Button, Flex, TextArea, Tooltip } from "@radix-ui/themes";
 import type { ReactElement } from "react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { SettingRow } from "./SettingRow.tsx";
 import styles from "./TextAreaSettingRow.module.scss";
@@ -24,9 +24,14 @@ export const TextAreaSettingRow = ({
   textAreaTestId,
   disabled = false,
 }: TextAreaSettingRowProps): ReactElement => {
+  // Local draft of the textarea, resynced during render whenever the committed
+  // value prop changes (e.g. a save elsewhere updates the underlying setting).
   const [localValue, setLocalValue] = useState(value);
-
-  useEffect(() => setLocalValue(value), [value]);
+  const [syncedValue, setSyncedValue] = useState(value);
+  if (syncedValue !== value) {
+    setSyncedValue(value);
+    setLocalValue(value);
+  }
 
   const handleBlur = (): void => {
     if (localValue !== value) {

@@ -1,4 +1,4 @@
-export type PropsWithClassName<T = unknown> = T & { className?: string };
+export type PropsWithClassName<TProps = unknown> = TProps & { className?: string };
 
 export type RequestID = string;
 export type TaskID = string;

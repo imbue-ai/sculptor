@@ -1,4 +1,4 @@
-import { Button, Flex } from "@radix-ui/themes";
+import { Box, Button, Flex } from "@radix-ui/themes";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { Layers } from "lucide-react";
 import type { CSSProperties, ReactElement } from "react";
@@ -159,7 +159,7 @@ export const FileBrowserPanel = (): ReactElement | null => {
                 : tab.label}
           </Button>
         ))}
-        <span style={{ flex: 1 }} />
+        <Box flexGrow="1" />
         {isReviewAllEnabled && hasChangesToReview && (
           <Button
             variant="ghost"

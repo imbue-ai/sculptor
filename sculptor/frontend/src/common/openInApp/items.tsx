@@ -58,11 +58,8 @@ const PREFERRED_APP_STORAGE_KEY = "sculptor-preferred-open-app";
 
 export const getPreferredApp = (): ExternalApp | null => {
   const stored = localStorage.getItem(PREFERRED_APP_STORAGE_KEY);
-  const items = getOpenWithItems();
-  if (stored && items.some((item) => item.app === stored)) {
-    return stored as ExternalApp;
-  }
-  return null;
+  const match = getOpenWithItems().find((item) => item.app === stored);
+  return match ? match.app : null;
 };
 
 export const savePreferredApp = (app: ExternalApp): void => {

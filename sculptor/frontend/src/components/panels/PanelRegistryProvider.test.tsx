@@ -273,6 +273,69 @@ describe("PanelRegistryProvider — reconciliation (removing panels)", () => {
     }
   });
 
+  it("skips a disabled panel when falling back after the active panel is removed", () => {
+    const store = createStore();
+    // top-left order is [disabled, enabled, active]; the disabled panel sits
+    // ahead of the enabled one. Removing the active panel must fall back to the
+    // enabled panel, never the disabled one (which would render despite being
+    // toggled off).
+    const disabledPanel: PanelDefinition = {
+      ...INFO_PANEL,
+      id: "disabledPanel",
+      defaultZone: "top-left",
+      defaultEnabled: false,
+    };
+    const enabledPanel: PanelDefinition = { ...INFO_PANEL, id: "enabledPanel", defaultZone: "top-left" };
+    const activePanel: PanelDefinition = { ...INFO_PANEL, id: "activePanel", defaultZone: "top-left" };
+
+    const seededLayout: DefaultPanelLayout = {
+      zoneAssignments: { disabledPanel: "top-left", enabledPanel: "top-left", activePanel: "top-left" },
+      activePanelPerZone: { "top-left": "activePanel" },
+      zoneVisibility: { "top-left": true },
+      zoneOrder: { "top-left": ["disabledPanel", "enabledPanel", "activePanel"] },
+    };
+
+    const { rerender } = renderProvider({
+      store,
+      panels: [disabledPanel, enabledPanel, activePanel],
+      defaultLayout: seededLayout,
+    });
+
+    expect(store.get(activePanelPerZoneAtom)["top-left"]).toBe("activePanel");
+
+    // Remove the active panel — fallback must land on the enabled panel, even
+    // though the disabled panel comes first in the zone's order.
+    rerender({ store, panels: [disabledPanel, enabledPanel], defaultLayout: seededLayout });
+    expect(store.get(activePanelPerZoneAtom)["top-left"]).toBe("enabledPanel");
+  });
+
+  it("clears the active panel when the only remaining panels in the zone are disabled", () => {
+    const store = createStore();
+    const disabledPanel: PanelDefinition = {
+      ...INFO_PANEL,
+      id: "disabledPanel",
+      defaultZone: "top-left",
+      defaultEnabled: false,
+    };
+    const activePanel: PanelDefinition = { ...INFO_PANEL, id: "activePanel", defaultZone: "top-left" };
+
+    const seededLayout: DefaultPanelLayout = {
+      zoneAssignments: { disabledPanel: "top-left", activePanel: "top-left" },
+      activePanelPerZone: { "top-left": "activePanel" },
+      zoneVisibility: { "top-left": true },
+      zoneOrder: { "top-left": ["disabledPanel", "activePanel"] },
+    };
+
+    const { rerender } = renderProvider({
+      store,
+      panels: [disabledPanel, activePanel],
+      defaultLayout: seededLayout,
+    });
+
+    rerender({ store, panels: [disabledPanel], defaultLayout: seededLayout });
+    expect(store.get(activePanelPerZoneAtom)["top-left"]).toBeUndefined();
+  });
+
   it("falls back to the next remaining panel in the zone when the active panel is removed", () => {
     const store = createStore();
     // Seed a zone with two panels, panelA active.

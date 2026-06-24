@@ -6,13 +6,13 @@ import { ElementIds } from "~/api";
 
 import styles from "./WarningStatusBanner.module.scss";
 
-type StatusBannerProps = {
+type WarningStatusBannerProps = {
   message: string;
   linkText?: string;
   onLinkClick?: () => void;
 };
 
-export const WarningStatusBanner = (props: StatusBannerProps): ReactElement => {
+export const WarningStatusBanner = (props: WarningStatusBannerProps): ReactElement => {
   return (
     <Flex
       direction="row"
@@ -36,7 +36,8 @@ export const WarningStatusBanner = (props: StatusBannerProps): ReactElement => {
                 e.preventDefault();
                 props.onLinkClick?.();
               }}
-              style={{ cursor: "pointer", textDecoration: "underline" }}
+              underline="always"
+              className={styles.link}
               data-testid={ElementIds.WARNING_STATUS_BANNER_LINK}
             >
               {props.linkText}

@@ -57,14 +57,14 @@ describe("ActionChip", () => {
       expect(screen.getByRole("button")).toBeInTheDocument();
     });
 
-    it("renders Zap icon for auto-submit actions", () => {
+    it("renders the auto-submit icon for auto-submit actions", () => {
       const { container } = renderChip({ action: createAction({ autoSubmit: true }) });
-      // Zap icon is from lucide-react - it renders as an SVG with the class
+      // The lucide icon renders as an SVG carrying the styles.autoSubmitIcon class.
       const icon = container.querySelector(".autoSubmitIcon");
       expect(icon).toBeInTheDocument();
     });
 
-    it("renders Pencil icon for draft (non-auto-submit) actions", () => {
+    it("renders the draft icon for draft (non-auto-submit) actions", () => {
       const { container } = renderChip({ action: createAction({ autoSubmit: false }) });
       const icon = container.querySelector(".draftIcon");
       expect(icon).toBeInTheDocument();

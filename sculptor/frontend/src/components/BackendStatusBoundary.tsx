@@ -25,6 +25,9 @@ import { TitleBar } from "./TitleBar.tsx";
 // recovery message so the user knows to relaunch the app manually.
 const SHUTDOWN_STALL_TIMEOUT_MS = 30_000;
 
+// How often we poll the backend health check endpoint while the app is up.
+const HEALTH_CHECK_INTERVAL_MS = 3_000;
+
 const getShutdownStallTimeoutMs = (): number => {
   // Integration tests inject a shorter timeout via localStorage so they
   // don't have to wait the full production duration.
@@ -58,8 +61,8 @@ export const BackendStatusBoundary = (props: PropsWithChildren<BackendStatusBoun
   const setHealthCheckData = useSetAtom(healthCheckDataAtom);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const [isCustomCommandMode, setIsCustomCommandMode] = useState(false);
-  const [isShutdownStalled, setIsShutdownStalled] = useState(false);
+  const [isCustomCommandMode, setIsCustomCommandMode] = useState<boolean>(false);
+  const [isShutdownStalled, setIsShutdownStalled] = useState<boolean>(false);
 
   useEffect(() => {
     window.sculptor
@@ -68,7 +71,7 @@ export const BackendStatusBoundary = (props: PropsWithChildren<BackendStatusBoun
       .catch(() => {});
   }, []);
 
-  const [isCustomBackendCleared, setIsCustomBackendCleared] = useState(false);
+  const [isCustomBackendCleared, setIsCustomBackendCleared] = useState<boolean>(false);
 
   const handleClearCustomBackend = useCallback(async () => {
     await window.sculptor?.setCustomBackendSettings?.({ customBackendCommand: "" });
@@ -118,7 +121,6 @@ export const BackendStatusBoundary = (props: PropsWithChildren<BackendStatusBoun
     loadInitialState();
 
     const handleStateChange = (state: AnyBackendStatus): void => {
-      console.log(`backend state change: ${state}`);
       maybeSetBackendStatus(state);
     };
 
@@ -127,7 +129,7 @@ export const BackendStatusBoundary = (props: PropsWithChildren<BackendStatusBoun
     return (): void => {
       window.sculptor?.removeBackendStatusListener?.();
     };
-  }, [setHasStartedSuccessfully, maybeSetBackendStatus]);
+  }, [maybeSetBackendStatus]);
 
   const performHealthCheck = useCallback(async (): Promise<void> => {
     abortControllerRef.current?.abort();
@@ -157,7 +159,7 @@ export const BackendStatusBoundary = (props: PropsWithChildren<BackendStatusBoun
               Number(healthData.freeDiskGb).toFixed(2) +
               " GB free, " +
               healthData.minFreeDiskGb +
-              " GB required)) You must free up additional space before creating new agents or messages",
+              " GB required) You must free up additional space before creating new agents or messages",
           },
         });
       } else if (healthData && healthData.freeDiskGb < healthData.freeDiskGbWarnLimit) {
@@ -181,8 +183,6 @@ export const BackendStatusBoundary = (props: PropsWithChildren<BackendStatusBoun
     } catch {
       // Silently ignore aborted requests — they don't indicate backend issues.
       if (signal.aborted) return;
-
-      console.log("Backend health check failed");
 
       // if we've never started, exit and stay in the loading state
       if (!hasStartedSuccessfully) return;
@@ -212,7 +212,19 @@ export const BackendStatusBoundary = (props: PropsWithChildren<BackendStatusBoun
     if (backendStatus.status !== "shutting_down") {
       performHealthCheck();
     }
-  }, 3000);
+  }, HEALTH_CHECK_INTERVAL_MS);
+
+  // Clear the stalled flag as soon as we leave ``shutting_down``. Adjusting
+  // state during render (with a previous-value guard) keeps the reset on the
+  // same render that observes the status change, instead of the extra render
+  // an effect would add.
+  const [prevBackendStatusForStall, setPrevBackendStatusForStall] = useState(backendStatus.status);
+  if (prevBackendStatusForStall !== backendStatus.status) {
+    setPrevBackendStatusForStall(backendStatus.status);
+    if (backendStatus.status !== "shutting_down" && isShutdownStalled) {
+      setIsShutdownStalled(false);
+    }
+  }
 
   // SCU-403: ``autoUpdater.quitAndInstall()`` can fail silently (e.g. when
   // Squirrel's cached download has been purged). The boundary locks into
@@ -221,7 +233,6 @@ export const BackendStatusBoundary = (props: PropsWithChildren<BackendStatusBoun
   // recovery message instead.
   useEffect(() => {
     if (backendStatus.status !== "shutting_down") {
-      setIsShutdownStalled(false);
       return;
     }
     const timeoutId = setTimeout(() => {
@@ -318,15 +329,13 @@ export const BackendStatusBoundary = (props: PropsWithChildren<BackendStatusBoun
       backendStatus.status === "exited" ? backendStatus.payload.stderr : backendStatus.payload.message;
 
     return (
-      <>
-        <ErrorPage
-          isCapturingErrorWithSentry={false}
-          headerText="Oops! That is embarrassing. An unexpected error has occurred. Try restarting the app or contacting us if the problem persists."
-          errorMessage={errorMessage}
-          onClearCustomBackend={isCustomCommandMode ? handleClearCustomBackend : undefined}
-          isCustomBackendCleared={isCustomBackendCleared}
-        />
-      </>
+      <ErrorPage
+        isCapturingErrorWithSentry={false}
+        headerText="Oops! That is embarrassing. An unexpected error has occurred. Try restarting the app or contacting us if the problem persists."
+        errorMessage={errorMessage}
+        onClearCustomBackend={isCustomCommandMode ? handleClearCustomBackend : undefined}
+        isCustomBackendCleared={isCustomBackendCleared}
+      />
     );
   }
 

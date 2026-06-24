@@ -1,6 +1,6 @@
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import type { ReactElement } from "react";
-import { useCallback, useEffect, useRef } from "react";
+import type { CSSProperties, ReactElement } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { ElementIds } from "~/api";
 
@@ -25,12 +25,10 @@ export const BrowserViewSlot = ({ workspaceId }: { workspaceId: string }): React
   const store = useStore();
   // Snapshot the persisted URL once at mount so subsequent persistUrl writes
   // don't re-render this slot (the toolbar reads liveUrl from the status atom).
-  // Lazy-init via ref + null sentinel since "" is a valid persisted value.
-  const initialUrlRef = useRef<string | null>(null);
-  if (initialUrlRef.current === null) {
-    initialUrlRef.current = store.get(browserPanelStateAtomFamily(workspaceId)).currentUrl;
-  }
-  const initialUrl = initialUrlRef.current;
+  // Lazy useState (read-only snapshot, no setter needed); single-element
+  // destructure trips react/hook-use-state, which wants a value+setter pair.
+  // eslint-disable-next-line react/hook-use-state
+  const [initialUrl] = useState(() => store.get(browserPanelStateAtomFamily(workspaceId)).currentUrl);
 
   const persistUrl = useCallback(
     (url: string) => {
@@ -95,7 +93,7 @@ export const BrowserViewSlot = ({ workspaceId }: { workspaceId: string }): React
   const partition = `persist:sculptor-browser-${workspaceId}`;
   const initialSrc = initialUrl === "" ? "about:blank" : initialUrl;
 
-  const style: React.CSSProperties =
+  const style: CSSProperties =
     placement.visible && placement.bounds !== null
       ? {
           position: "fixed",

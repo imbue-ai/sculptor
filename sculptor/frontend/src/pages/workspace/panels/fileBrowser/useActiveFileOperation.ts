@@ -9,11 +9,11 @@ type ActiveFileOperation = {
   tool: string;
 };
 
-export const useActiveFileOperation = (taskId: string | undefined): ActiveFileOperation | null => {
+export const useActiveFileOperation = (taskId: string | undefined): ActiveFileOperation | undefined => {
   const { inProgressChatMessage } = useTaskChatMessages(taskId ?? "");
 
   return useMemo(() => {
-    if (!taskId || !inProgressChatMessage) return null;
+    if (!taskId || !inProgressChatMessage) return undefined;
 
     for (const block of inProgressChatMessage.content) {
       if (!isToolUseBlock(block)) continue;
@@ -26,6 +26,6 @@ export const useActiveFileOperation = (taskId: string | undefined): ActiveFileOp
       return { filePath, tool: block.name };
     }
 
-    return null;
+    return undefined;
   }, [taskId, inProgressChatMessage]);
 };

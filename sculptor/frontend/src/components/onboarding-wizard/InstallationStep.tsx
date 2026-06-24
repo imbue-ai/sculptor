@@ -21,6 +21,9 @@ import { DependencyCard } from "./DependencyCard.tsx";
 import type { DependencyStatus } from "./dependencyTypes.ts";
 import styles from "./OnboardingWizard.module.scss";
 
+// Normal cadence for re-checking dependency status while not actively installing.
+const NORMAL_POLL_INTERVAL_MS = 30_000;
+
 const deriveClaudeStatus = (
   info: DependencyInfo | undefined,
   isInstalling: boolean,
@@ -66,7 +69,7 @@ type InstallationStepProps = {
 /** The InstallationStep is the second step of the OnboardingWizard where we verify that users have
  * the necessary dependencies installed.
  *
- * It is a key requirement of this page to track the appropriate PostHog events granurlaly as users complete the verious
+ * It is a key requirement of this page to track the appropriate PostHog events granularly as users complete the various
  * steps so that we can identify where users are dropping off in the onboarding process.
  */
 export const InstallationStep = ({ onComplete, isLoading, error }: InstallationStepProps): ReactElement => {
@@ -210,6 +213,9 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
 
   // Initial load
   useEffect(() => {
+    // Genuine mount-time fetch from the backend; the synchronous setState is
+    // only the loading flag flip on an external-system sync, not derived state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadDependencies();
   }, [loadDependencies]);
 
@@ -222,6 +228,9 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
       dependencies.claude.mode === "MANAGED" &&
       (!dependencies.claude.installed || dependencies.claude.isVersionInRange === false)
     ) {
+      // Reactive to backend-polled `dependencies`, not a user action, so this
+      // install-kickoff side effect can't move to an event handler.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       triggerInstall();
     }
   }, [dependencies, hasTriggeredInstall, isInstalling, triggerInstall]);
@@ -232,16 +241,15 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
     if (!isDependenciesLoading && !isInstalling) {
       loadDependencies(true);
     }
-  }, 30_000);
+  }, NORMAL_POLL_INTERVAL_MS);
 
   // Dismiss the sign-in prompt once Claude reports authenticated — e.g. when a
   // local loopback login completed in the background and the poll picked it up.
-  useEffect(() => {
-    if (authUrl && dependencies?.claude?.isAuthenticated === true) {
-      setAuthUrl(null);
-      setAuthError(null);
-    }
-  }, [authUrl, dependencies?.claude?.isAuthenticated]);
+  // Derived during render so there's no extra render cycle (and no stale frame
+  // showing the prompt) when the background poll reports success.
+  const isClaudeAuthenticated = dependencies?.claude?.isAuthenticated === true;
+  const displayedAuthUrl = isClaudeAuthenticated ? null : authUrl;
+  const displayedAuthError = isClaudeAuthenticated ? null : authError;
 
   /* We can only submit if all the dependencies are installed, in range, and authenticated */
   const canSubmit = (): boolean => {
@@ -342,8 +350,8 @@ export const InstallationStep = ({ onComplete, isLoading, error }: InstallationS
           onModeSwitch={handleModeSwitch}
           modeControls={claudeModeControls}
           onAuthenticate={triggerAuth}
-          authUrl={authUrl}
-          authError={authError}
+          authUrl={displayedAuthUrl}
+          authError={displayedAuthError}
           onSubmitAuthCode={submitAuthCode}
           onApplyOverride={(path) => handleOverride("claude", path)}
           installProgress={dependencies?.claude?.installProgress ?? null}

@@ -19,7 +19,7 @@ type PopoverContentProps = ComponentProps<typeof Popover.Content>;
 // target lives inside such a modal are suppressed; everything else
 // dismisses the popover as usual.
 export const popoverFriendlyModalGuard: Pick<PopoverContentProps, "onInteractOutside"> = {
-  onInteractOutside: (event) => {
+  onInteractOutside: (event): void => {
     if (isInsidePopoverFriendlyModal(event.target)) event.preventDefault();
   },
 };

@@ -2,7 +2,7 @@ from abc import ABC
 from abc import abstractmethod
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from typing import Generator
 from typing import Literal
 
 from sculptor.database.models import Project
@@ -222,7 +222,7 @@ class WorkspaceService(Service, ABC):
         concurrency_group: ConcurrencyGroup,
         root_progress_handle: RootProgressHandle,
         shutdown_event: ReadOnlyEvent,
-    ) -> Iterator[AgentExecutionEnvironment]:
+    ) -> Generator[AgentExecutionEnvironment, None, None]:
         """
         Set up the environment for a workspace.
 

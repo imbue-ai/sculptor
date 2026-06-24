@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type { Workspace } from "../../../api";
 import { buildAgentActions } from "../contextActions/agentActions.ts";
 import type { Agent, AgentActionRuntime, WorkspaceAction, WorkspaceActionRuntime } from "../contextActions/types.ts";
 import { buildWorkspaceActions } from "../contextActions/workspaceActions.ts";
 
-const fakeWorkspace = (id: string): { objectId: string; description: string | null } =>
-  ({ objectId: id, description: `ws-${id}` }) as never;
+const fakeWorkspace = (id: string): Workspace => ({ objectId: id, description: `ws-${id}` }) as unknown as Workspace;
 
 const fakeAgent = (id: string): Agent =>
   ({
@@ -17,14 +17,13 @@ const fakeAgent = (id: string): Agent =>
     updatedAt: "2026-04-01T00:00:00Z",
     lastReadAt: null,
     status: "running",
-  }) as never;
+  }) as unknown as Agent;
 
 type WorkspaceRuntimeOverrides = {
   canCloseOthers?: boolean;
   hasUncommittedChanges?: boolean;
   hasOpenPr?: boolean;
   canCreatePr?: boolean;
-  prTerm?: "merge request" | "pull request";
   canOpenInOS?: boolean;
   isMacUi?: boolean;
 };
@@ -43,7 +42,6 @@ const makeWorkspaceRuntime = (overrides: WorkspaceRuntimeOverrides = {}): Worksp
   hasUncommittedChanges: vi.fn(() => overrides.hasUncommittedChanges ?? false),
   hasOpenPr: vi.fn(() => overrides.hasOpenPr ?? false),
   canCreatePr: vi.fn(() => overrides.canCreatePr ?? true),
-  prTerm: vi.fn(() => overrides.prTerm ?? "pull request"),
   canOpenInOS: vi.fn(() => overrides.canOpenInOS ?? true),
   isMacUi: vi.fn(() => overrides.isMacUi ?? true),
 });
@@ -72,7 +70,7 @@ describe("buildWorkspaceActions", () => {
   it("close_others is hidden when there is only one tab open", () => {
     const actions = buildWorkspaceActions(makeWorkspaceRuntime({ canCloseOthers: false }));
     const closeOthers = actions.find((a) => a.id === "close_others") as WorkspaceAction;
-    expect(closeOthers.visible?.(fakeWorkspace("w1") as never)).toBe(false);
+    expect(closeOthers.visible?.(fakeWorkspace("w1"))).toBe(false);
   });
 
   it("delete is destructive and adds a separator", () => {
@@ -86,9 +84,9 @@ describe("buildWorkspaceActions", () => {
     const runtime = makeWorkspaceRuntime();
     const actions = buildWorkspaceActions(runtime);
     const ws = fakeWorkspace("w1");
-    actions.find((a) => a.id === "rename")?.perform(ws as never);
-    actions.find((a) => a.id === "close")?.perform(ws as never);
-    actions.find((a) => a.id === "delete")?.perform(ws as never);
+    actions.find((a) => a.id === "rename")?.perform(ws);
+    actions.find((a) => a.id === "close")?.perform(ws);
+    actions.find((a) => a.id === "delete")?.perform(ws);
     expect(runtime.beginRename).toHaveBeenCalledWith(ws);
     expect(runtime.closeWorkspace).toHaveBeenCalledWith(ws);
     expect(runtime.beginDelete).toHaveBeenCalledWith(ws);
@@ -97,7 +95,7 @@ describe("buildWorkspaceActions", () => {
   it("commit is disabled when there are no uncommitted changes, enabled otherwise", () => {
     const noChanges = buildWorkspaceActions(makeWorkspaceRuntime({ hasUncommittedChanges: false }));
     const withChanges = buildWorkspaceActions(makeWorkspaceRuntime({ hasUncommittedChanges: true }));
-    const ws = fakeWorkspace("w1") as never;
+    const ws = fakeWorkspace("w1");
     expect(noChanges.find((a) => a.id === "commit")?.disabled?.(ws)).toBe(true);
     expect(withChanges.find((a) => a.id === "commit")?.disabled?.(ws)).toBe(false);
   });
@@ -106,22 +104,19 @@ describe("buildWorkspaceActions", () => {
     const runtime = makeWorkspaceRuntime();
     const actions = buildWorkspaceActions(runtime);
     const ws = fakeWorkspace("w1");
-    actions.find((a) => a.id === "commit")?.perform(ws as never);
+    actions.find((a) => a.id === "commit")?.perform(ws);
     expect(runtime.commitChanges).toHaveBeenCalledWith(ws);
   });
 
-  it("create_pr title flips to 'Create merge request' on GitLab", () => {
-    const ws = fakeWorkspace("w1") as never;
-    const gh = buildWorkspaceActions(makeWorkspaceRuntime({ prTerm: "pull request" }));
-    const gl = buildWorkspaceActions(makeWorkspaceRuntime({ prTerm: "merge request" }));
-    expect(gh.find((a) => a.id === "create_pr")?.getTitle?.(ws)).toBe("Create pull request");
-    expect(gl.find((a) => a.id === "create_pr")?.getTitle?.(ws)).toBe("Create merge request");
+  it("create_pr uses pull request terminology", () => {
+    const actions = buildWorkspaceActions(makeWorkspaceRuntime());
+    expect(actions.find((a) => a.id === "create_pr")?.title).toBe("Create pull request");
   });
 
   it("create_pr is disabled when an open PR already exists", () => {
     const noPr = buildWorkspaceActions(makeWorkspaceRuntime({ canCreatePr: true }));
     const withOpenPr = buildWorkspaceActions(makeWorkspaceRuntime({ canCreatePr: false }));
-    const ws = fakeWorkspace("w1") as never;
+    const ws = fakeWorkspace("w1");
     expect(noPr.find((a) => a.id === "create_pr")?.disabled?.(ws)).toBe(false);
     expect(withOpenPr.find((a) => a.id === "create_pr")?.disabled?.(ws)).toBe(true);
   });
@@ -129,24 +124,21 @@ describe("buildWorkspaceActions", () => {
   it("open_pr is disabled when no open PR exists, enabled when one does", () => {
     const noPr = buildWorkspaceActions(makeWorkspaceRuntime({ hasOpenPr: false }));
     const openPr = buildWorkspaceActions(makeWorkspaceRuntime({ hasOpenPr: true }));
-    const ws = fakeWorkspace("w1") as never;
+    const ws = fakeWorkspace("w1");
     expect(noPr.find((a) => a.id === "open_pr")?.disabled?.(ws)).toBe(true);
     expect(openPr.find((a) => a.id === "open_pr")?.disabled?.(ws)).toBe(false);
   });
 
-  it("open_pr title flips to 'Open merge request' on GitLab", () => {
-    const ws = fakeWorkspace("w1") as never;
-    const gh = buildWorkspaceActions(makeWorkspaceRuntime({ prTerm: "pull request" }));
-    const gl = buildWorkspaceActions(makeWorkspaceRuntime({ prTerm: "merge request" }));
-    expect(gh.find((a) => a.id === "open_pr")?.getTitle?.(ws)).toBe("Open pull request");
-    expect(gl.find((a) => a.id === "open_pr")?.getTitle?.(ws)).toBe("Open merge request");
+  it("open_pr uses pull request terminology", () => {
+    const actions = buildWorkspaceActions(makeWorkspaceRuntime());
+    expect(actions.find((a) => a.id === "open_pr")?.title).toBe("Open pull request");
   });
 
   it("open_pr perform routes to runtime.openMergeRequest", () => {
     const runtime = makeWorkspaceRuntime({ hasOpenPr: true });
     const actions = buildWorkspaceActions(runtime);
     const ws = fakeWorkspace("w1");
-    actions.find((a) => a.id === "open_pr")?.perform(ws as never);
+    actions.find((a) => a.id === "open_pr")?.perform(ws);
     expect(runtime.openMergeRequest).toHaveBeenCalledWith(ws);
   });
 });

@@ -78,8 +78,14 @@ export const PathAutocomplete = ({
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const fetchIdRef = useRef(0);
   const rootRef = useRef<HTMLDivElement>(null);
+  // Keep a ref in sync with isOpen so the document-level listeners below read the
+  // latest value without re-subscribing. Synced in an effect (not during render)
+  // to satisfy the refs lint; the listeners only fire on user interaction, well
+  // after commit, so the ref is never observed stale — see the "latest ref" pattern.
   const isOpenRef = useRef(isOpen);
-  isOpenRef.current = isOpen;
+  useEffect(() => {
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
 
   const closeDropdown = useCallback((): void => {
     if (debounceRef.current) {
@@ -107,7 +113,7 @@ export const PathAutocomplete = ({
 
             // Detect home directory prefix from first tilde-based query
             if (path.startsWith("~") && results.length > 0 && homeDirPrefix === undefined) {
-              const detected = detectHomeDirPrefix(path, results[0].path);
+              const detected = detectHomeDirPrefix({ inputPath: path, firstResultPath: results[0].path });
               if (detected !== undefined) {
                 setHomeDirPrefix(detected);
               }
@@ -278,7 +284,7 @@ export const PathAutocomplete = ({
             )}
             {items.length > 0 && (
               <>
-                <ScrollArea type="hover" scrollbars="vertical" style={{ maxHeight: 240 }}>
+                <ScrollArea type="hover" scrollbars="vertical" className={styles.scrollArea}>
                   {items.map((entry) => (
                     <PathItem key={entry.path} entry={entry} homeDirPrefix={homeDirPrefix} onSelect={handleSelect} />
                   ))}

@@ -21,8 +21,17 @@ Sculptor-generated branches that Linear has no link for still resolve), the
 issues that issue's PR links to (`attachmentsForURL`), and any the user pins via
 a quick-search box (`searchIssues`). It renders descriptions with the
 SDK `Markdown` component, opens links via `openExternal`, and stores its API
-key and per-workspace pins through the plugin-settings SDK. It is structured as
-a reference: a `linear/` core (Linear client, source-merging, query hooks) kept
+key and per-workspace pins through the plugin-settings SDK. It also contributes
+a **workspace widget** (`registerWorkspaceWidget`) — a compact ticket shortcut
+the host renders in the workspace banner beside the PR button. The widget
+defaults to the branch ticket but follows whatever the user assigns from the
+panel; the two share a single per-workspace `shortcut` setting, so the ticket
+reference stays consistent across both surfaces.
+
+![The Linear workspace widget — a "# SCU-1234" ticket shortcut — in the workspace banner](linear-issue/docs/workspace-widget.png)
+
+It is structured as a
+reference: a `linear/` core (Linear client, source-merging, query hooks) kept
 separate from presentational `components/`, with `index.tsx` doing only
 `activate()` wiring.
 
@@ -73,9 +82,23 @@ the exact set the import map provides, derived from `RUNTIME_MODULE_SPECIFIERS`
   links open in a new tab, code blocks get copy buttons.
 - `openExternal(url)` — open a URL in the user's browser (a new tab on the web;
   the system browser in the desktop app). Use this rather than `window.open`.
-- `PanelHeader`, domain types, and the `PluginHostApi` / `PanelDefinition`
-  registration types (so plugins type `activate(api)` against the host
-  contract instead of re-declaring it).
+- `PanelHeader`, domain types, and the `PluginHostApi` / `PanelDefinition` /
+  `WorkspaceWidgetDefinition` registration types (so plugins type `activate(api)`
+  against the host contract instead of re-declaring it).
+
+### Contribution points (`activate(api)`)
+
+- `registerPanel(def)` — a panel in one of the workspace zones.
+- `registerSettings(component)` — a settings section under the plugin.
+- `registerOverlay(def)` — an always-on, app-global floating layer.
+- `registerWorkspaceWidget(def)` — a compact, workspace-scoped widget the host
+  places in its workspace chrome (today the banner's action row, beside the PR
+  button). Like a panel it is mounted in the `WorkspacePluginContext`, so the
+  workspace SDK hooks resolve to the workspace it is shown for. `collapsePriority`
+  (lower = hidden first) slots it into the banner's progressive-collapse order;
+  the host's own banner items occupy a few small integers. The name is
+  placement-agnostic on purpose — the same registration is what a future
+  per-workspace vertical-tabs layout would render.
 
 ## Caching fetched data (`@tanstack/react-query`)
 

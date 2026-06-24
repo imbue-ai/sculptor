@@ -101,20 +101,21 @@ export default tseslint.config(
       "simple-import-sort": simpleImportSortPlugin,
     },
     rules: {
-      // eslint-plugin-react-hooks 7 enables the React Compiler diagnostic
-      // rules by default. They flag ~160 pre-existing patterns (refs read
-      // during render, setState in effects, manual-memoization drift) that
-      // need per-site behavioral rework, so they are disabled until that
-      // cleanup happens. rules-of-hooks and exhaustive-deps stay active.
-      "react-hooks/refs": "off",
-      "react-hooks/set-state-in-effect": "off",
-      "react-hooks/immutability": "off",
-      "react-hooks/preserve-manual-memoization": "off",
-      "react-hooks/static-components": "off",
-      "react-hooks/incompatible-library": "off",
-      "react-hooks/use-memo": "off",
-      "react-hooks/purity": "off",
-      "react-hooks/globals": "off",
+      // React Compiler diagnostics from eslint-plugin-react-hooks 7.
+      // `preserve-manual-memoization` and `incompatible-library` only change
+      // anything once the React Compiler is enabled (it is not): they flag
+      // working code the compiler merely cannot auto-optimize, so they stay off
+      // until the compiler is turned on. The rest are enabled. rules-of-hooks
+      // and exhaustive-deps stay active throughout.
+      "react-hooks/refs": "error",
+      "react-hooks/set-state-in-effect": "error",
+      "react-hooks/immutability": "error",
+      "react-hooks/preserve-manual-memoization": "off", // deferred: needs React Compiler
+      "react-hooks/static-components": "error",
+      "react-hooks/incompatible-library": "off", // deferred: needs React Compiler
+      "react-hooks/use-memo": "error",
+      "react-hooks/purity": "error",
+      "react-hooks/globals": "error",
 
       /*
         Rules copied from https://mkosir.github.io/typescript-style-guide/ on 2025-06-04,

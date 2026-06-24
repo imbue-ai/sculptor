@@ -25,7 +25,7 @@ def classify_transitions(prev: PrStatusInfo | None, new: PrStatusInfo) -> list[T
 
     # MERGE_CONFLICT must surface on first observation (SCU-1361), unlike
     # PIPELINE_FAILED. A conflict is commonly already present the first time we
-    # observe the MR -- a branch cut from a stale main conflicts within seconds,
+    # observe the PR -- a branch cut from a stale main conflicts within seconds,
     # well before the ~30s first poll -- and the coordinator's prev_status is
     # in-memory, so a restart re-enters with prev is None against the same
     # conflict. A failed pipeline self-heals because the next push yields a new

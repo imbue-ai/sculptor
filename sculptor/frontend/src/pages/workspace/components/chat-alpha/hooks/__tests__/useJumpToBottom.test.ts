@@ -16,7 +16,7 @@ const makeMessage = (role: ChatMessageRole, id: string): ChatMessage =>
 
 describe("useJumpToBottom", () => {
   // The hook requires at least one message to show the button (hasMessages guard).
-  const oneMessage = [makeMessage(ChatMessageRole.ASSISTANT, "seed")] as ReadonlyArray<ChatMessage>;
+  const oneMessage: ReadonlyArray<ChatMessage> = [makeMessage(ChatMessageRole.ASSISTANT, "seed")];
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -126,11 +126,11 @@ describe("useJumpToBottom", () => {
   });
 
   it("shows jump label when new messages arrive without streaming", () => {
-    const messages1 = [makeMessage(ChatMessageRole.ASSISTANT, "m1")] as ReadonlyArray<ChatMessage>;
-    const messages2 = [
+    const messages1: ReadonlyArray<ChatMessage> = [makeMessage(ChatMessageRole.ASSISTANT, "m1")];
+    const messages2: ReadonlyArray<ChatMessage> = [
       makeMessage(ChatMessageRole.ASSISTANT, "m1"),
       makeMessage(ChatMessageRole.ASSISTANT, "m2"),
-    ] as ReadonlyArray<ChatMessage>;
+    ];
 
     const { result, rerender } = renderHook(
       ({ isAtBottom, messages }) => useJumpToBottom(isAtBottom, messages, false, false),

@@ -52,13 +52,16 @@ export const usePanelLayoutSync = (): void => {
   const lastSyncedLayoutRef = useRef<string | null>(null);
 
   // Keep refs so the write-path effect can read latest values without subscribing
-  // to visibility/sizes changes when per-workspace mode is active.
+  // to visibility/sizes changes when per-workspace mode is active. Written in an
+  // effect (not during render) so the values are read only after commit.
   const zoneVisibilityRef = useRef(zoneVisibility);
-  zoneVisibilityRef.current = zoneVisibility;
   const zoneSizesRef = useRef(zoneSizes);
-  zoneSizesRef.current = zoneSizes;
   const isPerWorkspaceRef = useRef(isPerWorkspace);
-  isPerWorkspaceRef.current = isPerWorkspace;
+  useEffect(() => {
+    zoneVisibilityRef.current = zoneVisibility;
+    zoneSizesRef.current = zoneSizes;
+    isPerWorkspaceRef.current = isPerWorkspace;
+  });
 
   // Read path: seed from backend if localStorage is empty
   useEffect(() => {

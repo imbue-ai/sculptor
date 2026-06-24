@@ -126,6 +126,12 @@ export const Editor = ({
   const routeWorkspaceID = useParams<{ workspaceID?: string }>().workspaceID;
   const projectID = projectIDProp ?? routeProjectID;
   const workspaceID = workspaceIDProp ?? routeWorkspaceID;
+  // Keep "latest ref" copies of the callback props so the editor's long-lived
+  // Tiptap callbacks always invoke the current handler. These refs are read
+  // only inside user-triggered Tiptap callbacks, never during render, so they
+  // are synced in an effect (after commit) to satisfy the refs lint; the brief
+  // post-commit window is never observed because no Tiptap callback fires during
+  // render.
   const onKeyDownRef = useRef<((event: KeyboardEvent) => boolean | void) | undefined>(onKeyDown);
   const onFilesChangeRef = useRef(onFilesChange);
   const onErrorRef = useRef(onError);
@@ -136,26 +142,13 @@ export const Editor = ({
   // parent that swaps in a new closure (e.g. one that captures other state)
   // doesn't end up calling a stale handler.
   const onChangeRef = useRef(onChange);
-
   useEffect(() => {
     onKeyDownRef.current = onKeyDown;
-  }, [onKeyDown]);
-
-  useEffect(() => {
     onFilesChangeRef.current = onFilesChange;
-  }, [onFilesChange]);
-
-  useEffect(() => {
     onErrorRef.current = onError;
-  }, [onError]);
-
-  useEffect(() => {
     onTriggerImageUploadRef.current = onTriggerImageUpload;
-  }, [onTriggerImageUpload]);
-
-  useEffect(() => {
     onChangeRef.current = onChange;
-  }, [onChange]);
+  });
 
   const isEntityMentionsEnabled = useAtomValue(isEntityMentionsEnabledAtom);
   const projects = useAtomValue(projectsArrayAtom);
@@ -185,6 +178,7 @@ export const Editor = ({
   // the /api/v1/skills endpoint) is not re-invoked on every render.
   const extensions = useMemo(
     () =>
+      // eslint-disable-next-line react-hooks/refs -- entityDataRef is forwarded as a stable ref object; createTipTapExtensions reads .current only inside user-triggered suggestion callbacks, never during render.
       createTipTapExtensions({
         placeholder,
         editable: true,
@@ -288,6 +282,12 @@ export const Editor = ({
   // agents on screen) each carry their own handle. Both are nulled/removed on
   // teardown so a detaching editor (after an agent/workspace switch) stops
   // advertising a destroyed instance.
+  //
+  // Stashing the editor on its own DOM node is a deliberate test-access side
+  // effect; the immutability lint flags it (and the effect) because `dom` is
+  // derived from the hook-returned `editor`, but it cannot tell this apart from
+  // mutating render output — hence the scoped disable below.
+  /* eslint-disable react-hooks/immutability */
   useEffect(() => {
     if (editorRef) editorRef.current = editor;
     if (!editor) {
@@ -300,6 +300,7 @@ export const Editor = ({
       delete dom.__tiptapEditor;
     };
   }, [editor, editorRef]);
+  /* eslint-enable react-hooks/immutability */
 
   // Hydrate `+[type:id|display_name]` text into entity-mention nodes once the
   // editor exists. The editor is initialized with `content: value` and

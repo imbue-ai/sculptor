@@ -52,8 +52,8 @@
 .tooltipIcon {
   display: block;
   flex-shrink: 0;
-  height: 64px;
-  width: 64px;
+  height: var(--space-9);
+  width: var(--space-9);
 }
 
 .tooltipText {

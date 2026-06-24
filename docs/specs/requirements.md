@@ -14,7 +14,7 @@ unspecified.
 | Document | Answers | Layer |
 |---|---|---|
 | `SPEC.md` | *What is the product, and how does each feature behave?* | Functional behavior, in prose |
-| `scenarios.md` | *What exactly happens on screen, action by action?* (~446 Given/When/Then) | UI-level acceptance |
+| `scenarios.md` | *What exactly happens on screen, action by action?* (Given/When/Then) | UI-level acceptance |
 | `scenario_coverage.md` | *Which test demonstrates each scenario?* | Coverage / traceability to tests |
 | **`requirements.md`** (this doc) | *What measurable targets, limits, and contracts does the product meet?* | Requirements |
 
@@ -62,7 +62,7 @@ pointers to their spec/scenario home.
 | REQ-FUNC-011 | Command palette & navigation: tabs, Cmd+K / Cmd+P, bottom bar, focus/zen mode, version popover | §7.9 | `SHELL`, `CMDP`, `HELP` | Core |
 | REQ-FUNC-012 | Settings (all sections) | §7.10 | `SET` | Core |
 | REQ-FUNC-013 | Actions & notes; mentions & path autocomplete | §7.11 | `ACT`, `MENT` | Optional |
-| REQ-FUNC-014 | Experimental surface (toggles, experimental skills/panels, container backend) | §7.12 | `SET`, `PANEL` | Experimental |
+| REQ-FUNC-014 | Experimental surface (toggles, experimental skills/panels, frontend plugin system, container backend) | §7.12 | `SET`, `PANEL` | Experimental |
 | REQ-FUNC-015 | `sculpt` CLI: full command surface, `--json`, env-var defaults, cross-surface visibility | §8 | (CLI-level, see §5.4) | Standard |
 
 - **REQ-FUNC-100 (MUST).** Every behavior enumerated in `scenarios.md` is a product requirement; that
@@ -165,9 +165,15 @@ and flags the targets it does not currently define.
 
 ### 2.8 Agent defaults
 
-- **REQ-NFR-070 (MUST).** New-agent defaults: model = **most-recently-used** (no hardcoded default),
-  effort = **Extra High (`xhigh`)**, fast mode = **off** (`sculptor/sculptor/config/user_config.py`). All three
-  are user-overridable in Settings → Agent (`SPEC.md` §7.10).
+- **REQ-NFR-070 (MUST).** New-agent defaults: model = the user's **configured Settings default** if
+  set, else the **most-recently-used** model (recorded whenever the user switches model in chat;
+  `lastUsedModelAtom`, `sculptor/frontend/src/common/state/atoms/userConfig.ts`), else a hardcoded
+  fallback of **`CLAUDE_4_OPUS` ("Opus (1M)")**, the 1M-context Opus variant (Fable, though listed in
+  the switcher, is disabled and so is never the fallback). Effort = **Extra High (`xhigh`)**, fast mode
+  = **off** (`sculptor/sculptor/config/user_config.py`, `sculptor/sculptor/web/derived.py`). All three
+  are user-overridable in Settings → Agent (`SPEC.md` §7.10). **Fast mode** is offered only on models
+  that support it — the Opus 4.x family, including Opus 4.8 (both the 1M and 200K variants) — and is
+  disabled for Sonnet/Haiku/Fable (`sculptor/frontend/src/common/modelCapabilities.ts`).
 
 ---
 
@@ -184,7 +190,7 @@ depends on.
 - **REQ-COMPAT-002 (SHOULD).** Sculptor ships a **Linux x64** build; **Linux arm64** is best-effort /
   non-blocking (`.github/workflows/build-desktop.yml`; `SPEC.md` §11.1).
 - **REQ-COMPAT-003 [Unspecified].** The supported **minimum macOS version** is not stated as a
-  product requirement (CI builds/tests on macOS 14 Sonoma; Electron 37's own floor is macOS 12), and
+  product requirement (CI builds/tests on macOS 14 Sonoma; Electron 42's own floor is macOS 12), and
   the **minimum Linux glibc** is likewise unpinned. → OPEN-5 (§7).
 
 ### 3.2 Toolchain / framework baselines
@@ -194,11 +200,11 @@ packaging Sculptor):
 
 | Component | Pinned value | Source |
 |---|---|---|
-| REQ-COMPAT-010 Python | **>=3.11, <3.13** (pinned 3.11) | `pyproject.toml`, `.python-version` |
-| REQ-COMPAT-011 Node.js | **20.13.1** | `sculptor/frontend/.nvmrc` |
-| REQ-COMPAT-012 Electron | **37.6.0** (Forge **7.8.3**) | `sculptor/frontend/package.json` |
-| REQ-COMPAT-013 uv (Python pkg mgr) | **>=0.7.22** | `pyproject.toml` |
-| REQ-COMPAT-014 TypeScript / React / Jotai / Radix Themes / Vite | **5.5 / 18.3 / 2.9 / 3.1 / 5.4** | `sculptor/frontend/package.json` |
+| REQ-COMPAT-010 Python | **>=3.14, <3.15** (pinned 3.14) | `pyproject.toml`, `.python-version` |
+| REQ-COMPAT-011 Node.js | **24.17.0** | `sculptor/frontend/.nvmrc` |
+| REQ-COMPAT-012 Electron | **42.4.1** (Forge **7.11.2**) | `sculptor/frontend/package.json` |
+| REQ-COMPAT-013 uv (Python pkg mgr) | **>=0.11.22** | `pyproject.toml` |
+| REQ-COMPAT-014 TypeScript / React / Jotai / Radix Themes / Vite | **6.0 / 19.2 / 2.20 / 3.3 / 6.4** | `sculptor/frontend/package.json` |
 
 ### 3.3 Required external binaries
 
@@ -284,8 +290,12 @@ rules behind them.
 
 - **REQ-INT-001 (MUST).** The provider is detected from the `origin` remote hostname (parsing SSH and
   HTTP(S) forms): hostname containing **"github"** → GitHub via **`gh`**; containing **"gitlab"** →
-  GitLab via **`glab`**. Any other host has **no** PR/MR surface and no target-branch concept
-  (`SPEC.md` §7.6; `sculptor/sculptor/web/pr_polling_service.py`).
+  GitLab via **`glab`**. Any other host has **no** PR/MR surface (`SPEC.md` §7.6;
+  `sculptor/sculptor/web/pr_polling_service.py`). The **target-branch** selector is *not* gated on the
+  provider, however — it is host-independent and available on every repo, including repos with no
+  remote (which offer the repo's local branches as targets); only opening a PR/MR requires a detected
+  provider (`SPEC.md` §7.2 / §7.5; `sculptor/sculptor/web/repo_polling_manager.py` target-branch
+  fallback).
 - **REQ-INT-002 (MUST).** Operations performed via the provider CLI: **list** requests for a branch,
   **view** a request's status-check/pipeline rollup, **reviews/approvals**, and **unresolved
   comments/discussions**; **push** the branch and **open** a request; poll status thereafter. (GitHub:
@@ -308,7 +318,12 @@ rules behind them.
 - **REQ-INT-022 (SHOULD).** **Pi** is launched in **`--mode rpc`** with `--session-dir`/`--session-id`
   (same dir+id resumes); multiplexed JSONL channels (`response`, `extension_ui_request`,
   `AgentSessionEvent`); API keys injected from named env vars at startup and **never persisted**; a
-  version mismatch raises a clear error (`sculptor/sculptor/agents/pi_agent/agent_wrapper.py`).
+  version mismatch raises a clear error (`sculptor/sculptor/agents/pi_agent/agent_wrapper.py`). Pi
+  reports a live model catalog and supports **in-session model switching** via a `set_model` RPC
+  between turns (a rejected switch raises `PiSetModelError` → HTTP 400, surfaced as a toast); a turn
+  that ends in a **known-transient provider error** (overload, 429, 5xx/529, timeout) is retried
+  automatically with exponential backoff (up to 4 attempts, honoring a user interrupt during backoff)
+  rather than crashing the agent, exhausting to a re-runnable error message (`output_processor.py`).
 - **REQ-INT-023 (MUST).** A missing binary for either CLI raises a specific, surfaced error
   (`ClaudeBinaryNotFoundError` / `PiBinaryNotFoundError`), not a generic failure.
 
@@ -359,6 +374,17 @@ rules behind them.
 - **REQ-SEC-003 (MUST).** Build & distribution security: the macOS artifact is **signed and notarized**
   (`.dmg`); releases are **tag-driven** with the version checked against build context so a tag build
   cannot publish an inconsistent version (`SPEC.md` §11.2–§11.3).
+- **REQ-SEC-004 (Experimental).** **Frontend-plugin trust model.** The experimental frontend plugin
+  system (off by default, gated on the `enableFrontendPlugins` flag — atom
+  `isFrontendPluginsEnabledAtom`, default `false`) runs plugin code **in the renderer with the same
+  privileges as Sculptor's own UI**; a URL plugin source is re-fetched on every load, so the user
+  trusts whatever it serves at load time. Adding a plugin source is therefore equivalent to running
+  that code, documented in `SECURITY.md`. The SDK's `openExternal` is restricted to **`http(s)`**
+  URLs (`sculptor/frontend/src/plugins/sdk/actions.ts`). In the packaged app the renderer and its
+  plugins are served from a single secure custom origin (`sculptor://app`) rather than `file://`
+  (`sculptor/frontend/src/electron/appProtocol.ts`). Plugins load from the Sculptor folder's
+  `plugins/` directory or user-added URL sources; precedence is local-disk > URL > bundled for the
+  same plugin id (`SPEC.md` §7.12).
 - **REQ-SEC-010 (MUST).** **Telemetry is consent-gated.** Error reporting (Sentry, frontend-only) and
   product analytics (PostHog) are each gated on explicit consent flags
   (`is_error_reporting_enabled`, `is_product_analytics_enabled`, `is_session_recording_enabled`,

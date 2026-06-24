@@ -59,16 +59,13 @@ const FileChangesPopover = ({
         className={styles.popover}
         onFocusOutside={(e): void => e.preventDefault()}
       >
-        {files.map((file, i) => (
+        {files.map((file) => (
           <Flex
             key={file.path}
             align="center"
             justify="end"
             className={styles.popoverFileRow}
             data-testid={ElementIds.TURN_FOOTER_FILE_ROW}
-            style={{
-              borderBottom: i < files.length - 1 ? "1px solid var(--gray-3)" : "none",
-            }}
             onClick={(): void => onFileClick?.(file.path)}
             onKeyDown={(e): void => {
               if (e.key === "Enter" || e.key === " ") {
@@ -79,17 +76,7 @@ const FileChangesPopover = ({
             role="button"
             tabIndex={0}
           >
-            <Text
-              size="1"
-              style={{
-                flex: 1,
-                minWidth: 0,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                textAlign: "right",
-              }}
-            >
+            <Text size="1" className={styles.fileRowText}>
               <FilePath path={file.path} />
             </Text>
           </Flex>

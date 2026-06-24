@@ -596,6 +596,7 @@ _patch-electron-app-name label:
 [group("dev")]
 frontend:
     #!/usr/bin/env bash
+    {{ nvm_use }}
     just _patch-electron-app-name "Sculptor (from source)"
     cd "{{justfile_directory()}}/sculptor/frontend"
     env SCULPTOR_ICON_LABEL="src" \
@@ -608,6 +609,7 @@ frontend:
 frontend-container:
     #!/usr/bin/env bash
     set -euo pipefail
+    {{ nvm_use }}
     REPO_ROOT="{{justfile_directory()}}"
     IMAGE_NAME="sculptor-backend-dev"
     SCRIPT="$REPO_ROOT/container/run-backend-in-container.sh"
@@ -644,6 +646,7 @@ frontend-container:
 frontend-custom:
     #!/usr/bin/env bash
     set -euo pipefail
+    {{ nvm_use }}
     REPO_ROOT="{{justfile_directory()}}"
     PORT="${SCULPTOR_API_PORT:-5050}"
 

@@ -60,23 +60,31 @@ export const RecentWorkspaces = ({
     setDeleteTarget(null);
   }, [deleteTarget, executeDelete]);
 
-  const fetchWorkspaces = useCallback(async (): Promise<void> => {
-    setIsLoading(true);
-    try {
-      const response = await listRecentWorkspaces();
-      if (response.data) {
-        setWorkspaces(response.data.workspaces);
-      }
-    } catch (error) {
-      console.error("Failed to load workspaces:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
+  // Fetch the recent workspaces once on mount. `isLoading` starts true, so the
+  // loading state is already correct without a synchronous setState here; the
+  // ignore flag prevents a stale write if the component unmounts mid-request.
   useEffect(() => {
-    void fetchWorkspaces();
-  }, [fetchWorkspaces]);
+    let isIgnored = false;
+
+    void (async (): Promise<void> => {
+      try {
+        const response = await listRecentWorkspaces();
+        if (!isIgnored && response.data) {
+          setWorkspaces(response.data.workspaces);
+        }
+      } catch (error) {
+        console.error("Failed to load workspaces:", error);
+      } finally {
+        if (!isIgnored) {
+          setIsLoading(false);
+        }
+      }
+    })();
+
+    return (): void => {
+      isIgnored = true;
+    };
+  }, []);
 
   const enrichedWorkspaces = useMemo(
     () => workspaces.filter((ws) => !deletedIds.has(ws.objectId)),
@@ -105,11 +113,15 @@ export const RecentWorkspaces = ({
   const visibleWorkspaces = useMemo(() => sortedWorkspaces.slice(0, visibleCount), [sortedWorkspaces, visibleCount]);
   const hasMore = visibleCount < sortedWorkspaces.length;
 
-  // Reset focused index and visible count when search query changes
-  useEffect(() => {
+  // Reset focused index and visible count when search query changes. Adjusting
+  // during render (comparing against the previous query) avoids the extra render
+  // an effect would add.
+  const [lastSearchQuery, setLastSearchQuery] = useState(searchQuery);
+  if (searchQuery !== lastSearchQuery) {
+    setLastSearchQuery(searchQuery);
     setFocusedIndex(null);
     setVisibleCount(PAGE_SIZE);
-  }, [searchQuery]);
+  }
 
   // Keyboard navigation within the recent workspaces area
   useEffect(() => {

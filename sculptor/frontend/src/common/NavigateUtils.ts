@@ -11,22 +11,15 @@ type ImbueNavigationFunctions = {
   navigateToHome: () => void;
   navigateToGlobalSettings: (section?: string) => void;
   navigateToRepoSetupCommand: (projectId: string) => void;
+  navigateToPanelSettings: (panelId: string) => void;
   navigateToComponentGallery: () => void;
   navigateToRoot: () => void;
 };
 
 export const useImbueNavigate = (): ImbueNavigationFunctions => {
-  const defaultNavigateFn = useNavigate();
+  const navigate = useNavigate();
   const setActiveTabById = useSetAtom(setActiveTabByIdAtom);
   const setAgentForWorkspace = useSetAtom(setAgentForWorkspaceAtom);
-
-  const navigate = useCallback(
-    (to: string): void => {
-      console.log(`navigating to: ${to}`);
-      defaultNavigateFn(to);
-    },
-    [defaultNavigateFn],
-  );
 
   return {
     navigateToWorkspace: useCallback(
@@ -67,6 +60,12 @@ export const useImbueNavigate = (): ImbueNavigationFunctions => {
     navigateToRepoSetupCommand: useCallback(
       (projectId: string): void => {
         navigate(`/settings?section=repositories&focusRepo=${encodeURIComponent(projectId)}`);
+      },
+      [navigate],
+    ),
+    navigateToPanelSettings: useCallback(
+      (panelId: string): void => {
+        navigate(`/settings?section=PANELS&panel=${encodeURIComponent(panelId)}`);
       },
       [navigate],
     ),

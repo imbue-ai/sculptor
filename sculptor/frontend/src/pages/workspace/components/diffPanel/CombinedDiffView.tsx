@@ -2,7 +2,7 @@ import { Flex, IconButton, Text } from "@radix-ui/themes";
 import { useAtom, useAtomValue } from "jotai";
 import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, ChevronUp, Ellipsis } from "lucide-react";
 import type { ReactElement, RefObject } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { appThemeAtom, fileBrowserLineWrappingAtom } from "~/common/state/atoms/userConfig.ts";
@@ -155,17 +155,10 @@ const ExpandableFileDiff = ({
   // single-file DiffPanel view.  Falls back to the target branch (undefined →
   // getBaseRef) only when the merge-base is unknown.
   const baseRefOverride = scope === "vs-target-branch" ? mergeBaseRef : "HEAD";
-  const { oldLines, newLines } = useFileLines(
-    workspaceId,
-    filePath,
-    previousFilePath,
-    fileStatus,
-    diffString,
-    baseRefOverride,
-  );
+  const { oldLines, newLines } = useFileLines(workspaceId, filePath, previousFilePath, fileStatus, baseRefOverride);
   return (
     <LargeDiffGate diffString={diffString}>
-      {(visibleDiff, isTruncated) => (
+      {({ visibleDiff, isTruncated }) => (
         <PierreDiffView
           diffString={visibleDiff}
           viewType={viewType}
@@ -251,28 +244,37 @@ export const CombinedDiffView = ({
   }, []);
 
   // Auto-expand collapsed files whose diff content matches the search query.
-  useEffect(() => {
-    if (!searchQuery) return;
-    const lowerQuery = searchQuery.toLowerCase();
-    const matchingPaths = new Set(
-      fileChanges
-        .filter((fc) => fc.diffString.toLowerCase().includes(lowerQuery))
-        .map((fc) => fc.fileNames.referenceFileName),
-    );
-    if (matchingPaths.size === 0) return;
-
-    setCollapsedFiles((prev) => {
-      let hasChanges = false;
-      const next = new Set(prev);
-      for (const path of matchingPaths) {
-        if (next.has(path)) {
-          next.delete(path);
-          hasChanges = true;
-        }
+  // Done as a during-render state adjustment (guarded on the search query and
+  // file set) rather than an effect, so matches expand in the same render the
+  // query changes — mirroring the auto-collapse adjustment above.
+  const [prevSearchInputs, setPrevSearchInputs] = useState<{ searchQuery: string; fileChanges: typeof fileChanges }>({
+    searchQuery,
+    fileChanges,
+  });
+  if (prevSearchInputs.searchQuery !== searchQuery || prevSearchInputs.fileChanges !== fileChanges) {
+    setPrevSearchInputs({ searchQuery, fileChanges });
+    if (searchQuery) {
+      const lowerQuery = searchQuery.toLowerCase();
+      const matchingPaths = new Set(
+        fileChanges
+          .filter((fc) => fc.diffString.toLowerCase().includes(lowerQuery))
+          .map((fc) => fc.fileNames.referenceFileName),
+      );
+      if (matchingPaths.size > 0) {
+        setCollapsedFiles((prev) => {
+          let hasChanges = false;
+          const next = new Set(prev);
+          for (const path of matchingPaths) {
+            if (next.has(path)) {
+              next.delete(path);
+              hasChanges = true;
+            }
+          }
+          return hasChanges ? next : prev;
+        });
       }
-      return hasChanges ? next : prev;
-    });
-  }, [searchQuery, fileChanges]);
+    }
+  }
 
   /** Index of the file we last navigated to (or 0 for the first file). */
   const navigatedIndexRef = useRef(0);

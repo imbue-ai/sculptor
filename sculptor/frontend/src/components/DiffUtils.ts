@@ -1,7 +1,12 @@
+// A standard per-file git diff header is five lines (the `diff --git`, `index`,
+// `---`, and `+++` lines plus the first `@@` hunk header); skip them before
+// counting changed lines. Any extra header markers are filtered out in the loop.
+const DIFF_HEADER_LINE_COUNT = 5;
+
 export const getLineCounts = (diffStr: string): { added: number; removed: number } => {
   let added = 0;
   let removed = 0;
-  const lines = diffStr.split("\n").slice(5);
+  const lines = diffStr.split("\n").slice(DIFF_HEADER_LINE_COUNT);
   for (const line of lines) {
     if (line.startsWith("@@") || line.startsWith("+++") || line.startsWith("---")) continue;
     if (line.startsWith("+")) added++;
@@ -40,9 +45,9 @@ const unescapeDiffFilename = (filename: string): string => {
     return filename;
   } else {
     try {
-      const unescaped_filename = JSON.parse(filename);
-      if (typeof unescaped_filename === "string") {
-        return unescaped_filename;
+      const unescapedFilename = JSON.parse(filename);
+      if (typeof unescapedFilename === "string") {
+        return unescapedFilename;
       } else {
         throw new Error("Parsed filename is not a string");
       }
@@ -55,8 +60,8 @@ const unescapeDiffFilename = (filename: string): string => {
 
 export const extractFileNamesFromDiff = (diffString: string): DiffFileNames => {
   // Split the diff into header and body. Everything up to the first line starting with @@ (if any) is the header.
-  const header_match = diffString.match(/^(.*?)(?=^@@)/ms);
-  const diffHeader = header_match ? header_match[1] : diffString;
+  const headerMatch = diffString.match(/^(.*?)(?=^@@)/ms);
+  const diffHeader = headerMatch ? headerMatch[1] : diffString;
 
   // Parse out the file names from the header. This is somewhat complicated:
   // 1. If the file is not renamed, we can get the filename from the `diff --git a/filename b/filename` line.

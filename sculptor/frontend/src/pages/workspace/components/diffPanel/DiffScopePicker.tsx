@@ -13,8 +13,10 @@ type DiffScopePickerProps = {
   allCount?: number;
 };
 
-const formatLabel = (label: string, count: number | undefined): string =>
-  count != null && count > 0 ? `${label} ${count}` : label;
+const formatLabel = (inputs: { label: string; count: number | undefined }): string => {
+  const { label, count } = inputs;
+  return count !== undefined && count > 0 ? `${label} ${count}` : label;
+};
 
 export const DiffScopePicker = ({
   scope,
@@ -34,11 +36,11 @@ export const DiffScopePicker = ({
     >
       {hasTargetBranch && (
         <SegmentedControl.Item value="vs-target-branch" data-testid={ElementIds.DIFF_SCOPE_ALL}>
-          {formatLabel("All", allCount)}
+          {formatLabel({ label: "All", count: allCount })}
         </SegmentedControl.Item>
       )}
       <SegmentedControl.Item value="uncommitted" data-testid={ElementIds.DIFF_SCOPE_UNCOMMITTED}>
-        {formatLabel("Uncommitted", uncommittedCount)}
+        {formatLabel({ label: "Uncommitted", count: uncommittedCount })}
       </SegmentedControl.Item>
     </SegmentedControl.Root>
   );

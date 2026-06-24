@@ -1,8 +1,7 @@
 import { Flex, Text } from "@radix-ui/themes";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useAtom, useSetAtom } from "jotai";
-import { memo, type ReactElement } from "react";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { type ReactElement, useCallback, useEffect, useMemo, useRef } from "react";
 
 import { ElementIds } from "~/api";
 import { useWorkspacePageParams } from "~/common/NavigateUtils.ts";
@@ -11,9 +10,10 @@ import { openFileViewTabAtom } from "~/pages/workspace/components/diffPanel/atom
 import { expandFoldersAtom, fileBrowserStateAtomFamily, toggleFolderAtom } from "./atoms.ts";
 import { FileContextMenu } from "./FileContextMenu.tsx";
 import styles from "./FileTree.module.scss";
+import { FlatListRow } from "./FlatListRow.tsx";
 import { useFileTree } from "./hooks.ts";
 import { TreeRow } from "./TreeRow.tsx";
-import type { FlatFileEntry, TreeNode, ViewMode } from "./types.ts";
+import type { TreeNode, ViewMode } from "./types.ts";
 import { useActiveFileOperation } from "./useActiveFileOperation.ts";
 import { useFocusFolderHighlight } from "./useFocusFolderHighlight.ts";
 import { useKeyboardNavigation } from "./useKeyboardNavigation.ts";
@@ -28,8 +28,6 @@ import {
   flattenVisibleTreeWithDepth,
   getAllFiles,
   isBinaryFile,
-  STATUS_COLOR_STYLES,
-  truncateMiddlePath,
 } from "./utils.ts";
 
 const SCROLL_SAVE_DEBOUNCE_MS = 200;
@@ -39,38 +37,6 @@ type FileTreeProps = {
   viewMode: ViewMode;
   searchMatchingPaths?: Set<string> | null;
 };
-
-type FlatListRowProps = {
-  entry: FlatFileEntry;
-  isFocused: boolean;
-  onFileClick: (path: string) => void;
-};
-
-const FlatListRow = memo(function FlatListRow({ entry, isFocused, onFileClick }: FlatListRowProps): ReactElement {
-  const isDeleted = entry.status === "D";
-
-  const handleClick = (): void => {
-    onFileClick(entry.path);
-  };
-
-  return (
-    <div
-      className={`${styles.flatListRow} ${isDeleted ? styles.deleted : ""} ${isFocused ? styles.focused : ""}`}
-      onClick={handleClick}
-    >
-      <span className={styles.flatListName}>{entry.name}</span>
-      {entry.parentPath && <span className={styles.flatListDir}>{truncateMiddlePath(entry.parentPath)}</span>}
-
-      <span className={styles.spacer} />
-
-      {entry.status && (
-        <span className={styles.statusLetter} style={STATUS_COLOR_STYLES[entry.status]}>
-          {entry.status}
-        </span>
-      )}
-    </div>
-  );
-});
 
 export const FileTree = ({ workspaceId, viewMode, searchMatchingPaths }: FileTreeProps): ReactElement => {
   const [fileBrowserState, setFileBrowserState] = useAtom(fileBrowserStateAtomFamily(workspaceId));

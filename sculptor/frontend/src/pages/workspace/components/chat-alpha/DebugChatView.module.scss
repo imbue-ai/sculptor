@@ -62,59 +62,6 @@
   word-break: break-word;
 }
 
-.blockEntry {
-  border-left: 2px solid var(--gray-6);
-  margin-left: var(--space-1);
-  padding: var(--space-1) var(--space-2);
-}
-
-.blockType {
-  color: var(--gray-9);
-  font-family: var(--code-font-family);
-}
-
-.blockTypeToolUse {
-  color: var(--blue-9);
-  font-family: var(--code-font-family);
-}
-
-.blockTypeToolResult {
-  color: var(--green-9);
-  font-family: var(--code-font-family);
-}
-
-.jsonToggle {
-  align-self: flex-start;
-  font-family: var(--code-font-family);
-  margin-left: var(--space-1);
-}
-
-.chevronClosed {
-  transition: transform var(--duration-fast) ease;
-}
-
-.chevronOpen {
-  transform: rotate(90deg);
-  transition: transform var(--duration-fast) ease;
-}
-
-.jsonBlock {
-  background: var(--gray-3);
-  border: 1px solid var(--gray-5);
-  border-radius: var(--radius-1);
-  color: var(--gray-11);
-  font-family: var(--code-font-family);
-  font-size: var(--font-size-1);
-  margin-left: var(--space-1);
-  max-height: 400px;
-  overflow: auto;
-  padding: var(--space-2);
-  white-space: pre-wrap;
-  word-break: break-word;
-
-  @include thin-scrollbar(both);
-}
-
 .timestamp {
   cursor: pointer;
   text-decoration: underline;

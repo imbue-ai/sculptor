@@ -1,5 +1,6 @@
 import type { ToolResultBlock, ToolUseBlock } from "~/api";
 import { ChatMessageRole } from "~/api";
+import { isToolResultBlock, isToolUseBlock } from "~/common/Guards.ts";
 import type { SubagentTreeNode } from "~/pages/workspace/utils/subagentTree.ts";
 import { isHiddenTool } from "~/pages/workspace/utils/utils.ts";
 
@@ -20,19 +21,17 @@ export const collectLeafToolBlocks = (
     if (node.message.role === ChatMessageRole.USER) continue;
 
     for (const block of node.message.content) {
-      if (block.type === "tool_use") {
-        const toolBlock = block as ToolUseBlock;
-        seenToolUseIds.add(toolBlock.id);
-        if (isHiddenTool(toolBlock.name)) continue;
-        const children = node.children.get(toolBlock.id);
+      if (isToolUseBlock(block)) {
+        seenToolUseIds.add(block.id);
+        if (isHiddenTool(block.name)) continue;
+        const children = node.children.get(block.id);
         if (!children || children.length === 0) {
-          blocks.push(toolBlock);
+          blocks.push(block);
         }
-      } else if (block.type === "tool_result") {
-        const resultBlock = block as ToolResultBlock;
-        if (isHiddenTool(resultBlock.toolName)) continue;
-        if (!seenToolUseIds.has(resultBlock.toolUseId)) {
-          blocks.push(resultBlock);
+      } else if (isToolResultBlock(block)) {
+        if (isHiddenTool(block.toolName)) continue;
+        if (!seenToolUseIds.has(block.toolUseId)) {
+          blocks.push(block);
         }
       }
     }

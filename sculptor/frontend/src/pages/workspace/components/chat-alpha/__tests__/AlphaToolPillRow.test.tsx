@@ -35,7 +35,7 @@ vi.mock("../AlphaCommandPopover.tsx", () => ({
 }));
 
 const createToolUse = (overrides: Partial<ToolUseBlock> = {}): ToolUseBlock => ({
-  id: `tool-${Math.random().toString(36).slice(2, 8)}`,
+  id: "tool-use",
   name: "Read",
   type: "tool_use",
   input: { file_path: "/src/file.ts" },

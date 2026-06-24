@@ -4,7 +4,7 @@ export type BackendStatusPayloads = {
   loading: BaseBackendStatusPayload;
   running: BaseBackendStatusPayload;
   warning: BaseBackendStatusPayload;
-  error: BaseBackendStatusPayload & { message: string; stack: string };
+  error: BaseBackendStatusPayload & { stack: string };
   exited: BaseBackendStatusPayload & { code: number | null; signal: NodeJS.Signals | null; stderr: string };
   unresponsive: BaseBackendStatusPayload;
   shutting_down: BaseBackendStatusPayload;

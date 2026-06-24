@@ -8,6 +8,10 @@ import { TaskStatus } from "~/api";
  */
 export type AgentDotStatus = "running" | "waiting" | "error" | "unread" | "read";
 
+function hasUnreadUpdate(lastReadAt: string | null, updatedAt: string): boolean {
+  return lastReadAt === null || new Date(updatedAt) > new Date(lastReadAt);
+}
+
 export function getAgentDotStatus(status: TaskStatus, lastReadAt: string | null, updatedAt: string): AgentDotStatus {
   if (status === TaskStatus.RUNNING || status === TaskStatus.BUILDING) {
     return "running";
@@ -24,16 +28,10 @@ export function getAgentDotStatus(status: TaskStatus, lastReadAt: string | null,
   // Request-level errors (e.g. API 429) show as "error" until the user views
   // the workspace, then clear to "read" — unlike full ERROR which persists.
   if (status === TaskStatus.REQUEST_ERROR) {
-    if (lastReadAt === null || new Date(updatedAt) > new Date(lastReadAt)) {
-      return "error";
-    }
-    return "read";
+    return hasUnreadUpdate(lastReadAt, updatedAt) ? "error" : "read";
   }
 
-  if (lastReadAt === null || new Date(updatedAt) > new Date(lastReadAt)) {
-    return "unread";
-  }
-  return "read";
+  return hasUnreadUpdate(lastReadAt, updatedAt) ? "unread" : "read";
 }
 
 /**

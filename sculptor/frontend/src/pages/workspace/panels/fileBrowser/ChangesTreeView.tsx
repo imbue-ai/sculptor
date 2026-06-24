@@ -36,6 +36,9 @@ import {
   isBinaryFile,
 } from "./utils.ts";
 
+/** Stable empty set used as the "no expanded folders" value in flat view mode. */
+const EMPTY_EXPANDED_SET: Set<string> = new Set<string>();
+
 /** Count all file nodes in a tree recursively. */
 const countTreeFiles = (nodes: Array<TreeNode>): number => {
   let count = 0;
@@ -192,11 +195,9 @@ export const ChangesTreeView = ({
     return flatFiles.map((f) => ({ path: f.path, type: "file" as const }));
   }, [viewMode, flatRows, flatFiles]);
 
-  const emptyExpandedSet = useMemo(() => new Set<string>(), []);
-
   const { focusedIndex, setFocusedIndex, onKeyDown } = useKeyboardNavigation({
     items: keyboardItems,
-    expandedFolders: viewMode === "tree" ? expandedFoldersSet : emptyExpandedSet,
+    expandedFolders: viewMode === "tree" ? expandedFoldersSet : EMPTY_EXPANDED_SET,
     onToggleExpand: handleToggleExpand,
     onFileOpen: handleFileClick,
   });
@@ -208,8 +209,7 @@ export const ChangesTreeView = ({
   }, [focusedIndex, virtualizer]);
 
   const getNodeData = useCallback(
-    (node: TreeNode, depth: number): { depth: number; isExpanded: boolean; folderChangeCount: number } => ({
-      depth,
+    (node: TreeNode): { isExpanded: boolean; folderChangeCount: number } => ({
       isExpanded: expandedFoldersSet.has(node.path),
       folderChangeCount: allFolderChangeCounts.get(node.path) ?? folderChangeCounts.get(node.path) ?? 0,
     }),
@@ -293,7 +293,7 @@ export const ChangesTreeView = ({
 
           // Tree mode
           const { node, depth } = flatRows[virtualItem.index];
-          const { isExpanded, folderChangeCount } = getNodeData(node, depth);
+          const { isExpanded, folderChangeCount } = getNodeData(node);
           const treeNode = treeNodeMap.get(node.path);
           const descendantFolderPaths =
             treeNode && treeNode.type === "directory" ? collectDescendantFolderPaths(treeNode) : undefined;

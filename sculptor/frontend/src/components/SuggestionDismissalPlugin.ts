@@ -113,7 +113,7 @@ const applyTransaction = (tr: Transaction, prev: DismissalState): DismissalState
   return next === prev.dismissed ? prev : { dismissed: next };
 };
 
-export const suggestionDismissalPlugin = (): Plugin<DismissalState> =>
+const suggestionDismissalPlugin = (): Plugin<DismissalState> =>
   new Plugin<DismissalState>({
     key: suggestionDismissalKey,
     state: {

@@ -70,6 +70,11 @@
   padding: var(--space-3);
 }
 
+.pathText {
+  font-family: monospace;
+  word-break: break-all;
+}
+
 .infoBox {
   background: var(--accent-2);
   border: 1px solid var(--accent-4);
@@ -84,12 +89,6 @@
   border-radius: var(--radius-2);
   color: var(--accent-11);
   padding: var(--space-3);
-}
-
-.futureNote {
-  color: var(--accent-10);
-  font-style: italic;
-  text-align: center;
 }
 
 .closeButton {

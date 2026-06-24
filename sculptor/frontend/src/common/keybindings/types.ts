@@ -46,7 +46,14 @@ export type ResolvedKeybinding = KeybindingDefinition & {
   isDefault: boolean;
 };
 
-export const CATEGORY_ORDER = ["chat", "workspaces", "navigation", "general", "panels", "terminal"] as const;
+export const CATEGORY_ORDER = [
+  "chat",
+  "workspaces",
+  "navigation",
+  "general",
+  "panels",
+  "terminal",
+] as const satisfies ReadonlyArray<KeybindingCategory>;
 
 export const CATEGORY_DISPLAY_NAMES: Readonly<Record<KeybindingCategory, string>> = {
   general: "General",

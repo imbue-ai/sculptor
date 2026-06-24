@@ -13,7 +13,7 @@ export const useInstallUpdate = (): UseInstallUpdate => {
   const [isInstalling, setIsInstalling] = useAtom(isInstallingUpdateAtom);
   const status = useAtomValue(autoUpdateStatusAtom);
 
-  const install = useCallback(() => {
+  const install = useCallback((): void => {
     if (isInstalling) return;
     setIsInstalling(true);
 

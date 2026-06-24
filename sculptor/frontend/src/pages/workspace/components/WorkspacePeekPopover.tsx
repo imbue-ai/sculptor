@@ -6,21 +6,23 @@ import { type CSSProperties, type ReactElement, useCallback, useEffect, useMemo,
 import type { CodingAgentTaskView, PrStatusInfo } from "~/api";
 import { ElementIds, WorkspacePeekAgentStatus } from "~/api";
 import { useTimedLatch } from "~/common/Hooks.ts";
-import { projectAtomFamily, projectsArrayAtom } from "~/common/state/atoms/projects";
 import { prStatusAtomFamily } from "~/common/state/atoms/prStatus";
 import { tasksArrayAtom } from "~/common/state/atoms/tasks";
-import { workspaceBranchAtomFamily } from "~/common/state/atoms/workspaceBranch";
-import { workspaceAtomFamily } from "~/common/state/atoms/workspaces";
-import { useGitProvider } from "~/common/state/hooks/useGitProvider";
+import { useProject, useProjects } from "~/common/state/hooks/useProjects";
 import { useThemeDangerColor, useThemeSuccessColor, useThemeWarningColor } from "~/common/state/hooks/useThemeBuilder";
+import { useWorkspace } from "~/common/state/hooks/useWorkspace";
+import { useWorkspaceBranch } from "~/common/state/hooks/useWorkspaceBranch";
 import { useWorkspaceDiff } from "~/common/state/hooks/useWorkspaceDiff";
-import { activePanelPerZoneAtom, zoneAssignmentsAtom, zoneVisibilityAtom } from "~/components/panels/atoms";
-import { activeFileBrowserTabAtomFamily } from "~/components/panels/atoms";
+import {
+  activeFileBrowserTabAtomFamily,
+  activePanelPerZoneAtom,
+  zoneAssignmentsAtom,
+  zoneVisibilityAtom,
+} from "~/components/panels/atoms";
 
 import { changesScopeAtomFamily } from "../panels/fileBrowser/atoms";
 import { parseDiffStats } from "../utils/parseDiffStats";
 import { AgentStatusDot } from "./AgentStatusDot";
-import type { GitProvider } from "./PrButton";
 import styles from "./WorkspacePeekPopover.module.scss";
 
 type WorkspacePeekPopoverProps = {
@@ -34,6 +36,13 @@ const VISIBLE_AGENT_COUNT = 5;
 // Holds the diff-stats shimmer on long enough to complete one full pulse cycle
 // even when the underlying fetch returns in under a frame.
 const SHIMMER_MIN_HOLD_MS = 1500;
+
+// How long the branch name shows "Copied!" after the user copies it.
+const COPY_FEEDBACK_DURATION_MS = 1500;
+
+// Only collapse the agent list when doing so hides at least this many agents —
+// hiding a single agent behind a "+N more" control isn't worth the extra click.
+const MIN_HIDDEN_AGENTS_TO_COLLAPSE = 2;
 
 const STATUS_SORT_ORDER: Record<WorkspacePeekAgentStatus, number> = {
   [WorkspacePeekAgentStatus.ERROR]: 0,
@@ -98,7 +107,7 @@ function getSummary(status: WorkspacePeekAgentStatus, agents: ReadonlyArray<Codi
   }
 }
 
-function getPeekPipelineDotClass(status: string | null | undefined): string {
+function getPeekPipelineDotClass(status: PrStatusInfo["pipelineStatus"]): string {
   switch (status) {
     case "running":
       return styles.dotRunning;
@@ -208,14 +217,12 @@ const PeekBanner = ({
 const PeekHeader = ({
   workspaceName,
   prStatus,
-  gitProvider,
   summary,
   workspaceStatus,
   onNavigate,
 }: {
   workspaceName: string;
   prStatus: PrStatusInfo | null;
-  gitProvider: GitProvider;
   summary: string;
   workspaceStatus: WorkspacePeekAgentStatus;
   onNavigate: () => void;
@@ -240,8 +247,7 @@ const PeekHeader = ({
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
         >
-          {gitProvider === "github" ? "PR" : "MR"} {gitProvider === "github" ? "#" : "!"}
-          {prStatus.prIid}
+          PR #{prStatus.prIid}
           {prStatus.prState === "open" && (
             <>
               <span className={`${styles.statusDot} ${getPeekPipelineDotClass(prStatus.pipelineStatus)}`} />
@@ -332,13 +338,12 @@ export const WorkspacePeekPopover = ({
   onNavigate,
   onDismiss,
 }: WorkspacePeekPopoverProps): ReactElement => {
-  const workspace = useAtomValue(workspaceAtomFamily(workspaceId));
-  const project = useAtomValue(projectAtomFamily(workspace?.projectId ?? ""));
-  const projects = useAtomValue(projectsArrayAtom);
+  const workspace = useWorkspace(workspaceId);
+  const project = useProject(workspace?.projectId ?? "");
+  const projects = useProjects();
   const allTasks = useAtomValue(tasksArrayAtom);
-  const branchInfo = useAtomValue(workspaceBranchAtomFamily(workspaceId));
+  const branchInfo = useWorkspaceBranch(workspaceId);
   const prStatus = useAtomValue(prStatusAtomFamily(workspaceId));
-  const gitProvider = useGitProvider(workspace?.projectId ?? "");
   const { data: diff, isFetching } = useWorkspaceDiff(workspaceId);
   const isShimmering = useTimedLatch(isFetching, SHIMMER_MIN_HOLD_MS);
   const diffStats = useMemo(() => parseDiffStats(diff?.targetBranchDiff), [diff?.targetBranchDiff]);
@@ -387,8 +392,7 @@ export const WorkspacePeekPopover = ({
   const sortedAgents = useMemo(
     () =>
       [...agents].sort((a, b) => {
-        const statusDiff =
-          (STATUS_SORT_ORDER[a.workspacePeekStatus] ?? 4) - (STATUS_SORT_ORDER[b.workspacePeekStatus] ?? 4);
+        const statusDiff = STATUS_SORT_ORDER[a.workspacePeekStatus] - STATUS_SORT_ORDER[b.workspacePeekStatus];
         if (statusDiff !== 0) return statusDiff;
         // Within the same status group, show most recently updated first
         return b.updatedAt.localeCompare(a.updatedAt);
@@ -439,7 +443,7 @@ export const WorkspacePeekPopover = ({
     navigator.clipboard.writeText(branchInfo.currentBranch);
     setIsCopied(true);
     clearTimeout(copyTimerRef.current);
-    copyTimerRef.current = setTimeout(() => setIsCopied(false), 1500);
+    copyTimerRef.current = setTimeout(() => setIsCopied(false), COPY_FEEDBACK_DURATION_MS);
   }, [branchInfo?.currentBranch]);
 
   const handleDiffClick = useCallback(() => {
@@ -464,7 +468,7 @@ export const WorkspacePeekPopover = ({
   ]);
 
   const hiddenCount = sortedAgents.length - VISIBLE_AGENT_COUNT;
-  const canCollapse = hiddenCount >= 2;
+  const canCollapse = hiddenCount >= MIN_HIDDEN_AGENTS_TO_COLLAPSE;
   const visibleAgents = isExpanded || !canCollapse ? sortedAgents : sortedAgents.slice(0, VISIBLE_AGENT_COUNT);
   const workspaceName = workspace?.description ?? "Workspace";
 
@@ -491,7 +495,6 @@ export const WorkspacePeekPopover = ({
       <PeekHeader
         workspaceName={workspaceName}
         prStatus={prStatus}
-        gitProvider={gitProvider}
         summary={summary}
         workspaceStatus={workspaceStatus}
         onNavigate={() => onNavigate(workspaceId)}

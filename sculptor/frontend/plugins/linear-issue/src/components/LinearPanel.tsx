@@ -6,6 +6,7 @@ import type { ReactElement } from "react";
 import { useExpandedIds } from "../linear/useExpandedIds.ts";
 import { useLinearTickets } from "../linear/useLinearTickets.ts";
 import { usePinnedIds } from "../linear/usePinnedIds.ts";
+import { useShortcut } from "../linear/useShortcut.ts";
 import { EmptyState } from "./EmptyState.tsx";
 import { QuickSearch } from "./QuickSearch.tsx";
 import { TicketSection } from "./TicketSection.tsx";
@@ -25,12 +26,19 @@ export const LinearPanel = (): ReactElement => {
   // A separate map for each ticket's sub-issue disclosure, keyed by the same
   // ticket identifier but namespaced so it can't collide with the section map.
   const { overrides: subOverrides, setExpanded: setSubExpanded } = useExpandedIds(workspaceId, "subissues");
+  const { shortcutId, setShortcut, clearShortcut } = useShortcut(workspaceId);
   const { tickets, isFetching, isError, error, refetch } = useLinearTickets({
     apiKey,
     branch,
     pullRequestUrl,
     pinnedIds,
   });
+
+  // The effective shortcut: the explicit assignment, or — when none — the branch
+  // (primary) ticket, mirroring what the banner widget shows. Highlighting that
+  // ticket here keeps the panel and the widget pointing at the same issue.
+  const primaryId = tickets.find((ticket) => ticket.isPrimary)?.issue.identifier ?? null;
+  const effectiveShortcutId = shortcutId ?? primaryId;
 
   const refreshAction = apiKey ? (
     <IconButton size="1" variant="ghost" color="gray" onClick={() => refetch()} disabled={isFetching} title="Refresh">
@@ -51,6 +59,9 @@ export const LinearPanel = (): ReactElement => {
             // Sub-issues stay collapsed until asked for, keeping the body compact.
             const subIssuesDefaultOpen = false;
             const subIssuesOpen = subOverrides[id] ?? subIssuesDefaultOpen;
+            // Toggle: clear when this ticket is already the explicit override
+            // (reverting to the branch default), otherwise assign it.
+            const onToggleShortcut = (): void => (shortcutId === id ? clearShortcut() : setShortcut(id));
             return (
               <TicketSection
                 key={id}
@@ -60,6 +71,8 @@ export const LinearPanel = (): ReactElement => {
                 subIssuesOpen={subIssuesOpen}
                 onToggleSubIssues={() => setSubExpanded(id, !subIssuesOpen, subIssuesDefaultOpen)}
                 onUnpin={unpin}
+                isShortcut={effectiveShortcutId === id}
+                onToggleShortcut={onToggleShortcut}
               />
             );
           })}

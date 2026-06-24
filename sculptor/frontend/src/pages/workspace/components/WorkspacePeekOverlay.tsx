@@ -7,6 +7,8 @@ const OPEN_DELAY_MS = 600;
 const CLOSE_DELAY_MS = 80;
 // After closing, re-entering a tab within this window reopens immediately.
 const REOPEN_GRACE_PERIOD_MS = 300;
+// Gap in pixels between the anchoring tab (or dropdown) and the peek overlay.
+const PEEK_OFFSET_PX = 4;
 
 type OverlayPosition = {
   x: number;
@@ -58,10 +60,10 @@ export const WorkspacePeekOverlay = ({ onNavigate }: WorkspacePeekOverlayProps):
     const dropdownContent = tabElement.closest("[role='menu']");
     if (dropdownContent) {
       const menuRect = dropdownContent.getBoundingClientRect();
-      setPosition({ x: menuRect.right + 4, y: menuRect.top });
+      setPosition({ x: menuRect.right + PEEK_OFFSET_PX, y: menuRect.top });
     } else {
       const rect = tabElement.getBoundingClientRect();
-      setPosition({ x: rect.left, y: rect.bottom + 4 });
+      setPosition({ x: rect.left, y: rect.bottom + PEEK_OFFSET_PX });
     }
   }, []);
 

@@ -23,7 +23,7 @@ const fetchFiles = async (workspaceId: string, signal: AbortSignal): Promise<Rea
     path: { workspace_id: workspaceId },
     meta: { signal },
   });
-  return (data?.files ?? []) as ReadonlyArray<FileListEntry>;
+  return data?.files ?? [];
 };
 
 const isTransientFileListFailure = (error: unknown): boolean => error instanceof HTTPException && error.status === 503;

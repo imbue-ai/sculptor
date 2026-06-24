@@ -9,8 +9,8 @@ describe("page stack helpers", () => {
   });
 
   it("pops the top page", () => {
-    expect(popPageStack(["a", "b"] as never)).toEqual(["a"]);
-    expect(popPageStack(["only"] as never)).toEqual([]);
+    expect(popPageStack(["theme.appearance", "settings.section"])).toEqual(["theme.appearance"]);
+    expect(popPageStack(["agents.switch"])).toEqual([]);
   });
 
   it("popping an empty stack is a no-op", () => {

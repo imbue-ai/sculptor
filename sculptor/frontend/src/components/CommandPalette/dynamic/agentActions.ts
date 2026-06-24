@@ -7,9 +7,15 @@ import type { AgentActionRuntime } from "../contextActions/types.ts";
 import type { CommandRuntime } from "../runtime.ts";
 import type { Command, DynamicProvider } from "../types.ts";
 
+// Cap palette rows at a fixed width; longer titles are truncated with an
+// ellipsis so the ellipsis budget stays inside the cap.
+const MAX_DISPLAY_TITLE_LENGTH = 80;
+const TITLE_ELLIPSIS = "...";
+
 const taskDisplayTitle = (task: { title?: string | null; initialPrompt: string }): string => {
   const display = task.title?.trim() || task.initialPrompt.trim() || "Untitled agent";
-  return display.length > 80 ? `${display.slice(0, 77)}...` : display;
+  if (display.length <= MAX_DISPLAY_TITLE_LENGTH) return display;
+  return `${display.slice(0, MAX_DISPLAY_TITLE_LENGTH - TITLE_ELLIPSIS.length)}${TITLE_ELLIPSIS}`;
 };
 
 /**
@@ -30,9 +36,13 @@ export const buildAgentActionsProvider = (
 ): DynamicProvider => ({
   id: "dynamic.agent_actions",
   produce: (ctx): Array<Command> => {
-    if (ctx.activeAgentId == null || ctx.activeWorkspaceId == null) return [];
+    // Destructure before the guard so the non-null narrowing survives into
+    // the `perform` closure below (a property read off `ctx` would widen
+    // back to `string | null` there, forcing a type assertion).
+    const { activeAgentId, activeWorkspaceId } = ctx;
+    if (activeAgentId == null || activeWorkspaceId == null) return [];
     const tasks = runtime.store.get(tasksArrayAtom) ?? [];
-    const target = tasks.find((t) => t.id === ctx.activeAgentId);
+    const target = tasks.find((t) => t.id === activeAgentId);
     if (target == null) return [];
 
     const display = taskDisplayTitle(target);
@@ -56,7 +66,7 @@ export const buildAgentActionsProvider = (
       order: 50,
       perform: () => {
         runtime.store.set(agentActionsTargetAtom, {
-          workspaceId: ctx.activeWorkspaceId as string,
+          workspaceId: activeWorkspaceId,
           agentId: target.id,
         });
       },

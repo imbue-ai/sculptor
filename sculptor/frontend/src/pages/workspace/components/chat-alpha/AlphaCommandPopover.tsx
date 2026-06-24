@@ -20,6 +20,9 @@ import { useElapsedTime } from "./useElapsedTime.ts";
 // integration tests; Monitor doesn't need one yet.
 type CommandPopoverToolName = "Bash" | "Monitor";
 
+/** How long a copy button shows its "copied" confirmation before reverting. */
+const COPY_FEEDBACK_DURATION_MS = 1500;
+
 type AlphaCommandPopoverProps = {
   toolName: CommandPopoverToolName;
   block: ToolUseBlock | undefined;
@@ -66,7 +69,7 @@ export const AlphaCommandPopover = ({
       navigator.clipboard.writeText(command).catch(() => {});
       setIsCommandCopied(true);
       clearTimeout(commandCopyTimerRef.current);
-      commandCopyTimerRef.current = setTimeout(() => setIsCommandCopied(false), 1500);
+      commandCopyTimerRef.current = setTimeout(() => setIsCommandCopied(false), COPY_FEEDBACK_DURATION_MS);
     },
     [command],
   );
@@ -77,7 +80,7 @@ export const AlphaCommandPopover = ({
       navigator.clipboard.writeText(outputText).catch(() => {});
       setIsOutputCopied(true);
       clearTimeout(outputCopyTimerRef.current);
-      outputCopyTimerRef.current = setTimeout(() => setIsOutputCopied(false), 1500);
+      outputCopyTimerRef.current = setTimeout(() => setIsOutputCopied(false), COPY_FEEDBACK_DURATION_MS);
     },
     [outputText],
   );

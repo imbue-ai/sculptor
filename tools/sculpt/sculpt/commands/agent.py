@@ -91,7 +91,10 @@ def resolve_workspace(workspace: str | None, client: Client, json_output: bool) 
     cli_error("--workspace is required (or set SCULPT_WORKSPACE_ID)", json_output=json_output)
 
 
-def _format_model_name(model_value: str) -> str:
+def _format_model_name(model_value: str | None) -> str:
+    # Terminal agents carry no model; render a placeholder rather than a name.
+    if not model_value:
+        return "-"
     lower = model_value.lower()
     if "opus" in lower:
         return "opus"
@@ -191,7 +194,8 @@ def create(
             id=result.id,
             title=_get_task_title(result),
             status=result.status.value,
-            model=result.model.value,
+            # `agent create` always makes a chat agent, so a model is always present.
+            model=result.model.value if result.model else "",
             workspace_id=result.workspace_id,
             created_at=result.created_at.isoformat(),
         )
@@ -200,7 +204,7 @@ def create(
 
     typer.echo(f"Agent created: {result.id}")
     typer.echo(f"Status: {result.status.value}")
-    typer.echo(f"Model: {result.model.value}")
+    typer.echo(f"Model: {result.model.value if result.model else '-'}")
 
 
 @agent_app.command("list")
@@ -347,7 +351,7 @@ def show(
         f"Agent: {snapshot.task_id}",
         f"Title: {snapshot.title or 'Untitled'}",
         f"Status: {snapshot.status}",
-        f"Model: {snapshot.model}",
+        f"Model: {snapshot.model or '-'}",
         f"Interface: {snapshot.interface}",
         f"Created: {format_datetime(created_dt)}",
         f"Updated: {format_datetime(updated_dt)}",

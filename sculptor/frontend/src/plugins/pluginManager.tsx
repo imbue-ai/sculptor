@@ -20,6 +20,7 @@ import {
   pluginSourcesAtom,
   type PluginSourceState,
   pluginSourceStatesAtom,
+  pluginWorkspaceWidgetsAtom,
 } from "./pluginRegistry.ts";
 import type {
   LoadedPlugin,
@@ -28,6 +29,7 @@ import type {
   PluginLoadError,
   PluginManifest,
   PluginModule,
+  WorkspaceWidgetDefinition,
 } from "./types.ts";
 import { WorkspacePluginContext } from "./WorkspaceContext.tsx";
 
@@ -823,6 +825,39 @@ export class PluginManager {
         store.set(pluginOverlaysAtom, (prev) => [...prev.filter((o) => o.id !== overlay.id), entry]);
         const undo = (): void => {
           store.set(pluginOverlaysAtom, (prev) => prev.filter((o) => o !== entry));
+        };
+        loadDisposers.push(undo);
+        return undo;
+      },
+      registerWorkspaceWidget: (widget: WorkspaceWidgetDefinition): (() => void) => {
+        // Workspace-scoped like a panel: wrap in the error boundary, the
+        // PluginContext, and a WorkspacePluginContext whose id is read fresh per
+        // render from the route — the banner the widget renders in is always on a
+        // workspace route, but reading it here (rather than taking it as a prop)
+        // keeps the host's render site a plain component map.
+        const PluginComponent = widget.component;
+        const Wrapped = (): ReactElement | null => {
+          const { workspaceID } = useWorkspacePageParams();
+          if (!workspaceID) return null;
+          return (
+            <PluginErrorBoundary pluginId={manifest.id} pluginName={manifest.name}>
+              <PluginContext.Provider value={{ pluginId: manifest.id }}>
+                <WorkspacePluginContext.Provider value={{ workspaceId: workspaceID }}>
+                  <PluginComponent />
+                </WorkspacePluginContext.Provider>
+              </PluginContext.Provider>
+            </PluginErrorBoundary>
+          );
+        };
+        Wrapped.displayName = `PluginWorkspaceWidget(${widget.id})`;
+        // Default to the lowest priority (hidden first) when unspecified, so an
+        // unprioritised widget never crowds out the host's own banner items.
+        const entry = { id: widget.id, component: Wrapped, collapsePriority: widget.collapsePriority ?? 0 };
+
+        // Replace-by-id; undo by instance (see the panel undo above).
+        store.set(pluginWorkspaceWidgetsAtom, (prev) => [...prev.filter((w) => w.id !== widget.id), entry]);
+        const undo = (): void => {
+          store.set(pluginWorkspaceWidgetsAtom, (prev) => prev.filter((w) => w !== entry));
         };
         loadDisposers.push(undo);
         return undo;

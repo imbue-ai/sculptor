@@ -1,6 +1,6 @@
 import { atom, useAtom, useAtomValue } from "jotai";
 import { atomFamily, atomWithStorage, selectAtom } from "jotai/utils";
-import { useContext, useMemo, useRef } from "react";
+import { useContext, useEffect, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
 
 import type { CodingAgentTaskView, Workspace } from "~/api";
@@ -89,11 +89,15 @@ export function useCurrentWorkspace<T = CurrentWorkspace | null>(
   // selectAtom rebuilds its derived atom whenever the selector/equality
   // *identity* changes — which an inline selector does every render. Keep the
   // latest in refs and hand selectAtom stable wrappers, so a field selector
-  // subscribes once and re-renders only when that field changes.
+  // subscribes once and re-renders only when that field changes. The refs are
+  // updated after commit (never during render) and read only when jotai later
+  // invokes the selector/equality wrappers, so the latest values are in place.
   const selectorRef = useRef(selector);
-  selectorRef.current = selector;
   const equalityRef = useRef(equalityFn);
-  equalityRef.current = equalityFn;
+  useEffect(() => {
+    selectorRef.current = selector;
+    equalityRef.current = equalityFn;
+  });
 
   const sourceAtom = useMemo(
     () => (workspaceId ? currentWorkspaceViewAtomFamily(workspaceId) : noCurrentWorkspaceAtom),
@@ -103,7 +107,9 @@ export function useCurrentWorkspace<T = CurrentWorkspace | null>(
     () =>
       selectAtom<CurrentWorkspace | null, T>(
         sourceAtom,
+        // eslint-disable-next-line react-hooks/refs -- jotai invokes these wrappers when it evaluates the atom, not during render; the ref indirection is what keeps the wrappers' identity stable so selectAtom subscribes once.
         (workspace) => (selectorRef.current ? selectorRef.current(workspace) : (workspace as unknown as T)),
+        // eslint-disable-next-line react-hooks/refs -- see above: read happens at atom-evaluation time, not during render.
         (a, b) => (equalityRef.current ? equalityRef.current(a, b) : Object.is(a, b)),
       ),
     [sourceAtom],

@@ -1,6 +1,5 @@
 import type { ChatMessage, ToolResultBlock } from "~/api";
 import { ChatMessageRole } from "~/api";
-import type { BlockUnion } from "~/common/Guards";
 import { isToolResultBlock } from "~/common/Guards";
 import { SUBAGENT_TOOL_NAMES } from "~/pages/workspace/utils/subagentTree.ts";
 
@@ -8,9 +7,8 @@ export const buildToolResultMap = (messages: ReadonlyArray<ChatMessage>): Map<st
   const map = new Map<string, ToolResultBlock>();
   for (const message of messages) {
     for (const block of message.content) {
-      if (isToolResultBlock(block as BlockUnion)) {
-        const resultBlock = block as ToolResultBlock;
-        map.set(resultBlock.toolUseId, resultBlock);
+      if (isToolResultBlock(block)) {
+        map.set(block.toolUseId, block);
       }
     }
   }
@@ -26,7 +24,7 @@ export const buildToolResultMap = (messages: ReadonlyArray<ChatMessage>): Map<st
 export const hasOnlyToolResults = (message: ChatMessage): boolean =>
   message.role === ChatMessageRole.USER &&
   message.content.length > 0 &&
-  message.content.every((block) => isToolResultBlock(block as BlockUnion));
+  message.content.every((block) => isToolResultBlock(block));
 
 /**
  * Returns true when an assistant message contains only subagent tool_result
@@ -37,9 +35,8 @@ export const hasOnlySubagentResults = (message: ChatMessage): boolean =>
   message.role === ChatMessageRole.ASSISTANT &&
   message.content.length > 0 &&
   message.content.every((block) => {
-    if (!isToolResultBlock(block as BlockUnion)) return false;
-    const resultBlock = block as ToolResultBlock;
-    return SUBAGENT_TOOL_NAMES.has(resultBlock.toolName);
+    if (!isToolResultBlock(block)) return false;
+    return SUBAGENT_TOOL_NAMES.has(block.toolName);
   });
 
 // Merge the completed chat messages with the queued messages for rendering,

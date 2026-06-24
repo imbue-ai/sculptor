@@ -1,11 +1,17 @@
+type ValidationErrorDetail = {
+  loc: Array<string | number>;
+  msg: string;
+  type: string;
+};
+
 /**
  * Custom error class for validation errors from the API
  */
 export class ValidationError extends Error {
-  status = 422;
-  detail: Array<{ loc: Array<string | number>; msg: string; type: string }>;
+  status: number;
+  detail: Array<ValidationErrorDetail>;
 
-  constructor(detail: Array<{ loc: Array<string | number>; msg: string; type: string }>) {
+  constructor(detail: Array<ValidationErrorDetail>) {
     super("Validation Error");
     this.name = "ValidationError";
     this.status = 422;

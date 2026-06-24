@@ -724,7 +724,7 @@ def _notify_pr_polling_service(
 
     Target branch changes do **not** emit a clearing sentinel — the old PR
     status stays visible until the immediate re-poll replaces it, avoiding
-    a visible flash to the "no MR" state.
+    a visible flash to the "no PR" state.
     """
     if pr_polling_service is None:
         return
@@ -738,7 +738,7 @@ def _notify_pr_polling_service(
                         pr_polling_service.on_workspace_created(model)
                         # Don't clear PR status on target branch change — the old
                         # status stays visible until the immediate re-poll replaces
-                        # it, avoiding a visible flash to the "no MR" state.
+                        # it, avoiding a visible flash to the "no PR" state.
         elif isinstance(item, WorkspaceBranchInfo):
             prev = last_branch_by_workspace.get(item.workspace_id)
             last_branch_by_workspace[item.workspace_id] = item.current_branch

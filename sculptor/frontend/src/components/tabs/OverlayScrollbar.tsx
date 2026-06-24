@@ -30,7 +30,7 @@ const computeThumbWidth = (trackWidth: number, metrics: ScrollMetrics): number =
  * positioning, without reserving any layout space. Syncs with the scroll
  * position of the referenced container.
  */
-export const OverlayScrollbar = ({ scrollRef, className }: OverlayScrollbarProps): ReactElement | null => {
+export const OverlayScrollbar = ({ scrollRef, className }: OverlayScrollbarProps): ReactElement | undefined => {
   const trackRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
   const dragStartXRef = useRef(0);
@@ -38,11 +38,16 @@ export const OverlayScrollbar = ({ scrollRef, className }: OverlayScrollbarProps
 
   const [metrics, setMetrics] = useState<ScrollMetrics>({ scrollLeft: 0, scrollWidth: 0, clientWidth: 0 });
   const metricsRef = useRef(metrics);
-  metricsRef.current = metrics;
 
   const [trackWidth, setTrackWidth] = useState(0);
   const trackWidthRef = useRef(trackWidth);
-  trackWidthRef.current = trackWidth;
+
+  // Mirror the latest metrics/trackWidth into refs so the pointer-move drag
+  // handler (which runs outside React's render) reads current values.
+  useEffect(() => {
+    metricsRef.current = metrics;
+    trackWidthRef.current = trackWidth;
+  });
 
   // Sync scroll metrics from the container.
   useEffect((): (() => void) | void => {
@@ -155,7 +160,7 @@ export const OverlayScrollbar = ({ scrollRef, className }: OverlayScrollbarProps
     isDraggingRef.current = false;
   }, []);
 
-  if (!hasOverflow) return null;
+  if (!hasOverflow) return undefined;
 
   const thumbW = computeThumbWidth(trackWidth, metrics);
   const maxScroll = metrics.scrollWidth - metrics.clientWidth;

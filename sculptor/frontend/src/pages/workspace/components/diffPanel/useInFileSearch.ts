@@ -34,9 +34,9 @@ type UseInFileSearchResult = {
 const collectTextNodes = (root: Node): Array<Text> => {
   const textNodes: Array<Text> = [];
 
-  const walk = (node: Node, insideContent: boolean): void => {
+  const walk = (node: Node, isInsideContent: boolean): void => {
     if (node.nodeType === Node.TEXT_NODE) {
-      if (insideContent) {
+      if (isInsideContent) {
         textNodes.push(node as Text);
       }
       return;
@@ -47,12 +47,12 @@ const collectTextNodes = (root: Node): Array<Text> => {
 
     // Traverse into shadow root if available
     if (node instanceof HTMLElement && node.shadowRoot) {
-      walk(node.shadowRoot, insideContent || isContentColumn);
+      walk(node.shadowRoot, isInsideContent || isContentColumn);
     }
 
     let child = node.firstChild;
     while (child) {
-      walk(child, insideContent || isContentColumn);
+      walk(child, isInsideContent || isContentColumn);
       child = child.nextSibling;
     }
   };
@@ -120,6 +120,14 @@ export const useInFileSearch = ({
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const [totalMatches, setTotalMatches] = useState(0);
   const rangesRef = useRef<Array<Range>>([]);
+  // Latest-ref mirror of the active index so the next/prev handlers can compute
+  // the target without listing currentMatchIndex as a callback dependency. Synced
+  // in an effect (not during render) to satisfy the refs lint; the handlers only
+  // run on user interaction, well after commit, so the ref is never read stale.
+  const currentMatchIndexRef = useRef(0);
+  useEffect(() => {
+    currentMatchIndexRef.current = currentMatchIndex;
+  }, [currentMatchIndex]);
   const [domVersion, setDomVersion] = useState(0);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -202,10 +210,9 @@ export const useInFileSearch = ({
 
     if (ranges.length > 0) {
       CSS.highlights.set(IN_FILE_SEARCH_ALL, new Highlight(...ranges));
-      const newIndex = 0;
-      setCurrentMatchIndex(newIndex);
-      CSS.highlights.set(IN_FILE_SEARCH_CURRENT, new Highlight(ranges[newIndex]));
-      scrollRangeIntoView(ranges[newIndex], container);
+      setCurrentMatchIndex(0);
+      CSS.highlights.set(IN_FILE_SEARCH_CURRENT, new Highlight(ranges[0]));
+      scrollRangeIntoView(ranges[0], container);
     } else {
       CSS.highlights.delete(IN_FILE_SEARCH_ALL);
       CSS.highlights.delete(IN_FILE_SEARCH_CURRENT);
@@ -236,22 +243,17 @@ export const useInFileSearch = ({
   const goToNextMatch = useCallback((): void => {
     const ranges = rangesRef.current;
     if (ranges.length === 0) return;
-    setCurrentMatchIndex((prev) => {
-      const next = (prev + 1) % ranges.length;
-      // Schedule side effects after the state update (outside the updater).
-      queueMicrotask(() => activateMatch(next));
-      return next;
-    });
+    const next = (currentMatchIndexRef.current + 1) % ranges.length;
+    setCurrentMatchIndex(next);
+    activateMatch(next);
   }, [activateMatch]);
 
   const goToPrevMatch = useCallback((): void => {
     const ranges = rangesRef.current;
     if (ranges.length === 0) return;
-    setCurrentMatchIndex((prev) => {
-      const next = (prev - 1 + ranges.length) % ranges.length;
-      queueMicrotask(() => activateMatch(next));
-      return next;
-    });
+    const next = (currentMatchIndexRef.current - 1 + ranges.length) % ranges.length;
+    setCurrentMatchIndex(next);
+    activateMatch(next);
   }, [activateMatch]);
 
   return {

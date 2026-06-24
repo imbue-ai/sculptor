@@ -43,10 +43,12 @@ export const getSculptorFolder = (): string => {
 const FINAL_LOG_PATH = path.join(getSculptorFolder(), "internal", "logs", "electron", "electron.log");
 export const TEMP_LOG_PATH = path.join(os.tmpdir(), `sculptor-premigration-${process.pid}.log`);
 
+const MAX_LOG_SIZE_BYTES = 100 * 1024 * 1024;
+
 // Start logging to a temp file so we don't create directories under the
 // sculptor folder before migration has a chance to run.
 log.transports.file.level = "info";
-log.transports.file.maxSize = 100 * 1024 * 1024; // 100MB
+log.transports.file.maxSize = MAX_LOG_SIZE_BYTES;
 log.transports.file.resolvePathFn = (): string => TEMP_LOG_PATH;
 log.transports.console.level = "debug";
 

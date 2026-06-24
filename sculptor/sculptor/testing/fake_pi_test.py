@@ -30,6 +30,7 @@ from sculptor.agents.pi_agent.output_processor import ParsedMessageEnd
 from sculptor.agents.pi_agent.output_processor import ParsedMessageUpdate
 from sculptor.agents.pi_agent.output_processor import RpcResponse
 from sculptor.services.dependency_management_service import PI_VERSION_RANGE
+from sculptor.testing.fake_pi import _BINARY_WRAPPER_TEMPLATE
 from sculptor.testing.fake_pi import _parse_args
 from sculptor.testing.fake_pi import install_fake_pi_binary
 
@@ -721,6 +722,35 @@ def test_install_fake_pi_binary_executes_rpc_mode_through_wrapper(tmp_path: Path
     events = _parse_jsonl(result.stdout)
     update = _first_update(events)
     assert update.assistant_message_event.get("delta") == "wrapped"
+
+
+def test_fake_pi_wrapper_answers_version_without_launching_python(tmp_path: Path) -> None:
+    """``pi --version`` is answered by the bash wrapper itself, before it execs
+    Python, so the version probe isn't starved by interpreter + import startup
+    under load (SCU-1571: ``pi --version`` cold-started past ``_check_pi_version``'s
+    5s timeout and failed the agent launch).
+
+    Proven by rendering the wrapper with a non-existent interpreter: ``--version``
+    still returns the pinned version (the wrapper fast-path), while any other
+    invocation reaches the (missing) interpreter and fails.
+    """
+    wrapper = tmp_path / "pi"
+    wrapper.write_text(
+        _BINARY_WRAPPER_TEMPLATE.format(
+            python="/nonexistent/interpreter-should-not-exist",
+            version=PI_VERSION_RANGE.recommended_version,
+        )
+    )
+    wrapper.chmod(0o755)
+
+    version = subprocess.run([str(wrapper), "--version"], capture_output=True, text=True, timeout=10.0, check=False)
+    assert version.returncode == 0
+    assert f"pi {PI_VERSION_RANGE.recommended_version}" in version.stderr
+
+    # Any non-version invocation must still reach the interpreter (here missing),
+    # so the fast-path stays scoped to the version probe only.
+    rpc = subprocess.run([str(wrapper), "--mode", "rpc"], capture_output=True, text=True, timeout=10.0, check=False)
+    assert rpc.returncode != 0
 
 
 @pytest.mark.parametrize(

@@ -1,7 +1,7 @@
-"""Shared helpers for CLI-based MR/PR status checks.
+"""Shared helpers for CLI-based PR status checks.
 
-Provides a unified error class, error classifier, and retry runner used by
-both pr_status.py (gh) and mr_status.py (glab).
+Provides an error class, error classifier, and retry runner used by
+pr_status.py (gh).
 """
 
 import re
@@ -26,7 +26,7 @@ _CLI_COMMAND_TIMEOUT = 30.0
 
 
 class CliStatusError(Exception):
-    """Raised when a CLI command (gh or glab) fails with a classifiable error."""
+    """Raised when a CLI command (gh) fails with a classifiable error."""
 
     def __init__(self, category: CliErrorCategory, stderr: str) -> None:
         super().__init__(stderr)
@@ -34,14 +34,10 @@ class CliStatusError(Exception):
 
 
 def classify_cli_error(stderr: str) -> CliErrorCategory:
-    """Classify a CLI error based on its stderr output.
-
-    Uses the union of gh and glab keyword lists so the same classifier
-    works for both providers.
-    """
+    """Classify a CLI error based on its stderr output."""
     lower = stderr.lower()
     # Usage errors are checked first: an unknown ``--json`` field, an unknown
-    # flag, or a malformed query makes gh/glab print a help blurb listing valid
+    # flag, or a malformed query makes gh print a help blurb listing valid
     # field names. That list contains tokens like "author" that would otherwise
     # trip the auth check below and mislabel a programming error as
     # "not authenticated". A usage error fails identically on retry and is
