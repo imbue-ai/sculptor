@@ -45,8 +45,6 @@ env:
   # The electron/vite build intermittently OOMs the default ~2GB Node heap on
   # the macOS runner; give it headroom.
   NODE_OPTIONS: --max-old-space-size=4096
-  VAULT_ADDR: https://vault-cluster-public-vault-df29b16f.9b573ab7.z1.hashicorp.cloud:8200
-  VAULT_NAMESPACE: admin
 
 jobs:
   # One timestamp shared by every build leg, so all platforms stamp the same
@@ -166,25 +164,7 @@ jobs:
           sudo apt-get $APT_OPTS install -y -qq \
             build-essential pkg-config python3 python3-pip \
             libsecret-1-dev libx11-dev libxkbfile-dev \
-            binutils squashfs-tools zsync zip jq unzip ca-certificates gnupg lsb-release
-
-      - name: Install Vault CLI (Linux)
-        if: matrix.os == 'linux'
-        # apt resolves the right binary for both x64 and arm64 runners.
-        run: |
-          curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --batch --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list >/dev/null
-          # Retry/timeout-harden apt against transient mirror stalls (SCU-1545).
-          APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
-          sudo apt-get $APT_OPTS update -qq
-          sudo apt-get $APT_OPTS install -y -qq vault
-          vault --version
-
-      - name: Install Vault CLI (macOS)
-        if: matrix.os == 'darwin'
-        run: |
-          brew install hashicorp/tap/vault
-          vault --version
+            binutils squashfs-tools zsync zip jq unzip ca-certificates
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v4
@@ -221,49 +201,74 @@ jobs:
       - name: Sync Python deps
         run: uv sync --frozen
 
+      - name: Export macOS signing credentials
+        if: matrix.os == 'darwin'
+        # CERTS_TAR_GZ is the base64 signing-identity tarball imported below.
+        # APPLE_API_KEY_ID / APPLE_API_ISSUER are the notarization key
+        # identifiers; the action leaves them in $GITHUB_ENV so forge.config.ts
+        # can read them from the environment during the build step.
+        uses: imbue-ai/vault/.github/actions/export-secrets@main
+        with:
+          role: ${{ env.VAULT_AUTH_ROLE }}
+          secrets: |
+            restricted/sculptor-release/CERTS_TAR_GZ
+            restricted/sculptor-release/APPLE_API_KEY_ID
+            restricted/sculptor-release/APPLE_API_ISSUER
+
       - name: Import macOS signing certificate
         if: matrix.os == 'darwin'
         # Import the signing identity into the runner keychain; it persists for
-        # the build step. Also export the notarization key identifiers, which
-        # forge.config.ts reads from the environment during the build step.
+        # the build step. Copy the notarization .p8 key (named by APPLE_API_KEY_ID)
+        # out of the certs tarball to where forge.config.ts expects it.
         run: |
           set -euo pipefail
-          eval "$(./scripts/export-vault-env restricted/sculptor-release/{CERTS_TAR_GZ,APPLE_API_KEY_ID,APPLE_API_ISSUER})"
           printf %s "$CERTS_TAR_GZ" | base64 -d | tar -xz -C /tmp -f -
           bash /tmp/certs/import_cert.sh.v8
           cp "/tmp/certs/AuthKey_${APPLE_API_KEY_ID}.p8" ./sculptor/frontend/config/apple_api_key.p8
-          {
-            echo "APPLE_API_KEY_ID=$APPLE_API_KEY_ID"
-            echo "APPLE_API_ISSUER=$APPLE_API_ISSUER"
-          } >> "$GITHUB_ENV"
+
+      - name: Export AWS credentials
+        # snapshot-build-artifacts uploads to S3, so AWS creds are needed (x64 too).
+        uses: imbue-ai/vault/.github/actions/export-secrets@main
+        with:
+          role: ${{ env.VAULT_AUTH_ROLE }}
+          secrets: |
+            shared/aws/AWS_ACCESS_KEY_ID
+            shared/aws/AWS_SECRET_ACCESS_KEY
+
+      # Frontend telemetry client keys for the renderer bundle. Without these the
+      # shipped app has an empty Sentry DSN and can't report bugs. Tag builds use
+      # the production Sentry/PostHog projects; other builds use the dev projects
+      # (only the matching pair is exported). Both Vault roles can read
+      # sculptor-release. A missing key hard-fails the action (curl --fail), so a
+      # release can't silently ship an app that can't report bugs.
+      - name: Export production telemetry keys
+        if: env.CI_COMMIT_TAG != ''
+        uses: imbue-ai/vault/.github/actions/export-secrets@main
+        with:
+          role: ${{ env.VAULT_AUTH_ROLE }}
+          secrets: |
+            sculptor-release/SCULPTOR_PRODUCTION_FRONTEND_SENTRY_DSN
+            sculptor-release/SCULPTOR_PRODUCTION_FRONTEND_POSTHOG_TOKEN
+
+      - name: Export dev telemetry keys
+        if: env.CI_COMMIT_TAG == ''
+        uses: imbue-ai/vault/.github/actions/export-secrets@main
+        with:
+          role: ${{ env.VAULT_AUTH_ROLE }}
+          secrets: |
+            sculptor-release/SCULPTOR_DEV_FRONTEND_SENTRY_DSN
+            sculptor-release/SCULPTOR_DEV_FRONTEND_POSTHOG_TOKEN
 
       - name: Build desktop artifacts
-        # snapshot-build-artifacts uploads to S3, so AWS creds are needed (x64 too).
         run: |
           set -euo pipefail
-          eval "$(./scripts/export-vault-env shared/aws/AWS_ACCESS_KEY_ID shared/aws/AWS_SECRET_ACCESS_KEY)"
-
-          # Frontend telemetry client keys for the renderer bundle. Without
-          # these the shipped app has an empty Sentry DSN and can't report bugs.
-          # Tag builds use the production Sentry/PostHog projects; other builds
-          # use the dev projects. Both Vault roles can read sculptor-release.
+          # Tag builds bundle the production telemetry keys; dev builds the dev
+          # keys. The matching pair is already in the environment (exported in the
+          # step above); select the project set the build compiles against.
           if [ -n "${CI_COMMIT_TAG:-}" ]; then
             export SCULPTOR_BUILD_ENV=production
-            eval "$(./scripts/export-vault-env \
-              sculptor-release/SCULPTOR_PRODUCTION_FRONTEND_SENTRY_DSN \
-              sculptor-release/SCULPTOR_PRODUCTION_FRONTEND_POSTHOG_TOKEN)"
-            # The eval above swallows a missing-key failure and leaves the var
-            # empty; assert so a release never ships an app that can't report bugs.
-            if [ -z "${SCULPTOR_PRODUCTION_FRONTEND_SENTRY_DSN:-}" ] \
-               || [ -z "${SCULPTOR_PRODUCTION_FRONTEND_POSTHOG_TOKEN:-}" ]; then
-              echo "::error::Release build is missing the production frontend Sentry DSN / PostHog token from Vault (sculptor-release)."
-              exit 1
-            fi
           else
             export SCULPTOR_BUILD_ENV=dev
-            eval "$(./scripts/export-vault-env \
-              sculptor-release/SCULPTOR_DEV_FRONTEND_SENTRY_DSN \
-              sculptor-release/SCULPTOR_DEV_FRONTEND_POSTHOG_TOKEN)"
           fi
 
           # A tag build keeps the pyproject version; otherwise stamp a .dev version.
@@ -473,15 +478,6 @@ jobs:
           git config --global user.email "ci@sculptor.dev"
           git config --global user.name "Sculptor CI"
 
-      - name: Install Vault CLI
-        run: |
-          curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --batch --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list >/dev/null
-          # Retry/timeout-harden apt against transient mirror stalls (SCU-1545).
-          APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
-          sudo apt-get $APT_OPTS update -qq
-          sudo apt-get $APT_OPTS install -y -qq vault
-
       - name: Setup uv
         uses: astral-sh/setup-uv@v4
         with:
@@ -493,6 +489,14 @@ jobs:
       - name: Sync Python deps
         run: uv sync --frozen
 
+      - name: Export AWS credentials
+        uses: imbue-ai/vault/.github/actions/export-secrets@main
+        with:
+          role: ${{ env.VAULT_AUTH_ROLE }}
+          secrets: |
+            shared/aws/AWS_ACCESS_KEY_ID
+            shared/aws/AWS_SECRET_ACCESS_KEY
+
       - name: Publish artifacts to releases bucket
         # PUBLISH_DRY_RUN expands to '' on imbue-ai/sculptor (real S3 copy)
         # and to --dry-run everywhere else (prints destinations only).
@@ -503,14 +507,16 @@ jobs:
         # heredoc-delimiter collision risk.
         run: |
           set -euo pipefail
-          eval "$(./scripts/export-vault-env shared/aws/AWS_ACCESS_KEY_ID shared/aws/AWS_SECRET_ACCESS_KEY)"
           just publish-build-artifacts ${PUBLISH_DRY_RUN} 2>&1 | tee "${GITHUB_WORKSPACE}/publish_output.log"
 
+      - name: Export Slack webhook
+        uses: imbue-ai/vault/.github/actions/export-secrets@main
+        with:
+          role: ${{ env.VAULT_AUTH_ROLE }}
+          secrets: sculptor-release/SLACK_WEBHOOK_URL
+
       - name: Notify Slack — released
-        run: |
-          set -euo pipefail
-          eval "$(./scripts/export-vault-env sculptor-release/SLACK_WEBHOOK_URL)"
-          ./scripts/ci/notify_slack_release.sh released
+        run: ./scripts/ci/notify_slack_release.sh released
 
       - name: Create GitHub Release
         if: github.repository == 'imbue-ai/sculptor'
@@ -574,15 +580,6 @@ jobs:
           git config --global user.email "ci@sculptor.dev"
           git config --global user.name "Sculptor CI"
 
-      - name: Install Vault CLI
-        run: |
-          curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --batch --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list >/dev/null
-          # Retry/timeout-harden apt against transient mirror stalls (SCU-1545).
-          APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
-          sudo apt-get $APT_OPTS update -qq
-          sudo apt-get $APT_OPTS install -y -qq vault
-
       - name: Setup uv
         uses: astral-sh/setup-uv@v4
         with:
@@ -594,6 +591,14 @@ jobs:
       - name: Sync Python deps
         run: uv sync --frozen
 
+      - name: Export AWS credentials
+        uses: imbue-ai/vault/.github/actions/export-secrets@main
+        with:
+          role: ${{ env.VAULT_AUTH_ROLE }}
+          secrets: |
+            shared/aws/AWS_ACCESS_KEY_ID
+            shared/aws/AWS_SECRET_ACCESS_KEY
+
       - name: Publish dev artifacts
         # PUBLISH_DRY_RUN expands to '' on imbue-ai/sculptor and to --dry-run
         # elsewhere. --bypass-checks because create-version-file --annotate-dev
@@ -604,15 +609,17 @@ jobs:
           CI_PIPELINE_CREATED_AT: ${{ needs.setup.outputs.pipeline_created_at }}
         run: |
           set -euo pipefail
-          eval "$(./scripts/export-vault-env shared/aws/AWS_ACCESS_KEY_ID shared/aws/AWS_SECRET_ACCESS_KEY)"
           just create-version-file --annotate-dev
           just publish-build-artifacts ${PUBLISH_DRY_RUN} --bypass-checks
 
+      - name: Export Slack webhook
+        uses: imbue-ai/vault/.github/actions/export-secrets@main
+        with:
+          role: ${{ env.VAULT_AUTH_ROLE }}
+          secrets: sculptor-release/SLACK_WEBHOOK_URL
+
       - name: Notify Slack — dev released
-        run: |
-          set -euo pipefail
-          eval "$(./scripts/export-vault-env sculptor-release/SLACK_WEBHOOK_URL)"
-          ./scripts/ci/notify_slack_release.sh dev-released
+        run: ./scripts/ci/notify_slack_release.sh dev-released
 
   notify-build-failed:
     name: notify slack — build failed
@@ -634,17 +641,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Vault CLI
-        run: |
-          curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --batch --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list >/dev/null
-          # Retry/timeout-harden apt against transient mirror stalls (SCU-1545).
-          APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
-          sudo apt-get $APT_OPTS update -qq
-          sudo apt-get $APT_OPTS install -y -qq vault
+      - name: Export Slack webhook
+        uses: imbue-ai/vault/.github/actions/export-secrets@main
+        with:
+          role: ${{ env.VAULT_AUTH_ROLE }}
+          secrets: sculptor-release/SLACK_WEBHOOK_URL
 
       - name: Notify Slack — build failed
-        run: |
-          set -euo pipefail
-          eval "$(./scripts/export-vault-env sculptor-release/SLACK_WEBHOOK_URL)"
-          ./scripts/ci/notify_slack_release.sh build-failed
+        run: ./scripts/ci/notify_slack_release.sh build-failed
