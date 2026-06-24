@@ -57,6 +57,7 @@ from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.files_panel import PlaywrightFilesPanelElement
 from sculptor.testing.elements.files_panel import get_files_panel_in
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -619,6 +620,10 @@ def test_shared_sidebar_resizes_and_has_a_minimum_width(sculptor_instance_: Scul
     """
     page = sculptor_instance_.page
     _, files_panel = _open_files_panel_with(page, WRITE_FILES_PROMPT)
+
+    # Files is seeded into the narrow (~20%) left section; maximize that section so
+    # the shared list has room to grow before the resize is measured.
+    PlaywrightWorkspaceSection(page, "left").maximize()
 
     layout = files_panel.get_explorer_layout()
     expect(layout.get_list()).to_be_visible()

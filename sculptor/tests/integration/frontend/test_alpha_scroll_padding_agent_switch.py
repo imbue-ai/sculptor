@@ -13,7 +13,7 @@ from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
 from sculptor.testing.elements.alpha_chat_view import scroll_alpha_chat_by
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
-from sculptor.testing.elements.panels import close_bottom_panel
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -45,7 +45,7 @@ def test_dynamic_padding_survives_agent_switch(sculptor_instance_: SculptorInsta
 
     # Close the bottom panel to maximize chat height for scroll tests.
     # Must be done after workspace creation since the terminal only exists in workspaces.
-    close_bottom_panel(page)
+    PlaywrightWorkspaceSection(page, "bottom").collapse_section()
 
     # Send a follow-up so we have a "last user message" at data-index=2
     send_chat_message(

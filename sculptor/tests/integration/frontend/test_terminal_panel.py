@@ -105,26 +105,29 @@ def test_closing_terminal_panel_requires_confirmation(sculptor_instance_: Sculpt
 def test_terminal_numbering_reuses_lowest_after_close(sculptor_instance_: SculptorInstance) -> None:
     """Closing a terminal frees its number; the next terminal reuses the lowest free one.
 
-    Create Terminal 1 + Terminal 2, close Terminal 1, then create a new terminal —
-    it is named "Terminal 1" again (lowest available), not "Terminal 3" (TERM-03).
+    The default layout seeds Terminal 1 in the bottom section, so created
+    terminals start at Terminal 2. Create Terminal 2 + Terminal 3, close
+    Terminal 2, then create a new terminal — it is named "Terminal 2" again
+    (lowest available), not "Terminal 4" (TERM-03).
     """
     page = sculptor_instance_.page
     bottom_tabs = PlaywrightPanelTabElement(page, sub_section="bottom")
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Terminal Numbering WS")
 
+    # Terminal 1 is seeded; these create Terminal 2 and Terminal 3.
     create_terminal_panel(page, section="bottom")
     create_terminal_panel(page, section="bottom")
-    expect(bottom_tabs.get_panel_tab_by_name("Terminal 1")).to_have_count(1)
     expect(bottom_tabs.get_panel_tab_by_name("Terminal 2")).to_have_count(1)
+    expect(bottom_tabs.get_panel_tab_by_name("Terminal 3")).to_have_count(1)
 
-    # Close Terminal 1.
-    terminal_one = bottom_tabs.get_panel_tab_by_name("Terminal 1")
-    bottom_tabs.delete_panel_via_close_button(_panel_id_of(terminal_one))
+    # Close Terminal 2 (a freed middle number).
+    terminal_two = bottom_tabs.get_panel_tab_by_name("Terminal 2")
+    bottom_tabs.delete_panel_via_close_button(_panel_id_of(terminal_two))
     expect(bottom_tabs.get_delete_confirmation_dialog()).to_be_hidden()
-    expect(bottom_tabs.get_panel_tab_by_name("Terminal 1")).to_have_count(0)
+    expect(bottom_tabs.get_panel_tab_by_name("Terminal 2")).to_have_count(0)
 
-    # The next terminal reuses number 1 (lowest available), not 3.
+    # The next terminal reuses number 2 (lowest available), not 4.
     create_terminal_panel(page, section="bottom")
-    expect(bottom_tabs.get_panel_tab_by_name("Terminal 1")).to_have_count(1)
-    expect(bottom_tabs.get_panel_tab_by_name("Terminal 3")).to_have_count(0)
+    expect(bottom_tabs.get_panel_tab_by_name("Terminal 2")).to_have_count(1)
+    expect(bottom_tabs.get_panel_tab_by_name("Terminal 4")).to_have_count(0)
