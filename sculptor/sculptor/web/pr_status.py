@@ -157,7 +157,7 @@ _PR_QUERY_LIMIT = 5
 # actually works. Requesting ``statusCheckRollup { state }`` (one aggregate
 # enum) rather than every individual check context also lowers the point cost.
 # ``mergeable`` (MERGEABLE / CONFLICTING / UNKNOWN) surfaces merge conflicts so
-# the CI babysitter can act on a conflicted PR the same way it does for an MR.
+# the CI babysitter can act on a conflicted PR.
 # ``{owner}`` / ``{repo}`` in the field args are expanded by gh from the
 # working directory's ``origin`` remote, so no repo plumbing is needed here.
 _GRAPHQL_PR_QUERY = """
