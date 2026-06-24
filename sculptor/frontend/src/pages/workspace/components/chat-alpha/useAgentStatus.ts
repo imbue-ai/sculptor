@@ -141,6 +141,21 @@ export function useAgentStatus(props: UseAgentStatusProps): AgentStatusResult {
       return;
     }
 
+    // Entering compaction is a deliberate lifecycle signal, not the
+    // high-frequency thinking/streaming/calling_tools flicker the debounce
+    // smooths — apply it immediately. A debounced compacting transition can be
+    // cleared by the next active-state transition before its timer fires (when
+    // a brief compaction ends within the debounce window), so the "Compacting"
+    // chrome would never reach the displayed state.
+    if (rawState === "compacting") {
+      if (pendingTimeoutRef.current !== null) {
+        clearTimeout(pendingTimeoutRef.current);
+        pendingTimeoutRef.current = null;
+      }
+      applyState(rawState);
+      return;
+    }
+
     // When stopping transitions to idle, show "Stopped" briefly first
     if (rawState === "idle" && displayedState === "stopping") {
       if (pendingTimeoutRef.current !== null) {

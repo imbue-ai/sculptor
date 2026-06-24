@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ChatMessage } from "~/api";
 
-import type { UseAgentStatusProps } from "./useAgentStatus.ts";
+import type { AgentState, UseAgentStatusProps } from "./useAgentStatus.ts";
 import { useAgentStatus } from "./useAgentStatus.ts";
 
 const DEBOUNCE_MS = 500;
@@ -300,15 +300,10 @@ describe("useAgentStatus", () => {
 
   describe("compacting indicator (SCU-1564)", () => {
     it("shows compacting even when compaction ends within the debounce window", () => {
-      // Regression for the offload flake in SCU-1564: a brief auto-compaction
-      // whose "Compacting" chrome never rendered. The agent is thinking,
-      // compaction starts, then ends (agent resumes streaming its summary)
-      // before the debounce window elapses. If the compacting transition is
-      // debounced like the noisy thinking/streaming/calling_tools states, the
-      // still-pending compacting timer is cleared by the streaming transition
-      // and rescheduled for streaming — so the user (and the integration test
-      // asserting the pill) never sees the compacting state at all. Compaction
-      // is a deliberate lifecycle signal and must show immediately.
+      // A compaction brief enough to end within the debounce window must still
+      // appear in the pill. The render callback records every displayed state
+      // so the assertion can confirm "compacting" showed at some point, rather
+      // than only inspecting the final state.
       const observed: Array<AgentState> = [];
       const { rerender } = renderHook(
         (props: UseAgentStatusProps) => {
