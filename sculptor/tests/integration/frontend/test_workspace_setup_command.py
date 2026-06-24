@@ -159,7 +159,10 @@ def test_setup_edit_button_switches_section_when_other_page_was_last_open(
 
     # Make a non-Repositories section the last-opened one. The active section is
     # persisted, so without a real switch the Edit deep-link would simply land here.
+    # Confirm the switch landed (the Repositories textarea is gone) so a silently
+    # dropped click can't turn this into a false-negative.
     settings_page.click_on_general()
+    expect(repos.get_setup_command_input()).not_to_be_visible()
 
     start_task_and_wait_for_ready(sculptor_page=page)
 
