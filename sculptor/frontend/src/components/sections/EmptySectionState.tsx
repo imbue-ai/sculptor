@@ -114,7 +114,13 @@ const EmptySectionStateComponent = ({ subSection }: EmptySectionStateProps): Rea
         </Flex>
 
         {isSplitPane && (
-          <Button variant="ghost" color="gray" size="1" onClick={handleCloseSplit}>
+          <Button
+            variant="ghost"
+            color="gray"
+            size="1"
+            onClick={handleCloseSplit}
+            data-testid={ElementIds.SPLIT_CLOSE_OPTION}
+          >
             Close split
           </Button>
         )}

@@ -23,11 +23,12 @@ import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { AddPanelDropdown } from "./AddPanelDropdown.tsx";
 import { panelDefinitionByIdAtom } from "./registry/panelRegistry.ts";
 import { isMultiInstanceKind } from "./registry/panelRegistry.ts";
-import { closePanelAtom, setActivePanelAtom } from "./sectionActions.ts";
-import { activePanelIdInSubSectionAtom } from "./sectionAtoms.ts";
+import { closePanelAtom, setActivePanelAtom, splitSectionAtom } from "./sectionActions.ts";
+import { activePanelIdInSubSectionAtom, sectionSplitForSectionAtom } from "./sectionAtoms.ts";
 import styles from "./SectionHeader.module.scss";
 import type { PanelId, SubSectionId } from "./sectionTypes.ts";
 import { toSection } from "./sectionTypes.ts";
+import { splitDirectionOptionsForSection } from "./splitDirection.ts";
 import {
   displayedPanelIdsAtom,
   ghostPanelIdAtom,
@@ -61,6 +62,9 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
   const closePanel = useSetAtom(closePanelAtom);
   const recordRecentlyClosed = useSetAtom(recentlyClosedPanelIdsAtom);
   const [isRenaming, setIsRenaming] = useState<boolean>(false);
+  const section = toSection(subSection);
+  const existingSplit = useAtomValue(sectionSplitForSectionAtom(section));
+  const splitPanel = useSetAtom(splitSectionAtom);
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({
     id: panelId,
     data: { kind: "panel", panelId, from: subSection, index },
@@ -72,6 +76,10 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
 
   const canRename = isMultiInstanceKind(definition.kind);
   const Icon = definition.icon;
+
+  // "Create {direction} split and move panel" (SPLIT-01/02): one option per allowed
+  // axis, offered only while the section has no split (one-split-max, SPLIT-03).
+  const splitOptions = existingSplit === undefined ? splitDirectionOptionsForSection(section) : [];
 
   const tabClassName = [
     styles.tab,
@@ -170,11 +178,13 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
   );
 
   const contextActions = definition.contextMenuActions ?? [];
-  const hasContextMenu = canRename || contextActions.length > 0;
+  const hasContextMenu = canRename || contextActions.length > 0 || splitOptions.length > 0;
 
   if (!hasContextMenu) {
     return tabBody;
   }
+
+  const hasMenuAboveSplits = canRename || contextActions.length > 0;
 
   return (
     <ContextMenu.Root>
@@ -189,6 +199,16 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
         {contextActions.map((action) => (
           <ContextMenu.Item key={action.label} disabled={action.disabled} onSelect={() => action.action()}>
             {action.label}
+          </ContextMenu.Item>
+        ))}
+        {hasMenuAboveSplits && splitOptions.length > 0 && <ContextMenu.Separator />}
+        {splitOptions.map((option) => (
+          <ContextMenu.Item
+            key={option.axis}
+            data-testid={`${ElementIds.SPLIT_CREATE_OPTION}-${option.axis}`}
+            onSelect={() => splitPanel({ section, panelId, axis: option.axis })}
+          >
+            Create {option.label} split and move panel
           </ContextMenu.Item>
         ))}
       </ContextMenu.Content>

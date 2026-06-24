@@ -655,6 +655,11 @@ class ElementIDs(StrEnum):
     SECTION_ACTIVE_RING = "SECTION_ACTIVE_RING"
     SECTION_EMPTY_STATE = "SECTION_EMPTY_STATE"
     SECTION_SPLIT_SUBSECTION = "SECTION_SPLIT_SUBSECTION"
+    # Split affordances: the panel context-menu "Create {direction} split" items
+    # (one per allowed axis, suffixed with the axis — e.g.
+    # f"{SPLIT_CREATE_OPTION}-horizontal") and the empty-state "Close split" button.
+    SPLIT_CREATE_OPTION = "SPLIT_CREATE_OPTION"
+    SPLIT_CLOSE_OPTION = "SPLIT_CLOSE_OPTION"
     # Empty-state quick actions: the recent-agent / terminal / recently-closed
     # rows share one testid, disambiguated by suffixing the action key (e.g.
     # f"{SECTION_EMPTY_QUICK_ACTION}-new-agent", "...-files").
