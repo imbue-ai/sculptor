@@ -1,0 +1,66 @@
+"""Integration tests for the seamless workspace-switch sequence (SWITCH-03/04).
+
+Switching workspaces keeps the shell continuously present (no spinner, no blank frame —
+SWITCH-03) and re-entering a workspace restores what the user was looking at (the
+persisted active sub-section / expanded sections — SWITCH-04). The zero-reflow /
+≤1-mount-per-panel ``[perf]`` guarantees are Task 9.1, not asserted here.
+"""
+
+from playwright.sync_api import expect
+
+from sculptor.constants import ElementIDs
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
+from sculptor.testing.playwright_utils import navigate_to_workspace
+from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
+from sculptor.testing.sculptor_instance import SculptorInstance
+from sculptor.testing.user_stories import user_story
+
+
+@user_story("to switch workspaces without a spinner or a blank frame")
+def test_switch_keeps_the_shell_present(sculptor_instance_: SculptorInstance) -> None:
+    """Switching to another workspace keeps the sidebar mounted and lands on its chat (SWITCH-03).
+
+    The workspace sidebar is part of the persistent shell, so it stays visible across the
+    switch (no full-page loader tears it down), and the destination's chat panel renders.
+    """
+    page = sculptor_instance_.page
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Seamless A WS")
+    # Settle workspace A with a real UI interaction before creating the second workspace
+    # — a back-to-back create with nothing in between can race the harness create flow.
+    PlaywrightWorkspaceSection(page, "right").expand_section()
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Seamless B WS")
+
+    sidebar = page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)
+    expect(sidebar).to_be_visible()
+
+    navigate_to_workspace(page, "Seamless A WS")
+
+    # The shell never tears down (no spinner-gated blank): the sidebar stays visible and
+    # the destination workspace's chat panel renders.
+    expect(sidebar).to_be_visible()
+    expect(page.get_by_test_id(ElementIDs.CHAT_PANEL)).to_be_visible(timeout=60_000)
+
+
+@user_story("to return to a workspace and find the view I left")
+def test_reentry_preserves_last_view(sculptor_instance_: SculptorInstance) -> None:
+    """Re-entering a workspace restores its expanded sections, not the default (SWITCH-04).
+
+    Expand the (default-collapsed) right section in workspace A, switch to B, then return
+    to A — A's right section is still expanded (the last view is preserved, the default is
+    not re-seeded over it).
+    """
+    page = sculptor_instance_.page
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Reentry A WS")
+
+    right_a = PlaywrightWorkspaceSection(page, "right")
+    right_a.expand_section()
+    expect(right_a.get_header()).to_be_visible()
+
+    start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Reentry B WS")
+    # B keeps its own default (right collapsed).
+    expect(PlaywrightWorkspaceSection(page, "right").get_header()).to_have_count(0)
+
+    navigate_to_workspace(page, "Reentry A WS")
+    expect(page.get_by_test_id(ElementIDs.CHAT_PANEL)).to_be_visible(timeout=60_000)
+    # The view A was left in (right expanded) is restored.
+    expect(PlaywrightWorkspaceSection(page, "right").get_header()).to_be_visible()

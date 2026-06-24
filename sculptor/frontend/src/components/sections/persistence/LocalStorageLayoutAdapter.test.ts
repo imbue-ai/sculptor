@@ -75,6 +75,65 @@ describe("LocalStorageLayoutAdapter", () => {
     expect(adapter.read(WS_SCOPE)).toEqual(makeWorkspaceLayout("c"));
   });
 
+  it("isolates per-workspace snapshots from each other and from global (PERSIST-01/02/05)", () => {
+    const wsTwoScope: LayoutScope = { kind: "workspace", workspaceId: "ws-2" };
+    const wsOne = makeWorkspaceLayout("agent:one");
+    const wsTwo = makeWorkspaceLayout("agent:two");
+    const global = {
+      sectionSizes: { left: 25, right: 25, bottom: 25 },
+      sidebarWidthPx: 300,
+      sidebarCollapsed: true,
+      explorerListWidthPx: 260,
+    };
+
+    adapter.write(WS_SCOPE, wsOne);
+    adapter.write(wsTwoScope, wsTwo);
+    adapter.write(GLOBAL_SCOPE, global);
+    adapter.flush();
+
+    // Each scope round-trips its OWN snapshot; no scope leaks into another.
+    expect(adapter.read(WS_SCOPE)).toEqual(wsOne);
+    expect(adapter.read(wsTwoScope)).toEqual(wsTwo);
+    expect(adapter.read(GLOBAL_SCOPE)).toEqual(global);
+
+    // Rewriting one workspace leaves the others and global untouched.
+    const wsOneUpdated = makeWorkspaceLayout("agent:one-changed");
+    adapter.write(WS_SCOPE, wsOneUpdated);
+    adapter.flush();
+    expect(adapter.read(WS_SCOPE)).toEqual(wsOneUpdated);
+    expect(adapter.read(wsTwoScope)).toEqual(wsTwo);
+    expect(adapter.read(GLOBAL_SCOPE)).toEqual(global);
+  });
+
+  it("remove clears only the targeted scope", () => {
+    const wsTwoScope: LayoutScope = { kind: "workspace", workspaceId: "ws-2" };
+    adapter.write(WS_SCOPE, makeWorkspaceLayout("a"));
+    adapter.write(wsTwoScope, makeWorkspaceLayout("b"));
+    adapter.flush();
+
+    adapter.remove(WS_SCOPE);
+    expect(adapter.read(WS_SCOPE)).toBeUndefined();
+    // The other workspace's snapshot survives the targeted remove.
+    expect(adapter.read(wsTwoScope)).toEqual(makeWorkspaceLayout("b"));
+  });
+
+  it("ignores legacy/prototype keys — reads only consolidated keys (no migration)", () => {
+    // Old prototype scattered many per-aspect keys; the consolidated adapter must never
+    // read them, so a workspace with only legacy keys present reads as "nothing stored".
+    localStorage.setItem("sculptor-section-sizes", JSON.stringify({ left: 40 }));
+    localStorage.setItem("sculptor-panel-visibility-ws-1", JSON.stringify({ files: true }));
+    localStorage.setItem("sculptor-open-panels", JSON.stringify(["files", "changes"]));
+
+    expect(adapter.read(WS_SCOPE)).toBeUndefined();
+    expect(adapter.read(GLOBAL_SCOPE)).toBeUndefined();
+
+    // Writing through the adapter never resurrects or rewrites the legacy keys.
+    adapter.write(WS_SCOPE, makeWorkspaceLayout("files"));
+    adapter.flush();
+    expect(localStorage.getItem("sculptor-section-sizes")).toEqual(JSON.stringify({ left: 40 }));
+    expect(adapter.read(WS_SCOPE)).toEqual(makeWorkspaceLayout("files"));
+  });
+
   it("flush persists pending writes synchronously (e.g. on beforeunload)", () => {
     vi.useFakeTimers();
     adapter.write(WS_SCOPE, makeWorkspaceLayout("x"));
