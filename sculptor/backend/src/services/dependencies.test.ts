@@ -59,6 +59,9 @@ describe("DependencyService", () => {
     previousFolder = process.env[SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG];
     dir = mkdtempSync(path.join(tmpdir(), "sculptor-deps-"));
     process.env[SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG] = dir;
+    // The whole suite spawns many subprocesses concurrently; raise the probe
+    // timeout so a trivially-fast stub can't trip the 5s default under load.
+    process.env.SCULPTOR_DEP_PROBE_TIMEOUT_MS = "30000";
     ensureSculptorFolderReady(process.env);
     // Force claude into MANAGED mode regardless of the host's default override.
     saveSettings({
@@ -73,6 +76,7 @@ describe("DependencyService", () => {
     } else {
       process.env[SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG] = previousFolder;
     }
+    delete process.env.SCULPTOR_DEP_PROBE_TIMEOUT_MS;
     rmSync(dir, { recursive: true, force: true });
   });
 

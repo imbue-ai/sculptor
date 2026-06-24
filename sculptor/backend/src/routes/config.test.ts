@@ -76,6 +76,9 @@ describe("config / onboarding routes", () => {
     dir = mkdtempSync(path.join(tmpdir(), "sculptor-config-"));
     process.env[SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG] = dir;
     delete process.env.SESSION_TOKEN;
+    // config/status probes git via the dependency service; raise the probe
+    // timeout so concurrent-suite load can't trip the 5s default.
+    process.env.SCULPTOR_DEP_PROBE_TIMEOUT_MS = "30000";
     closeDatabase();
     ensureSculptorFolderReady(process.env);
     runMigrations(getDatabase(), MIGRATIONS_FOLDER);
@@ -86,6 +89,7 @@ describe("config / onboarding routes", () => {
   afterEach(async () => {
     await app.close();
     closeDatabase();
+    delete process.env.SCULPTOR_DEP_PROBE_TIMEOUT_MS;
     if (previousFolder === undefined) {
       delete process.env[SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG];
     } else {

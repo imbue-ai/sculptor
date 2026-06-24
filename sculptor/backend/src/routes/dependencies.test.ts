@@ -19,6 +19,9 @@ describe("dependency routes", () => {
     dir = mkdtempSync(path.join(tmpdir(), "sculptor-deproutes-"));
     process.env[SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG] = dir;
     delete process.env.SESSION_TOKEN;
+    // Raise the dependency probe timeout so concurrent-suite subprocess load
+    // can't trip the 5s default.
+    process.env.SCULPTOR_DEP_PROBE_TIMEOUT_MS = "30000";
     ensureSculptorFolderReady(process.env);
     app = buildApp();
     await app.ready();
@@ -26,6 +29,7 @@ describe("dependency routes", () => {
 
   afterEach(async () => {
     await app.close();
+    delete process.env.SCULPTOR_DEP_PROBE_TIMEOUT_MS;
     if (previousFolder === undefined) {
       delete process.env[SCULPTOR_FOLDER_OVERRIDE_ENV_FLAG];
     } else {

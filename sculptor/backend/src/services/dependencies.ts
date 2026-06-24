@@ -494,6 +494,14 @@ interface ResolvedDistribution {
   binarySubpath: string;
 }
 
+// Probe (`<binary> --version` / `auth status`) timeout. Read at call time so a
+// test under heavy parallel subprocess load can raise it via the env override
+// (default mirrors Python's 5s/10s). `base` is the Python-parity default.
+function probeTimeoutMs(base: number): number {
+  const override = process.env.SCULPTOR_DEP_PROBE_TIMEOUT_MS;
+  return override !== undefined && override !== "" ? Number(override) : base;
+}
+
 export class DependencyService {
   private readonly installing = new Set<Dependency>();
   private readonly installProgress = new Map<Dependency, InstallProgressWire>();
@@ -513,7 +521,10 @@ export class DependencyService {
       return { installed: false, path: null, version: null };
     }
     try {
-      const result = await runWithTimeout([binary, "--version"], 5_000);
+      const result = await runWithTimeout(
+        [binary, "--version"],
+        probeTimeoutMs(5_000),
+      );
       if (result.exitCode !== 0) {
         return { installed: false, path: binary, version: null };
       }
@@ -539,7 +550,10 @@ export class DependencyService {
       return null;
     }
     try {
-      const result = await runWithTimeout([binary, "auth", "status"], 10_000);
+      const result = await runWithTimeout(
+        [binary, "auth", "status"],
+        probeTimeoutMs(10_000),
+      );
       return result.exitCode === 0;
     } catch {
       return false;
@@ -796,7 +810,10 @@ export class DependencyService {
       const stagedBinary = path.join(stagingDir, managed.binarySubpath);
       chmodSync(stagedBinary, 0o755);
 
-      const probe = await runWithTimeout([stagedBinary, "--version"], 5_000);
+      const probe = await runWithTimeout(
+        [stagedBinary, "--version"],
+        probeTimeoutMs(5_000),
+      );
       if (probe.exitCode !== 0) {
         throw new Error("Installed binary failed its version check");
       }
