@@ -34,11 +34,13 @@ selection, branch-collision handling, and the project selector + MRU. The dialog
 create and ensures mode/source-branch/MRU/collision behavior is preserved against the
 dialog surface.
 
-**Last-used settings** for direct create (WSC-01): the MRU agent type + MRU project +
-last init strategy already exist (`test_add_workspace_agent_type` / `test_multi_repo`
-/ `test_restart_mru` exercised them). Reuse the MRU machinery; direct create
-auto-generates a unique branch (so WSC-08 collisions are only possible when the user
-types a branch in the dialog).
+**Last-used settings** for direct create (WSC-01): persist the full set (repo, source
+branch, agent type, init strategy) in `lastWorkspaceCreationSettingsAtom`
+(`state_atoms.md` → "Workspace creation") — this **extends** today's MRU project + MRU
+agent type (which exist; `test_add_workspace_agent_type` / `test_multi_repo` /
+`test_restart_mru` exercised them) to the rest. Direct create auto-generates a unique
+branch (so WSC-08 collisions are only possible when the user types a branch in the
+dialog).
 
 This task depends on **Task 5.1** (the modal), **Task 2.2** (the sidebar button + repo
 `+`), and **Task 4.5** (the Cmd/Meta+T handler). The empty-first-run inline form is
@@ -46,7 +48,7 @@ This task depends on **Task 5.1** (the modal), **Task 2.2** (the sidebar button 
 
 ## Files to modify/create
 
-- `sculptor/frontend/src/components/NewWorkspaceModal/` — wire openers
+- `sculptor/frontend/src/components/newWorkspace/` — wire openers
   (`open_via_sidebar_button`, `open_via_shortcut`, `open_via_command_palette`,
   `open_via_repo_plus(repo)` equivalents) and the direct-create path.
 - The sidebar new-workspace button (Task 2.2) + repo `+` → call direct-create / open

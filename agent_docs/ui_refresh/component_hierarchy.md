@@ -47,6 +47,7 @@ AppShell
 │   │   └─ workspace rows ....... status dot · name · hover delete/menu
 │   ├─ sidebar bottom ........... settings · report a bug · version
 │   └─ sidebar resize handle .... drag right border (min width)
+├─ NewWorkspaceModal ........... global; opened via atom (sidebar + · Cmd/Meta+T · Cmd+K · repo +)
 │
 └─ <route outlet>
     ├─ WorkspacePage (a workspace route)
@@ -145,6 +146,47 @@ agent panel wraps the existing chat interface, the terminal panel wraps the xter
 container, and Files/Changes/Commits each wrap an explorer (file list + diff
 viewer). Registry details, panel kinds, and the add/close/rename/confirmation
 rules are in `supplemental/panel_registry.md`.
+
+## Workspace creation modal
+
+The `/ws/new` page and its draft pseudo-tab are removed (`goals.md` → "New workspace
+dialog"). Creation moves into a single global **`NewWorkspaceModal`**, opened from
+anywhere via a transient atom — the sidebar `+`, Cmd/Meta+T, Cmd+K, or a repo group's
+`+` (which pre-selects that repo). The modal is **rebuilt reusing this branch's
+existing creation pieces**; only the prototype's *styling and shape* are copied (the
+`PaletteDialog` shell, the branch-name pill, the title + prompt + context-pill + footer
+layout). The prototype's own form component is **not** copied — it is coupled to APIs
+that diverged from this branch.
+
+```
+NewWorkspaceModal                    opened/contextualized by the modal atom
+└─ PaletteDialog (shell)             ← prototype styling (opaque Raycast dialog)
+   └─ NewWorkspaceForm
+      ├─ title input + auto-growing prompt textarea
+      ├─ context pills: RepoSelector · AgentTypeSelect · ModeSelect · BranchSelector
+      ├─ BranchNameField             (monospace pill; sanitize / shuffle / error slot)
+      └─ footer: "keep open" · Cmd+Enter hint · Create
+```
+
+- **Reused as-is from this branch** (data via props, no `/ws/new` coupling):
+  `RepoSelector`, `BranchSelector`, the branch-name field + its branch-name-preview
+  hook, the repo-info hook, and the projects / agent-type atoms.
+- **Extracted from today's add-workspace page** (inline JSX → components):
+  `AgentTypeSelect` and `ModeSelect` (the agent-type and worktree/clone/in-place
+  pickers).
+- **New (not in today's form):** the auto-growing **prompt textarea** — today's form
+  creates the first agent with no prompt; the modal adds one and passes it to the
+  create flow (the empty first-run prefills `/sculptor:help`, `goals.md` → "Empty
+  workspace state").
+- **Create flow:** factored out of today's add-workspace page submit handler into a
+  single `useCreateWorkspace` hook (the two-step create-workspace → create-first-agent),
+  **decoupled from the draft pseudo-tab model** (which is deleted). On success it
+  navigates to the new agent; "keep open" resets the form but retains repo + agent type.
+
+The **empty first-run** page (`goals.md` → "Empty workspace state") renders the **same**
+`NewWorkspaceForm` inline (no modal chrome), gated on the workspace-list-empty atom.
+Atoms are in `supplemental/state_atoms.md` → "Workspace creation"; the file layout +
+the reuse-vs-copy list are in `supplemental/component_tree.md`.
 
 ## Drag-and-drop architecture
 
