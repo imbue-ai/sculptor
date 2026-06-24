@@ -21,8 +21,8 @@ auto-update.  When the mock is active:
 - ``BackendStatusBoundary.tsx``: calls ``getCurrentBackendStatus()`` and
   registers via ``onBackendStatusChange()``.
 - ``TerminalPanel.tsx``: calls ``getBackendPort()`` for the WebSocket URL.
-- ``FilePreviewList.tsx`` / ``FileUploadUtils.ts``: call ``getFileData()``
-  / ``saveFile()``.
+- ``FilePreviewList.tsx``: calls ``getFileData()`` to read legacy desktop
+  attachments (new uploads are fetched from the backend over HTTP).
 - ``electron/utils.ts``: ``isElectron()`` returns ``true``, so
   ``selectProjectDirectory()`` becomes reachable.
 
@@ -101,7 +101,6 @@ if (localStorage.getItem("__sculptor_mock_enabled") === "true") {
         async selectProjectDirectory() { this._notMocked("selectProjectDirectory"); },
         async getSessionToken() { this._notMocked("getSessionToken"); },
         async getBackendPort() { this._notMocked("getBackendPort"); },
-        async saveFile() { this._notMocked("saveFile"); },
         async getFileData() { this._notMocked("getFileData"); },
 
         // --- Backend status (pull initial + push updates) ---

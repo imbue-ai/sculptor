@@ -5,6 +5,7 @@ import { setupAuthHeaders } from "./common/Auth.ts";
 import { initBackendCapabilities } from "./common/state/atoms/backendCapabilities.ts";
 import { createRequestTracker } from "./common/state/requestTracking.ts";
 import { makeRequestId } from "./common/Utils.ts";
+import { isElectron } from "./electron/utils.ts";
 
 type TrackingConfig = {
   /** Custom timeout in milliseconds for WebSocket acknowledgment */
@@ -143,7 +144,14 @@ export const configureClient = async (): Promise<void> => {
     }
   }
 
-  initBackendCapabilities(isRemoteBackend);
+  // Web builds (e.g. self-hosted/OpenHost) compile API_URL_BASE to "" (same-origin)
+  // rather than leaving it undefined, so the first branch above runs and
+  // isRemoteBackend stays false — even though there is no Electron IPC bridge.
+  // Treat the absence of window.sculptor as a remote backend so file
+  // uploads/downloads/previews go over HTTP instead of the (nonexistent) Electron
+  // IPC channel. The desktop app and the Electron custom-backend case are
+  // unaffected: they have window.sculptor, so isElectron() is true.
+  initBackendCapabilities(isRemoteBackend || !isElectron());
 
   client.setConfig({
     baseUrl,

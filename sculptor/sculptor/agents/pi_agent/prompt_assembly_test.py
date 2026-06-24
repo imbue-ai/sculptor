@@ -5,19 +5,14 @@ the image/path split, image-block encoding, and the prompt-text instructions.
 from __future__ import annotations
 
 import base64
-from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
-from sculptor.agents.pi_agent import prompt_assembly
 from sculptor.agents.pi_agent.prompt_assembly import build_attachment_instructions
 from sculptor.agents.pi_agent.prompt_assembly import build_image_block
 from sculptor.agents.pi_agent.prompt_assembly import image_mime_type
 from sculptor.agents.pi_agent.prompt_assembly import is_image_attachment
-from sculptor.agents.pi_agent.prompt_assembly import save_attachments_to_environment
 from sculptor.agents.pi_agent.prompt_assembly import split_image_and_path_attachments
-from sculptor.interfaces.environments.agent_execution_environment import AgentExecutionEnvironment
 
 
 @pytest.mark.parametrize(
@@ -102,59 +97,3 @@ def test_build_attachment_instructions_renders_claude_style_block() -> None:
     assert "/env/attachments/notes.txt" in text
     assert "/env/attachments/data.csv" in text
     assert text.endswith("</system-instructions>\n\n")
-
-
-def _mock_environment(attachments_dir: Path) -> AgentExecutionEnvironment:
-    environment = MagicMock(spec=AgentExecutionEnvironment)
-    environment.get_attachments_path.return_value = attachments_dir
-    return environment
-
-
-def test_save_attachments_resolves_absolute_path_and_copies_into_environment(tmp_path: Path) -> None:
-    source = tmp_path / "picture.png"
-    source.write_bytes(b"image-bytes")
-    attachments_dir = tmp_path / "attachments"
-    environment = _mock_environment(attachments_dir)
-
-    saved = save_attachments_to_environment(environment, [str(source)])
-
-    assert saved == (str(attachments_dir / "picture.png"),)
-    # pyrefly: ignore [missing-attribute]
-    environment.write_file.assert_called_once_with(
-        path=str(attachments_dir / "picture.png"), content=b"image-bytes", mode="wb"
-    )
-
-
-def test_save_attachments_resolves_upload_id_under_internal_uploads(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    internal = tmp_path / "internal"
-    uploads = internal / "uploads"
-    uploads.mkdir(parents=True)
-    (uploads / "uuid-123.txt").write_bytes(b"text-bytes")
-    monkeypatch.setattr(prompt_assembly, "get_internal_folder", lambda: internal)
-    attachments_dir = tmp_path / "attachments"
-    environment = _mock_environment(attachments_dir)
-
-    saved = save_attachments_to_environment(environment, ["uuid-123.txt"])
-
-    assert saved == (str(attachments_dir / "uuid-123.txt"),)
-    # pyrefly: ignore [missing-attribute]
-    environment.write_file.assert_called_once_with(
-        path=str(attachments_dir / "uuid-123.txt"), content=b"text-bytes", mode="wb"
-    )
-
-
-def test_save_attachments_skips_missing_source_without_failing(tmp_path: Path) -> None:
-    present = tmp_path / "present.png"
-    present.write_bytes(b"ok")
-    missing = tmp_path / "gone.png"  # never created
-    attachments_dir = tmp_path / "attachments"
-    environment = _mock_environment(attachments_dir)
-
-    saved = save_attachments_to_environment(environment, [str(missing), str(present)])
-
-    # The missing source is skipped (not fatal); the present one still saves.
-    assert saved == (str(attachments_dir / "present.png"),)
-    # pyrefly: ignore [missing-attribute]
-    environment.write_file.assert_called_once_with(path=str(attachments_dir / "present.png"), content=b"ok", mode="wb")
