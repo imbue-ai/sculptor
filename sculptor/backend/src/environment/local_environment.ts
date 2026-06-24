@@ -17,6 +17,7 @@ import {
   runProcessToCompletion,
   spawnBackgroundProcess,
 } from "~/environment/process";
+import { TerminalManager } from "~/terminal/manager";
 
 export interface LocalEnvironmentOptions {
   // The workspace root (the absolute path stored as the workspace's
@@ -36,6 +37,7 @@ export class LocalEnvironment {
   private readonly initializationStrategy: WorkspaceInitializationStrategy;
   private readonly repoHostPath: string | undefined;
   private readonly backgroundProcesses = new Set<BackgroundProcess>();
+  private terminalManager: TerminalManager | undefined;
 
   constructor(options: LocalEnvironmentOptions) {
     this.root = options.root;
@@ -133,9 +135,22 @@ export class LocalEnvironment {
     return handle.child.exitCode === null && handle.child.signalCode === null && !handle.child.killed;
   }
 
-  // close() and destroy() both terminate tracked background processes so no
-  // child outlives the environment.
+  // --- Terminals (node-pty) ---
+
+  startTerminalManager(): TerminalManager {
+    this.terminalManager ??= new TerminalManager();
+    return this.terminalManager;
+  }
+
+  stopTerminalManager(): void {
+    this.terminalManager?.closeAll();
+    this.terminalManager = undefined;
+  }
+
+  // close() and destroy() both terminate tracked background processes and
+  // terminals so nothing outlives the environment.
   close(): void {
+    this.stopTerminalManager();
     for (const handle of this.backgroundProcesses) {
       handle.child.kill("SIGTERM");
     }
