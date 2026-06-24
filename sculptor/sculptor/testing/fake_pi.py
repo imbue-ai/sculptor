@@ -1256,7 +1256,14 @@ def main(argv: list[str] | None = None) -> int:
     return _run_rpc_loop(parsed.append_system_prompt, session_dir, session_id)
 
 
+# Answer `--version` in the wrapper, before exec'ing Python: `_check_pi_version`
+# allows `pi --version` only a 5s timeout, which the `python -m
+# sculptor.testing.fake_pi` interpreter + `sculptor`-import startup can blow on a
+# contended host, failing the launch. Mirror `fake_pi.main`'s `pi <version>` stderr line.
 _BINARY_WRAPPER_TEMPLATE = """#!/bin/bash
+case "$1" in
+--version|-v) echo "pi {version}" >&2; exit 0;;
+esac
 exec {python} -m sculptor.testing.fake_pi "$@"
 """
 
@@ -1264,14 +1271,20 @@ exec {python} -m sculptor.testing.fake_pi "$@"
 def install_fake_pi_binary(fake_bin_dir: Path) -> Path:
     """Install FakePi as a ``pi`` binary in ``fake_bin_dir``.
 
-    Writes a bash wrapper that execs ``python -m sculptor.testing.fake_pi``
-    with the current interpreter. Returns the absolute path to the wrapper
-    so callers can pin it into ``DependencyPaths.pi`` — pinning the absolute
-    path mirrors ``install_default_claude_stub`` and avoids PATH-ordering
-    races when subprocesses mutate PATH.
+    Writes a bash wrapper that answers ``--version`` directly and otherwise execs
+    ``python -m sculptor.testing.fake_pi`` with the current interpreter. Returns
+    the absolute path to the wrapper so callers can pin it into
+    ``DependencyPaths.pi`` — pinning the absolute path mirrors
+    ``install_default_claude_stub`` and avoids PATH-ordering races when
+    subprocesses mutate PATH.
     """
     binary_path = fake_bin_dir / "pi"
-    binary_path.write_text(_BINARY_WRAPPER_TEMPLATE.format(python=shlex.quote(sys.executable)))
+    binary_path.write_text(
+        _BINARY_WRAPPER_TEMPLATE.format(
+            python=shlex.quote(sys.executable),
+            version=PI_VERSION_RANGE.recommended_version,
+        )
+    )
     binary_path.chmod(0o755)
     return binary_path
 
