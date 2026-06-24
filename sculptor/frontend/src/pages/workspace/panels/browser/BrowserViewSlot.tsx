@@ -93,8 +93,17 @@ export const BrowserViewSlot = ({ workspaceId }: { workspaceId: string }): React
   const partition = `persist:sculptor-browser-${workspaceId}`;
   const initialSrc = initialUrl === "" ? "about:blank" : initialUrl;
 
-  const style: CSSProperties =
-    placement.visible && placement.bounds !== null
+  // The <webview> guest renders with a transparent base, so a plain/unstyled
+  // page (whose <body> has no background of its own) lets whatever is behind
+  // the webview show through — namely Sculptor's themed app background. In dark
+  // mode that paints the guest's default black text on a dark backdrop, which
+  // is unreadable (SCU-1577). Give the element an opaque white background so
+  // transparent pages render against the browser's normal white canvas,
+  // independent of the Sculptor theme; pages with their own background paint
+  // over it as usual.
+  const style: CSSProperties = {
+    backgroundColor: "#ffffff",
+    ...(placement.visible && placement.bounds !== null
       ? {
           position: "fixed",
           left: placement.bounds.x,
@@ -102,7 +111,8 @@ export const BrowserViewSlot = ({ workspaceId }: { workspaceId: string }): React
           width: placement.bounds.width,
           height: placement.bounds.height,
         }
-      : { display: "none" };
+      : { display: "none" }),
+  };
 
   // Only the focused workspace's slot carries the BROWSER_WEBVIEW test id.
   const testId = isFocused ? ElementIds.BROWSER_WEBVIEW : undefined;
