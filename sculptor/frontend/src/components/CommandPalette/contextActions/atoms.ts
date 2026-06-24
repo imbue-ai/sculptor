@@ -22,6 +22,23 @@ export const renamingAgentIdAtom = atom<string | null>(null);
 export const agentDeleteTargetAtom = atom<{ id: string; name: string } | null>(null);
 
 /**
+ * The terminal pending a close-confirmation, set when a terminal tab's close
+ * button is hit (TERM-02). Carries everything the confirm handler needs to tear
+ * the terminal down without a separate lookup: the panel id (to unplace from the
+ * layout), the workspace id + backend index (to kill the shell via
+ * closeWorkspaceTerminal — TERM-04), the persisted tab id (to drop from
+ * terminalTabStateAtom), and the display name (for the dialog copy). Null when no
+ * confirmation is open.
+ */
+export const terminalCloseTargetAtom = atom<{
+  panelId: string;
+  workspaceId: string;
+  index: number;
+  tabId: string;
+  name: string;
+} | null>(null);
+
+/**
  * The workspace whose context-action sub-page is currently shown in the
  * command palette. Set by the workspace picker page-opener and read by
  * the dynamic provider for the `workspace.actions` sub-page. Cleared on

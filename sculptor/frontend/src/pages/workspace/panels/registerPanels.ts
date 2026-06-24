@@ -5,3 +5,4 @@
 // panel's component. Later panel tasks add their modules to this barrel.
 
 import "./AgentPanel.tsx";
+import "./TerminalPanelView.tsx";

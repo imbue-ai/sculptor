@@ -133,6 +133,9 @@ export type DynamicTerminalInput = {
   index: number;
   displayName: string;
   contextMenuActions?: ReadonlyArray<PanelContextMenuItem>;
+  // Closing a terminal tab kills the backend shell with a confirmation (TERM-02/04).
+  // Supplied by the sync hook; absent for callers that don't wire the close flow.
+  onRequestClose?: () => void;
 };
 
 export function deriveDynamicPanels(
@@ -170,6 +173,7 @@ export function deriveDynamicPanels(
       defaultSection: "bottom",
       component: getTerminalComponent(terminal.workspaceId, terminal.index),
       contextMenuActions: terminal.contextMenuActions,
+      onRequestClose: terminal.onRequestClose,
     });
   }
 

@@ -14,6 +14,7 @@ import { PanelDndProvider } from "~/components/sections/PanelDndProvider.tsx";
 import { SectionGrid } from "~/components/sections/SectionGrid.tsx";
 import { maximizedSectionAtom } from "~/components/sections/transientAtoms.ts";
 
+import { TerminalCloseConfirmation } from "./components/TerminalCloseConfirmation.tsx";
 import { WorkspaceHeader } from "./WorkspaceHeader.tsx";
 import styles from "./WorkspaceLayoutShell.module.scss";
 
@@ -27,6 +28,9 @@ export const WorkspaceLayoutShell = (): ReactElement => {
         {!isMaximized && <WorkspaceHeader />}
         <SectionGrid />
       </div>
+      {/* Headless owner of the terminal close-confirmation (TERM-02); driven by the
+          shared close-target atom set from a terminal tab's close button. */}
+      <TerminalCloseConfirmation />
     </PanelDndProvider>
   );
 };
