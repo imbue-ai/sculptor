@@ -42,8 +42,12 @@ export const useImbueNavigate = (): ImbueNavigationFunctions => {
       [navigate, setActiveTabById, setAgentForWorkspace],
     ),
     navigateToAddWorkspace: useCallback(
-      (draftId?: string): void => {
-        navigate(`/ws/new/${draftId ?? crypto.randomUUID()}`);
+      // The legacy /ws/new page is gone; creation is the new-workspace modal. The
+      // remaining callers are fallback redirects (e.g. landing on a since-deleted
+      // workspace), so route them to Home — which shows the inline first-run form when
+      // there are no workspaces, or the home landing where the modal can be opened.
+      (_draftId?: string): void => {
+        navigate(`/home`);
       },
       [navigate],
     ),

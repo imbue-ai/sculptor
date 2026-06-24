@@ -4,9 +4,9 @@ import type { ReactElement } from "react";
 
 import type { WorkspaceInitializationStrategy } from "~/api";
 import { ElementIds, WorkspaceInitializationStrategy as Strategy } from "~/api";
-import type { BranchNameCollisionState } from "~/pages/add-workspace/hooks/useBranchNamePreview.ts";
 
 import styles from "./BranchNameField.module.scss";
+import type { BranchNameCollisionState } from "./hooks/useBranchNamePreview.ts";
 
 type BranchNameFieldProps = {
   mode: WorkspaceInitializationStrategy;

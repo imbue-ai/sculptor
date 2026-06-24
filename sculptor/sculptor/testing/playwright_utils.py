@@ -3,7 +3,6 @@ from __future__ import annotations
 import itertools
 import json
 import re
-import uuid
 from collections.abc import Callable
 from collections.abc import Mapping
 from collections.abc import Sequence
@@ -186,71 +185,51 @@ def open_command_palette(page: Page) -> None:
 
 
 def get_workspace_creation_button(page: Page) -> tuple[Locator, bool]:
-    """Resolve the settled workspace-creation surface and its create button.
+    """Resolve the workspace-creation surface and its create button.
 
-    Two surfaces create a workspace: the inline empty-first-run form
-    (``NEW_WORKSPACE_CREATE_BUTTON``, shown when no workspaces exist yet) and the
-    legacy ``/ws/new`` page (``START_TASK_BUTTON``, shown when workspaces exist).
+    Two surfaces create a workspace, and both use ``NEW_WORKSPACE_CREATE_BUTTON``:
+    the new-workspace modal (when workspaces already exist) and the inline
+    empty-first-run form (when none do). They are distinguished by the modal's
+    ``NEW_WORKSPACE_DIALOG`` wrapper, which only the modal renders.
 
-    On an empty instance the gate briefly flashes the (disabled) /ws/new page before
-    swapping in the inline form, so this waits for the surface to settle — the inline
-    button only mounts once the gate has resolved to the empty state, and the legacy
-    flash is never enabled before that swap — then returns ``(button, is_inline_form)``.
+    Waits for the create button to mount, then returns ``(button, is_inline_form)``
+    where ``is_inline_form`` is true for the empty-first-run form (which pre-seeds
+    the prompt) and false for the modal.
     """
-    page.wait_for_function(
-        """({ inlineId, legacyId }) => {
-          const inline = document.querySelector(`[data-testid="${inlineId}"]`);
-          if (inline) return true;  // inline first-run form has settled in
-          const legacy = document.querySelector(`[data-testid="${legacyId}"]`);
-          return !!legacy && !legacy.disabled;  // /ws/new page ready (workspaces exist)
-        }""",
-        arg={
-            "inlineId": ElementIDs.NEW_WORKSPACE_CREATE_BUTTON,
-            "legacyId": ElementIDs.START_TASK_BUTTON,
-        },
-        timeout=45_000,
-    )
-    inline_create = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_CREATE_BUTTON)
-    if inline_create.count() > 0:
-        return inline_create, True
-    return page.get_by_test_id(ElementIDs.START_TASK_BUTTON), False
+    create_button = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_CREATE_BUTTON)
+    expect(create_button).to_be_visible(timeout=45_000)
+    is_inline_form = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG).count() == 0
+    return create_button, is_inline_form
 
 
 def navigate_to_add_workspace_page(page: Page) -> None:
-    """Bring up a workspace-creation surface (the inline first-run form or /ws/new).
+    """Bring up a workspace-creation surface (the new-workspace modal or inline form).
 
-    No-op if a create surface is already showing. In the new shell the sidebar's
-    new-workspace button DIRECT-CREATES (Task 5.2) rather than opening the page, so
-    this navigates to the /ws/new draft route directly: when workspaces exist the
-    route renders the (still-present, until Task 7.3) add-workspace page; when none
-    exist the empty-first-run gate renders the inline new-workspace form instead.
-    Either way a create button appears.
+    No-op if a create surface is already showing — either the inline empty-first-run
+    form or an already-open modal exposes ``NEW_WORKSPACE_CREATE_BUTTON``. Otherwise
+    opens the new-workspace modal via the ``new_workspace`` keybinding (Cmd/Meta+T)
+    and waits for its create button to appear.
     """
-    inline_create = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_CREATE_BUTTON)
-    legacy_submit = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
-    if inline_create.is_visible() or legacy_submit.is_visible():
+    create_button = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_CREATE_BUTTON)
+    chat_panel = page.get_by_test_id(ElementIDs.CHAT_PANEL)
+
+    # Settle on a known surface before deciding. Without this, a non-waiting
+    # is_visible() check on a not-yet-rendered page can race: pressing the modal
+    # shortcut on the empty-first-run page (where it is disabled, and where the
+    # inline form is the create surface) would open the modal OVER the inline form
+    # and leave its overlay stuck. Wait until either a create surface is showing
+    # (inline form or already-open modal) or we are on a workspace (chat panel).
+    expect(create_button.or_(chat_panel)).to_be_visible(timeout=45_000)
+    if create_button.is_visible():
         return
 
-    # Legacy top-bar tab/button (old shell), if present.
-    add_workspace_tab = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_TAB)
-    if add_workspace_tab.count() > 0:
-        add_workspace_tab.first.click()
-        expect(legacy_submit).to_be_visible(timeout=45_000)
-        return
-
-    add_workspace_button = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
-    if add_workspace_button.is_visible():
-        add_workspace_button.click()
-        expect(legacy_submit).to_be_visible(timeout=45_000)
-        return
-
-    # New shell: reach the /ws/new draft route directly (a fresh draft id avoids
-    # reusing prior draft state). Wait for EITHER create surface — the gate swaps in
-    # the inline first-run form when no workspaces exist yet.
-    base_url = page.url.split("#")[0].rstrip("/")
-    page.goto(f"{base_url}/#/ws/new/{uuid.uuid4()}")
-    page.wait_for_load_state("domcontentloaded")
-    expect(inline_create.or_(legacy_submit)).to_be_visible(timeout=45_000)
+    # On a workspace with no create surface yet — open the modal via the
+    # new_workspace keybinding (Cmd/Meta+T). The empty-first-run case already
+    # returned above via the visible inline create button.
+    mod = get_playwright_modifier_key()
+    page.keyboard.press(f"{mod}+t")
+    page.keyboard.up(mod)
+    expect(create_button).to_be_visible(timeout=45_000)
 
 
 def reset_active_panel_to_files(page: Page) -> None:
@@ -373,18 +352,17 @@ def start_task_and_wait_for_ready(
     mode: str | None = None,
     agent_type: str | None = None,
 ) -> PlaywrightTaskPage:
-    """Create a workspace and agent through the Add Workspace UI.
+    """Create a workspace and agent through the new-workspace UI.
 
-    Navigates to the Add Workspace form by clicking the "+" button in the
-    workspace tabs bar, fills in the workspace name, clicks submit,
-    then waits for the agent chat page to appear.  If the Add Workspace form
-    is already showing (e.g. no workspaces exist yet), skips the "+" click.
+    Opens the new-workspace modal (or uses the inline empty-first-run form when
+    no workspaces exist yet) via ``navigate_to_add_workspace_page``, fills in the
+    workspace name, clicks create, then waits for the agent chat page to appear.
 
-    The Add Workspace page no longer has a model selector, so the model
-    is switched on the chat panel once the workspace is ready.
+    The new-workspace form has no model selector, so the model is switched on the
+    chat panel once the workspace is ready.
 
     When *prompt* is provided, it is sent as the first chat message after the
-    workspace is created (the Add Workspace page has no prompt input).
+    workspace is created (the modal form has no prompt-as-first-message input).
 
     When *prompt* is empty the agent is created in a waiting state and
     ``wait_for_agent_to_finish`` is ignored.
@@ -416,9 +394,9 @@ def start_task_and_wait_for_ready(
 
     navigate_to_add_workspace_page(sculptor_page)
 
-    # The same name/mode/agent-type fields back both creation surfaces (the inline
-    # empty-first-run form and the /ws/new page); they differ only in the create
-    # button, and the inline form pre-seeds the prompt (cleared below).
+    # The same name/mode/agent-type fields and create button back both creation
+    # surfaces (the new-workspace modal and the inline empty-first-run form); they
+    # differ only in that the inline form pre-seeds the prompt (cleared below).
     submit_button, is_inline_form = get_workspace_creation_button(sculptor_page)
 
     # Fill in the workspace name. Each call gets a unique name by default so
@@ -447,7 +425,7 @@ def start_task_and_wait_for_ready(
 
     # The empty-first-run inline form seeds the prompt with `/sculptor:help`; clear
     # it so the first agent is created promptless and this helper sends `prompt` as
-    # the first chat message below (matching the /ws/new flow) — otherwise the agent
+    # the first chat message below (matching the modal flow) — otherwise the agent
     # would receive both the prefill and the test's prompt.
     if is_inline_form:
         sculptor_page.get_by_test_id(ElementIDs.NEW_WORKSPACE_PROMPT_TEXTAREA).fill("")
@@ -459,6 +437,12 @@ def start_task_and_wait_for_ready(
 
     # Click create workspace
     submit_button.click()
+
+    # When created via the modal, its overlay backdrop lingers through the close
+    # animation and intercepts pointer events on the workspace beneath (e.g. the model
+    # selector). Wait for the dialog to fully close before interacting. The inline
+    # first-run form has no dialog, so this resolves instantly there.
+    expect(sculptor_page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG)).to_have_count(0, timeout=60_000)
 
     # A terminal first agent has no chat surface — wait for the terminal
     # panel instead and skip the chat-panel/model/prompt steps entirely.
@@ -717,18 +701,20 @@ def soft_reload_page(page: Page, wait_until: str | None = None) -> None:
 
 
 def navigate_away_and_back(page: Page) -> None:
-    """Navigate to the Add Workspace page and back to force Jotai store reinitialization.
+    """Navigate to the Home page and back to force Jotai store reinitialization.
 
     The Sculptor frontend caches state in Jotai atoms that are initialized from
     localStorage on first load.  A hash-only navigation within the SPA does not
-    unload/reload atoms.  By navigating to a different route (``#/ws/new``) and
+    unload/reload atoms.  By navigating to a different route (``#/home``) and
     then back, we force the atoms to reinitialize from whatever values are
     currently in localStorage.
     """
     current_url = page.url
     base_url = current_url.split("#")[0].rstrip("/")
-    page.goto(f"{base_url}#/ws/new")
-    expect(page.get_by_test_id(ElementIDs.START_TASK_BUTTON)).to_be_visible()
+    page.goto(f"{base_url}#/home")
+    workspace_rows = page.get_by_test_id(ElementIDs.WORKSPACE_ROW)
+    empty_state = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_EMPTY_STATE)
+    expect(workspace_rows.first.or_(empty_state)).to_be_visible()
     page.goto(current_url)
 
 

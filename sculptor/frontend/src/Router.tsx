@@ -13,7 +13,6 @@ import {
 import { COMPONENT_GALLERY_TAB_ID, HOME_TAB_ID, SETTINGS_TAB_ID } from "./components/workspaceTabIds.ts";
 import { EmptyFirstRunGate } from "./EmptyFirstRunGate.tsx";
 import { AppShell } from "./layouts/AppShell";
-import { AddWorkspacePage } from "./pages/add-workspace/AddWorkspacePage.tsx";
 import { ComponentGalleryPage } from "./pages/debug/ComponentGalleryPage.tsx";
 import { NotFoundErrorPage } from "./pages/error/NotFound.tsx";
 import { RouteErrorPage } from "./pages/error/RouteErrorPage.tsx";
@@ -45,7 +44,7 @@ const entryToUrl = (entry: TabEntry): string | null => {
   if (entry.tabId === SETTINGS_TAB_ID) return "/settings";
   if (entry.tabId === COMPONENT_GALLERY_TAB_ID) return "/component-gallery";
   const draftId = parseDraftIdFromTabId(entry.tabId);
-  if (draftId !== null) return `/ws/new/${draftId}`;
+  if (draftId !== null) return null;
   if (entry.tabId.startsWith(WORKSPACE_TAB_ID_PREFIX)) {
     return entry.agentId !== null ? `/ws/${entry.tabId}/agent/${entry.agentId}` : `/ws/${entry.tabId}`;
   }
@@ -55,20 +54,15 @@ const entryToUrl = (entry: TabEntry): string | null => {
 const rootLoader = (): Response => {
   const tabs = readSculptorTabs();
   const entry = tabs.order[tabs.activeIndex];
-  if (!entry) return redirect("/ws/new");
+  if (!entry) return redirect("/home");
   const target = entryToUrl(entry);
-  return redirect(target ?? "/ws/new");
+  return redirect(target ?? "/home");
 };
 
 const router = createHashRouter([
   {
     path: "/",
     loader: rootLoader,
-    errorElement: <RouteErrorPage />,
-  },
-  {
-    path: "/ws/new",
-    loader: (): Response => redirect(`/ws/new/${crypto.randomUUID()}`),
     errorElement: <RouteErrorPage />,
   },
   // Pathless layout route hosting every page destination. Its element
@@ -105,10 +99,6 @@ const router = createHashRouter([
                 element: <WorkspacePage />,
               },
             ],
-          },
-          {
-            path: "/ws/new/:draftId",
-            element: <AddWorkspacePage />,
           },
           {
             path: "/component-gallery",

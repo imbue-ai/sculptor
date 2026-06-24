@@ -7,7 +7,14 @@ from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 
 
 class PlaywrightAddWorkspacePage(PlaywrightProjectLayoutPage):
-    """Page object for the Add Workspace page (/ws/new)."""
+    """Page object for the new-workspace MODAL (formerly the /ws/new page).
+
+    The legacy ``/ws/new`` page is gone; this now drives the new-workspace modal
+    (and the inline empty-first-run form, which shares the same field testids).
+    The create button and prompt input are re-pointed at the modal's
+    ``NEW_WORKSPACE_CREATE_BUTTON`` / ``NEW_WORKSPACE_PROMPT_TEXTAREA``; the
+    remaining getters already use testids shared across both surfaces.
+    """
 
     def get_project_selector(self) -> Locator:
         return self.get_by_test_id(ElementIDs.PROJECT_SELECTOR)
@@ -35,13 +42,13 @@ class PlaywrightAddWorkspacePage(PlaywrightProjectLayoutPage):
         return dialog
 
     def get_task_input(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.TASK_INPUT)
+        return self.get_by_test_id(ElementIDs.NEW_WORKSPACE_PROMPT_TEXTAREA)
 
     def get_workspace_name_input(self) -> Locator:
         return self.get_by_test_id(ElementIDs.WORKSPACE_NAME_INPUT)
 
     def get_submit_button(self) -> Locator:
-        return self.get_by_test_id(ElementIDs.START_TASK_BUTTON)
+        return self.get_by_test_id(ElementIDs.NEW_WORKSPACE_CREATE_BUTTON)
 
     def get_branch_name_input(self) -> Locator:
         return self.get_by_test_id(ElementIDs.BRANCH_NAME_INPUT)

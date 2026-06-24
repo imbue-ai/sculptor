@@ -15,6 +15,7 @@ import { BranchSelector } from "~/components/BranchSelector.tsx";
 import { KeyboardHint } from "~/components/KeyboardHint.tsx";
 import { AgentTypeSelect } from "~/components/newWorkspace/AgentTypeSelect.tsx";
 import { BranchNameField } from "~/components/newWorkspace/BranchNameField.tsx";
+import { useBranchNamePreview } from "~/components/newWorkspace/hooks/useBranchNamePreview.ts";
 import { ModeSelect } from "~/components/newWorkspace/ModeSelect.tsx";
 import {
   keepNewWorkspaceModalOpenAtom,
@@ -23,7 +24,6 @@ import {
 import { RepoSelector } from "~/components/RepoSelector.tsx";
 import { Toast, type ToastContent, ToastType } from "~/components/Toast.tsx";
 import { getMetaKey, isModifierPressed } from "~/electron/utils.ts";
-import { useBranchNamePreview } from "~/pages/add-workspace/hooks/useBranchNamePreview.ts";
 
 import styles from "./NewWorkspaceForm.module.scss";
 
