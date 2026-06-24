@@ -19,6 +19,8 @@ import { memo, useState } from "react";
 
 import { ElementIds } from "~/api";
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
+import { sidebarCollapsedAtom } from "~/components/layout/sidebarAtoms.ts";
+import { getTitleBarLeftPadding } from "~/electron/utils.ts";
 
 import { AddPanelDropdown } from "./AddPanelDropdown.tsx";
 import { panelDefinitionByIdAtom } from "./registry/panelRegistry.ts";
@@ -248,6 +250,7 @@ const SectionHeaderComponent = ({ subSection }: SectionHeaderProps): ReactElemen
   const isReorderWithin = useAtomValue(isReorderWithinSubSectionAtom(subSection));
   const maximizedSection = useAtomValue(maximizedSectionAtom);
   const setMaximizedSection = useSetAtom(maximizedSectionAtom);
+  const isSidebarCollapsed = useAtomValue(sidebarCollapsedAtom);
 
   const section = toSection(subSection);
   const isMaximized = maximizedSection === section;
@@ -256,8 +259,19 @@ const SectionHeaderComponent = ({ subSection }: SectionHeaderProps): ReactElemen
     setMaximizedSection(isMaximized ? null : section);
   };
 
+  // While maximized the workspace header is hidden, so this section header sits at the
+  // very top. When the sidebar is also collapsed (SEC-16), reserve the OS window-control
+  // gutter on the left so the tabs clear the traffic lights and the floating
+  // show-sidebar toggle (CollapsedSidebarToggle, rendered by the shell).
+  const headerStyle = isMaximized && isSidebarCollapsed ? { paddingLeft: getTitleBarLeftPadding(false) } : undefined;
+
   return (
-    <Flex align="center" className={styles.header} data-testid={`${ElementIds.SECTION_HEADER}-${subSection}`}>
+    <Flex
+      align="center"
+      className={styles.header}
+      style={headerStyle}
+      data-testid={`${ElementIds.SECTION_HEADER}-${subSection}`}
+    >
       <div className={styles.tabs} data-section-tabs={subSection}>
         {displayedPanelIds.map((panelId, index) => {
           // A cross-section drag shows a non-draggable ghost here while the real

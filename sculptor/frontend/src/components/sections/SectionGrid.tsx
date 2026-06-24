@@ -11,10 +11,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ElementIds } from "~/api";
 
+import { PanelSection } from "./PanelSection.tsx";
 import { ResizeHandle } from "./ResizeHandle.tsx";
 import { isSectionExpandedAtom, sectionSizesAtom, setSectionSizeAtom } from "./sectionAtoms.ts";
 import { resolveSectionPixelSizes, sizeToPercent } from "./sectionGeometry.ts";
 import styles from "./SectionGrid.module.scss";
+import { primaryOf } from "./sectionTypes.ts";
 import { SplittableSection } from "./SplittableSection.tsx";
 import { maximizedSectionAtom } from "./transientAtoms.ts";
 
@@ -62,9 +64,12 @@ export const SectionGrid = (): ReactElement => {
   );
 
   if (maximizedSection !== null) {
+    // A maximized section shows only ONE sub-section — the primary (SPLIT-06) — so a
+    // split section maximizes to its primary half rather than rendering both panes
+    // (which, both flagged maximized, would overlap).
     return (
       <div ref={containerRef} className={styles.maximized}>
-        <SplittableSection section={maximizedSection} />
+        <PanelSection subSection={primaryOf(maximizedSection)} />
       </div>
     );
   }
