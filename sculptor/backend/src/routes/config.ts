@@ -21,6 +21,7 @@ import {
 import { getOrm } from "~/db/orm";
 import { getUserSettings, listActiveRepos } from "~/db/repositories";
 import { eventBus } from "~/events";
+import { getDependencyService } from "~/services/dependencies";
 
 // Config / onboarding endpoints (web/app.py). config.toml (UserConfig) is the
 // source of truth; the wire shape is camelCase (RW-API-3). These routes require
@@ -216,14 +217,19 @@ export async function registerConfigRoutes(
     async () => {
       const config = getCurrentUserConfig();
       const hasProject = listActiveRepos(getOrm()).length > 0;
-      // The dependency-management service lands in Task 6.2; until then the
-      // status is unknown, matching Python's "not passing" until checked.
+      // deps_passing = git installed AND claude installed AND claude version
+      // not out-of-range (None counts as passing — Python web/app.py L2558-2560).
+      const deps = await getDependencyService().getStatus();
+      const hasDependenciesPassing =
+        deps.git.installed &&
+        deps.claude.installed &&
+        deps.claude.isVersionInRange !== false;
       return {
         hasEmail:
           config.user_email !== "" && checkIsUserEmailFieldValid(config),
         hasPrivacyConsent: config.is_privacy_policy_consented,
         hasProject,
-        hasDependenciesPassing: false,
+        hasDependenciesPassing,
       };
     },
   );

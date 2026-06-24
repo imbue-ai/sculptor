@@ -5,6 +5,7 @@ import { jsonSchemaTransform, serializerCompiler, validatorCompiler } from "fast
 
 import { registerAuthGuard } from "~/auth/guard";
 import { registerConfigRoutes } from "~/routes/config";
+import { registerDependencyRoutes } from "~/routes/dependencies";
 import { registerHealthRoutes } from "~/routes/health";
 import { registerSessionTokenRoutes } from "~/routes/session_token";
 import { registerStreamWsRoutes } from "~/routes/stream_ws";
@@ -52,6 +53,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   void app.register(registerSessionTokenRoutes);
   void app.register(registerHealthRoutes);
   void app.register(registerConfigRoutes);
+  void app.register(registerDependencyRoutes);
   void app.register(registerTelemetryInfoRoutes);
   void app.register(registerStreamWsRoutes);
 

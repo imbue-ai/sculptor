@@ -100,12 +100,14 @@ describe("config / onboarding routes", () => {
       url: "/api/v1/config/status",
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({
+    // hasDependenciesPassing depends on the host's git/claude binaries, so assert
+    // only the config-derived fields here.
+    expect(res.json()).toMatchObject({
       hasEmail: false,
       hasPrivacyConsent: false,
       hasProject: false,
-      hasDependenciesPassing: false,
     });
+    expect(typeof res.json().hasDependenciesPassing).toBe("boolean");
   });
 
   it("status reflects a project once one exists", async () => {
