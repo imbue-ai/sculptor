@@ -4,6 +4,7 @@ import { buildApp } from "~/app";
 import { ensureSculptorFolderReady } from "~/config/bootstrap";
 import { resolveBindHost, resolvePort } from "~/config/port";
 import { closeDatabase, getDatabase } from "~/db/connection";
+import { runMigrations } from "~/db/migrate";
 import { setupLogging } from "~/logging/logger";
 import { emitOpenApiToFile } from "~/openapi";
 
@@ -58,7 +59,8 @@ export async function main(argv: readonly string[] = process.argv): Promise<void
   // configure logging so all later startup logs are captured, then open the DB.
   ensureSculptorFolderReady();
   const logger = setupLogging();
-  getDatabase();
+  const db = getDatabase();
+  runMigrations(db);
 
   const port = resolvePort(argv);
   const host = resolveBindHost();
