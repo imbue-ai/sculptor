@@ -651,6 +651,20 @@ class ElementIDs(StrEnum):
     SECTION_ACTIVE_RING = "SECTION_ACTIVE_RING"
     SECTION_EMPTY_STATE = "SECTION_EMPTY_STATE"
     SECTION_SPLIT_SUBSECTION = "SECTION_SPLIT_SUBSECTION"
+    # Empty-state quick actions: the recent-agent / terminal / recently-closed
+    # rows share one testid, disambiguated by suffixing the action key (e.g.
+    # f"{SECTION_EMPTY_QUICK_ACTION}-new-agent", "...-files").
+    SECTION_EMPTY_QUICK_ACTION = "SECTION_EMPTY_QUICK_ACTION"
+
+    # Add-panel dropdown opened by the section header `+` (and the empty-state
+    # add button). The agent-type submenu items reuse the AGENT_TYPE_MENU_ITEM_*
+    # testids; the panel-option rows share ADD_PANEL_PANEL_OPTION, disambiguated
+    # by suffixing the panel id (e.g. f"{ADD_PANEL_PANEL_OPTION}-files").
+    ADD_PANEL_DROPDOWN = "ADD_PANEL_DROPDOWN"
+    ADD_PANEL_NEW_AGENT = "ADD_PANEL_NEW_AGENT"
+    ADD_PANEL_AGENT_TYPE_SUBMENU = "ADD_PANEL_AGENT_TYPE_SUBMENU"
+    ADD_PANEL_NEW_TERMINAL = "ADD_PANEL_NEW_TERMINAL"
+    ADD_PANEL_PANEL_OPTION = "ADD_PANEL_PANEL_OPTION"
 
     # Agent tabs (within a workspace)
     AGENT_TAB = "AGENT_TAB"

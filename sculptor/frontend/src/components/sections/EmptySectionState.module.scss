@@ -7,13 +7,26 @@
   width: 100%;
 }
 
-// A centered column: the add button and the close-split affordance are centered in
-// the section via `margin: auto`, which also keeps the column scrollable when the
-// section is too short.
+// A centered column: the add button, quick actions, and the close-split affordance
+// are centered in the section via `margin: auto`, which also keeps the column
+// scrollable when the section is too short.
 .column {
   align-items: center;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
   margin: auto;
+}
+
+// The ≤5 quick-action rows stacked under the add button.
+.quickActions {
+  // stylelint-disable-next-line sculptor/no-hardcoded-values -- caps the quick-action column to the add button's width
+  max-width: 220px;
+  width: 100%;
+}
+
+// Left-align each quick action's icon + label so the rows read as a list rather
+// than centered buttons.
+.quickAction {
+  justify-content: flex-start;
 }

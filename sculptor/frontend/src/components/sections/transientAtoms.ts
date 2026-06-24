@@ -86,6 +86,26 @@ export const displayedPanelIdsAtom = memoizedAtomByKey<SubSectionId, ReadonlyArr
   });
 });
 
+// ── Recently closed single-instance panels ────────────────────────────────────
+
+// Most-recently-closed single-instance panel ids, newest first. Drives the
+// empty-state quick actions (SEC-19): the up-to-three recently-closed panels a
+// user can re-open with one click. Transient (reset on reload) and capped — only
+// single-instance panels belong here (closing an agent/terminal ends it, so they
+// are never re-offered). Maintained by the section close handler, which knows the
+// panel is single-instance, rather than the layout reducers.
+const RECENTLY_CLOSED_PANELS_CAP = 8;
+
+const recentlyClosedPanelIdsBaseAtom: PrimitiveAtom<ReadonlyArray<PanelId>> = atom<ReadonlyArray<PanelId>>([]);
+
+export const recentlyClosedPanelIdsAtom = atom(
+  (get) => get(recentlyClosedPanelIdsBaseAtom),
+  (get, set, panelId: PanelId): void => {
+    const withoutPanel = get(recentlyClosedPanelIdsBaseAtom).filter((id) => id !== panelId);
+    set(recentlyClosedPanelIdsBaseAtom, [panelId, ...withoutPanel].slice(0, RECENTLY_CLOSED_PANELS_CAP));
+  },
+);
+
 // ── Active-section ring ───────────────────────────────────────────────────────
 
 export const RING_VISIBLE_MS = 2000;

@@ -21,7 +21,11 @@ export type PageId =
   /** Layout toggles: Left/Right/Bottom panel zones + Focus/Zen modes. */
   | "view.layout"
   /** Individual panel toggles (Files, Actions, Terminal, Notes, …). */
-  | "view.panels";
+  | "view.panels"
+  /** Add panel — pick the destination section/sub-section. */
+  | "addpanel.location"
+  /** Add panel — pick the panel for the chosen location (set via addPanelTargetSubSectionAtom). */
+  | "addpanel.panels";
 
 /**
  * Icon component reference. Wide on purpose so `lucide-react` icons (which

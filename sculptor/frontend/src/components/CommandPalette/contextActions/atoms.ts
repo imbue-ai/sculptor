@@ -1,5 +1,7 @@
 import { atom } from "jotai";
 
+import type { SubSectionId } from "~/components/sections/sectionTypes.ts";
+
 /**
  * Atoms for state shared by tab right-click menus and the command palette.
  *
@@ -52,3 +54,10 @@ export const workspaceActionsTargetAtom = atom<string | null>(null);
  * delete / mark-unread without doing a separate workspace lookup.
  */
 export const agentActionsTargetAtom = atom<{ workspaceId: string; agentId: string } | null>(null);
+
+/**
+ * The destination sub-section chosen on the Cmd+K "Add panel" location page,
+ * read by the `addpanel.panels` provider to list and place panels for that
+ * location (PANEL-12). Cleared on palette close.
+ */
+export const addPanelTargetSubSectionAtom = atom<SubSectionId | null>(null);

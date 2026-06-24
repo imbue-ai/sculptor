@@ -8,6 +8,7 @@ import { buildSettingsCommands } from "./builtinCommands/settings.ts";
 import { buildTerminalCommands } from "./builtinCommands/terminal.ts";
 import { buildThemeCommands } from "./builtinCommands/theme.ts";
 import { buildWorkspaceActionCommands } from "./builtinCommands/workspaces.ts";
+import { buildAddPanelProvider } from "./dynamic/addPanel.ts";
 import { buildAgentActionsProvider } from "./dynamic/agentActions.ts";
 import { buildAgentProvider } from "./dynamic/agentCommands.ts";
 import { buildPanelTogglesProvider } from "./dynamic/panels.ts";
@@ -55,9 +56,11 @@ export const CommandRegistrations = (): null => {
   const workspaceProvider = useMemo(() => buildWorkspaceProvider(runtime), [runtime]);
   const agentProvider = useMemo(() => buildAgentProvider(runtime), [runtime]);
   const panelTogglesProvider = useMemo(() => buildPanelTogglesProvider(runtime), [runtime]);
+  const addPanelProvider = useMemo(() => buildAddPanelProvider(runtime), [runtime]);
   useRegisterDynamicCommands(workspaceProvider);
   useRegisterDynamicCommands(panelTogglesProvider);
   useRegisterDynamicCommands(agentProvider);
+  useRegisterDynamicCommands(addPanelProvider);
 
   // Context-action providers — drive Cmd+K → Workspace/Agent actions… off
   // the same descriptor lists that the right-click menus consume. Adding

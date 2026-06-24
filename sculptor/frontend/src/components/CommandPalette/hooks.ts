@@ -19,7 +19,11 @@ import {
   commandPalettePendingAtom,
   commandPaletteSearchAtom,
 } from "./atoms.ts";
-import { agentActionsTargetAtom, workspaceActionsTargetAtom } from "./contextActions/atoms.ts";
+import {
+  addPanelTargetSubSectionAtom,
+  agentActionsTargetAtom,
+  workspaceActionsTargetAtom,
+} from "./contextActions/atoms.ts";
 import { isValidPageId, popPageStack, pushPageStack } from "./pages.ts";
 import { useCommandRegistry } from "./registryContext.tsx";
 import type { Command, DynamicProvider, PageId, PaletteContext } from "./types.ts";
@@ -366,6 +370,7 @@ export const useResetOnOpenChange = (): void => {
   const setInitialPage = useSetAtom(commandPaletteInitialPageAtom);
   const setWorkspaceActionsTarget = useSetAtom(workspaceActionsTargetAtom);
   const setAgentActionsTarget = useSetAtom(agentActionsTargetAtom);
+  const setAddPanelTarget = useSetAtom(addPanelTargetSubSectionAtom);
   const prevOpenRef = useRef(false);
   // Layout effect (not plain effect) so the reset commits BEFORE paint.
   // A caller that batches `setSearch("x"); setIsOpen(true)` would
@@ -397,6 +402,16 @@ export const useResetOnOpenChange = (): void => {
       }
       setWorkspaceActionsTarget(null);
       setAgentActionsTarget(null);
+      setAddPanelTarget(null);
     }
-  }, [isOpen, initialPage, setSearch, setPages, setInitialPage, setWorkspaceActionsTarget, setAgentActionsTarget]);
+  }, [
+    isOpen,
+    initialPage,
+    setSearch,
+    setPages,
+    setInitialPage,
+    setWorkspaceActionsTarget,
+    setAgentActionsTarget,
+    setAddPanelTarget,
+  ]);
 };

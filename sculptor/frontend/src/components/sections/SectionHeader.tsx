@@ -19,6 +19,7 @@ import { memo, useState } from "react";
 import { ElementIds } from "~/api";
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 
+import { AddPanelDropdown } from "./AddPanelDropdown.tsx";
 import { panelDefinitionByIdAtom } from "./registry/panelRegistry.ts";
 import { isMultiInstanceKind } from "./registry/panelRegistry.ts";
 import { closePanelAtom, setActivePanelAtom } from "./sectionActions.ts";
@@ -26,7 +27,12 @@ import { activePanelIdInSubSectionAtom } from "./sectionAtoms.ts";
 import styles from "./SectionHeader.module.scss";
 import type { PanelId, SubSectionId } from "./sectionTypes.ts";
 import { toSection } from "./sectionTypes.ts";
-import { displayedPanelIdsAtom, ghostPanelIdAtom, maximizedSectionAtom } from "./transientAtoms.ts";
+import {
+  displayedPanelIdsAtom,
+  ghostPanelIdAtom,
+  maximizedSectionAtom,
+  recentlyClosedPanelIdsAtom,
+} from "./transientAtoms.ts";
 
 type PanelTabProps = {
   panelId: PanelId;
@@ -43,6 +49,7 @@ const PanelTabComponent = ({ panelId, subSection, isActive, isGhost }: PanelTabP
   const definition = useAtomValue(panelDefinitionByIdAtom(panelId));
   const setActivePanel = useSetAtom(setActivePanelAtom);
   const closePanel = useSetAtom(closePanelAtom);
+  const recordRecentlyClosed = useSetAtom(recentlyClosedPanelIdsAtom);
   const [isRenaming, setIsRenaming] = useState<boolean>(false);
 
   if (definition === undefined) {
@@ -68,6 +75,9 @@ const PanelTabComponent = ({ panelId, subSection, isActive, isGhost }: PanelTabP
     if (definition.onRequestClose !== undefined) {
       definition.onRequestClose();
     } else {
+      // Single-instance panel: closing only removes it from the layout, so remember
+      // it for the empty-state quick actions (SEC-19) — it can be re-added later.
+      recordRecentlyClosed(panelId);
       closePanel({ panelId });
     }
   };
@@ -160,10 +170,6 @@ const SectionHeaderComponent = ({ subSection }: SectionHeaderProps): ReactElemen
   const section = toSection(subSection);
   const isMaximized = maximizedSection === section;
 
-  const handleAddPanel = (): void => {
-    // Task 3.5: open AddPanelDropdown scoped to this sub-section.
-  };
-
   const handleToggleMaximize = (): void => {
     setMaximizedSection(isMaximized ? null : section);
   };
@@ -182,17 +188,21 @@ const SectionHeaderComponent = ({ subSection }: SectionHeaderProps): ReactElemen
         ))}
       </div>
       <Flex align="center" gap="2" className={styles.controls}>
-        <IconButton
-          variant="ghost"
-          size="1"
-          color="gray"
-          className={styles.headerButton}
-          aria-label="Add panel"
-          data-testid={`${ElementIds.SECTION_ADD_PANEL_BUTTON}-${subSection}`}
-          onClick={handleAddPanel}
-        >
-          <Plus size={14} />
-        </IconButton>
+        <AddPanelDropdown
+          subSection={subSection}
+          trigger={
+            <IconButton
+              variant="ghost"
+              size="1"
+              color="gray"
+              className={styles.headerButton}
+              aria-label="Add panel"
+              data-testid={`${ElementIds.SECTION_ADD_PANEL_BUTTON}-${subSection}`}
+            >
+              <Plus size={14} />
+            </IconButton>
+          }
+        />
         <IconButton
           variant="ghost"
           size="1"
