@@ -75,7 +75,7 @@ def test_agent_settings_persist_and_apply_to_new_agents(sculptor_instance_: Scul
 
     # Add a second agent via the "+" button
     agent_tab_bar = task_page.get_agent_tab_bar()
-    agent_tab_bar.get_add_agent_button().click()
+    agent_tab_bar.add_agent()
     expect(agent_tab_bar.get_agent_tabs()).to_have_count(2)
 
     # Agent 2 should pick up the configured default (fast mode ON),
@@ -122,7 +122,7 @@ def test_effort_level_persists_without_sending_message(sculptor_instance_: Sculp
 
     # Add a second agent to the workspace
     agent_tab_bar = task_page.get_agent_tab_bar()
-    agent_tab_bar.get_add_agent_button().click()
+    agent_tab_bar.add_agent()
     expect(agent_tab_bar.get_agent_tabs()).to_have_count(2)
 
     # Second agent should show default effort (Extra High)

@@ -42,9 +42,7 @@ def test_create_second_agent_in_existing_workspace(
     expect(agent_tabs).to_have_count(1)
 
     # Click the "+" button in the agent tabs bar to add a second agent
-    add_agent_button = agent_tab_bar.get_add_agent_button()
-    expect(add_agent_button).to_be_visible()
-    add_agent_button.click()
+    agent_tab_bar.add_agent()
 
     # Wait for the second agent tab to appear
     expect(agent_tabs).to_have_count(2)
@@ -70,8 +68,7 @@ def test_multiple_agent_tabs_shown_for_shared_workspace(
     start_task_and_wait_for_ready(page, prompt="First agent task", workspace_name="Shared WS")
 
     # Add a second agent to the same workspace
-    add_agent_button = agent_tab_bar.get_add_agent_button()
-    add_agent_button.click()
+    agent_tab_bar.add_agent()
 
     # Verify 2 agent tabs are visible
     agent_tabs = agent_tab_bar.get_agent_tabs()
@@ -116,8 +113,7 @@ def test_workspaces_have_isolated_agent_tabs(
     start_task_and_wait_for_ready(page, prompt="Agent A1", workspace_name="Workspace A")
 
     # Add a second agent to workspace A
-    add_agent_button = agent_tab_bar.get_add_agent_button()
-    add_agent_button.click()
+    agent_tab_bar.add_agent()
 
     # Verify workspace A has 2 agent tabs
     agent_tabs = agent_tab_bar.get_agent_tabs()
@@ -226,8 +222,7 @@ def test_workspace_survives_when_other_agents_remain(
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Surviving WS")
 
     # Add a second agent to the same workspace
-    add_agent_button = agent_tab_bar.get_add_agent_button()
-    add_agent_button.click()
+    agent_tab_bar.add_agent()
 
     # Wait for 2 agent tabs
     agent_tabs = agent_tab_bar.get_agent_tabs()
@@ -295,12 +290,11 @@ def test_agent_tab_reuses_lowest_available_number(
     expect(agent_tabs.first).to_have_text("Claude 1")
 
     # Add two more agents via the "+" button — they get "Claude 2" and "Claude 3".
-    add_agent_button = agent_tab_bar.get_add_agent_button()
-    add_agent_button.click()
+    agent_tab_bar.add_agent()
     expect(agent_tabs).to_have_count(2)
     expect(agent_tabs.nth(1)).to_have_text("Claude 2")
 
-    add_agent_button.click()
+    agent_tab_bar.add_agent()
     expect(agent_tabs).to_have_count(3)
     expect(agent_tabs.nth(2)).to_have_text("Claude 3")
 
@@ -338,7 +332,7 @@ def test_agent_tab_reuses_lowest_available_number(
     page.wait_for_timeout(3_000)
 
     # Add another agent — should reuse number 2, not increment to 4.
-    add_agent_button.click()
+    agent_tab_bar.add_agent()
     expect(agent_tabs).to_have_count(3)
     expect(agent_tabs.nth(2)).to_have_text("Claude 2")
 

@@ -12,6 +12,7 @@ from playwright.sync_api import expect
 
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -43,11 +44,11 @@ def test_unread_indicator_when_switching_agents_within_workspace(
     expect(agent_tabs.first).to_have_attribute("data-dot-status", "read")
 
     # Workspace tab should also be read (only agent is read)
-    workspace_tabs = task_page.get_workspace_tabs()
+    workspace_tabs = get_workspace_sidebar(page).get_workspace_rows()
     expect(workspace_tabs.first).to_have_attribute("data-has-unread", "false")
 
     # Add a second agent (auto-navigates to it)
-    agent_tab_bar.get_add_agent_button().click()
+    agent_tab_bar.add_agent()
     expect(agent_tabs).to_have_count(2)
 
     # Send a message on agent 2 so it gets response activity
@@ -106,7 +107,7 @@ def test_unread_workspace_indicator_across_workspaces(
     chat_panel_a = task_page_a.get_chat_panel()
     wait_for_completed_message_count(chat_panel=chat_panel_a, expected_message_count=2)
 
-    workspace_tabs = task_page_a.get_workspace_tabs()
+    workspace_tabs = get_workspace_sidebar(page).get_workspace_rows()
     expect(workspace_tabs).to_have_count(1)
     expect(workspace_tabs.first).to_have_attribute("data-has-unread", "false")
 
@@ -181,7 +182,7 @@ def test_focused_agent_stays_read_while_receiving_updates(
     expect(agent_tabs.first).to_have_attribute("data-dot-status", "read")
 
     # Workspace should also show no unread
-    workspace_tabs = task_page.get_workspace_tabs()
+    workspace_tabs = get_workspace_sidebar(page).get_workspace_rows()
     expect(workspace_tabs.first).to_have_attribute("data-has-unread", "false")
 
 
@@ -222,7 +223,7 @@ def test_read_status_persists_after_restart(
         expect(agent_tabs).to_have_count(1)
         expect(agent_tabs.first).to_have_attribute("data-dot-status", "read")
 
-        workspace_tabs = task_page.get_workspace_tabs()
+        workspace_tabs = get_workspace_sidebar(page).get_workspace_rows()
         expect(workspace_tabs.first).to_have_attribute("data-has-unread", "false")
 
         # Step 3: Give time for the debounced mark_read to fire and persist
@@ -233,8 +234,7 @@ def test_read_status_persists_after_restart(
         page = instance.page
 
         # Step 4: Wait for the workspace tab to appear (server has restarted)
-        layout_page = PlaywrightTaskPage(page=page)
-        workspace_tabs = layout_page.get_workspace_tabs()
+        workspace_tabs = get_workspace_sidebar(page).get_workspace_rows()
         expect(workspace_tabs.first).to_be_visible()
 
         # Step 5: Check workspace tab shows read WITHOUT clicking on it.

@@ -63,7 +63,7 @@ def test_fast_mode_persists_after_sending_message_and_switching_agents(
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=4)
 
     # Add a second agent to the workspace
-    agent_tab_bar.get_add_agent_button().click()
+    agent_tab_bar.add_agent()
 
     # Wait for second agent tab to appear
     agent_tabs = agent_tab_bar.get_agent_tabs()
@@ -102,7 +102,7 @@ def test_fast_mode_persists_without_sending_message(
     _expect_fast_mode_active(chat_panel)
 
     # Add a second agent to the workspace
-    agent_tab_bar.get_add_agent_button().click()
+    agent_tab_bar.add_agent()
 
     # Wait for second agent tab to appear
     agent_tabs = agent_tab_bar.get_agent_tabs()
@@ -148,7 +148,7 @@ def test_fast_mode_disable_persists_without_sending_message(
     _expect_fast_mode_inactive(chat_panel)
 
     # Add a second agent to the workspace
-    agent_tab_bar.get_add_agent_button().click()
+    agent_tab_bar.add_agent()
 
     # Wait for second agent tab to appear
     agent_tabs = agent_tab_bar.get_agent_tabs()

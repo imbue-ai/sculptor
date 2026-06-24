@@ -56,7 +56,7 @@ def test_dynamic_padding_survives_agent_switch(sculptor_instance_: SculptorInsta
 
     # --- Add agent 2 to the same workspace ---
     agent_tab_bar = task_page.get_agent_tab_bar()
-    agent_tab_bar.get_add_agent_button().click()
+    agent_tab_bar.add_agent()
     expect(agent_tab_bar.get_agent_tabs()).to_have_count(2)
 
     # Navigate to agent 1 to verify baseline padding.
@@ -126,7 +126,7 @@ def test_scroll_height_settles_after_agent_switch(sculptor_instance_: SculptorIn
 
     # --- Add agent 2 ---
     agent_tab_bar = task_page.get_agent_tab_bar()
-    agent_tab_bar.get_add_agent_button().click()
+    agent_tab_bar.add_agent()
     expect(agent_tab_bar.get_agent_tabs()).to_have_count(2)
 
     agent_tab_bar.get_agent_tabs().first.click()

@@ -7,6 +7,7 @@ These tests verify:
 - Unread persists on a non-focused agent across workspace switches
 """
 
+import pytest
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.chat_panel import send_chat_message
@@ -15,6 +16,13 @@ from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
+
+# The manual "Mark unread" tab action (AGENT-07) is not wired on the redesigned
+# panel-tab context menu yet — the dot renders but there is no Mark-unread item
+# (the same deferral test_panel_tab_context_menu records). Skip the module until
+# that affordance lands; the read/unread-from-activity behaviour is still covered
+# by test_read_unread_status.
+pytestmark = pytest.mark.skip(reason="Mark-unread tab action (AGENT-07) not yet wired on the redesigned panel tab")
 
 SECONDS_MS = 1000
 

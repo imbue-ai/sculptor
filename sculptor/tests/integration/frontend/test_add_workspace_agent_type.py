@@ -96,7 +96,7 @@ def test_first_agent_type_defaults_to_shared_last_used(
     # The form's creation recorded the MRU — a plain + click (no menu) now
     # creates another Terminal in the tab bar.
     agent_tab_bar = PlaywrightAgentTabBarElement(page)
-    agent_tab_bar.get_add_agent_button().click()
+    agent_tab_bar.add_agent()
     expect(agent_tab_bar.get_agent_tab_by_name("Terminal 2")).to_have_count(1)
 
     # And the next new-workspace form opens preset to Terminal. (No cleanup

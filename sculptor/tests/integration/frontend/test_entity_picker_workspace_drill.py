@@ -86,7 +86,7 @@ def test_tab_on_workspace_drills_into_agent_list(
     expect(chat_input).to_be_visible()
 
     agent_tab_bar = task_page.get_agent_tab_bar()
-    agent_tab_bar.get_add_agent_button().click()
+    agent_tab_bar.add_agent()
     expect(agent_tab_bar.get_agent_tabs()).to_have_count(2)
 
     chat_input = task_page.get_chat_panel().get_chat_input()
@@ -125,7 +125,7 @@ def test_click_on_workspace_drills_into_agent_list(
     expect(chat_input).to_be_visible()
 
     agent_tab_bar = task_page.get_agent_tab_bar()
-    agent_tab_bar.get_add_agent_button().click()
+    agent_tab_bar.add_agent()
     expect(agent_tab_bar.get_agent_tabs()).to_have_count(2)
 
     chat_input = task_page.get_chat_panel().get_chat_input()

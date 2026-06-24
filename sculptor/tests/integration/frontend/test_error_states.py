@@ -12,7 +12,9 @@ Covers:
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.chat_panel import send_chat_message
-from sculptor.testing.playwright_utils import navigate_to_add_workspace_page
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
+from sculptor.testing.playwright_utils import navigate_to_workspace
+from sculptor.testing.playwright_utils import open_home
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -142,12 +144,11 @@ def test_api_error_shows_error_in_workspace_peek_and_clears_on_return(
     )
 
     # Step 2: Navigate away before the error fires.
-    navigate_to_add_workspace_page(page)
+    open_home(page)
 
     # Step 3: Hover the workspace tab to open the peek popover.  Use a
     # timeout that accounts for the delay — the error hasn't fired yet.
-    workspace_tab = task_page.get_workspace_tabs().first
-    workspace_tab.hover()
+    get_workspace_sidebar(page).get_workspace_rows().first.hover()
 
     workspace_peek = task_page.get_workspace_peek_popover()
     expect(workspace_peek).to_be_visible()
@@ -158,7 +159,7 @@ def test_api_error_shows_error_in_workspace_peek_and_clears_on_return(
 
     # Step 4: Navigate back to the workspace by clicking the tab.
     page.mouse.move(0, 0)  # Dismiss the popover first.
-    workspace_tab.click()
+    navigate_to_workspace(page)
 
     # The agent tab dot should revert to read (gray) — the error is
     # acknowledged by viewing the workspace.
@@ -191,11 +192,10 @@ def test_crash_shows_error_in_workspace_peek_and_persists_on_return(
     )
 
     # Step 2: Navigate away before the crash fires.
-    navigate_to_add_workspace_page(page)
+    open_home(page)
 
     # Step 3: Hover the workspace tab to open the peek popover.
-    workspace_tab = task_page.get_workspace_tabs().first
-    workspace_tab.hover()
+    get_workspace_sidebar(page).get_workspace_rows().first.hover()
 
     workspace_peek = task_page.get_workspace_peek_popover()
     expect(workspace_peek).to_be_visible()
@@ -206,7 +206,7 @@ def test_crash_shows_error_in_workspace_peek_and_persists_on_return(
 
     # Step 4: Navigate back to the workspace by clicking the tab.
     page.mouse.move(0, 0)  # Dismiss the popover first.
-    workspace_tab.click()
+    navigate_to_workspace(page)
 
     # The agent tab dot should STILL be red — the crash requires an explicit
     # restore, not just viewing the workspace.

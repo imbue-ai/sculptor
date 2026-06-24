@@ -169,7 +169,7 @@ def test_image_upload_from_second_agent(sculptor_instance_: SculptorInstance, te
     wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
 
     agent_tab_bar = task_page.get_agent_tab_bar()
-    agent_tab_bar.get_add_agent_button().click()
+    agent_tab_bar.add_agent()
 
     expect(agent_tab_bar.get_agent_tabs()).to_have_count(2)
 

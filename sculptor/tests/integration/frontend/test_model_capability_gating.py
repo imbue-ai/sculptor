@@ -169,7 +169,7 @@ def test_model_selector_is_isolated_per_agent(sculptor_instance_: SculptorInstan
 
     # Add Agent 2 via the "+" button.
     agent_tab_bar = task_page.get_agent_tab_bar()
-    agent_tab_bar.get_add_agent_button().click()
+    agent_tab_bar.add_agent()
 
     agent_tabs = agent_tab_bar.get_agent_tabs()
     expect(agent_tabs).to_have_count(2)
