@@ -33,6 +33,7 @@ import { determineFileStatus } from "~/pages/workspace/panels/fileBrowser/utils.
 
 import styles from "./DiffViewer.module.scss";
 import { DiffViewerHeader } from "./DiffViewerHeader.tsx";
+import { DiffViewerMenu } from "./DiffViewerMenu.tsx";
 import type { DiffSelection, DiffViewOptions, TreeViewOptions } from "./types.ts";
 import { useDiffViewerContent } from "./useDiffViewerContent.ts";
 
@@ -398,7 +399,24 @@ export const DiffViewer = ({
           </Flex>
         </>
       ) : (
-        renderDiffBody()
+        <>
+          {/* No file selected: still show a minimal header so the sidebar toggle
+              (FCC-05) and the list's tree options (FCC-07) stay reachable, plus the
+              always-visible empty body (FCC-06). */}
+          <Flex
+            align="center"
+            justify="between"
+            gap="2"
+            px="3"
+            flexShrink="0"
+            className={styles.emptyHeader}
+            data-testid={ElementIds.DIFF_FILE_HEADER}
+          >
+            {sidebarToggle ?? <span />}
+            <DiffViewerMenu workspaceId={workspaceId} fileContext={null} isBinary={false} treeOptions={treeOptions} />
+          </Flex>
+          {renderDiffBody()}
+        </>
       )}
     </Flex>
   );
