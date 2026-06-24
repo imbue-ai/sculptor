@@ -5,16 +5,18 @@ import { ensureSculptorFolderReady } from "~/config/bootstrap";
 import { resolveBindHost, resolvePort } from "~/config/port";
 import { closeDatabase, getDatabase } from "~/db/connection";
 import { runMigrations } from "~/db/migrate";
-import { getOrm } from "~/db/orm";
 import { setupLogging } from "~/logging/logger";
 import { emitOpenApiToFile } from "~/openapi";
-import { AgentRunner } from "~/runner";
+import { getAgentRunner } from "~/runner/instance";
 
 // The integration harness scrapes stdout for this exact string to decide the
 // backend is ready (READY_MESSAGE_V1 in sculptor/sculptor/testing/server_utils.py).
 const READY_MESSAGE = "Server is ready to accept requests!";
 
-function findFlagValue(argv: readonly string[], flag: string): string | undefined {
+function findFlagValue(
+  argv: readonly string[],
+  flag: string,
+): string | undefined {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === undefined) {
@@ -50,7 +52,9 @@ function installShutdownHandlers(app: FastifyInstance): void {
   process.once("SIGINT", shutdown);
 }
 
-export async function main(argv: readonly string[] = process.argv): Promise<void> {
+export async function main(
+  argv: readonly string[] = process.argv,
+): Promise<void> {
   const emitPath = findFlagValue(argv, "--emit-openapi");
   if (emitPath !== undefined) {
     await emitOpenApiToFile(emitPath);
@@ -65,10 +69,9 @@ export async function main(argv: readonly string[] = process.argv): Promise<void
   runMigrations(db);
 
   // Re-supervise every non-terminal agent (crash-recovery / cutover resume,
-  // RW-DATA-6). The harness resolver is supplied by the registry (Task 5.6);
-  // until then no agent resolves a harness and this is a safe no-op.
-  const runner = new AgentRunner({ orm: getOrm(), harnessFor: () => undefined });
-  await runner.resuperviseOnStartup();
+  // RW-DATA-6). The shared runner is wired with the harness registry resolver
+  // (Task 5.6) + per-agent environment (Task 6.7).
+  await getAgentRunner().resuperviseOnStartup();
 
   const port = resolvePort(argv);
   const host = resolveBindHost();

@@ -332,7 +332,7 @@ function getManagedVersion(tool: Dependency): string | null {
   return versions[0] ?? null;
 }
 
-function resolveBinaryPath(tool: Dependency): string | null {
+export function resolveBinaryPath(tool: Dependency): string | null {
   const config = getCurrentUserConfig();
   const paths = config.dependency_paths;
   if (tool === "GIT") {

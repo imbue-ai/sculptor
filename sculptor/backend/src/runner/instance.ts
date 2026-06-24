@@ -1,0 +1,110 @@
+import { readFile, writeFile } from "node:fs/promises";
+import os from "node:os";
+
+import { getOrm } from "~/db/orm";
+import { getWorkspace } from "~/db/repositories";
+import type {
+  AgentRow,
+  WorkspaceInitializationStrategy,
+  WorkspaceRow,
+} from "~/db/schema";
+import {
+  artifactsPath,
+  statePath,
+  workingDirectory,
+} from "~/environment/paths";
+import type { ClaudeHarnessEnvironment } from "~/harness/claude/harness";
+import type { PiHarnessEnvironment } from "~/harness/pi/harness";
+import { createHarnessResolver } from "~/harness/registry";
+import { getCurrentUserConfig } from "~/config/user_config";
+import { localPathFromRepo } from "~/services/project";
+import { getRepo } from "~/db/repositories";
+import { resolveBinaryPath } from "~/services/dependencies";
+import { projectionCache } from "~/projection/cache";
+import { AgentRunner } from "~/runner/runner";
+
+// The shared, fully-wired AgentRunner singleton the API routes drive. index.ts'
+// bootstrap runner was a stub (harnessFor -> undefined); this wires the harness
+// registry (Task 5.6) + per-agent environment so a created agent actually
+// launches. Env-var injection precedence (Task 7.6) and pinned pi extensions
+// are layered on later; until then the harness deps pass the basics.
+
+function workspaceForAgent(agent: AgentRow): WorkspaceRow | undefined {
+  return agent.workspaceId === null
+    ? undefined
+    : getWorkspace(getOrm(), agent.workspaceId);
+}
+
+function workingDirForWorkspace(workspace: WorkspaceRow | undefined): string {
+  if (workspace === undefined || workspace.environmentId === null) {
+    return "";
+  }
+  const repo = getRepo(getOrm(), workspace.projectId);
+  const repoHostPath =
+    repo !== undefined ? (localPathFromRepo(repo) ?? undefined) : undefined;
+  return workingDirectory(
+    workspace.environmentId,
+    workspace.initializationStrategy,
+    repoHostPath,
+  );
+}
+
+function strategyForAgent(agent: AgentRow): WorkspaceInitializationStrategy {
+  return workspaceForAgent(agent)?.initializationStrategy ?? "IN_PLACE";
+}
+
+function claudeEnvironmentFor(agent: AgentRow): ClaudeHarnessEnvironment {
+  const workspace = workspaceForAgent(agent);
+  const root = workspace?.environmentId ?? "";
+  const workDir = workingDirForWorkspace(workspace);
+  return {
+    getUserHomeDirectory: () => os.homedir(),
+    getWorkingDirectory: () => workDir,
+    getStatePath: (agentId) => statePath(root, agentId),
+    getArtifactsPath: (agentId) => artifactsPath(root, agentId),
+    writeFile: (filePath, content) => writeFile(filePath, content),
+    readTextFile: (filePath) => readFile(filePath, "utf8"),
+  };
+}
+
+function piEnvironmentFor(agent: AgentRow): PiHarnessEnvironment {
+  const workspace = workspaceForAgent(agent);
+  const root = workspace?.environmentId ?? "";
+  const workDir = workingDirForWorkspace(workspace);
+  return {
+    getWorkingDirectory: () => workDir,
+    getStatePath: (agentId) => statePath(root, agentId),
+    writeFile: (filePath, content) => writeFile(filePath, content),
+    readTextFile: (filePath) => readFile(filePath, "utf8"),
+  };
+}
+
+let runner: AgentRunner | undefined;
+
+export function getAgentRunner(): AgentRunner {
+  if (runner === undefined) {
+    const config = getCurrentUserConfig();
+    const harnessFor = createHarnessResolver({
+      claude: {
+        resolveBinaryPath: () => resolveBinaryPath("CLAUDE") ?? undefined,
+        environmentFor: claudeEnvironmentFor,
+        initializationStrategyFor: strategyForAgent,
+        enableEntityMentions: config.enable_entity_mentions,
+      },
+      pi: {
+        resolveBinaryPath: () => resolveBinaryPath("PI") ?? undefined,
+        environmentFor: piEnvironmentFor,
+        initializationStrategyFor: strategyForAgent,
+        apiKeyEnvVarNames: config.pi.api_key_env_var_names as readonly string[],
+      },
+    });
+    runner = new AgentRunner({
+      orm: getOrm(),
+      harnessFor,
+      workingDirectoryFor: (agent) =>
+        workingDirForWorkspace(workspaceForAgent(agent)),
+      cache: projectionCache,
+    });
+  }
+  return runner;
+}
