@@ -132,6 +132,49 @@ def test_setup_edit_button_deep_links_to_focused_textarea(sculptor_instance_: Sc
     expect(textarea).to_be_focused()
 
 
+@user_story("to land on the repositories page even when another settings page was last open")
+def test_setup_edit_button_switches_section_when_other_page_was_last_open(
+    sculptor_instance_: SculptorInstance,
+) -> None:
+    """Clicking the pencil edit button must switch Settings to Repositories even when a
+    *different* section was the last one open.
+
+    Regression test for SCU-1599: the "Edit command" deep-link navigated to
+    ``?section=repositories`` (lowercase), but ``SettingsPage`` matches the query
+    param against the canonical ``SettingsSection`` ids (uppercase
+    ``REPOSITORIES``). The lowercase value never matched, so the active section
+    was left untouched and Settings just showed whatever page was last opened.
+
+    The existing deep-link tests above don't catch this: they leave Repositories
+    as the last-opened section while configuring the command, so the section
+    "happens" to already be correct. Here we deliberately open General last, so
+    only an actual section switch can land the user on Repositories.
+    """
+    page = sculptor_instance_.page
+
+    settings_page = navigate_to_settings_page(page=page)
+    repos = settings_page.click_on_repositories()
+    repos.expand_repo_config()
+    repos.set_setup_command('echo "SCULPTOR_SETUP_MARKER_QUICKEDIT"')
+
+    # Make a non-Repositories section the last-opened one. The active section is
+    # persisted, so without a real switch the Edit deep-link would simply land here.
+    settings_page.click_on_general()
+
+    start_task_and_wait_for_ready(sculptor_page=page)
+
+    setup = PlaywrightSetupStatusElement(page=page)
+    expect(setup.get_card()).to_be_visible()
+    setup.get_edit_button().click()
+
+    # The deep-link must switch to Repositories: the focused repo auto-expands and
+    # focuses its setup-command textarea. With the bug the page stays on General
+    # and this textarea is never rendered.
+    textarea = repos.get_setup_command_input()
+    expect(textarea).to_be_visible()
+    expect(textarea).to_be_focused()
+
+
 @user_story("to land on the focused textarea from the configure-CTA")
 def test_setup_config_prompt_deep_links_to_focused_textarea(sculptor_instance_: SculptorInstance) -> None:
     """Clicking the SetupConfigPrompt CTA should deep-link to settings with the matching
