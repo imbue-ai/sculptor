@@ -134,12 +134,12 @@ def test_fake_pi_import_stays_off_heavy_service_layer() -> None:
     imported the heavy modules transitively, so an in-process ``sys.modules``
     check would always pass.
     """
-    code = (
-        "import sys, json\n"
-        "import sculptor.testing.fake_pi  # noqa: F401\n"
-        f"forbidden = {_FAKE_PI_FORBIDDEN_HEAVY_IMPORTS!r}\n"
-        "print(json.dumps([m for m in forbidden if m in sys.modules]))\n"
-    )
+    code = f"""\
+import sys, json
+import sculptor.testing.fake_pi  # noqa: F401
+forbidden = {_FAKE_PI_FORBIDDEN_HEAVY_IMPORTS!r}
+print(json.dumps([m for m in forbidden if m in sys.modules]))
+"""
     result = subprocess.run(
         [sys.executable, "-c", code],
         capture_output=True,
