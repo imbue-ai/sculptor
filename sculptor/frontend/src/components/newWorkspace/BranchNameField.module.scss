@@ -1,0 +1,65 @@
+.container {
+  display: flex;
+  flex-direction: column;
+}
+
+.pill {
+  align-items: center;
+  background: var(--gray-a3);
+  border: 1px solid var(--gray-a5);
+  border-radius: var(--radius-3);
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+}
+
+.pillError {
+  border-color: var(--red-a7);
+}
+
+.prefix {
+  align-items: center;
+  color: var(--gray-10);
+  display: flex;
+  flex-shrink: 0;
+  font-size: var(--font-size-1);
+  gap: var(--space-1);
+}
+
+.input {
+  background: transparent;
+  border: none;
+  color: var(--gray-12);
+  flex: 1;
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-2);
+  min-width: 0;
+  outline: none;
+  padding: var(--space-1) 0;
+
+  &::placeholder {
+    color: var(--gray-8);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+  }
+}
+
+.spinner {
+  color: var(--gray-9);
+  flex-shrink: 0;
+  font-size: var(--font-size-1);
+}
+
+// Always rendered with a fixed minimum height so toggling the collision error
+// never shifts the surrounding layout (the dialog must not jump — WSC-06).
+.errorSlot {
+  min-height: var(--space-5);
+  padding-top: var(--space-1);
+}
+
+.error {
+  color: var(--red-11);
+  font-size: var(--font-size-1);
+}

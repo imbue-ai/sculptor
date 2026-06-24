@@ -1,0 +1,67 @@
+@use "scrollbar" as *;
+
+.loading {
+  min-height: 200px;
+  width: 100%;
+}
+
+.form {
+  gap: var(--space-3);
+  padding: var(--space-5);
+}
+
+// Borderless title — reads as a heading, not a boxed field.
+.titleInput {
+  background: transparent;
+  border: none;
+  color: var(--gray-12);
+  font-size: var(--font-size-5);
+  font-weight: var(--font-weight-medium);
+  outline: none;
+  padding: 0;
+  width: 100%;
+
+  &::placeholder {
+    color: var(--gray-8);
+  }
+}
+
+// Auto-grows up to a cap set in JS (no Chromium-only `field-sizing` hack); the
+// height is driven by the scrollHeight measurement in the component.
+.promptTextarea {
+  background: transparent;
+  border: none;
+  color: var(--gray-12);
+  font-family: var(--default-font-family);
+  font-size: var(--font-size-3);
+  line-height: var(--line-height-3);
+  max-height: 240px;
+  outline: none;
+  padding: 0;
+  resize: none;
+  width: 100%;
+
+  @include thin-scrollbar($autohide: false);
+
+  &::placeholder {
+    color: var(--gray-9);
+  }
+}
+
+// Breadcrumb context pills (repo / agent type / mode / branch source).
+.contextRow {
+  border-top: 1px solid var(--gray-a4);
+  padding-top: var(--space-3);
+}
+
+.footer {
+  border-top: 1px solid var(--gray-a4);
+  padding-top: var(--space-3);
+}
+
+.keepOpenLabel {
+  align-items: center;
+  color: var(--gray-11);
+  display: flex;
+  gap: var(--space-2);
+}

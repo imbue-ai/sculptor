@@ -22,6 +22,12 @@ type UseBranchNamePreviewArgs = {
   mode: WorkspaceInitializationStrategy;
   /** The user's manual override; null means "use the auto-filled preview". */
   override: string | null;
+  /**
+   * Bump to force a fresh preview fetch even when the other inputs are
+   * unchanged. The "shuffle" button uses this to re-roll the random slug the
+   * backend generates when the workspace name is blank. Defaults to 0.
+   */
+  shuffleNonce?: number;
 };
 
 const PREVIEW_DEBOUNCE_MS = 250;
@@ -32,6 +38,7 @@ export function useBranchNamePreview({
   workspaceName,
   mode,
   override,
+  shuffleNonce = 0,
 }: UseBranchNamePreviewArgs): BranchNamePreviewState {
   const [preview, setPreview] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -71,7 +78,7 @@ export function useBranchNamePreview({
     return (): void => {
       window.clearTimeout(timer);
     };
-  }, [projectId, workspaceName, mode, isManuallyEdited]);
+  }, [projectId, workspaceName, mode, isManuallyEdited, shuffleNonce]);
 
   useEffect(() => {
     if (mode === Strategy.IN_PLACE || !projectId) {
