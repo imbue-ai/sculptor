@@ -26,6 +26,7 @@ from sculptor.testing.elements.alpha_chat_view import get_alpha_chat_view
 from sculptor.testing.elements.pr_popover import PlaywrightPrPopoverElement
 from sculptor.testing.elements.terminal import get_agent_terminal_panel
 from sculptor.testing.elements.terminal import wait_for_xterm_substring
+from sculptor.testing.fake_claude_pause import FakeClaudePause
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.playwright_utils import full_spa_reload
 from sculptor.testing.playwright_utils import navigate_to_settings_page
@@ -576,16 +577,15 @@ def test_babysitter_defers_while_agent_busy_then_dispatches_when_idle(
     page = sculptor_instance_.page
     state_file = tmp_path / "gh_state"
     state_file.write_text("running")
-    # Sentinel the busy agent blocks on; absent → the agent stays RUNNING.
-    release_file = tmp_path / "agent_release"
+    # Keep the workspace agent busy (RUNNING) until the test releases it — a
+    # signaled pause, not a wall-clock, so CI overhead can't race the window.
+    pause = FakeClaudePause()
 
     _enable_babysitter(sculptor_instance_)
     _install_state_driven_gh(sculptor_instance_, state_file)
     _set_remote(sculptor_instance_, _FAKE_GITHUB_REMOTE)
 
-    # Start an agent that stays busy until the test creates the sentinel file.
-    busy_prompt = f'fake_claude:wait_for_file `{{"path": "{release_file}", "timeout_seconds": 300}}`'
-    task_page = start_task_and_wait_for_ready(page, busy_prompt, wait_for_agent_to_finish=False)
+    task_page = start_task_and_wait_for_ready(page, pause.prompt, wait_for_agent_to_finish=False)
     chat_panel = task_page.get_chat_panel()
     # Confirm the agent is actually busy before arming CI.
     expect(chat_panel.get_thinking_indicator()).to_be_visible(timeout=30_000)
@@ -616,7 +616,7 @@ def test_babysitter_defers_while_agent_busy_then_dispatches_when_idle(
 
     # Release the agent → it finishes its turn and goes idle → the deferred
     # babysitter prompt is delivered on the coordinator's next re-check tick.
-    release_file.write_text("go")
+    pause.release()
 
     expect(babysitter_tab.first).to_be_visible(timeout=60_000)
     babysitter_tab.first.click()
