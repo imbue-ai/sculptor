@@ -72,3 +72,15 @@ export const isWorkspaceListEmptyAtom: Atom<boolean> = atom<boolean>((get) => {
   }
   return workspaces.length === 0;
 });
+
+/**
+ * True in the empty first-run state, where navigation is deliberately pared
+ * back to just the inline form + Settings (FIRST-03). The global keyboard
+ * shortcuts hook and the command palette's open path read this and no-op while
+ * it's set, so Cmd+K and the rest of the shortcuts stay off until the first
+ * workspace exists. Tracks `isWorkspaceListEmptyAtom` exactly today; kept as a
+ * separate, intent-named atom so the shortcut-gating contract is explicit and
+ * can diverge later (e.g. allow more shortcuts) without touching the
+ * empty-page render condition.
+ */
+export const areGlobalShortcutsDisabledAtom: Atom<boolean> = atom<boolean>((get) => get(isWorkspaceListEmptyAtom));

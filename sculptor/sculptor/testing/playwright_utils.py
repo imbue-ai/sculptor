@@ -185,49 +185,72 @@ def open_command_palette(page: Page) -> None:
     expect(page.get_by_test_id(ElementIDs.COMMAND_PALETTE)).to_be_visible()
 
 
-def navigate_to_add_workspace_page(page: Page) -> None:
-    """Navigate to the Add Workspace page (/ws/new).
+def get_workspace_creation_button(page: Page) -> tuple[Locator, bool]:
+    """Resolve the settled workspace-creation surface and its create button.
 
-    Clicks the "+" button in the workspace tabs bar, or is a no-op if the
-    submit button is already visible (i.e. we're already on the page).
-    Falls back to direct URL navigation when on a page that doesn't show
-    workspace controls (e.g. settings).
+    Two surfaces create a workspace: the inline empty-first-run form
+    (``NEW_WORKSPACE_CREATE_BUTTON``, shown when no workspaces exist yet) and the
+    legacy ``/ws/new`` page (``START_TASK_BUTTON``, shown when workspaces exist).
 
-    If an "Open Workspace" tab already exists in the tab bar, clicks it
-    instead of creating a new one via "+".  This avoids creating duplicate
-    tabs when the add-workspace page is still loading (e.g. fetching projects).
+    On an empty instance the gate briefly flashes the (disabled) /ws/new page before
+    swapping in the inline form, so this waits for the surface to settle — the inline
+    button only mounts once the gate has resolved to the empty state, and the legacy
+    flash is never enabled before that swap — then returns ``(button, is_inline_form)``.
     """
-    submit_button = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
-    if submit_button.is_visible():
+    page.wait_for_function(
+        """({ inlineId, legacyId }) => {
+          const inline = document.querySelector(`[data-testid="${inlineId}"]`);
+          if (inline) return true;  // inline first-run form has settled in
+          const legacy = document.querySelector(`[data-testid="${legacyId}"]`);
+          return !!legacy && !legacy.disabled;  // /ws/new page ready (workspaces exist)
+        }""",
+        arg={
+            "inlineId": ElementIDs.NEW_WORKSPACE_CREATE_BUTTON,
+            "legacyId": ElementIDs.START_TASK_BUTTON,
+        },
+        timeout=45_000,
+    )
+    inline_create = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_CREATE_BUTTON)
+    if inline_create.count() > 0:
+        return inline_create, True
+    return page.get_by_test_id(ElementIDs.START_TASK_BUTTON), False
+
+
+def navigate_to_add_workspace_page(page: Page) -> None:
+    """Bring up a workspace-creation surface (the inline first-run form or /ws/new).
+
+    No-op if a create surface is already showing. In the new shell the sidebar's
+    new-workspace button DIRECT-CREATES (Task 5.2) rather than opening the page, so
+    this navigates to the /ws/new draft route directly: when workspaces exist the
+    route renders the (still-present, until Task 7.3) add-workspace page; when none
+    exist the empty-first-run gate renders the inline new-workspace form instead.
+    Either way a create button appears.
+    """
+    inline_create = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_CREATE_BUTTON)
+    legacy_submit = page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
+    if inline_create.is_visible() or legacy_submit.is_visible():
         return
 
-    # If an add-workspace tab already exists (e.g. from an earlier redirect or
-    # navigation), click it instead of creating a new one.  This handles the
-    # case where we're already on /ws/new/<draftId> but the form is still
-    # loading (showing a spinner while projects load).
+    # Legacy top-bar tab/button (old shell), if present.
     add_workspace_tab = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_TAB)
     if add_workspace_tab.count() > 0:
         add_workspace_tab.first.click()
-        expect(submit_button).to_be_visible(timeout=45_000)
+        expect(legacy_submit).to_be_visible(timeout=45_000)
         return
 
     add_workspace_button = page.get_by_test_id(ElementIDs.ADD_WORKSPACE_BUTTON)
     if add_workspace_button.is_visible():
         add_workspace_button.click()
-        expect(submit_button).to_be_visible(timeout=45_000)
+        expect(legacy_submit).to_be_visible(timeout=45_000)
         return
 
-    # New shell: the workspace route has no top-bar tab/button, and the sidebar's
-    # new-workspace button now DIRECT-CREATES (Task 5.2) rather than opening the
-    # /ws/new page. The page itself is still present until Task 7.3, so reach it
-    # directly by its route (a fresh draft id avoids reusing prior draft state).
-    # The bare base-URL fallback only lands on /ws/new when no workspace exists yet
-    # (the root loader then redirects); for a second-workspace create it would land
-    # on the existing workspace, so navigate to the draft route explicitly.
+    # New shell: reach the /ws/new draft route directly (a fresh draft id avoids
+    # reusing prior draft state). Wait for EITHER create surface — the gate swaps in
+    # the inline first-run form when no workspaces exist yet.
     base_url = page.url.split("#")[0].rstrip("/")
     page.goto(f"{base_url}/#/ws/new/{uuid.uuid4()}")
     page.wait_for_load_state("domcontentloaded")
-    expect(submit_button).to_be_visible(timeout=45_000)
+    expect(inline_create.or_(legacy_submit)).to_be_visible(timeout=45_000)
 
 
 def reset_active_panel_to_files(page: Page) -> None:
@@ -393,6 +416,11 @@ def start_task_and_wait_for_ready(
 
     navigate_to_add_workspace_page(sculptor_page)
 
+    # The same name/mode/agent-type fields back both creation surfaces (the inline
+    # empty-first-run form and the /ws/new page); they differ only in the create
+    # button, and the inline form pre-seeds the prompt (cleared below).
+    submit_button, is_inline_form = get_workspace_creation_button(sculptor_page)
+
     # Fill in the workspace name. Each call gets a unique name by default so
     # the auto-generated worktree branch (`<user>/<slug>`) doesn't collide
     # when a test creates multiple workspaces. Callers that need a specific
@@ -417,10 +445,16 @@ def start_task_and_wait_for_ready(
         }[agent_type]
         sculptor_page.get_by_test_id(option_id).click()
 
+    # The empty-first-run inline form seeds the prompt with `/sculptor:help`; clear
+    # it so the first agent is created promptless and this helper sends `prompt` as
+    # the first chat message below (matching the /ws/new flow) — otherwise the agent
+    # would receive both the prefill and the test's prompt.
+    if is_inline_form:
+        sculptor_page.get_by_test_id(ElementIDs.NEW_WORKSPACE_PROMPT_TEXTAREA).fill("")
+
     # Wait for the submit button to be enabled — repo info loaded, AND the
-    # worktree-mode branch-name preview has populated the input (the page
+    # worktree-mode branch-name preview has populated the input (the form
     # gates submit on a non-empty branch name in worktree mode).
-    submit_button = sculptor_page.get_by_test_id(ElementIDs.START_TASK_BUTTON)
     expect(submit_button).to_be_enabled()
 
     # Click create workspace

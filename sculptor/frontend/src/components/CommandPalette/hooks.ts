@@ -12,6 +12,7 @@ import {
   zenModeActiveAtom,
 } from "~/components/panels/atoms.ts";
 
+import { areGlobalShortcutsDisabledAtom } from "../newWorkspace/newWorkspaceAtoms.ts";
 import {
   commandPaletteInitialPageAtom,
   commandPaletteOpenAtom,
@@ -112,6 +113,12 @@ export const useCommandPalette = (): {
   const setSearch = useSetAtom(commandPaletteSearchAtom);
   const setPages = useSetAtom(commandPalettePagesAtom);
   const setInitialPage = useSetAtom(commandPaletteInitialPageAtom);
+  // FIRST-03: the palette is unreachable in the empty first-run state. Gate the
+  // open paths here (rather than only at the keyboard hook) so every entry —
+  // the sidebar Search button, deep links, commands that re-open it — is
+  // covered by one rule. `close`/`toggle` never get stuck open because opening
+  // is blocked in the first place.
+  const areGlobalShortcutsDisabled = useAtomValue(areGlobalShortcutsDisabledAtom);
 
   // open/close just flip `isOpen`. The reset of search / page stack /
   // context-action targets is owned exclusively by `useResetOnOpenChange`
@@ -120,11 +127,13 @@ export const useCommandPalette = (): {
   // ensures raw `setIsOpen(...)` callers (tests, deep links) get the
   // same reset behavior.
   const open = useCallback(() => {
+    if (areGlobalShortcutsDisabled) return;
     setIsOpen(true);
-  }, [setIsOpen]);
+  }, [areGlobalShortcutsDisabled, setIsOpen]);
 
   const openTo = useCallback(
     (pageId: PageId) => {
+      if (areGlobalShortcutsDisabled) return;
       if (!isValidPageId(pageId)) {
         console.error(`[command-palette] openTo: unknown page id "${pageId}" — opening at root`);
         setIsOpen(true);
@@ -135,7 +144,7 @@ export const useCommandPalette = (): {
       setInitialPage(pageId);
       setIsOpen(true);
     },
-    [setInitialPage, setIsOpen],
+    [areGlobalShortcutsDisabled, setInitialPage, setIsOpen],
   );
 
   const close = useCallback(() => {
@@ -143,8 +152,9 @@ export const useCommandPalette = (): {
   }, [setIsOpen]);
 
   const toggle = useCallback(() => {
+    if (areGlobalShortcutsDisabled) return;
     setIsOpen((prev) => !prev);
-  }, [setIsOpen]);
+  }, [areGlobalShortcutsDisabled, setIsOpen]);
 
   const pushPage = useCallback(
     (pageId: PageId) => {

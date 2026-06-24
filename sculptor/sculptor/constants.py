@@ -639,6 +639,15 @@ class ElementIDs(StrEnum):
     SIDEBAR_COLLAPSE_TOGGLE = "SIDEBAR_COLLAPSE_TOGGLE"
     SIDEBAR_RESIZE_HANDLE = "SIDEBAR_RESIZE_HANDLE"
     SIDEBAR_EXPAND_ICON = "SIDEBAR_EXPAND_ICON"
+    # Empty first-run sidebar repo-area states (FIRST-02): the "Add a repo"
+    # button shown when no repos exist, and the "No workspaces yet" hint shown
+    # beneath a repo that has no workspaces.
+    SIDEBAR_ADD_REPO_BUTTON = "SIDEBAR_ADD_REPO_BUTTON"
+    SIDEBAR_NO_WORKSPACES_HINT = "SIDEBAR_NO_WORKSPACES_HINT"
+
+    # Empty first-run page (FIRST-01): the no-workspaces special page that
+    # renders the new-workspace form inline with the sidebar open.
+    EMPTY_FIRST_RUN_PAGE = "EMPTY_FIRST_RUN_PAGE"
 
     # Workspace header (the simplified top bar above the section grid): branch
     # pill + section collapse/expand toggles + re-homed PR button / diff summary.

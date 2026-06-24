@@ -222,6 +222,16 @@
   white-space: nowrap;
 }
 
+// FIRST-02 empty-state hint beneath a repo that has no workspaces. Indented to
+// align with where workspace rows would sit and dimmed so it reads as a
+// placeholder rather than an actionable row.
+.noWorkspacesHint {
+  color: var(--gray-10);
+  font-size: var(--font-size-1);
+  font-style: italic;
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-5);
+}
+
 .spacer {
   flex-grow: 1;
   flex-shrink: 0;

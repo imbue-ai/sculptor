@@ -32,6 +32,12 @@ const PROMPT_MAX_TEXTAREA_HEIGHT_PX = 240;
 type NewWorkspaceFormProps = {
   /** Repo to pre-select (from a repo group's "+"); overrides the MRU seed. */
   presetProjectId?: string;
+  /**
+   * Text to seed the prompt textarea with on mount. Used by the empty
+   * first-run page to default the very first prompt to `/sculptor:help`
+   * (FIRST-04). A mount-time snapshot the user can freely edit.
+   */
+  initialPrompt?: string;
   /** Called after a successful create when "keep open" is off. */
   onCreated: () => void;
 };
@@ -44,7 +50,11 @@ type NewWorkspaceFormProps = {
  * `lastWorkspaceCreationSettingsAtom` and the preset repo. Reuses this branch's
  * RepoSelector / BranchSelector / BranchNameField and the factored create hook.
  */
-export const NewWorkspaceForm = ({ presetProjectId, onCreated }: NewWorkspaceFormProps): ReactElement => {
+export const NewWorkspaceForm = ({
+  presetProjectId,
+  initialPrompt,
+  onCreated,
+}: NewWorkspaceFormProps): ReactElement => {
   // State and hooks — atoms
   const projects = useAtomValue(projectsArrayAtom);
   const updateProjects = useSetAtom(updateProjectsAtom);
@@ -62,7 +72,7 @@ export const NewWorkspaceForm = ({ presetProjectId, onCreated }: NewWorkspaceFor
     () => presetProjectId ?? lastSettings?.projectId ?? null,
   );
   const [workspaceName, setWorkspaceName] = useState<string>("");
-  const [prompt, setPrompt] = useState<string>("");
+  const [prompt, setPrompt] = useState<string>(() => initialPrompt ?? "");
   const [mode, setMode] = useState<WorkspaceInitializationStrategy>(
     () => lastSettings?.initStrategy ?? WorkspaceInitializationStrategy.WORKTREE,
   );

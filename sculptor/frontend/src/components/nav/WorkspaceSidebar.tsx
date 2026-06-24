@@ -5,6 +5,7 @@ import {
   Bug,
   ChevronDown,
   ChevronRight,
+  FolderPlus,
   Home,
   MoreHorizontal,
   PanelLeftClose,
@@ -14,7 +15,7 @@ import {
   Trash2,
 } from "lucide-react";
 import type { ReactElement } from "react";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import type { Workspace } from "~/api";
 import { ElementIds, updateWorkspace } from "~/api";
@@ -30,6 +31,7 @@ import {
 import { useOpenSettings } from "~/common/state/hooks/useOpenSettings.ts";
 import { useOptimisticWorkspaceDelete } from "~/common/state/hooks/useOptimisticWorkspaceDelete.ts";
 import { useThemeDangerColor } from "~/common/state/hooks/useThemeBuilder.ts";
+import { AddRepoDialog } from "~/components/add-repo/AddRepoDialog.tsx";
 import { useCommandPalette } from "~/components/CommandPalette";
 import { renamingWorkspaceIdAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
 import { type OpenInRuntime, WorkspaceContextMenuContent } from "~/components/CommandPalette/contextActions/menu.tsx";
@@ -39,11 +41,12 @@ import { buildWorkspaceActions } from "~/components/CommandPalette/contextAction
 import { InlineRenameInput } from "~/components/InlineRenameInput.tsx";
 import { sidebarCollapsedAtom, sidebarWidthAtom } from "~/components/layout/sidebarAtoms.ts";
 import { collapsedRepoGroupsAtom } from "~/components/nav/navAtoms.ts";
-import { newWorkspaceModalAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
+import { isWorkspaceListEmptyAtom, newWorkspaceModalAtom } from "~/components/newWorkspace/newWorkspaceAtoms.ts";
 import { useCreateWorkspaceFromSidebar } from "~/components/newWorkspace/useCreateWorkspaceFromSidebar.ts";
 import { ReportProblemPopover } from "~/components/ReportProblemPopover.tsx";
 import { ResizeHandle } from "~/components/sections/ResizeHandle.tsx";
 import { computeWorkspaceDotStatus, EMPTY_WORKSPACE_DOT_STATUS, WorkspaceStatusDots } from "~/components/statusDot";
+import { Toast, type ToastContent } from "~/components/Toast.tsx";
 import { useWorkspaceTabActions } from "~/components/useWorkspaceTabActions.ts";
 import { VersionDisplay } from "~/components/VersionDisplay.tsx";
 import { HOME_TAB_ID, SETTINGS_TAB_ID } from "~/components/workspaceTabIds.ts";
@@ -136,6 +139,15 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   const setCollapsedRepos = useSetAtom(collapsedRepoGroupsAtom);
   const effectiveOpenTabIds = useAtomValue(effectiveOpenTabIdsAtom);
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useAtom(renamingWorkspaceIdAtom);
+  // FIRST-02: in the empty first-run state the repo area shows its own
+  // "Add a repo" / "No workspaces yet" affordances; outside it the sidebar is
+  // unchanged.
+  const isWorkspaceListEmpty = useAtomValue(isWorkspaceListEmptyAtom);
+
+  // Internal state — the add-repo dialog opened from the empty-state
+  // "Add a repo" button (and its toast).
+  const [isAddRepoDialogOpen, setIsAddRepoDialogOpen] = useState<boolean>(false);
+  const [addRepoToast, setAddRepoToast] = useState<ToastContent | null>(null);
 
   // External hooks
   const { navigateToWorkspace, navigateToAgent, navigateToHome, navigateToGlobalSettings } = useImbueNavigate();
@@ -315,6 +327,35 @@ export const WorkspaceSidebar = (): ReactElement | null => {
       </nav>
 
       <div className={styles.repoList}>
+        {/* FIRST-02: empty first-run repo area. With no repos, an "Add a repo"
+            button; with repos but no workspaces, each repo header followed by a
+            "No workspaces yet" hint. `repoGroups` is built from workspaces, so
+            it's empty here — render from `projects` instead. */}
+        {isWorkspaceListEmpty ? (
+          projects.length === 0 ? (
+            <NavItem
+              icon={FolderPlus}
+              label="Add a repo"
+              onClick={() => setIsAddRepoDialogOpen(true)}
+              testId={ElementIds.SIDEBAR_ADD_REPO_BUTTON}
+            />
+          ) : (
+            projects.map((project) => (
+              <div key={project.objectId} className={styles.repoGroup}>
+                <div className={styles.repoHeader}>
+                  <span className={styles.repoHeaderButton}>
+                    <Text className={styles.repoName} truncate>
+                      {project.name}
+                    </Text>
+                  </span>
+                </div>
+                <Text className={styles.noWorkspacesHint} data-testid={ElementIds.SIDEBAR_NO_WORKSPACES_HINT}>
+                  No workspaces yet
+                </Text>
+              </div>
+            ))
+          )
+        ) : null}
         {repoGroups.map((group) => {
           const isRepoCollapsed = collapsedRepos[group.projectId] ?? false;
           const Chevron = isRepoCollapsed ? ChevronRight : ChevronDown;
@@ -489,6 +530,15 @@ export const WorkspaceSidebar = (): ReactElement | null => {
         className={styles.resizeHandle}
         ariaLabel="Resize sidebar"
         data-testid={ElementIds.SIDEBAR_RESIZE_HANDLE}
+      />
+
+      {/* Empty first-run "Add a repo" flow reuses the standard add-repo dialog. */}
+      <AddRepoDialog open={isAddRepoDialogOpen} onOpenChange={setIsAddRepoDialogOpen} setToast={setAddRepoToast} />
+      <Toast
+        open={addRepoToast !== null}
+        onOpenChange={(open) => !open && setAddRepoToast(null)}
+        title={addRepoToast?.title}
+        type={addRepoToast?.type}
       />
     </aside>
   );
