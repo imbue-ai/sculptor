@@ -37,13 +37,14 @@ The `--trace-to` flag traces from boot and writes once, on clean shutdown.
 When you instead need to profile a backend that is *already running* — most
 importantly a signed production build, which `py-spy`/`lldb` cannot attach to
 because of the hardened runtime — arm and disarm viztracer at runtime over
-HTTP:
+HTTP. These commands live under `sculpt debug` because they exist for Sculptor
+development only, not as end-user functionality:
 
 ```sh
-sculpt trace start          # arm; prints the output path it will write to
+sculpt debug trace start    # arm; prints the output path it will write to
 # ...reproduce the slow path...
-sculpt trace stop           # stop, flush the Chrome-JSON file, print its path
-sculpt trace status         # is a trace running right now?
+sculpt debug trace stop     # stop, flush the Chrome-JSON file, print its path
+sculpt debug trace status   # is a trace running right now?
 ```
 
 This works in-process, so it needs no debugger entitlement and no signals.

@@ -1,11 +1,16 @@
 """Low-level diagnostics against a running Sculptor backend.
 
-    sculpt debug threads        # print a Python traceback for every thread
+**For Sculptor development only — not end-user functionality.** These commands
+exist to debug and profile the Sculptor backend itself; they are not part of
+the product surface and may change or disappear without notice.
 
-This is the lightweight alternative to a full trace when the backend looks
-wedged: it returns an instant snapshot of every thread's Python stack via
-``sys._current_frames()`` (greenlet-safe — no signals, no C-stack walk).
-Requires the session token, which ``get_authenticated_client`` resolves.
+    sculpt debug threads              # print a Python traceback for every thread
+    sculpt debug trace start|stop|status   # profile the backend (viztracer)
+
+``threads`` is the lightweight alternative to a full trace when the backend
+looks wedged: it returns an instant snapshot of every thread's Python stack via
+``sys._current_frames()`` (greenlet-safe — no signals, no C-stack walk). All
+commands require the session token, which ``get_authenticated_client`` resolves.
 """
 
 import httpx
@@ -13,10 +18,14 @@ import typer
 
 from sculpt.auth import get_authenticated_client
 from sculpt.auth import get_default_base_url
+from sculpt.commands.trace import trace_app
 from sculpt.formatting import cli_error
 from sculpt.formatting import handle_connection_error
 
-debug_app = typer.Typer(help="Low-level diagnostics for a running Sculptor backend.")
+debug_app = typer.Typer(
+    help="Diagnostics for a running Sculptor backend. For Sculptor development only — not end-user functionality."
+)
+debug_app.add_typer(trace_app, name="trace")
 
 _OUTPUT_OPTION = typer.Option(None, "--output", "-o", help="Write the dump to this file instead of stdout.")
 
