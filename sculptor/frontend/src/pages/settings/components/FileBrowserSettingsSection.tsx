@@ -1,7 +1,7 @@
 import { Flex, Select, Text, TextField } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { UserConfigField } from "~/api";
 import {
@@ -32,9 +32,14 @@ export const FileBrowserSettingsSection = ({ onSettingChange }: FileBrowserSetti
   const diffViewType = useAtomValue(fileBrowserDiffViewTypeAtom);
   const commitPrompt = useAtomValue(commitPromptAtom);
 
+  // Local draft of the split-ratio input, resynced during render whenever the
+  // committed atom value changes (e.g. another tab edits it or a blur rejects).
   const [splitRatioValue, setSplitRatioValue] = useState(String(splitRatio));
-
-  useEffect(() => setSplitRatioValue(String(splitRatio)), [splitRatio]);
+  const [lastSplitRatio, setLastSplitRatio] = useState(splitRatio);
+  if (splitRatio !== lastSplitRatio) {
+    setLastSplitRatio(splitRatio);
+    setSplitRatioValue(String(splitRatio));
+  }
 
   const handleSplitRatioBlur = (): void => {
     const parsed = parseInt(splitRatioValue, 10);

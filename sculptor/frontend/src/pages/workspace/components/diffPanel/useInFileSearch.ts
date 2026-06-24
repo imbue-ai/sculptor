@@ -121,9 +121,13 @@ export const useInFileSearch = ({
   const [totalMatches, setTotalMatches] = useState(0);
   const rangesRef = useRef<Array<Range>>([]);
   // Latest-ref mirror of the active index so the next/prev handlers can compute
-  // the target without listing currentMatchIndex as a callback dependency.
+  // the target without listing currentMatchIndex as a callback dependency. Synced
+  // in an effect (not during render) to satisfy the refs lint; the handlers only
+  // run on user interaction, well after commit, so the ref is never read stale.
   const currentMatchIndexRef = useRef(0);
-  currentMatchIndexRef.current = currentMatchIndex;
+  useEffect(() => {
+    currentMatchIndexRef.current = currentMatchIndex;
+  }, [currentMatchIndex]);
   const [domVersion, setDomVersion] = useState(0);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 

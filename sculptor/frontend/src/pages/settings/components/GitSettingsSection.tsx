@@ -1,7 +1,7 @@
 import { Switch, Text, TextField } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
 import type { ReactElement } from "react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { ElementIds, UserConfigField } from "../../../api";
 import {
@@ -35,13 +35,28 @@ export const GitSettingsSection = ({ onSettingChange }: GitSettingsSectionProps)
   const prPollClosedMultiplier = useAtomValue(prPollClosedMultiplierAtom);
   const prDefaultTargetBranch = useAtomValue(prDefaultTargetBranchAtom);
 
+  // Editable drafts resync to the atom whenever it changes (e.g. a save elsewhere),
+  // tracking the previous atom value to reset the draft during render instead of in an effect.
   const [pollIntervalValue, setPollIntervalValue] = useState(String(prPollInterval));
-  const [closedMultiplierValue, setClosedMultiplierValue] = useState(String(prPollClosedMultiplier));
-  const [targetBranchValue, setTargetBranchValue] = useState(prDefaultTargetBranch);
+  const [prevPollInterval, setPrevPollInterval] = useState(prPollInterval);
+  if (prevPollInterval !== prPollInterval) {
+    setPrevPollInterval(prPollInterval);
+    setPollIntervalValue(String(prPollInterval));
+  }
 
-  useEffect(() => setPollIntervalValue(String(prPollInterval)), [prPollInterval]);
-  useEffect(() => setClosedMultiplierValue(String(prPollClosedMultiplier)), [prPollClosedMultiplier]);
-  useEffect(() => setTargetBranchValue(prDefaultTargetBranch), [prDefaultTargetBranch]);
+  const [closedMultiplierValue, setClosedMultiplierValue] = useState(String(prPollClosedMultiplier));
+  const [prevClosedMultiplier, setPrevClosedMultiplier] = useState(prPollClosedMultiplier);
+  if (prevClosedMultiplier !== prPollClosedMultiplier) {
+    setPrevClosedMultiplier(prPollClosedMultiplier);
+    setClosedMultiplierValue(String(prPollClosedMultiplier));
+  }
+
+  const [targetBranchValue, setTargetBranchValue] = useState(prDefaultTargetBranch);
+  const [prevTargetBranch, setPrevTargetBranch] = useState(prDefaultTargetBranch);
+  if (prevTargetBranch !== prDefaultTargetBranch) {
+    setPrevTargetBranch(prDefaultTargetBranch);
+    setTargetBranchValue(prDefaultTargetBranch);
+  }
 
   const handlePollIntervalBlur = (): void => {
     const parsed = parseInt(pollIntervalValue, 10);

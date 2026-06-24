@@ -82,7 +82,9 @@ export const AddWorkspacePage = (): ReactElement => {
   // Latest selection, read inside the one-shot project-load effect without
   // making it a dependency (which would re-fetch projects on every change).
   const selectedProjectIdRef = useRef(selectedProjectId);
-  selectedProjectIdRef.current = selectedProjectId;
+  useEffect(() => {
+    selectedProjectIdRef.current = selectedProjectId;
+  });
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
 
   // Form state. Worktree is the default mode; clone and in-place are opt-in.

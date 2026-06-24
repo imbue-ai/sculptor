@@ -40,6 +40,7 @@ export const TabBar = ({
     overId: null,
   });
   const [containerWidth, setContainerWidth] = useState<number>(0);
+  const [childrenWidth, setChildrenWidth] = useState<number>(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const childrenRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -70,6 +71,28 @@ export const TabBar = ({
         cancelAnimationFrame(rafId);
       }
     };
+  }, [isCompact]);
+
+  // Measure the children/controls width so tab sizing can subtract it (default variant only).
+  // ResizeObserver fires post-layout, so the measured width is current without reading the ref during render.
+  useEffect((): (() => void) | void => {
+    const element = childrenRef.current;
+    if (isCompact || !element) {
+      setChildrenWidth(0);
+      return;
+    }
+
+    setChildrenWidth(element.offsetWidth);
+    const observer = new ResizeObserver((): void => {
+      setChildrenWidth(element.offsetWidth);
+    });
+
+    observer.observe(element);
+    return (): void => {
+      observer.disconnect();
+    };
+    // The ResizeObserver handles content-driven width changes, so this only
+    // needs to re-run when the measured/compact mode flips.
   }, [isCompact]);
 
   // Auto-scroll active tab into view
@@ -124,12 +147,11 @@ export const TabBar = ({
 
     if (containerWidth === 0) return maxTabWidth;
 
-    const childrenWidth = childrenRef.current?.offsetWidth ?? 0;
     const availableWidth = containerWidth - childrenWidth;
     const naturalWidth = Math.min(availableWidth / openTabIds.length, maxTabWidth);
 
     return Math.max(MIN_TAB_WIDTH, naturalWidth);
-  }, [containerWidth, openTabIds.length, maxTabWidth, isCompact]);
+  }, [containerWidth, childrenWidth, openTabIds.length, maxTabWidth, isCompact]);
 
   const isCloseable = alwaysCloseable || openTabIds.length > 1;
   const isDragActive = dragState.activeId !== null;

@@ -81,6 +81,13 @@ export const useRepoInfo = (projectId: ProjectID): RepoInfoHookReturn => {
     }
   }, [projectId, store]);
 
+  // Once repo info loads successfully, reset the retry counter during render so a
+  // later failure starts a fresh retry budget. Adjusting here avoids the extra
+  // render an effect-based reset would add.
+  if (repoInfo !== null && retryAttempt !== 0) {
+    setRetryAttempt(0);
+  }
+
   // Retry fetching repo info if the initial fetch failed and left the atom
   // null.  This handles transient backend errors (e.g. the repo directory
   // being temporarily unavailable) that would otherwise leave the UI stuck
@@ -92,14 +99,7 @@ export const useRepoInfo = (projectId: ProjectID): RepoInfoHookReturn => {
   // short-circuits the no-op write — no re-render, no effect re-run, and
   // retries silently stop after the first attempt.
   useEffect(() => {
-    if (repoInfo !== null) {
-      if (retryAttempt !== 0) {
-        setRetryAttempt(0);
-      }
-      return;
-    }
-
-    if (retryAttempt >= MAX_RETRIES) {
+    if (repoInfo !== null || retryAttempt >= MAX_RETRIES) {
       return;
     }
 

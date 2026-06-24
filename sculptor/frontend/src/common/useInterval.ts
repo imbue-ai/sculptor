@@ -9,7 +9,9 @@ export const useInterval = (callback: () => void, intervalMs: number): void => {
 
   // Keep the ref in sync so the interval always calls the latest callback
   // without restarting the timer.
-  callbackRef.current = callback;
+  useEffect(() => {
+    callbackRef.current = callback;
+  });
 
   useEffect(() => {
     const id = setInterval(() => {

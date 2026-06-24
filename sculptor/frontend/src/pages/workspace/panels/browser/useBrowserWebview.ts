@@ -43,9 +43,11 @@ export const useBrowserWebview = (
   // captures the originally-passed callbacks. Reading via ref keeps it
   // pointing at the most recent props on every event.
   const onUrlChangeRef = useRef(onUrlChange);
-  onUrlChangeRef.current = onUrlChange;
   const setStatusRef = useRef(setStatus);
-  setStatusRef.current = setStatus;
+  useEffect(() => {
+    onUrlChangeRef.current = onUrlChange;
+    setStatusRef.current = setStatus;
+  });
 
   useEffect(() => {
     const webview = webviewRef.current;

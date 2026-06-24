@@ -63,6 +63,9 @@ type Nav = NonNullable<ReturnType<typeof useToolNavigation>>;
 
 let capturedOuterNav: Nav | null = null;
 const OuterNavCapture = ({ children }: { children: ReactNode }): ReactElement => {
+  // Test-only: capture the hook's value into an outer variable so assertions can
+  // read it. This render-time write is intentional and safe in a test harness.
+  // eslint-disable-next-line react-hooks/globals
   capturedOuterNav = useToolNavigation();
   return <>{children}</>;
 };

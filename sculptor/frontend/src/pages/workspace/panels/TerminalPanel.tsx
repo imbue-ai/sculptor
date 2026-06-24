@@ -143,8 +143,13 @@ const TerminalPanelContent = ({ workspaceID }: { workspaceID: string }): ReactEl
   }, [setTerminalPanelMounted]);
 
   const [unreadTabIds, setUnreadTabIds] = useState<Set<string>>(new Set());
+  // Mirror activeTabId into a ref so the terminal-output callback stays stable.
+  // The ref is read only inside that callback, never during render, so syncing
+  // it in an effect keeps render pure without changing behavior.
   const activeTabIdRef = useRef(activeTabId);
-  activeTabIdRef.current = activeTabId;
+  useEffect(() => {
+    activeTabIdRef.current = activeTabId;
+  });
 
   const handleTerminalOutput = useCallback((tabId: string) => {
     setUnreadTabIds((prev) => {

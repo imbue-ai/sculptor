@@ -81,10 +81,13 @@ export const PathAutocomplete = ({
   const fetchIdRef = useRef(0);
   const rootRef = useRef<HTMLDivElement>(null);
   // Keep a ref in sync with isOpen so the document-level listeners below read the
-  // latest value without re-subscribing. Assigned during render (not in an effect)
-  // so the ref is never stale — see the "latest ref" pattern.
+  // latest value without re-subscribing. Synced in an effect (not during render)
+  // to satisfy the refs lint; the listeners only fire on user interaction, well
+  // after commit, so the ref is never observed stale — see the "latest ref" pattern.
   const isOpenRef = useRef(isOpen);
-  isOpenRef.current = isOpen;
+  useEffect(() => {
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
 
   const closeDropdown = useCallback((): void => {
     if (debounceRef.current) {
