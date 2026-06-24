@@ -6,6 +6,7 @@ from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.actions_panel import PlaywrightActionsPanelElement
+from sculptor.testing.elements.agent_tab import PlaywrightAgentTabBarElement
 from sculptor.testing.elements.browser_panel import PlaywrightBrowserPanelElement
 from sculptor.testing.elements.changes_panel import PlaywrightChangesPanelElement
 from sculptor.testing.elements.chat_panel import PlaywrightChatPanelElement
@@ -14,7 +15,6 @@ from sculptor.testing.elements.compaction_panel import PlaywrightCompactionPanel
 from sculptor.testing.elements.diff_panel import PlaywrightDiffPanelElement
 from sculptor.testing.elements.file_browser import PlaywrightFileBrowserElement
 from sculptor.testing.elements.history_panel import PlaywrightHistoryPanelElement
-from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 
 
@@ -23,16 +23,15 @@ class PlaywrightTaskPage(PlaywrightProjectLayoutPage):
         chat_panel = self.get_by_test_id(ElementIDs.CHAT_PANEL)
         return PlaywrightChatPanelElement(locator=chat_panel, page=self._page)
 
-    def get_agent_tab_bar(self) -> PlaywrightWorkspaceSection:
-        """Get a thin panel-tab accessor over the center section.
+    def get_agent_tab_bar(self) -> PlaywrightAgentTabBarElement:
+        """Get the agent-tab-bar shim over the center section's panel tabs.
 
-        Agents render as panel tabs in the section header (``PANEL_TAB-agent:<id>``).
-        The full ``PanelTab`` POM (rename/close/diagnostics/add-agent dropdown)
-        lands in a later task; this returns the basic section accessor whose
-        ``get_panel_tabs`` / ``get_panel_tab`` / ``get_active_tab`` cover the
-        tab-strip surface for new tests.
+        Agents render as panel tabs in the center section header
+        (``PANEL_TAB-agent:<id>``), created from the section's add-panel dropdown.
+        The returned shim maps the legacy agent-tab-bar API (reads / creation /
+        rename / close / diagnostics / status dot) onto the new panel-tab POMs.
         """
-        return PlaywrightWorkspaceSection(page=self._page, sub_section="center")
+        return PlaywrightAgentTabBarElement(self._page)
 
     def get_branch_name_element(self) -> Locator:
         branch_name = self.get_by_test_id(ElementIDs.BRANCH_NAME)

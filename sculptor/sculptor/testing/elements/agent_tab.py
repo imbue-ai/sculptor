@@ -1,138 +1,151 @@
+"""UI-refresh shim: the legacy agent-tab-bar API mapped onto the new panel surfaces.
+
+Agents render as panel tabs in the **center** section (``PANEL_TAB-agent:<taskId>``),
+created from that section's add-panel ``+`` dropdown. This class keeps the old
+``PlaywrightAgentTabBarElement`` surface (so its many importers keep working) while
+delegating to the new POMs:
+
+- reads / switch → :class:`PlaywrightWorkspaceSection` (center)
+- rename / close / context menu / diagnostics / status dot → :class:`PlaywrightPanelTabElement`
+- creation → the add-panel dropdown (``create_agent_panel`` / the agent-type submenu)
+
+Behavioural notes (documented decisions):
+- There is no bare "terminal" agent type anymore (Decision B2): create a plain
+  terminal via ``create_terminal_panel`` (bottom section) and a registered
+  terminal-agent via ``add_agent(agent_type="registered", ...)``. So this shim does
+  not expose a terminal agent-type item or a context-menu "Delete" / "Mark unread"
+  item — those affordances moved (delete → the tab's close button) or are deferred
+  (mark-unread / AGENT-07). Tests that used them are rewritten directly.
+"""
+
 from playwright.sync_api import Locator
 from playwright.sync_api import Page
-from playwright.sync_api import expect
 
 from sculptor.constants import ElementIDs
+from sculptor.testing.elements.add_panel_dropdown import PlaywrightAddPanelDropdownElement
+from sculptor.testing.elements.add_panel_dropdown import create_agent_panel
+from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
+
+
+def _panel_id_of(tab: Locator) -> str:
+    """Extract a panel tab's panel id from its ``PANEL_TAB-<panelId>`` testid."""
+    testid = tab.get_attribute("data-testid")
+    prefix = f"{ElementIDs.PANEL_TAB}-"
+    assert testid is not None and testid.startswith(prefix), f"unexpected tab testid: {testid!r}"
+    return testid[len(prefix) :]
 
 
 class PlaywrightAgentTabBarElement:
-    """Page Object Model for the agent tab bar and tab context menus."""
+    """Shim over the center-section panel tabs + add-panel dropdown."""
 
     def __init__(self, page: Page) -> None:
         self._page = page
+        self._section = PlaywrightWorkspaceSection(page, "center")
+        self._tabs = PlaywrightPanelTabElement(page, sub_section="center")
+        self._dropdown = PlaywrightAddPanelDropdownElement(page, sub_section="center")
+
+    # ── Tab reads / switch ──────────────────────────────────────────────────────
 
     def get_agent_tabs(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.AGENT_TAB)
+        return self._section.get_panel_tabs()
 
     def get_agent_tab_by_name(self, name: str) -> Locator:
-        return self.get_agent_tabs().filter(has_text=name)
+        return self._tabs.get_panel_tab_by_name(name)
+
+    def get_panel_tab(self, panel_id: str) -> Locator:
+        return self._section.get_panel_tab(panel_id)
+
+    def get_active_tab(self) -> Locator:
+        return self._section.get_active_tab()
+
+    def get_section(self) -> PlaywrightWorkspaceSection:
+        return self._section
+
+    def get_tab_dot_status(self, tab: Locator) -> Locator:
+        return self._tabs.get_tab_dot_status(tab)
+
+    # ── Creation (add-panel dropdown) ───────────────────────────────────────────
+
+    def add_agent(self, agent_type: str | None = None) -> None:
+        """Create a new agent in center via the add-panel dropdown.
+
+        ``agent_type`` is ``None`` (the pinned "New {recent} agent"), ``"claude"``,
+        or ``"pi"``.
+        """
+        create_agent_panel(self._page, "center", agent_type)
 
     def get_add_agent_button(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.ADD_AGENT_BUTTON)
-
-    def get_add_agent_chevron_button(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.ADD_AGENT_CHEVRON_BUTTON)
-
-    def get_agent_type_menu(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.AGENT_TYPE_MENU)
-
-    def get_agent_type_menu_item_claude(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.AGENT_TYPE_MENU_ITEM_CLAUDE)
-
-    def get_agent_type_menu_item_pi(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.AGENT_TYPE_MENU_ITEM_PI)
-
-    def get_agent_type_menu_item_terminal(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.AGENT_TYPE_MENU_ITEM_TERMINAL)
-
-    def get_agent_type_menu_item_registered(self, registration_id: str) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.AGENT_TYPE_MENU_ITEM_REGISTERED).and_(
-            self._page.locator(f'[data-registration-id="{registration_id}"]')
-        )
+        """The center section's add-panel ``+`` button (the dropdown trigger)."""
+        return self._section.get_add_panel_button()
 
     def open_agent_type_menu(self) -> Locator:
-        """Click the chevron next to the `+` button and return the open menu.
+        """Open the add-panel dropdown and its agent-type sub-menu; return the sub-menu."""
+        self._dropdown.open()
+        return self._dropdown.open_agent_type_submenu()
 
-        Retries the click: a click landing while Radix is still tearing down
-        a just-dismissed menu can be swallowed (or toggle the menu straight
-        closed), and `expect` alone cannot recover from a lost click.
-        """
-        menu = self.get_agent_type_menu()
-        for _attempt in range(3):
-            self.get_add_agent_chevron_button().click()
-            try:
-                expect(menu).to_be_visible(timeout=3_000)
-                return menu
-            except AssertionError:
-                continue
-        expect(menu).to_be_visible()
-        return menu
+    def get_agent_type_menu(self) -> Locator:
+        return self._dropdown.get_agent_type_submenu()
 
-    def open_diagnostics_submenu(self, tab: Locator) -> None:
-        """Right-click a tab and hover on Diagnostics to open the submenu."""
-        tab.click(button="right")
-        trigger = self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_DIAGNOSTICS)
-        expect(trigger).to_be_visible()
-        trigger.hover()
+    def get_agent_type_menu_item_claude(self) -> Locator:
+        return self._dropdown.get_agent_type_item_claude()
 
-    def get_copy_session_id_item(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_COPY_SESSION_ID)
+    def get_agent_type_menu_item_pi(self) -> Locator:
+        return self._dropdown.get_agent_type_item_pi()
 
-    def get_copy_transcript_path_item(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_COPY_TRANSCRIPT_PATH)
+    def get_agent_type_menu_item_registered(self, registration_id: str) -> Locator:
+        return self._dropdown.get_agent_type_item_registered(registration_id)
 
-    def get_copy_sculptor_transcript_item(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_COPY_SCULPTOR_TRANSCRIPT_PATH)
-
-    def get_copy_agent_id_item(self) -> Locator:
-        """Copy agent id lives in the Diagnostics sub-menu (open it first)."""
-        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_COPY_AGENT_ID)
-
-    def get_copy_agent_name_item(self) -> Locator:
-        """Copy agent name lives in the top-level context menu (not Diagnostics)."""
-        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_COPY_AGENT_NAME)
-
-    def open_context_menu(self, tab: Locator) -> None:
-        """Right-click a tab to open the context menu."""
-        tab.click(button="right")
-
-    def get_context_menu_close_item(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_CLOSE)
-
-    def get_context_menu_rename_item(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_RENAME)
-
-    def get_context_menu_delete_item(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_DELETE)
-
-    def get_context_menu_mark_unread_item(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.TAB_CONTEXT_MENU_MARK_UNREAD)
-
-    def mark_tab_unread(self, tab: Locator) -> None:
-        self.open_context_menu(tab)
-        mark_unread_item = self.get_context_menu_mark_unread_item()
-        expect(mark_unread_item).to_be_visible()
-        mark_unread_item.click()
+    # ── Rename ──────────────────────────────────────────────────────────────────
 
     def get_inline_rename_input(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.INLINE_RENAME_INPUT)
+        return self._tabs.get_inline_rename_input()
 
     def rename_tab(self, tab: Locator, new_name: str) -> None:
-        self.open_context_menu(tab)
-        rename_item = self.get_context_menu_rename_item()
-        expect(rename_item).to_be_visible()
-        rename_item.click()
-        rename_input = self.get_inline_rename_input()
-        expect(rename_input).to_be_visible()
-        rename_input.fill(new_name)
-        rename_input.press("Enter")
-        expect(rename_input).not_to_be_visible()
+        self._tabs.rename_tab_via_context_menu(tab, new_name)
+
+    # ── Context menu ────────────────────────────────────────────────────────────
+
+    def open_context_menu(self, tab: Locator) -> None:
+        self._tabs.open_context_menu(tab)
+
+    def get_context_menu_rename_item(self) -> Locator:
+        return self._tabs.get_context_menu_rename_item()
+
+    # ── Diagnostics copy items (flat items, matched by label) ───────────────────
+
+    def open_diagnostics_submenu(self, tab: Locator) -> None:
+        """Open the tab's context menu (the diagnostics items are flat, not a sub-menu)."""
+        self._tabs.open_context_menu(tab)
+
+    def get_copy_agent_id_item(self) -> Locator:
+        return self._tabs.get_diagnostics_item_by_text("Copy agent id")
+
+    def get_copy_agent_name_item(self) -> Locator:
+        return self._tabs.get_diagnostics_item_by_text("Copy agent name")
+
+    def get_copy_session_id_item(self) -> Locator:
+        return self._tabs.get_diagnostics_item_by_text("Copy claude session id")
+
+    def get_copy_transcript_path_item(self) -> Locator:
+        return self._tabs.get_diagnostics_item_by_text("Copy claude transcript file path")
+
+    def get_copy_sculptor_transcript_item(self) -> Locator:
+        return self._tabs.get_diagnostics_item_by_text("Copy Sculptor transcript file path")
+
+    # ── Close / delete (via the tab's close button + confirmation) ──────────────
 
     def get_tab_close_button(self, tab: Locator) -> Locator:
-        return tab.get_by_test_id(ElementIDs.TAB_CLOSE_BUTTON)
+        """The tab's always-visible close (X) button (scoped under the tab)."""
+        return tab.locator(f'[data-testid^="{ElementIDs.PANEL_TAB_CLOSE}-"]')
 
     def get_delete_confirmation_dialog(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_DIALOG)
+        return self._tabs.get_delete_confirmation_dialog()
 
     def get_delete_confirmation_confirm_button(self) -> Locator:
-        return self._page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_CONFIRM)
+        return self._tabs.get_delete_confirmation_confirm_button()
 
     def delete_agent_via_close_button(self, agent_tab_index: int = 0) -> None:
-        """Click the close button on an agent tab and confirm deletion."""
+        """Click an agent tab's close button and confirm the delete."""
         tab = self.get_agent_tabs().nth(agent_tab_index)
-        tab.click()
-        close_button = self.get_tab_close_button(tab)
-        close_button.click()
-        confirm_button = self.get_delete_confirmation_confirm_button()
-        expect(confirm_button).to_be_visible()
-        confirm_button.click()
+        self._tabs.delete_panel_via_close_button(_panel_id_of(tab))
