@@ -16,25 +16,35 @@ import { createOrm } from "~/db/orm";
 import { createAgent, createRepo, createWorkspace } from "~/db/repositories";
 import { eventBus } from "~/events";
 import { projectionCache } from "~/projection/cache";
-import type { StreamingUpdate } from "~/projection/streaming_update_types";
 
 const MIGRATIONS_FOLDER = path.resolve(process.cwd(), "drizzle");
 
+// The wire shape is camelCase (streamingUpdateToWire); this models the fields
+// the assertions below read.
+interface WireUpdate {
+  taskViewsByTaskId: Record<string, unknown>;
+  taskUpdateByTaskId: Record<string, unknown>;
+  userUpdate: { projects: { objectId: string }[] };
+}
+
 interface Connection {
   socket: WebSocket;
-  next(): Promise<StreamingUpdate>;
+  next(): Promise<WireUpdate>;
   pending(): number;
 }
 
 // Buffers messages from connection time so the snapshot can never be missed
 // in the window between "open" and a "message" listener being attached.
 function connect(port: number, scope?: string): Promise<Connection> {
-  const query = scope === undefined ? "" : `?scope=${encodeURIComponent(scope)}`;
-  const socket = new WebSocket(`ws://127.0.0.1:${port}/api/v1/stream/ws${query}`);
-  const queue: StreamingUpdate[] = [];
-  const waiters: ((update: StreamingUpdate) => void)[] = [];
+  const query =
+    scope === undefined ? "" : `?scope=${encodeURIComponent(scope)}`;
+  const socket = new WebSocket(
+    `ws://127.0.0.1:${port}/api/v1/stream/ws${query}`,
+  );
+  const queue: WireUpdate[] = [];
+  const waiters: ((update: WireUpdate) => void)[] = [];
   socket.on("message", (data: Buffer) => {
-    const update = JSON.parse(data.toString()) as StreamingUpdate;
+    const update = JSON.parse(data.toString()) as WireUpdate;
     const waiter = waiters.shift();
     if (waiter !== undefined) {
       waiter(update);
@@ -48,7 +58,7 @@ function connect(port: number, scope?: string): Promise<Connection> {
       resolve({
         socket,
         next: () =>
-          new Promise<StreamingUpdate>((res) => {
+          new Promise<WireUpdate>((res) => {
             const queued = queue.shift();
             if (queued !== undefined) {
               res(queued);
@@ -81,8 +91,18 @@ describe("/api/v1/stream/ws", () => {
     runMigrations(db, MIGRATIONS_FOLDER);
     const orm = createOrm(db);
     createRepo(orm, { objectId: "prj_1", name: "r" });
-    createWorkspace(orm, { objectId: "ws_1", projectId: "prj_1", description: "d", initializationStrategy: "WORKTREE" });
-    createAgent(orm, { objectId: "tsk_1", projectId: "prj_1", workspaceId: "ws_1", agentConfig: {} });
+    createWorkspace(orm, {
+      objectId: "ws_1",
+      projectId: "prj_1",
+      description: "d",
+      initializationStrategy: "WORKTREE",
+    });
+    createAgent(orm, {
+      objectId: "tsk_1",
+      projectId: "prj_1",
+      workspaceId: "ws_1",
+      agentConfig: {},
+    });
 
     app = buildApp();
     await app.ready();
@@ -106,17 +126,23 @@ describe("/api/v1/stream/ws", () => {
     const conn = await connect(port);
     try {
       const snapshot = await conn.next();
-      expect(Object.keys(snapshot.task_views_by_task_id)).toContain("tsk_1");
-      expect(snapshot.user_update.projects.map((p) => p.object_id)).toContain("prj_1");
+      expect(Object.keys(snapshot.taskViewsByTaskId)).toContain("tsk_1");
+      expect(snapshot.userUpdate.projects.map((p) => p.objectId)).toContain(
+        "prj_1",
+      );
 
       eventBus.publish({
         kind: "agent_message",
         agentId: "tsk_1",
         workspaceId: "ws_1",
-        message: { object_type: "ChatInputUserMessage", message_id: "agm_1", source: "USER" },
+        message: {
+          object_type: "ChatInputUserMessage",
+          message_id: "agm_1",
+          source: "USER",
+        },
       });
       const delta = await conn.next();
-      expect(Object.keys(delta.task_update_by_task_id)).toContain("tsk_1");
+      expect(Object.keys(delta.taskUpdateByTaskId)).toContain("tsk_1");
     } finally {
       conn.socket.close();
     }
@@ -126,10 +152,14 @@ describe("/api/v1/stream/ws", () => {
     const conn = await connect(port, "agent:tsk_1");
     try {
       const snapshot = await conn.next();
-      expect(Object.keys(snapshot.task_views_by_task_id)).toEqual(["tsk_1"]);
-      expect(snapshot.user_update.projects).toEqual([]);
+      expect(Object.keys(snapshot.taskViewsByTaskId)).toEqual(["tsk_1"]);
+      expect(snapshot.userUpdate.projects).toEqual([]);
 
-      eventBus.publish({ kind: "agent_status", agentId: "tsk_other", workspaceId: "ws_other" });
+      eventBus.publish({
+        kind: "agent_status",
+        agentId: "tsk_other",
+        workspaceId: "ws_other",
+      });
       await new Promise((resolve) => setTimeout(resolve, 100));
       expect(conn.pending()).toBe(0);
     } finally {

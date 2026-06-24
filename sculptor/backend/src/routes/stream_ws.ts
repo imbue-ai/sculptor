@@ -14,6 +14,7 @@ import type { BusEvent } from "~/events/types";
 import { DeltaBuilder } from "~/projection/delta";
 import { buildScopeContext, isEmptyUpdate, narrowToScope, parseScope, type Scope, ScopeParseError, toSnapshotScope } from "~/projection/scope";
 import { buildSnapshot } from "~/projection/snapshot";
+import { streamingUpdateToWire } from "~/projection/to_wire";
 
 const INVALID_SCOPE_CLOSE_CODE = 1008;
 
@@ -68,7 +69,7 @@ export async function registerStreamWsRoutes(app: FastifyInstance): Promise<void
     // Snapshot MUST precede any delta (REQ-NFR-001). Always build the full
     // (ScopeAll) snapshot then narrow uniformly for this connection.
     const snapshot = narrowToScope(buildSnapshot(orm, toSnapshotScope({ kind: "all" })), scope, context);
-    socket.send(JSON.stringify(snapshot));
+    socket.send(JSON.stringify(streamingUpdateToWire(snapshot)));
 
     const builder = new DeltaBuilder({ orm });
     const unsubscribe = eventBus.subscribe((event: BusEvent) => {
@@ -87,7 +88,7 @@ export async function registerStreamWsRoutes(app: FastifyInstance): Promise<void
       if (isEmptyUpdate(narrowed)) {
         return;
       }
-      socket.send(JSON.stringify(narrowed));
+      socket.send(JSON.stringify(streamingUpdateToWire(narrowed)));
     });
 
     socket.on("close", unsubscribe);
