@@ -18,6 +18,7 @@ import {
   CODE_SUBDIR,
   newWorkspaceRootPath,
   statePath,
+  workingDirectory,
 } from "~/environment/paths";
 import { eventBus } from "~/events";
 import { previewBranchName, runGit, setupWorkspace } from "~/git";
@@ -475,6 +476,27 @@ export async function previewWorkspaceBranchName(
     workspaceName,
     namingPattern: repo.namingPattern ?? null,
   });
+}
+
+// Resolve a workspace's working directory (the checkout the diff/file reads
+// target), or throw 404/400. Mirrors workspace_service.get_workspace_working_directory.
+export function getWorkspaceWorkingDirectory(workspaceId: string): string {
+  const orm = getOrm();
+  const row = getWorkspace(orm, workspaceId);
+  if (row === undefined || row.isDeleted) {
+    throw new WorkspaceError(404, "Workspace not found");
+  }
+  const repo = getRepo(orm, row.projectId);
+  const repoHostPath =
+    repo !== undefined ? (localPathFromRepo(repo) ?? undefined) : undefined;
+  if (row.environmentId === null && row.initializationStrategy !== "IN_PLACE") {
+    throw new WorkspaceError(400, "Workspace environment not initialized");
+  }
+  return workingDirectory(
+    row.environmentId ?? "",
+    row.initializationStrategy,
+    repoHostPath,
+  );
 }
 
 function publishWorkspaceChanged(workspaceId: string): void {
