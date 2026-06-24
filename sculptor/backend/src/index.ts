@@ -8,6 +8,7 @@ import { runMigrations } from "~/db/migrate";
 import { setupLogging } from "~/logging/logger";
 import { emitOpenApiToFile } from "~/openapi";
 import { getAgentRunner } from "~/runner/instance";
+import { getPrPollingService } from "~/services/pr_polling/service";
 
 // The integration harness scrapes stdout for this exact string to decide the
 // backend is ready (READY_MESSAGE_V1 in sculptor/sculptor/testing/server_utils.py).
@@ -72,6 +73,10 @@ export async function main(
   // RW-DATA-6). The shared runner is wired with the harness registry resolver
   // (Task 5.6) + per-agent environment (Task 6.7).
   await getAgentRunner().resuperviseOnStartup();
+
+  // Start PR/CI status polling (Task 7.1) — bounded pool + global spacing,
+  // gated by pr_polling_enabled. Stopped on shutdown.
+  getPrPollingService().start();
 
   const port = resolvePort(argv);
   const host = resolveBindHost();

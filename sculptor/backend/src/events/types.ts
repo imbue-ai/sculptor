@@ -59,6 +59,9 @@ export interface PrStatusEvent {
   kind: "pr_status";
   workspaceId: string;
   projectId?: string;
+  // The PrStatusInfo (snake_case) for this workspace, or null to clear it.
+  // Camelized at the WS boundary (projection/to_wire.ts).
+  status?: Record<string, unknown> | null;
 }
 
 // Drives dependencies_status. ScopeAll-only.

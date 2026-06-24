@@ -204,7 +204,9 @@ export class DeltaBuilder {
       }
       case "pr_status": {
         const delta = emptyStreamingUpdate();
-        delta.pr_status_by_workspace_id[event.workspaceId] = null;
+        delta.pr_status_by_workspace_id[event.workspaceId] =
+          (event.status as StreamingUpdate["pr_status_by_workspace_id"][string]) ??
+          null;
         return delta;
       }
       case "workspace_setup_status": {
