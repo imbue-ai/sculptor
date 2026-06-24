@@ -18,6 +18,9 @@ type AgentTerminalPanelProps = {
  * the backend-owned PTY (the WebSocket reconnects with the replay buffer),
  * not from keeping xterm mounted. useTerminal's 4404 retry covers the
  * agent-still-BUILDING window before the backend handler registers the PTY.
+ *
+ * Workspace setup status is surfaced in the WorkspaceBanner (a workspace-level
+ * concern shared by all agents), not here.
  */
 export const AgentTerminalPanel = ({ taskId }: AgentTerminalPanelProps): ReactElement => {
   useTerminalChatActions(taskId);

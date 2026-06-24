@@ -23,6 +23,7 @@ import { PrButton } from "./PrButton";
 import { RepoSegment } from "./RepoSegment";
 import { TargetBranchSelector } from "./TargetBranchSelector";
 import styles from "./WorkspaceBanner.module.scss";
+import { WorkspaceSetupStatus } from "./WorkspaceSetupStatus";
 
 export const WorkspaceBanner = (): ReactElement | null => {
   const isZenModeActive = useAtomValue(zenModeActiveAtom);
@@ -220,6 +221,14 @@ export const WorkspaceBanner = (): ReactElement | null => {
 
       <div className={styles.spacer} data-spacer />
 
+      {/* Workspace setup status (renders only once a run exists) */}
+      {!hiddenPriorities.has(3) && (
+        <div data-collapse-priority="3">
+          <WorkspaceSetupStatus workspaceId={workspaceID} />
+        </div>
+      )}
+
+      {/* Diff summary */}
       {!hiddenPriorities.has(1) && (
         <div data-collapse-priority="1">
           <DiffSummary workspaceId={workspaceID} />
