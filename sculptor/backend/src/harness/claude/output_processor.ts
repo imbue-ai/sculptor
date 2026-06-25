@@ -16,6 +16,7 @@
 //    cases for one tool / a hung CLI) are not ported.
 
 import { newAgentMessageId } from "~/ids";
+import { shouldRefreshTaskList } from "~/harness/claude/artifacts";
 import {
   MCP_ASK_TOOL_FQN,
   MCP_EXIT_PLAN_MODE_TOOL_FQN,
@@ -51,6 +52,11 @@ export interface OutputProcessorDeps {
   onSessionId?: (sessionId: string) => void;
   // Invoked when a file-changing tool ran, so the workspace diff can refresh.
   onDiffNeeded?: () => void;
+  // Read the per-task store for this session, write a PLAN TaskListArtifact file,
+  // and return the UpdatedArtifactAgentMessage to emit (or null on failure).
+  buildTaskListArtifactMessage?: (
+    sessionId: string,
+  ) => Record<string, unknown> | null;
   // Whether the current turn has been interrupted (suppresses error surfacing).
   isInterrupted?: () => boolean;
   now?: () => number;
@@ -97,6 +103,8 @@ export class ClaudeOutputProcessor {
   foundFinalMessage = false;
   readonly pendingBackgroundTasks = new Set<string>();
   private pendingWakeup = false;
+  // The CLI's session id (system/init), used to locate the per-task store.
+  private sessionId: string | null = null;
   private readonly completedViaTaskUpdated = new Set<string>();
   private readonly turnStartTime: number;
   turnError: TurnError | undefined;
@@ -264,6 +272,7 @@ export class ClaudeOutputProcessor {
   }
 
   private handleInit(sessionId: string): void {
+    this.sessionId = sessionId;
     this.deps.onSessionId?.(sessionId);
     if (this.pendingWakeup) {
       this.pendingWakeup = false;
@@ -434,11 +443,30 @@ export class ClaudeOutputProcessor {
       this.pendingWakeup = true;
     }
     // Refresh the workspace diff if a file-changing tool produced this result.
+    let diffRefreshed = false;
+    let taskListRefreshed = false;
     for (const toolUseId of response.toolUseIds) {
       const info = this.toolUseMap.get(toolUseId);
-      if (info !== undefined && shouldRefreshDiff(info.name, info.input)) {
+      if (info === undefined) {
+        continue;
+      }
+      if (!diffRefreshed && shouldRefreshDiff(info.name, info.input)) {
         this.deps.onDiffNeeded?.();
-        break;
+        diffRefreshed = true;
+      }
+      // A TaskCreate/TaskUpdate changed the per-task store; re-publish the PLAN
+      // artifact so the status pill's task widget reflects it (output_processor.py
+      // should_refresh_task_list → get_file_artifact_messages(PLAN)).
+      if (
+        !taskListRefreshed &&
+        this.sessionId !== null &&
+        shouldRefreshTaskList(info.name)
+      ) {
+        const message = this.deps.buildTaskListArtifactMessage?.(this.sessionId);
+        if (message != null) {
+          this.deps.emit(message);
+        }
+        taskListRefreshed = true;
       }
     }
   }

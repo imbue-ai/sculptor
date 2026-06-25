@@ -18,6 +18,7 @@ import {
   MODEL_SHORTNAME_MAP,
   PRE_COMPACT_CALLBACK_ID,
 } from "~/harness/claude/constants";
+import { readTaskListArtifact } from "~/harness/claude/artifacts";
 import { serializeError } from "~/harness/claude/errors";
 import {
   buildInitializeControlRequest,
@@ -390,6 +391,8 @@ class ClaudeHarnessProcess implements HarnessProcess {
       onDiffNeeded: this.deps.onDiffNeeded
         ? () => this.deps.onDiffNeeded?.(this.agent)
         : undefined,
+      buildTaskListArtifactMessage: (sid) =>
+        this.buildTaskListArtifactMessage(sid),
       isInterrupted: () => this.interrupted,
       now: () => this.now(),
     });
@@ -621,6 +624,58 @@ class ClaudeHarnessProcess implements HarnessProcess {
       this.child?.stdin?.write(line);
     } catch {
       // The stdin pipe may already be closed (e.g. after interrupt); ignore.
+    }
+  }
+
+  // Read the per-task store ($HOME/.claude/tasks/<sessionId>), write a v2
+  // TaskListArtifact JSON into the artifacts dir, and return the
+  // UpdatedArtifactAgentMessage pointing at it (the projection's
+  // getLastTaskListArtifact reads that file for the status pill's task widget).
+  // Mirrors artifact_creation.get_file_artifact_messages(PLAN). Best-effort.
+  private buildTaskListArtifactMessage(
+    sessionId: string,
+  ): Record<string, unknown> | null {
+    try {
+      // Resolve the per-task store like the CLI does, honoring $CLAUDE_CONFIG_DIR
+      // from the env the CLI was launched with (tests isolate it per-case).
+      const launchEnv = {
+        ...process.env,
+        ...(this.deps.resolveEnvForAgent?.(this.agent) ?? this.context.env),
+      };
+      const tasksDir = resolveTasksPath(
+        this.environment.getUserHomeDirectory(),
+        sessionId,
+        launchEnv,
+      );
+      const { tasks } = readTaskListArtifact(tasksDir);
+      const artifactsDir = this.environment.getArtifactsPath(
+        this.agent.objectId,
+      );
+      mkdirSync(artifactsDir, { recursive: true });
+      // A single, overwritten file: the serve endpoint (agent.artifact) returns
+      // the first `PLAN-`-prefixed file it finds, so keeping exactly one ensures
+      // a follow-up turn's status reflects the latest task list, not a stale one.
+      const planPath = joinPath(artifactsDir, "PLAN-tasks.json");
+      writeFileSync(
+        planPath,
+        JSON.stringify({
+          object_type: "TaskListArtifact",
+          version: 2,
+          tasks,
+        }),
+      );
+      return {
+        object_type: "UpdatedArtifactAgentMessage",
+        message_id: newAgentMessageId(),
+        source: "AGENT",
+        artifact: {
+          object_type: "FileAgentArtifact",
+          name: "PLAN",
+          url: `file://${planPath}`,
+        },
+      };
+    } catch {
+      return null;
     }
   }
 

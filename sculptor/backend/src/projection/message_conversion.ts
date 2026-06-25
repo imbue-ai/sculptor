@@ -556,6 +556,9 @@ export interface FoldState {
   // and the user's enter_plan_mode/exit_plan_mode chat-input flags; cleared by
   // ExitPlanMode. Distinct from recentPlanFilePath (a written plan file).
   isInPlanMode: boolean;
+  // Artifact types seen via UpdatedArtifactAgentMessage (e.g. "PLAN", "DIFF").
+  // Surfaced as task_update.updated_artifacts so the frontend fetches them.
+  updatedArtifacts: Set<string>;
   streaming: StreamingState;
 }
 
@@ -579,6 +582,7 @@ export function createFoldState(): FoldState {
     pendingBackgroundTaskIds: new Set(),
     recentPlanFilePath: null,
     isInPlanMode: false,
+    updatedArtifacts: new Set(),
     streaming: newStreamingState(),
   };
 }
@@ -1004,9 +1008,19 @@ export function applyMessage(state: FoldState, message: RawMessage): FoldState {
       answers: (message["answers"] as Record<string, string> | undefined) ?? {},
       tool_use_id: toolUseId,
     });
+  } else if (objectType(message) === "UpdatedArtifactAgentMessage") {
+    // Record the artifact type (PLAN/DIFF) so task_update.updated_artifacts
+    // signals the frontend to fetch it (message_conversion.py L796-799).
+    const artifact = message["artifact"] as
+      | Record<string, unknown>
+      | undefined;
+    const name = artifact?.["name"];
+    if (typeof name === "string" && name) {
+      state.updatedArtifacts.add(name);
+    }
   }
-  // Unhandled message types (artifacts, plan-mode, ephemeral lifecycle, etc.)
-  // do not affect the ChatMessage list and are intentionally ignored.
+  // Other message types (plan-mode, ephemeral lifecycle, etc.) do not affect the
+  // ChatMessage list and are intentionally ignored.
 
   return state;
 }

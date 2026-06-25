@@ -21,7 +21,7 @@ export function foldStateToTaskUpdate(taskId: string, state: FoldState): TaskUpd
   return {
     task_id: taskId,
     chat_messages: [...state.completedChatMessages],
-    updated_artifacts: [],
+    updated_artifacts: [...state.updatedArtifacts],
     in_progress_chat_message: state.inProgressChatMessage,
     queued_chat_messages: [...state.queuedChatMessages],
     // The id of the user message whose request is currently in flight (the
