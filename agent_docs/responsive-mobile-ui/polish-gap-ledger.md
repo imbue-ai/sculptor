@@ -28,7 +28,7 @@ Screenshot: `0011_get.png`
 
 - **B1 (T1) ✅ DONE** — Chat stream top **clipped under the status row**. Fixed: made `.statusRow` an in-flow flex row (was `position:absolute` overlay) so the reused chat (`.container`, `flex:1`) starts below it. Validated; no clipping, chat still fills.
 - **B2 (T2) ✅ DONE** — same root cause as B1 (the floating pill row overlapped the intro); fixed by the same change.
-- **B3 (T1/T2)** **Agent pager dots missing** — spec S1/A1 want centered dots + dashed new-agent dot under the input; none render. (Verify whether they only appear with ≥1 agent / multiple agents.)
+- **B3 (T1/T2) ❌ FALSE POSITIVE** — the pager-dots design (spec A1) was DELETED in fc15efd and replaced by the `AgentSwitcher` pill (the "Claude 1 ▾") + `AgentSheet` bottom sheet for switch/create. Spec A1 is stale. Agent switching works via the pill→sheet; no dots by design.
 - **B4 (T2)** Header **subtitle missing** — H2 wants `agent · repo` subtitle + status dot under the workspace-name title; only the title shows.
 - **B5 (T3)** Header icons aren't the circled Lucide variants (`square-menu`, `circle-ellipsis`); right icon is plain `•••`.
 - **B6 (T2)** Large empty dead band mid-screen — intro hugs top, input pinned bottom, ~50% empty/unbalanced.
