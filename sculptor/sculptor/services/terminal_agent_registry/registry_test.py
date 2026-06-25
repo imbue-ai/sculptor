@@ -151,11 +151,13 @@ def test_bundled_claude_cli_hooks_only_signal_waiting_for_genuine_attention() ->
     """The shipped hooks must not turn the tab yellow without a question.
 
     The TUI's Notification hook fires for every notification type it emits --
-    including the after-60s-idle ``idle_prompt`` reminder -- so an unfiltered
-    Notification->waiting mapping shows the attention dot with nothing to
-    answer. Questions themselves never fire a Notification at all: the
-    AskUserQuestion / ExitPlanMode tool lifecycle is the question signal
-    (PreToolUse = question shown -> waiting; PostToolUse = answered -> busy).
+    including the after-60s-idle ``idle_prompt`` reminder. That reminder may map
+    to ``idle`` (it confirms the agent has settled), but it must NEVER map to
+    ``waiting``: an unfiltered Notification->waiting mapping would show the
+    attention dot with nothing to answer. Questions themselves never fire a
+    Notification at all: the AskUserQuestion / ExitPlanMode tool lifecycle is the
+    question signal (PreToolUse = question shown -> waiting; PostToolUse =
+    answered -> busy).
     """
     sample_dir = get_bundled_claude_code_dir()
     assert sample_dir is not None, "bundled claude-code sample not found"
@@ -163,12 +165,23 @@ def test_bundled_claude_cli_hooks_only_signal_waiting_for_genuine_attention() ->
 
     notification_groups = hooks["Notification"]
     waiting_matchers = []
+    idle_matchers = []
     for group in notification_groups:
         matcher = group.get("matcher")
-        assert matcher, "Notification hooks must filter by notification type (idle_prompt is not attention)"
-        assert re.search(matcher, "idle_prompt") is None, f"matcher {matcher!r} would fire on the idle reminder"
+        assert matcher, "Notification hooks must filter by notification type"
         if any("signal waiting" in hook["command"] for hook in group["hooks"]):
             waiting_matchers.append(matcher)
+        if any("signal idle" in hook["command"] for hook in group["hooks"]):
+            idle_matchers.append(matcher)
+    # The after-60s idle reminder must never raise the attention (waiting) dot...
+    for matcher in waiting_matchers:
+        assert re.search(matcher, "idle_prompt") is None, (
+            f"matcher {matcher!r} must not signal waiting on the idle reminder"
+        )
+    # ...though it is allowed (and expected) to drive the tab to idle.
+    assert any(matcher and re.search(matcher, "idle_prompt") for matcher in idle_matchers), (
+        "idle_prompt should signal idle (it confirms the agent has settled)"
+    )
     for notification_type in ("permission_prompt", "worker_permission_prompt"):
         assert any(re.search(matcher, notification_type) for matcher in waiting_matchers), (
             f"permission notifications must signal waiting: {notification_type}"
@@ -213,4 +226,29 @@ def test_bundled_claude_cli_hooks_report_session_id_on_first_prompt_not_startup(
     )
     assert any("session-id" in command for command in commands_for("UserPromptSubmit")), (
         "UserPromptSubmit must report the session id (first moment a resumable conversation exists)"
+    )
+
+
+def test_bundled_claude_cli_session_start_idles_on_real_starts_not_compaction() -> None:
+    """SessionStart signals idle for a genuine (re)start but not a compaction.
+
+    A mid-turn auto-compaction re-fires SessionStart with source=compact while
+    the agent is still working, so the hook must not signal idle then. The
+    filtering is done by Claude's ``source`` matcher (startup|resume|clear), so
+    we assert the matcher semantics rather than executing a command.
+    """
+    sample_dir = get_bundled_claude_code_dir()
+    assert sample_dir is not None, "bundled claude-code sample not found"
+    groups = json.loads((sample_dir / "claude-code-hooks.json").read_text())["hooks"]["SessionStart"]
+    idle_matchers = [
+        group["matcher"] for group in groups if any("signal idle" in hook["command"] for hook in group["hooks"])
+    ]
+
+    assert idle_matchers, "SessionStart must signal idle on a real start"
+    for source in ("startup", "resume", "clear"):
+        assert any(re.search(matcher, source) for matcher in idle_matchers), (
+            f"SessionStart must idle on source={source}"
+        )
+    assert not any(re.search(matcher, "compact") for matcher in idle_matchers), (
+        "SessionStart must NOT idle on a mid-turn compaction"
     )
