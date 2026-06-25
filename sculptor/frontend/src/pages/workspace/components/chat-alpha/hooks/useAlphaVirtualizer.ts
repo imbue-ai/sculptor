@@ -5,6 +5,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 
 import { ChatMessageRole } from "~/api";
 
+import type { ScrollStateMachine } from "../scroll/scrollStateMachine.ts";
+
 const ESTIMATED_MESSAGE_HEIGHT = 120;
 const OVERSCAN = 5;
 
@@ -95,11 +97,11 @@ export const skipNextScrollAdjustForItem = (index: number): void => {
  * listeners skip it.
  */
 export const buildShouldAdjustScrollPositionOnItemSizeChange = (
-  isSettlingRef: MutableRefObject<boolean>,
+  isMeasuring: () => boolean,
   isProgrammaticScrollRef?: MutableRefObject<boolean>,
 ): ((item: VirtualItem, delta: number, instance: Virtualizer<HTMLDivElement, Element>) => boolean) => {
   return (item, delta, instance): boolean => {
-    if (isSettlingRef.current) return false;
+    if (isMeasuring()) return false;
     if (skipAdjustForItemIndex !== null && item.index === skipAdjustForItemIndex) {
       skipAdjustForItemIndex = null;
       return false;
@@ -115,6 +117,7 @@ export const useAlphaVirtualizer = (
   messageCount: number,
   lastMessageRole: ChatMessageRole | null,
   taskId: string,
+  machine: ScrollStateMachine,
   introPaddingStart: number = VIRTUAL_PADDING,
   // Set true when an item size change triggers a scrollTop adjustment,
   // so chat-level scroll listeners can distinguish it from a user scroll.
@@ -133,11 +136,11 @@ export const useAlphaVirtualizer = (
   const tailCacheRef = useRef<Map<string, number>>(new Map());
   const currentEstimatesRef = useRef<Array<number>>([]);
 
-  // Suppress per-item scroll adjustments while measurements are settling
-  // after a task switch.  Without this, items partially visible at the
-  // viewport top that have slightly different real heights than their saved
-  // estimates cause a small visible shift.
-  const isSettlingRef = useRef(false);
+  // The settle window (per-item scroll-adjustment suppression after a task
+  // switch) is owned by the scroll state machine's layout phase: `measuring`
+  // while heights/paddingEnd reconverge, `stable` once they have. Without that
+  // suppression, items partially visible at the viewport top whose real heights
+  // differ slightly from their saved estimates cause a small visible shift.
   const settlingRafRef = useRef(0);
 
   // Counter incremented after settling clears to force a re-render.
@@ -261,14 +264,15 @@ export const useAlphaVirtualizer = (
       // positions are close to correct.
       virtualizer.measure();
 
-      // Suppress per-item scroll adjustments until measurements settle.
-      // Without this, small deltas between cached estimates and real DOM
-      // measurements cause visible scroll-position shifts.
-      isSettlingRef.current = true;
+      // Enter the `measuring` layout phase to suppress per-item scroll
+      // adjustments until measurements settle. Without this, small deltas
+      // between cached estimates and real DOM measurements cause visible
+      // scroll-position shifts.
+      machine.dispatchLayout({ kind: "invalidated", taskId });
       cancelAnimationFrame(settlingRafRef.current);
       settlingRafRef.current = requestAnimationFrame(() => {
         settlingRafRef.current = requestAnimationFrame(() => {
-          isSettlingRef.current = false;
+          machine.dispatchLayout({ kind: "converged" });
           settlingRafRef.current = 0;
           // Force a re-render so the normal branch runs, which saves
           // heights and recalculates tailContentHeight.
@@ -288,7 +292,7 @@ export const useAlphaVirtualizer = (
     // The cached tailContentHeight (restored above) stays in effect until
     // settling completes, preventing a visible shift from intermediate
     // measurement values.
-    if (isSettlingRef.current) return;
+    if (machine.getState().layout.kind === "measuring") return;
 
     // The scroll-to-top target is the last user message: the last item when
     // it's from the user, otherwise the second-to-last item.
@@ -320,7 +324,7 @@ export const useAlphaVirtualizer = (
   });
 
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = buildShouldAdjustScrollPositionOnItemSizeChange(
-    isSettlingRef,
+    () => machine.getState().layout.kind === "measuring",
     isProgrammaticScrollRef,
   );
 

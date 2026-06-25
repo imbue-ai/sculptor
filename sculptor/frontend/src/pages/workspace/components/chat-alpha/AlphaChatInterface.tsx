@@ -175,18 +175,20 @@ export const AlphaChatInterface = ({
   // useAlphaAutoScroll.handleScroll after it consumes the scroll event.
   const isProgrammaticScrollRef = useRef(false);
 
+  // Single owner of scroll state (authority + layout settle + suppression).
+  // Declared before the scroll hooks so its attach layout effect runs first and
+  // so they can dispatch into / read from it.
+  const scrollMachine = useScrollStateMachine(scrollContainerRef);
+
   const virtualizer = useAlphaVirtualizer(
     scrollContainerRef,
     filteredNodes.length,
     lastMessageRole,
     taskID ?? "",
+    scrollMachine,
     introHeight,
     isProgrammaticScrollRef,
   );
-
-  // Single owner of scroll state (authority + layout settle + suppression).
-  // Declared before the scroll hooks so its attach layout effect runs first.
-  const scrollMachine = useScrollStateMachine(scrollContainerRef);
 
   const density = useAtomValue(chatToolDensityAtom);
 

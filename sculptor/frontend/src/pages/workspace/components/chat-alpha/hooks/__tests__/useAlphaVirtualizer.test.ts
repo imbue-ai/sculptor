@@ -73,13 +73,15 @@ describe("shouldAdjustScrollPosition", () => {
 });
 
 describe("buildShouldAdjustScrollPositionOnItemSizeChange", () => {
+  const notMeasuring = (): boolean => false;
+  const measuring = (): boolean => true;
+
   it("flags the programmatic-scroll ref when about to adjust scrollTop", () => {
     // TanStack Virtual fires a scroll event when this callback returns true.
     // Without the flag, chat-level scroll listeners treat it as user intent
     // and dismiss click-pinned popovers.
-    const isSettlingRef = { current: false };
     const isProgrammaticScrollRef = { current: false };
-    const adjust = buildShouldAdjustScrollPositionOnItemSizeChange(isSettlingRef, isProgrammaticScrollRef);
+    const adjust = buildShouldAdjustScrollPositionOnItemSizeChange(notMeasuring, isProgrammaticScrollRef);
 
     const item = createMockItem(100, 200);
     const instance = createMockInstance(400);
@@ -88,9 +90,8 @@ describe("buildShouldAdjustScrollPositionOnItemSizeChange", () => {
   });
 
   it("does not touch the flag when no adjustment is needed", () => {
-    const isSettlingRef = { current: false };
     const isProgrammaticScrollRef = { current: false };
-    const adjust = buildShouldAdjustScrollPositionOnItemSizeChange(isSettlingRef, isProgrammaticScrollRef);
+    const adjust = buildShouldAdjustScrollPositionOnItemSizeChange(notMeasuring, isProgrammaticScrollRef);
 
     // Item overlapping the viewport → no adjustment.
     const item = createMockItem(500, 800);
@@ -99,10 +100,9 @@ describe("buildShouldAdjustScrollPositionOnItemSizeChange", () => {
     expect(isProgrammaticScrollRef.current).toBe(false);
   });
 
-  it("returns false (and skips the flag) while settling after a task switch", () => {
-    const isSettlingRef = { current: true };
+  it("returns false (and skips the flag) while the layout is measuring after a task switch", () => {
     const isProgrammaticScrollRef = { current: false };
-    const adjust = buildShouldAdjustScrollPositionOnItemSizeChange(isSettlingRef, isProgrammaticScrollRef);
+    const adjust = buildShouldAdjustScrollPositionOnItemSizeChange(measuring, isProgrammaticScrollRef);
 
     const item = createMockItem(100, 200);
     const instance = createMockInstance(400);
@@ -111,9 +111,8 @@ describe("buildShouldAdjustScrollPositionOnItemSizeChange", () => {
   });
 
   it("honours skipNextScrollAdjustForItem and does not flag the ref", () => {
-    const isSettlingRef = { current: false };
     const isProgrammaticScrollRef = { current: false };
-    const adjust = buildShouldAdjustScrollPositionOnItemSizeChange(isSettlingRef, isProgrammaticScrollRef);
+    const adjust = buildShouldAdjustScrollPositionOnItemSizeChange(notMeasuring, isProgrammaticScrollRef);
 
     const item: VirtualItem = { ...createMockItem(100, 200), index: 7, key: "7" };
     const instance = createMockInstance(400);
@@ -127,8 +126,7 @@ describe("buildShouldAdjustScrollPositionOnItemSizeChange", () => {
   });
 
   it("works without a programmatic-scroll ref (back-compat for callers that opt out)", () => {
-    const isSettlingRef = { current: false };
-    const adjust = buildShouldAdjustScrollPositionOnItemSizeChange(isSettlingRef);
+    const adjust = buildShouldAdjustScrollPositionOnItemSizeChange(notMeasuring);
 
     const item = createMockItem(100, 200);
     const instance = createMockInstance(400);
