@@ -61,7 +61,41 @@ These were genuine new-shell gaps the harness exposed; fixed to match intended U
   source of flaky (passed-on-retry) command-palette / keybindings tests.
 
 ## Status / trajectory (offload, real_claude+real_pi excluded; ~1005 tests)
-- Passing: 128 → 836 → 888 → 902 → 927 → 958 → 986 (round 6) → final round below.
+- Passing: 128 → 836 → 888 → 902 → 927 → 958 → 986 (round 6) → **regression** (756,
+  714) → **992 / 1005 (final, round 9)** after the strict-mode fix. 13 truly-failed
+  + 18 flaky remain (the genuine residual below).
+
+## Final residual (13 truly-failed, round 9 — for the review / a live-run debug)
+- **chat message-count (4)**: `test_branch_switching_with_untracked_file`,
+  `test_in_place_mode_displayed_correctly`, `test_turn_footer_shows_bash_created_file_in_worktree_workspace`,
+  `test_worktree_on_local_only_repo_shows_all_tab_and_uncommitted_changes` — the
+  FakeClaude reply / message count not reaching the expected number in these
+  branch/worktree flows. POM + testids verified correct; needs `/debug-integration-test`.
+- **command palette (3)**: `test_command_palette_report_problem_opens_popover`,
+  `test_open_command_palette_via_topbar_button` (NOTE: "topbar" is a removed surface —
+  likely a stale test to delete/repoint), `test_customized_keybinding_is_honored`.
+  Possibly still flaky (they pass on retry in some runs).
+- **sidebar resize (2)**: `test_resize_handle_widens_sidebar`, `test_resize_clamps_to_a_minimum_width`
+  — dragging the thin `SIDEBAR_RESIZE_HANDLE`; finicky drag actionability.
+- **linear plugin panel (1)**: `test_linear_panel_follows_workspace_branch_and_sends_key`
+  — the bundled Linear plugin's `linear-issue` panel isn't offered in the add-panel
+  dropdown (plugin-contributed panels may not be wired into the section-shell registry).
+- **agent-type default (1)**: `test_first_agent_type_defaults_to_shared_last_used`
+  — `useCreateWorkspace.ts` doesn't optimistically set `lastUsedAgentType`.
+- **unread indicator (1)**: `test_unread_indicator_when_switching_agents_within_workspace`.
+- **terminal close (1)**: `test_close_terminal_tab_kills_shell_process` (bottom-section tab).
+
+## IMPORTANT — strict-mode regression (introduced + fixed this session)
+- A round-5 change added `EMPTY_FIRST_RUN_PAGE` to the `navigate_to_add_workspace_page`
+  settle `or_()` chain. On the empty-first-run page that surface OVERLAPS the inline
+  `NEW_WORKSPACE_CREATE_BUTTON`, so the combined locator matched 2 elements and the
+  strict-mode `to_be_visible()` raised "resolved to N elements". Since per-test
+  cleanup leaves every test starting on that page, this failed the WHOLE suite
+  (offload rounds 7-8: 756/714 passing, 400+ "flaky" — the flakiness was the
+  timing-dependent overlap, not infra). **Fixed** by adding `.first` to the settle
+  locator (commit fixing the strict-mode violation). Lesson: a sudden jump in the
+  flaky count + a uniform single-locator failure can be a strict-mode-overlap race,
+  not infra — always reproduce locally before blaming infra.
 
 ## Auto-update fix (real product bug, fixed this session)
 - `EmptyFirstRunGate` swaps out `AppShell` when the workspace list is empty, and
