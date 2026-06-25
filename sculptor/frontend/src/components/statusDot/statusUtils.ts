@@ -36,10 +36,9 @@ export function getAgentDotStatus(
     return hasUnreadUpdate(lastReadAt, updatedAt) ? "error" : "read";
   }
 
-  // The agent the user is currently viewing reads as "read" so its dot doesn't
-  // flash unread while the debounced mark-read settles. An explicit mark-unread
-  // (lastReadAt === null) is still honored while focused — the user can mark the
-  // active agent unread and it must stay unread.
+  // The agent the user is currently viewing has its content on screen, so it
+  // reads as "read". An explicit mark-unread (lastReadAt === null) is the
+  // exception — the user can mark the active agent unread and it must stay so.
   if (isFocused && lastReadAt !== null) {
     return "read";
   }

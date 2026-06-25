@@ -25,11 +25,10 @@ export const useMarkRead = (workspaceID: string, agentID: string): void => {
   };
 
   // Whether the user has explicitly marked THIS agent unread (lastReadAt=null).
-  // Read live from the store rather than the rendered `task`: switching agents
-  // re-renders this hook (no remount) before the leaving agent's effect cleanup
-  // runs, so a render-scoped value would describe the agent being switched to,
-  // not the one being left. Keyed by `agentID`, the cleanup's closure still sees
-  // the departing agent.
+  // Read from the store, not the rendered `task`: on an agent switch the hook
+  // re-renders to the new agent before the departing agent's cleanup runs, so a
+  // render-scoped value would be the wrong agent; the cleanup's `agentID` closure
+  // still points at the departing one.
   const isExplicitlyUnread = (): boolean => store.get(taskAtomFamily(agentID))?.lastReadAt === null;
 
   // Mark as read on mount / agent change, and flush a still-pending debounced

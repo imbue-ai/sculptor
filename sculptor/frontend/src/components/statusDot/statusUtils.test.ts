@@ -30,9 +30,7 @@ describe("getAgentDotStatus", () => {
   });
 
   it("reports the focused agent as read when content is newer than the last read", () => {
-    // Focused agent with a prior read timestamp: suppress the racy
-    // "updatedAt > lastReadAt" so the open agent doesn't flash unread while the
-    // debounced mark-read settles.
+    // Focused with a prior read timestamp: focus wins over a newer updatedAt.
     expect(getAgentDotStatus(TaskStatus.READY, READ_AT, UPDATED_AT_LATER, true)).toBe("read");
   });
 
