@@ -9,9 +9,9 @@
 # How it fits together:
 #   - Vite binds 127.0.0.1:<port>; nginx reaches it on loopback and forwards the
 #     /proxy/<port>/ path through UNSTRIPPED.
-#   - base is passed natively (`vite --base=/proxy/<port>/`) so Vite serves its
-#     assets + HMR under that sub-path; SCULPTOR_OPENHOST_PROXY tells the Vite
-#     config to dial HMR back over the TLS edge (wss, :443) — see vite.base.config.ts.
+#   - SCULPTOR_OPENHOST_PROXY tells the Vite config to serve under base=/proxy/<port>/
+#     (derived from SCULPTOR_FRONTEND_PORT) AND to dial its HMR client back over the
+#     TLS edge (wss, :443) — see vite.base.config.ts.
 #   - The app's /api + /ws calls are same-origin ABSOLUTE (the web build compiles
 #     API base to ""), so they bypass this Vite and hit the SHARED backend via
 #     nginx. No per-preview backend is needed; full-stack previews aren't supported
@@ -29,5 +29,8 @@ export SCULPTOR_FRONTEND_PORT="$port"
 export SCULPTOR_OPENHOST_PROXY=1
 
 echo "Live preview -> https://<this-app-host>/proxy/$port/   (Vite on 127.0.0.1:$port)"
-# `base` is a native Vite flag; the env var above only drives the wss/HMR override.
-exec pnpm run dev -- --base="/proxy/$port/"
+# SCULPTOR_OPENHOST_PROXY (above) drives BOTH base=/proxy/<port>/ and the wss/HMR
+# override in vite.base.config.ts (both derived from SCULPTOR_FRONTEND_PORT), so no CLI
+# `--base` is needed. Do NOT add `pnpm run dev -- --base=…`: pnpm forwards a stray `--`
+# that Vite reads as an end-of-options marker and silently drops the flag.
+exec pnpm run dev
