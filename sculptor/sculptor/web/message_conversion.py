@@ -758,14 +758,23 @@ def convert_agent_messages_to_task_update(
             #
             # Skip the synthesis when the parent tool is identifiable and is
             # NOT Agent/Task — the same notification subtype also fires for
-            # foreground Bash calls auto-promoted to ``local_bash`` background
-            # tasks, and a child ChatMessage attached to a Bash tool_use_id
+            # ``run_in_background`` (and auto-promoted ``local_bash``) Bash
+            # calls, and a child ChatMessage attached to a Bash tool_use_id
             # causes AlphaToolGroup to misclassify the Bash as a subagent
             # (children.length > 0) and render a subagent pill instead of the
-            # bash block.  When the parent isn't in scope we conservatively
-            # synthesize anyway: real Agent-tool notifications often arrive
-            # in a batch where the parent ToolUseBlock was emitted earlier
-            # and isn't visible in this call's local message list.
+            # bash block — the bash command appears to vanish.
+            #
+            # The lookup MUST span the whole conversation history, not just the
+            # messages completed in this batch: a background task's notification
+            # routinely arrives in a SEPARATE conversion batch from the one that
+            # finalized the launching turn (e.g. the user Stops the turn, the
+            # detached command keeps running, and its completion is delivered on
+            # the next invocation). By then the parent Bash ToolUseBlock lives
+            # only in ``completed_message_by_id``. Searching only the per-batch
+            # list there would miss it, fall through, and synthesize the
+            # subagent-misrendering child. We only synthesize when the parent is
+            # genuinely unknown (a notification for a tool we never saw) or is
+            # Agent/Task (where the child IS the completion signal — see SCU-1151).
             #
             # When the CLI's `usage.duration_ms` is available we backdate the
             # synthetic message's timestamp to (parent + duration_seconds) so
@@ -775,7 +784,7 @@ def convert_agent_messages_to_task_update(
             parent_tool_use = _find_tool_use_by_id(
                 msg.tool_use_id,
                 in_progress_chat_message,
-                completed_chat_messages,
+                completed_message_by_id,
             )
             if parent_tool_use is not None and parent_tool_use[0].name not in ("Agent", "Task"):
                 continue
@@ -855,22 +864,31 @@ def convert_agent_messages_to_task_update(
 def _find_tool_use_by_id(
     tool_use_id: str,
     in_progress: ChatMessage | None,
-    completed: list[ChatMessage],
+    completed_message_by_id: dict[AgentMessageID, ChatMessage],
 ) -> tuple[ToolUseBlock, datetime.datetime] | None:
     """Locate a ToolUseBlock by id and return it alongside the
     approximate_creation_time of the ChatMessage that contains it.
 
-    Returns ``None`` when no matching block is in the local message list. Used
-    by BackgroundTaskNotificationAgentMessage handling to (a) decide whether to
+    Returns ``None`` when no matching block is known. Used by
+    BackgroundTaskNotificationAgentMessage handling to (a) decide whether to
     synthesize a completion child (only for Agent/Task tools — see SCU-1151)
     and (b) timestamp that child as (parent + duration_seconds) so the
     subagent pill shows the exact wallclock duration rather than the
     notification's arrival delay.
+
+    Searches ``completed_message_by_id`` — the full conversation history that
+    persists across conversion batches — NOT just the messages completed in the
+    current batch. A background task's ``task_notification`` routinely lands in a
+    later batch, after its launching turn was already finalized and flushed to
+    history, so the parent ToolUseBlock is no longer in the current batch. Missing
+    it there would let the caller synthesize a child on a background Bash's
+    tool_use_id, which makes the frontend misrender the Bash as a subagent pill so
+    the bash block vanishes once the turn is done.
     """
     candidates: list[ChatMessage] = []
     if in_progress is not None:
         candidates.append(in_progress)
-    candidates.extend(completed)
+    candidates.extend(completed_message_by_id.values())
     for chat_message in candidates:
         for block in chat_message.content:
             if isinstance(block, ToolUseBlock) and block.id == tool_use_id:
