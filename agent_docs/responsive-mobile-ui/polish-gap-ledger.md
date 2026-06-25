@@ -26,8 +26,8 @@ Screenshot: `0003_get.png`
 ## Surface B — Chat shell, empty state (`MobileWorkspaceShell` / `MobileWorkspaceHeader` / reused `AlphaChatInterface` / `ChatInput` mobile toolbar)
 Screenshot: `0011_get.png`
 
-- **B1 (T1)** Chat stream top is **clipped under the header** — the intro's first line slides under the header border (no top padding/offset on the scroll container).
-- **B2 (T2)** A stray `Claude 1 ▾` agent pill floats at the top-left of the chat region, overlapping the clipped intro — reads as a misplaced dropdown.
+- **B1 (T1) ✅ DONE** — Chat stream top **clipped under the status row**. Fixed: made `.statusRow` an in-flow flex row (was `position:absolute` overlay) so the reused chat (`.container`, `flex:1`) starts below it. Validated; no clipping, chat still fills.
+- **B2 (T2) ✅ DONE** — same root cause as B1 (the floating pill row overlapped the intro); fixed by the same change.
 - **B3 (T1/T2)** **Agent pager dots missing** — spec S1/A1 want centered dots + dashed new-agent dot under the input; none render. (Verify whether they only appear with ≥1 agent / multiple agents.)
 - **B4 (T2)** Header **subtitle missing** — H2 wants `agent · repo` subtitle + status dot under the workspace-name title; only the title shows.
 - **B5 (T3)** Header icons aren't the circled Lucide variants (`square-menu`, `circle-ellipsis`); right icon is plain `•••`.
