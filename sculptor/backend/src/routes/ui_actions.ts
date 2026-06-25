@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 import type { FastifyInstance, FastifyReply } from "fastify";
@@ -6,17 +7,20 @@ import { z } from "zod";
 
 import { getOrm } from "~/db/orm";
 import { getWorkspace } from "~/db/repositories";
-import {
-  getWorkspaceWorkingDirectory,
-  WorkspaceError,
-} from "~/services/workspace";
+import { WorkspaceError } from "~/services/workspace";
 import { publishOpenFile, publishWebviewCommand } from "~/services/ui_actions";
 
 // UI-action routes (web/app.py): open-file + webview navigate/refresh. Each
 // succeeds by emitting a stream event the frontend reacts to; the HTTP response
 // is 204 No Content.
 
-const ErrorResponseSchema = z.object({ detail: z.string() });
+// detail is a plain string for webview commands but a {code, message} object
+// for open-file, whose codes the sculpt CLI maps to distinct exit codes
+// (workspace_not_open→3, file_not_found/file_not_absolute→4).
+const CodedDetailSchema = z.object({ code: z.string(), message: z.string() });
+const ErrorResponseSchema = z.object({
+  detail: z.union([z.string(), CodedDetailSchema]),
+});
 const errorResponses = {
   400: ErrorResponseSchema,
   404: ErrorResponseSchema,
@@ -24,7 +28,23 @@ const errorResponses = {
 };
 const WorkspaceIdParamsSchema = z.object({ workspace_id: z.string() });
 
+// An error carrying the structured {code, message} detail the CLI dispatches on.
+class CodedError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 function handleError(error: unknown, reply: FastifyReply): FastifyReply {
+  if (error instanceof CodedError) {
+    return reply
+      .code(error.status)
+      .send({ detail: { code: error.code, message: error.message } });
+  }
   if (error instanceof WorkspaceError) {
     return reply.code(error.status).send({ detail: error.message });
   }
@@ -46,17 +66,22 @@ function requireOpenWorkspace(workspaceId: string): void {
   }
 }
 
-// Resolve a workspace-relative path, rejecting traversal outside the tree.
-function resolveWithinWorkspace(workspaceId: string, filePath: string): string {
-  const workingDir = path.resolve(getWorkspaceWorkingDirectory(workspaceId));
-  const resolved = path.resolve(workingDir, filePath);
-  if (
-    resolved !== workingDir &&
-    !resolved.startsWith(`${workingDir}${path.sep}`)
-  ) {
-    throw new WorkspaceError(400, "Path traversal not allowed");
+// Resolve a CLI-provided path to a host-readable file (app.py
+// _resolve_open_file_target). The path must be absolute and must exist (in the
+// workspace checkout or anywhere else the host can read — open-file is allowed
+// to surface files outside the clone). No traversal rejection.
+function resolveOpenFileTarget(filePath: string): string {
+  if (!path.isAbsolute(filePath)) {
+    throw new CodedError(
+      400,
+      "file_not_absolute",
+      `path must be absolute: ${filePath}`,
+    );
   }
-  return resolved;
+  if (!existsSync(filePath)) {
+    throw new CodedError(404, "file_not_found", filePath);
+  }
+  return filePath;
 }
 
 export async function registerUiActionRoutes(
@@ -80,16 +105,20 @@ export async function registerUiActionRoutes(
       try {
         const row = getWorkspace(getOrm(), request.params.workspace_id);
         if (row === undefined || row.isDeleted) {
-          return reply
-            .code(404)
-            .send({
-              detail: `Workspace ${request.params.workspace_id} not found`,
-            });
+          throw new CodedError(
+            404,
+            "workspace_not_found",
+            `workspace ${request.params.workspace_id} not found`,
+          );
         }
-        const resolved = resolveWithinWorkspace(
-          request.params.workspace_id,
-          request.body.filePath,
-        );
+        if (!row.isOpen) {
+          throw new CodedError(
+            409,
+            "workspace_not_open",
+            `workspace ${request.params.workspace_id} is not open; cannot show files in a closed workspace`,
+          );
+        }
+        const resolved = resolveOpenFileTarget(request.body.filePath);
         publishOpenFile(
           request.params.workspace_id,
           resolved,

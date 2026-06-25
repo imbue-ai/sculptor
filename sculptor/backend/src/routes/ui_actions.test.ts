@@ -96,10 +96,11 @@ describe("workspace UI-action routes", () => {
 
   it("open-file publishes a ui_open_file action", async () => {
     const { events, stop } = captureEvents();
+    // open-file takes an absolute, existing path (web _resolve_open_file_target).
     const res = await app.inject({
       method: "POST",
       url: `/api/v1/workspaces/${workspaceId}/ui/open-file`,
-      payload: { filePath: "README.md", mode: "auto" },
+      payload: { filePath: path.join(workingDir, "README.md"), mode: "auto" },
     });
     stop();
     expect(res.statusCode).toBe(204);
