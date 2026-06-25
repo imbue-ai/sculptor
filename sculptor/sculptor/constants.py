@@ -28,11 +28,10 @@ class ElementIDs(StrEnum):
     BRANCH_NAME_RESET_BUTTON = "BRANCH_NAME_RESET_BUTTON"
     BRANCH_NAME_SHUFFLE_BUTTON = "BRANCH_NAME_SHUFFLE_BUTTON"
 
-    # New-workspace modal (WSC-05/06). The dialog reuses the existing field ids
+    # New-workspace modal. The dialog reuses the existing field ids
     # above (WORKSPACE_NAME_INPUT / BRANCH_NAME_INPUT / BRANCH_SELECTOR /
     # PROJECT_SELECTOR / the agent-type + mode ids); these are the modal-only
-    # surfaces. The old /ws/new page keeps its own START_TASK_BUTTON until the
-    # page is removed in a later phase.
+    # surfaces.
     NEW_WORKSPACE_DIALOG = "NEW_WORKSPACE_DIALOG"
     NEW_WORKSPACE_FORM = "NEW_WORKSPACE_FORM"
     NEW_WORKSPACE_PROMPT_TEXTAREA = "NEW_WORKSPACE_PROMPT_TEXTAREA"
@@ -63,8 +62,6 @@ class ElementIDs(StrEnum):
     # Top Bar Elements
     HELP_BUTTON = "HELP_BUTTON"
     KEYBOARD_SHORTCUTS_DIALOG = "KEYBOARD_SHORTCUTS_DIALOG"
-
-    # Sidebar Elements
 
     # Project Selector
     PROJECT_SELECTOR = "PROJECT_SELECTOR"
@@ -205,7 +202,7 @@ class ElementIDs(StrEnum):
     FILE_BROWSER_SEARCH_CLOSE = "FILE_BROWSER_SEARCH_CLOSE"
     FILE_BROWSER_CHANGES_TREE = "FILE_BROWSER_CHANGES_TREE"
     # ExplorerLayout sidebar-visibility toggle (rendered in the viewer header):
-    # "hide" while the sidebar is shown, "show" while it is collapsed (FCC-05).
+    # "hide" while the sidebar is shown, "show" while it is collapsed.
     FILE_BROWSER_HIDE_TREE_BTN = "FILE_BROWSER_HIDE_TREE_BTN"
     DIFF_HEADER_SHOW_TREE_BTN = "DIFF_HEADER_SHOW_TREE_BTN"
     # Diff Panel
@@ -216,13 +213,14 @@ class ElementIDs(StrEnum):
     # tab without a CSS-attribute locator on the tab id prefix.
     FILE_VIEW_TAB_MARKER = "FILE_VIEW_TAB_MARKER"
     DIFF_FILE_HEADER = "DIFF_FILE_HEADER"
-    # The single triple-dot options menu in the viewer header (FCC-07); the
+    # The single triple-dot options menu in the viewer header; the
     # relocated view toggles + tree options re-anchor under this trigger.
     DIFF_FILE_HEADER_MENU_TRIGGER = "DIFF_FILE_HEADER_MENU_TRIGGER"
-    # The list flat/tree toggle item inside the triple-dot menu (FCC-07).
+    # The list flat/tree toggle item inside the triple-dot menu.
     DIFF_MENU_TREE_VIEW_MODE = "DIFF_MENU_TREE_VIEW_MODE"
     # Static, no-shimmer diff placeholder.
     DIFF_SKELETON = "DIFF_SKELETON"
+    DIFF_VIEWER_EMPTY = "DIFF_VIEWER_EMPTY"
     COMBINED_DIFF_FILE_SECTION = "COMBINED_DIFF_FILE_SECTION"
     # Root of the Review All panel, which wraps the combined multi-file diff.
     REVIEW_ALL_PANEL = "REVIEW_ALL_PANEL"
@@ -280,19 +278,11 @@ class ElementIDs(StrEnum):
     BROWSER_SCREENSHOT_BTN = "BROWSER_SCREENSHOT_BTN"
     BROWSER_WEBVIEW = "BROWSER_WEBVIEW"
 
-    # Panel Containers (docking layout)
-
-    # Bottom Bar
-
-    # Panel Side Toggle Buttons (bottom bar)
-
     # Zen mode
     EXIT_ZEN_MODE_BUTTON = "EXIT_ZEN_MODE_BUTTON"
 
     # Focus mode
     FOCUS_MODE_BUTTON = "FOCUS_MODE_BUTTON"
-
-    # Panel Context Menu
 
     # Agent tasks popover (StatusPill)
     AGENT_TASKS_EMPTY_STATE = "AGENT_TASKS_EMPTY_STATE"
@@ -610,13 +600,13 @@ class ElementIDs(StrEnum):
     SIDEBAR_COLLAPSE_TOGGLE = "SIDEBAR_COLLAPSE_TOGGLE"
     SIDEBAR_RESIZE_HANDLE = "SIDEBAR_RESIZE_HANDLE"
     SIDEBAR_EXPAND_ICON = "SIDEBAR_EXPAND_ICON"
-    # Empty first-run sidebar repo-area states (FIRST-02): the "Add a repo"
+    # Empty first-run sidebar repo-area states: the "Add a repo"
     # button shown when no repos exist, and the "No workspaces yet" hint shown
     # beneath a repo that has no workspaces.
     SIDEBAR_ADD_REPO_BUTTON = "SIDEBAR_ADD_REPO_BUTTON"
     SIDEBAR_NO_WORKSPACES_HINT = "SIDEBAR_NO_WORKSPACES_HINT"
 
-    # Empty first-run page (FIRST-01): the no-workspaces special page that
+    # Empty first-run page: the no-workspaces special page that
     # renders the new-workspace form inline with the sidebar open.
     EMPTY_FIRST_RUN_PAGE = "EMPTY_FIRST_RUN_PAGE"
 
@@ -649,7 +639,7 @@ class ElementIDs(StrEnum):
     SECTION_EMPTY_STATE = "SECTION_EMPTY_STATE"
     SECTION_SPLIT_SUBSECTION = "SECTION_SPLIT_SUBSECTION"
     # The collapsed-section drop rail shown at a collapsed section's grid edge during a
-    # panel drag (PANEL-09); suffixed with the section id (e.g.
+    # panel drag; suffixed with the section id (e.g.
     # f"{SECTION_DROP_RAIL}-bottom"). Dropping on it expands the section and appends.
     SECTION_DROP_RAIL = "SECTION_DROP_RAIL"
     # Split affordances: the panel context-menu "Create {direction} split" items

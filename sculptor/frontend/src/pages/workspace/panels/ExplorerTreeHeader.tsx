@@ -16,7 +16,7 @@ type ExplorerTreeHeaderProps = {
  * The 41px list (sidebar) header shared by the Files / Changes / Commits panels:
  * a single search box whose height matches the viewer header so the two line up.
  * The list/tree view-options do not live here — they are merged into the
- * viewer's triple-dot menu (FCC-07). Panels whose list has no search (Commits)
+ * viewer's triple-dot menu. Panels whose list has no search (Commits)
  * simply do not render this header.
  */
 export const ExplorerTreeHeader = ({

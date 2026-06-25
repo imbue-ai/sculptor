@@ -60,7 +60,7 @@
 }
 
 // Ghosted placeholder shown in the gap while a tab is dragged into this section (the
-// floating copy is rendered by the ancestor drag overlay in Task 4.1). outline (not
+// floating copy is rendered by the ancestor drag overlay). outline (not
 // border) keeps the footprint stable so neighbouring tabs don't shift.
 .tabGhost {
   background-color: var(--gray-a2);

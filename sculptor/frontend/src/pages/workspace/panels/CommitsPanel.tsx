@@ -2,7 +2,7 @@
 // history (the list — commit graph, rows, popover, footer) with an embedded
 // DiffViewer (the detail). It owns its own selection — a commit-scoped diff of the
 // clicked file within a commit — and feeds it to its own viewer instance, so there
-// is no shared "active diff" singleton (FCC-01/02/03). The proven history behavior
+// is no shared "active diff" singleton. The proven history behavior
 // (graph dots, merge spurs, popover) is migrated, not redesigned.
 
 import { useAtomValue, useSetAtom } from "jotai";
@@ -56,7 +56,6 @@ const CommitsPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
   return (
     <ExplorerLayout
       list={list}
-      hasSelection={selection !== null}
       detail={(sidebarToggle) => (
         <DiffViewer
           workspaceId={workspaceId}

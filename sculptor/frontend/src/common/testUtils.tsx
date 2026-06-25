@@ -16,8 +16,8 @@ type RenderWithProvidersOptions = {
 };
 
 // Shared test helper: render a component inside the Jotai store, Radix Theme, and a
-// MemoryRouter. The section/panel shell reads the registry from a global atom (no
-// provider), so unlike the docking shell's helper there is nothing to seed here.
+// MemoryRouter. The section/panel shell reads the registry from a module-level (global)
+// atom, so the wrapper needs no extra provider seeding.
 export const renderWithProviders = (ui: ReactNode, options: RenderWithProvidersOptions): RenderWithProvidersResult => {
   const { store, initialEntries } = options;
   const Wrapper = ({ children }: { children: ReactNode }): ReactElement => (

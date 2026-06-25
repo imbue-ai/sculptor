@@ -8,33 +8,9 @@ import type { Atom, PrimitiveAtom } from "jotai";
 import { atom } from "jotai";
 import { selectAtom } from "jotai/utils";
 
+import { memoizedAtomByKey, shallowArrayEqual } from "./atomCache.ts";
 import { isActiveSubSectionAtom, panelsInSubSectionAtom } from "./sectionAtoms.ts";
 import type { PanelId, SectionId, SubSectionId } from "./sectionTypes.ts";
-
-function memoizedAtomByKey<TKey extends string, TValue>(
-  factory: (key: TKey) => Atom<TValue>,
-): (key: TKey) => Atom<TValue> {
-  const cache = new Map<string, Atom<TValue>>();
-  return (key) => {
-    let cached = cache.get(key);
-    if (cached === undefined) {
-      cached = factory(key);
-      cache.set(key, cached);
-    }
-    return cached;
-  };
-}
-
-function shallowArrayEqual<T>(a: ReadonlyArray<T>, b: ReadonlyArray<T>): boolean {
-  if (a === b) {
-    return true;
-  }
-
-  if (a.length !== b.length) {
-    return false;
-  }
-  return a.every((value, index) => value === b[index]);
-}
 
 // ── Maximized section ─────────────────────────────────────────────────────────
 
@@ -99,7 +75,7 @@ export const displayedPanelIdsAtom = memoizedAtomByKey<SubSectionId, ReadonlyArr
 // ── Recently closed single-instance panels ────────────────────────────────────
 
 // Most-recently-closed single-instance panel ids, newest first. Drives the
-// empty-state quick actions (SEC-19): the up-to-three recently-closed panels a
+// empty-state quick actions: the up-to-three recently-closed panels a
 // user can re-open with one click. Transient (reset on reload) and capped — only
 // single-instance panels belong here (closing an agent/terminal ends it, so they
 // are never re-offered). Maintained by the section close handler, which knows the
@@ -120,12 +96,12 @@ export const recentlyClosedPanelIdsAtom = atom(
 
 export const RING_VISIBLE_MS = 2000;
 
-// Transient visibility layer over the persisted active sub-section. The fade
-// timer/effect that flips this to false after RING_VISIBLE_MS is built in Task 4.4.
+// Transient visibility layer over the persisted active sub-section. A fade
+// timer/effect flips this to false after RING_VISIBLE_MS.
 export const activeSectionRingVisibleAtom: PrimitiveAtom<boolean> = atom<boolean>(false);
 
 // Bumped on a deliberate jump (keyboard cycle / add / drop / workspace entry) to
-// (re)start the ring fade timer. jumpToSectionAtom (Task 1.4) increments this.
+// (re)start the ring fade timer. jumpToSectionAtom increments this.
 export const activeSectionRingNonceAtom: PrimitiveAtom<number> = atom<number>(0);
 
 // True only when this sub-section is the active one AND the ring is visible, so the

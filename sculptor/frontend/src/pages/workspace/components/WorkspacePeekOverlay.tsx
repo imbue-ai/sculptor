@@ -7,7 +7,7 @@ const OPEN_DELAY_MS = 600;
 const CLOSE_DELAY_MS = 80;
 // After closing, re-entering a tab within this window reopens immediately.
 const REOPEN_GRACE_PERIOD_MS = 300;
-// Gap in pixels between the anchoring tab (or dropdown) and the peek overlay.
+// Gap in pixels between the anchoring sidebar row and the peek overlay.
 const PEEK_OFFSET_PX = 4;
 
 type OverlayPosition = {

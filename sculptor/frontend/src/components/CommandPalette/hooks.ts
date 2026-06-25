@@ -43,10 +43,11 @@ const COMMAND_TIMEOUT_MS = 30_000;
  */
 export const usePaletteContext = (): PaletteContext => {
   const loc = useImbueLocation();
-  // Reactive read: `chatPanelMountedAtom` is flipped by the chat panel
-  // component on mount/unmount, so this updates without poking the DOM.
-  const hasChatPanel = useAtomValue(chatPanelMountedAtom);
-  const hasTerminalPanel = useAtomValue(terminalPanelMountedAtom);
+  // Reactive read: the panel components maintain these mount counters on
+  // mount/unmount, so this updates without poking the DOM. `> 0` means at
+  // least one such panel is currently mounted.
+  const hasChatPanel = useAtomValue(chatPanelMountedAtom) > 0;
+  const hasTerminalPanel = useAtomValue(terminalPanelMountedAtom) > 0;
   const pages = useAtomValue(commandPalettePagesAtom);
   const page = pages.length === 0 ? null : (pages[pages.length - 1] ?? null);
 
@@ -106,7 +107,7 @@ export const useCommandPalette = (): {
   const setSearch = useSetAtom(commandPaletteSearchAtom);
   const setPages = useSetAtom(commandPalettePagesAtom);
   const setInitialPage = useSetAtom(commandPaletteInitialPageAtom);
-  // FIRST-03: the palette is unreachable in the empty first-run state. Gate the
+  // The palette is unreachable in the empty first-run state. Gate the
   // open paths here (rather than only at the keyboard hook) so every entry —
   // the sidebar Search button, deep links, commands that re-open it — is
   // covered by one rule. `close`/`toggle` never get stuck open because opening

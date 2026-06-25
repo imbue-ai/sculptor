@@ -22,7 +22,7 @@ export const newWorkspaceModalAtom: PrimitiveAtom<NewWorkspaceModalState> = atom
 });
 
 /**
- * The "keep open" switch (Decision B8): when on, Create keeps the dialog open
+ * The "keep open" switch: when on, Create keeps the dialog open
  * for rapid multi-create — the form resets its title/prompt/branch but retains
  * the repo + agent type. Persisted so the preference survives reloads.
  */
@@ -35,7 +35,7 @@ export const keepNewWorkspaceModalOpenAtom: WritableAtom<boolean, [boolean], voi
 
 /**
  * The settings of the last successful create. Seeds the modal's defaults and
- * powers the sidebar "+" direct-create (WSC-01). Persisted; extends today's MRU
+ * powers the sidebar "+" direct-create. Persisted; extends today's MRU
  * project + last-used agent type into the full set the direct-create reuses.
  *
  * `undefined` means "no successful create yet" — consumers fall back to their
@@ -61,7 +61,7 @@ export const lastWorkspaceCreationSettingsAtom: WritableAtom<
 
 /**
  * Derived over the live workspace list; gates the empty first-run page
- * (FIRST-01) and the sidebar empty-workspace special case. `false` while the
+ * and the sidebar empty-workspace special case. `false` while the
  * list is still loading (`undefined`) so the empty state never flashes before
  * the first snapshot arrives.
  */
@@ -75,7 +75,7 @@ export const isWorkspaceListEmptyAtom: Atom<boolean> = atom<boolean>((get) => {
 
 /**
  * True in the empty first-run state, where navigation is deliberately pared
- * back to just the inline form + Settings (FIRST-03). The global keyboard
+ * back to just the inline form + Settings. The global keyboard
  * shortcuts hook and the command palette's open path read this and no-op while
  * it's set, so Cmd+K and the rest of the shortcuts stay off until the first
  * workspace exists. Tracks `isWorkspaceListEmptyAtom` exactly today; kept as a

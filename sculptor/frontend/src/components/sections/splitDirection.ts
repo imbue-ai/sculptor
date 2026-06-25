@@ -1,5 +1,5 @@
 // The (section, axis) → user-facing direction word that labels the panel right-click
-// "Create {direction} split and move panel" option (SPLIT-01/02).
+// "Create {direction} split and move panel" option.
 //
 // A split always moves the chosen panel into the section's SECONDARY sub-section, and
 // SplittableSection renders the secondary below the primary for a horizontal divider

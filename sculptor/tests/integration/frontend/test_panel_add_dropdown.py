@@ -17,7 +17,6 @@ import re
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.add_panel_dropdown import PlaywrightAddPanelDropdownElement
 from sculptor.testing.elements.add_panel_dropdown import close_seeded_panel
 from sculptor.testing.elements.panel_tab import PlaywrightPanelTabElement
@@ -81,7 +80,7 @@ def test_agent_type_submenu_offers_claude_no_bare_terminal(sculptor_instance_: S
     expect(dropdown.get_agent_type_item_claude()).to_be_visible()
     # No bare "Terminal" agent type (Decision B2): the old AGENT_TYPE_MENU_ITEM_TERMINAL
     # row is never rendered.
-    expect(page.get_by_test_id(ElementIDs.AGENT_TYPE_MENU_ITEM_TERMINAL)).to_have_count(0)
+    expect(dropdown.get_agent_type_item_terminal()).to_have_count(0)
 
 
 @user_story("to only see the pi agent type when pi-agent is enabled")

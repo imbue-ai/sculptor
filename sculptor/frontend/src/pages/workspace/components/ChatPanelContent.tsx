@@ -17,8 +17,8 @@ import { useChatData } from "./useChatData.ts";
 
 type ChatPanelContentProps = {
   // The task this panel renders. Supplied as a prop (not read from the route) so each
-  // agent panel renders its OWN agent — one in center and another in right at once
-  // (AGENT-03), two streaming concurrently (AGENT-05).
+  // agent panel renders its OWN agent — one in center and another in right at once,
+  // two streaming concurrently.
   taskId: string;
   appendTextRef?: React.MutableRefObject<((text: string) => void) | null>;
   insertSkillRef?: React.MutableRefObject<((skill: InsertSkillArg) => void) | null>;
@@ -106,15 +106,17 @@ const ChatPanelInner = ({
     closeBtwPopupIfNotForAgent(taskId);
   }, [taskId, closeBtwPopupIfNotForAgent]);
 
-  // Reactive signal for "is the chat panel currently rendered?" — read by the
+  // Reactive signal for "is a chat panel currently rendered?" — read by the
   // command palette (via `chatPanelMountedAtom`) instead of poking the DOM.
-  // The debug view replaces the chat panel and so doesn't count.
+  // The debug view replaces the chat panel and so doesn't count. Increment/decrement
+  // a shared counter so the signal stays correct when two chat panels are mounted at
+  // once (e.g. one in the center section and one moved to the right).
   const isChatPanelRendered = !isDebugView;
   useEffect(() => {
     if (!isChatPanelRendered) return;
-    setChatPanelMounted(true);
+    setChatPanelMounted((count) => count + 1);
     return (): void => {
-      setChatPanelMounted(false);
+      setChatPanelMounted((count) => count - 1);
     };
   }, [isChatPanelRendered, setChatPanelMounted]);
 

@@ -1,7 +1,7 @@
 // Pure geometry for the four-section grid: resolve the global section size
 // percentages to pixels, protecting the center's larger minimum width by shrinking
 // the sides first (right before left). No React, no Jotai — unit-testable in
-// isolation. See goals.md → "Sections" / SEC-22.
+// isolation.
 
 import type { GlobalLayoutState } from "./persistence/types.ts";
 

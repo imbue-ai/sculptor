@@ -19,6 +19,7 @@ import { useSyncActiveTabFromRoute } from "~/common/hooks/useSyncActiveTabFromRo
 import { useActiveProjectID } from "~/common/NavigateUtils.ts";
 import { backendStatusAtom } from "~/common/state/atoms/backend.ts";
 import {
+  createAgentErrorToastAtom,
   deleteErrorToastAtom,
   mentionChipUnreachableToastAtom,
   terminalPromptRejectedToastAtom,
@@ -60,6 +61,8 @@ export const AppShell = (): ReactElement => {
   const setMentionChipUnreachableToast = useSetAtom(mentionChipUnreachableToastAtom);
   const terminalPromptRejectedToast = useAtomValue(terminalPromptRejectedToastAtom);
   const setTerminalPromptRejectedToast = useSetAtom(terminalPromptRejectedToastAtom);
+  const createAgentErrorToast = useAtomValue(createAgentErrorToastAtom);
+  const setCreateAgentErrorToast = useSetAtom(createAgentErrorToastAtom);
 
   // Internal state
   const [isRepoPathDialogOpen, setIsRepoPathDialogOpen] = useState<boolean>(false);
@@ -104,6 +107,12 @@ export const AppShell = (): ReactElement => {
       if (!open) setTerminalPromptRejectedToast(null);
     },
     [setTerminalPromptRejectedToast],
+  );
+  const handleCreateAgentErrorOpenChange = useCallback(
+    (open: boolean): void => {
+      if (!open) setCreateAgentErrorToast(null);
+    },
+    [setCreateAgentErrorToast],
   );
 
   // JSX and rendering logic
@@ -159,6 +168,15 @@ export const AppShell = (): ReactElement => {
         description={deleteErrorToast?.description}
         type={deleteErrorToast?.type}
         action={deleteErrorToast?.action ?? undefined}
+        duration={ERROR_TOAST_DURATION_MS}
+      />
+      <Toast
+        open={createAgentErrorToast !== null}
+        onOpenChange={handleCreateAgentErrorOpenChange}
+        title={createAgentErrorToast?.title}
+        description={createAgentErrorToast?.description}
+        type={createAgentErrorToast?.type}
+        action={createAgentErrorToast?.action ?? undefined}
         duration={ERROR_TOAST_DURATION_MS}
       />
       <Toast

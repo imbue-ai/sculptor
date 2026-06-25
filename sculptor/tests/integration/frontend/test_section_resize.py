@@ -9,6 +9,7 @@ tolerant (direction-of-change), not exact-pixel, to avoid layout-math flakiness.
 
 from playwright.sync_api import expect
 
+from sculptor.constants import ElementIDs
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -44,10 +45,14 @@ def test_resize_right_section_changes_width(sculptor_instance_: SculptorInstance
     for _ in range(3):
         handle.press("ArrowLeft")
 
-    grown_box = section_root.bounding_box()
-    assert grown_box is not None
-    assert grown_box["width"] > start_width, (
-        f"Right section should widen after ArrowLeft: start={start_width:.0f}, grown={grown_box['width']:.0f}"
+    # Poll the rendered width rather than reading a once-evaluated bounding box, so a
+    # slow relayout under CI load is tolerated. Only the direction of change is asserted.
+    page.wait_for_function(
+        """({ testId, startWidth }) => {
+            const el = document.querySelector(`[data-testid="${testId}"]`);
+            return el && el.getBoundingClientRect().width > startWidth;
+        }""",
+        arg={"testId": str(ElementIDs.SECTION_RIGHT), "startWidth": start_width},
     )
 
 
@@ -64,7 +69,6 @@ def test_resize_clamps_to_a_minimum_width(sculptor_instance_: SculptorInstance) 
 
     right = PlaywrightWorkspaceSection(page, "right")
     right.expand_section()
-    section_root = right.get_section()
     handle = right.get_resize_handle()
     expect(handle).to_be_visible()
 
@@ -73,10 +77,16 @@ def test_resize_clamps_to_a_minimum_width(sculptor_instance_: SculptorInstance) 
     for _ in range(40):
         handle.press("ArrowRight")
 
-    clamped_box = section_root.bounding_box()
-    assert clamped_box is not None
-    # The section must remain visible with a clamped (non-zero) width.
-    assert clamped_box["width"] > 50, f"Right section must clamp above zero, got {clamped_box['width']:.0f}"
+    # Poll the rendered width rather than reading a once-evaluated bounding box, so a
+    # slow relayout under CI load is tolerated: the section must remain with a clamped
+    # (non-zero) width, not zero.
+    page.wait_for_function(
+        """(testId) => {
+            const el = document.querySelector(`[data-testid="${testId}"]`);
+            return el && el.getBoundingClientRect().width > 50;
+        }""",
+        arg=str(ElementIDs.SECTION_RIGHT),
+    )
     expect(right.get_header()).to_be_visible()
 
 

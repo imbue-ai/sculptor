@@ -13,7 +13,7 @@ _EXPAND_SECTION_CLICK_TIMEOUT_MS = 5_000
 
 # The four sections of the workspace grid. A sub-section id is either a section id
 # (the unsplit "primary" half) or a section id suffixed with ":secondary" (e.g.
-# "left:secondary") — the flat sub-section keyspace from state_design.md.
+# "left:secondary") — the flat sub-section keyspace.
 _SECTION_ROOT_TEST_IDS: dict[str, ElementIDs] = {
     "left": ElementIDs.SECTION_LEFT,
     "center": ElementIDs.SECTION_CENTER,
@@ -70,10 +70,11 @@ class PlaywrightWorkspaceSection:
         """Get every panel tab in this sub-section's header.
 
         Panel-tab testids are suffixed with the panel id (e.g.
-        ``f"{PANEL_TAB}-agent:<taskId>"``), so they are matched by a
-        ``data-testid`` prefix selector scoped under this sub-section's header.
-        The CSS selector is kept inside the POM to honour the integration-test
-        css-locator ratchet.
+        ``f"{PANEL_TAB}-agent:<taskId>"``), so there is no single testid to match
+        on; they are selected by a ``data-testid`` prefix (attribute) selector
+        scoped under this sub-section's header. That CSS selector is encapsulated
+        here so the integration tests (which the css-locator ratchet covers) keep
+        querying tabs by testid through this POM rather than writing their own.
         """
         return self.get_header().locator(f'[data-testid^="{ElementIDs.PANEL_TAB}-"]')
 
@@ -85,9 +86,10 @@ class PlaywrightWorkspaceSection:
         """Get the active (selected) panel tab in this sub-section.
 
         The panel tab itself carries ``aria-selected="true"`` (PanelTab sets it
-        from ``isActive``), so the tab locator is intersected with that
-        attribute. CSS-attribute scoping stays inside the POM to honour the
-        integration-test css-locator ratchet.
+        from ``isActive``), which is not a testid, so the tab locator is
+        intersected with that attribute selector. That CSS-attribute selector is
+        encapsulated here so the integration tests (which the css-locator ratchet
+        covers) keep querying the active tab by testid through this POM.
         """
         return self.get_panel_tabs().and_(self._page.locator('[aria-selected="true"]'))
 
@@ -119,8 +121,8 @@ class PlaywrightWorkspaceSection:
         """Whether this sub-section is the logical active section.
 
         Reads the ``data-active`` hook on the ring host (absent when not active,
-        ``"true"`` when active). The CSS-attribute read stays inside the POM to
-        honour the integration-test css-locator ratchet.
+        ``"true"`` when active). The attribute read is encapsulated here so test
+        files get a boolean accessor and never reach for the raw ``data-*`` hook.
         """
         return self.get_active_ring().get_attribute("data-active") == "true"
 
@@ -128,8 +130,9 @@ class PlaywrightWorkspaceSection:
         """Whether this sub-section's transient active-section ring is showing.
 
         Reads the ``data-ring-visible`` hook (absent until a deliberate jump pulses
-        it, then ``"true"`` for the fade window). The CSS-attribute read stays
-        inside the POM to honour the integration-test css-locator ratchet.
+        it, then ``"true"`` for the fade window). The attribute read is encapsulated
+        here so test files get a boolean accessor and never reach for the raw
+        ``data-*`` hook.
         """
         return self.get_active_ring().get_attribute("data-ring-visible") == "true"
 
@@ -164,7 +167,7 @@ class PlaywrightWorkspaceSection:
 
         Only the non-center sections have a toggle (center is always expanded), so for
         the center this returns a never-matching locator — callers can assert it has
-        count 0 (SEC-08: center cannot collapse).
+        count 0 (center cannot collapse).
         """
         toggle_id = _SECTION_TOGGLE_TEST_IDS.get(section_of(self._sub_section))
         if toggle_id is None:
@@ -203,25 +206,41 @@ class PlaywrightWorkspaceSection:
         # click timeout lets a churning (never-stable) toggle fail fast so we can
         # re-check the guard and clear any intercepting overlay between attempts,
         # rather than burning the whole default timeout on a single unstable click.
+        #
+        # The toggle flips expand <-> collapse, so a landed click must never be
+        # repeated: once the click itself succeeds the section is already expanding
+        # and only the header render is pending, so re-clicking would collapse it
+        # again. We therefore separate "the click did not land" (an exception FROM
+        # the click — retry it) from "the header has not rendered yet" (the click
+        # landed; keep waiting on the same expand without re-clicking).
         last_error: Exception | None = None
         for _ in range(_EXPAND_SECTION_CLICK_ATTEMPTS):
             if header.is_visible():
                 return
             try:
                 toggle.click(timeout=_EXPAND_SECTION_CLICK_TIMEOUT_MS)
-                expect(header).to_be_visible(timeout=_EXPAND_SECTION_CLICK_TIMEOUT_MS)
-                return
-            except (PlaywrightTimeoutError, AssertionError) as error:
+            except PlaywrightTimeoutError as error:
                 last_error = error
-                # An open dismissible overlay (a lingering popover/tooltip/dialog
-                # from the prior test) can intercept the click; clear it, then retry.
+                # The click never landed (the toggle stayed unstable/unactionable,
+                # or an open dismissible overlay — a lingering popover/tooltip/dialog
+                # from the prior test — intercepted it); clear any overlay, then retry.
                 self._page.keyboard.press("Escape")
+                continue
+            # The click landed, so this attempt already flipped the section to
+            # expanded; only the header render is pending. Wait for it WITHOUT
+            # re-clicking — a re-click here would toggle the section back to
+            # collapsed. If the header never renders this re-raises out of the
+            # method (it is a real failure, not a missed click), which is why the
+            # forced-click fallback below is reachable only when no click landed.
+            expect(header).to_be_visible(timeout=_EXPAND_SECTION_CLICK_TIMEOUT_MS)
+            return
 
-        # Every actionable attempt lost the stability race — the workspace header is
-        # still churning (a mid-optimistic-delete navigation remounts it, so its box
-        # keeps moving past the per-attempt budget). The toggle is a fixed-position
-        # header button (only the branch-name text beside it reflows), so a forced
-        # click lands on it without waiting for the box to settle.
+        # No click ever landed: every actionable attempt lost the stability race —
+        # the workspace header is still churning (a mid-optimistic-delete navigation
+        # remounts it, so its box keeps moving past the per-attempt budget). The
+        # toggle is a fixed-position header button (only the branch-name text beside
+        # it reflows), so a forced click lands on it without waiting for the box to
+        # settle.
         if not header.is_visible():
             try:
                 toggle.click(force=True, timeout=_EXPAND_SECTION_CLICK_TIMEOUT_MS)

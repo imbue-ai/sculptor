@@ -58,8 +58,8 @@ const SectionToggle = ({ section, icon, label, testId }: SectionToggleProps): Re
 };
 
 /**
- * The simplified workspace header above the section grid (component_hierarchy.md →
- * "The workspace layout shell"). Left cluster: the left-section toggle. Center:
+ * The simplified workspace header above the section grid, part of the workspace
+ * layout shell. Left cluster: the left-section toggle. Center:
  * the branch pill + target-branch selector. A draggable spacer lets the frameless
  * window be moved by the header. Right cluster: the re-homed diff summary + PR
  * button, then the bottom- and right-section toggles. Hidden by WorkspaceLayoutShell
@@ -100,10 +100,14 @@ export const WorkspaceHeader = (): ReactElement | null => {
     if (!branchName) {
       return;
     }
-    navigator.clipboard.writeText(branchName);
-    setIsCopied(true);
-    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
-    copyTimerRef.current = setTimeout(() => setIsCopied(false), 1500);
+    navigator.clipboard
+      .writeText(branchName)
+      .then(() => {
+        setIsCopied(true);
+        if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+        copyTimerRef.current = setTimeout(() => setIsCopied(false), 1500);
+      })
+      .catch(() => {});
   }, [branchName]);
 
   const handleTargetBranchChange = useCallback(

@@ -10,6 +10,8 @@ terminal there); ``navigate_away_and_back`` then forces the atoms to re-hydrate 
 localStorage.
 """
 
+import re
+
 from playwright.sync_api import expect
 
 from sculptor.testing.elements.add_panel_dropdown import create_terminal_panel
@@ -27,15 +29,17 @@ def test_agent_and_added_panel_survive_round_trip(sculptor_instance_: SculptorIn
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Round Trip WS")
 
     center = PlaywrightWorkspaceSection(page, "center")
+    expect(center.get_active_tab()).to_have_attribute("data-panel-id", re.compile(r"^agent:"))
     agent_panel_id = center.get_active_tab().get_attribute("data-panel-id")
-    assert agent_panel_id is not None and agent_panel_id.startswith("agent:")
+    assert agent_panel_id is not None  # narrows Optional[str] for the get_panel_tab(agent_panel_id) call
 
     # Add a terminal into the (default-collapsed) right section.
     create_terminal_panel(page, "right")
     right = PlaywrightWorkspaceSection(page, "right")
     expect(right.get_panel_tabs()).to_have_count(1)
+    expect(right.get_active_tab()).to_have_attribute("data-panel-id", re.compile(r"^terminal:"))
     right_terminal_id = right.get_active_tab().get_attribute("data-panel-id")
-    assert right_terminal_id is not None and right_terminal_id.startswith("terminal:")
+    assert right_terminal_id is not None  # narrows Optional[str] for the get_panel_tab(right_terminal_id) call
 
     # Force the layout atoms to re-hydrate from localStorage.
     navigate_away_and_back(page)

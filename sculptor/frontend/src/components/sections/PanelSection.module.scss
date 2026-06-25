@@ -26,7 +26,7 @@
 
 // The active-section ring is TRANSIENT: it pulses on a deliberate jump and then
 // fades. `.active` persists for as long as the section holds logical focus, so the
-// ring's opacity is gated on `.ringVisible` (flipped on a timer rebuilt in Task 4.4)
+// ring's opacity is gated on `.ringVisible` (flipped on a timer)
 // and fades via an opacity transition rather than vanishing. The `:not(.dropTarget)`
 // guard keeps the drop-target edge solid for the whole drag, even on the active one.
 .active:not(.dropTarget)::after {
@@ -47,7 +47,7 @@
 // Maximized section: absolutely positioned to fill the workspace page container
 // (every ancestor up to it is static), covering the header and the rest of the grid
 // while the nav rail stays visible. Opaque background so the layout beneath (still
-// mounted) is fully hidden. The full maximize behavior lands in Task 4.3.
+// mounted) is fully hidden.
 .maximized {
   background: var(--gray-1);
   inset: 0;

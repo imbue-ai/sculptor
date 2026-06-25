@@ -1,4 +1,4 @@
-// The desktop/mobile seam (component_hierarchy.md → "Mobile shell variant"). The
+// The desktop/mobile seam for the mobile shell variant. The
 // page-level shell branches on a single hook so the mobile shell can land later
 // without threading a flag through the tree. For now this is a real seam but a
 // no-op: it always reports desktop and never builds the mobile shell.

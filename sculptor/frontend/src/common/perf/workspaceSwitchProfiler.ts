@@ -1,9 +1,9 @@
 /** Workspace-switch profiler.
  *
- * Records how long a workspace switch takes to reach each rendering/data
+ * Records how long a workspace switch takes to reach each rendering
  * milestone, so "tab switching feels slow" can be measured instead of
  * eyeballed. A switch starts in `useImbueNavigate` (markSwitchStart) and
- * milestones are reported from the layout/data code paths as they complete.
+ * milestones are reported from the layout code paths as they complete.
  *
  * Every milestone is a real `performance.mark()` with a `ws-switch.` prefix,
  * so when tracing is enabled (see common/tracing.ts) the marks flow into the
@@ -22,8 +22,6 @@
  * check per call, matching the bar set by `traceMark`.
  */
 
-import { useEffect } from "react";
-
 export const WS_SWITCH_MILESTONES = [
   // WorkspacePageContent rendered with the new workspace id.
   "page-content-render",
@@ -32,10 +30,6 @@ export const WS_SWITCH_MILESTONES = [
   // First frame painted after the layout restore (double-rAF approximation).
   // Frames between `start` and this mark are the stale-content window.
   "first-paint-after-restore",
-  // First data for the new workspace reached each consumer.
-  "chat-loaded",
-  "diff-loaded",
-  "files-loaded",
 ] as const;
 
 export type WsSwitchMilestone = (typeof WS_SWITCH_MILESTONES)[number];
@@ -54,7 +48,7 @@ export type WsSwitchTimingRecord = {
 };
 
 // A switch that hasn't produced all milestones after this long is finalized
-// as-is: data milestones legitimately never fire for empty workspaces.
+// as-is, in case a render milestone legitimately never fires.
 const FINALIZE_TIMEOUT_MS = 5000;
 
 // Cap on window.__WS_SWITCH_TIMINGS__ so a long session can't grow it unboundedly.
@@ -179,32 +173,4 @@ export const markSwitchMilestone = (milestone: WsSwitchMilestone): void => {
   if (hasAllMilestones(record)) {
     finalizePendingSwitch(false);
   }
-};
-
-/**
- * Variant of `markSwitchMilestone` for data milestones: only counts when the
- * in-flight switch is heading to `workspaceId`, so data landing for some other
- * (e.g. background) workspace doesn't end the measurement early.
- */
-export const markSwitchDataMilestone = (milestone: WsSwitchMilestone, workspaceId: string): void => {
-  if (!isProfilerEnabled()) return;
-  if (pendingSwitch === null || pendingSwitch.record.toWorkspaceId !== workspaceId) return;
-  markSwitchMilestone(milestone);
-};
-
-/**
- * Effect wrapper for data hooks: reports `milestone` once `hasData` first
- * becomes true for `workspaceId`. Adds one inert effect per consumer when the
- * profiler is disabled.
- */
-export const useMarkSwitchDataMilestone = (
-  milestone: WsSwitchMilestone,
-  workspaceId: string | null,
-  hasData: boolean,
-): void => {
-  useEffect(() => {
-    if (workspaceId !== null && hasData) {
-      markSwitchDataMilestone(milestone, workspaceId);
-    }
-  }, [milestone, workspaceId, hasData]);
 };

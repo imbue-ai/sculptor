@@ -1,9 +1,9 @@
-// The empty-section state (SEC-19): a centered "add panel" button that opens the
+// The empty-section state: a centered "add panel" button that opens the
 // same AddPanelDropdown, plus up to five quick actions — always "New {recent}
 // agent" and "New terminal", then up to three most-recently-created-but-closed
 // single-instance panels (excluding any currently open, and never agents/terminals).
 // When the empty pane is a split half it also offers a "close split" affordance so
-// the other half can reclaim the space (Task 4.2 owns closeSplitAtom).
+// the other half can reclaim the space (closeSplitAtom owns this).
 
 import { Button, Flex } from "@radix-ui/themes";
 import { useAtomValue, useSetAtom } from "jotai";

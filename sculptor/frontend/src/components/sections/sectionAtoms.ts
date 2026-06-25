@@ -1,7 +1,7 @@
 // Consolidated Jotai layout atoms for the workspace section/panel shell.
 //
 // One per-workspace snapshot (workspaceLayoutFamily) and one global snapshot
-// (globalLayoutAtom), both backed by the persistence adapter (Task 1.2). The app
+// (globalLayoutAtom), both backed by the persistence adapter. The app
 // reads the active workspace through the `workspaceLayoutAtom` proxy, which resolves
 // the active scope on every read/write so switching workspaces is a single write to
 // `activeWorkspaceIdAtom`. Components subscribe to the narrow, per-key read slices
@@ -12,6 +12,7 @@ import type { Atom, WritableAtom } from "jotai";
 import { atom } from "jotai";
 import { atomFamily, selectAtom } from "jotai/utils";
 
+import { memoizedAtomByKey, shallowArrayEqual } from "./atomCache.ts";
 import { layoutPersistenceAdapter } from "./persistence/LocalStorageLayoutAdapter.ts";
 import type { GlobalLayoutState, LayoutScope, WorkspaceLayoutState } from "./persistence/types.ts";
 import { DEFAULT_GLOBAL_LAYOUT, EMPTY_WORKSPACE_LAYOUT } from "./persistence/types.ts";
@@ -91,31 +92,6 @@ export const globalLayoutAtom: WritableAtom<GlobalLayoutState, [GlobalLayoutUpda
 
 // ── Narrow read slices (per-key, memoized) ────────────────────────────────────
 
-function memoizedAtomByKey<TKey extends string, TValue>(
-  factory: (key: TKey) => Atom<TValue>,
-): (key: TKey) => Atom<TValue> {
-  const cache = new Map<string, Atom<TValue>>();
-  return (key) => {
-    let cached = cache.get(key);
-    if (cached === undefined) {
-      cached = factory(key);
-      cache.set(key, cached);
-    }
-    return cached;
-  };
-}
-
-function shallowArrayEqual<T>(a: ReadonlyArray<T>, b: ReadonlyArray<T>): boolean {
-  if (a === b) {
-    return true;
-  }
-
-  if (a.length !== b.length) {
-    return false;
-  }
-  return a.every((value, index) => value === b[index]);
-}
-
 // Open panels in a sub-section, ordered. A panel's presence in `placement` is its
 // "open" state; `order` gives the tab order. Any placed-but-unordered panel is
 // appended so the slice never drops an open panel.
@@ -185,7 +161,7 @@ export const explorerListWidthAtom: WritableAtom<number, [number], void> = atom(
 );
 
 // Write a section's global size percentage (clamped). Resizing in one workspace
-// changes the size everywhere (SEC-18 / PERSIST-02).
+// changes the size everywhere.
 export const setSectionSizeAtom = atom(
   null,
   (_get, set, params: { side: "left" | "right" | "bottom"; percent: number }) => {
@@ -201,7 +177,7 @@ export const setSectionSizeAtom = atom(
 
 // A workspace's snapshot is "empty" (never visited / nothing seeded) when no panel is
 // placed and no sub-section is active. The bootstrap uses this as the first-visit
-// signal to seed the default arrangement + terminal (Task 6.1/6.2); a restored
+// signal to seed the default arrangement + terminal; a restored
 // snapshot is never empty, so it is never re-seeded.
 export function isEmptyLayout(layout: WorkspaceLayoutState): boolean {
   return Object.keys(layout.placement).length === 0 && layout.activeSubSection === null;
@@ -209,7 +185,7 @@ export function isEmptyLayout(layout: WorkspaceLayoutState): boolean {
 
 // Switch the active workspace in one write. First visit seeds the default layout if
 // provided and the family entry is still empty; the full default-layout seeding plus
-// registry/dynamic-panel placement are wired in Task 6.1/6.2.
+// registry/dynamic-panel placement are wired in the bootstrap.
 export const switchActiveWorkspaceAtom = atom(
   null,
   (get, set, params: { workspaceId: string; defaultLayout?: WorkspaceLayoutState }) => {

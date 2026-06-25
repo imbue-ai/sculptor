@@ -6,17 +6,7 @@ import { agentActionsTargetAtom } from "../contextActions/atoms.ts";
 import type { AgentActionRuntime } from "../contextActions/types.ts";
 import type { CommandRuntime } from "../runtime.ts";
 import type { Command, DynamicProvider } from "../types.ts";
-
-// Cap palette rows at a fixed width; longer titles are truncated with an
-// ellipsis so the ellipsis budget stays inside the cap.
-const MAX_DISPLAY_TITLE_LENGTH = 80;
-const TITLE_ELLIPSIS = "...";
-
-const taskDisplayTitle = (task: { title?: string | null; initialPrompt: string }): string => {
-  const display = task.title?.trim() || task.initialPrompt.trim() || "Untitled agent";
-  if (display.length <= MAX_DISPLAY_TITLE_LENGTH) return display;
-  return `${display.slice(0, MAX_DISPLAY_TITLE_LENGTH - TITLE_ELLIPSIS.length)}${TITLE_ELLIPSIS}`;
-};
+import { taskDisplayTitle } from "./agentTitle.ts";
 
 /**
  * Surfaces the right-click menu actions for the CURRENT agent in Cmd+K.

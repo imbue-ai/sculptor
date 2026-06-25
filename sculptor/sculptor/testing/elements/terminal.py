@@ -20,7 +20,7 @@ from sculptor.testing.elements.add_panel_dropdown import create_terminal_panel
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 
 # The default workspace layout seeds terminal panels into the (collapsed) bottom
-# section (SEC-03). A terminal renders as a dynamic panel tab whose id is
+# section. A terminal renders as a dynamic panel tab whose id is
 # ``terminal:<wsId>:<index>`` and whose xterm content carries no testid of its own,
 # so the terminal panel is reached through the bottom section's tab strip / xterm I/O.
 _TERMINAL_SECTION = "bottom"
@@ -332,7 +332,7 @@ def get_tab_close_button(tab: Locator) -> Locator:
 
 
 def confirm_close_terminal(page: Page) -> None:
-    """Confirm the terminal close-confirmation dialog (TERM-02).
+    """Confirm the terminal close-confirmation dialog.
 
     Closing a terminal tab opens a "Close terminal?" confirmation; clicking its
     confirm button kills the backend shell and drops the tab.

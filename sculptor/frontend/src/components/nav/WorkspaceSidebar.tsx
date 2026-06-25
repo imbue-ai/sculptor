@@ -64,15 +64,17 @@ type NavItemProps = {
   icon: LucideIcon;
   label: string;
   isActive?: boolean;
+  disabled?: boolean;
   onClick: () => void;
   testId?: string;
 };
 
-const NavItem = ({ icon: Icon, label, isActive, onClick, testId }: NavItemProps): ReactElement => (
+const NavItem = ({ icon: Icon, label, isActive, disabled, onClick, testId }: NavItemProps): ReactElement => (
   <button
     type="button"
     className={`${styles.navItem} ${isActive ? styles.navItemActive : ""}`}
     onClick={onClick}
+    disabled={disabled}
     data-testid={testId}
   >
     <Icon size={16} className={styles.navIcon} />
@@ -120,8 +122,117 @@ const WorkspaceRowDropdownItems = ({
 );
 
 /**
+ * A single workspace row in the sidebar repo group: the status dot + name (or an
+ * inline rename input while renaming), the hover-revealed actions dropdown and
+ * delete button, and the wrapping right-click context menu. Purely presentational
+ * — all behavior is delegated through the callback props.
+ */
+const SidebarWorkspaceRow = ({
+  workspace,
+  status,
+  isRenaming,
+  isActive,
+  actions,
+  openInRuntime,
+  destructiveColor,
+  onClick,
+  onHover,
+  onRenameCommit,
+  onRenameCancel,
+  onBeginDelete,
+}: {
+  workspace: Workspace;
+  status: ReturnType<typeof computeWorkspaceDotStatus>;
+  isRenaming: boolean;
+  isActive: boolean;
+  actions: ReadonlyArray<WorkspaceAction>;
+  openInRuntime: OpenInRuntime;
+  destructiveColor: ReturnType<typeof useThemeDangerColor>;
+  onClick: () => void;
+  onHover: () => void;
+  onRenameCommit: (newName: string) => void;
+  onRenameCancel: () => void;
+  onBeginDelete: () => void;
+}): ReactElement => (
+  <ContextMenu.Root>
+    <ContextMenu.Trigger>
+      <div className={`${styles.workspaceRow} ${isActive ? styles.workspaceRowActive : ""}`}>
+        {isRenaming ? (
+          <span className={styles.workspaceRowButton}>
+            <span className={styles.workspaceDot}>
+              <WorkspaceStatusDots status={status} />
+            </span>
+            <InlineRenameInput
+              value={workspace.description ?? ""}
+              onCommit={onRenameCommit}
+              onCancel={onRenameCancel}
+              isEditing={true}
+            />
+          </span>
+        ) : (
+          <button
+            type="button"
+            className={styles.workspaceRowButton}
+            onClick={onClick}
+            onMouseEnter={onHover}
+            data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW}
+            data-workspace-id={workspace.objectId}
+            data-has-unread={String(status.hasUnread)}
+            data-workspace-tab
+            data-tab-id={workspace.objectId}
+          >
+            <span className={styles.workspaceDot}>
+              <WorkspaceStatusDots status={status} />
+            </span>
+            <span className={styles.workspaceName}>{workspace.description ?? "Untitled"}</span>
+          </button>
+        )}
+        <Flex className={`${styles.rowActions} ${styles.hoverReveal}`} gap="2">
+          <DropdownMenu.Root>
+            <Tooltip content="Workspace actions" side="bottom">
+              <DropdownMenu.Trigger>
+                <IconButton
+                  variant="ghost"
+                  size="1"
+                  color="gray"
+                  aria-label="Workspace actions"
+                  data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW_MENU}
+                  data-workspace-id={workspace.objectId}
+                >
+                  <MoreHorizontal size={13} />
+                </IconButton>
+              </DropdownMenu.Trigger>
+            </Tooltip>
+            <WorkspaceRowDropdownItems actions={actions} workspace={workspace} destructiveColor={destructiveColor} />
+          </DropdownMenu.Root>
+          <Tooltip content="Delete workspace" side="bottom">
+            <IconButton
+              variant="ghost"
+              size="1"
+              color="gray"
+              onClick={onBeginDelete}
+              aria-label="Delete workspace"
+              data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW_DELETE}
+              data-workspace-id={workspace.objectId}
+            >
+              <Trash2 size={13} />
+            </IconButton>
+          </Tooltip>
+        </Flex>
+      </div>
+    </ContextMenu.Trigger>
+    <WorkspaceContextMenuContent
+      actions={actions}
+      workspace={workspace}
+      destructiveColor={destructiveColor}
+      openInRuntime={openInRuntime}
+    />
+  </ContextMenu.Root>
+);
+
+/**
  * Vertical navigation sidebar — the global chrome rail that replaces the old
- * top bar (SIDE-01..17). Top links (Home / Cmd+K / New workspace), then repos
+ * top bar. Top links (Home / Cmd+K / New workspace), then repos
  * as collapsible groups with their workspaces, then Settings / report-a-bug /
  * version anchored to the bottom. A drag handle on the right border resizes it
  * and the collapse toggle hides it down to `CollapsedSidebarToggle`. Width and
@@ -142,7 +253,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   const setCollapsedRepos = useSetAtom(collapsedRepoGroupsAtom);
   const effectiveOpenTabIds = useAtomValue(effectiveOpenTabIdsAtom);
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useAtom(renamingWorkspaceIdAtom);
-  // FIRST-02: in the empty first-run state the repo area shows its own
+  // In the empty first-run state the repo area shows its own
   // "Add a repo" / "No workspaces yet" affordances; outside it the sidebar is
   // unchanged.
   const isWorkspaceListEmpty = useAtomValue(isWorkspaceListEmptyAtom);
@@ -159,7 +270,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   // External hooks
   const { navigateToWorkspace, navigateToAgent, navigateToHome, navigateToGlobalSettings } = useImbueNavigate();
   const setNewWorkspaceModal = useSetAtom(newWorkspaceModalAtom);
-  const { createFromSidebar } = useCreateWorkspaceFromSidebar();
+  const { createFromSidebar, isCreating } = useCreateWorkspaceFromSidebar();
   const { toggle: toggleCommandPalette } = useCommandPalette();
   const openSettings = useOpenSettings();
   const { workspaceId: activeWorkspaceId, isHomeRoute, isSettingsRoute } = useImbueLocation();
@@ -167,7 +278,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   const { handleClose, handleCloseOthers, handleCloseAll, navigateToNextTab } = useWorkspaceTabActions();
   const gitAndOpenIn = useGitAndOpenInRuntime();
   // Deleting a workspace updates the sidebar optimistically and rolls back with
-  // an error toast on failure (SIDE-16). Navigate away only when the deleted
+  // an error toast on failure. Navigate away only when the deleted
   // workspace is the active one.
   const { execute: executeDelete } = useOptimisticWorkspaceDelete({
     onNavigateAfterDelete: (workspaceId): void => {
@@ -234,13 +345,14 @@ export const WorkspaceSidebar = (): ReactElement | null => {
     return statusMap;
   }, [workspaces, tasks]);
 
-  // Group workspaces by repo (project). Workspaces whose project hasn't loaded
-  // yet fall into an "Other" bucket so nothing disappears.
+  // Group workspaces by repo (project). Every workspace has a projectId, but the
+  // project record itself may not have loaded yet — those fall back to an "Other"
+  // group *name* (see the `?? "Other"` below) so nothing disappears.
   const repoGroups = useMemo((): ReadonlyArray<RepoGroup> => {
     const projectsById = new Map(projects.map((project) => [project.objectId, project]));
     const byProject = new Map<string, Array<Workspace>>();
     for (const ws of workspaces ?? []) {
-      const key = ws.projectId ?? "__unknown__";
+      const key = ws.projectId;
       const list = byProject.get(key) ?? [];
       list.push(ws);
       byProject.set(key, list);
@@ -266,7 +378,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
     [agentIdsByWorkspace, navigateToAgent, navigateToWorkspace],
   );
 
-  // Navigation-intent prefetch seam (SWITCH-03): warm the workspace's persisted layout
+  // Navigation-intent prefetch seam: warm the workspace's persisted layout
   // on hover. A no-op for the localStorage adapter (reads are synchronous); the seam is
   // here so the future backend adapter can fetch the snapshot before the user clicks.
   const handleWorkspaceHover = useCallback((workspaceId: string): void => {
@@ -318,7 +430,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
   return (
     <aside className={styles.sidebar} style={{ width: `${width}px` }} data-testid={ElementIds.WORKSPACE_SIDEBAR}>
       {/* Window-controls gutter clears the macOS traffic lights, then the
-          collapse toggle (SIDE-13). */}
+          collapse toggle. */}
       <div className={styles.windowControls} style={{ paddingLeft: getTitleBarLeftPadding(true) }}>
         <Tooltip content="Collapse sidebar" side="right">
           <IconButton
@@ -344,18 +456,19 @@ export const WorkspaceSidebar = (): ReactElement | null => {
           testId={ElementIds.SIDEBAR_HOME_LINK}
         />
         <NavItem icon={Search} label="Search" onClick={toggleCommandPalette} testId={ElementIds.SIDEBAR_CMDK_LINK} />
-        {/* WSC-01: direct-create reusing the last settings + a fresh auto branch;
+        {/* Direct-create reusing the last settings + a fresh auto branch;
             falls back to the dialog when there are no last settings yet. */}
         <NavItem
           icon={Plus}
           label="New Workspace"
+          disabled={isCreating}
           onClick={() => void createFromSidebar()}
           testId={ElementIds.SIDEBAR_NEW_WORKSPACE_BUTTON}
         />
       </nav>
 
       <div className={styles.repoList}>
-        {/* FIRST-02: empty first-run repo area. With no repos, an "Add a repo"
+        {/* Empty first-run repo area. With no repos, an "Add a repo"
             button; with repos but no workspaces, each repo header followed by a
             "No workspaces yet" hint. `repoGroups` is built from workspaces, so
             it's empty here — render from `projects` instead. */}
@@ -418,7 +531,7 @@ export const WorkspaceSidebar = (): ReactElement | null => {
                     </IconButton>
                   </Tooltip>
                   <Tooltip content="New workspace in this repo" side="right">
-                    {/* WSC-04: open the dialog pre-selecting this repo. */}
+                    {/* Open the dialog pre-selecting this repo. */}
                     <IconButton
                       variant="ghost"
                       size="1"
@@ -434,92 +547,23 @@ export const WorkspaceSidebar = (): ReactElement | null => {
                 </Flex>
               </div>
               {!isRepoCollapsed &&
-                group.workspaces.map((ws) => {
-                  const status = workspaceStatuses.get(ws.objectId) ?? EMPTY_WORKSPACE_DOT_STATUS;
-                  const isRenaming = renamingWorkspaceId === ws.objectId;
-                  return (
-                    <ContextMenu.Root key={ws.objectId}>
-                      <ContextMenu.Trigger>
-                        <div
-                          className={`${styles.workspaceRow} ${ws.objectId === activeWorkspaceId ? styles.workspaceRowActive : ""}`}
-                        >
-                          {isRenaming ? (
-                            <span className={styles.workspaceRowButton}>
-                              <span className={styles.workspaceDot}>
-                                <WorkspaceStatusDots status={status} />
-                              </span>
-                              <InlineRenameInput
-                                value={ws.description ?? ""}
-                                onCommit={(newName) => void handleRenameCommit(ws.objectId, newName)}
-                                onCancel={() => setRenamingWorkspaceId(null)}
-                                isEditing={true}
-                              />
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              className={styles.workspaceRowButton}
-                              onClick={() => handleWorkspaceClick(ws.objectId)}
-                              onMouseEnter={() => handleWorkspaceHover(ws.objectId)}
-                              data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW}
-                              data-workspace-id={ws.objectId}
-                              data-has-unread={String(status.hasUnread)}
-                              data-workspace-tab
-                              data-tab-id={ws.objectId}
-                            >
-                              <span className={styles.workspaceDot}>
-                                <WorkspaceStatusDots status={status} />
-                              </span>
-                              <span className={styles.workspaceName}>{ws.description ?? "Untitled"}</span>
-                            </button>
-                          )}
-                          <Flex className={`${styles.rowActions} ${styles.hoverReveal}`} gap="2">
-                            <DropdownMenu.Root>
-                              <Tooltip content="Workspace actions" side="bottom">
-                                <DropdownMenu.Trigger>
-                                  <IconButton
-                                    variant="ghost"
-                                    size="1"
-                                    color="gray"
-                                    aria-label="Workspace actions"
-                                    data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW_MENU}
-                                    data-workspace-id={ws.objectId}
-                                  >
-                                    <MoreHorizontal size={13} />
-                                  </IconButton>
-                                </DropdownMenu.Trigger>
-                              </Tooltip>
-                              <WorkspaceRowDropdownItems
-                                actions={workspaceActions}
-                                workspace={ws}
-                                destructiveColor={dangerColor}
-                              />
-                            </DropdownMenu.Root>
-                            <Tooltip content="Delete workspace" side="bottom">
-                              <IconButton
-                                variant="ghost"
-                                size="1"
-                                color="gray"
-                                onClick={() => setDeleteTarget(ws)}
-                                aria-label="Delete workspace"
-                                data-testid={ElementIds.SIDEBAR_WORKSPACE_ROW_DELETE}
-                                data-workspace-id={ws.objectId}
-                              >
-                                <Trash2 size={13} />
-                              </IconButton>
-                            </Tooltip>
-                          </Flex>
-                        </div>
-                      </ContextMenu.Trigger>
-                      <WorkspaceContextMenuContent
-                        actions={workspaceActions}
-                        workspace={ws}
-                        destructiveColor={dangerColor}
-                        openInRuntime={openInRuntime}
-                      />
-                    </ContextMenu.Root>
-                  );
-                })}
+                group.workspaces.map((ws) => (
+                  <SidebarWorkspaceRow
+                    key={ws.objectId}
+                    workspace={ws}
+                    status={workspaceStatuses.get(ws.objectId) ?? EMPTY_WORKSPACE_DOT_STATUS}
+                    isRenaming={renamingWorkspaceId === ws.objectId}
+                    isActive={ws.objectId === activeWorkspaceId}
+                    actions={workspaceActions}
+                    openInRuntime={openInRuntime}
+                    destructiveColor={dangerColor}
+                    onClick={() => handleWorkspaceClick(ws.objectId)}
+                    onHover={() => handleWorkspaceHover(ws.objectId)}
+                    onRenameCommit={(newName) => void handleRenameCommit(ws.objectId, newName)}
+                    onRenameCancel={() => setRenamingWorkspaceId(null)}
+                    onBeginDelete={() => setDeleteTarget(ws)}
+                  />
+                ))}
             </div>
           );
         })}

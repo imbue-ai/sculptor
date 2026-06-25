@@ -6,9 +6,9 @@
 // over), so a pointer move elsewhere never reaches it.
 //
 // A plain click sets this section active silently (no ring flash) — the ring is only
-// pulsed by deliberate jumps (Task 4.4). The active-section ring is drawn as a CSS
-// overlay gated on isRingVisible; the maximized styling hook (full layout in Task
-// 4.3) flips when this section is the maximized one.
+// pulsed by deliberate jumps. The active-section ring is drawn as a CSS
+// overlay gated on isRingVisible; the maximized styling hook flips when this section
+// is the maximized one.
 
 import { useDroppable } from "@dnd-kit/core";
 import { useAtomValue, useSetAtom } from "jotai";
@@ -71,7 +71,7 @@ const PanelSectionComponent = ({ subSection }: PanelSectionProps): ReactElement 
       // (.dropTarget) is driven by the isDropTargetAtom slice, not dnd's own isOver.
       data-drop-target-subsection={subSection}
       data-drop-active={isDropTarget ? "true" : undefined}
-      // Behavioral hooks for the active-section ring (SEC-10/11): which section is the
+      // Behavioral hooks for the active-section ring: which section is the
       // logical active one, and whether its transient ring is currently visible.
       data-active={isActive ? "true" : undefined}
       data-ring-visible={isRingVisible ? "true" : undefined}

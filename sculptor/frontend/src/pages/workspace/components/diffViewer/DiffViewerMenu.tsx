@@ -9,7 +9,7 @@ import { useFileMenuGroups } from "~/pages/workspace/panels/fileBrowser/useFileM
 
 import type { DiffViewOptions, TreeViewOptions } from "./types.ts";
 
-/** The tree (list) view controls — flat/tree + collapse-all (FCC-07). */
+/** The tree (list) view controls — flat/tree + collapse-all. */
 const TreeOptionItems = ({ options }: { options: TreeViewOptions }): ReactElement => (
   <>
     {options.onToggleViewMode && (
@@ -30,14 +30,14 @@ const TreeOptionItems = ({ options }: { options: TreeViewOptions }): ReactElemen
   </>
 );
 
-/** The diff view controls relocated from the old toolbar (FCC-07): find,
+/** The diff view controls relocated from the old toolbar: find,
  *  split/unified, wrap, and (for markdown) render. */
 const DiffViewOptionItems = ({ isBinary, options }: { isBinary: boolean; options: DiffViewOptions }): ReactElement => (
   <>
     {!isBinary && (
       <>
         {/* Find-in-file walks the source DOM, so it is unavailable while markdown
-            is rendered (FCC-07 preserves the old toolbar's behavior). */}
+            is rendered (preserves the old toolbar's behavior). */}
         {!(options.showRenderToggle && options.isRendered) && (
           <DropdownMenu.Item onSelect={() => options.onToggleSearch()} data-testid={ElementIds.DIFF_FIND_IN_FILE_BTN}>
             <Search size={14} /> Find in file
@@ -73,15 +73,15 @@ type DiffViewerMenuProps = {
   /** File-actions context (open/copy/close-tab); when absent only view/tree
    *  options are shown (e.g. the empty state has no file). */
   fileContext: FileContextMenuContext | null;
-  /** The relocated diff view controls (FCC-07); absent for non-diff selections. */
+  /** The relocated diff view controls; absent for non-diff selections. */
   viewOptions?: DiffViewOptions;
-  /** The list view controls merged in from the tree side (FCC-07). */
+  /** The list view controls merged in from the tree side. */
   treeOptions?: TreeViewOptions;
   isBinary: boolean;
 };
 
 /**
- * The single triple-dot menu in the viewer header (FCC-07). It assembles, in
+ * The single triple-dot menu in the viewer header. It assembles, in
  * order: the tree (list) view options, the diff view options that used to sit
  * as toolbar icons, and the per-file actions (open / copy / close tab). The
  * trigger carries {@link ElementIds.DIFF_FILE_HEADER_MENU_TRIGGER}; the

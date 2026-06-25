@@ -28,8 +28,8 @@ export const pluginOverlaysAtom = atom<ReadonlyArray<{ id: string; component: Co
 
 /**
  * Workspace-scoped widgets contributed by plugins via `registerWorkspaceWidget`.
- * The workspace banner renders each one in its action row, ordered (and
- * progressively collapsed) by `collapsePriority`. Each entry's component is
+ * The workspace banner renders each one in its action row, ordered by
+ * `collapsePriority` (higher values rendered nearer the PR button). Each entry's component is
  * already wrapped by the loader in an error boundary and the plugin's
  * PluginContext; the banner supplies the per-render WorkspacePluginContext.
  */

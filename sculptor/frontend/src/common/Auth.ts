@@ -10,7 +10,9 @@ let sessionToken: string | undefined = undefined;
 export const initializeSessionToken = async (): Promise<void> => {
   if (!window.sculptor) {
     // As a backup, outside of the electron context, initialize the session token through the samesite cookie.
-    const sessionTokenInitializationURL = new URL(SESSION_TOKEN_ENDPOINT, API_URL_BASE ?? window.location.origin);
+    // Use `||` (not `??`): the web/OpenHost build sets API_URL_BASE to "" for the same-origin default, and
+    // `new URL(relativePath, "")` throws — the empty string must fall back to the page origin.
+    const sessionTokenInitializationURL = new URL(SESSION_TOKEN_ENDPOINT, API_URL_BASE || window.location.origin);
     // This sets the session token cookie.
     await fetch(sessionTokenInitializationURL.toString(), { method: "GET" });
   } else {

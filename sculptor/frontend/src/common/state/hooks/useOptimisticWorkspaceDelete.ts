@@ -45,8 +45,8 @@ export const useOptimisticWorkspaceDelete = (
       })
         .then(() => {
           // Drop the workspace's persisted layout only once the server delete commits,
-          // so a failed delete (rolled back below) keeps the user's arrangement
-          // (PERSIST-05 isolation; the layout is re-seeded to default on next visit).
+          // so a failed delete (rolled back below) keeps the user's arrangement;
+          // the layout is re-seeded to default on next visit.
           removeWorkspaceLayout({ workspaceId });
         })
         .catch(() => {

@@ -15,6 +15,41 @@ function keyFor(scope: LayoutScope): string {
   return scope.kind === "global" ? GLOBAL_KEY : `${WORKSPACE_KEY_PREFIX}${scope.workspaceId}`;
 }
 
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// Structural guard so a valid-JSON-but-wrong-shape snapshot (e.g. a stale schema
+// or a hand-edited entry) is treated as "nothing stored" rather than hydrated and
+// crashing the layout atoms downstream. Intentionally shallow: it checks the
+// presence/kind of the top-level fields each scope's atoms rely on, not every nested value.
+function isValidSnapshot(scope: LayoutScope, value: unknown): boolean {
+  if (!isObject(value)) {
+    return false;
+  }
+
+  if (scope.kind === "workspace") {
+    return (
+      isObject(value.placement) &&
+      isObject(value.order) &&
+      isObject(value.activePanel) &&
+      isObject(value.expanded) &&
+      isObject(value.splits) &&
+      "activeSubSection" in value
+    );
+  }
+  const sectionSizes = value.sectionSizes;
+  return (
+    isObject(sectionSizes) &&
+    typeof sectionSizes.left === "number" &&
+    typeof sectionSizes.right === "number" &&
+    typeof sectionSizes.bottom === "number" &&
+    typeof value.sidebarWidthPx === "number" &&
+    typeof value.sidebarCollapsed === "boolean" &&
+    typeof value.explorerListWidthPx === "number"
+  );
+}
+
 export class LocalStorageLayoutAdapter implements LayoutPersistenceAdapter {
   private readonly pending = new Map<string, unknown>();
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -31,7 +66,13 @@ export class LocalStorageLayoutAdapter implements LayoutPersistenceAdapter {
       if (raw === null) {
         return undefined;
       }
-      return JSON.parse(raw) as LayoutSnapshotFor<TScope>;
+      const parsed: unknown = JSON.parse(raw);
+      if (!isValidSnapshot(scope, parsed)) {
+        // Wrong-shape snapshot (e.g. stale schema or hand-edited entry): treat as
+        // "nothing stored" so the atoms fall back to their safe defaults.
+        return undefined;
+      }
+      return parsed as LayoutSnapshotFor<TScope>;
     } catch {
       // Missing localStorage or corrupt JSON must not break startup.
       return undefined;
@@ -55,6 +96,20 @@ export class LocalStorageLayoutAdapter implements LayoutPersistenceAdapter {
 
   prefetch(): void {
     // No-op: localStorage reads are already synchronous.
+  }
+
+  // Removes the beforeunload listener and cancels any pending flush. The exported
+  // singleton lives for the page lifetime, so this exists mainly so short-lived
+  // instances (e.g. in tests) don't leak a listener.
+  dispose(): void {
+    if (typeof window !== "undefined") {
+      window.removeEventListener("beforeunload", this.flush);
+    }
+
+    if (this.flushTimer !== null) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
   }
 
   private scheduleFlush(): void {

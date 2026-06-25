@@ -23,7 +23,6 @@ let `useFileLines` fall back to the target branch ref.
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -97,12 +96,12 @@ def test_review_all_diff_stays_visible_when_target_branch_longer_than_head(
     task_page.activate_changes_panel()
     task_page.click_review_all()
 
-    review_all_panel = page.get_by_test_id(ElementIDs.REVIEW_ALL_PANEL)
+    review_all_panel = task_page.get_review_all_panel()
     expect(review_all_panel).to_be_visible()
 
     # Switch the scope picker to "All" — the bug only manifests for the
     # vs-target-branch combined diff path.
-    all_scope = review_all_panel.get_by_test_id(ElementIDs.DIFF_SCOPE_ALL)
+    all_scope = review_all_panel.get_scope_all()
     expect(all_scope).to_be_visible()
     all_scope.click()
 

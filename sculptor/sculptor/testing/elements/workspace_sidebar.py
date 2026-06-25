@@ -95,7 +95,7 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
         expect(menu_icon).to_be_visible()
         menu_icon.click()
 
-    # -- Workspace-row context menu items + inline rename (SIDE-08/09/16) --
+    # -- Workspace-row context menu items + inline rename --
     #
     # The sidebar workspace row reuses the shared workspace-action context menu
     # (the same ``TAB_CONTEXT_MENU_*`` ids the old workspace tab used), reached by
@@ -135,11 +135,20 @@ class PlaywrightWorkspaceSidebarElement(PlaywrightIntegrationTestElement):
     def get_delete_confirmation_confirm_button(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_CONFIRM)
 
+    def get_delete_confirmation_cancel_button(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_CANCEL)
+
     def confirm_delete(self) -> None:
         """Click the confirm button in the workspace delete-confirmation dialog."""
         confirm_button = self.get_delete_confirmation_confirm_button()
         expect(confirm_button).to_be_visible()
         confirm_button.click()
+
+    def cancel_delete(self) -> None:
+        """Click the cancel button in the workspace delete-confirmation dialog."""
+        cancel_button = self.get_delete_confirmation_cancel_button()
+        expect(cancel_button).to_be_visible()
+        cancel_button.click()
 
     def open_diagnostics_submenu(self, workspace_row: Locator) -> None:
         """Right-click a row and hover Diagnostics to open the copy-id submenu."""

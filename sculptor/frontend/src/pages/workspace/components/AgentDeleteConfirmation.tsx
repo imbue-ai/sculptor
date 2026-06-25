@@ -1,8 +1,8 @@
-// Headless owner of the agent delete-confirmation dialog (AGENT-04), driven by the
+// Headless owner of the agent delete-confirmation dialog, driven by the
 // shared agentDeleteTargetAtom (set from an agent tab's close button via the panel's
 // onRequestClose, wired in useWorkspaceDynamicPanels). Confirming runs the optimistic
 // agent delete (useOptimisticTaskDelete): the tab disappears instantly, a failed
-// backend delete rolls back with an error toast + Retry (AGENT-08). Deleting the
+// backend delete rolls back with an error toast + Retry. Deleting the
 // currently-viewed agent navigates to a sibling agent so the user stays in the
 // workspace; closing the LAST agent leaves the center empty — no auto-create (Decision
 // B1). Mirrors the terminal close-confirmation wiring; rendered once by the workspace
@@ -28,7 +28,7 @@ export const AgentDeleteConfirmation = (): ReactElement | null => {
 
   // When the deleted agent is the one being viewed, move to a sibling agent so the
   // user stays in the workspace. When it was the last agent, navigate to root — the
-  // center is left empty, NOT refilled with an auto-created agent (Decision B1).
+  // center is left empty, NOT refilled with an auto-created agent.
   // Deleting a non-viewed agent leaves the current view untouched.
   const handleNavigateAfterDelete = useCallback(
     (taskId: string): void => {

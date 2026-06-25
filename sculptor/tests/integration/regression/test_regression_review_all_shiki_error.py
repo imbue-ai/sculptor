@@ -13,7 +13,6 @@ The diff initially appears but disappears once decorations are applied.
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -107,7 +106,7 @@ def test_review_all_diff_stays_visible_with_committed_line_count_changes(
     task_page.activate_changes_panel()
     task_page.click_review_all()
 
-    review_all_panel = page.get_by_test_id(ElementIDs.REVIEW_ALL_PANEL)
+    review_all_panel = task_page.get_review_all_panel()
     expect(review_all_panel).to_be_visible()
 
     # The combined diff should show the file header and diff content.

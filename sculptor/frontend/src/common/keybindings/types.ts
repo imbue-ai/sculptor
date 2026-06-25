@@ -31,9 +31,7 @@ export type StaticKeybindingId =
   | "toggle_tool_density"
   | "clear_terminal";
 
-export type PanelKeybindingId = `panel_${string}`;
-
-export type KeybindingId = StaticKeybindingId | PanelKeybindingId;
+export type KeybindingId = StaticKeybindingId;
 
 export type KeybindingCategory = "general" | "workspaces" | "chat" | "navigation" | "panels" | "terminal";
 

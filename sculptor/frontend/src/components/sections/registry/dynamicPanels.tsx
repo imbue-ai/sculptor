@@ -2,13 +2,13 @@
 // agent:<taskId> panel per task and one terminal:<wsId>:<index> panel per terminal.
 // Source data comes from tasksArrayAtom (src/common/state/atoms/tasks.ts) and
 // terminalTabStateAtom (src/common/state/atoms/terminalTabs.ts), fed in by the sync
-// hook in Task 6.2.
+// hook.
 //
 // The bound component per dynamic panel id is cached, so rebuilding the registry on
 // every task tick returns the SAME component reference per id and a live
-// agent/terminal panel never remounts (component_hierarchy.md → SectionBody;
-// SWITCH-02). The base components are registered by AgentPanel/TerminalPanel
-// (Phase 2/3) and looked up at render time, so a cached bound component picks up its
+// agent/terminal panel never remounts (it stays mounted under SectionBody).
+// The base components are registered by AgentPanel/TerminalPanel at import time and
+// looked up at render time, so a cached bound component picks up its
 // base once it registers.
 
 import { Bot, Terminal } from "lucide-react";
@@ -35,12 +35,24 @@ export function registerTerminalPanelComponent(component: TerminalPanelBaseCompo
   terminalBaseComponent = component;
 }
 
+// Single source of truth for the dynamic (multi-instance) panel id format. The id
+// embeds the agent/terminal identity behind these prefixes; isMultiInstancePanelId
+// keys off them so callers never re-derive the prefixes as bare literals.
+export const AGENT_PANEL_ID_PREFIX = "agent:";
+export const TERMINAL_PANEL_ID_PREFIX = "terminal:";
+
 export function makeAgentPanelId(taskId: string): PanelId {
-  return `agent:${taskId}`;
+  return `${AGENT_PANEL_ID_PREFIX}${taskId}`;
 }
 
 export function makeTerminalPanelId(workspaceId: string, index: number): PanelId {
-  return `terminal:${workspaceId}:${index}`;
+  return `${TERMINAL_PANEL_ID_PREFIX}${workspaceId}:${index}`;
+}
+
+// True when a panel id is a dynamic agent/terminal panel (multi-instance). Distinct
+// from isMultiInstanceKind, which keys off the registry kind rather than the id.
+export function isMultiInstancePanelId(panelId: PanelId): boolean {
+  return panelId.startsWith(AGENT_PANEL_ID_PREFIX) || panelId.startsWith(TERMINAL_PANEL_ID_PREFIX);
 }
 
 const componentCache = new Map<PanelId, ComponentType>();
@@ -69,7 +81,7 @@ function getTerminalComponent(workspaceId: string, index: number): ComponentType
   return cached;
 }
 
-// Diagnostics for an agent's context menu (AGENT-06). Fetched lazily by the Task 6.2
+// Diagnostics for an agent's context menu. Fetched lazily by the
 // sync hook when the tab's menu opens; absent/null fields disable the matching copy
 // action (e.g. "Copy session id" is disabled until the agent has a session).
 export type DynamicAgentDiagnostics = {
@@ -81,22 +93,22 @@ export type DynamicAgentDiagnostics = {
 export type DynamicAgentInput = {
   taskId: string;
   // The agent's display name. Carries the backend's "Claude N" / "Agent N" title with
-  // lowest-available-number reuse after deletions (AGENT-09); the sync hook passes
+  // lowest-available-number reuse after deletions; the sync hook passes
   // agent.title through, so numbering stays in one place (the backend).
   displayName: string;
-  // Raw fields for the tab status dot (AGENT-07); the dot is derived here via the
+  // Raw fields for the tab status dot; the dot is derived here via the
   // shared getAgentDotStatus so the panel tab and the old agent tab can't drift.
   status: TaskStatus;
   lastReadAt: string | null;
   updatedAt: string;
-  // Diagnostics powering the context-menu copy actions (AGENT-06). Omitted until the
+  // Diagnostics powering the context-menu copy actions. Omitted until the
   // sync hook has fetched them.
   diagnostics?: DynamicAgentDiagnostics;
-  // Closing an agent tab deletes the agent with confirmation + optimistic rollback
-  // (AGENT-04/08). Supplied by the Task 6.2 hook; defaults to a no-op so this module
+  // Closing an agent tab deletes the agent with confirmation + optimistic rollback.
+  // Supplied by the sync hook; defaults to a no-op so this module
   // type-checks before that wiring lands.
   onRequestClose?: () => void;
-  // Committing an inline tab rename persists the new title on the agent (PANEL-11);
+  // Committing an inline tab rename persists the new title on the agent;
   // supplied by the sync hook (renameWorkspaceAgent + optimistic title update).
   onRename?: (newName: string) => void;
 };
@@ -105,7 +117,7 @@ async function copyToClipboard(text: string): Promise<void> {
   await navigator.clipboard.writeText(text);
 }
 
-// Build the flat diagnostics copy actions for an agent's tab context menu (AGENT-06).
+// Build the flat diagnostics copy actions for an agent's tab context menu.
 // Copy agent id / name are always available; session id and transcript paths are
 // disabled until a session exists.
 function buildAgentContextMenuActions(agent: DynamicAgentInput): ReadonlyArray<PanelContextMenuItem> {
@@ -136,11 +148,11 @@ export type DynamicTerminalInput = {
   index: number;
   displayName: string;
   contextMenuActions?: ReadonlyArray<PanelContextMenuItem>;
-  // Closing a terminal tab kills the backend shell with a confirmation (TERM-02/04).
+  // Closing a terminal tab kills the backend shell with a confirmation.
   // Supplied by the sync hook; absent for callers that don't wire the close flow.
   onRequestClose?: () => void;
-  // Committing an inline tab rename updates this terminal tab's persisted label
-  // (PANEL-11); supplied by the sync hook.
+  // Committing an inline tab rename updates this terminal tab's persisted label;
+  // supplied by the sync hook.
   onRename?: (newName: string) => void;
 };
 

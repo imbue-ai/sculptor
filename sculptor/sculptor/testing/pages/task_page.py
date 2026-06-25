@@ -14,6 +14,7 @@ from sculptor.testing.elements.compaction_header import PlaywrightCompactionBarE
 from sculptor.testing.elements.compaction_panel import PlaywrightCompactionPanelElement
 from sculptor.testing.elements.diff_panel import PlaywrightDiffPanelElement
 from sculptor.testing.elements.file_browser import PlaywrightFileBrowserElement
+from sculptor.testing.elements.review_all_panel import PlaywrightReviewAllPanelElement
 from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 
 
@@ -145,6 +146,17 @@ class PlaywrightTaskPage(PlaywrightProjectLayoutPage):
     def get_changes_panel(self) -> PlaywrightChangesPanelElement:
         changes_panel = self._page.get_by_test_id(ElementIDs.CHANGES_PANEL)
         return PlaywrightChangesPanelElement(locator=changes_panel, page=self._page)
+
+    def get_review_all_panel(self) -> PlaywrightReviewAllPanelElement:
+        """Get the Review All panel POM, scoped to ``REVIEW_ALL_PANEL``.
+
+        The Review All panel embeds ``CombinedDiffView`` directly under
+        ``REVIEW_ALL_PANEL`` with no ``DIFF_PANEL`` wrapper, so its scope picker,
+        file sections, and diff views are reached from the panel root itself
+        rather than via ``get_diff_viewer_in`` (which resolves ``DIFF_PANEL``).
+        """
+        review_all_panel = self._page.get_by_test_id(ElementIDs.REVIEW_ALL_PANEL)
+        return PlaywrightReviewAllPanelElement(locator=review_all_panel, page=self._page)
 
     def get_diff_panel(self) -> PlaywrightDiffPanelElement:
         diff_panel = self._page.get_by_test_id(ElementIDs.DIFF_PANEL)

@@ -1,7 +1,7 @@
 // The Files panel: a single-instance left-section panel that pairs the workspace
 // file tree (the list) with an embedded DiffViewer (the detail). It owns its own
 // selection — a file-view of the clicked file — and feeds it to its own viewer
-// instance, so there is no shared "active diff" singleton (FCC-01/02/03). The
+// instance, so there is no shared "active diff" singleton. The
 // proven file-tree behavior (flat + tree variants, path/tilde display, symlink
 // handling, search) is migrated, not redesigned.
 
@@ -36,7 +36,7 @@ const FilesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEleme
 
   // The shared active diff tab — written when an agent opens a file (sculpt open-file,
   // a chat file-chip, plan mode). Reading it here makes those opens render in this
-  // panel's single embedded viewer, not just reveal the panel (FCC-01).
+  // panel's single embedded viewer, not just reveal the panel.
   const activeTab = useAtomValue(activeDiffTabAtomFamily(workspaceId));
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -78,7 +78,7 @@ const FilesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEleme
   // The path highlighted in the tree mirrors whatever the viewer is showing.
   const selectedPath = selection?.kind === "file-view" ? selection.filePath : null;
 
-  // The flat/tree + collapse-all controls live in the viewer's triple-dot menu (FCC-07).
+  // The flat/tree + collapse-all controls live in the viewer's triple-dot menu.
   const treeOptions: TreeViewOptions = {
     viewMode,
     onToggleViewMode: handleToggleViewMode,
@@ -110,7 +110,6 @@ const FilesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEleme
   return (
     <ExplorerLayout
       list={list}
-      hasSelection={selection !== null}
       detail={(sidebarToggle) => (
         <DiffViewer
           workspaceId={workspaceId}

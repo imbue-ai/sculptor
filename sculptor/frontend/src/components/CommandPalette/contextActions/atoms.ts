@@ -25,10 +25,10 @@ export const agentDeleteTargetAtom = atom<{ id: string; name: string } | null>(n
 
 /**
  * The terminal pending a close-confirmation, set when a terminal tab's close
- * button is hit (TERM-02). Carries everything the confirm handler needs to tear
+ * button is hit. Carries everything the confirm handler needs to tear
  * the terminal down without a separate lookup: the panel id (to unplace from the
  * layout), the workspace id + backend index (to kill the shell via
- * closeWorkspaceTerminal — TERM-04), the persisted tab id (to drop from
+ * closeWorkspaceTerminal), the persisted tab id (to drop from
  * terminalTabStateAtom), and the display name (for the dialog copy). Null when no
  * confirmation is open.
  */
@@ -58,6 +58,6 @@ export const agentActionsTargetAtom = atom<{ workspaceId: string; agentId: strin
 /**
  * The destination sub-section chosen on the Cmd+K "Add panel" location page,
  * read by the `addpanel.panels` provider to list and place panels for that
- * location (PANEL-12). Cleared on palette close.
+ * location. Cleared on palette close.
  */
 export const addPanelTargetSubSectionAtom = atom<SubSectionId | null>(null);

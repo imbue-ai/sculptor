@@ -50,9 +50,9 @@ type PanelTabProps = {
 // One panel tab. Subscribes only to its own panel definition so a registry rebuild
 // re-renders this tab only if ITS definition changed. Rename is offered for
 // multi-instance panels (agent/terminal) via double-click or the context menu;
-// single-instance panels cannot be renamed (PANEL-11).
+// single-instance panels cannot be renamed.
 //
-// The tab is a dnd-kit draggable (PANEL-08): the whole tab is the measured node, and
+// The tab is a dnd-kit draggable: the whole tab is the measured node, and
 // a focusable grip handle is the activator that carries the pointer/keyboard sensor
 // listeners — so a plain click still activates the panel and the drag starts only
 // from the handle. The floating copy is the ancestor DragOverlay; while dragging, the
@@ -79,8 +79,8 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
   const canRename = isMultiInstanceKind(definition.kind);
   const Icon = definition.icon;
 
-  // "Create {direction} split and move panel" (SPLIT-01/02): one option per allowed
-  // axis, offered only while the section has no split (one-split-max, SPLIT-03).
+  // "Create {direction} split and move panel": one option per allowed
+  // axis, offered only while the section has no split (one-split-max).
   const splitOptions = existingSplit === undefined ? splitDirectionOptionsForSection(section) : [];
 
   const tabClassName = [
@@ -96,7 +96,7 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
     setActivePanel({ panelId, in: subSection });
   };
 
-  // Double-clicking a multi-instance tab starts an inline rename (PANEL-11), matching
+  // Double-clicking a multi-instance tab starts an inline rename, matching
   // the old agent/terminal tab gesture; the context-menu Rename item is the other entry.
   const handleDoubleClick = (): void => {
     if (canRename) {
@@ -107,13 +107,13 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
   const handleClose = (event: React.MouseEvent): void => {
     event.stopPropagation();
     // Multi-instance panels (agent/terminal) delete the underlying entity — with its
-    // confirmation dialog — instead of just removing the tab from the layout
-    // (AGENT-04/08). Static panels have no onRequestClose and just close.
+    // confirmation dialog — instead of just removing the tab from the layout.
+    // Static panels have no onRequestClose and just close.
     if (definition.onRequestClose !== undefined) {
       definition.onRequestClose();
     } else {
       // Single-instance panel: closing only removes it from the layout, so remember
-      // it for the empty-state quick actions (SEC-19) — it can be re-added later.
+      // it for the empty-state quick actions — it can be re-added later.
       recordRecentlyClosed(panelId);
       closePanel({ panelId });
     }
@@ -123,7 +123,7 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
     setIsRenaming(false);
     // Persist the new name on the underlying entity (agent title / terminal label).
     // Only multi-instance panels supply onRename; static panels cannot be renamed
-    // (PANEL-11), so this is a no-op for them. InlineRenameInput already trims and drops
+    // so this is a no-op for them. InlineRenameInput already trims and drops
     // empty/unchanged values before committing, so newName is a non-empty new label.
     definition.onRename?.(newName);
   };
@@ -153,7 +153,7 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
       </span>
       <span className={styles.icon}>
         {/* Multi-instance panels carry a per-instance tabIcon (the agent status dot —
-            read/unread + running/waiting, AGENT-07); static panels fall back to their
+            read/unread + running/waiting); static panels fall back to their
             lucide kind icon. */}
         {definition.tabIcon ?? <Icon size={14} />}
       </span>
@@ -262,7 +262,7 @@ const SectionHeaderComponent = ({ subSection }: SectionHeaderProps): ReactElemen
   };
 
   // While maximized the workspace header is hidden, so this section header sits at the
-  // very top. When the sidebar is also collapsed (SEC-16), reserve the OS window-control
+  // very top. When the sidebar is also collapsed, reserve the OS window-control
   // gutter on the left so the tabs clear the traffic lights and the floating
   // show-sidebar toggle (CollapsedSidebarToggle, rendered by the shell).
   const headerStyle = isMaximized && isSidebarCollapsed ? { paddingLeft: getTitleBarLeftPadding(false) } : undefined;

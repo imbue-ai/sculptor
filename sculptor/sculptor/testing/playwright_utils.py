@@ -86,7 +86,7 @@ def _expect_home_landed(page: Page) -> None:
 def navigate_to_home_page(page: Page) -> None:
     """Navigate to the Home page (/home).
 
-    Prefers the sidebar Home link (SIDE-01) when the sidebar is rendered (the
+    Prefers the sidebar Home link when the sidebar is rendered (the
     workspace route's shell), and falls back to direct URL navigation when it is
     not (e.g. the empty first-run route).
     """
@@ -106,7 +106,7 @@ def navigate_to_home_page(page: Page) -> None:
 
 
 def navigate_to_workspace(page: Page, name_or_index: str | int = 0) -> None:
-    """Navigate to a workspace by clicking its sidebar row (SIDE-07).
+    """Navigate to a workspace by clicking its sidebar row.
 
     Replaces the old ``get_workspace_tabs().nth(i).click()``: the workspace tab
     strip is gone, so navigation happens through the sidebar's workspace rows
@@ -136,7 +136,7 @@ def navigate_to_workspace(page: Page, name_or_index: str | int = 0) -> None:
 
 
 def new_workspace(page: Page) -> None:
-    """Click the sidebar's new-workspace button (SIDE-03).
+    """Click the sidebar's new-workspace button.
 
     Opens the new-workspace flow. The full create-and-fill flow is Workspace
     creation's ``create_workspace()`` (a refactor of
@@ -149,7 +149,7 @@ def new_workspace(page: Page) -> None:
 
 
 def open_home(page: Page) -> None:
-    """Open the Home page via the sidebar Home link (SIDE-01).
+    """Open the Home page via the sidebar Home link.
 
     Clicks ``SIDEBAR_HOME_LINK`` when the sidebar is present (workspace route)
     and waits for the workspace list or empty state. Falls back to
@@ -168,7 +168,7 @@ def open_home(page: Page) -> None:
 
 
 def open_settings(page: Page) -> PlaywrightSettingsPage:
-    """Open Settings via the sidebar Settings link (SIDE-10).
+    """Open Settings via the sidebar Settings link.
 
     Clicks ``SIDEBAR_SETTINGS_LINK`` when the sidebar is present (workspace
     route), then waits for the settings page to render. Falls back to
@@ -181,23 +181,6 @@ def open_settings(page: Page) -> PlaywrightSettingsPage:
         expect(page.get_by_test_id(ElementIDs.SETTINGS_PAGE)).to_be_visible(timeout=10000)
         return PlaywrightSettingsPage(page=page)
     return navigate_to_settings_page(page)
-
-
-def open_command_palette(page: Page) -> None:
-    """Open the command palette via the sidebar Cmd+K link (SIDE-02).
-
-    The open affordance moved from the old top-bar search button to the sidebar
-    ``SIDEBAR_CMDK_LINK``. Falls back to the keyboard shortcut when the sidebar
-    is not rendered.
-    """
-    cmdk_link = page.get_by_test_id(ElementIDs.SIDEBAR_CMDK_LINK)
-    if cmdk_link.is_visible():
-        cmdk_link.click()
-    else:
-        mod_key = get_playwright_modifier_key()
-        page.keyboard.press(f"{mod_key}+k")
-        page.keyboard.up(mod_key)
-    expect(page.get_by_test_id(ElementIDs.COMMAND_PALETTE)).to_be_visible()
 
 
 def get_workspace_creation_button(page: Page) -> tuple[Locator, bool]:
@@ -309,7 +292,7 @@ def navigate_to_add_workspace_page(page: Page) -> None:
 
     # On the empty-first-run page the inline form IS the create surface, but its
     # create button mounts only after the form loads projects — and the modal
-    # shortcut (Cmd/Meta+T) is disabled here (FIRST-03), so falling through to it
+    # shortcut (Cmd/Meta+T) is disabled here, so falling through to it
     # would hang. Wait for the inline create button to appear instead.
     if empty_first_run.is_visible():
         expect(create_button).to_be_visible(timeout=45_000)
@@ -880,7 +863,7 @@ def navigate_to_workspace_without_agent(page: Page, workspace_id: str) -> None:
 def create_zero_agent_workspace(page: Page, *, description: str | None = None, source_branch: str = "testing") -> str:
     """Create a WORKTREE workspace with NO agent and navigate to it, returning its id.
 
-    The redesign relaxes the old "≥1 agent" invariant (AGENT-02, Task 2.5), so a
+    The redesign relaxes the old "≥1 agent" invariant, so a
     workspace can exist with an empty center section. This drives that state via
     the backend API — ``POST /api/v1/workspaces`` creates the workspace WITHOUT
     an agent (agents are a separate ``/agents`` POST), so no agent is ever

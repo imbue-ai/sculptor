@@ -7,7 +7,7 @@ from playwright.sync_api import expect
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.base import PlaywrightIntegrationTestElement
 
-# The view options that live in the viewer's triple-dot menu (FCC-07). Each maps
+# The view options that live in the viewer's triple-dot menu. Each maps
 # to the testid of its menu item so ``toggle_view_option_via_menu`` can open the
 # menu once and click the right row regardless of which option a test wants.
 _MENU_OPTION_TEST_IDS: dict[str, ElementIDs] = {
@@ -23,7 +23,7 @@ MenuOption = Literal["find_in_file", "split_view", "line_wrap", "render", "tree_
 
 
 class PlaywrightDiffViewerElement(PlaywrightIntegrationTestElement):
-    """Page Object Model for an embeddable per-panel diff/file viewer (FCC-02/06/07).
+    """Page Object Model for an embeddable per-panel diff/file viewer.
 
     Each Files / Changes / Commits panel embeds its OWN viewer instance with its
     own selection — there is no shared "active diff" singleton — so this POM is
@@ -48,6 +48,10 @@ class PlaywrightDiffViewerElement(PlaywrightIntegrationTestElement):
     def get_skeleton(self) -> Locator:
         """The static, no-shimmer placeholder shown while a diff is about to render."""
         return self.get_by_test_id(ElementIDs.DIFF_SKELETON)
+
+    def get_empty_body(self) -> Locator:
+        """The empty placeholder shown when no file is selected."""
+        return self.get_by_test_id(ElementIDs.DIFF_VIEWER_EMPTY)
 
     def get_loading_bar(self) -> Locator:
         """The indeterminate progress bar shown while a diff fetch is in flight.
@@ -79,7 +83,7 @@ class PlaywrightDiffViewerElement(PlaywrightIntegrationTestElement):
     def get_search_input(self) -> Locator:
         return self.get_by_test_id(ElementIDs.DIFF_IN_FILE_SEARCH_INPUT)
 
-    # -- The triple-dot menu (FCC-07) --
+    # -- The triple-dot menu --
 
     def get_menu_trigger(self) -> Locator:
         return self.get_file_header().get_by_test_id(ElementIDs.DIFF_FILE_HEADER_MENU_TRIGGER)
@@ -116,7 +120,7 @@ class PlaywrightDiffViewerElement(PlaywrightIntegrationTestElement):
         return self._page.get_by_test_id(_MENU_OPTION_TEST_IDS[option])
 
     def toggle_view_option_via_menu(self, option: MenuOption) -> None:
-        """Open the triple-dot menu and click the relocated ``option`` toggle (FCC-07).
+        """Open the triple-dot menu and click the relocated ``option`` toggle.
 
         Covers the diff view toggles (find-in-file, split/unified, line wrap,
         render markdown) and the list controls (flat/tree, collapse-all) that all
@@ -127,7 +131,7 @@ class PlaywrightDiffViewerElement(PlaywrightIntegrationTestElement):
         expect(item).to_be_visible()
         item.click()
 
-    # -- The sidebar-visibility toggle (FCC-05) --
+    # -- The sidebar-visibility toggle --
 
     def get_hide_sidebar_button(self) -> Locator:
         """The sidebar toggle while the list is visible ("Hide sidebar")."""

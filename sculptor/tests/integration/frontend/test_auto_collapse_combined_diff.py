@@ -6,7 +6,6 @@ they start collapsed, and the expand-all button works.
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -122,19 +121,17 @@ def test_many_files_start_collapsed_in_review_all(sculptor_instance_: SculptorIn
     # The Review All panel is a thin wrapper around CombinedDiffView, whose scope
     # picker defaults to "Uncommitted"; switch it to "All" (vs the target branch)
     # so the committed files count too.
-    review_all_panel = page.get_by_test_id(ElementIDs.REVIEW_ALL_PANEL)
+    review_all_panel = task_page.get_review_all_panel()
     expect(review_all_panel).to_be_visible()
-    review_all_panel.get_by_test_id(ElementIDs.DIFF_SCOPE_ALL).click()
+    review_all_panel.get_scope_all().click()
 
     # All 9 file section headers should be visible (7 uncommitted + 2 committed
     # on the testing branch vs main, since Review All is scoped to "All").
-    file_sections = review_all_panel.get_by_test_id(ElementIDs.COMBINED_DIFF_FILE_SECTION)
-    expect(file_sections).to_have_count(9)
+    expect(review_all_panel.get_file_sections()).to_have_count(9)
 
     # But diff content should not be visible (files are collapsed) — check that
     # no unified diff view is shown
-    diff_views = review_all_panel.get_by_test_id(ElementIDs.DIFF_VIEW_UNIFIED)
-    expect(diff_views).to_have_count(0)
+    expect(review_all_panel.get_unified_diff_views()).to_have_count(0)
 
 
 @user_story("to see files NOT auto-collapsed when there are few files in Review All")
@@ -154,15 +151,13 @@ def test_few_files_start_expanded_in_review_all(sculptor_instance_: SculptorInst
 
     # The Review All panel's scope picker defaults to "Uncommitted"; switch it to
     # "All" (vs the target branch) so the committed files count too.
-    review_all_panel = page.get_by_test_id(ElementIDs.REVIEW_ALL_PANEL)
+    review_all_panel = task_page.get_review_all_panel()
     expect(review_all_panel).to_be_visible()
-    review_all_panel.get_by_test_id(ElementIDs.DIFF_SCOPE_ALL).click()
+    review_all_panel.get_scope_all().click()
 
     # 5 file section headers should be visible (3 uncommitted + 2 committed
     # on the testing branch vs main, since Review All is scoped to "All").
-    file_sections = review_all_panel.get_by_test_id(ElementIDs.COMBINED_DIFF_FILE_SECTION)
-    expect(file_sections).to_have_count(5)
+    expect(review_all_panel.get_file_sections()).to_have_count(5)
 
     # Diff content should be visible (files are expanded)
-    diff_views = review_all_panel.get_by_test_id(ElementIDs.DIFF_VIEW_UNIFIED)
-    expect(diff_views).to_have_count(5)
+    expect(review_all_panel.get_unified_diff_views()).to_have_count(5)

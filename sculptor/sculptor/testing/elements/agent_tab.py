@@ -10,12 +10,12 @@ delegating to the new POMs:
 - creation → the add-panel dropdown (``create_agent_panel`` / the agent-type submenu)
 
 Behavioural notes (documented decisions):
-- There is no bare "terminal" agent type anymore (Decision B2): create a plain
+- There is no bare "terminal" agent type anymore: create a plain
   terminal via ``create_terminal_panel`` (bottom section) and a registered
   terminal-agent via ``add_agent(agent_type="registered", ...)``. So this shim does
   not expose a terminal agent-type item or a context-menu "Delete" / "Mark unread"
   item — those affordances moved (delete → the tab's close button) or are deferred
-  (mark-unread / AGENT-07). Tests that used them are rewritten directly.
+  (mark-unread). Tests that used them are rewritten directly.
 """
 
 from playwright.sync_api import Locator

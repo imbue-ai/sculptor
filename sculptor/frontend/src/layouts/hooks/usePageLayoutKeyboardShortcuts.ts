@@ -44,7 +44,7 @@ export const usePageLayoutKeyboardShortcuts = (): void => {
   const isChatSearchVisibleRef = useRef(isChatSearchVisible);
   isChatSearchVisibleRef.current = isChatSearchVisible;
 
-  // FIRST-03: in the empty first-run state, global shortcuts are off. Read
+  // In the empty first-run state, global shortcuts are off. Read
   // through a ref so the keydown effect doesn't re-subscribe when the flag
   // flips (it reads the latest value at event time instead).
   const areGlobalShortcutsDisabled = useAtomValue(areGlobalShortcutsDisabledAtom);
@@ -55,7 +55,7 @@ export const usePageLayoutKeyboardShortcuts = (): void => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
-      // FIRST-03: empty first-run state — only Settings is reachable. Suppress
+      // Empty first-run state — only Settings is reachable. Suppress
       // every other global shortcut (including Cmd+K) so the user can't escape
       // the inline form by keyboard. Settings still works so they can reach
       // preferences; it's the one allowed destination per the empty-state spec.

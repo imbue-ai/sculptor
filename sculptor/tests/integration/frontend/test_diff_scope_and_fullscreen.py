@@ -8,7 +8,6 @@ The diff-specific expand/fullscreen control was removed in the section shell
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -45,9 +44,8 @@ def test_scope_picker_defaults_to_all(sculptor_instance_: SculptorInstance) -> N
     task_page.click_review_all()
 
     # The combined diff lives in the Review All panel (the Changes panel renders
-    # its own scope picker too), so scope to REVIEW_ALL_PANEL to avoid matching
-    # two pickers.
-    review_all_panel = page.get_by_test_id(ElementIDs.REVIEW_ALL_PANEL)
-    scope_picker = review_all_panel.get_by_test_id(ElementIDs.DIFF_SCOPE_PICKER)
+    # its own scope picker too), so go through the Review All panel POM to avoid
+    # matching two pickers.
+    scope_picker = task_page.get_review_all_panel().get_scope_picker()
     expect(scope_picker).to_be_visible()
     expect(scope_picker).to_contain_text("All")

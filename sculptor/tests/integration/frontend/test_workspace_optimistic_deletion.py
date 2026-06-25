@@ -17,7 +17,6 @@ from playwright.sync_api import Page
 from playwright.sync_api import Route
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.toast import PlaywrightToastElement
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -66,7 +65,7 @@ def test_workspace_delete_requires_confirmation(
     expect(dialog).to_be_visible()
 
     # Cancelling aborts: the workspace row is still present.
-    page.get_by_test_id(ElementIDs.DELETE_CONFIRMATION_CANCEL).click()
+    sidebar.cancel_delete()
     expect(dialog).to_be_hidden()
     expect(rows).to_have_count(1)
 

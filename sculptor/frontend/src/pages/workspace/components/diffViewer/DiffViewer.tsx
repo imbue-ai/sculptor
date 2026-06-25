@@ -81,16 +81,16 @@ type DiffViewerProps = {
    *  `null` renders the empty state. There is no shared "active diff" singleton —
    *  each Files / Changes / Commits panel passes its own selection. */
   selection: DiffSelection | null;
-  /** The list view controls merged into the triple-dot menu (FCC-07). */
+  /** The list view controls merged into the triple-dot menu. */
   treeOptions?: TreeViewOptions;
-  /** The sidebar-visibility toggle rendered before the breadcrumb (FCC-05). */
+  /** The sidebar-visibility toggle rendered before the breadcrumb. */
   sidebarToggle?: ReactElement;
   /** Extra header actions (e.g. refresh) rendered before the menu. */
   headerActions?: ReactElement;
 };
 
 /**
- * An embeddable single-file diff/file viewer (FCC-02/06/07). It resolves its
+ * An embeddable single-file diff/file viewer. It resolves its
  * {@link DiffSelection} prop into content, preserves the in-panel viewer's
  * behavior (split/unified, wrap, find-in-file, render markdown, line numbers /
  * expansion, moved-file rendering, GFM + sanitization, loading bar only when a
@@ -401,8 +401,8 @@ export const DiffViewer = ({
       ) : (
         <>
           {/* No file selected: still show a minimal header so the sidebar toggle
-              (FCC-05) and the list's tree options (FCC-07) stay reachable, plus the
-              always-visible empty body (FCC-06). */}
+              and the list's tree options stay reachable, plus the
+              always-visible empty body. */}
           <Flex
             align="center"
             justify="between"
@@ -422,9 +422,9 @@ export const DiffViewer = ({
   );
 };
 
-/** The viewer body when no file is selected (FCC-06). */
+/** The viewer body when no file is selected. */
 const EmptyBody = (): ReactElement => (
-  <Flex align="center" justify="center" flexGrow="1">
+  <Flex align="center" justify="center" flexGrow="1" data-testid={ElementIds.DIFF_VIEWER_EMPTY}>
     <Text size="2" color="gray">
       Open a file to view it
     </Text>

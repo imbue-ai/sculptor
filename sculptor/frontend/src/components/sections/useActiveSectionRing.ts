@@ -1,4 +1,4 @@
-// Drives the ~2-second active-section ring fade (SEC-11). The LOGICAL active
+// Drives the ~2-second active-section ring fade. The LOGICAL active
 // sub-section persists; the ring VISIBILITY is transient and flashes only on a
 // deliberate jump (keyboard cycle, add, drop, workspace entry), each of which bumps
 // activeSectionRingNonceAtom via jumpToSectionAtom. On every bump this shows the ring
@@ -21,7 +21,7 @@ export function useActiveSectionRing(): void {
 
   useEffect(() => {
     // The initial mount (nonce 0) must not flash: re-entering the shell is not a jump.
-    // Workspace entry pulses explicitly by bumping the nonce after mount (Task 6.2).
+    // Workspace entry pulses explicitly by bumping the nonce after mount.
     if (!hasMountedRef.current) {
       hasMountedRef.current = true;
       return;

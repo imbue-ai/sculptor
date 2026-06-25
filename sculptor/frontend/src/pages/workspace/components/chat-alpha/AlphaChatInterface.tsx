@@ -62,7 +62,7 @@ type AlphaChatInterfaceProps = ChatData & {
   // The agent + workspace this chat surface renders. Threaded from the owning
   // panel so the surface (and its ChatInput) binds the PANEL's agent rather than
   // the route's agent — in the section shell the active center tab can differ
-  // from the route agent (AGENT-03/05: two agents render at once). Falls back to
+  // from the route agent (two agents render at once). Falls back to
   // the route params when omitted.
   taskId?: string;
   workspaceId?: string;

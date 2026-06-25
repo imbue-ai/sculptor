@@ -1,8 +1,7 @@
 // The single boundary between the Jotai layout atoms and storage. The state model
 // talks ONLY to this interface — never to localStorage or any backend client
 // directly — so swapping the backend (localStorage today → backend API later) is a
-// one-line change of which adapter is installed. See
-// agent_docs/ui_refresh/supplemental/persistence_interface.md.
+// one-line change of which adapter is installed.
 
 import type { LayoutScope, LayoutSnapshotFor } from "./types.ts";
 

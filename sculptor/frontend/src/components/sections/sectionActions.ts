@@ -3,11 +3,12 @@
 // and the layout invariants live here in one place: center never collapses, the
 // active sub-section stays in an expanded section, splits self-heal and are capped
 // at one per section, and single-instance panels activate in place instead of
-// duplicating. See agent_docs/ui_refresh/supplemental/state_atoms.md.
+// duplicating.
 
 import { atom } from "jotai";
 
 import type { WorkspaceLayoutState } from "./persistence/types.ts";
+import { isMultiInstancePanelId } from "./registry/dynamicPanels.tsx";
 import { workspaceLayoutAtom } from "./sectionAtoms.ts";
 import type { PanelId, SectionId, SplitAxis, SubSectionId } from "./sectionTypes.ts";
 import { canSplitAxis, toSecondary, toSection } from "./sectionTypes.ts";
@@ -18,12 +19,6 @@ export { removeWorkspaceLayoutAtom } from "./sectionAtoms.ts";
 export const SPLIT_RATIO_MIN = 0.15;
 export const SPLIT_RATIO_MAX = 0.85;
 const DEFAULT_SPLIT_RATIO = 0.5;
-
-// Agent and terminal panels are the only multi-instance panels (their ids embed the
-// task/terminal identity); everything else is single-instance.
-function isMultiInstancePanel(panelId: PanelId): boolean {
-  return panelId.startsWith("agent:") || panelId.startsWith("terminal:");
-}
 
 function isSectionExpanded(layout: WorkspaceLayoutState, section: SectionId): boolean {
   return section === "center" ? true : (layout.expanded[section] ?? false);
@@ -148,7 +143,7 @@ function withMovePanel(layout: WorkspaceLayoutState, { panelId, to, index }: Mov
 }
 
 function withOpenPanel(layout: WorkspaceLayoutState, { panelId, in: target }: OpenPanelParams): WorkspaceLayoutState {
-  if (!isMultiInstancePanel(panelId)) {
+  if (!isMultiInstancePanelId(panelId)) {
     const existing = layout.placement[panelId];
     if (existing !== undefined) {
       // Single-instance already open: activate it in place (do not duplicate) and

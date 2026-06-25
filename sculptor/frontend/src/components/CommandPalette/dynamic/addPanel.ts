@@ -1,4 +1,4 @@
-// Cmd+K "Add panel" flow (PANEL-12): a two-step page drill-down that reuses the
+// Cmd+K "Add panel" flow: a two-step page drill-down that reuses the
 // store-driven add-panel operations shared with the section `+` dropdown.
 //
 //   "Add panel…" (root, primary, workspace only)
@@ -7,11 +7,11 @@
 //
 // The chosen location rides in addPanelTargetSubSectionAtom (set by the location
 // rows, cleared on palette close). The panel page lists "New {recent} agent" (always
-// landing the agent in center — PANEL-06), "New terminal" (in the chosen location),
+// landing the agent in center), "New terminal" (in the chosen location),
 // and every single-instance panel not already open. Agents/terminals are never in
 // the single-instance list (closing one ends it).
 
-import { FileText, MessageSquarePlus, PanelTopIcon, SquareTerminal } from "lucide-react";
+import { MessageSquarePlus, PanelTopIcon, SquareTerminal } from "lucide-react";
 
 import { AGENT_TYPE_LABELS, lastUsedAgentTypeAtom, parseStoredAgentType } from "~/common/state/atoms/agentTabs.ts";
 import {
@@ -116,7 +116,7 @@ export const buildAddPanelProvider = (runtime: CommandRuntime): DynamicProvider 
         },
       });
       for (const panel of listAvailableStaticPanels(runtime.store)) {
-        const Icon = panel.icon ?? FileText;
+        const Icon = panel.icon;
         out.push({
           id: `addpanel.panels.${panel.id}`,
           title: panel.displayName,

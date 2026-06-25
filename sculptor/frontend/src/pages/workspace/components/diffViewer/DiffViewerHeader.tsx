@@ -18,12 +18,12 @@ type DiffViewerHeaderProps = {
   removedLines: number;
   fileStatus: FileStatus | null;
   isBinary: boolean;
-  /** The diff view controls in the triple-dot menu (FCC-07). Absent for
+  /** The diff view controls in the triple-dot menu. Absent for
    *  file-view / commit-diff selections that have no diff toggles. */
   viewOptions?: DiffViewOptions;
-  /** The tree view controls merged into the triple-dot menu (FCC-07). */
+  /** The tree view controls merged into the triple-dot menu. */
   treeOptions?: TreeViewOptions;
-  /** Rendered before the breadcrumb — the sidebar-visibility toggle (FCC-05). */
+  /** Rendered before the breadcrumb — the sidebar-visibility toggle. */
   leadingControl?: ReactNode;
   /** Rendered in the right cluster before the menu (e.g. refresh). */
   trailingActions?: ReactNode;
@@ -32,7 +32,7 @@ type DiffViewerHeaderProps = {
 /**
  * The 41px viewer header: an optional leading control (sidebar toggle), the
  * file breadcrumb, line stats, optional trailing actions, and the single
- * triple-dot options menu (FCC-07).
+ * triple-dot options menu.
  */
 export const DiffViewerHeader = ({
   workspaceId,

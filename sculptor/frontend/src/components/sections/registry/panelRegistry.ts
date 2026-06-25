@@ -1,12 +1,11 @@
 // The panel registry: the join point between layout state (which references panels
 // by id) and content (which renders them). Static single-instance panels carry
 // metadata here; their actual components are supplied through registerPanelComponent
-// at import time (Phase 2/3) so this Phase-1 module never forward-imports components
+// at import time so this module never forward-imports components
 // that do not exist yet. Dynamic agent/terminal panels are derived in dynamicPanels.
 // There is NO enabled/defaultEnabled/isBuiltin flag — the Panels settings page is
 // gone.
 
-import type { Atom } from "jotai";
 import { atom } from "jotai";
 import { selectAtom } from "jotai/utils";
 import type { LucideIcon } from "lucide-react";
@@ -14,6 +13,7 @@ import { FileText, GitBranch, GitCommitVertical, Globe, ListChecks, NotebookPen,
 import type { ComponentType, ReactNode } from "react";
 
 import type { AgentDotStatus } from "../../statusDot/statusUtils.ts";
+import { memoizedAtomByKey } from "../atomCache.ts";
 import { activePanelIdInSubSectionAtom } from "../sectionAtoms.ts";
 import type { PanelId, SubSectionId } from "../sectionTypes.ts";
 
@@ -38,12 +38,12 @@ export type PanelDefinition = {
   // When set, the tab's close button runs this instead of removing the panel from the
   // layout. Multi-instance panels use it so closing an agent/terminal tab deletes the
   // underlying agent/terminal (with its confirmation dialog) rather than just hiding it
-  // (AGENT-04/08). Static panels leave it unset and fall back to closePanelAtom.
+  // Static panels leave it unset and fall back to closePanelAtom.
   onRequestClose?: () => void;
   // When set, committing an inline tab rename runs this with the new name to persist it
   // on the underlying entity (agent title / terminal tab label). Only multi-instance
-  // panels supply it; static panels leave it unset since they cannot be renamed
-  // (PANEL-11). Mirrors onRequestClose.
+  // panels supply it; static panels leave it unset since they cannot be renamed.
+  // Mirrors onRequestClose.
   onRename?: (newName: string) => void;
 };
 
@@ -125,18 +125,26 @@ export function buildPluginPanelDefinitions(
 // defaults to the static panels so reads before sync never crash.
 export const panelRegistryAtom = atom<ReadonlyArray<PanelDefinition>>(buildStaticPanelDefinitions());
 
-function memoizedAtomByKey<TKey extends string, TValue>(
-  factory: (key: TKey) => Atom<TValue>,
-): (key: TKey) => Atom<TValue> {
-  const cache = new Map<string, Atom<TValue>>();
-  return (key) => {
-    let cached = cache.get(key);
-    if (cached === undefined) {
-      cached = factory(key);
-      cache.set(key, cached);
-    }
-    return cached;
-  };
+// True when two panel definitions are equal for render purposes: same identity, or
+// all of the stable, render-relevant fields match. A registry rebuild on a task tick
+// produces fresh PanelDefinition objects even when nothing a tab cares about changed,
+// so without this comparator selectAtom would re-emit (new object reference) and
+// re-render the tab every tick. `component` is identity-stable (registeredComponents
+// map / dynamicPanels componentCache) and `dotStatus` is a scalar, so comparing these
+// fields suppresses spurious re-emits while still re-rendering on a real change (e.g.
+// rename or dot-status change).
+function panelDefinitionEqual(a: PanelDefinition | undefined, b: PanelDefinition | undefined): boolean {
+  return (
+    a === b ||
+    (a !== undefined &&
+      b !== undefined &&
+      a.id === b.id &&
+      a.displayName === b.displayName &&
+      a.kind === b.kind &&
+      a.defaultSection === b.defaultSection &&
+      a.dotStatus === b.dotStatus &&
+      a.component === b.component)
+  );
 }
 
 // A single panel's definition, sliced out of the registry and memoized per id.
@@ -144,13 +152,17 @@ function memoizedAtomByKey<TKey extends string, TValue>(
 // task tick (which produces a new array but the same per-id definition) does not
 // re-render every tab — only the tab whose own definition changed.
 export const panelDefinitionByIdAtom = memoizedAtomByKey<PanelId, PanelDefinition | undefined>((panelId) =>
-  selectAtom(panelRegistryAtom, (registry) => registry.find((definition) => definition.id === panelId)),
+  selectAtom(
+    panelRegistryAtom,
+    (registry) => registry.find((definition) => definition.id === panelId),
+    panelDefinitionEqual,
+  ),
 );
 
 // The layout↔registry join SectionBody subscribes to: the resolved component for the
 // sub-section's active panel. Returns a stable reference per panel id (static
 // component or identity-cached dynamic component), so a registry rebuild on a task
-// tick never remounts live panel content (SWITCH-02).
+// tick never remounts live panel content.
 export const activePanelComponentInSubSectionAtom = memoizedAtomByKey<SubSectionId, ComponentType | undefined>(
   (subSection) =>
     atom((get) => {

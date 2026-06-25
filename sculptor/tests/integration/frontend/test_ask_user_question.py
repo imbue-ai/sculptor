@@ -11,13 +11,13 @@ import sys
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.ask_user_question import PlaywrightAskUserQuestionBlockElement
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_panel
 from sculptor.testing.elements.ask_user_question import get_ask_user_question_tool_blocks
 from sculptor.testing.elements.ask_user_question import get_first_ask_user_question_tool_block
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import navigate_away_and_back
 from sculptor.testing.playwright_utils import soft_reload_page
@@ -1018,7 +1018,7 @@ fake_claude:ask_user_question `{
         page = instance.page
 
         # The workspace still exists after restart.
-        workspace_tab = page.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW).first
+        workspace_tab = get_workspace_sidebar(page).get_workspace_rows().first
         expect(workspace_tab).to_be_visible()
         workspace_tab.click()
 

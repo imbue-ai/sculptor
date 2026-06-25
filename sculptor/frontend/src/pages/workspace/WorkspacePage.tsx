@@ -22,22 +22,15 @@ import { WorkspaceLayoutShell } from "./WorkspaceLayoutShell.tsx";
 const WorkspacePageContent = ({ workspaceId, taskId }: { workspaceId: string; taskId: string }): ReactElement => {
   useWorkspaceShellBootstrap({ workspaceId, taskId });
 
-  // Workspace-switch profiler (SWITCH-01 / SEC-18): the content rendered with the
+  // Workspace-switch profiler: the content rendered with the
   // new workspace id; the bootstrap above has restored its persisted layout into
-  // the section atoms, and a double-rAF approximates the first painted frame so
-  // the start→first-paint window measures any stale-content / layout-shift gap.
+  // the section atoms. Reporting `layout-restored` lets the profiler schedule
+  // `first-paint-after-restore` on its own (via an internal double-rAF) so the
+  // start→first-paint window measures any stale-content / layout-shift gap.
   // Every mark is inert unless the profiler is opted in (dev-only by default).
   markSwitchMilestone("page-content-render");
   useEffect(() => {
     markSwitchMilestone("layout-restored");
-    let secondRaf = 0;
-    const firstRaf = requestAnimationFrame(() => {
-      secondRaf = requestAnimationFrame(() => markSwitchMilestone("first-paint-after-restore"));
-    });
-    return (): void => {
-      cancelAnimationFrame(firstRaf);
-      if (secondRaf) cancelAnimationFrame(secondRaf);
-    };
   }, [workspaceId]);
 
   return <WorkspaceLayoutShell />;
@@ -92,8 +85,7 @@ export const WorkspacePage = (): ReactElement | null => {
   ]);
 
   if (!agentIDFromUrl) return null;
-  // The mobile shell is not built yet (component_hierarchy.md → "Mobile shell
-  // variant"); the seam always resolves to desktop for now.
+  // The mobile shell is not built yet; the seam always resolves to desktop for now.
   if (isMobile) return null;
   return <WorkspacePageContent workspaceId={workspaceID} taskId={agentIDFromUrl} />;
 };

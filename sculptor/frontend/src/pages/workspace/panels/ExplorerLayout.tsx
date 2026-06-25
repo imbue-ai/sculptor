@@ -1,6 +1,5 @@
-import { Flex, Text } from "@radix-ui/themes";
 import { useAtom } from "jotai";
-import { FileText, FolderTree } from "lucide-react";
+import { FolderTree } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
@@ -19,38 +18,26 @@ type ExplorerLayoutProps = {
   /** The master list (file tree / changes browser / commit history). */
   list: ReactNode;
   /**
-   * The detail (viewer) slot, always rendered (FCC-06). Receives the
-   * sidebar-visibility toggle to place in its own header (FCC-05). When the
-   * embedded viewer renders its own empty state, ignore `hasSelection`; when it
-   * does not, pass `emptyDetail` to have the layout render one.
+   * The detail (viewer) slot, always rendered. Receives the
+   * sidebar-visibility toggle to place in its own header. The embedded
+   * viewer owns its own empty state.
    */
   detail: (sidebarToggle: ReactElement) => ReactNode;
-  /** Whether the detail has something selected. Drives the layout-owned empty
-   *  state when `emptyDetail` is provided (FCC-06). */
-  hasSelection: boolean;
-  /**
-   * Optional layout-owned empty detail, rendered instead of `detail` when
-   * `hasSelection` is false. Receives the sidebar toggle so the empty header
-   * keeps the toggle reachable. Omit when the viewer renders its own empty
-   * state.
-   */
-  emptyDetail?: (sidebarToggle: ReactElement) => ReactNode;
 };
 
 /**
  * Shared resizable list-plus-viewer scaffold for the Files / Changes / Commits
- * panels (FCC-04/05/06). The list (sidebar) on the left keeps a fixed pixel
+ * panels. The list (sidebar) on the left keeps a fixed pixel
  * width — the GLOBAL `explorerListWidthAtom`, shared across all three panels and
  * across workspaces — and the viewer on the right flexes to fill the rest. The
  * divider resizes the list (min 200px list / min 280px viewer). The
- * sidebar-visibility toggle is rendered into the viewer's header (FCC-05); the
- * viewer is always visible (FCC-06).
+ * sidebar-visibility toggle is rendered into the viewer's header; the
+ * viewer is always visible.
  *
- * It takes the list and viewer as slots and the selection as a prop — there is
- * no shared "active diff" singleton, so each panel embeds its own instance with
- * its own selection.
+ * It takes the list and viewer as slots — there is no shared "active diff"
+ * singleton, so each panel embeds its own instance with its own selection.
  */
-export const ExplorerLayout = ({ list, detail, hasSelection, emptyDetail }: ExplorerLayoutProps): ReactElement => {
+export const ExplorerLayout = ({ list, detail }: ExplorerLayoutProps): ReactElement => {
   // Width persists globally (shared across the three panels and all workspaces).
   const [listWidth, setListWidth] = useAtom(explorerListWidthAtom);
   // Sidebar visibility is per-instance UI state (each panel can hide its own).
@@ -103,7 +90,7 @@ export const ExplorerLayout = ({ list, detail, hasSelection, emptyDetail }: Expl
     </TooltipIconButton>
   );
 
-  const detailContent = !hasSelection && emptyDetail ? emptyDetail(sidebarToggle) : detail(sidebarToggle);
+  const detailContent = detail(sidebarToggle);
 
   return (
     <div ref={containerRef} className={styles.row}>
@@ -117,31 +104,5 @@ export const ExplorerLayout = ({ list, detail, hasSelection, emptyDetail }: Expl
       )}
       <div className={styles.detail}>{detailContent}</div>
     </div>
-  );
-};
-
-/**
- * The placeholder header + body for an empty viewer (FCC-06), kept here so a
- * panel that does not delegate its empty state to the embedded viewer can reuse
- * the same look. It keeps the sidebar toggle in the header so the sidebar stays
- * toggleable with nothing selected.
- */
-export const EmptyDetail = ({ sidebarToggle }: { sidebarToggle: ReactElement }): ReactElement => {
-  return (
-    <Flex direction="column" height="100%" width="100%">
-      <Flex align="center" gap="2" className={styles.emptyHeader}>
-        {sidebarToggle}
-        <Text size="1" color="gray" className={styles.emptyHeaderLabel}>
-          No file selected
-        </Text>
-        <span className={styles.emptyHeaderSpacer} />
-      </Flex>
-      <Flex className={styles.emptyDetail} direction="column" align="center" justify="center" gap="3" p="4">
-        <FileText size={28} strokeWidth={1.5} />
-        <Text size="2" color="gray">
-          Select a file to view its contents
-        </Text>
-      </Flex>
-    </Flex>
   );
 };

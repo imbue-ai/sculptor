@@ -1,6 +1,6 @@
 // Consolidated layout snapshot shapes persisted by the LayoutPersistenceAdapter.
 // One object per scope (per-workspace or global) — never the prototype's many
-// scattered keys. See agent_docs/ui_refresh/supplemental/persistence_interface.md.
+// scattered keys.
 
 import type { PanelId, SectionId, SectionSplit, SubSectionId } from "../sectionTypes.ts";
 
@@ -24,7 +24,7 @@ export type GlobalLayoutState = {
   sectionSizes: { left: number; right: number; bottom: number };
   sidebarWidthPx: number;
   sidebarCollapsed: boolean;
-  // Shared across Files/Changes/Commits (goals.md → "Files, Changes and Commits").
+  // Shared across Files/Changes/Commits.
   explorerListWidthPx: number;
 };
 
@@ -35,8 +35,8 @@ export type LayoutSnapshotFor<TScope extends LayoutScope> = TScope extends { kin
   : GlobalLayoutState;
 
 // Safe "nothing persisted yet" snapshots. The real default *arrangement* (center
-// agent, left Files/Changes/Commits, bottom terminal) is seeded in Task 6.1; these
-// are just inert empties/defaults so the atoms always have a valid initial value.
+// agent, left Files/Changes/Commits, bottom terminal) is seeded by the bootstrap;
+// these are just inert empties/defaults so the atoms always have a valid initial value.
 export const EMPTY_WORKSPACE_LAYOUT: WorkspaceLayoutState = {
   placement: {},
   order: {},

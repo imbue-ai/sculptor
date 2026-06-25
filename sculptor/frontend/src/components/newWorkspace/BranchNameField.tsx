@@ -44,7 +44,7 @@ const sanitizeBranchName = (raw: string): string =>
     .replace(/^\.+/, "");
 
 /**
- * The WSC-06 branch field: a monospace pill with input sanitization, a shuffle
+ * The branch-name field: a monospace pill with input sanitization, a shuffle
  * button to re-roll the auto-filled name, and a STABLE error slot that is always
  * rendered (an empty fixed-height row when there is nothing to show) so the
  * dialog never jumps as the collision state changes.

@@ -89,13 +89,11 @@ export type WorkspaceWidgetDefinition = {
   id: string;
   component: ComponentType;
   /**
-   * Where the widget sits in the host's progressive-collapse order when the row
-   * runs out of horizontal room: lower values are hidden first, higher values
-   * survive longer (the banner's PR button is the most protected built-in). A
-   * host without a collapsing container — e.g. the future vertical-tabs layout —
-   * is free to ignore this. Built-in banner items occupy a few small integers,
-   * so pick a value that orders the widget relative to them; omit it to collapse
-   * before everything else.
+   * Orders plugin widgets relative to one another within the action row: lower
+   * values render first, higher values render nearer the PR button. It only
+   * sorts plugin widgets among themselves — built-in banner items are not part
+   * of this ordering — and a host that lays the widgets out differently is free
+   * to ignore it. Omit it to sort ahead of widgets that set a value.
    */
   collapsePriority?: number;
 };

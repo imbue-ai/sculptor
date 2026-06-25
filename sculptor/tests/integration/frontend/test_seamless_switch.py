@@ -8,8 +8,9 @@ persisted active sub-section / expanded sections — SWITCH-04). The zero-reflow
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
+from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
+from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
@@ -30,7 +31,7 @@ def test_switch_keeps_the_shell_present(sculptor_instance_: SculptorInstance) ->
     PlaywrightWorkspaceSection(page, "right").expand_section()
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Seamless B WS")
 
-    sidebar = page.get_by_test_id(ElementIDs.WORKSPACE_SIDEBAR)
+    sidebar = get_workspace_sidebar(page)
     expect(sidebar).to_be_visible()
 
     navigate_to_workspace(page, "Seamless A WS")
@@ -38,7 +39,7 @@ def test_switch_keeps_the_shell_present(sculptor_instance_: SculptorInstance) ->
     # The shell never tears down (no spinner-gated blank): the sidebar stays visible and
     # the destination workspace's chat panel renders.
     expect(sidebar).to_be_visible()
-    expect(page.get_by_test_id(ElementIDs.CHAT_PANEL)).to_be_visible(timeout=60_000)
+    expect(PlaywrightTaskPage(page=page).get_chat_panel()).to_be_visible(timeout=60_000)
 
 
 @user_story("to return to a workspace and find the view I left")
@@ -61,6 +62,6 @@ def test_reentry_preserves_last_view(sculptor_instance_: SculptorInstance) -> No
     expect(PlaywrightWorkspaceSection(page, "right").get_header()).to_have_count(0)
 
     navigate_to_workspace(page, "Reentry A WS")
-    expect(page.get_by_test_id(ElementIDs.CHAT_PANEL)).to_be_visible(timeout=60_000)
+    expect(PlaywrightTaskPage(page=page).get_chat_panel()).to_be_visible(timeout=60_000)
     # The view A was left in (right expanded) is restored.
     expect(PlaywrightWorkspaceSection(page, "right").get_header()).to_be_visible()

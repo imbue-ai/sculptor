@@ -9,7 +9,7 @@ import { useAutoUpdateListener } from "./hooks/useAutoUpdateListener.ts";
 import { EmptyFirstRunPage } from "./pages/workspace/EmptyFirstRunPage.tsx";
 
 /**
- * App gate for the empty first-run experience (FIRST-01/FIRST-05). Wraps every
+ * App gate for the empty first-run experience. Wraps every
  * page route. When the workspace list is genuinely empty it renders
  * `EmptyFirstRunPage` instead of the matched route, so the post-onboarding /
  * post-signup landing (and any other destination) shows the inline new-workspace
@@ -20,7 +20,7 @@ import { EmptyFirstRunPage } from "./pages/workspace/EmptyFirstRunPage.tsx";
  * loading (`undefined`) and whenever any workspace exists, so this is a no-op
  * for the entire has-workspaces flow — the matched route renders unchanged, and
  * the empty page never flashes during load. Once the first workspace is created
- * the atom flips false and the normal layouts take back over (FIRST-05).
+ * the atom flips false and the normal layouts take back over.
  */
 export const EmptyFirstRunGate = (): ReactElement => {
   const isWorkspaceListEmpty = useAtomValue(isWorkspaceListEmptyAtom);
@@ -28,9 +28,10 @@ export const EmptyFirstRunGate = (): ReactElement => {
 
   // The auto-update listener + toasts are mounted here, above the gate, rather than
   // inside AppShell: AppShell unmounts whenever the workspace list is empty (the
-  // empty-first-run state), which would drop the `_autoUpdateCallback` registration
-  // and silence update toasts. This gate wraps every route and never unmounts, so
-  // the updater keeps running in every app state.
+  // empty-first-run state), which would tear down the `onAutoUpdateStatus` IPC
+  // listener registered by `useAutoUpdateListener` and silence update toasts. This
+  // gate wraps every route and never unmounts, so the updater keeps running in
+  // every app state.
   useAutoUpdateListener();
 
   return (

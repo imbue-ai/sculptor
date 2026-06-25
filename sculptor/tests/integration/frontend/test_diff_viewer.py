@@ -226,16 +226,17 @@ def _ensure_render_mode(viewer: PlaywrightDiffViewerElement, page: Page, mode: s
     effective view). Idempotent — only toggles when the current view differs.
     """
     want_rendered = mode == "rendered"
+    # Anchor on a deterministic baseline first: confirm the preview wrapper is
+    # mounted with the default 30s timeout, so a slow mount is never misread.
     expect(viewer.get_read_only_preview()).to_be_visible()
     markdown = viewer.get_read_only_preview_markdown()
-    # Settle before sampling: a fresh markdown file renders by default, but the
-    # wrapper mounts a beat after the preview. Wait for it so a not-yet-mounted
-    # wrapper isn't misread as "source" (which would toggle the wrong way).
-    try:
-        expect(markdown).to_be_visible(timeout=5_000)
-        currently_rendered = True
-    except AssertionError:
-        currently_rendered = False
+    # The markdown body and the source view are mutually exclusive branches of
+    # the SAME render commit (ReadOnlyPreview's `shouldRenderMarkdown` gate), so
+    # once the preview wrapper is visible the body's presence is already settled.
+    # Read it as a stable attachment count rather than a shortened visibility
+    # probe — the latter could mis-time a slow mount as "source" and toggle the
+    # wrong way.
+    currently_rendered = markdown.count() > 0
     if currently_rendered != want_rendered:
         viewer.toggle_view_option_via_menu("render")
     if want_rendered:
@@ -418,10 +419,12 @@ def test_diff_refreshes_when_current_branch_changes(sculptor_instance_: Sculptor
         capture_output=True,
     )
 
-    # Step 3: The Changes list should no longer show hello.py.
-    # Allow up to 15 seconds for the branch polling (3s interval) to detect
-    # the change and the frontend to clear + refetch the diff.
-    expect(hello_row).to_be_hidden(timeout=15_000)
+    # Step 3: The Changes list should no longer show hello.py once the branch
+    # polling (3s interval) detects the change and the frontend clears +
+    # refetches the diff. This waits on an async WebSocket/poll-driven refresh,
+    # not a performance bound, so rely on the default timeout (which already
+    # budgets for the poll interval + WebSocket delivery + refetch).
+    expect(hello_row).to_be_hidden()
 
 
 # --------------------------------------------------------------------------- #
@@ -501,6 +504,11 @@ def test_diff_loading_bar_hidden_when_no_file_open(sculptor_instance_: SculptorI
     # The viewer body is visible (empty placeholder), and there is NO loading
     # bar — even though opening the panel kicks off a background diff fetch.
     expect(viewer).to_be_visible()
+    # Wait for the empty-state body to actually render before the negative
+    # check: the background diff fetch resolving into the empty placeholder is
+    # the state under test, so the loading-bar assertion must run after it
+    # settles rather than during the in-flight window.
+    expect(viewer.get_empty_body()).to_be_visible()
     expect(viewer.get_loading_bar()).to_have_count(0)
 
 

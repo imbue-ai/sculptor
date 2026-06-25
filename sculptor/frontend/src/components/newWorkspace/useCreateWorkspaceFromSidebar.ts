@@ -15,7 +15,7 @@ type UseCreateWorkspaceFromSidebarReturn = {
   /** True while a direct-create is in flight. */
   isCreating: boolean;
   /**
-   * The sidebar new-workspace button (WSC-01): create a workspace immediately,
+   * The sidebar new-workspace button: create a workspace immediately,
    * reusing the last creation settings (repo / source branch / agent type /
    * init strategy) plus a freshly auto-generated unique branch name. Falls back
    * to opening the dialog when there are no last settings yet (first-ever

@@ -5,7 +5,7 @@
 // the React hook — means the dropdown and Cmd+K can't drift, and the Cmd+K
 // provider doesn't need React hooks (which would crash on non-workspace routes).
 //
-// New agents ALWAYS land in the center section (PANEL-06), regardless of the
+// New agents ALWAYS land in the center section, regardless of the
 // requesting sub-section. Terminals and single-instance panels land in the
 // requesting sub-section. Agents/terminals are multi-instance and are never in the
 // single-instance re-add list (closing one ends it).
@@ -26,7 +26,7 @@ import { activeWorkspaceIdAtom, workspaceLayoutAtom } from "./sectionAtoms.ts";
 import type { PanelId, SectionId, SubSectionId } from "./sectionTypes.ts";
 import { SECTION_IDS, toSecondary } from "./sectionTypes.ts";
 
-// New agents always land in the center section's primary sub-section (PANEL-06).
+// New agents always land in the center section's primary sub-section.
 const AGENT_TARGET_SUB_SECTION: SubSectionId = "center";
 
 type AppStore = ReturnType<typeof useStore>;
@@ -84,7 +84,7 @@ export function listAvailableStaticPanels(store: AppStore): ReadonlyArray<Availa
 export function openStaticPanelInLocation(store: AppStore, panelId: PanelId, subSection: SubSectionId): void {
   store.set(openPanelAtom, { panelId, in: subSection });
   // Adding a panel is a deliberate interaction: make its section active and pulse the
-  // ring (SEC-10/11). openPanel has already expanded the section, so the jump applies.
+  // ring. openPanel has already expanded the section, so the jump applies.
   store.set(jumpToSectionAtom, { subSection });
 }
 
@@ -109,7 +109,7 @@ export function createTerminalInLocation(store: AppStore, subSection: SubSection
   store.set(jumpToSectionAtom, { subSection });
 }
 
-// Seed the workspace's first-visit terminal for the default bottom section (SEC-03).
+// Seed the workspace's first-visit terminal for the default bottom section.
 // Reuses the first existing terminal tab if one is already persisted (so a no-migration
 // revisit of a workspace that already had terminals does not spawn a duplicate),
 // otherwise appends one fresh tab with the same index/label scheme as
@@ -132,7 +132,7 @@ export function seedFirstVisitTerminal(store: AppStore, workspaceId: string): nu
 type CreateAgentInputs = { agentType: AgentTypeName; registrationId?: string; activeAgentId?: string };
 
 // Create an agent of the given type and place its panel in the CENTER section
-// (PANEL-06), regardless of the requesting sub-section. Returns the new task id (or
+// regardless of the requesting sub-section. Returns the new task id (or
 // undefined on failure) so callers can navigate to it. The placement is just an id
 // reference; the registry sync derives the panel def once the task loads.
 export async function createAgentInCenter(store: AppStore, inputs: CreateAgentInputs): Promise<string | undefined> {

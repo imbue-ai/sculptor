@@ -159,7 +159,7 @@ def test_browser_panel_navigation_tour(
     assert nav_type == "reload"
 
     panel.navigate("not a url", wait_for_webview_load=False)
-    expect(page.get_by_test_id(ElementIDs.BROWSER_PANEL)).to_be_visible()
+    expect(panel.get_root()).to_be_visible()
     expect(panel.get_url_error()).to_be_visible()
     expect(panel.get_url_input()).not_to_have_value(re.compile(r"http://"))
 
@@ -201,7 +201,7 @@ def test_browser_panel_url_input_polish(
     panel.wait_for_address_bar_contains(target_url)
 
     PlaywrightWorkspaceSection(page, "right").collapse_section()
-    expect(page.get_by_test_id(ElementIDs.BROWSER_PANEL)).not_to_be_visible()
+    expect(panel.get_root()).not_to_be_visible()
     panel = _open_browser_panel(page)
     expect(panel.get_url_input()).to_be_focused()
 
@@ -286,7 +286,7 @@ def test_browser_panel_url_persists_across_collapse(
     expect(panel.get_url_input()).to_have_value(re.compile(re.escape(target_url)))
 
     PlaywrightWorkspaceSection(page, "right").collapse_section()
-    expect(page.get_by_test_id(ElementIDs.BROWSER_PANEL)).not_to_be_visible()
+    expect(panel.get_root()).not_to_be_visible()
 
     panel = _open_browser_panel(page)
     expect(panel.get_url_input()).to_have_value(re.compile(re.escape(target_url)))

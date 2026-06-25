@@ -21,7 +21,7 @@ from sculptor.testing.utils import get_playwright_modifier_key
 class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
     """Page object for the workspace shell — the sidebar + section grid.
 
-    This is the UI-refresh shim (Task 2.7): the old top-bar/tab API has been
+    This is the UI-refresh shim: the old top-bar/tab API has been
     replaced by a sidebar + section API while the cross-cutting survivors
     (keyboard shortcuts, command palette, warning banner, the git-init /
     add-repo / project-path / keyboard-shortcuts dialogs) keep their original
@@ -29,8 +29,8 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
 
     The old tab getters (``get_home_tab``, the ``get_tab_context_menu_*`` set,
     ``get_topbar``, ``get_bottom_bar``, …) targeted surfaces that no longer
-    render on the workspace route; the tests that drove them are deleted in
-    Phase 8. Use ``get_workspace_sidebar()`` for navigation and ``get_section()``
+    render on the workspace route; the tests that drove them are deleted.
+    Use ``get_workspace_sidebar()`` for navigation and ``get_section()``
     for the panel grid. ``get_workspace_tabs`` survives below as a thin shim onto
     the sidebar rows for the regression / real_pi suites that were not swept.
     """
@@ -110,8 +110,8 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
     def ensure_workspace_exists(self) -> None:
         """Leave the empty first-run state so global shortcuts are live.
 
-        FIRST-03 deliberately disables the command palette AND every global
-        keyboard shortcut while no workspace exists: ``areGlobalShortcutsDisabled``
+        The empty first-run state deliberately disables the command palette AND
+        every global keyboard shortcut while no workspace exists: ``areGlobalShortcutsDisabled``
         (derived from an empty workspace list) makes ``useCommandPalette().toggle``
         and ``usePageLayoutKeyboardShortcuts`` no-op, so the sidebar Cmd+K link,
         Cmd+K and Cmd+/ all do nothing. The shared instance's per-test cleanup
@@ -130,7 +130,7 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
         if self.get_by_test_id(ElementIDs.EMPTY_FIRST_RUN_PAGE).is_visible():
             create_zero_agent_workspace(self._page)
             # Global shortcuts + the Cmd+K palette stay disabled until the workspace
-            # LIST is non-empty (FIRST-03, driven by workspacesArrayAtom). The create
+            # LIST is non-empty (driven by workspacesArrayAtom). The create
             # above navigates onto the new workspace, but that list atom can lag the
             # WebSocket sync, so a palette open / shortcut fired immediately can no-op.
             # Wait for the sidebar row (same workspace list) so callers don't race it.
@@ -140,9 +140,9 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
         """Open the command palette by clicking the sidebar Cmd+K link.
 
         The open path moved from the old top-bar search button to the sidebar
-        ``SIDEBAR_CMDK_LINK`` (SIDE-02); the method signature is unchanged so
+        ``SIDEBAR_CMDK_LINK``; the method signature is unchanged so
         existing callers keep working. A workspace is ensured first because the
-        open affordance is disabled in the empty first-run state (FIRST-03).
+        open affordance is disabled in the empty first-run state.
         """
         self.ensure_workspace_exists()
         cmdk_link = self.get_workspace_sidebar().get_cmdk_link()
@@ -156,7 +156,7 @@ class PlaywrightProjectLayoutPage(PlaywrightIntegrationTestPage):
         """Open the command palette using its default keyboard shortcut.
 
         A workspace is ensured first because Cmd+K is suppressed in the empty
-        first-run state (FIRST-03).
+        first-run state.
         """
         self.ensure_workspace_exists()
         mod_key = get_playwright_modifier_key()

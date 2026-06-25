@@ -1,4 +1,4 @@
-"""Page Object Model for a section's split (SPLIT-01..06).
+"""Page Object Model for a section's split.
 
 A section is split by right-clicking one of its panel tabs and choosing "Create
 {direction} split and move panel": the panel moves into the section's SECONDARY

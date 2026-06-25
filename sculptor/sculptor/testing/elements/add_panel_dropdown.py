@@ -8,7 +8,7 @@ from sculptor.testing.elements.workspace_section import section_of
 
 
 class PlaywrightAddPanelDropdownElement:
-    """Page Object Model for the section `+` add-panel dropdown (PANEL-01..06).
+    """Page Object Model for the section `+` add-panel dropdown.
 
     The dropdown is opened by a section's header `+` (or an empty-section add
     button) and is scoped to the sub-section it was opened from: its content
@@ -55,6 +55,9 @@ class PlaywrightAddPanelDropdownElement:
 
     def get_agent_type_item_claude(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.AGENT_TYPE_MENU_ITEM_CLAUDE)
+
+    def get_agent_type_item_terminal(self) -> Locator:
+        return self._page.get_by_test_id(ElementIDs.AGENT_TYPE_MENU_ITEM_TERMINAL)
 
     def get_agent_type_item_pi(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.AGENT_TYPE_MENU_ITEM_PI)
@@ -127,8 +130,8 @@ class PlaywrightAddPanelDropdownElement:
         option.click()
 
 
-# Panels the default workspace layout seeds OPEN on a workspace's first visit
-# (SEC-02): Files/Changes/Commits live in the (collapsed) left section, Files active.
+# Panels the default workspace layout seeds OPEN on a workspace's first visit:
+# Files/Changes/Commits live in the (collapsed) left section, Files active.
 # A single-instance panel can only live in ONE section at a time, and the add-panel
 # dropdown only offers panels not already open anywhere, so to land a seeded panel in
 # a DIFFERENT section the helper first closes it from its seeded section (which a
@@ -141,7 +144,7 @@ _DEFAULT_SEEDED_SECTION: dict[str, str] = {"files": "left", "changes": "left", "
 def open_panel(page: Page, panel_id: str, sub_section: str = "center") -> Locator:
     """Bring a single-instance panel into ``sub_section`` and return its section root.
 
-    Seeded panels (Files/Changes/Commits — seeded into the left section, SEC-02) are
+    Seeded panels (Files/Changes/Commits — seeded into the left section) are
     never center panels, so a request for their seeded section OR the default ``center``
     means "reveal it where it lives": expand the seeded section and activate its tab,
     waiting for the tab (never the dropdown). Only an explicit request for a DIFFERENT
@@ -195,7 +198,7 @@ def close_seeded_panel(page: Page, panel_id: str) -> None:
     """Close a default-seeded single-instance panel from its seeded section.
 
     The default layout seeds Files/Changes/Commits OPEN in the (collapsed) left
-    section (SEC-02), so they are not offered by the add-panel dropdown until closed.
+    section, so they are not offered by the add-panel dropdown until closed.
     Expands the seeded section to render the tab's close button (page-wide by panel id)
     and clicks it; a single-instance close removes the panel silently (no confirmation),
     which both returns it to the dropdown's re-add list and records it as recently-closed
@@ -218,7 +221,7 @@ def close_seeded_panel(page: Page, panel_id: str) -> None:
 def create_agent_panel(page: Page, section: str = "center", agent_type: str | None = None) -> None:
     """Create a new agent via the section `+` add-panel dropdown.
 
-    New agents ALWAYS land in the center section (PANEL-06), regardless of the
+    New agents ALWAYS land in the center section, regardless of the
     ``section`` the dropdown was opened from. ``agent_type`` picks a specific type
     from the agent-type sub-menu (``"claude"`` / ``"pi"``); ``None`` uses the pinned
     "New {recent} agent" row.

@@ -6,7 +6,7 @@
 // This getter jumps the dragged item to the NEAREST droppable in the pressed
 // direction, so one ArrowRight/Left/Up/Down moves the panel to the adjacent section,
 // making the keyboard pipeline (focus handle → Space → one arrow per section → Space)
-// the reliable, Playwright-drivable drag path (harness_migration.md §3b).
+// the reliable, Playwright-drivable drag path.
 //
 // Geometry alone can't resolve `over` reliably for keyboard drags: the thin
 // full-height collapsed-section rails abut other droppables, and dnd-kit's keyboard

@@ -1,12 +1,11 @@
 // The new-shell workspace keyboard shortcuts (the section/panel analog of the docking
-// shell's usePageLayoutKeyboardShortcuts, which is NOT extended — it dies with the
-// docking shell in Phase 7). Every handler registers through the shared keybindings
+// shell's usePageLayoutKeyboardShortcuts, which is NOT extended). Every handler registers through the shared keybindings
 // registry (useKeybindingHandler), so each binding appears on and is configurable from
 // the keybindings settings page.
 //
 // Mounted once by WorkspaceLayoutShell, which only renders on a workspace page, so the
-// empty first-run state (no workspaces) never mounts these handlers — FIRST-03's
-// "global shortcuts disabled in the empty state" falls out for free.
+// empty first-run state (no workspaces) never mounts these handlers, so global
+// shortcuts are disabled in the empty state for free.
 //
 // new_workspace (Meta+T) is intentionally NOT handled here: it is served by the
 // surviving page-layout hook (usePageLayoutKeyboardShortcuts), which opens the global
@@ -32,7 +31,7 @@ type CycleDirection = 1 | -1;
 
 // The ordered active-able sub-sections: each expanded section's primary (center is
 // always expanded), plus its secondary half when split. This is the sequence the
-// section-cycle steps through (SEC-12).
+// section-cycle steps through.
 function activeableSubSections(layout: WorkspaceLayoutState): ReadonlyArray<SubSectionId> {
   const subSections: Array<SubSectionId> = [];
   for (const section of SECTION_IDS) {
@@ -63,7 +62,7 @@ export const useWorkspaceShortcuts = (): void => {
   const { createRecentAgent } = useAddPanelActions();
 
   // Cycle the active section through the expanded sub-sections incl. split halves,
-  // pulsing the ring on each step (SEC-12).
+  // pulsing the ring on each step.
   const cycleSection = useCallback(
     (direction: CycleDirection): void => {
       const layout = store.get(workspaceLayoutAtom);
@@ -79,7 +78,7 @@ export const useWorkspaceShortcuts = (): void => {
   );
 
   // Cycle the active panel within the active sub-section; wraps at the ends and is a
-  // no-op for an empty or single-panel section (SEC-20).
+  // no-op for an empty or single-panel section.
   const cyclePanel = useCallback(
     (direction: CycleDirection): void => {
       const layout = store.get(workspaceLayoutAtom);
@@ -96,7 +95,7 @@ export const useWorkspaceShortcuts = (): void => {
     [store, setActivePanel],
   );
 
-  // Maximize the active section, or restore if one is already maximized (SEC-15).
+  // Maximize the active section, or restore if one is already maximized.
   const toggleMaximize = useCallback((): void => {
     if (store.get(maximizedSectionAtom) !== null) {
       setMaximizedSection(null);
@@ -110,7 +109,7 @@ export const useWorkspaceShortcuts = (): void => {
     setSidebarCollapsed(!store.get(sidebarCollapsedAtom));
   }, [store, setSidebarCollapsed]);
 
-  // Center never collapses (SEC-08): toggleSectionAtom ignores it, so the binding is
+  // Center never collapses: toggleSectionAtom ignores it, so the binding is
   // simply a no-op there.
   useKeybindingHandler(
     "toggle_left_panel",
@@ -142,6 +141,6 @@ export const useWorkspaceShortcuts = (): void => {
     "previous_panel",
     useCallback(() => cyclePanel(-1), [cyclePanel]),
   );
-  // New agent always lands in center regardless of the active section (PANEL-06).
+  // New agent always lands in center regardless of the active section.
   useKeybindingHandler("new_agent", createRecentAgent);
 };

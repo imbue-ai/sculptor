@@ -13,14 +13,14 @@ _RESIZE_HANDLE_ARIA_LABEL = "Resize sidebar"
 
 
 class PlaywrightExplorerLayoutElement(PlaywrightIntegrationTestElement):
-    """Page Object Model for the shared list-plus-viewer scaffold (FCC-04/05/06).
+    """Page Object Model for the shared list-plus-viewer scaffold.
 
     The Files / Changes / Commits panels embed the same ``ExplorerLayout``: a
     resizable list (file tree / changes browser / commit history) on the left
     whose width is the GLOBAL, shared-across-panels ``explorerListWidthAtom``, and
     an always-visible viewer on the right. The sidebar-visibility toggle is
-    rendered into the viewer's header (FCC-05); when nothing is selected the
-    viewer shows its empty state (FCC-06).
+    rendered into the viewer's header; when nothing is selected the
+    viewer shows its empty state.
 
     The layout's row container carries no testid and the list / viewer are
     SIBLINGS under it, so this POM is constructed scoped to the owning SECTION
@@ -47,7 +47,7 @@ class PlaywrightExplorerLayoutElement(PlaywrightIntegrationTestElement):
 
     def get_empty_detail(self) -> Locator:
         """The always-rendered viewer body, which shows its empty placeholder
-        text when nothing is selected (FCC-06)."""
+        text when nothing is selected."""
         return self.get_diff_viewer()
 
     def get_tree_rows(self) -> Locator:
@@ -67,13 +67,13 @@ class PlaywrightExplorerLayoutElement(PlaywrightIntegrationTestElement):
         return self.get_by_test_id(ElementIDs.DIFF_HEADER_SHOW_TREE_BTN)
 
     def hide_sidebar(self) -> None:
-        """Collapse the list so only the viewer remains (FCC-05)."""
+        """Collapse the list so only the viewer remains."""
         toggle = self.get_hide_sidebar_button()
         expect(toggle).to_be_visible()
         toggle.click()
 
     def show_sidebar(self) -> None:
-        """Re-expand a collapsed list (FCC-05)."""
+        """Re-expand a collapsed list."""
         toggle = self.get_show_sidebar_button()
         expect(toggle).to_be_visible()
         toggle.click()

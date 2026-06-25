@@ -1,5 +1,3 @@
-import type { ReactNode } from "react";
-
 import type { DiffScope, DiffViewType } from "~/pages/workspace/components/diffPanel/types.ts";
 import type { FileStatus, ViewMode } from "~/pages/workspace/panels/fileBrowser/types.ts";
 
@@ -40,7 +38,7 @@ export type DiffSelection =
 
 /**
  * The diff view controls that previously lived as toolbar icons above the
- * viewer. They now hang off the file header's triple-dot menu (FCC-07).
+ * viewer. They now hang off the file header's triple-dot menu.
  */
 export type DiffViewOptions = {
   viewType: DiffViewType;
@@ -58,7 +56,7 @@ export type DiffViewOptions = {
 
 /**
  * The tree (list) view controls — flat/tree and collapse-all — merged into the
- * same triple-dot menu so there is a single options menu (FCC-07). Omitted by
+ * same triple-dot menu so there is a single options menu. Omitted by
  * panels (e.g. Commits) whose list has no such controls.
  */
 export type TreeViewOptions = {
@@ -67,14 +65,4 @@ export type TreeViewOptions = {
   onToggleViewMode?: () => void;
   onCollapseAll: () => void;
   collapseLabel: string;
-};
-
-/** Slots an embedding panel injects into the viewer header. */
-export type DiffViewerHeaderSlots = {
-  /** Rendered before the breadcrumb (the sidebar-visibility toggle). */
-  leadingControl?: ReactNode;
-  /** Rendered in the right cluster before the menu (e.g. refresh). */
-  trailingActions?: ReactNode;
-  /** The tree view-options merged into the triple-dot menu. */
-  treeOptions?: TreeViewOptions;
 };

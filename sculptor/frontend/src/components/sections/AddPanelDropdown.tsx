@@ -1,17 +1,17 @@
 // The section `+` add-panel DROPDOWN (Radix DropdownMenu, not the cmdk overlay).
 // Opened by the section header `+` and the empty-state add button, scoped to the
-// sub-section it was opened from. Items, in order (PANEL-01..05):
+// sub-section it was opened from. Items, in order:
 //   1. "New {recent} agent" — the recently-used agent type (Claude by default),
-//      with its new-agent keybinding shown. ALWAYS lands the agent in center
-//      (PANEL-06), regardless of `subSection`.
+//      with its new-agent keybinding shown. ALWAYS lands the agent in center,
+//      regardless of `subSection`.
 //   2. Agent-type sub-menu — create an agent of a different type: Claude, pi
 //      (gated), and each registered terminal-agent program. No bare "Terminal"
-//      agent type (Decision B2). Also lands in center.
+//      agent type. Also lands in center.
 //   3. "New terminal" — creates a terminal in THIS sub-section.
 //   4. Every single-instance panel not currently open anywhere — opens in THIS
 //      sub-section. Agents/terminals are never offered (closing one ends it).
 //
-// Reuses the prototype add-panel row styling, rendered as dropdown items.
+// Reuses the add-panel row styling, rendered as dropdown items.
 
 import { DropdownMenu } from "@radix-ui/themes";
 import { MessageSquarePlus, SquareTerminal } from "lucide-react";
@@ -31,7 +31,7 @@ type AddPanelDropdownProps = {
   trigger: ReactElement;
 };
 
-// The agent-type sub-menu never offers a bare "terminal" type (Decision B2), so
+// The agent-type sub-menu never offers a bare "terminal" type, so
 // only claude / pi / registered appear; "terminal" maps to the registered testid
 // for completeness.
 const agentTypeTestId = (agentType: AgentTypeName): string => {

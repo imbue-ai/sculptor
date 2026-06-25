@@ -2,7 +2,7 @@
 // browser (the list — scope picker, commit button, changed-file tree, discard) with
 // an embedded DiffViewer (the detail). It owns its own selection — a scoped diff of
 // the clicked file — and feeds it to its own viewer instance, so there is no shared
-// "active diff" singleton (FCC-01/02/03). The proven changes-browser behavior
+// "active diff" singleton. The proven changes-browser behavior
 // (All/Uncommitted scope, discard, commit-from-changes) is migrated, not redesigned.
 
 import { Flex } from "@radix-ui/themes";
@@ -57,7 +57,7 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
 
   // The shared active diff tab — written when an agent opens a diff (a chat file-chip,
   // sculpt open-file --mode diff). Reading it here makes those opens render in this
-  // panel's single embedded viewer, not just reveal the panel (FCC-01).
+  // panel's single embedded viewer, not just reveal the panel.
   const activeTab = useAtomValue(activeDiffTabAtomFamily(workspaceId));
 
   const { viewMode } = fileBrowserState;
@@ -157,7 +157,6 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
   return (
     <ExplorerLayout
       list={list}
-      hasSelection={selection !== null}
       detail={(sidebarToggle) => (
         <DiffViewer
           workspaceId={workspaceId}

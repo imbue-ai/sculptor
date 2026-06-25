@@ -3,7 +3,7 @@
 }
 
 // The minimal header shown when no file is selected — keeps the sidebar toggle and
-// the list's tree options reachable (FCC-05/07).
+// the list's tree options reachable.
 .emptyHeader {
   border-bottom: 1px solid var(--gray-a5);
   // stylelint-disable-next-line sculptor/no-hardcoded-values -- matches the 41px file-viewer header

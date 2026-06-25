@@ -1,8 +1,8 @@
-// The desktop workspace shell (component_hierarchy.md → "The workspace layout
-// shell"): the workspace header above the four-section grid, both wrapped in the
-// app-level drag-and-drop context. The header is hidden while a section is
-// maximized (the full maximize presentation lands in Task 4.3; here we just gate
-// the render). Content components below the grid read no layout/route state.
+// The desktop workspace shell: the workspace header above the four-section grid,
+// both wrapped in the app-level drag-and-drop context. The header is hidden while
+// a section is maximized (the full maximize presentation is handled elsewhere;
+// here we just gate the render). Content components below the grid read no
+// layout/route state.
 
 // Side-effect import: registers the panel components (agent, …) with the registry.
 import "./panels/registerPanels.ts";
@@ -25,7 +25,7 @@ export const WorkspaceLayoutShell = (): ReactElement => {
   const maximizedSection = useAtomValue(maximizedSectionAtom);
   const isMaximized = maximizedSection !== null;
 
-  // The active-section ring fade timer, mounted once for the whole shell (SEC-11).
+  // The active-section ring fade timer, mounted once for the whole shell.
   useActiveSectionRing();
   // The new-shell section/panel keyboard shortcuts (collapse/cycle/maximize/sidebar/
   // new-agent), registered through the keybindings registry.
@@ -39,7 +39,7 @@ export const WorkspaceLayoutShell = (): ReactElement => {
       </div>
       {/* Headless owners of the panel-tab close confirmations, driven by the shared
           close-target atoms set from a tab's close button: the terminal close
-          confirmation (TERM-02) and the agent delete confirmation (AGENT-04). */}
+          confirmation and the agent delete confirmation. */}
       <TerminalCloseConfirmation />
       <AgentDeleteConfirmation />
     </PanelDndProvider>

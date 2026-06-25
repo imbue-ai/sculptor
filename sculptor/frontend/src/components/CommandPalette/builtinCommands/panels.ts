@@ -46,7 +46,7 @@ export const buildPanelCommands = (runtime: CommandRuntime): Array<Command> => [
   },
 
   // ── view.layout sub-page ────────────────────────────────────────────
-  // Zone toggles + the two display modes. The `when` guard is kept on
+  // Section toggles. The `when` guard is kept on
   // each row even though the entry-point already gates on workspace,
   // so deep-linking / direct keybinding still respects route.
   //

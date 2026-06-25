@@ -1,15 +1,15 @@
-// The no-workspaces first-run page (FIRST-01). When the workspace list is
+// The no-workspaces first-run page. When the workspace list is
 // genuinely empty, the app gate renders this in place of the normal layouts:
 // the sidebar (open) on the left and, in the content area, the new-workspace
 // form inline in a card. The first prompt defaults to the existing
-// `/sculptor:help` prefill (FIRST-04). Navigation is otherwise disabled — only
+// `/sculptor:help` prefill. Navigation is otherwise disabled — only
 // this form and Settings are reachable, and Cmd+K / the global shortcuts are
-// off (FIRST-03), gated by `areGlobalShortcutsDisabledAtom`.
+// off, gated by `areGlobalShortcutsDisabledAtom`.
 //
 // Creating the first workspace navigates to the new agent (handled inside
 // `useCreateWorkspace`); that flips `isWorkspaceListEmptyAtom` to false, the
 // gate stops rendering this page, and the full workspace page takes over in the
-// default state (FIRST-05).
+// default state.
 
 import { Flex } from "@radix-ui/themes";
 import { useAtomValue } from "jotai";
@@ -32,7 +32,7 @@ export const EmptyFirstRunPage = (): ReactElement => {
   // The normal app shell (AppShell) doesn't mount while
   // this page is showing, so own the websocket stream here. Without it the
   // first created workspace would never arrive and the gate would never flip
-  // back to the full workspace page (FIRST-05).
+  // back to the full workspace page.
   useUnifiedStream();
 
   // A successful create navigates away (inside `useCreateWorkspace`), so there

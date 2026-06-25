@@ -1,7 +1,7 @@
-// Headless owner of the terminal close-confirmation dialog (TERM-02), driven by the
+// Headless owner of the terminal close-confirmation dialog, driven by the
 // shared terminalCloseTargetAtom (set from a terminal tab's close button via the
 // panel's onRequestClose, wired in useWorkspaceDynamicPanels). Confirming kills the
-// backend shell (closeWorkspaceTerminal — TERM-04), drops the tab from the persisted
+// backend shell (closeWorkspaceTerminal), drops the tab from the persisted
 // terminal-tab state, and unplaces the panel from the layout (closePanelAtom). Closing
 // the last terminal leaves the bottom section empty (no auto-recreate), consistent with
 // the agent flow. Mirrors the agent delete-confirmation wiring; rendered once by the
@@ -27,7 +27,7 @@ export const TerminalCloseConfirmation = (): ReactElement => {
       return;
     }
 
-    // Fire-and-forget: ask the backend to stop the pty + shell (TERM-04). A 404
+    // Fire-and-forget: ask the backend to stop the pty + shell. A 404
     // (terminal never started, or already closed) is harmless; errors surface via
     // the API client's default handler.
     void closeWorkspaceTerminal({

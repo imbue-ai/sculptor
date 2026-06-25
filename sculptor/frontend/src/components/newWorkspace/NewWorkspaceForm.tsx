@@ -34,8 +34,8 @@ type NewWorkspaceFormProps = {
   presetProjectId?: string;
   /**
    * Text to seed the prompt textarea with on mount. Used by the empty
-   * first-run page to default the very first prompt to `/sculptor:help`
-   * (FIRST-04). A mount-time snapshot the user can freely edit.
+   * first-run page to default the very first prompt to `/sculptor:help`.
+   * A mount-time snapshot the user can freely edit.
    */
   initialPrompt?: string;
   /** Called after a successful create when "keep open" is off. */
@@ -43,7 +43,7 @@ type NewWorkspaceFormProps = {
 };
 
 /**
- * The WSC-05 new-workspace form: a borderless title input, an auto-growing
+ * The new-workspace form: a borderless title input, an auto-growing
  * prompt textarea, a breadcrumb row of context pills (repo / agent type / mode /
  * branch), and a footer (keep-open switch + Cmd+Enter hint + Create). Field
  * values are LOCAL component state (the modal is ephemeral), seeded from
@@ -197,7 +197,8 @@ export const NewWorkspaceForm = ({
     isCreating ||
     (mode === WorkspaceInitializationStrategy.WORKTREE &&
       (effectiveBranchName.trim() === "" || isBranchNamePreviewLoading)) ||
-    (repoInfo !== null && repoInfo.recentBranches?.length === 0);
+    (repoInfo !== null && repoInfo.recentBranches?.length === 0) ||
+    branchNameCollision === "exists";
 
   const handleSubmit = useCallback(async (): Promise<void> => {
     if (isSubmitDisabled || selectedProjectId === null) return;
@@ -240,7 +241,7 @@ export const NewWorkspaceForm = ({
     }
 
     if (isKeepOpen) {
-      // Decision B8: keep the dialog open for rapid multi-create — reset the
+      // Keep the dialog open for rapid multi-create — reset the
       // per-workspace fields but retain the repo + agent type (+ mode/source).
       setWorkspaceName("");
       setPrompt("");

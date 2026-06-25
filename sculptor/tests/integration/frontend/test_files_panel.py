@@ -45,6 +45,8 @@ Migrated from:
 * ``test_fcc_harness_smoke.py`` (folded in)
 """
 
+import os
+import shutil
 from collections.abc import Generator
 from pathlib import Path
 
@@ -643,22 +645,25 @@ def test_shared_sidebar_resizes_and_has_a_minimum_width(sculptor_instance_: Scul
     start_width = start_box["width"]
 
     # Grow the sidebar with ArrowRight; the list should get measurably wider.
+    # Poll the live width with wait_for_function so the resize has time to settle
+    # rather than asserting on a single bounding_box() snapshot.
     handle.focus()
     for _ in range(3):
         handle.press("ArrowRight")
-    grown_box = list_root.bounding_box()
-    assert grown_box is not None
-    assert grown_box["width"] > start_width, (
-        f"Sidebar should grow after ArrowRight: start={start_width:.0f}, grown={grown_box['width']:.0f}"
+    page.wait_for_function(
+        "([el, w]) => el.getBoundingClientRect().width > w",
+        arg=[list_root.element_handle(), start_width],
     )
 
     # Shrink it well past the minimum with repeated ArrowLeft; it must clamp to
-    # the 200px minimum rather than collapsing to zero.
+    # the 200px minimum rather than collapsing to zero. Poll the live width until
+    # it settles at the clamped minimum instead of reading a single snapshot.
     for _ in range(40):
         handle.press("ArrowLeft")
-    clamped_box = list_root.bounding_box()
-    assert clamped_box is not None
-    assert clamped_box["width"] >= 190, f"Sidebar must clamp to its ~200px minimum, got {clamped_box['width']:.0f}"
+    page.wait_for_function(
+        "(el) => el.getBoundingClientRect().width >= 190",
+        arg=list_root.element_handle(),
+    )
 
 
 @user_story("to hide and show the file-browser sidebar from the viewer header")
@@ -709,10 +714,15 @@ def _home_sentinel_dir() -> Generator[Path, None, None]:
 
     Some CI environments have an empty home directory with only dotfiles.
     """
-    sentinel_dir = Path.home() / "test_autocomplete_dir"
+    # Suffix with the pid so parallel xdist workers each get their own dir under
+    # the shared real HOME, and tear down idempotently so an already-removed dir
+    # does not fail teardown.
+    sentinel_dir = Path.home() / f"sculptor_autocomplete_dir_{os.getpid()}"
     sentinel_dir.mkdir(exist_ok=True)
-    yield sentinel_dir
-    sentinel_dir.rmdir()
+    try:
+        yield sentinel_dir
+    finally:
+        shutil.rmtree(sentinel_dir, ignore_errors=True)
 
 
 @user_story("to see paths with ~ instead of the full home directory")

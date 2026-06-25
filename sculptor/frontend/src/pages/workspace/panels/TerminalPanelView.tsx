@@ -1,18 +1,15 @@
 // The terminal panel: a thin, shell-agnostic wrapper around the existing xterm I/O,
 // parameterized by the (workspaceId, index) the registry binds per
-// terminal:<wsId>:<index> panel. It reads no layout, split, or route state
-// (component_hierarchy.md → principle 2) so the same component renders identically
-// wherever the section model places it, and two instances with different indices
-// stream independently (TERM-01). The xterm I/O is reused verbatim via useTerminal —
-// this file only owns the container element and its styling.
-//
-// NOTE: the OLD multi-tab terminal panel still lives in TerminalPanel.tsx; it is
-// registered by old-shell code that compiles until Phase 7. Once Phase 7 deletes the
-// old shell, that file can be removed and this one renamed to TerminalPanel.tsx.
+// terminal:<wsId>:<index> panel. It reads no layout, split, or route state, so the same
+// component renders identically wherever the section model places it, and two instances
+// with different indices stream independently. The xterm I/O is reused verbatim via
+// useTerminal — this file only owns the container element and its styling.
 
-import type { ReactElement } from "react";
+import { useSetAtom } from "jotai";
+import { type ReactElement, useEffect } from "react";
 
 import { registerTerminalPanelComponent } from "~/components/sections/registry/dynamicPanels.tsx";
+import { terminalPanelMountedAtom } from "~/pages/workspace/atoms.ts";
 
 import styles from "./TerminalPanelView.module.scss";
 import { useTerminal } from "./useTerminal.ts";
@@ -24,6 +21,16 @@ export const TerminalPanelView = ({ workspaceId, index }: { workspaceId: string;
     terminalPath: `/api/v1/workspaces/${workspaceId}/terminal/${index}/ws`,
     isVisible: true,
   });
+
+  // Reactive signal for the command palette: maintain a shared mount counter so
+  // terminal-scoped commands (e.g. "Clear terminal") gate on whether a terminal is open.
+  const setTerminalPanelMounted = useSetAtom(terminalPanelMountedAtom);
+  useEffect(() => {
+    setTerminalPanelMounted((count) => count + 1);
+    return (): void => {
+      setTerminalPanelMounted((count) => count - 1);
+    };
+  }, [setTerminalPanelMounted]);
 
   return (
     <div className={styles.terminalPanel}>

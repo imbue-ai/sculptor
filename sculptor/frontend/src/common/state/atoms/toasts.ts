@@ -17,6 +17,10 @@ export const deleteErrorToastAtom = atom<ErrorToastData | null>(null);
 export const workspaceDeleteErrorToastAtom = atom<ErrorToastData | null>(null);
 export const workspaceOpenCloseErrorToastAtom = atom<ErrorToastData | null>(null);
 
+// Surfaced when creating an agent (from the add-panel `+` dropdown or Cmd+K) fails on
+// the backend; otherwise the failure would only reach the console.
+export const createAgentErrorToastAtom = atom<ErrorToastData | null>(null);
+
 export type InfoToastData = {
   title: string;
   description?: ReactNode;

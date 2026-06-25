@@ -3,7 +3,7 @@
 // center's larger minimum by shrinking the sides first), renders only expanded
 // sections, and short-circuits to a single full-bleed section when one is maximized.
 // Its SplittableSection children are memoized with primitive props so a
-// per-pointer-move resize does not cascade into them (SWITCH-05).
+// per-pointer-move resize does not cascade into them.
 
 import { useAtomValue, useSetAtom } from "jotai";
 import type { ReactElement } from "react";
@@ -68,7 +68,7 @@ export const SectionGrid = (): ReactElement => {
   );
 
   if (maximizedSection !== null) {
-    // A maximized section shows only ONE sub-section — the primary (SPLIT-06) — so a
+    // A maximized section shows only ONE sub-section — the primary — so a
     // split section maximizes to its primary half rather than rendering both panes
     // (which, both flagged maximized, would overlap).
     return (
@@ -81,7 +81,7 @@ export const SectionGrid = (): ReactElement => {
   return (
     <div ref={containerRef} className={styles.outer}>
       <div className={styles.topRow}>
-        {/* Collapsed left section: a drop rail at the left edge while dragging (PANEL-09). */}
+        {/* Collapsed left section: a drop rail at the left edge while dragging. */}
         {isDragging && !isLeftExpanded && <CollapsedSectionDropRail section="left" orientation="vertical" />}
         {isLeftExpanded && (
           <>

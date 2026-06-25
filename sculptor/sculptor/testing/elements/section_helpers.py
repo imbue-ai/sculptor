@@ -1,11 +1,11 @@
-"""Section-interaction helpers for the workspace section/panel shell (Phase 4).
+"""Section-interaction helpers for the workspace section/panel shell.
 
 These drive the real UI the way a user does — clicking section controls, pressing the
 keyboard shortcuts, and dragging panel tabs through the dnd-kit KeyboardSensor — rather
 than seeding layout state, so the tests exercise the same code paths as production.
 
 The drag helper is the load-bearing one: panel drag-and-drop is driven via the
-KeyboardSensor (Task 4.1), which Playwright can drive faithfully (focus the tab's drag
+KeyboardSensor, which Playwright can drive faithfully (focus the tab's drag
 handle, Space to pick up, one arrow per section to move, Space to drop) where a
 synthetic pointer drag cannot. The provider's directional coordinate getter makes a
 single arrow press jump to the adjacent section.

@@ -20,6 +20,7 @@ from playwright.sync_api import expect
 from sculptor.constants import ElementIDs
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.elements.plan_item import get_plan_checkmark
+from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstanceFactory
@@ -83,7 +84,7 @@ fake_claude:multi_step `{
     shutil.rmtree(task_sync_dir)
 
     with sculptor_instance_factory_.spawn_instance() as instance:
-        workspace_tab = instance.page.get_by_test_id(ElementIDs.SIDEBAR_WORKSPACE_ROW).first
+        workspace_tab = PlaywrightProjectLayoutPage(instance.page).get_workspace_tabs().first
         expect(workspace_tab).to_be_visible(timeout=_VISIBILITY_TIMEOUT_MS)
         workspace_tab.click()
 

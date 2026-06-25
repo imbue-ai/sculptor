@@ -18,8 +18,9 @@ import {
 import { HOME_TAB_ID, SETTINGS_TAB_ID } from "./workspaceTabIds.ts";
 
 /**
- * The three "close-tab" handlers used by the workspace tab bar AND the
- * Cmd+K command palette. Both surfaces must close + navigate identically;
+ * The three "close-tab" handlers used by the workspace sidebar
+ * (WorkspaceSidebar.tsx) AND the Cmd+K command palette. Both surfaces
+ * must close + navigate identically;
  * keeping the logic in one hook avoids drift between them.
  *
  * Returns three handlers and the `navigateToNextTab` helper so callers

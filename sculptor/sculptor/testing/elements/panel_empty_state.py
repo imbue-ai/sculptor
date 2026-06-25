@@ -1,4 +1,4 @@
-"""Page Object Model for an empty section / split-half's empty state (SEC-19, SPLIT-04/05).
+"""Page Object Model for an empty section / split-half's empty state.
 
 An empty sub-section renders a centered "Add panel" button (which opens the same
 add-panel dropdown) plus up to five quick actions: always "New {recent} agent" and

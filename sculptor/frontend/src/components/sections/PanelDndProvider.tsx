@@ -1,17 +1,17 @@
-// The single app-level drag-and-drop context that wraps the whole layout
-// (component_hierarchy.md → "Drag-and-drop architecture"). Panel tabs are
+// The single app-level drag-and-drop context that wraps the whole layout — the
+// drag-and-drop architecture root. Panel tabs are
 // draggables; each PanelSection body and each collapsed-section toggle is a drop
 // target. During a drag only the transient preview atom (panelDragStateAtom)
 // updates — the real placement is mutated once, on drop, via movePanelAtom.
 //
-// Re-render discipline (SWITCH-05): this provider subscribes ONLY to the stable
+// Re-render discipline: this provider subscribes ONLY to the stable
 // dragged-panel id (draggedPanelIdAtom, constant for the whole drag) so it does not
 // re-render on every pointer move; the moving preview is written through useSetAtom
 // (no subscription). Sections read the narrow per-sub-section preview slices
 // (isDropTargetAtom / ghostPanelIdAtom / displayedPanelIdsAtom), so a pointer move
 // re-renders only the sections under/around the cursor.
 //
-// Testability (harness_migration.md §3b): the context runs a PointerSensor AND a
+// Testability: the context runs a PointerSensor AND a
 // KeyboardSensor, and each tab exposes a focusable drag handle, so Playwright drives
 // the real sensor pipeline (focus handle → Space → arrows → Space) — a plain
 // PointerSensor cannot be driven faithfully by Playwright's synthetic mouse events.

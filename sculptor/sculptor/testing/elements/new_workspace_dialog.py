@@ -9,10 +9,10 @@ from sculptor.testing.utils import get_playwright_modifier_key
 
 
 class PlaywrightNewWorkspaceDialog(PlaywrightIntegrationTestElement):
-    """Page Object Model for the new-workspace modal (WSC-01..10).
+    """Page Object Model for the new-workspace modal.
 
-    The modal hosts the WSC-05 ``NewWorkspaceForm`` inside a ``PaletteDialog``
-    (``NEW_WORKSPACE_DIALOG``). It is opened by the Task 5.2 entry points — the
+    The modal hosts the ``NewWorkspaceForm`` inside a ``PaletteDialog``
+    (``NEW_WORKSPACE_DIALOG``). It is opened by several entry points — the
     Cmd/Meta+T shortcut (``new_workspace`` keybinding), the Cmd+K
     ``nav.new_workspace`` command, and the sidebar repo group's "+"
     (``SIDEBAR_REPO_ADD_WORKSPACE``). The plain sidebar new-workspace button
@@ -28,7 +28,7 @@ class PlaywrightNewWorkspaceDialog(PlaywrightIntegrationTestElement):
     def __init__(self, page: Page) -> None:
         super().__init__(locator=page.get_by_test_id(ElementIDs.NEW_WORKSPACE_DIALOG), page=page)
 
-    # -- Openers (Task 5.2 entry points) --
+    # -- Openers (entry points) --
 
     def open_via_shortcut(self) -> None:
         """Open the modal with the ``new_workspace`` keybinding (Cmd/Meta+T)."""
@@ -53,7 +53,7 @@ class PlaywrightNewWorkspaceDialog(PlaywrightIntegrationTestElement):
         expect(self.get_dialog()).to_be_visible()
 
     def open_via_repo_plus(self, project_id: str) -> None:
-        """Open the modal preselecting a repo via that repo group's "+" (WSC-04)."""
+        """Open the modal preselecting a repo via that repo group's "+"."""
         repo_add = self._page.locator(
             f'[data-testid="{ElementIDs.SIDEBAR_REPO_ADD_WORKSPACE}"][data-project-id="{project_id}"]'
         )
@@ -78,7 +78,7 @@ class PlaywrightNewWorkspaceDialog(PlaywrightIntegrationTestElement):
         return self._page.get_by_test_id(ElementIDs.NEW_WORKSPACE_PROMPT_TEXTAREA)
 
     def get_context_pills(self) -> Locator:
-        """The branch-name context pill (WSC-06).
+        """The branch-name context pill.
 
         ``NEW_WORKSPACE_CONTEXT_PILL`` is the branch field's pill container; the
         repo / agent-type / mode / source controls are their own selectors below.
@@ -178,7 +178,7 @@ class PlaywrightNewWorkspaceDialog(PlaywrightIntegrationTestElement):
         expect(branch_option).to_have_count(1)
         branch_option.click()
 
-    # -- Branch-name pill (WSC-06) --
+    # -- Branch-name pill --
 
     def get_branch_name_input(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.BRANCH_NAME_INPUT)

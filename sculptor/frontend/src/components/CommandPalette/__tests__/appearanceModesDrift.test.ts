@@ -27,15 +27,13 @@ const makeRuntime = (): CommandRuntime =>
   ({
     store: getDefaultStore(),
     navigate: { toHome: noop, toSettings: vi.fn(), toAddWorkspace: noop, toWorkspace: vi.fn(), toAgent: vi.fn() },
+    openNewWorkspaceModal: noop,
     ui: {
       toggleHelpDialog: noop,
       toggleDevPanel: noop,
-      toggleZenMode: noop,
-      toggleFocusMode: noop,
       toggleLeftPanel: noop,
       toggleBottomPanel: noop,
       toggleRightPanel: noop,
-      togglePanel: noop,
       setTheme: vi.fn(),
       focusChatInput: noop,
       showChatSearch: noop,

@@ -42,8 +42,8 @@
   width: 100%;
 }
 
-// A maximized section fills the entire content area (Task 4.3 adds the header-hide
-// and OS-window-control padding).
+// A maximized section fills the entire content area, with the header-hide
+// and OS-window-control padding handled alongside the maximize behavior.
 .maximized {
   display: flex;
   flex-direction: column;

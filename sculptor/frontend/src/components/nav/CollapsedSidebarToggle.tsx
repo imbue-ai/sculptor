@@ -16,7 +16,7 @@ import styles from "./CollapsedSidebarToggle.module.scss";
  * expand control. Renders nothing while the sidebar is expanded.
  *
  * Positioned absolutely in the top-left titlebar gutter; paddingLeft clears
- * the macOS traffic-light buttons (SIDE-13).
+ * the macOS traffic-light buttons.
  */
 export const CollapsedSidebarToggle = (): ReactElement | null => {
   const isCollapsed = useAtomValue(sidebarCollapsedAtom);

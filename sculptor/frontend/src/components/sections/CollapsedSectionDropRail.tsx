@@ -1,5 +1,5 @@
 // A thin drop target rendered at a collapsed section's grid edge while a panel drag is
-// in progress (PANEL-09). Dropping a panel onto it lands the panel in the section's
+// in progress. Dropping a panel onto it lands the panel in the section's
 // primary sub-section, which expands the section and appends (withMovePanel →
 // withExpandedSection). It shares the section body's droppable id — the body is not
 // mounted while collapsed, so there is never a clash — and the same drop-target slice

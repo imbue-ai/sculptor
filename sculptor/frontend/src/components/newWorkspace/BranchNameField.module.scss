@@ -53,7 +53,7 @@
 }
 
 // Always rendered with a fixed minimum height so toggling the collision error
-// never shifts the surrounding layout (the dialog must not jump — WSC-06).
+// never shifts the surrounding layout (the dialog must not jump).
 .errorSlot {
   min-height: var(--space-5);
   padding-top: var(--space-1);

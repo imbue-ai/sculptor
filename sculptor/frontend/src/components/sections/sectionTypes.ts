@@ -51,7 +51,7 @@ export function primaryOf(section: SectionId): SubSectionId {
   return section;
 }
 
-// Split-direction rules (goals.md → "Split sections"): left/right split top/bottom
+// Split-direction rules: left/right split top/bottom
 // (horizontal divider), bottom splits left/right (vertical divider), center allows
 // either direction.
 export function allowedSplitAxesForSection(section: SectionId): ReadonlyArray<SplitAxis> {

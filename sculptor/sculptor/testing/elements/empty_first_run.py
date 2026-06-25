@@ -8,18 +8,18 @@ from sculptor.testing.pages.task_page import PlaywrightTaskPage
 
 
 class PlaywrightEmptyFirstRun(PlaywrightIntegrationTestElement):
-    """Page Object Model for the empty first-run page (FIRST-01..05).
+    """Page Object Model for the empty first-run page.
 
     With zero workspaces the app gate (``EmptyFirstRunGate``) renders
     ``EmptyFirstRunPage`` in place of every route: the sidebar (open) on the
-    left and, in the content area, the WSC-05 ``NewWorkspaceForm`` inline in a
-    card with the prompt prefilled to ``/sculptor:help`` (FIRST-04). Navigation
-    is otherwise pared back — Cmd+K and the global shortcuts are off (FIRST-03),
+    left and, in the content area, the ``NewWorkspaceForm`` inline in a
+    card with the prompt prefilled to ``/sculptor:help``. Navigation
+    is otherwise pared back — Cmd+K and the global shortcuts are off,
     so only this form and Settings are reachable.
 
     The inline form shares the new-workspace form's field ids, so the form
     getters here mirror ``PlaywrightNewWorkspaceDialog``'s; the sidebar
-    empty-state affordances (FIRST-02) are unique to this page.
+    empty-state affordances are unique to this page.
     """
 
     def __init__(self, page: Page) -> None:
@@ -42,7 +42,7 @@ class PlaywrightEmptyFirstRun(PlaywrightIntegrationTestElement):
     def get_create_button(self) -> Locator:
         return self._page.get_by_test_id(ElementIDs.NEW_WORKSPACE_CREATE_BUTTON)
 
-    # -- Sidebar empty-state affordances (FIRST-02) --
+    # -- Sidebar empty-state affordances --
 
     def get_add_repo_button(self) -> Locator:
         """The "Add a repo" button shown when no repos are registered yet."""
@@ -55,7 +55,7 @@ class PlaywrightEmptyFirstRun(PlaywrightIntegrationTestElement):
     # -- Create --
 
     def create_and_wait_for_chat_panel(self, timeout: int = 60_000) -> PlaywrightTaskPage:
-        """Create the first workspace and wait for the full workspace page (FIRST-05).
+        """Create the first workspace and wait for the full workspace page.
 
         The create navigates to the new agent, flipping the gate off so the
         normal workspace shell takes over and the chat panel renders.

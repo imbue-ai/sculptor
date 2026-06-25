@@ -26,6 +26,7 @@ describe("LocalStorageLayoutAdapter", () => {
   });
 
   afterEach(() => {
+    adapter.dispose();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
@@ -53,6 +54,23 @@ describe("LocalStorageLayoutAdapter", () => {
     localStorage.setItem("sculptor-layout-ws-ws-1", "{not valid json");
     expect(() => adapter.read(WS_SCOPE)).not.toThrow();
     expect(adapter.read(WS_SCOPE)).toBeUndefined();
+  });
+
+  it("returns undefined for valid JSON of the wrong shape (missing required field)", () => {
+    // Valid JSON, but a workspace snapshot missing `splits`/`activeSubSection` — a
+    // stale or hand-edited entry must read as "nothing stored", not hydrate as valid.
+    localStorage.setItem(
+      "sculptor-layout-ws-ws-1",
+      JSON.stringify({ placement: {}, order: {}, activePanel: {}, expanded: {} }),
+    );
+    expect(adapter.read(WS_SCOPE)).toBeUndefined();
+
+    // Likewise for global: sectionSizes present but not the numeric/bool fields.
+    localStorage.setItem(
+      "sculptor-layout-global",
+      JSON.stringify({ sectionSizes: { left: 20, right: 20, bottom: 30 } }),
+    );
+    expect(adapter.read(GLOBAL_SCOPE)).toBeUndefined();
   });
 
   it("remove clears a persisted scope and drops a pending write", () => {

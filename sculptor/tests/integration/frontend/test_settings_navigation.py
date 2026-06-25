@@ -9,8 +9,8 @@ dropped along with the tab strip.
 
 from playwright.sync_api import expect
 
-from sculptor.constants import ElementIDs
 from sculptor.testing.elements.workspace_sidebar import get_workspace_sidebar
+from sculptor.testing.pages.project_layout import PlaywrightProjectLayoutPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.playwright_utils import navigate_to_workspace
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -31,6 +31,7 @@ def test_settings_opens_from_sidebar_link(
     """
     page = sculptor_instance_.page
     sidebar = get_workspace_sidebar(page)
+    layout = PlaywrightProjectLayoutPage(page=page)
 
     start_task_and_wait_for_ready(page, prompt="Settings test", workspace_name="Settings WS")
 
@@ -38,7 +39,7 @@ def test_settings_opens_from_sidebar_link(
     expect(settings_link).to_be_visible()
     settings_link.click()
 
-    expect(page.get_by_test_id(ElementIDs.SETTINGS_PAGE)).to_be_visible()
+    expect(layout.get_settings_page_locator()).to_be_visible()
 
 
 @user_story("to return to a workspace from Settings via the sidebar")
@@ -55,14 +56,15 @@ def test_navigate_from_settings_back_to_workspace(
     """
     page = sculptor_instance_.page
     sidebar = get_workspace_sidebar(page)
+    layout = PlaywrightProjectLayoutPage(page=page)
     task_page = PlaywrightTaskPage(page)
 
     start_task_and_wait_for_ready(page, prompt="Back to workspace", workspace_name="Return WS")
 
     sidebar.get_settings_link().click()
-    expect(page.get_by_test_id(ElementIDs.SETTINGS_PAGE)).to_be_visible()
+    expect(layout.get_settings_page_locator()).to_be_visible()
 
     navigate_to_workspace(page, "Return WS")
 
-    expect(page.get_by_test_id(ElementIDs.SETTINGS_PAGE)).to_be_hidden()
+    expect(layout.get_settings_page_locator()).to_be_hidden()
     expect(task_page.get_chat_panel()).to_be_visible()

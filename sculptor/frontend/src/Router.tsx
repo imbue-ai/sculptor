@@ -66,7 +66,7 @@ const router = createHashRouter([
   // Pathless layout route hosting every page destination. Its element
   // (`EmptyFirstRunGate`) renders the matched route normally unless the
   // workspace list is genuinely empty, in which case it swaps in the
-  // EmptyFirstRunPage (FIRST-01) — except on Settings, which stays reachable.
+  // EmptyFirstRunPage — except on Settings, which stays reachable.
   // The has-workspaces flow is unaffected: the gate falls through to <Outlet/>.
   {
     element: <EmptyFirstRunGate />,

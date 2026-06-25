@@ -118,7 +118,7 @@ def sculptor_instance_(
 def sculptor_instance_zero_agent_(
     sculptor_instance_: SculptorInstance,
 ) -> SculptorInstance:
-    """Shared instance positioned on a workspace with zero agents (AGENT-02).
+    """Shared instance positioned on a workspace with zero agents.
 
     Rides the shared ``sculptor_instance_`` fixture (same per-test cleanup), then
     creates a workspace with no agent and navigates to it so the center section
@@ -134,7 +134,7 @@ def sculptor_instance_zero_agent_(
 def sculptor_instance_empty_first_run_(
     sculptor_instance_: SculptorInstance,
 ) -> SculptorInstance:
-    """Shared instance settled on the empty first-run page (FIRST-01).
+    """Shared instance settled on the empty first-run page.
 
     The shared ``sculptor_instance_`` already deletes every workspace in its
     per-test cleanup and lands the browser on ``/ws/new`` with one repo and zero
