@@ -418,6 +418,16 @@ class ClaudeHarnessProcess implements HarnessProcess {
             outputProcessor.processLine(line);
             if (outputProcessor.isTurnComplete()) {
               child.stdin?.end();
+              // A CLI that emits a terminal frame but then keeps running (e.g.
+              // fake_claude usage_limit emits the rate-limit frame, then blocks)
+              // won't exit on stdin EOF — force it so the turn finalizes with the
+              // error that was already recorded. Cleared on close.
+              if (this.interruptEscalationTimers.length === 0) {
+                this.interruptEscalationTimers.push(
+                  setTimeout(() => this.killChildGroup("SIGTERM"), 1_000),
+                  setTimeout(() => this.killChildGroup("SIGKILL"), 5_000),
+                );
+              }
             }
           }
         }
@@ -427,7 +437,7 @@ class ClaudeHarnessProcess implements HarnessProcess {
         // case is handled earlier, so treat this as a clean turn end.
         resolve();
       });
-      child.on("close", () => {
+      child.on("close", (code) => {
         this.clearInterruptEscalation();
         const remaining = this.stdoutBuffer.trim();
         if (remaining) {
@@ -435,7 +445,27 @@ class ClaudeHarnessProcess implements HarnessProcess {
         }
         this.stdoutBuffer = "";
         outputProcessor.finalizeTurn();
+        // A non-zero exit with no error frame and no interrupt is a crash: the
+        // process died unrecoverably (the CLI emits a result frame on a clean
+        // end, so turnError is already set in that path). Treat it as fatal —
+        // exitCb drives the supervisor to run_state FAILED (→ ERROR + the
+        // restore-agent prompt), not a recoverable REQUEST_ERROR.
+        const isCrash =
+          code !== 0 &&
+          code !== null &&
+          !this.interrupted &&
+          outputProcessor.turnError === undefined;
         this.child = undefined;
+        if (isCrash) {
+          this.finished = true;
+          this.exitCb?.({
+            error: {
+              exception: "AgentCrashedError",
+              args: [`Agent process exited with code ${code}`],
+              traceback_dict: null,
+            },
+          });
+        }
         resolve();
       });
 
