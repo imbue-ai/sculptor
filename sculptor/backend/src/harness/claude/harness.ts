@@ -150,6 +150,9 @@ class ClaudeHarnessProcess implements HarnessProcess {
   private interrupted = false;
   private controlRequestCounter = 0;
   private interruptEscalationTimers: ReturnType<typeof setTimeout>[] = [];
+  // The model from the most recent message that carried one, so a later turn
+  // without an explicit model (an answer turn) reuses it.
+  private lastModelName: string | null = null;
   // AUQ/plan answers delivered mid-turn via the MCP backchannel: their
   // RequestStarted is emitted on delivery, but the matching RequestSuccess is
   // deferred until the in-flight CLI invocation completes (the answer continues
@@ -280,10 +283,18 @@ class ClaudeHarnessProcess implements HarnessProcess {
       request_id: requestId,
     });
 
+    // A turn without an explicit model_name (an answer turn) inherits the last
+    // selected model, then the agent's default — not just defaultModel, which is
+    // null when the model was chosen on the first message rather than at create.
+    if (typeof message.model_name === "string" && message.model_name !== "") {
+      this.lastModelName = message.model_name;
+    }
     const modelName =
-      typeof message.model_name === "string"
+      (typeof message.model_name === "string" && message.model_name !== ""
         ? message.model_name
-        : this.agent.defaultModel;
+        : null) ??
+      this.lastModelName ??
+      this.agent.defaultModel;
     const fakeClaude =
       this.deps.resolveFakeClaudeCommand?.(modelName ?? null) ?? null;
 
@@ -297,14 +308,20 @@ class ClaudeHarnessProcess implements HarnessProcess {
       }
     }
 
-    const userInstructions = getUserInstructions({
-      text: typeof message.text === "string" ? message.text : "",
-      filePaths: Array.isArray(message.files)
-        ? (message.files as string[])
-        : undefined,
-      enterPlanMode: message.enter_plan_mode === true,
-      exitPlanMode: message.exit_plan_mode === true,
-    });
+    // An answer turn (the agent's AUQ/plan dialog already resolved, so this is a
+    // fresh CLI invocation) feeds the user's answers back as the prompt — the
+    // message has no `text` (process_manager_utils.get_user_instructions).
+    const userInstructions =
+      message.object_type === "UserQuestionAnswerMessage"
+        ? buildAnswerInstructions(message)
+        : getUserInstructions({
+            text: typeof message.text === "string" ? message.text : "",
+            filePaths: Array.isArray(message.files)
+              ? (message.files as string[])
+              : undefined,
+            enterPlanMode: message.enter_plan_mode === true,
+            exitPlanMode: message.exit_plan_mode === true,
+          });
     const systemPrompt = getCombinedSystemPrompt({
       initializationStrategy: this.deps.initializationStrategyFor(this.agent),
       userSystemPrompt: this.agent.systemPrompt,
@@ -600,4 +617,23 @@ class ClaudeHarnessProcess implements HarnessProcess {
       }
     }
   }
+}
+
+// Build the prompt for an answer turn (a fresh CLI invocation after the AUQ /
+// plan dialog resolved): feed the user's answers back as text, since the
+// UserQuestionAnswerMessage carries no `text`. Mirrors
+// process_manager_utils.get_user_instructions' UserQuestionAnswerMessage branch
+// (non-plan-approval case).
+function buildAnswerInstructions(message: Record<string, unknown>): string {
+  const answers = (message["answers"] as Record<string, string> | undefined) ?? {};
+  const questionData = message["question_data"] as
+    | { questions?: Array<{ question?: string; header?: string }> }
+    | undefined;
+  const questions = questionData?.questions ?? [];
+  const lines = ["[Sculptor: The user answered your questions]", ""];
+  for (const question of questions) {
+    const value = answers[question.question ?? ""] ?? "";
+    lines.push(`**${question.header ?? ""}:** ${value}`);
+  }
+  return lines.join("\n");
 }
