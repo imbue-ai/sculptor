@@ -3,7 +3,9 @@ import type { ReactElement } from "react";
 import { Outlet } from "react-router-dom";
 
 import { useImbueLocation } from "./common/NavigateUtils.ts";
+import { AutoUpdateToasts } from "./components/AutoUpdateToasts.tsx";
 import { isWorkspaceListEmptyAtom } from "./components/newWorkspace/newWorkspaceAtoms.ts";
+import { useAutoUpdateListener } from "./hooks/useAutoUpdateListener.ts";
 import { EmptyFirstRunPage } from "./pages/workspace/EmptyFirstRunPage.tsx";
 
 /**
@@ -24,9 +26,17 @@ export const EmptyFirstRunGate = (): ReactElement => {
   const isWorkspaceListEmpty = useAtomValue(isWorkspaceListEmptyAtom);
   const { isSettingsRoute } = useImbueLocation();
 
-  if (isWorkspaceListEmpty && !isSettingsRoute) {
-    return <EmptyFirstRunPage />;
-  }
+  // The auto-update listener + toasts are mounted here, above the gate, rather than
+  // inside AppShell: AppShell unmounts whenever the workspace list is empty (the
+  // empty-first-run state), which would drop the `_autoUpdateCallback` registration
+  // and silence update toasts. This gate wraps every route and never unmounts, so
+  // the updater keeps running in every app state.
+  useAutoUpdateListener();
 
-  return <Outlet />;
+  return (
+    <>
+      {isWorkspaceListEmpty && !isSettingsRoute ? <EmptyFirstRunPage /> : <Outlet />}
+      <AutoUpdateToasts />
+    </>
+  );
 };

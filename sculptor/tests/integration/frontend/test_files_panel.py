@@ -55,6 +55,7 @@ from playwright.sync_api import expect
 from sculptor.testing.elements.add_panel_dropdown import open_panel
 from sculptor.testing.elements.chat_panel import send_chat_message
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
+from sculptor.testing.elements.explorer_layout import get_explorer_layout_in
 from sculptor.testing.elements.files_panel import PlaywrightFilesPanelElement
 from sculptor.testing.elements.files_panel import get_files_panel_in
 from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
@@ -621,11 +622,16 @@ def test_shared_sidebar_resizes_and_has_a_minimum_width(sculptor_instance_: Scul
     page = sculptor_instance_.page
     # Open Files into the narrow (~20%) left section, then maximize that section so
     # the shared list has room to grow before the resize is measured.
-    _, files_panel = _open_files_panel_with(page, WRITE_FILES_PROMPT, sub_section="left")
+    _open_files_panel_with(page, WRITE_FILES_PROMPT, sub_section="left")
 
-    PlaywrightWorkspaceSection(page, "left").maximize()
+    left = PlaywrightWorkspaceSection(page, "left")
+    left.maximize()
 
-    layout = files_panel.get_explorer_layout()
+    # A maximized section is rendered without its ``SECTION_LEFT`` grid wrapper — the
+    # grid swaps to a single full-bleed PanelSection — so the Files panel's list now
+    # lives under the surviving panel-section root (the active-ring host), not under
+    # ``SECTION_LEFT``. Re-scope the ExplorerLayout POM there before measuring.
+    layout = get_explorer_layout_in(left.get_active_ring(), page)
     expect(layout.get_list()).to_be_visible()
 
     handle = layout.get_resize_handle()

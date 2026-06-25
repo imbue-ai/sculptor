@@ -12,6 +12,7 @@ import playwright
 from loguru import logger
 from playwright.sync_api import Locator
 from playwright.sync_api import Page
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import expect
 from tenacity import RetryError
 from tenacity import retry
@@ -267,6 +268,13 @@ def navigate_to_add_workspace_page(page: Page) -> None:
     create_button = page.get_by_test_id(ElementIDs.NEW_WORKSPACE_CREATE_BUTTON)
     chat_panel = page.get_by_test_id(ElementIDs.CHAT_PANEL)
     settings_page = page.get_by_test_id(ElementIDs.SETTINGS_PAGE)
+    # The empty-first-run page (no workspaces anywhere) hosts the inline create form,
+    # but its create button only mounts AFTER the form finishes loading projects, so
+    # the page can be parked here with no create button yet. This is its own settle
+    # signal — and a multi-repo create-in-sequence routinely lands here between
+    # workspaces (a create-and-delete leaves zero workspaces) — so it must be in the
+    # settle set or a caller parked here times out before the button mounts.
+    empty_first_run = page.get_by_test_id(ElementIDs.EMPTY_FIRST_RUN_PAGE)
     # The Home workspace list (rows, or its search-empty heading) is a valid
     # parked surface too: it exposes no create button until the modal opens, so
     # it must be in the settle set or a caller parked there times out.
@@ -279,17 +287,26 @@ def navigate_to_add_workspace_page(page: Page) -> None:
     # shortcut on the empty-first-run page (where it is disabled, and where the
     # inline form is the create surface) would open the modal OVER the inline form
     # and leave its overlay stuck. Wait until a create surface is showing (inline
-    # form or already-open modal), we are on a workspace (chat panel), parked on
-    # Settings, or sitting on the Home workspace list.
-    expect(create_button.or_(chat_panel).or_(settings_page).or_(home_list)).to_be_visible(timeout=45_000)
+    # form or already-open modal), the empty-first-run page is up, we are on a
+    # workspace (chat panel), parked on Settings, or sitting on the Home list.
+    expect(create_button.or_(chat_panel).or_(settings_page).or_(empty_first_run).or_(home_list)).to_be_visible(
+        timeout=45_000
+    )
     # Parked on Settings (no create affordance) — route Home, which settles on a
-    # definite Home surface: the empty-first-run inline form (no workspaces, which
-    # exposes the create button and returns below) or the Home workspace list (no
-    # create button — handled by the modal shortcut path below, like a workspace).
-    # navigate_to_home_page waits for Home to land, so no extra wait is needed here.
+    # definite Home surface: the empty-first-run inline form (no workspaces) or the
+    # Home workspace list. navigate_to_home_page waits for Home to land, so no extra
+    # wait is needed here.
     if settings_page.is_visible():
         navigate_to_home_page(page)
     if create_button.is_visible():
+        return
+
+    # On the empty-first-run page the inline form IS the create surface, but its
+    # create button mounts only after the form loads projects — and the modal
+    # shortcut (Cmd/Meta+T) is disabled here (FIRST-03), so falling through to it
+    # would hang. Wait for the inline create button to appear instead.
+    if empty_first_run.is_visible():
+        expect(create_button).to_be_visible(timeout=45_000)
         return
 
     # No create surface yet — a workspace (chat panel) or the Home list. Open the
@@ -311,14 +328,24 @@ def reset_active_panel_to_files(page: Page) -> None:
     Files out of the left section (e.g. dragged it to the right), so this is
     best-effort — it expands the left section and activates the Files tab when it
     is there, and otherwise skips silently rather than failing setup.
+
+    Whole-thing best-effort: when this runs in per-test cleanup the previous test's
+    workspace may be mid-optimistic-delete (deleting the active workspace navigates
+    away and remounts the workspace header, so the section toggle never stabilizes
+    long enough to click). The browser reset that follows restores the default
+    layout anyway, so a churning shell here must not fail setup — swallow any
+    expand/activate error rather than blocking the next test.
     """
     if not page.get_by_test_id(ElementIDs.SECTION_CENTER).is_visible():
         return
     left = PlaywrightWorkspaceSection(page, "left")
-    left.expand_section()
-    files_tab = left.get_panel_tab("files")
-    if files_tab.count() > 0:
-        files_tab.click()
+    try:
+        left.expand_section()
+        files_tab = left.get_panel_tab("files")
+        if files_tab.count() > 0:
+            files_tab.click()
+    except (PlaywrightTimeoutError, AssertionError) as error:
+        logger.debug("reset_active_panel_to_files skipped (workspace shell unstable): {}", error)
 
 
 _MAX_WORKSPACE_DELETE_ITERATIONS = 50

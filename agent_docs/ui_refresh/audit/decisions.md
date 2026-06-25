@@ -46,6 +46,60 @@ These were genuine new-shell gaps the harness exposed; fixed to match intended U
   empty-first-run page as a valid Home landing.
 - `get_workspace_tabs()` retained as a shim onto sidebar rows for un-swept suites.
 
-## Status
-- Trajectory (offload, real_claude/real_pi excluded): 128 → 836 → 888 → 902 → 927
-  → 958 passing. Driving the remaining tail to green now.
+## Frontend product changes (rounds 2-4, to call out in review)
+- Diff/file open reveal + single-viewer render (host panels read the shared
+  diff-tab atom); agent auto-open (`agentPanelPlacement.ts`); panel-tab rename
+  wiring (`onRename` → `renameWorkspaceAgent`); per-agent chat isolation
+  (`ChatInput`/`ChatPanelContent` key on the panel's agent); Linear workspace
+  widget in `WorkspaceHeader`. These are genuine new-shell completions, not
+  test-only changes — the reviewer should sanity-check them.
+
+## Command-palette flakiness
+- `ensure_workspace_exists` now waits for the sidebar workspace row before
+  returning, so the Cmd+K palette / global shortcuts (gated on a non-empty
+  workspace list) don't fire before the list atom syncs. This was the dominant
+  source of flaky (passed-on-retry) command-palette / keybindings tests.
+
+## Status / trajectory (offload, real_claude+real_pi excluded; ~1005 tests)
+- Passing: 128 → 836 → 888 → 902 → 927 → 958 → 986 (round 6) → final round below.
+
+## Auto-update fix (real product bug, fixed this session)
+- `EmptyFirstRunGate` swaps out `AppShell` when the workspace list is empty, and
+  `AppShell` hosted `useAutoUpdateListener()` + `<AutoUpdateToasts/>` — so the
+  update callback was unregistered whenever a user had zero workspaces (which the
+  test cleanup always produces). Hoisted both into `EmptyFirstRunGate` (always
+  mounted). This is a genuine product fix, not test-only: auto-update would have
+  been silently dead in the empty-first-run state for real users too.
+
+## Residual (documented for the review / a real-run debug session)
+After the final round these remained red/uncertain — each needs either a live test
+run to diagnose or a deeper product decision, so I stopped autonomous blind edits:
+- **Chat message-count (~4)**: `test_branch_switching_integration` (untracked-file,
+  in-place-mode), `test_turn_summary_worktree`, `test_read_unread_status`. The POM +
+  testids verified correct by source; the FakeClaude reply / 2nd-agent-tab not
+  materializing is a runtime/timing question (possibly flaky, possibly a chat-alpha
+  regression in a specific switch/worktree flow). Needs `/debug-integration-test`.
+- **Linear plugin panel (1)**: `test_linear_panel_follows_workspace_branch_and_sends_key`
+  — the bundled Linear plugin's `linear-issue` panel isn't offered in the add-panel
+  dropdown. Plugin-contributed panels may not be wired into the section-shell
+  dropdown (`addPanelCore.ts` / registry) — a plugin-system gap.
+- **Sidebar resize (2)**: `test_resize_handle_widens_sidebar` / `_clamps_to_a_minimum_width`
+  — dragging the thin `SIDEBAR_RESIZE_HANDLE` doesn't change width; flagged
+  `WorkspaceSidebar.module.scss` / `SectionGrid.tsx`. Finicky drag actionability.
+- **Add-workspace agent-type default (1)**: `test_first_agent_type_defaults_to_shared_last_used`
+  — `useCreateWorkspace.ts` doesn't optimistically set `lastUsedAgentType`.
+- The command-palette / keybindings flakiness should be resolved by the
+  `ensure_workspace_exists` wait; confirm in the final run.
+
+## Hand-off notes (for the review agent)
+- The review doc the instructions mean is **docs/development/review/integration_tests.md**
+  (also docs/development/review/sculptor.md, react.md). The `code-review-checklist`
+  skill is present.
+- The branch changed **~829 files** (whole shell rebuild over 144 commits) — "every
+  changed file" is huge; scope to substantive source (skip generated `types.gen.ts`,
+  pure deletions) and consider a fan-out workflow.
+- **~31 source files** carry comments referencing ui_refresh planning docs
+  (`goals.md`, `state_design.md`, `Task X.Y`, `PANEL-06`, etc.) — these are the
+  comment-cleanup targets (remove references to agent_docs/ui_refresh).
+- These audit docs (agent_docs/ui_refresh/audit/) are deliverables — KEEP them.
+- `offload.tmp.toml` (repo root, untracked) is a local run artifact — delete before merge.

@@ -27,7 +27,6 @@ import {
 } from "~/common/state/atoms/toasts.ts";
 import { useProject } from "~/common/state/hooks/useProjects.ts";
 import { useUnifiedStream } from "~/common/state/hooks/useUnifiedStream";
-import { AutoUpdateToasts } from "~/components/AutoUpdateToasts.tsx";
 import { CommandPalette } from "~/components/CommandPalette";
 import { CommandRegistrations } from "~/components/CommandPalette/CommandRegistrations.tsx";
 import { KeyboardShortcutsDialog } from "~/components/KeyboardShortcutsDialog.tsx";
@@ -39,7 +38,6 @@ import { NotificationToasts } from "~/components/NotificationToasts.tsx";
 import { RepoPathDialog } from "~/components/RepoPathDialog.tsx";
 import { Toast } from "~/components/Toast.tsx";
 import { WarningStatusBanner } from "~/components/WarningStatusBanner.tsx";
-import { useAutoUpdateListener } from "~/hooks/useAutoUpdateListener.ts";
 import { usePageLayoutKeyboardShortcuts } from "~/layouts/hooks/usePageLayoutKeyboardShortcuts.ts";
 import { PluginLoader } from "~/plugins/PluginLoader.tsx";
 import { PluginOverlays } from "~/plugins/PluginOverlays.tsx";
@@ -72,7 +70,6 @@ export const AppShell = (): ReactElement => {
 
   useUnifiedStream();
   usePageLayoutKeyboardShortcuts();
-  useAutoUpdateListener();
   useSyncActiveTabFromRoute();
 
   // Functions and callbacks
@@ -155,7 +152,6 @@ export const AppShell = (): ReactElement => {
         onClose={() => setIsRepoPathDialogOpen(false)}
       />
       <NotificationToasts />
-      <AutoUpdateToasts />
       <Toast
         open={deleteErrorToast !== null}
         onOpenChange={handleDeleteErrorOpenChange}

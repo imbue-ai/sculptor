@@ -216,6 +216,21 @@ class PlaywrightWorkspaceSection:
                 # An open dismissible overlay (a lingering popover/tooltip/dialog
                 # from the prior test) can intercept the click; clear it, then retry.
                 self._page.keyboard.press("Escape")
+
+        # Every actionable attempt lost the stability race — the workspace header is
+        # still churning (a mid-optimistic-delete navigation remounts it, so its box
+        # keeps moving past the per-attempt budget). The toggle is a fixed-position
+        # header button (only the branch-name text beside it reflows), so a forced
+        # click lands on it without waiting for the box to settle.
+        if not header.is_visible():
+            try:
+                toggle.click(force=True, timeout=_EXPAND_SECTION_CLICK_TIMEOUT_MS)
+                expect(header).to_be_visible(timeout=_EXPAND_SECTION_CLICK_TIMEOUT_MS)
+                return
+            except (PlaywrightTimeoutError, AssertionError) as error:
+                last_error = error
+        if header.is_visible():
+            return
         if last_error is not None:
             raise last_error
         expect(header).to_be_visible()

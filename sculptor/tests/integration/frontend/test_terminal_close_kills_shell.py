@@ -36,6 +36,7 @@ from sculptor.testing.elements.terminal import open_terminal_and_wait
 from sculptor.testing.elements.terminal import run_command_in_active_terminal
 from sculptor.testing.elements.terminal import wait_for_xterm_buffer_nonempty
 from sculptor.testing.elements.terminal import wait_for_xterm_substring
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
 from sculptor.testing.sculptor_instance import SculptorInstance
 from sculptor.testing.user_stories import user_story
@@ -135,6 +136,11 @@ def test_close_terminal_tab_kills_shell_process(sculptor_instance_: SculptorInst
     # 2. After the close, we can run a command in the surviving second
     #    tab to prove the panel is still healthy.
     add_terminal(page)
+    # The terminal tab strip lives in the bottom section's header, which only
+    # renders while bottom is expanded; keep it expanded before reading the tabs so
+    # the count assertion below targets a mounted SECTION_HEADER-bottom rather than
+    # racing a collapsed section.
+    PlaywrightWorkspaceSection(page, "bottom").expand_section()
     terminal_tabs = get_terminal_tabs(page)
     expect(terminal_tabs).to_have_count(2)
 
