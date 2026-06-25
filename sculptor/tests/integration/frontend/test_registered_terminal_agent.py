@@ -80,13 +80,16 @@ def test_registered_terminal_agent_launches_program(sculptor_instance_: Sculptor
         (registrations_dir / "fake-tui.toml").unlink(missing_ok=True)
 
 
-# The SESSION-REPORTED marker is assembled via printf so the echoed command
-# line never contains it: the xterm wait must trip on the program OUTPUT
-# (the session-id POST completed) — matching the command echo would let the
-# instance shut down before the signal persists, and the restart would
-# relaunch instead of resume.
+# The session id must be durably persisted before the first instance is torn
+# down, or the restart relaunches instead of resuming. `until sculpt signal ...`
+# retries until the report succeeds (CLI exit 0 == the backend committed the id);
+# a plain `; sculpt signal ... ;` would let SESSION-REPORTED print even when the
+# report fails transiently under load, tearing the instance down unpersisted.
+# SESSION-REPORTED is printf-assembled so it appears only in the program output,
+# never the echoed command line -- the xterm wait must trip on the output.
 _FAKE_RESUME_LAUNCH = (
-    "echo FIRST-RUN-BANNER; sculpt signal session-id fake-session-42; printf %sREPORTED SESSION-; echo; read -r _line"
+    "echo FIRST-RUN-BANNER; until sculpt signal session-id fake-session-42; do sleep 0.2; done; "
+    + "printf %sREPORTED SESSION-; echo; read -r _line"
 )
 _FAKE_RESUME_TEMPLATE = "echo RESUMED-WITH {session_id}; read -r _line"
 
