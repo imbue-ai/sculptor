@@ -2,7 +2,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 
 import { getOrm } from "~/db/orm";
-import { getWorkspace } from "~/db/repositories";
+import { getWorkspace, setWorkspaceDiffStatus } from "~/db/repositories";
+import { eventBus } from "~/events";
 import type {
   AgentRow,
   WorkspaceInitializationStrategy,
@@ -82,6 +83,22 @@ function resolveFakeClaudeCommand(
   return { python, script };
 }
 
+// A file-changing tool (Write/Edit/...) ran for this agent: bump the workspace's
+// diff marker and publish a workspace change so the frontend invalidates its
+// git-derived queries (the file tree + diff) and re-fetches (the `diffUpdatedAt`
+// cascade). Without this, files an agent creates never appear in the browser.
+function markWorkspaceDiffChanged(agent: AgentRow): void {
+  const workspace = workspaceForAgent(agent);
+  if (workspace === undefined) {
+    return;
+  }
+  setWorkspaceDiffStatus(getOrm(), workspace.objectId, "READY");
+  eventBus.publish({
+    kind: "data_model_change",
+    changedEntities: [{ type: "workspace", id: workspace.objectId }],
+  });
+}
+
 function claudeEnvironmentFor(agent: AgentRow): ClaudeHarnessEnvironment {
   const workspace = workspaceForAgent(agent);
   const root = workspace?.environmentId ?? "";
@@ -127,6 +144,7 @@ export function getAgentRunner(): AgentRunner {
         environmentFor: claudeEnvironmentFor,
         initializationStrategyFor: strategyForAgent,
         enableEntityMentions: config.enable_entity_mentions,
+        onDiffNeeded: markWorkspaceDiffChanged,
       },
       pi: {
         resolveBinaryPath: () => resolveBinaryPath("PI") ?? undefined,

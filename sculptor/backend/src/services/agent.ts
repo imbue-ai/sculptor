@@ -162,6 +162,50 @@ export interface CreateAgentInput {
   agentType?: AgentTypeName;
 }
 
+// The default-name prefix for an agent type ("Claude 1", "Pi 2", "Terminal 1").
+// Ports app.py `_default_agent_name_prefix` (registered terminal agents would
+// name from their registration; not yet wired here, so they fall back to Agent).
+function defaultAgentNamePrefix(agentType: AgentTypeName): string {
+  switch (agentType) {
+    case "claude":
+      return "Claude";
+    case "pi":
+      return "Pi";
+    case "terminal":
+      return "Terminal";
+    default:
+      return "Agent";
+  }
+}
+
+// Compute the next auto-generated agent name like "Claude N", reusing the lowest
+// available number so deleting "Claude 1" frees it for the next agent. Numbering
+// is independent per prefix. Ports app.py `_compute_next_agent_name`.
+function computeNextAgentName(
+  orm: ReturnType<typeof getOrm>,
+  workspaceId: string,
+  prefix: string,
+): string {
+  const pattern = new RegExp(
+    `^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} (\\d+)$`,
+  );
+  const used = new Set<number>();
+  for (const agent of listAgentsByWorkspace(orm, workspaceId)) {
+    if (agent.isDeleted) {
+      continue;
+    }
+    const match = agent.title === null ? null : pattern.exec(agent.title);
+    if (match) {
+      used.add(Number(match[1]));
+    }
+  }
+  let n = 1;
+  while (used.has(n)) {
+    n += 1;
+  }
+  return `${prefix} ${n}`;
+}
+
 function workspaceWorkingDir(
   workspace: ReturnType<typeof getWorkspace>,
 ): string {
@@ -224,7 +268,9 @@ export class AgentService {
       startingGitHash,
       systemPrompt: repo?.defaultSystemPrompt ?? null,
       defaultModel: input.model ?? null,
-      title: input.name ?? null,
+      title:
+        input.name ??
+        computeNextAgentName(orm, workspaceId, defaultAgentNamePrefix(agentType)),
       runState: "QUEUED",
     });
 
