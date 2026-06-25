@@ -8,7 +8,6 @@ import { getOrm } from "~/db/orm";
 import {
   appendAgentMessage,
   createAgent,
-  deleteAgentMessage,
   findAgentsByPrefix,
   getAgent,
   getWorkspace,
@@ -545,17 +544,21 @@ export class AgentService {
     });
   }
 
+  // Remove a queued (not-yet-sent) message — e.g. the chat input's edit/delete
+  // of a queued bar. Records a RemoveQueuedMessageAgentMessage tombstone (not a
+  // hard delete) so the fold drops it from queued_chat_messages and the delta
+  // streams the updated queue, without touching the busy turn's
+  // current_request_id (web/app.py delete_workspace_agent_message →
+  // RemoveQueuedMessageUserMessage → RemoveQueuedMessageAgentMessage).
   deleteMessage(agentId: string, messageId: string): void {
     const orm = getOrm();
     const agent = this.requireAgent(agentId);
-    deleteAgentMessage(orm, messageId);
-    // Drop the warm fold so the view recomputes without the deleted message.
-    projectionCache.evict(agentId);
-    eventBus.publish({
-      kind: "agent_status",
-      agentId,
-      workspaceId: agent.workspaceId ?? undefined,
-      projectId: agent.projectId,
+    recordUserMessage(orm, agent, {
+      object_type: "RemoveQueuedMessageAgentMessage",
+      message_id: newAgentMessageId(),
+      source: "AGENT",
+      removed_message_id: messageId,
+      approximate_creation_time: new Date().toISOString(),
     });
   }
 

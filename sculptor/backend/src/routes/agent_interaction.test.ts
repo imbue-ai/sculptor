@@ -175,12 +175,12 @@ describe("agent interaction routes", () => {
     });
   });
 
-  it("deletes a single message", async () => {
+  it("records a remove-queued tombstone for a deleted message", async () => {
     const orm = createOrm(getDatabase());
     const row = appendAgentMessage(orm, agentId, {
-      object_type: "ResponseBlockAgentMessage",
+      object_type: "ChatInputUserMessage",
       message_id: "agm_del",
-      source: "AGENT",
+      source: "USER",
       text: "x",
     });
     const res = await app.inject({
@@ -188,9 +188,17 @@ describe("agent interaction routes", () => {
       url: url(`/messages/${row.objectId}`),
     });
     expect(res.statusCode).toBe(200);
+    // Deletion records a RemoveQueuedMessageAgentMessage tombstone (the fold
+    // filters the queued message out), not a hard delete — web/app.py parity.
     expect(
-      listAgentMessages(orm, agentId).some((m) => m.objectId === row.objectId),
-    ).toBe(false);
+      listAgentMessages(orm, agentId).some(
+        (m) =>
+          (m.message as { object_type?: string }).object_type ===
+            "RemoveQueuedMessageAgentMessage" &&
+          (m.message as { removed_message_id?: string }).removed_message_id ===
+            row.objectId,
+      ),
+    ).toBe(true);
   });
 
   it("404s interaction with an unknown agent", async () => {
