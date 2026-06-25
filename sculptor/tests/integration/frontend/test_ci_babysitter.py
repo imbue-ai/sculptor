@@ -66,11 +66,13 @@ _MERGED_MODE_STABLE_WAIT_MS = 25_000
 # poll. The polling service uses a 10s minimum interval in tests; 12s is a
 # safe lower bound that still keeps the test snappy.
 _BASELINE_POLL_SETTLE_MS = 12_000
-# Buffer, measured from the moment the pipeline badge confirms the failed poll
-# was observed, in which a babysitter that ignored the busy gate would have
-# spawned its tab. The coordinator consumes that same poll result (≤1s behind
-# the badge), so 15s is generous headroom against a contended runner.
-_BUSY_DEFER_STABLE_WAIT_MS = 15_000
+# Buffer in which a babysitter that ignored the busy gate (or one that queued the
+# failure to pounce when the agent goes idle) would have spawned its tab. Measured
+# from the moment the pipeline badge confirms the failed poll was observed, or from
+# the moment the busy agent goes idle. The coordinator consumes that same poll
+# result and re-checks idleness within ~1s, so 15s is generous headroom against a
+# contended runner.
+_BUSY_SKIP_STABLE_WAIT_MS = 15_000
 
 _FAKE_GITHUB_REMOTE = "https://github.com/test-org/test-repo.git"
 
@@ -560,19 +562,18 @@ def test_github_pr_merge_conflict_creates_babysitter(sculptor_instance_: Sculpto
     expect(conflict_prompt_messages.first).to_be_visible()
 
 
-@user_story("to have the CI Babysitter wait until my other agent is idle before it starts fixing CI")
-def test_babysitter_defers_while_agent_busy_then_dispatches_when_idle(
-    sculptor_instance_: SculptorInstance, tmp_path: Path
-) -> None:
+@user_story("to keep the CI Babysitter from interrupting my other agent while it's working")
+def test_babysitter_ignores_ci_failure_while_agent_busy(sculptor_instance_: SculptorInstance, tmp_path: Path) -> None:
     """The CI Babysitter must not inject a fix prompt while another agent in the
-    workspace is actively working — two agents editing the same workspace at
-    once corrupts the tree (SCU-1601). It holds off until every agent is idle,
-    then delivers the deferred prompt.
+    workspace is actively working — two agents editing the same workspace at once
+    corrupts the tree (SCU-1601). It does not queue the failure to pounce when the
+    agent finishes; it simply skips it. A *fresh* CI failure observed once the
+    workspace is idle still drives a prompt.
 
-    The workspace agent is held busy with ``fake_claude:wait_for_file`` so it
-    stays RUNNING until the test releases it. With a failed pipeline armed while
-    it is busy, no 'CI Babysitter' tab may appear. Releasing the agent (it goes
-    idle) lets the deferred prompt dispatch on the coordinator's next re-check.
+    The workspace agent is held busy with FakeClaudePause so it stays RUNNING
+    until the test releases it. A failed pipeline armed while it is busy spawns no
+    'CI Babysitter' tab; releasing the agent (it goes idle) does NOT retroactively
+    spawn one; a fresh running → failed edge observed while idle does.
     """
     page = sculptor_instance_.page
     state_file = tmp_path / "gh_state"
@@ -594,7 +595,7 @@ def test_babysitter_defers_while_agent_busy_then_dispatches_when_idle(
     # the whole time, so the badge flip is read live without a re-open race. Once
     # the badge shows "Failed", the coordinator has consumed that same poll result
     # (observer fan-out is simultaneous with the cache update the badge renders
-    # from), so a babysitter ignoring the busy gate has already dispatched.
+    # from), so a babysitter ignoring the busy gate would already have dispatched.
     # Anchoring here — rather than on a fixed wall-clock window after arming —
     # makes the negative assertion a reliable discriminator at any poll interval.
     pr_popover = PlaywrightPrPopoverElement(page)
@@ -608,16 +609,21 @@ def test_babysitter_defers_while_agent_busy_then_dispatches_when_idle(
 
     agent_tabs = PlaywrightAgentTabBarElement(page)
     babysitter_tab = agent_tabs.get_agent_tab_by_name("CI Babysitter")
-    # The coordinator has now seen the failure. Give it a beat to act: with the
-    # bug it spawns the babysitter tab here; with the fix it defers while the
-    # workspace agent is busy, so no tab appears.
-    page.wait_for_timeout(_BUSY_DEFER_STABLE_WAIT_MS)
+    # Busy: the failure is skipped, so no babysitter tab appears.
+    page.wait_for_timeout(_BUSY_SKIP_STABLE_WAIT_MS)
     expect(babysitter_tab).to_have_count(0)
 
-    # Release the agent → it finishes its turn and goes idle → the deferred
-    # babysitter prompt is delivered on the coordinator's next re-check tick.
+    # Release the agent → it finishes its turn and goes idle. The skipped failure
+    # must NOT come back to pounce the instant the agent stops working: the
+    # babysitter stays absent even after the workspace is idle.
     pause.release()
+    expect(chat_panel.get_thinking_indicator()).not_to_be_visible(timeout=30_000)
+    page.wait_for_timeout(_BUSY_SKIP_STABLE_WAIT_MS)
+    expect(babysitter_tab).to_have_count(0)
 
+    # A fresh running → failed edge observed while idle DOES drive a prompt —
+    # proving the babysitter still works and the silence above was the busy gate.
+    _arm_failed_transition(sculptor_instance_, state_file)
     expect(babysitter_tab.first).to_be_visible(timeout=60_000)
     babysitter_tab.first.click()
     alpha_chat = get_alpha_chat_view(page)

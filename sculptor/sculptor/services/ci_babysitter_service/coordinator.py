@@ -260,21 +260,13 @@ class CIBabysitterCoordinator(Service):
             try:
                 item = self._queue.get(timeout=_CONSUMER_QUEUE_TIMEOUT_SECONDS)
             except Empty:
-                item = None
-            if isinstance(item, PrStatusInfo):
-                try:
-                    self._handle_status(item)
-                except Exception:
-                    logger.exception("CIBabysitterCoordinator: error handling PrStatusInfo for {}", item.workspace_id)
-            # Re-check deferred dispatches on every tick — including idle ticks,
-            # since the polling service only re-pushes a status on change, so a
-            # still-failing pipeline never re-arrives to retrigger the gate. This
-            # is what lets a deferred prompt fire within ~1s of every agent in
-            # the workspace going idle (SCU-1601).
+                continue
+            if not isinstance(item, PrStatusInfo):
+                continue
             try:
-                self._process_deferred_dispatches()
+                self._handle_status(item)
             except Exception:
-                logger.opt(exception=True).error("CIBabysitterCoordinator: error processing deferred dispatches")
+                logger.exception("CIBabysitterCoordinator: error handling PrStatusInfo for {}", item.workspace_id)
 
     def _handle_status(self, new: PrStatusInfo) -> None:
         state = self._ensure_state(new.workspace_id)
@@ -311,46 +303,13 @@ class CIBabysitterCoordinator(Service):
                     # The transient reason reflects a one-off hiccup; once the
                     # cycle resolves it no longer applies.
                     state.transient_disabled_reason = None
-                    # A passing pipeline cancels any prompt deferred for the
-                    # now-resolved failure (SCU-1601).
-                    self._clear_pending_dispatch(state)
             elif transition in (Transition.MR_MERGED, Transition.MR_CLOSED):
                 with self._lock:
                     state.retired = True
                     state.transient_disabled_reason = None
-                    # A merged/closed PR retires the babysitter; drop any
-                    # deferred prompt so it can't fire after retirement.
-                    self._clear_pending_dispatch(state)
         for transition in transitions:
             if transition in (Transition.PIPELINE_FAILED, Transition.MERGE_CONFLICT):
                 self._dispatch_prompt(state, transition, new)
-
-    def _clear_pending_dispatch(self, state: CIBabysitterState) -> None:
-        """Drop a deferred dispatch. The caller MUST hold ``self._lock``."""
-        state.pending_dispatch_transition = None
-        state.pending_dispatch_status = None
-
-    def _process_deferred_dispatches(self) -> None:
-        """Re-attempt every dispatch that was deferred because an agent was busy.
-
-        Called on each consumer-loop tick. ``_dispatch_prompt`` re-runs the
-        all-agents-idle gate, so this is a no-op for a workspace whose agents are
-        still busy and a real dispatch the moment they all go idle (SCU-1601).
-        """
-        with self._lock:
-            pending: list[tuple[CIBabysitterState, Transition, PrStatusInfo]] = []
-            for state in self._state.values():
-                transition = state.pending_dispatch_transition
-                status = state.pending_dispatch_status
-                if transition is not None and status is not None:
-                    pending.append((state, transition, status))
-        for state, transition, status in pending:
-            try:
-                self._dispatch_prompt(state, transition, status)
-            except Exception:
-                logger.opt(exception=True).error(
-                    "CIBabysitterCoordinator: error re-dispatching deferred prompt for {}", state.workspace_id
-                )
 
     def _are_all_workspace_agents_idle(self, state: CIBabysitterState) -> bool:
         """True when no non-babysitter agent in the workspace is busy or waiting.
@@ -359,10 +318,9 @@ class CIBabysitterCoordinator(Service):
         which keys off the same agent status (WORKING/WAITING) the UI shows — so
         the gate and the status dot never disagree. The babysitter's own task is
         excluded by ``_workspace_agent_tasks_most_recent_first``. Any
-        busy/waiting agent makes the workspace not-idle and the babysitter holds
-        off (SCU-1601); an idle, errored, or completed agent does not block, so a
-        wedged agent can never park the babysitter indefinitely. A workspace with
-        no prior agent is trivially idle.
+        busy/waiting agent makes the workspace not-idle, so the babysitter skips
+        this failure (SCU-1601); an idle, errored, or completed agent does not
+        count. A workspace with no prior agent is trivially idle.
         """
         with self._data_model_service.open_transaction(RequestID()) as transaction:
             tasks = self._workspace_agent_tasks_most_recent_first(state.workspace_id, state.project_id, transaction)
@@ -407,24 +365,22 @@ class CIBabysitterCoordinator(Service):
         # All-agents-idle gate (SCU-1601). Never inject a fix prompt while another
         # agent in the workspace is busy or waiting for input — the babysitter
         # runs as its own agent, so two agents would then edit the same workspace
-        # at once. Computing agent status does DB I/O, so it runs outside the
-        # lock. When an agent is busy, record this transition as pending and bail;
-        # the consumer loop's _process_deferred_dispatches re-checks each tick and
-        # dispatches once every agent is idle. The deferral counts no retry and
-        # sets no dedup, so re-checking re-enters this method cleanly.
+        # at once. Computing agent status does DB I/O, so it runs outside the lock.
+        #
+        # When the workspace isn't idle we DROP this failure rather than queueing
+        # it for later: pouncing the instant the user's agent finishes a turn is
+        # more disruptive than a missed prompt, and the user's own work may have
+        # already made the CI result moot. A still-relevant pipeline failure
+        # re-arms naturally on the next push (a new pipeline_id is a fresh
+        # PIPELINE_FAILED edge); a persistent merge conflict re-arms when it next
+        # clears and recurs. The drop counts no retry and sets no dedup.
         if not self._are_all_workspace_agents_idle(state):
-            with self._lock:
-                state.pending_dispatch_transition = transition
-                state.pending_dispatch_status = new
             logger.info(
-                "CIBabysitterCoordinator: deferring {} for workspace={} — another agent is busy/waiting",
+                "CIBabysitterCoordinator: skipping {} for workspace={} — another agent is busy/waiting",
                 transition,
                 state.workspace_id,
             )
             return
-        # Every agent is idle: this dispatch supersedes any earlier deferral.
-        with self._lock:
-            self._clear_pending_dispatch(state)
 
         if transition is Transition.PIPELINE_FAILED:
             prompt_text = config.ci_babysitter.pipeline_failed_prompt

@@ -833,12 +833,13 @@ def _add_existing_agent(env: _FakeEnv, *, agent_config: Any = None) -> Task:
     return task
 
 
-def test_busy_agent_defers_dispatch_until_idle(
+def test_busy_agent_skips_dispatch_without_pouncing_on_idle(
     env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
 ) -> None:
-    """SCU-1601: with another agent busy, a PIPELINE_FAILED transition is
-    recorded as pending and NOT dispatched. Once that agent goes idle, the next
-    re-check delivers the deferred prompt."""
+    """SCU-1601: with another agent busy, a PIPELINE_FAILED transition is dropped,
+    not queued — nothing is dispatched and no retry is burned. The babysitter must
+    NOT pounce when that agent later goes idle (the same failure never re-arrives);
+    only a *fresh* CI failure observed while idle drives a prompt."""
     coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
     busy_agent = _add_existing_agent(env)
     task_service.set_live_messages(busy_agent.object_id, _busy_chat_messages())
@@ -846,27 +847,26 @@ def test_busy_agent_defers_dispatch_until_idle(
 
     coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
 
-    # Deferred: nothing dispatched, but the transition is pending and no retry burned.
+    # Dropped while busy: nothing dispatched, no retry burned, no dedup recorded.
     assert task_service.create_task_calls == []
     assert task_service.create_message_calls == []
     state = coordinator._state[env.workspace_id]
-    assert state.pending_dispatch_transition == Transition.PIPELINE_FAILED
     assert state.retry_count == 0
+    assert state.last_dispatched_pipeline_failed_id is None
 
-    # Re-checking while still busy is a no-op.
-    coordinator._process_deferred_dispatches()
+    # The agent goes idle, but the still-failing pipeline_id=1 never re-arrives
+    # (the classifier only fires on a change), so the babysitter stays silent —
+    # no pounce the instant the user's agent finishes a turn.
+    task_service.set_live_messages(busy_agent.object_id, _idle_agent_messages())
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
     assert task_service.create_message_calls == []
 
-    # The agent goes idle → the next re-check dispatches the deferred prompt.
-    task_service.set_live_messages(busy_agent.object_id, _idle_agent_messages())
-    coordinator._process_deferred_dispatches()
-
-    assert len(task_service.create_task_calls) == 1
+    # A *fresh* failure (new pipeline_id) observed while idle DOES drive a prompt —
+    # proving the silence above was the busy gate, not a dead path.
+    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=2))
     assert len(task_service.create_message_calls) == 1
     sent_message, _ = task_service.create_message_calls[0]
     assert sent_message.text == "FAILED_PROMPT"
-    assert state.pending_dispatch_transition is None
-    assert state.pending_dispatch_status is None
     assert state.retry_count == 1
 
 
@@ -874,7 +874,7 @@ def test_idle_agent_dispatches_immediately(
     env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
 ) -> None:
     """An idle prior agent does not block the babysitter — it dispatches on the
-    failed transition with no deferral."""
+    failed transition."""
     coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
     idle_agent = _add_existing_agent(env)
     task_service.set_live_messages(idle_agent.object_id, _idle_agent_messages())
@@ -884,32 +884,7 @@ def test_idle_agent_dispatches_immediately(
 
     assert len(task_service.create_message_calls) == 1
     state = coordinator._state[env.workspace_id]
-    assert state.pending_dispatch_transition is None
     assert state.retry_count == 1
-
-
-def test_pipeline_passed_clears_pending_deferral(
-    env: _FakeEnv, patch_user_config: _ConfigSlot, test_root_concurrency_group: ConcurrencyGroup
-) -> None:
-    """A deferred prompt is cancelled when the pipeline passes before the busy
-    agent goes idle — the failure it was queued for is resolved."""
-    coordinator, task_service = _build_coordinator(env, test_root_concurrency_group)
-    busy_agent = _add_existing_agent(env)
-    task_service.set_live_messages(busy_agent.object_id, _busy_chat_messages())
-    _seed_baseline(coordinator, env.workspace_id)
-
-    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="failed", pipeline_id=1))
-    state = coordinator._state[env.workspace_id]
-    assert state.pending_dispatch_transition == Transition.PIPELINE_FAILED
-
-    coordinator._handle_status(_make_status(env.workspace_id, pipeline_status="passed", pipeline_id=1))
-    assert state.pending_dispatch_transition is None
-    assert state.pending_dispatch_status is None
-
-    # Even after the agent goes idle, nothing is dispatched — the deferral is gone.
-    task_service.set_live_messages(busy_agent.object_id, _idle_agent_messages())
-    coordinator._process_deferred_dispatches()
-    assert task_service.create_message_calls == []
 
 
 def test_transient_pr_state_none_does_not_clobber_prev_status(
