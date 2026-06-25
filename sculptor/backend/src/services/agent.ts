@@ -1,4 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import { z } from "zod";
@@ -21,6 +22,7 @@ import { eventBus } from "~/events";
 import type { AgentRow } from "~/db/schema";
 import { artifactsPath, workingDirectory } from "~/environment/paths";
 import { revParseHead } from "~/git";
+import { resolveJsonlDirectory } from "~/harness/claude/paths";
 import { newAgentId, newAgentMessageId } from "~/ids";
 import { projectionCache } from "~/projection/cache";
 import { computeAgentView } from "~/projection/derived";
@@ -518,13 +520,31 @@ export class AgentService {
         ? undefined
         : getWorkspace(orm, agent.workspaceId);
     const root = workspace?.environmentId ?? null;
+    const sessionId = agent.claudeSessionId ?? agent.piSessionId ?? null;
+    // The CLI's own transcript: <jsonl-dir-for-cwd>/<session_id>.jsonl
+    // (web/app.py get_jsonl_path_for_working_directory). Path is computed, not
+    // existence-gated, mirroring the Python endpoint.
+    let transcriptFilePath: string | null = null;
+    if (sessionId !== null && agent.claudeSessionId !== null) {
+      const workDir = workspaceWorkingDir(workspace);
+      if (workDir !== "") {
+        transcriptFilePath = path.join(
+          resolveJsonlDirectory(os.homedir(), workDir),
+          `${sessionId}.jsonl`,
+        );
+      }
+    }
+    // The Sculptor-side transcript artifact, only when it has been written
+    // (app.py gates on .exists(), so the menu item disables until then).
+    const sculptorTranscript =
+      root === null ? null : path.join(artifactsPath(root, agentId), "transcript.jsonl");
     return {
-      sessionId: agent.claudeSessionId ?? agent.piSessionId ?? null,
-      transcriptFilePath: null,
+      sessionId,
+      transcriptFilePath,
       sculptorTranscriptFilePath:
-        root === null
-          ? null
-          : path.join(artifactsPath(root, agentId), "transcript.jsonl"),
+        sculptorTranscript !== null && existsSync(sculptorTranscript)
+          ? sculptorTranscript
+          : null,
     };
   }
 
