@@ -245,8 +245,8 @@ _SEARCH_QUERY_STRING = "is:pr state:open author:@me archived:false sort:updated"
 # ``repository { nameWithOwner }`` and ``headRefName`` so the poller can index a
 # node back to the workspace(s) it belongs to. The sibling ``rateLimit`` block
 # rides in the same response so the governor can read the token's budget with no
-# extra call. ``reviewThreads`` is trimmed to 10 (Change-1b) and
-# ``latestReviews`` left at 20 (cost-free — it nests no connection).
+# extra call. ``reviewThreads`` is trimmed to 10 and ``latestReviews`` left at 20
+# (cost-free — it nests no connection).
 _SEARCH_PR_QUERY = """
 query($q: String!, $prCount: Int!, $after: String) {
   search(query: $q, type: ISSUE, first: $prCount, after: $after) {

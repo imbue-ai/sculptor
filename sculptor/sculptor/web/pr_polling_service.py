@@ -131,7 +131,7 @@ _GOVERNOR_RECOVER_FRACTION = 0.5
 # stop polling until the window resets rather than nibbling the last of the budget.
 _GOVERNOR_DEFER_REMAINING_FRACTION = 0.05
 # A single search round costs only a few points; a cost far above this signals a
-# field addition that ballooned the fan-out (complements the Task 4.2 guard).
+# field addition that ballooned the fan-out.
 _MAX_PLAUSIBLE_SEARCH_COST = 50
 
 
@@ -361,7 +361,7 @@ class _OriginInfo:
     """Parsed identity of a workspace's ``origin`` remote.
 
     ``host`` keys the per-(host, token) poll round, so a ``github.com`` workspace
-    and a GitHub Enterprise workspace get separate rounds (Risk-5).
+    and a GitHub Enterprise workspace get separate rounds.
     ``name_with_owner`` (``owner/name``, ``.git`` stripped) is compared *exactly*
     against a search node's ``repository.nameWithOwner`` to map the node back to
     this workspace. GitHub returns canonical casing there, so a casing mismatch
@@ -498,7 +498,7 @@ class PrPollingService(Service):
     # Hosts whose search round is currently failing (transient), for once-only
     # logging until the round recovers.
     _round_failed_hosts: set[str] = PrivateAttr(default_factory=set)
-    # Hosts whose cold-start unmatched-fetch count has already been logged (rule 6).
+    # Hosts whose cold-start unmatched-fetch count has already been logged.
     _cold_start_logged_hosts: set[str] = PrivateAttr(default_factory=set)
 
     def __init__(
@@ -580,7 +580,7 @@ class PrPollingService(Service):
             )
         # Round driver: one thread that, each interval, issues one batched
         # ``search`` query per distinct host and fans the results out per
-        # workspace (Change-1). Replaces per-workspace polling for matched PRs.
+        # workspace. Replaces per-workspace polling for matched PRs.
         self.concurrency_group.start_new_thread(
             target=self._round_loop,
             name="pr-poll-round-driver",
@@ -855,7 +855,7 @@ class PrPollingService(Service):
     ) -> _RoundCandidate | None:
         """Resolve a workspace for the round, or short-circuit it to ``none``.
 
-        Applies today's short-circuits (rule 4) *before* a workspace can enter a
+        Applies today's short-circuits *before* a workspace can enter a
         round or fallback: not ready (no working_dir) → skip silently; no branch
         info / on the target branch / non-GitHub origin → emit ``none`` with zero
         gh calls. Returns a candidate only for a GitHub workspace off its target
@@ -1049,7 +1049,7 @@ class PrPollingService(Service):
             self._emit_status(job.workspace_id, result)
 
         # A workspace matched by the batched round rides the cheap batch — stop
-        # the per-workspace fallback from rescheduling it (rule 3 cost control).
+        # the per-workspace fallback from rescheduling it (avoids redundant gh calls).
         # If it later drops out of the search, the round re-enqueues a fallback.
         if job.workspace_id in self._matched_workspaces:
             logger.trace("PR fallback {}: matched by search round, not rescheduling fallback", job.workspace_id)
