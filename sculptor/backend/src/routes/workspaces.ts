@@ -3,7 +3,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 
 import { getOrm } from "~/db/orm";
-import { updateWorkspace } from "~/db/repositories";
+import { setWorkspaceDiffStatus, updateWorkspace } from "~/db/repositories";
 import { workspaceInitializationStrategySchema } from "~/db/schema/enums";
 import { eventBus } from "~/events";
 import {
@@ -240,10 +240,15 @@ export async function registerWorkspaceRoutes(
     {
       schema: {
         params: WorkspaceIdParamsSchema,
+        // Accept camelCase (the generated client / frontend) and snake_case
+        // (Pydantic field names, which the Python models accept via
+        // populate_by_name) for each field.
         body: z.object({
           description: z.string().nullable().optional(),
           targetBranch: z.string().nullable().optional(),
+          target_branch: z.string().nullable().optional(),
           isOpen: z.boolean().nullable().optional(),
+          is_open: z.boolean().nullable().optional(),
         }),
         response: { 200: WorkspaceResponseSchema, ...errorResponses },
       },
@@ -254,14 +259,29 @@ export async function registerWorkspaceRoutes(
         if (request.body.description != null) {
           patch.description = request.body.description;
         }
-        if (request.body.targetBranch !== undefined) {
-          patch.targetBranch = request.body.targetBranch;
+        const targetBranch =
+          request.body.targetBranch !== undefined
+            ? request.body.targetBranch
+            : request.body.target_branch;
+        if (targetBranch !== undefined) {
+          patch.targetBranch = targetBranch;
         }
-        if (request.body.isOpen != null) {
-          patch.isOpen = request.body.isOpen;
+        const isOpen = request.body.isOpen ?? request.body.is_open;
+        if (isOpen != null) {
+          patch.isOpen = isOpen;
         }
         if (Object.keys(patch).length > 0) {
           updateWorkspace(getOrm(), request.params.workspace_id, patch);
+          // Changing the target branch changes what the diff is computed
+          // against, so recompute it (web/app.py refresh_workspace_diff). Bumping
+          // the diff marker invalidates the frontend's git-derived queries.
+          if (targetBranch !== undefined) {
+            setWorkspaceDiffStatus(
+              getOrm(),
+              request.params.workspace_id,
+              "READY",
+            );
+          }
           eventBus.publish({
             kind: "data_model_change",
             changedEntities: [
