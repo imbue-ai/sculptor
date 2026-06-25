@@ -591,6 +591,12 @@ export class DependencyService {
   // pool and stall unrelated requests. Serve a short-lived cache and coalesce
   // concurrent callers onto a single in-flight probe; install/auth flows
   // invalidate it so a freshly installed/authenticated binary shows immediately.
+  // The last computed status, or null if never probed. Sync, for the initial
+  // WS snapshot (which can't await); a connect also kicks getStatus() to refresh.
+  getCachedStatus(): DependenciesStatusWire | null {
+    return this.cachedStatus?.status ?? null;
+  }
+
   async getStatus(): Promise<DependenciesStatusWire> {
     const now = Date.now();
     if (

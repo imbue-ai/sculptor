@@ -388,6 +388,15 @@ export async function registerConfigRoutes(
       });
       saveUserConfig(merged);
       publishUserSettingsChanged();
+      // Changing a dependency's path/mode (e.g. switching Claude to managed)
+      // changes its resolved status, so re-probe and publish dependencies_status
+      // — the settings UI waits for that confirmation before committing the new
+      // mode (else it reverts after a timeout).
+      if ("dependency_paths" in internalKeyValues) {
+        const deps = getDependencyService();
+        deps.invalidateStatusCache();
+        void deps.getStatus().catch(() => undefined);
+      }
       return userConfigToWire(merged) as z.infer<typeof UserConfigWireSchema>;
     },
   );

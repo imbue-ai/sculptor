@@ -16,6 +16,8 @@ import { DeltaBuilder } from "~/projection/delta";
 import { buildScopeContext, isEmptyUpdate, narrowToScope, parseScope, type Scope, ScopeParseError, toSnapshotScope } from "~/projection/scope";
 import { buildSnapshot } from "~/projection/snapshot";
 import { streamingUpdateToWire } from "~/projection/to_wire";
+import type { DependenciesStatus } from "~/projection/streaming_update_types";
+import { getDependencyService } from "~/services/dependencies";
 
 const INVALID_SCOPE_CLOSE_CODE = 1008;
 
@@ -73,7 +75,16 @@ export async function registerStreamWsRoutes(app: FastifyInstance): Promise<void
     // settings (SculptorSettings) ride on user_update.settings so the frontend
     // can gate testing-only affordances (Fake Claude model, etc.).
     const snapshot = narrowToScope(
-      buildSnapshot(orm, toSnapshotScope({ kind: "all" }), { serverSettings }),
+      buildSnapshot(orm, toSnapshotScope({ kind: "all" }), {
+        serverSettings,
+        // Serve the last-probed dependency status in the snapshot (ScopeAll); a
+        // refresh below republishes if it changed or was never probed. The deps
+        // service already emits the camelCase wire shape (as the delta path
+        // does), so cast past the snake-cased StreamingUpdate annotation.
+        dependenciesStatus: getDependencyService().getCachedStatus() as unknown as
+          | DependenciesStatus
+          | null,
+      }),
       scope,
       context,
     );
@@ -101,5 +112,12 @@ export async function registerStreamWsRoutes(app: FastifyInstance): Promise<void
 
     socket.on("close", unsubscribe);
     socket.on("error", unsubscribe);
+
+    // Probe dependencies now that this connection is subscribed: the first
+    // connect (empty cache) gets the result as a dependencies_status delta;
+    // later connects already had it in the snapshot, and this refreshes it.
+    void getDependencyService()
+      .getStatus()
+      .catch(() => undefined);
   });
 }
