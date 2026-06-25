@@ -47,7 +47,10 @@
   --mobile-modified: var(--amber-11);
   --mobile-modified-bg: var(--amber-a3);
 
-  --mobile-overlay: var(--color-overlay);
+  /* Stronger than Radix's default --color-overlay (--black-a6/a8): a full-screen
+     mobile drawer/sheet scrim needs the backdrop to clearly recede, especially in
+     dark theme where a light overlay over dark content barely dims. */
+  --mobile-overlay: var(--black-a9);
   --mobile-shadow: var(--shadow-5);
   --mobile-shadow-sm: var(--shadow-2);
 }

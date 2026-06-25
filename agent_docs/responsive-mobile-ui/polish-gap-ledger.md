@@ -39,8 +39,8 @@ Screenshot: `0011_get.png`
 ## Surface C — Workspaces drawer (`WorkspaceDrawer.tsx` / `.module.scss`)
 Screenshot: `0016_get.png`
 
-- **C1 (T1)** **Backdrop dim too weak** — drawer and dimmed app are nearly the same value; no drawer shadow, so the panel doesn't read as elevated. Strengthen scrim and/or add a shadow.
-- **C2 (T1)** Row subtitle shows the **repo slug (`imbue/tiny-viper`), not the branch** (D3) — the `currentBranch ?? sourceBranch` fallback is resolving to a slug; also duplicates the repo already shown in the group header.
+- **C1 (T1) ✅ DONE** — **Backdrop dim too weak**. Fixed: `--mobile-overlay` bumped `--color-overlay`→`--black-a9` (stronger scrim across all mobile backdrops) + drawer `box-shadow: var(--mobile-shadow)`. Validated via harness.
+- **C2 (T1) ❌ FALSE POSITIVE** — `imbue/tiny-viper` IS the generated workspace branch name (Sculptor names branches `imbue/<animal>`), not a repo slug. The drawer correctly shows the branch (same value the landing's Branch pill shows). No change.
 - **C3 (T2)** Repo-group chevron + folder icons are very low-contrast (`--mobile-ink-3`) — disclosure affordance hard to see.
 - **C4 (T2)** No divider/section heading between Home/Settings nav rows and the workspace list (D2 "Workspaces" concept).
 - **C5 (T2)** New-workspace CTA is inverted ink-on-surface (near-white) — confirm intentional vs. using the app accent.
