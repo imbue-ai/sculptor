@@ -16,9 +16,13 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # libnss-wrapper lets the entrypoint present a passwd/group entry for the
 # arbitrary runtime UID without making /etc/passwd writable (see entrypoint below).
+# build-essential supplies a C compiler/linker (cc): Python deps with native
+# extensions (e.g. typeid-python's Rust module) compile from sdist whenever no
+# prebuilt wheel matches the interpreter, and uv/maturin's on-demand Rust install
+# still needs a system C toolchain to link.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        git curl ca-certificates xz-utils libnss-wrapper && \
+        git curl ca-certificates xz-utils libnss-wrapper build-essential && \
     rm -rf /var/lib/apt/lists/*
 
 # Node.js 24 — for the frontend build and the API-client codegen. Matches the
