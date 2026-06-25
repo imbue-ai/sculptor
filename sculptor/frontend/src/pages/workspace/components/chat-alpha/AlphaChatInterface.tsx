@@ -234,19 +234,15 @@ export const AlphaChatInterface = ({
     [filteredNodes],
   );
 
-  // Shared ref: useAlphaPromptNav writes to it synchronously when entering/
-  // exiting nav, and useAlphaActivePromptIndex reads it to freeze the cursor
-  // during keyboard nav so the scroll spy and stick-to-bottom logic don't
-  // fight the explicit user intent.
-  const isNavigatingRef = useRef(false);
-
-  // Active dot index (scroll-spy) — shared with keyboard nav as the single cursor.
+  // Active dot index (scroll-spy) — shared with keyboard nav as the single
+  // cursor. Reads the `navigating` phase off the shared scroll machine so the
+  // scroll spy and stick-to-bottom logic don't fight the explicit user intent.
   const activePromptIndex = useAlphaActivePromptIndex(
     userPromptIndices,
     virtualizer,
     scrollContainerRef,
     isAtBottom,
-    isNavigatingRef,
+    scrollMachine,
   );
 
   // ─── Anchor the active user message during chat tool density flips ──────────
@@ -333,7 +329,7 @@ export const AlphaChatInterface = ({
     scrollToBottom,
     setIsSuppressed,
     activePromptIndex,
-    isNavigatingRef,
+    scrollMachine,
   );
 
   const handlePromptNavigate = useCallback(
@@ -387,13 +383,17 @@ export const AlphaChatInterface = ({
   // search navigation. Exit prompt navigation when search opens (it has its own
   // suppression that we supersede here).
   useEffect(() => {
+    // The machine's top-level suppression guard drops auto-scroll initiation
+    // events (newUserTurn/reachedBottom) while search is open, so a search
+    // session never starts pinning or anchoring.
+    scrollMachine.setSuppressed(isSearchVisible);
     if (isSearchVisible) {
       exitNavigation();
       setIsSuppressed(true);
     } else {
       setIsSuppressed(false);
     }
-  }, [isSearchVisible, exitNavigation, setIsSuppressed]);
+  }, [isSearchVisible, exitNavigation, setIsSuppressed, scrollMachine]);
 
   // Jump-to-bottom button
   const { isVisible: isJumpVisible, label: jumpLabel } = useJumpToBottom(

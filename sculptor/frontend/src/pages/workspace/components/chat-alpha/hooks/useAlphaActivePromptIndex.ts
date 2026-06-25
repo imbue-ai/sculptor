@@ -1,7 +1,9 @@
 import type { Virtualizer } from "@tanstack/react-virtual";
 import { throttle } from "lodash";
 import type { MutableRefObject, RefObject } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+
+import type { ScrollStateMachine } from "../scroll/scrollStateMachine.ts";
 
 /**
  * How far below the current scrollTop a prompt's virtual start position can be
@@ -59,9 +61,17 @@ export const useAlphaActivePromptIndex = (
   virtualizer: Virtualizer<HTMLDivElement, Element>,
   scrollContainerRef: RefObject<HTMLDivElement | null>,
   isAtBottom: boolean,
-  isNavigatingRef: MutableRefObject<boolean>,
+  machine: ScrollStateMachine,
 ): ActivePromptIndex => {
   const [activeIndex, setActiveIndex] = useState<number>(0);
+
+  // Whether keyboard prompt navigation is active, read off the scroll state
+  // machine's `navigating` phase. Suppresses the stick-to-bottom highlight so
+  // the explicit nav cursor isn't clobbered.
+  const isNavigating = useSyncExternalStore(
+    machine.subscribe,
+    () => machine.getState().authority.kind === "navigating",
+  );
 
   // Timestamp (ms, Date.now) until which the scroll-spy should skip updates
   // so programmatic scrolls from `setIndex` / `scrollToIndex` can't clobber
@@ -163,14 +173,8 @@ export const useAlphaActivePromptIndex = (
   // When pinned to the bottom (or holding through the brief isAtBottom gap
   // after a new message is added), highlight the last prompt dot.  Suppressed
   // during keyboard navigation so the explicit cursor isn't clobbered.
-  // `isNavigatingRef` is a caller-owned ref mutated synchronously by a sibling
-  // hook (useAlphaPromptNav) and must gate output during render; it can't be
-  // lifted to state without changing the shared prop contract and that caller.
   const effectiveIndex =
-    // eslint-disable-next-line react-hooks/refs
-    !isNavigatingRef.current && shouldStickToBottom && userPromptIndices.length > 0
-      ? userPromptIndices.length - 1
-      : activeIndex;
+    !isNavigating && shouldStickToBottom && userPromptIndices.length > 0 ? userPromptIndices.length - 1 : activeIndex;
 
   // Mirror the effective index into a ref so arrow-key handlers can read it
   // synchronously without waiting for a re-render.  `setIndex` writes it
