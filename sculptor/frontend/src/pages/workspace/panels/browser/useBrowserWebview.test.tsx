@@ -89,4 +89,34 @@ describe("useBrowserWebview navigation readiness", () => {
     expect(webview.loadURL).toHaveBeenCalledTimes(1);
     expect(webview.loadURL).toHaveBeenCalledWith("http://example.test/page.html");
   });
+
+  it("re-waits for dom-ready after the guest is re-attached", () => {
+    const webview = mountWebview();
+    // First guest reaches readiness and navigates fine.
+    act(() => {
+      webview.dispatchEvent(new Event("did-attach"));
+      webview.dispatchEvent(new Event("dom-ready"));
+    });
+    act(() => {
+      captured?.navigate("http://example.test/first.html");
+    });
+    expect(webview.loadURL).toHaveBeenCalledTimes(1);
+
+    // The guest is recreated: did-attach fires again, but the new guest's
+    // document is not ready yet. A navigation now must be held until the new
+    // guest fires dom-ready — not issued against the previous guest's readiness.
+    act(() => {
+      webview.dispatchEvent(new Event("did-attach"));
+    });
+    act(() => {
+      captured?.navigate("http://example.test/second.html");
+    });
+    expect(webview.loadURL).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      webview.dispatchEvent(new Event("dom-ready"));
+    });
+    expect(webview.loadURL).toHaveBeenCalledTimes(2);
+    expect(webview.loadURL).toHaveBeenLastCalledWith("http://example.test/second.html");
+  });
 });
