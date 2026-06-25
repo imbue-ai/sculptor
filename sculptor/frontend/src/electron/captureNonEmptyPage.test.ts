@@ -32,11 +32,20 @@ describe("captureNonEmptyPage", () => {
     expect(capturePage).toHaveBeenCalledTimes(1);
   });
 
-  it("gives up after the attempt budget and returns the last image", async () => {
+  it("captures exactly once when retries is 0", async () => {
+    const capturePage = vi.fn(() => Promise.resolve(emptyImage));
+
+    const result = await captureNonEmptyPage({ capturePage }, { retries: 0 });
+
+    expect(result).toBe(emptyImage);
+    expect(capturePage).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives up after the retry budget and returns the last image", async () => {
     const capturePage = vi.fn(() => Promise.resolve(emptyImage));
     const sleep = vi.fn(() => Promise.resolve());
 
-    const result = await captureNonEmptyPage({ capturePage }, { attempts: 4, delayMs: 0, sleep });
+    const result = await captureNonEmptyPage({ capturePage }, { retries: 3, delayMs: 0, sleep });
 
     expect(result).toBe(emptyImage);
     expect(capturePage).toHaveBeenCalledTimes(4);
