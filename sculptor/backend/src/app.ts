@@ -8,6 +8,7 @@ import {
   validatorCompiler,
 } from "fastify-type-provider-zod";
 
+import { eventBus } from "~/events";
 import { registerAgentInteractionRoutes } from "~/routes/agent_interaction";
 import { registerAgentRoutes } from "~/routes/agents";
 import { registerAuthGuard } from "~/auth/guard";
@@ -47,6 +48,28 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     options.loggerInstance !== undefined
       ? Fastify({ loggerInstance: options.loggerInstance })
       : Fastify({ logger: false });
+
+  // Acknowledge every request that carries a client request id. The frontend's
+  // request tracker holds each non-`skipWsAck` request open until the /stream/ws
+  // connection echoes its id back in `finished_request_ids`, then resolves the
+  // caller (web/auth.py opens+commits a per-request transaction in Python, which
+  // emits the same ack on commit — including for reads like preview-branch-name).
+  // A mutation publishes its data_model_change during the handler, so this
+  // post-handler ack lands after the changed rows; reads carry no change and are
+  // acked alone. Without this, a tracked read hangs until the 10 s client
+  // timeout. The id header is set by every openapi-client request
+  // (apiClient.ts `Sculptor-Request-ID`); the browser's WS/static fetches omit
+  // it and are skipped.
+  app.addHook("onResponse", async (request) => {
+    const requestId = request.headers["sculptor-request-id"];
+    if (typeof requestId === "string" && requestId !== "") {
+      eventBus.publish({
+        kind: "data_model_change",
+        requestId,
+        changedEntities: [],
+      });
+    }
+  });
 
   // Make Zod the single source of truth for route schemas, and feed those
   // schemas to @fastify/swagger so one OpenAPI document drives both client
