@@ -49,6 +49,40 @@ Screenshot: `0016_get.png`
 
 ---
 
+## Surface D — AgentSheet (`AgentSheet.tsx` / `.module.scss`)
+Screenshot: `0043_get.png` (bottom sheet, opened from the agent switcher pill — this is the B3 "pager" replacement; it works)
+
+- **D1 (T2)** Sheet barely reads as a layer over the chat — even with the `--black-a9` scrim, over near-black chat the dim is subtle and the sheet surface (`--mobile-surface`) is only a hair lighter than the page; the 1px top border does all the separation. Add a sheet **shadow** (`--mobile-shadow`) like the drawer fix; consider a slightly lifted surface.
+- **D2 (T2)** "New agent" row sits flush against the screen's bottom edge — bottom padding/safe-area reads as ~0, cramping the touch target. Add bottom inset.
+- **D3 (T3)** Sheet title ("Agents in …") is `--mobile-ink-3` at `--font-size-1` — same dim as the "1h ago" subline, so it reads as de-emphasized rather than a heading.
+- **D4 (T3)** Large empty gap between the single agent row and the separator/New-agent block (under-filled with one agent).
+- **D5 (T3)** Status dot small + far-left, reads as detached from the agent name.
+- **D6 (T3)** Grabber handle is faint (`--mobile-line` over a near-equal surface).
+- **Clean:** proper bottom sheet w/ grabber + rounded top, current agent checked w/ status dot, clear `+` New agent affordance.
+
+## Surface E — Home page reflow (`HomePage.tsx/.scss`, `MobileHomeHeader.tsx`, shared `WorkspaceRow`)
+Screenshot: `0048_get.png`. Header is clean (replaces TopBar, centered title, safe-area).
+
+- **E1 (T1)** No new-workspace CTA on Home itself — the only "+ New workspace" is pinned in the drawer (behind the hamburger). The most-expected Home action has no visible affordance. Add a visible button/FAB.
+- **E2 (T1) [DESKTOP-REACHING]** `WorkspaceRow` touch target <44px (`min-height:24px` + `--space-3` ≈ 40px). Shared component → fix in the desktop-reaching cluster (or a mobile row variant).
+- **E3 (T2) [DESKTOP-REACHING]** `WorkspaceRow` delete button + repo column are **hover-gated** (`opacity:0` until `:hover`) → permanently invisible/unreachable on touch; the repo column still reserves 80px dead width. The row was reused, not reflowed for mobile.
+- **E4 (T2) [DESKTOP-REACHING]** Row metadata is desktop-shaped (fixed `.time 60px` / `.repo 80px`), wasteful at 390px — big empty gap between name and "1h ago".
+- **E5 (T3)** Sparse one-item body: ~80% empty void, no anchor/CTA (EmptyState only renders at zero items).
+- **E6 (T3)** Search bar sits flush under the header — a little more top breathing room would help.
+
+> **NEW CLUSTER — "WorkspaceRow mobile reflow" (desktop-reaching):** E2/E3/E4 share a root cause (the shared `WorkspaceRow` isn't mobile-aware). Handle on the desktop-reaching branch — either a mobile-specific row or an `isMobile` branch in `WorkspaceRow`.
+
+## Surface F — Settings page (`SettingsPage.tsx`, `MobileSettingsHeader.tsx`)
+Screenshot: `0052_get.png`. Header/back, nav-as-dropdown collapse, and theme segmented control render correctly.
+
+- **F1 (T1)** "Software Updates" row: the `N/A ▾` channel select + disabled "Check for updates" button sit side-by-side (`gap="2"`, never wraps at 390px), an awkward two-tier layout. On mobile they should stack / go full-width. (`SettingRow.module.scss` `.controlRow` flex-wrap — gate on mobile.)
+- **F2 (T2)** Nav `Select.Trigger` is full-width with label left + chevron far-right and a big empty gap between — reads like a stretched input, not a nav control. Constrain width / center.
+- **F3 (T2)** Large vertical void (~65px) between the nav dropdown and the section description (`.mobileNav pt=5` + section `mt/mb` stack).
+- **F4 (T2)** Inconsistent horizontal gutters — nav dropdown `px=5` doesn't align with the section content's left edge. Share a gutter.
+- **F5 (T3)** Theme segmented control off-state (`--gray-11`) is dim vs the selected item.
+- **F6 (T3)** `N/A ▾` select trigger ~32px tall (<44px touch target); same trigger is used for enabled selects elsewhere.
+- **Clean:** no overflow/clip, back chevron 44px, centered title.
+
 ## Behavioral (from code analysis — not visible in stills)
 
 - **BE1 (T1, perf)** TipTap typing lag: every keystroke writes the `promptDraftAtomFamily` jotai atom → full `ChatInput` re-render, plus `getMarkdown()` serialization twice per keystroke. Fix: debounce/uncontrolled draft + isolate the subscription + drop the double serialize. (Shared with desktop; verify with `measure-react-renders`.)
