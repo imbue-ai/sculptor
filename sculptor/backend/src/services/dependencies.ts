@@ -502,6 +502,11 @@ function probeTimeoutMs(base: number): number {
   return override !== undefined && override !== "" ? Number(override) : base;
 }
 
+// How long a probed dependency status is served from cache before re-probing.
+// Short enough that an external change (a binary installed outside the app) is
+// reflected promptly, long enough that polling doesn't re-spawn probes per call.
+const DEPENDENCY_STATUS_TTL_MS = 3000;
+
 export class DependencyService {
   private readonly installing = new Set<Dependency>();
   private readonly installProgress = new Map<Dependency, InstallProgressWire>();
@@ -512,6 +517,10 @@ export class DependencyService {
     stderr: string;
   } | null = null;
   private stopRequested = false;
+  private cachedStatus:
+    | { status: DependenciesStatusWire; at: number }
+    | undefined;
+  private statusInFlight: Promise<DependenciesStatusWire> | undefined;
 
   private async checkInstalled(
     tool: Dependency,
@@ -576,7 +585,43 @@ export class DependencyService {
     };
   }
 
+  // config/status and dependencies_status are polled, but each computeStatus()
+  // spawns version + auth subprocess probes (seconds). Without a cache the polls
+  // pile up slow requests that exhaust the browser's small per-host connection
+  // pool and stall unrelated requests. Serve a short-lived cache and coalesce
+  // concurrent callers onto a single in-flight probe; install/auth flows
+  // invalidate it so a freshly installed/authenticated binary shows immediately.
   async getStatus(): Promise<DependenciesStatusWire> {
+    const now = Date.now();
+    if (
+      this.cachedStatus !== undefined &&
+      now - this.cachedStatus.at < DEPENDENCY_STATUS_TTL_MS
+    ) {
+      return this.cachedStatus.status;
+    }
+    if (this.statusInFlight !== undefined) {
+      return this.statusInFlight;
+    }
+    this.statusInFlight = this.computeStatus()
+      .then((status) => {
+        this.cachedStatus = { status, at: Date.now() };
+        this.statusInFlight = undefined;
+        return status;
+      })
+      .catch((error: unknown) => {
+        this.statusInFlight = undefined;
+        throw error;
+      });
+    return this.statusInFlight;
+  }
+
+  // Drop the cached status so the next getStatus() re-probes — call after an
+  // install or auth change mutates a binary's state.
+  invalidateStatusCache(): void {
+    this.cachedStatus = undefined;
+  }
+
+  private async computeStatus(): Promise<DependenciesStatusWire> {
     const config = getCurrentUserConfig();
     const [gitCheck, claudeCheck, piCheck] = await Promise.all([
       this.checkInstalled("GIT"),
@@ -686,6 +731,7 @@ export class DependencyService {
     // progress to observers; callers poll getStatus().
     void this.downloadVerifyStage(managed, distribution).finally(() => {
       this.installing.delete(tool);
+      this.invalidateStatusCache();
       void this.getStatus();
     });
     return {
@@ -996,6 +1042,8 @@ export class DependencyService {
       session.process.child.stdin?.write(`${code.trim()}\n`);
       const exitCode = await this.waitForExit(session.process, 120_000);
       if (exitCode === 0) {
+        // Auth state changed; re-probe on the next status read.
+        this.invalidateStatusCache();
         return { success: true, authUrl: null, error: null };
       }
       return {
