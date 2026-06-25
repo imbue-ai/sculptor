@@ -54,16 +54,17 @@ def _post_signal_with_retries(
 
     Retries on connect/read timeouts, a refused connection, and 5xx responses;
     a non-5xx response (success or a permanent 4xx) ends the loop immediately.
-    Returns the final response, or None when every attempt failed before the
-    backend answered.
+    Returns the last response the backend returned, or None when every attempt
+    failed before the backend answered.
     """
     response: Response[Any] | None = None
     for attempt in range(max_attempts):
         try:
-            response = post_agent_signal.sync_detailed(agent_id=agent_id, client=client, body=body)
+            attempt_response = post_agent_signal.sync_detailed(agent_id=agent_id, client=client, body=body)
         except _RETRYABLE_EXCEPTIONS:
-            response = None
-        else:
+            attempt_response = None
+        if attempt_response is not None:
+            response = attempt_response
             if int(response.status_code) < 500:
                 return response
         if attempt + 1 < max_attempts:

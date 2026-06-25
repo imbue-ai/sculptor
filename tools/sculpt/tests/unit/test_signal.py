@@ -169,3 +169,22 @@ def test_signal_session_id_does_not_retry_permanent_4xx(runner: CliRunner, monke
 
     assert result.exit_code == 1
     assert route.call_count == 1
+
+
+@respx.mock
+def test_signal_session_id_reports_server_status_when_later_retries_lose_connection(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # If an attempt gets a 5xx and later retries can't reach the backend at all,
+    # surface the backend's last answer rather than masking it as a bare
+    # connection error.
+    monkeypatch.setattr(signal, "_RETRY_BACKOFF_SECONDS", 0.0)
+    _mock_session()
+    side_effect = [Response(503)] + [httpx.ReadTimeout("backend slow")] * (signal._SESSION_ID_MAX_ATTEMPTS - 1)
+    route = respx.post(f"{_BASE_URL}/api/v1/agents/{_AGENT_ID}/signal").mock(side_effect=side_effect)
+
+    result = runner.invoke(app, ["signal", "session-id", "sess-xyz", "--agent", _AGENT_ID])
+
+    assert result.exit_code == 1
+    assert "503" in result.stderr
+    assert route.call_count == signal._SESSION_ID_MAX_ATTEMPTS
