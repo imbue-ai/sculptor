@@ -26,6 +26,11 @@ export interface HarnessProcess {
   sendUserMessage(message: Record<string, unknown>): void;
   interrupt(): void;
   stop(): void;
+  // /clear: reset the model session in-place. Harnesses that re-resolve their
+  // session every turn (claude) need nothing here (the on-disk session files are
+  // cleared by the caller); a persistent process (pi) must tell the CLI to start
+  // a new session. Optional — defaults to a no-op.
+  clearSession?(): void;
 }
 
 export interface Harness {

@@ -97,6 +97,10 @@ export class AgentSupervisor {
     this.process?.interrupt();
   }
 
+  clearSession(): void {
+    this.process?.clearSession?.();
+  }
+
   stop(): void {
     if (this.finalized) {
       return;

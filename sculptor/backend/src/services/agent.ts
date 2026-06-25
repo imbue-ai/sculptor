@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -20,9 +20,14 @@ import {
 } from "~/db/repositories";
 import { eventBus } from "~/events";
 import type { AgentRow } from "~/db/schema";
-import { artifactsPath, workingDirectory } from "~/environment/paths";
+import { artifactsPath, statePath, workingDirectory } from "~/environment/paths";
 import { revParseHead } from "~/git";
+import {
+  SESSION_ID_STATE_FILE_NAME,
+  VALIDATED_SESSION_ID_STATE_FILE_NAME,
+} from "~/harness/claude/constants";
 import { resolveJsonlDirectory } from "~/harness/claude/paths";
+import { PI_SESSION_ID_STATE_FILE } from "~/harness/pi/launch";
 import { newAgentId, newAgentMessageId } from "~/ids";
 import { projectionCache } from "~/projection/cache";
 import { computeAgentView } from "~/projection/derived";
@@ -469,12 +474,36 @@ export class AgentService {
   clearContext(agentId: string): void {
     const orm = getOrm();
     const agent = this.requireAgent(agentId);
+    // Reset the model session so the next turn starts fresh (no CLI --resume).
+    // The harnesses resolve the session id from on-disk state files per turn
+    // (claude session_id/validated_session_id, pi pi_session_id), so the row
+    // columns alone don't reset it — delete the state files too.
     updateAgent(orm, agentId, { claudeSessionId: null, piSessionId: null });
-    eventBus.publish({
-      kind: "agent_status",
-      agentId,
-      workspaceId: agent.workspaceId ?? undefined,
-      projectId: agent.projectId,
+    const root =
+      agent.workspaceId === null
+        ? undefined
+        : getWorkspace(orm, agent.workspaceId)?.environmentId ?? undefined;
+    if (root !== undefined) {
+      const dir = statePath(root, agentId);
+      for (const file of [
+        SESSION_ID_STATE_FILE_NAME,
+        VALIDATED_SESSION_ID_STATE_FILE_NAME,
+        PI_SESSION_ID_STATE_FILE,
+      ]) {
+        rmSync(path.join(dir, file), { force: true });
+      }
+    }
+    // A persistent harness process (pi) keeps the conversation in memory, so
+    // also tell it to start a new session in-place.
+    getAgentRunner().clearSession(agentId);
+    // ...and record the cleared marker so the chat shows the context-reset
+    // summary (web/app.py creates a ClearContextUserMessage whose harness reply
+    // is this ContextClearedMessage; here we emit the visible result directly).
+    recordUserMessage(orm, agent, {
+      object_type: "ContextClearedMessage",
+      message_id: newAgentMessageId(),
+      source: "AGENT",
+      approximate_creation_time: new Date().toISOString(),
     });
   }
 

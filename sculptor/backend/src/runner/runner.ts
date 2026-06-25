@@ -82,6 +82,10 @@ export class AgentRunner {
     this.supervisors.get(agentId)?.interrupt();
   }
 
+  clearSession(agentId: string): void {
+    this.supervisors.get(agentId)?.clearSession();
+  }
+
   sendUserMessage(agentId: string, message: Record<string, unknown>): void {
     this.supervisors.get(agentId)?.sendUserMessage(message);
   }

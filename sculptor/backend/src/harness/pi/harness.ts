@@ -44,6 +44,7 @@ import {
   buildExtensionUiResponseCommand,
   buildGetAvailableModelsCommand,
   buildGetStateCommand,
+  buildNewSessionCommand,
   buildPromptCommand,
   parsePiEvent,
   type PiEvent,
@@ -218,6 +219,16 @@ class PiHarnessProcess implements HarnessProcess {
     }
     this.interruptPending = true;
     this.sendRpc(buildAbortCommand());
+  }
+
+  // /clear: tell the running pi CLI to start a fresh session so prior turns are
+  // forgotten (the persistent process keeps the conversation in memory, so
+  // clearing the on-disk session id alone doesn't reset it).
+  clearSession(): void {
+    if (this.child === undefined) {
+      return;
+    }
+    this.sendRpc(buildNewSessionCommand(this.nextControlId("new_session")));
   }
 
   stop(): void {
