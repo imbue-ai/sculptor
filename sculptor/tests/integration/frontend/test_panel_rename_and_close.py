@@ -27,13 +27,15 @@ def test_static_panel_tab_has_no_rename_in_context_menu(sculptor_instance_: Scul
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Static No Rename WS")
-    center = PlaywrightWorkspaceSection(page, "center")
 
-    open_panel(page, "files", "center")
-    files_tab = center.get_panel_tab("files")
+    # Files is seeded into the (collapsed) left section, so open_panel reveals it there;
+    # the tab and its affordances live in the left header.
+    left = PlaywrightWorkspaceSection(page, "left")
+    open_panel(page, "files", "left")
+    files_tab = left.get_panel_tab("files")
     expect(files_tab).to_be_visible()
 
-    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="left")
     panel_tabs.open_context_menu(files_tab)
     # No Rename item is offered for a single-instance panel.
     expect(panel_tabs.get_context_menu_rename_item()).to_have_count(0)
@@ -47,13 +49,14 @@ def test_static_panel_tab_double_click_does_not_rename(sculptor_instance_: Sculp
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Static No Dblclick WS")
-    center = PlaywrightWorkspaceSection(page, "center")
 
-    open_panel(page, "files", "center")
-    files_tab = center.get_panel_tab("files")
+    # Files is seeded into the (collapsed) left section, so open_panel reveals it there.
+    left = PlaywrightWorkspaceSection(page, "left")
+    open_panel(page, "files", "left")
+    files_tab = left.get_panel_tab("files")
     expect(files_tab).to_be_visible()
 
-    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="left")
     files_tab.dblclick()
     # No inline rename input appears for a single-instance panel.
     expect(panel_tabs.get_inline_rename_input()).to_have_count(0)
@@ -65,15 +68,16 @@ def test_static_panel_close_removes_it_from_header(sculptor_instance_: SculptorI
     page = sculptor_instance_.page
 
     start_task_and_wait_for_ready(page, prompt="Say hello", workspace_name="Static Close WS")
-    center = PlaywrightWorkspaceSection(page, "center")
 
-    open_panel(page, "files", "center")
-    expect(center.get_panel_tab("files")).to_be_visible()
+    # Files is seeded into the (collapsed) left section, so open_panel reveals it there.
+    left = PlaywrightWorkspaceSection(page, "left")
+    open_panel(page, "files", "left")
+    expect(left.get_panel_tab("files")).to_be_visible()
 
-    panel_tabs = PlaywrightPanelTabElement(page, sub_section="center")
+    panel_tabs = PlaywrightPanelTabElement(page, sub_section="left")
     panel_tabs.get_tab_close_button("files").click()
 
     # The static panel closes immediately (no delete confirmation) and is gone from
     # the header.
     expect(panel_tabs.get_delete_confirmation_dialog()).to_have_count(0)
-    expect(center.get_panel_tab("files")).to_have_count(0)
+    expect(left.get_panel_tab("files")).to_have_count(0)

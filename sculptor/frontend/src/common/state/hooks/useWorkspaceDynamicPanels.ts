@@ -12,7 +12,8 @@
 import { useAtomValue, useSetAtom } from "jotai";
 import { useEffect, useMemo } from "react";
 
-import { tasksArrayAtom } from "~/common/state/atoms/tasks.ts";
+import { renameWorkspaceAgent } from "~/api";
+import { tasksArrayAtom, updateTasksAtom } from "~/common/state/atoms/tasks.ts";
 import { terminalTabStateAtom } from "~/common/state/atoms/terminalTabs.ts";
 import { agentDeleteTargetAtom, terminalCloseTargetAtom } from "~/components/CommandPalette/contextActions/atoms.ts";
 import type { DynamicAgentInput, DynamicTerminalInput } from "~/components/sections/registry/dynamicPanels.tsx";
@@ -31,8 +32,10 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
   const allTerminalTabs = useAtomValue(terminalTabStateAtom);
   const pluginPanels = useAtomValue(pluginPanelsAtom);
   const setPanelRegistry = useSetAtom(panelRegistryAtom);
+  const setTerminalTabs = useSetAtom(terminalTabStateAtom);
   const setTerminalCloseTarget = useSetAtom(terminalCloseTargetAtom);
   const setAgentDeleteTarget = useSetAtom(agentDeleteTargetAtom);
+  const updateTasks = useSetAtom(updateTasksAtom);
 
   // This workspace's tasks, narrowed to the identity/title/status/read fields the
   // registry derives panels from (so the memo below only refires when one changes).
@@ -62,8 +65,20 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
       // runs the optimistic delete + rollback + Retry flow (AGENT-08). Closing the last
       // agent leaves the center empty — no auto-create (Decision B1).
       onRequestClose: (): void => setAgentDeleteTarget({ id: task.id, name: task.title ?? "" }),
+      // Committing an inline tab rename persists the new title (PANEL-11). Update the task
+      // optimistically so the tab text changes immediately, then PATCH the backend; the
+      // canonical value arrives back via WebSocket (mirrors markUnread's fire-and-forget).
+      onRename: (newName: string): void => {
+        updateTasks({ [task.id]: { ...task, title: newName } });
+        renameWorkspaceAgent({
+          path: { workspace_id: workspaceId, agent_id: task.id },
+          body: { title: newName },
+        }).catch(() => {
+          // Fire-and-forget: server value will arrive via WebSocket.
+        });
+      },
     }));
-  }, [workspaceTasks, diagnosticsByTaskId, setAgentDeleteTarget]);
+  }, [workspaceTasks, diagnosticsByTaskId, setAgentDeleteTarget, updateTasks, workspaceId]);
 
   // Map this workspace's persisted terminal tabs to terminal inputs. Each tab's label
   // already reflects the lowest-available-number reuse (TERM-03) the old panel applied
@@ -83,8 +98,22 @@ export const useWorkspaceDynamicPanels = (workspaceId: string): void => {
           tabId: tab.id,
           name: tab.label,
         }),
+      // Committing an inline tab rename rewrites this terminal tab's persisted label
+      // (PANEL-11). Terminal tabs live entirely in client state, so there is no backend
+      // round-trip — just update the persisted label by tab id.
+      onRename: (newName: string): void =>
+        setTerminalTabs((prev) => {
+          const workspaceTabs = prev[workspaceId];
+          if (workspaceTabs === undefined) {
+            return prev;
+          }
+          return {
+            ...prev,
+            [workspaceId]: workspaceTabs.map((t) => (t.id === tab.id ? { ...t, label: newName } : t)),
+          };
+        }),
     }));
-  }, [allTerminalTabs, workspaceId, setTerminalCloseTarget]);
+  }, [allTerminalTabs, workspaceId, setTerminalCloseTarget, setTerminalTabs]);
 
   useEffect(() => {
     const dynamicDefinitions = deriveDynamicPanels(agents, terminals);

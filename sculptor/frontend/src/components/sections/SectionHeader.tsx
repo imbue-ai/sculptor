@@ -121,10 +121,11 @@ const PanelTabComponent = ({ panelId, subSection, index, isActive, isGhost }: Pa
 
   const handleRenameCommit = (newName: string): void => {
     setIsRenaming(false);
-    // The rename mutation (renaming the underlying agent/terminal) is wired to the
-    // data layer in a later task; this affordance is offered only for multi-instance
-    // panels here. newName is the committed value for that wiring.
-    void newName;
+    // Persist the new name on the underlying entity (agent title / terminal label).
+    // Only multi-instance panels supply onRename; static panels cannot be renamed
+    // (PANEL-11), so this is a no-op for them. InlineRenameInput already trims and drops
+    // empty/unchanged values before committing, so newName is a non-empty new label.
+    definition.onRename?.(newName);
   };
 
   const tabBody = (

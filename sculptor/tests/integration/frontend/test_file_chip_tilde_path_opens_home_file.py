@@ -97,7 +97,4 @@ def test_file_chip_with_tilde_path_opens_home_file(
     rendered_chip.click()
 
     diff_panel = get_diff_panel_from_page(page)
-    expect(diff_panel).to_be_visible()
-    expect(diff_panel.get_tab_by_name(_home_marker_file).first).to_be_visible()
-    expect(diff_panel.get_read_only_preview()).to_be_visible()
-    expect(diff_panel).not_to_contain_text("Could not load file content")
+    diff_panel.expect_shows_file(_home_marker_file)

@@ -23,6 +23,7 @@ let `useFileLines` fall back to the target branch ref.
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
+from sculptor.constants import ElementIDs
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -96,18 +97,18 @@ def test_review_all_diff_stays_visible_when_target_branch_longer_than_head(
     task_page.activate_changes_panel()
     task_page.click_review_all()
 
-    diff_panel = task_page.get_diff_panel()
-    expect(diff_panel).to_be_visible()
+    review_all_panel = page.get_by_test_id(ElementIDs.REVIEW_ALL_PANEL)
+    expect(review_all_panel).to_be_visible()
 
     # Switch the scope picker to "All" — the bug only manifests for the
     # vs-target-branch combined diff path.
-    all_scope = diff_panel.get_scope_all()
+    all_scope = review_all_panel.get_by_test_id(ElementIDs.DIFF_SCOPE_ALL)
     expect(all_scope).to_be_visible()
     all_scope.click()
 
     # Combined diff should show the shrunk helpers.py header and content.
-    expect(diff_panel).to_contain_text("helpers.py")
-    expect(diff_panel).to_contain_text("is_even")
+    expect(review_all_panel).to_contain_text("helpers.py")
+    expect(review_all_panel).to_contain_text("is_even")
 
     # Wait for syntax highlighting decorations and Pierre's
     # context-expansion to run — the bug caused the diff to disappear at
@@ -115,7 +116,7 @@ def test_review_all_diff_stays_visible_when_target_branch_longer_than_head(
     page.wait_for_timeout(3000)
 
     # Diff must still be visible afterwards.
-    expect(diff_panel).to_contain_text("helpers.py")
-    expect(diff_panel).to_contain_text("is_even")
+    expect(review_all_panel).to_contain_text("helpers.py")
+    expect(review_all_panel).to_contain_text("is_even")
     # No Shiki crash banner.
-    expect(diff_panel).not_to_contain_text("Invalid decoration position")
+    expect(review_all_panel).not_to_contain_text("Invalid decoration position")

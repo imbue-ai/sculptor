@@ -96,6 +96,9 @@ export type DynamicAgentInput = {
   // (AGENT-04/08). Supplied by the Task 6.2 hook; defaults to a no-op so this module
   // type-checks before that wiring lands.
   onRequestClose?: () => void;
+  // Committing an inline tab rename persists the new title on the agent (PANEL-11);
+  // supplied by the sync hook (renameWorkspaceAgent + optimistic title update).
+  onRename?: (newName: string) => void;
 };
 
 async function copyToClipboard(text: string): Promise<void> {
@@ -136,6 +139,9 @@ export type DynamicTerminalInput = {
   // Closing a terminal tab kills the backend shell with a confirmation (TERM-02/04).
   // Supplied by the sync hook; absent for callers that don't wire the close flow.
   onRequestClose?: () => void;
+  // Committing an inline tab rename updates this terminal tab's persisted label
+  // (PANEL-11); supplied by the sync hook.
+  onRename?: (newName: string) => void;
 };
 
 export function deriveDynamicPanels(
@@ -160,6 +166,7 @@ export function deriveDynamicPanels(
       dotStatus,
       contextMenuActions: buildAgentContextMenuActions(agent),
       onRequestClose: agent.onRequestClose,
+      onRename: agent.onRename,
     });
   }
 
@@ -175,6 +182,7 @@ export function deriveDynamicPanels(
       component: getTerminalComponent(terminal.workspaceId, terminal.index),
       contextMenuActions: terminal.contextMenuActions,
       onRequestClose: terminal.onRequestClose,
+      onRename: terminal.onRename,
     });
   }
 

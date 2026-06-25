@@ -4,11 +4,13 @@ import { atomFamily, atomWithStorage } from "jotai/utils";
 import { atomWithDebouncedStorage } from "~/common/state/atoms/atomWithDebouncedStorage.ts";
 import { workspaceAtomFamily } from "~/common/state/atoms/workspaces.ts";
 import { jumpToSectionAtom, openPanelAtom } from "~/components/sections/sectionActions.ts";
+import { isEmptyLayout, workspaceLayoutFamily } from "~/components/sections/sectionAtoms.ts";
 import type { PanelId, SubSectionId } from "~/components/sections/sectionTypes.ts";
+import type { DiffSelection } from "~/pages/workspace/components/diffViewer/types.ts";
 import { getUncommittedFileStatusMap } from "~/pages/workspace/panels/fileBrowser/atoms.ts";
 import type { FileStatus } from "~/pages/workspace/panels/fileBrowser/types.ts";
 
-import type { DiffPanelTabState, DiffScope, DiffTab } from "./types.ts";
+import type { DiffPanelTabState, DiffScope, DiffTab, SingleFileDiffTab } from "./types.ts";
 import { COMBINED_REVIEW_PATH, COMMIT_DIFF_PREFIX, FILE_VIEW_PREFIX, TARGET_BRANCH_DIFF_PREFIX } from "./types.ts";
 
 // The single-instance panel (and its default section) that hosts the active diff/
@@ -44,6 +46,71 @@ const DEFAULT_DIFF_PANEL_TAB_STATE: DiffPanelTabState = {
 export const diffPanelStateAtomFamily = atomFamily((workspaceId: string) =>
   atomWithStorage<DiffPanelTabState>(`diffPanel-state-${workspaceId}`, DEFAULT_DIFF_PANEL_TAB_STATE),
 );
+
+/**
+ * The active diff tab for a workspace (the `DiffTab` whose path is `activeTabPath`),
+ * or null when no tab is active. Each host panel (Files / Changes / Commits) reads
+ * this so an agent-opened file/diff — which writes the tab via `setActiveDiffTabAtom`
+ * but never touches the panel's local click state — still renders in the panel's
+ * single embedded DiffViewer. Local tree clicks keep driving the panel directly; the
+ * panel reconciles the two by most-recent-`viewedAt` (see the host panels).
+ */
+export const activeDiffTabAtomFamily = atomFamily((workspaceId: string) =>
+  atom<DiffTab | null>((get) => {
+    const state = get(diffPanelStateAtomFamily(workspaceId));
+    if (state.activeTabPath === null) {
+      return null;
+    }
+    return state.openTabs.find((tab) => tab.filePath === state.activeTabPath) ?? null;
+  }),
+);
+
+/** The real file path a single-diff tab targets (its tab id strips a scope prefix). */
+const singleTabRealPath = (tab: SingleFileDiffTab): string =>
+  tab.filePath.startsWith(TARGET_BRANCH_DIFF_PREFIX)
+    ? tab.filePath.slice(TARGET_BRANCH_DIFF_PREFIX.length)
+    : tab.filePath;
+
+/**
+ * Map the active diff tab to the {@link DiffSelection} the Files panel's embedded
+ * viewer renders — only `file-view` tabs belong to the Files panel. Returns null for
+ * any other kind so an agent-opened diff/commit doesn't bleed into the Files viewer.
+ */
+export const fileViewSelectionFromTab = (tab: DiffTab | null): DiffSelection | null => {
+  if (tab === null || tab.kind !== "file-view") {
+    return null;
+  }
+  return { kind: "file-view", filePath: tab.realPath, tabFilePath: tab.filePath };
+};
+
+/**
+ * Map the active diff tab to the {@link DiffSelection} the Changes panel renders —
+ * only `single` (file-vs-changes) tabs belong here. Returns null for any other kind.
+ */
+export const changesSelectionFromTab = (tab: DiffTab | null): DiffSelection | null => {
+  if (tab === null || tab.kind !== "single") {
+    return null;
+  }
+  return {
+    kind: "diff",
+    filePath: singleTabRealPath(tab),
+    status: tab.status,
+    scope: tab.scope,
+    diffString: tab.diffString,
+    tabFilePath: tab.filePath,
+  };
+};
+
+/**
+ * Map the active diff tab to the {@link DiffSelection} the Commits panel renders —
+ * only `commit-diff` tabs belong here. Returns null for any other kind.
+ */
+export const commitSelectionFromTab = (tab: DiffTab | null): DiffSelection | null => {
+  if (tab === null || tab.kind !== "commit-diff") {
+    return null;
+  }
+  return { kind: "commit-diff", commitHash: tab.commitHash, filePath: tab.realPath, tabFilePath: tab.filePath };
+};
 
 /**
  * Whether the diff viewer column is visible.  Stored globally by default so
@@ -190,9 +257,22 @@ export const setActiveDiffTabAtom = atom(null, (get, set, payload: SetActiveDiff
   // in the section shell (no component consumes it), so revealing the host panel in
   // the section layout is what actually surfaces the viewer. The legacy flag is
   // still written below for backwards compatibility with code/tests that read it.
-  const host = HOST_PANEL_BY_KIND[payload.kind];
-  set(openPanelAtom, { panelId: host.panelId, in: host.section });
-  set(jumpToSectionAtom, { subSection: host.section });
+  //
+  // Guard against an UNSEEDED layout: the workspace-shell bootstrap seeds the default
+  // arrangement (Files/Changes/Commits in the left section, the agent in center, …)
+  // on a workspace's first visit, gated on `isEmptyLayout`. If an open-file event
+  // races that bootstrap (e.g. a buffered WebSocket OpenFileUiAction landing in the
+  // same tick as mount), opening a single host panel here would place it ALONE in the
+  // left section and flip `isEmptyLayout` to false, so the bootstrap would skip seeding
+  // and Files/Changes/Commits would never appear. Skip the reveal until the layout is
+  // seeded; the tab is already recorded above, so once the bootstrap seeds the default
+  // and the user expands the host panel, the viewer renders the right file.
+  const layout = get(workspaceLayoutFamily(payload.workspaceId));
+  if (!isEmptyLayout(layout)) {
+    const host = HOST_PANEL_BY_KIND[payload.kind];
+    set(openPanelAtom, { panelId: host.panelId, in: host.section });
+    set(jumpToSectionAtom, { subSection: host.section });
+  }
   set(diffPanelOpenAtom, true);
 
   // When opening a combined tab with a default scope, set the scope atom.

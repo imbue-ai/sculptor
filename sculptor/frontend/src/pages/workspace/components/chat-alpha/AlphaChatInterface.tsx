@@ -59,12 +59,21 @@ type AlphaChatInterfaceProps = ChatData & {
   appendTextRef?: React.MutableRefObject<((text: string) => void) | null>;
   insertSkillRef?: React.MutableRefObject<((skill: InsertSkillArg) => void) | null>;
   editorRef?: React.MutableRefObject<TipTapEditor | null>;
+  // The agent + workspace this chat surface renders. Threaded from the owning
+  // panel so the surface (and its ChatInput) binds the PANEL's agent rather than
+  // the route's agent — in the section shell the active center tab can differ
+  // from the route agent (AGENT-03/05: two agents render at once). Falls back to
+  // the route params when omitted.
+  taskId?: string;
+  workspaceId?: string;
 };
 
 export const AlphaChatInterface = ({
   appendTextRef,
   insertSkillRef,
   editorRef,
+  taskId: taskIdProp,
+  workspaceId: workspaceIdProp,
   chatMessages,
   smoothInProgressChatMessage,
   isStreaming,
@@ -77,7 +86,9 @@ export const AlphaChatInterface = ({
   pendingBackgroundTaskCount,
   bottomSentinelRef,
 }: AlphaChatInterfaceProps): ReactElement => {
-  const { workspaceID, agentID: taskID } = useWorkspacePageParams();
+  const { workspaceID: workspaceIDFromRoute, agentID: agentIDFromRoute } = useWorkspacePageParams();
+  const taskID = taskIdProp ?? agentIDFromRoute;
+  const workspaceID = workspaceIdProp ?? workspaceIDFromRoute;
   const [toast, setToast] = useState<ToastContent | null>(null);
   // Stable callback so the memoized <Toast> below bails out instead of
   // re-rendering on every unrelated parent render. (SCU-1455)
@@ -632,6 +643,8 @@ export const AlphaChatInterface = ({
                 appendTextRef={appendTextRef}
                 insertSkillRef={insertSkillRef}
                 editorRef={editorRef}
+                taskId={taskID}
+                workspaceId={workspaceID}
                 showPromptNavHint
               />
             ))}

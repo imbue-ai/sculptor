@@ -14,6 +14,7 @@ import { ElementIds } from "~/api";
 import { useWorkspace } from "~/common/state/hooks/useWorkspace.ts";
 import { registerPanelComponent } from "~/components/sections/registry/panelRegistry.ts";
 import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
+import { activeDiffTabAtomFamily, changesSelectionFromTab } from "~/pages/workspace/components/diffPanel/atoms.ts";
 import { DiffScopePicker } from "~/pages/workspace/components/diffPanel/DiffScopePicker.tsx";
 import type { DiffSelection, TreeViewOptions } from "~/pages/workspace/components/diffViewer/index.ts";
 import { DiffViewer } from "~/pages/workspace/components/diffViewer/index.ts";
@@ -33,8 +34,9 @@ import { CommitButton } from "./fileBrowser/CommitButton.tsx";
 import { useFileStatusMap } from "./fileBrowser/hooks.ts";
 import type { FileStatus } from "./fileBrowser/types.ts";
 
-/** The file the panel's viewer is currently showing, with the status the list reported. */
-type ChangesSelection = { filePath: string; status: FileStatus };
+/** A local-click selection: the file + the status the list reported, stamped so it can
+ *  be reconciled with the atom-driven selection (an agent open) by recency. */
+type ChangesSelection = { filePath: string; status: FileStatus; at: number };
 
 const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactElement => {
   const workspace = useWorkspace(workspaceId);
@@ -49,15 +51,20 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
   const allStatusMap = useFileStatusMap(workspaceId, "vs-target-branch");
   const { discardFile } = useDiscardFile(workspaceId);
 
-  // Per-panel selection: the changed file currently shown in this panel's viewer.
+  // Local-click selection (reconciled with the atom-driven one below).
   const [selected, setSelected] = useState<ChangesSelection | null>(null);
   const [discardTarget, setDiscardTarget] = useState<string | null>(null);
+
+  // The shared active diff tab — written when an agent opens a diff (a chat file-chip,
+  // sculpt open-file --mode diff). Reading it here makes those opens render in this
+  // panel's single embedded viewer, not just reveal the panel (FCC-01).
+  const activeTab = useAtomValue(activeDiffTabAtomFamily(workspaceId));
 
   const { viewMode } = fileBrowserState;
   const isUncommitted = scope === "uncommitted";
 
   const handleSelectFile = useCallback((filePath: string, status: FileStatus): void => {
-    setSelected({ filePath, status });
+    setSelected({ filePath, status, at: Date.now() });
   }, []);
 
   const handleDiscardRequest = useCallback((filePath: string): void => {
@@ -86,12 +93,20 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
     collapseAllChangesFolders({ workspaceId });
   }, [collapseAllChangesFolders, workspaceId]);
 
-  // The selection carries the active scope so switching All/Uncommitted re-renders
-  // the same file against the newly chosen base.
+  // The selection carries the active scope so switching All/Uncommitted re-renders the
+  // same file against the newly chosen base. Reconcile the local click selection with
+  // the atom-driven one (an agent open) by recency: whichever was activated last wins.
   const selection = useMemo((): DiffSelection | null => {
-    if (selected === null) return null;
-    return { kind: "diff", filePath: selected.filePath, status: selected.status, scope };
-  }, [selected, scope]);
+    const atomViewedAt = activeTab?.kind === "single" ? activeTab.viewedAt : null;
+    const isLocalNewer = selected !== null && (atomViewedAt === null || selected.at >= atomViewedAt);
+    if (isLocalNewer) {
+      return { kind: "diff", filePath: selected.filePath, status: selected.status, scope };
+    }
+    return changesSelectionFromTab(activeTab);
+  }, [selected, scope, activeTab]);
+
+  // The path highlighted in the tree mirrors whatever the viewer is showing.
+  const selectedPath = selection?.kind === "diff" ? selection.filePath : null;
 
   const treeOptions: TreeViewOptions = {
     viewMode,
@@ -125,7 +140,7 @@ const ChangesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEle
         viewMode={viewMode}
         scope={scope}
         onSelectFile={handleSelectFile}
-        selectedPath={selected?.filePath ?? null}
+        selectedPath={selectedPath}
         onDiscardFile={isUncommitted ? handleDiscardRequest : undefined}
       />
       <DiscardDialog

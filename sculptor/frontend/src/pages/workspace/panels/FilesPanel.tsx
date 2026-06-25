@@ -12,6 +12,7 @@ import { useCallback, useMemo, useState } from "react";
 import { ElementIds } from "~/api";
 import { registerPanelComponent } from "~/components/sections/registry/panelRegistry.ts";
 import { activeWorkspaceIdAtom } from "~/components/sections/sectionAtoms.ts";
+import { activeDiffTabAtomFamily, fileViewSelectionFromTab } from "~/pages/workspace/components/diffPanel/atoms.ts";
 import type { DiffSelection, TreeViewOptions } from "~/pages/workspace/components/diffViewer/index.ts";
 import { DiffViewer } from "~/pages/workspace/components/diffViewer/index.ts";
 
@@ -29,8 +30,14 @@ const FilesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEleme
   const toggleViewMode = useSetAtom(toggleViewModeAtom);
   const collapseAllFolders = useSetAtom(collapseAllFoldersAtom);
 
-  // Per-panel selection: the file currently shown in this panel's viewer.
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  // Per-panel selection from a local tree click, stamped so it can be reconciled with
+  // the atom-driven selection (an agent open) by recency.
+  const [localSelection, setLocalSelection] = useState<{ path: string; at: number } | null>(null);
+
+  // The shared active diff tab — written when an agent opens a file (sculpt open-file,
+  // a chat file-chip, plan mode). Reading it here makes those opens render in this
+  // panel's single embedded viewer, not just reveal the panel (FCC-01).
+  const activeTab = useAtomValue(activeDiffTabAtomFamily(workspaceId));
 
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -45,7 +52,7 @@ const FilesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEleme
   }, [searchQuery, matchingPaths]);
 
   const handleSelectFile = useCallback((path: string): void => {
-    setSelectedPath(path);
+    setLocalSelection({ path, at: Date.now() });
   }, []);
 
   const handleToggleViewMode = useCallback((): void => {
@@ -56,10 +63,20 @@ const FilesPanelContent = ({ workspaceId }: { workspaceId: string }): ReactEleme
     collapseAllFolders({ workspaceId });
   }, [collapseAllFolders, workspaceId]);
 
+  // Reconcile the local click selection with the atom-driven one (an agent open) by
+  // recency: whichever was activated last wins, so a local click still takes effect
+  // after an agent open and vice-versa.
   const selection = useMemo((): DiffSelection | null => {
-    if (selectedPath === null) return null;
-    return { kind: "file-view", filePath: selectedPath };
-  }, [selectedPath]);
+    const atomViewedAt = activeTab?.kind === "file-view" ? activeTab.viewedAt : null;
+    const isLocalNewer = localSelection !== null && (atomViewedAt === null || localSelection.at >= atomViewedAt);
+    if (isLocalNewer) {
+      return { kind: "file-view", filePath: localSelection.path };
+    }
+    return fileViewSelectionFromTab(activeTab);
+  }, [localSelection, activeTab]);
+
+  // The path highlighted in the tree mirrors whatever the viewer is showing.
+  const selectedPath = selection?.kind === "file-view" ? selection.filePath : null;
 
   // The flat/tree + collapse-all controls live in the viewer's triple-dot menu (FCC-07).
   const treeOptions: TreeViewOptions = {

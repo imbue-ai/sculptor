@@ -13,6 +13,7 @@ The diff initially appears but disappears once decorations are applied.
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
+from sculptor.constants import ElementIDs
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -106,12 +107,12 @@ def test_review_all_diff_stays_visible_with_committed_line_count_changes(
     task_page.activate_changes_panel()
     task_page.click_review_all()
 
-    diff_panel = task_page.get_diff_panel()
-    expect(diff_panel).to_be_visible()
+    review_all_panel = page.get_by_test_id(ElementIDs.REVIEW_ALL_PANEL)
+    expect(review_all_panel).to_be_visible()
 
     # The combined diff should show the file header and diff content.
-    expect(diff_panel).to_contain_text("README.md")
-    expect(diff_panel).to_contain_text("MODIFIED")
+    expect(review_all_panel).to_contain_text("README.md")
+    expect(review_all_panel).to_contain_text("MODIFIED")
 
     # Wait for syntax highlighting decorations to be applied — the bug caused
     # the diff to disappear at this point because decorations referenced
@@ -120,5 +121,5 @@ def test_review_all_diff_stays_visible_with_committed_line_count_changes(
 
     # The diff must still be visible and contain the changed content after
     # decorations have been processed.
-    expect(diff_panel).to_contain_text("README.md")
-    expect(diff_panel).to_contain_text("MODIFIED")
+    expect(review_all_panel).to_contain_text("README.md")
+    expect(review_all_panel).to_contain_text("MODIFIED")

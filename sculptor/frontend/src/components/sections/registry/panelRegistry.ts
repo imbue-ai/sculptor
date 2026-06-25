@@ -40,6 +40,11 @@ export type PanelDefinition = {
   // underlying agent/terminal (with its confirmation dialog) rather than just hiding it
   // (AGENT-04/08). Static panels leave it unset and fall back to closePanelAtom.
   onRequestClose?: () => void;
+  // When set, committing an inline tab rename runs this with the new name to persist it
+  // on the underlying entity (agent title / terminal tab label). Only multi-instance
+  // panels supply it; static panels leave it unset since they cannot be renamed
+  // (PANEL-11). Mirrors onRequestClose.
+  onRename?: (newName: string) => void;
 };
 
 // Agent and terminal are the only multi-instance (renamable) panels.

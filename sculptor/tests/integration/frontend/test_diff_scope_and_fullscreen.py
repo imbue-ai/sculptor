@@ -1,12 +1,14 @@
-"""Integration tests for the diff scope picker and expanded diff view.
+"""Integration tests for the Review All combined-diff scope picker.
 
-Tests verify that the scope picker defaults to All when opened from
-the Changes tab, and that the expand toggle works correctly.
+Tests verify that the scope picker in the Review All panel defaults to All.
+The diff-specific expand/fullscreen control was removed in the section shell
+(section maximize replaces it), so its tests are gone.
 """
 
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
+from sculptor.constants import ElementIDs
 from sculptor.testing.elements.chat_panel import wait_for_completed_message_count
 from sculptor.testing.playwright_utils import navigate_to_settings_page
 from sculptor.testing.playwright_utils import start_task_and_wait_for_ready
@@ -28,9 +30,9 @@ fake_claude:write_file `{
 }`"""
 
 
-@user_story("to see the scope picker default to All from the Changes tab")
+@user_story("to see the scope picker default to All in the Review All panel")
 def test_scope_picker_defaults_to_all(sculptor_instance_: SculptorInstance) -> None:
-    """Opening Review All from Changes tab should default to All scope."""
+    """Opening Review All should default its combined-diff scope to All."""
     page = sculptor_instance_.page
 
     _enable_review_all_via_settings(page)
@@ -42,29 +44,10 @@ def test_scope_picker_defaults_to_all(sculptor_instance_: SculptorInstance) -> N
     task_page.activate_changes_panel()
     task_page.click_review_all()
 
-    # The Changes tab also renders its own DiffScopePicker, so we scope to the
-    # diff panel to avoid a strict-mode violation from two matching elements.
-    diff_panel = task_page.get_diff_panel()
-    scope_picker = diff_panel.get_scope_picker()
+    # The combined diff lives in the Review All panel (the Changes panel renders
+    # its own scope picker too), so scope to REVIEW_ALL_PANEL to avoid matching
+    # two pickers.
+    review_all_panel = page.get_by_test_id(ElementIDs.REVIEW_ALL_PANEL)
+    scope_picker = review_all_panel.get_by_test_id(ElementIDs.DIFF_SCOPE_PICKER)
     expect(scope_picker).to_be_visible()
     expect(scope_picker).to_contain_text("All")
-
-
-@user_story("to use the expand toggle for distraction-free diff review")
-def test_expand_toggle_expands_and_collapses(sculptor_instance_: SculptorInstance) -> None:
-    """The expand toggle should expand the diff to fill the layout area."""
-    page = sculptor_instance_.page
-
-    _enable_review_all_via_settings(page)
-
-    task_page = start_task_and_wait_for_ready(page, prompt=_WRITE_FILE_PROMPT)
-    chat_panel = task_page.get_chat_panel()
-    wait_for_completed_message_count(chat_panel=chat_panel, expected_message_count=2)
-
-    task_page.activate_changes_panel()
-    task_page.click_review_all()
-
-    diff_panel = task_page.get_diff_panel()
-    expand_toggle = diff_panel.get_expand_toggle()
-    expect(expand_toggle).to_be_visible()
-    expand_toggle.click()
