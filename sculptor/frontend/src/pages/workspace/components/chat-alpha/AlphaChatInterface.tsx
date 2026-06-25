@@ -203,6 +203,7 @@ export const AlphaChatInterface = ({
     lastMessageRole,
     lastUserMessageIndex,
     taskID ?? "",
+    scrollMachine,
     isProgrammaticScrollRef,
   );
 

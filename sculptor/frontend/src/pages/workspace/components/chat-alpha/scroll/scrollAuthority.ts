@@ -75,12 +75,21 @@ export const nextAuthority = (state: ScrollAuthority, event: ScrollEvent): Scrol
       if (event.kind === "restoreSettled") return { kind: "userControlled" };
       return state;
     case "anchoringTurn":
-      // The anchored turn becomes the thing we follow as its response streams in.
+      // The anchored turn becomes the thing we follow once its response
+      // overflows the viewport...
       if (event.kind === "turnAnchored") return { kind: "following" };
+      // ...or the moment the viewport reaches the bottom (e.g. jump-to-bottom).
+      if (event.kind === "reachedBottom") return { kind: "following" };
+      // A short response that finishes before it ever overflows ends the turn
+      // without entering follow.
+      if (event.kind === "streamingStopped") return { kind: "userControlled" };
+      // A newer turn re-anchors to it.
+      if (event.kind === "newUserTurn") return { kind: "anchoringTurn", anchorIndex: event.index };
       return state;
     case "following":
       if (event.kind === "streamingStopped") return { kind: "userControlled" };
       if (event.kind === "newUserTurn") return { kind: "anchoringTurn", anchorIndex: event.index };
+      if (event.kind === "navStarted") return { kind: "navigating", promptIndex: event.promptIndex };
       return state;
     case "navigating":
       if (event.kind === "navMoved") return { kind: "navigating", promptIndex: event.promptIndex };

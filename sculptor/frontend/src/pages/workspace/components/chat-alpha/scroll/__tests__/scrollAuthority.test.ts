@@ -59,11 +59,17 @@ describe("nextAuthority", () => {
 
   describe("from anchoringTurn", () => {
     const s: ScrollAuthority = { kind: "anchoringTurn", anchorIndex: 2 };
-    it("turnAnchored -> following", () => {
+    it("turnAnchored -> following (response overflowed)", () => {
       expect(nextAuthority(s, { kind: "turnAnchored" })).toEqual({ kind: "following" });
     });
-    it("ignores unrelated events (same reference)", () => {
-      expect(nextAuthority(s, { kind: "streamingStopped" })).toBe(s);
+    it("reachedBottom -> following (jumped to bottom while anchoring)", () => {
+      expect(nextAuthority(s, { kind: "reachedBottom" })).toEqual({ kind: "following" });
+    });
+    it("streamingStopped -> userControlled (short response never overflowed)", () => {
+      expect(nextAuthority(s, { kind: "streamingStopped" })).toEqual({ kind: "userControlled" });
+    });
+    it("newUserTurn re-anchors to the newer turn", () => {
+      expect(nextAuthority(s, { kind: "newUserTurn", index: 9 })).toEqual({ kind: "anchoringTurn", anchorIndex: 9 });
     });
   });
 
@@ -74,6 +80,9 @@ describe("nextAuthority", () => {
     });
     it("newUserTurn -> anchoringTurn (a new turn while following)", () => {
       expect(nextAuthority(s, { kind: "newUserTurn", index: 7 })).toEqual({ kind: "anchoringTurn", anchorIndex: 7 });
+    });
+    it("navStarted -> navigating", () => {
+      expect(nextAuthority(s, { kind: "navStarted", promptIndex: 1 })).toEqual({ kind: "navigating", promptIndex: 1 });
     });
   });
 
