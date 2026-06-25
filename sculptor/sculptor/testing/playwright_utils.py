@@ -23,12 +23,12 @@ from tenacity import wait_fixed
 from sculptor.constants import ElementIDs
 from sculptor.foundation.async_monkey_patches import log_exception
 from sculptor.state.messages import LLMModel
-from sculptor.testing.elements.add_panel_dropdown import open_panel
 from sculptor.testing.elements.base import type_into_tiptap
 from sculptor.testing.elements.chat_panel import select_model_by_name
 from sculptor.testing.elements.task_starter import FAKE_CLAUDE_MODEL_NAME
 from sculptor.testing.elements.user_config import enable_clone_workspaces
 from sculptor.testing.elements.user_config import enable_pi_agent
+from sculptor.testing.elements.workspace_section import PlaywrightWorkspaceSection
 from sculptor.testing.pages.settings_page import PlaywrightSettingsPage
 from sculptor.testing.pages.task_page import PlaywrightTaskPage
 from sculptor.testing.utils import get_playwright_modifier_key
@@ -266,15 +266,26 @@ def navigate_to_add_workspace_page(page: Page) -> None:
 
 
 def reset_active_panel_to_files(page: Page) -> None:
-    """Reveal the Files panel (seeded in the left section) on the workspace shell.
+    """Best-effort: reveal the Files panel in its seeded left section.
 
-    No-op when the workspace section shell isn't rendered (e.g. the Home /
-    empty first-run route). The sidebar renders on Home too, so it can't be the
-    guard signal; the center section only exists once a workspace is open, which
-    is exactly when there is a left section to reset. Safe to call from any state.
+    No-op when the workspace section shell isn't rendered (Home / empty first-run
+    route) — the sidebar renders on Home too, so the center section (which only
+    exists once a workspace is open) is the guard signal.
+
+    This is a clean-baseline nicety: it runs as per-test cleanup (on the previous
+    test's about-to-be-deleted workspace, before the browser reset restores the
+    default layout) and from a couple of tests. A prior test may have *moved*
+    Files out of the left section (e.g. dragged it to the right), so this is
+    best-effort — it expands the left section and activates the Files tab when it
+    is there, and otherwise skips silently rather than failing setup.
     """
-    if page.get_by_test_id(ElementIDs.SECTION_CENTER).is_visible():
-        open_panel(page, "files", "left")
+    if not page.get_by_test_id(ElementIDs.SECTION_CENTER).is_visible():
+        return
+    left = PlaywrightWorkspaceSection(page, "left")
+    left.expand_section()
+    files_tab = left.get_panel_tab("files")
+    if files_tab.count() > 0:
+        files_tab.click()
 
 
 _MAX_WORKSPACE_DELETE_ITERATIONS = 50
